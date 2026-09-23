@@ -451,6 +451,7 @@ fn "http_response_headers_multi.wado/$cm_task_entry__handle"(request) {
 }
 
 fn "http_response_headers_multi.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(handle, value) {
+    let $load_0: i32;
     let ptr_2: i32;
     let $local_4: ref "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>";
     let $local_6: i32;
@@ -564,8 +565,8 @@ fn "http_response_headers_multi.wado/$cm_future_write_core:prelude/types.wado/Re
         }
     } else {
         $local_7 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Err"(value).payload_0;
-        builtin::store_u8(ptr_2 + 8, $local_7.discriminant);
-        if $local_7.discriminant == 0 {
+        builtin::store_u8(ptr_2 + 8, local.tee $load_0($local_7.discriminant));
+        if $load_0 == 0 {
         } else if ref.test "wasi:http/types.wado//ErrorCode::DnsError"($local_7) {
             $local_9 = ref.cast "wasi:http/types.wado//ErrorCode::DnsError"($local_7).payload_0;
             $local_11 = $local_9.rcode;
@@ -596,18 +597,18 @@ fn "http_response_headers_multi.wado/$cm_future_write_core:prelude/types.wado/Re
                 builtin::store_u16((((ptr_2 + 8) + 8) + 12) + 2, $local_15);
             } else {
             }
-        } else if $local_7.discriminant == 2 {
-        } else if $local_7.discriminant == 3 {
-        } else if $local_7.discriminant == 4 {
-        } else if $local_7.discriminant == 5 {
-        } else if $local_7.discriminant == 6 {
-        } else if $local_7.discriminant == 7 {
-        } else if $local_7.discriminant == 8 {
-        } else if $local_7.discriminant == 9 {
-        } else if $local_7.discriminant == 10 {
-        } else if $local_7.discriminant == 11 {
-        } else if $local_7.discriminant == 12 {
-        } else if $local_7.discriminant == 13 {
+        } else if $load_0 == 2 {
+        } else if $load_0 == 3 {
+        } else if $load_0 == 4 {
+        } else if $load_0 == 5 {
+        } else if $load_0 == 6 {
+        } else if $load_0 == 7 {
+        } else if $load_0 == 8 {
+        } else if $load_0 == 9 {
+        } else if $load_0 == 10 {
+        } else if $load_0 == 11 {
+        } else if $load_0 == 12 {
+        } else if $load_0 == 13 {
         } else if ref.test "wasi:http/types.wado//ErrorCode::TlsAlertReceived"($local_7) {
             $local_16 = ref.cast "wasi:http/types.wado//ErrorCode::TlsAlertReceived"($local_7).payload_0;
             $local_18 = $local_16.alert_id;
@@ -638,8 +639,8 @@ fn "http_response_headers_multi.wado/$cm_future_write_core:prelude/types.wado/Re
                 builtin::store_i32(((((ptr_2 + 8) + 8) + 4) + 4) + 4, builtin::i32_wrap_i64($local_22 >> 32_i64));
             } else {
             }
-        } else if $local_7.discriminant == 15 {
-        } else if $local_7.discriminant == 16 {
+        } else if $load_0 == 15 {
+        } else if $load_0 == 16 {
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestBodySize"($local_7) {
             $local_23 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestBodySize"($local_7).payload_0;
             builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u64>::Some"($local_23));
@@ -648,9 +649,9 @@ fn "http_response_headers_multi.wado/$cm_future_write_core:prelude/types.wado/Re
                 builtin::store_i64(((ptr_2 + 8) + 8) + 8, $local_25);
             } else {
             }
-        } else if $local_7.discriminant == 18 {
-        } else if $local_7.discriminant == 19 {
-        } else if $local_7.discriminant == 20 {
+        } else if $load_0 == 18 {
+        } else if $load_0 == 19 {
+        } else if $load_0 == 20 {
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize"($local_7) {
             $local_26 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize"($local_7).payload_0;
             builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26));
@@ -732,7 +733,7 @@ fn "http_response_headers_multi.wado/$cm_future_write_core:prelude/types.wado/Re
                 builtin::store_i32((((ptr_2 + 8) + 8) + 12) + 4, $local_47);
             } else {
             }
-        } else if $local_7.discriminant == 25 {
+        } else if $load_0 == 25 {
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize"($local_7) {
             $local_48 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize"($local_7).payload_0;
             builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"($local_48));
@@ -861,11 +862,11 @@ fn "http_response_headers_multi.wado/$cm_future_write_core:prelude/types.wado/Re
                 builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64($local_78 >> 32_i64));
             } else {
             }
-        } else if $local_7.discriminant == 33 {
-        } else if $local_7.discriminant == 34 {
-        } else if $local_7.discriminant == 35 {
-        } else if $local_7.discriminant == 36 {
-        } else if $local_7.discriminant == 37 {
+        } else if $load_0 == 33 {
+        } else if $load_0 == 34 {
+        } else if $load_0 == 35 {
+        } else if $load_0 == 36 {
+        } else if $load_0 == 37 {
         } else {
             $local_79 = ref.cast "wasi:http/types.wado//ErrorCode::InternalError"($local_7).payload_0;
             builtin::store_u8((ptr_2 + 8) + 8, ref.is_null($local_79) == 0);

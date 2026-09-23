@@ -1,0 +1,38 @@
+// A dead global's initializer that only fills a fresh array in counted loops,
+// every access in range, goes with the global: it can neither trap nor loop
+// forever, so nothing it does is observable.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn build_table(lenient: bool) -> ByteList {
+    let mut table = ByteList::filled(256, 255);
+    for let mut i = 0; i < 26; i += 1 {
+        table['A' as i32 + i] = i as u8;
+    }
+    for let mut i = 0; i < 10; i += 1 {
+        table['0' as i32 + i] = (52 + i) as u8;
+    }
+    table['-' as i32] = 62;
+    if lenient {
+        table['+' as i32] = 62;
+    }
+    return table;
+}
+
+global TABLE: ByteList = build_table(true);
+
+fn decode(b: u8) -> u8 {
+    return TABLE[b as i32];
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_not_expect:O2": [
+        "build_table"
+    ]
+}

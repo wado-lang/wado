@@ -861,8 +861,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    pub(super) fn ast_find_return_type_in_block(&self, block: &Block) -> Option<TypeId> {
-        control_flow::find_return_type_in_block(self.ctrl_flow_ctx(), block)
+    pub(super) fn ast_return_types_in_block(&self, block: &Block) -> Vec<TypeId> {
+        control_flow::return_types_in_block(self.ctrl_flow_ctx(), block)
     }
 
     pub(super) fn ast_block_always_exits(&self, block: &Block) -> bool {

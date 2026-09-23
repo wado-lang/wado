@@ -138,6 +138,8 @@ fn "retain_elements_of_a_local_view.wado/copy_across"(dst, src) {
 }
 
 fn "retain_elements_of_a_local_view.wado/run"() {
+    let $load_3: ref "Array<retain_elements_of_a_local_view.wado/Slot>";
+    let $load_5: ref "Array<retain_elements_of_a_local_view.wado/Bag>";
     let x: ref "retain_elements_of_a_local_view.wado//Data";
     let origin: ref "retain_elements_of_a_local_view.wado//Bag";
     let copy: ref "Array<retain_elements_of_a_local_view.wado/Slot>";
@@ -158,16 +160,16 @@ fn "retain_elements_of_a_local_view.wado/run"() {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, new_used);
     }; start_26 = $local_8.used; $local_8.used = new_used; builtin::array_copy<u8>($local_8.repr, start_26, $sroa_other_repr, 0, 1); "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_31(black_box(1)), $local_8); $local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }); struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_33, used: builtin::array_len(elements_33) }), slots: builtin::array_new<ref "retain_elements_of_a_local_view.wado//Slot">(1) };
-    builtin::array_set<ref "retain_elements_of_a_local_view.wado//Slot">(origin.slots, 0, struct.new "retain_elements_of_a_local_view.wado//Slot" { d: x });
+    builtin::array_set<ref "retain_elements_of_a_local_view.wado//Slot">(local.tee $load_3(origin.slots), 0, struct.new "retain_elements_of_a_local_view.wado//Slot" { d: x });
     copy = builtin::array_new<ref "retain_elements_of_a_local_view.wado//Slot">(1);
-    "retain_elements_of_a_local_view.wado/copy_across"(copy, origin.slots);
+    "retain_elements_of_a_local_view.wado/copy_across"(copy, $load_3);
     elements_34 = array.new_fixed<ref "retain_elements_of_a_local_view.wado//Bag">();
     kept = struct.new "core:prelude//List<retain_elements_of_a_local_view.wado/Bag>" { repr: elements_34, used: 0 };
     if @unlikely(0 >= builtin::array_len(kept.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<retain_elements_of_a_local_view.wado/Bag>::grow"(kept);
     }
-    builtin::array_set<ref "retain_elements_of_a_local_view.wado//Bag">(kept.repr, 0, origin);
+    builtin::array_set<ref "retain_elements_of_a_local_view.wado//Bag">(local.tee $load_5(kept.repr), 0, origin);
     kept.used = 1;
     $v0_4 = builtin::array_get_value<ref "retain_elements_of_a_local_view.wado//Slot">(copy, 0).d.v;
     if @unlikely($v0_4 != 7) {
@@ -179,7 +181,7 @@ fn "retain_elements_of_a_local_view.wado/run"() {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<retain_elements_of_a_local_view.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1);
         unreachable;
-    }; builtin::array_get_value<ref "retain_elements_of_a_local_view.wado//Bag">(kept.repr, 0).tags;
+    }; builtin::array_get_value<ref "retain_elements_of_a_local_view.wado//Bag">($load_5, 0).tags;
     $v0_6 = self_42.used;
     if @unlikely($v0_6 != 2) {
         cold_path;
@@ -194,6 +196,8 @@ fn "retain_elements_of_a_local_view.wado/$cm_export__run"() {
 }
 
 fn "retain_elements_of_a_local_view.wado/run$cold0"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_12: ref "core:prelude/string.wado//String";
     let $local_13: ref "core:prelude/format.wado//Formatter";
     let self_23: ref Array<u8>;
@@ -214,18 +218,18 @@ fn "retain_elements_of_a_local_view.wado/run$cold0"($v0) {
     let start_77: i32;
     $local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(146), used: 0 };
     $local_12.used = 64;
-    self_23 = $local_12.repr;
+    self_23 = local.tee $load_0($local_12.repr);
     builtin::array_copy<u8>(self_23, 0, global:retain_elements_of_a_local_view.wado::$const_obj_8, 0, 20);
-    self_27 = $local_12.repr;
+    self_27 = $load_0;
     offset_28 = 0 + 20;
     builtin::array_copy<u8>(self_27, offset_28, global:retain_elements_of_a_local_view.wado::$const_obj_7, 0, 3);
-    self_31 = $local_12.repr;
+    self_31 = $load_0;
     offset_32 = 0 + 23;
     builtin::array_copy<u8>(self_31, offset_32, global:retain_elements_of_a_local_view.wado::$const_obj_6, 0, 4);
-    self_35 = $local_12.repr;
+    self_35 = $load_0;
     offset_36 = 0 + 27;
     builtin::array_copy<u8>(self_35, offset_36, global:retain_elements_of_a_local_view.wado::$const_obj_5, 0, 36);
-    self_39 = $local_12.repr;
+    self_39 = $load_0;
     offset_40 = 0 + 63;
     builtin::array_copy<u8>(self_39, offset_40, global:retain_elements_of_a_local_view.wado::$const_obj_4, 0, 1);
     $local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_12 };
@@ -237,9 +241,9 @@ fn "retain_elements_of_a_local_view.wado/run$cold0"($v0) {
     }
     start_51 = $local_12.used;
     $local_12.used = new_used_50;
-    self_53 = $local_12.repr;
+    self_53 = local.tee $load_5($local_12.repr);
     builtin::array_copy<u8>(self_53, start_51, global:retain_elements_of_a_local_view.wado::$const_obj_3, 0, 36);
-    self_57 = $local_12.repr;
+    self_57 = $load_5;
     offset_58 = start_51 + 36;
     builtin::array_copy<u8>(self_57, offset_58, global:retain_elements_of_a_local_view.wado::$const_obj_2, 0, 20);
     $local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_12 };
@@ -257,6 +261,8 @@ fn "retain_elements_of_a_local_view.wado/run$cold0"($v0) {
 }
 
 fn "retain_elements_of_a_local_view.wado/run$cold1"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_10: ref "core:prelude/string.wado//String";
     let $local_11: ref "core:prelude/format.wado//Formatter";
     let self_23: ref Array<u8>;
@@ -277,18 +283,18 @@ fn "retain_elements_of_a_local_view.wado/run$cold1"($v0) {
     let start_77: i32;
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(186), used: 0 };
     $local_10.used = 64;
-    self_23 = $local_10.repr;
+    self_23 = local.tee $load_0($local_10.repr);
     builtin::array_copy<u8>(self_23, 0, global:retain_elements_of_a_local_view.wado::$const_obj_8, 0, 20);
-    self_27 = $local_10.repr;
+    self_27 = $load_0;
     offset_28 = 0 + 20;
     builtin::array_copy<u8>(self_27, offset_28, global:retain_elements_of_a_local_view.wado::$const_obj_7, 0, 3);
-    self_31 = $local_10.repr;
+    self_31 = $load_0;
     offset_32 = 0 + 23;
     builtin::array_copy<u8>(self_31, offset_32, global:retain_elements_of_a_local_view.wado::$const_obj_6, 0, 4);
-    self_35 = $local_10.repr;
+    self_35 = $load_0;
     offset_36 = 0 + 27;
     builtin::array_copy<u8>(self_35, offset_36, global:retain_elements_of_a_local_view.wado::$const_obj_5, 0, 36);
-    self_39 = $local_10.repr;
+    self_39 = $load_0;
     offset_40 = 0 + 63;
     builtin::array_copy<u8>(self_39, offset_40, global:retain_elements_of_a_local_view.wado::$const_obj_4, 0, 1);
     $local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_10 };
@@ -300,9 +306,9 @@ fn "retain_elements_of_a_local_view.wado/run$cold1"($v0) {
     }
     start_51 = $local_10.used;
     $local_10.used = new_used_50;
-    self_53 = $local_10.repr;
+    self_53 = local.tee $load_5($local_10.repr);
     builtin::array_copy<u8>(self_53, start_51, global:retain_elements_of_a_local_view.wado::$const_obj_11, 0, 56);
-    self_57 = $local_10.repr;
+    self_57 = $load_5;
     offset_58 = start_51 + 56;
     builtin::array_copy<u8>(self_57, offset_58, global:retain_elements_of_a_local_view.wado::$const_obj_10, 0, 40);
     $local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_10 };
@@ -402,6 +408,9 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<retain_elements_of_a_local_view.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_14: ref Array<u8>;
@@ -431,18 +440,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<retain_elements_of_a_loca
     let start_94: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 };
     $local_4.used = 64;
-    self_14 = $local_4.repr;
+    self_14 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_14, 0, global:retain_elements_of_a_local_view.wado::$const_obj_8, 0, 20);
-    self_18 = $local_4.repr;
+    self_18 = $load_0;
     offset_19 = 0 + 20;
     builtin::array_copy<u8>(self_18, offset_19, global:core:prelude/list.wado::$const_obj_27, 0, 17);
-    self_22 = $local_4.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 37;
     builtin::array_copy<u8>(self_22, offset_23, global:retain_elements_of_a_local_view.wado::$const_obj_6, 0, 4);
-    self_26 = $local_4.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 41;
     builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/list.wado::$const_obj_25, 0, 22);
-    self_30 = $local_4.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:retain_elements_of_a_local_view.wado::$const_obj_4, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -454,15 +463,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<retain_elements_of_a_loca
     }
     start_42 = $local_4.used;
     $local_4.used = new_used_41;
-    self_44 = $local_4.repr;
+    self_44 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_44, start_42, global:core:prelude/list.wado::$const_obj_23, 0, 2);
-    self_48 = $local_4.repr;
+    self_48 = $load_5;
     offset_49 = start_42 + 2;
     builtin::array_copy<u8>(self_48, offset_49, global:core:prelude/list.wado::$const_obj_22, 0, 19);
-    self_52 = $local_4.repr;
+    self_52 = $load_5;
     offset_53 = start_42 + 21;
     builtin::array_copy<u8>(self_52, offset_53, global:core:prelude/list.wado::$const_obj_21, 0, 30);
-    self_56 = $local_4.repr;
+    self_56 = $load_5;
     offset_57 = start_42 + 51;
     builtin::array_copy<u8>(self_56, offset_57, global:core:prelude/list.wado::$const_obj_20, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -474,9 +483,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<retain_elements_of_a_loca
     }
     start_68 = $local_4.used;
     $local_4.used = new_used_67;
-    self_70 = $local_4.repr;
+    self_70 = local.tee $load_10($local_4.repr);
     builtin::array_copy<u8>(self_70, start_68, global:retain_elements_of_a_local_view.wado::$const_obj_1, 0, 1);
-    self_74 = $local_4.repr;
+    self_74 = $load_10;
     offset_75 = start_68 + 1;
     builtin::array_copy<u8>(self_74, offset_75, global:core:prelude/list.wado::$const_obj_18, 0, 11);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -494,19 +503,20 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<retain_elements_of_a_loca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -569,7 +579,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l34;
@@ -578,13 +588,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<retain_elements_of_a_local_view.wado/Bag>::grow"(self) {
+    let $load_0: ref "Array<retain_elements_of_a_local_view.wado/Bag>";
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "Array<retain_elements_of_a_local_view.wado/Bag>";
     let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    a = local.tee capacity(builtin::array_len(local.tee $load_0(self.repr))) * 2;
     new_repr = builtin::array_new<ref "retain_elements_of_a_local_view.wado//Bag">(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "retain_elements_of_a_local_view.wado//Bag">(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<ref "retain_elements_of_a_local_view.wado//Bag">(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 

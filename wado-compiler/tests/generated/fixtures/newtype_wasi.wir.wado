@@ -103,7 +103,7 @@ fn "newtype_wasi.wado/newtype_wasi_chained"() with Stdout, MonotonicClock {
     let rx_51: i32;
     let tx_52: i32;
     t1 = "newtype_wasi.wado/$cm_binding__MonotonicClock_now"();
-    if select i32(t1 == t1, t1 == t1, 0) {
+    if (t1 == t1) & (t1 == t1) {
         rx_15 = builtin::i32_wrap_i64(local.tee packed_14("wasi/stream-new"()));
         tx_16 = builtin::i32_wrap_i64(packed_14 >> 32_i64);
         handle_12 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(rx_15);
@@ -224,7 +224,7 @@ fn "newtype_wasi.wado/newtype_wasi_multiple"() with Stdout, MonotonicClock {
     let tx_37: i32;
     start = "newtype_wasi.wado/$cm_binding__MonotonicClock_now"();
     res = "newtype_wasi.wado/$cm_binding__MonotonicClock_get_resolution"();
-    if select i32(start >u 0_i64, res >u 0_i64, 0) {
+    if (start >u 0_i64) & (res >u 0_i64) {
         rx_12 = builtin::i32_wrap_i64(local.tee packed_11("wasi/stream-new"()));
         tx_13 = builtin::i32_wrap_i64(packed_11 >> 32_i64);
         handle_9 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(rx_12);
@@ -341,7 +341,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l9;

@@ -10,7 +10,8 @@ use std::rc::Rc;
 
 use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
 use crate::attribute::{
-    ALLOC, AMBIENT, BENIGN, EXPORT_NAME, IMMEDIATE, INLINE, PARAM, RESULT, RETAIN, SECRET, WIRE,
+    self, ALLOC, AMBIENT, BENIGN, EXPORT_NAME, IMMEDIATE, INLINE, LINEAR_MEMORY, PARAM, RESULT,
+    RETAIN, SECRET, TRAP, WIRE,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -111,6 +112,13 @@ macro_rules! reify_annotation_accessors {
             }
         )+
     };
+}
+
+/// What one `#[trap(...)]` attribute states; `never` states nothing.
+#[derive(Default)]
+struct TrapClause {
+    check: Option<tir::TrapCheck<String>>,
+    result_len: Option<String>,
 }
 
 /// Whether a compound-assign target sub-piece may be left inline (duplicated
@@ -1421,10 +1429,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &params,
             return_type,
             body.is_some(),
-            self.reify_return_convention_attr(&func.attrs, &params, body.is_some()),
+            self.reify_return_convention_attr(&func.attrs, &params),
         );
-        let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
-        let immediates = self.reify_immediate_attrs(&func.attrs, &params, body.is_some());
+        let retains = self.reify_retain_attrs(&func.attrs, &params);
+        let immediates = self.reify_immediate_attrs(&func.attrs, &params);
+        let trap = self.reify_trap_attrs(&func.attrs, &params);
+        let linear_memory = self.reify_linear_memory_attr(&func.attrs);
+        if body.is_some() {
+            self.reject_bodyless_attrs_on_body(&func.attrs);
+        }
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1449,6 +1462,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
             retains,
             immediates,
+            trap,
+            linear_memory,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1809,10 +1824,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &params,
             return_type,
             body.is_some(),
-            self.reify_return_convention_attr(&func.attrs, &params, body.is_some()),
+            self.reify_return_convention_attr(&func.attrs, &params),
         );
-        let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
-        let immediates = self.reify_immediate_attrs(&func.attrs, &params, body.is_some());
+        let retains = self.reify_retain_attrs(&func.attrs, &params);
+        let immediates = self.reify_immediate_attrs(&func.attrs, &params);
+        let trap = self.reify_trap_attrs(&func.attrs, &params);
+        let linear_memory = self.reify_linear_memory_attr(&func.attrs);
+        if body.is_some() {
+            self.reject_bodyless_attrs_on_body(&func.attrs);
+        }
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1837,6 +1857,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
             retains,
             immediates,
+            trap,
+            linear_memory,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1907,6 +1929,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             effects: vec![],
             retains: vec![],
             immediates: vec![],
+            trap: None,
+            linear_memory: None,
             body: Some(body),
             span: test_decl.span,
             local_count: ctx.local_count(),
@@ -2033,6 +2057,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span: Some(DiagnosticSpan::from_span(&attr.span, None)),
             },
         );
+    }
+
+    /// Report each attribute that describes a declaration with no body, written
+    /// on a function that has one. Its arguments were read already, so a
+    /// malformed one reports that too.
+    fn reject_bodyless_attrs_on_body(&self, attrs: &[ast::Attribute]) {
+        for (attr, name, bodyless) in attribute::bodyless(attrs) {
+            self.attr_error(
+                Code::AttrMisuse,
+                attr,
+                format!(
+                    "#[{name}] belongs to a declaration with no body: {}",
+                    bodyless.on_body
+                ),
+            );
+        }
     }
 
     /// Report a malformed `#[wire(number = …)]` at the field it was written on.
@@ -2221,7 +2261,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attrs: &[ast::Attribute],
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Option<tir::ReturnConvention> {
         let attr = attrs.iter().find(|a| a.name == RESULT)?;
         let emit = |message: String| {
@@ -2233,22 +2272,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 "#[result] takes one convention: `owned` or `part_of = param`".to_string(),
             );
         };
-        // After the argument, so an attribute that is both malformed and
-        // misplaced reports what it got wrong rather than only where it sits.
-        let placed = |convention| {
-            if has_body {
-                return emit(
-                    "#[result] belongs to a declaration with no body; a body states what it returns"
-                        .to_string(),
-                );
-            }
-            Some(convention)
-        };
         match arg {
-            ast::AttrArg::Ident(name) if name == "owned" => placed(tir::ReturnConvention::Owned),
+            ast::AttrArg::Ident(name) if name == "owned" => Some(tir::ReturnConvention::Owned),
             ast::AttrArg::KeyIdent(key, named) if key == "part_of" => {
                 match params.iter().position(|p| &p.name == named) {
-                    Some(index) => placed(tir::ReturnConvention::PartOf(index)),
+                    Some(index) => Some(tir::ReturnConvention::PartOf(index)),
                     None => emit(format!("#[result(part_of = {named})] names no parameter")),
                 }
             }
@@ -2262,19 +2290,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// The `#[retain(...)]` clauses, one per attribute. A function with a body
-    /// states what it retains in that body, so an attribute there is reported
-    /// and dropped rather than read.
+    /// The `#[retain(...)]` clauses, one per attribute.
     fn reify_retain_attrs(
         &self,
         attrs: &[ast::Attribute],
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Vec<tir::RetainSpec<String>> {
         attrs
             .iter()
             .filter(|a| a.name == RETAIN)
-            .filter_map(|attr| self.reify_retain_attr(attr, params, has_body))
+            .filter_map(|attr| self.reify_retain_attr(attr, params))
             .collect()
     }
 
@@ -2282,7 +2307,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attr: &ast::Attribute,
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Option<tir::RetainSpec<String>> {
         let emit = |message: String| {
             self.attr_error(Code::RetainAttr, attr, message);
@@ -2330,15 +2354,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 "#[retain] names one retained thing; repeat the attribute for another".to_string(),
             );
         }
-
-        // After the arguments, so an attribute that is both malformed and
-        // misplaced reports what it got wrong rather than only where it sits.
-        if has_body {
-            return emit(
-                "#[retain] belongs to a declaration with no body; a body states what it retains"
-                    .to_string(),
-            );
-        }
         Some(tir::RetainSpec {
             source,
             elements,
@@ -2352,12 +2367,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attrs: &[ast::Attribute],
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Vec<String> {
         attrs
             .iter()
             .filter(|a| a.name == IMMEDIATE)
-            .filter_map(|attr| self.reify_immediate_attr(attr, params, has_body))
+            .filter_map(|attr| self.reify_immediate_attr(attr, params))
             .collect()
     }
 
@@ -2365,7 +2379,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attr: &ast::Attribute,
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Option<String> {
         let emit = |message: String| {
             self.attr_error(Code::ImmediateAttr, attr, message);
@@ -2382,14 +2395,123 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 "#[immediate] names one parameter; repeat the attribute for another".to_string(),
             );
         }
-        if has_body {
-            return emit(
-                "#[immediate] belongs to a declaration with no body: it describes how codegen \
-                 lowers the call, and a body is called rather than lowered"
-                    .to_string(),
-            );
-        }
         Some(name.clone())
+    }
+
+    /// The `#[trap(...)]` attributes as one spec, `None` where there are none.
+    /// A malformed one is reported and the whole spec dropped: silence is "may
+    /// trap", the reading that deletes nothing.
+    fn reify_trap_attrs(
+        &self,
+        attrs: &[ast::Attribute],
+        params: &[tir::TirParam],
+    ) -> Option<tir::TrapSpec<String>> {
+        let written: Vec<&ast::Attribute> = attrs.iter().filter(|a| a.name == TRAP).collect();
+        let mut spec = tir::TrapSpec {
+            checks: Vec::new(),
+            result_len: None,
+        };
+        let mut sound = true;
+        for attr in &written {
+            let emit = |message: String| self.attr_error(Code::TrapAttr, attr, message);
+            match self.reify_trap_attr(attr, params, written.len()) {
+                Ok(clause) => {
+                    spec.checks.extend(clause.check);
+                    if let Some(len) = clause.result_len {
+                        if spec.result_len.is_some() {
+                            emit("#[trap] states `result_len` once".to_string());
+                            sound = false;
+                        }
+                        spec.result_len = Some(len);
+                    }
+                }
+                Err(message) => {
+                    emit(message);
+                    sound = false;
+                }
+            }
+        }
+        (sound && !written.is_empty()).then_some(spec)
+    }
+
+    /// The `#[linear_memory(...)]` access, `None` where there is none. A
+    /// malformed one is reported and read as a write, which reorders nothing.
+    fn reify_linear_memory_attr(&self, attrs: &[ast::Attribute]) -> Option<tir::LinearMemory> {
+        let mut written = attrs.iter().filter(|a| a.name == LINEAR_MEMORY);
+        let attr = written.next()?;
+        let emit = |message: &str| {
+            self.attr_error(Code::LinearMemoryAttr, attr, message.to_string());
+            Some(tir::LinearMemory::Write)
+        };
+        if written.next().is_some() {
+            return emit("#[linear_memory] is written once");
+        }
+        match attr.args.as_slice() {
+            [ast::AttrArg::Ident(word)] if word == "read" => Some(tir::LinearMemory::Read),
+            [ast::AttrArg::Ident(word)] if word == "write" => Some(tir::LinearMemory::Write),
+            _ => emit("#[linear_memory] takes `read` or `write`"),
+        }
+    }
+
+    fn reify_trap_attr(
+        &self,
+        attr: &ast::Attribute,
+        params: &[tir::TirParam],
+        attr_count: usize,
+    ) -> Result<TrapClause, String> {
+        if let [ast::AttrArg::Ident(word)] = attr.args.as_slice()
+            && word == "never"
+        {
+            if attr_count > 1 {
+                return Err("#[trap(never)] stands alone".to_string());
+            }
+            return Ok(TrapClause::default());
+        }
+        let mut named: IndexMap<&str, String> = IndexMap::default();
+        for arg in &attr.args {
+            let ast::AttrArg::KeyIdent(key, param) = arg else {
+                return Err(format!(
+                    "#[trap] takes `never` or `key = param` pairs, not {}",
+                    arg.name()
+                ));
+            };
+            if !matches!(
+                key.as_str(),
+                "negative" | "outside" | "unset" | "at" | "len" | "result_len"
+            ) {
+                return Err(format!("unknown #[trap] key: {key}"));
+            }
+            if !params.iter().any(|p| &p.name == param) {
+                return Err(format!("#[trap({key} = {param})] names no parameter"));
+            }
+            if named.insert(key, param.clone()).is_some() {
+                return Err(format!("#[trap] names `{key}` twice"));
+            }
+        }
+        let mut take = |key: &str| named.shift_remove(key);
+        let check = match (take("negative"), take("outside"), take("unset")) {
+            (None, None, None) => None,
+            (Some(p), None, None) => Some(tir::TrapCheck::Negative(p)),
+            (None, Some(array), None) => Some(tir::TrapCheck::Outside {
+                array,
+                at: take("at"),
+                len: take("len"),
+            }),
+            (None, None, Some(array)) => Some(tir::TrapCheck::Unset(array)),
+            _ => {
+                return Err(
+                    "#[trap] states one check; repeat the attribute for another".to_string()
+                );
+            }
+        };
+        let result_len = take("result_len");
+        if let Some(key) = named.keys().next() {
+            return Err(format!("#[trap({key} = ...)] belongs with `outside`"));
+        }
+        if check.is_none() && result_len.is_none() {
+            return Err("#[trap] takes `never` or at least one `key = param`".to_string());
+        }
+        Ok(TrapClause { check, result_len })
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -9497,6 +9619,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
     }
 
+    /// Which wide-integer prelude struct `head` is, with the name its methods mangle under.
+    fn wide_int_of(&self, head: TypeId) -> Option<(CompilerItem, FqTypeName)> {
+        let tt = self.tysys.type_table.borrow();
+        Some((tt.wide_int_item(head)?, tt.fq_base_type_name(head)))
+    }
+
     /// Replay an `i128` / `u128` numeric-literal coercion recorded by annotate,
     /// returning `None` for every other shape. The 128-bit types are prelude
     /// structs, so the value is materialized by a `from_u64` / `from_i64` /
@@ -9508,24 +9636,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return None;
         }
         let target_type = choice.target_type;
-        let name = match self.tysys.type_table.borrow().get(target_type).clone() {
-            ResolvedType::Struct { def, .. }
-                if matches!(
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .struct_head_name(def)
-                        .as_str(),
-                    "u128" | "i128"
-                ) =>
-            {
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .fq_base_type_name(target_type)
-            }
-            _ => return None,
-        };
+        let (item, name) = self.wide_int_of(target_type)?;
 
         // Every shape the coercion admits, the negated `-NUM` among them, whose
         // coercion is keyed on the enclosing `Unary` node. Reading the one
@@ -9538,7 +9649,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             NumericLiteralKind::Byte(raw) => unescape_byte(raw).ok()?.to_string(),
         };
 
-        let parse_result = if name.decl_name() == "u128" {
+        let parse_result = if item == CompilerItem::U128 {
             parse_u128_literal(&repr).map(|v| v as i128)
         } else if negated {
             parse_i128_literal(&format!("-{repr}"))
@@ -9548,6 +9659,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let value = parse_result.ok()?;
 
         Some(build_int128_literal_call(
+            item,
             &name,
             value,
             &repr,
@@ -9570,36 +9682,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .type_table
             .borrow()
             .representation_head(target_type);
-        let name = match self.tysys.type_table.borrow().get(target_base).clone() {
-            ResolvedType::Struct { def, .. }
-                if matches!(
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .struct_head_name(def)
-                        .as_str(),
-                    "u128" | "i128"
-                ) =>
-            {
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .fq_base_type_name(target_base)
-            }
-            _ => return None,
-        };
+        let (item, name) = self.wide_int_of(target_base)?;
 
         // Literal operand: `1042 as u128`.
         if let ast::Expr::Literal(lit) = &cast.expr
             && let Some(repr) = int_literal_repr(lit)
         {
-            let parsed = if name.decl_name() == "u128" {
+            let parsed = if item == CompilerItem::U128 {
                 parse_u128_literal(repr).map(|v| v as i128)
             } else {
                 parse_i128_literal(repr)
             };
             if let Ok(value) = parsed {
                 return Some(build_int128_literal_call(
+                    item,
                     &name,
                     value,
                     repr,
@@ -9611,7 +9707,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         // Negated literal operand (i128 only): `-170... as i128`.
-        if name.decl_name() == "i128"
+        if item == CompilerItem::I128
             && let ast::Expr::Unary(unary) = &cast.expr
             && unary.op == ast::UnaryOp::Neg
             && let ast::Expr::Literal(ast::LiteralExpr {
@@ -9622,6 +9718,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && let Ok(value) = parse_i128_literal(&format!("-{repr}"))
         {
             return Some(build_int128_literal_call(
+                item,
                 &name,
                 value,
                 repr,
@@ -9650,7 +9747,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 cast.span,
             ));
         }
-        let intermediate_type = if name.decl_name() == "u128" {
+        let intermediate_type = if item == CompilerItem::U128 {
             TypeTable::U64
         } else {
             TypeTable::I64
@@ -9664,6 +9761,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cast.span,
         );
         Some(build_int128_from_intermediate(
+            item,
             &name,
             casted,
             target_type,
@@ -9685,7 +9783,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         target_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
-        use crate::compiler_item::CompilerItem;
         use crate::primitive::PrimitiveType;
         use crate::tir::{ResolvedType, TypeTable};
 
@@ -9700,22 +9797,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 tt.representation_head(target_type),
             )
         };
-        let source_name = match self.tysys.type_table.borrow().get(source_base).clone() {
-            ResolvedType::Struct { def, .. }
-                if matches!(
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .struct_head_name(def)
-                        .as_str(),
-                    "u128" | "i128"
-                ) =>
-            {
-                self.tysys.type_table.borrow().struct_head_name(def)
-            }
-            _ => return None,
+        let (source_item, target_item) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.wide_int_item(source_base)?,
+                tt.wide_int_item(target_base),
+            )
         };
-        let signed_source = source_name == "i128";
+        let signed_source = source_item == CompilerItem::I128;
 
         enum Lowering {
             /// `i128 as i128` / `u128 as u128` — no-op.
@@ -9748,29 +9837,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | PrimitiveType::I8
                 | PrimitiveType::U8,
             ) => Lowering::LowThenCast,
-            ResolvedType::Struct { def, .. }
-                if self.tysys.type_table.borrow().struct_head_name(def) == source_name =>
-            {
-                if target_type == source_type {
-                    Lowering::Identity
-                } else {
-                    // Same wide base but a newtype on either side: the
-                    // bare `Cast` emitted by the caller is the correct
-                    // repr-compatible reinterpret.
-                    return None;
+            _ => match target_item {
+                Some(item) if item == source_item => {
+                    if target_type == source_type {
+                        Lowering::Identity
+                    } else {
+                        // Same wide base but a newtype on either side: the
+                        // bare `Cast` emitted by the caller is the correct
+                        // repr-compatible reinterpret.
+                        return None;
+                    }
                 }
-            }
-            ResolvedType::Struct { def, .. }
-                if self.tysys.type_table.borrow().struct_head_name(def) == "i128" =>
-            {
-                Lowering::Reinterpret(CompilerItem::I128FromU128)
-            }
-            ResolvedType::Struct { def, .. }
-                if self.tysys.type_table.borrow().struct_head_name(def) == "u128" =>
-            {
-                Lowering::Reinterpret(CompilerItem::U128FromI128)
-            }
-            _ => return None,
+                Some(CompilerItem::I128) => Lowering::Reinterpret(CompilerItem::I128FromU128),
+                Some(CompilerItem::U128) => Lowering::Reinterpret(CompilerItem::U128FromI128),
+                Some(other) => unreachable!("wide_int_item answered {other:?}"),
+                None => return None,
+            },
         };
 
         let make_func_ref = |tysys: &TypeSystem, item: CompilerItem| {
@@ -11112,6 +11194,7 @@ fn deref_to_value(
 /// Build the `from_pair` call that materializes a 128-bit value from its
 /// `(low: u64, high: u64/i64)` halves.
 fn build_int128_from_pair(
+    item: CompilerItem,
     type_name: &FqTypeName,
     low: u64,
     high: i64,
@@ -11131,7 +11214,7 @@ fn build_int128_from_pair(
             value: high.cast_unsigned(),
             repr: high.to_string(),
         },
-        if type_name.decl_name() == "u128" {
+        if item == CompilerItem::U128 {
             TypeTable::U64
         } else {
             TypeTable::I64
@@ -11166,6 +11249,7 @@ fn build_int128_from_pair(
 /// admits the cheaper `from_u64` / `from_i64`; the negated `-NUM` shape denies
 /// it and always takes `from_pair`.
 fn build_int128_literal_call(
+    item: CompilerItem,
     name: &FqTypeName,
     value: i128,
     repr: &str,
@@ -11174,14 +11258,14 @@ fn build_int128_literal_call(
     span: Span,
 ) -> TirExpr {
     let use_small = allow_small
-        && if name.decl_name() == "u128" {
+        && if item == CompilerItem::U128 {
             u64::try_from(value).is_ok()
         } else {
             i64::try_from(value).is_ok()
         };
 
     if use_small {
-        let (inner_type, method_name, store_value) = if name.decl_name() == "u128" {
+        let (inner_type, method_name, store_value) = if item == CompilerItem::U128 {
             (
                 TypeTable::U64,
                 "from_u64",
@@ -11227,18 +11311,19 @@ fn build_int128_literal_call(
     }
 
     let (low, high) = unpack_i128(value);
-    build_int128_from_pair(name, low, high, target_type, span)
+    build_int128_from_pair(item, name, low, high, target_type, span)
 }
 
 /// Build `u128::from_u64(inner)` / `i128::from_i64(inner)` for the general
 /// (non-literal) `expr as i128/u128` cast. `intermediate` is already `u64`/`i64`.
 fn build_int128_from_intermediate(
+    item: CompilerItem,
     name: &FqTypeName,
     intermediate: TirExpr,
     target_type: TypeId,
     span: Span,
 ) -> TirExpr {
-    let method_name = if name.decl_name() == "u128" {
+    let method_name = if item == CompilerItem::U128 {
         "from_u64"
     } else {
         "from_i64"

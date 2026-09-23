@@ -1,0 +1,43 @@
+// A source that is not yet a settled scalar may still cast into a struct: a
+// reference reads through to its base, and a type parameter or projection
+// settles at monomorphization.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    x: i32,
+}
+
+type Q = P;
+
+trait Tr {
+    type Item;
+}
+
+struct Holder {}
+
+impl Tr for Holder {
+    type Item = P;
+}
+
+fn from_param<T>(v: T) -> P {
+    return v as P;
+}
+
+fn from_projection<T: Tr>(v: T::Item) -> P {
+    return v as P;
+}
+
+export fn run() with Stdout {
+    let mut p = P { x: 1 };
+    let r = &p;
+    let a = r as P;
+    let m = &mut p;
+    let b = m as Q;
+    let c = from_param(P { x: 2 });
+    let d = from_projection::<Holder>(P { x: 3 });
+    println(`${a.x} ${b.x} ${c.x} ${d.x}`);
+}
+
+__DATA__
+{"stdout": "1 1 2 3\n"}

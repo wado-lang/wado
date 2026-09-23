@@ -98,6 +98,10 @@ global global:cross_destruct_patterns.wado::$const_obj_6: ref null Array<u8> = a
 global global:cross_destruct_patterns.wado::$const_obj_9: ref null Array<u8> = array.new_fixed<u8>(65);
 
 fn "cross_destruct_patterns.wado/run"() with Stdout {
+    let $load_0: ref Array<u8>;
+    let $load_9: ref Array<u8>;
+    let $load_20: i32;
+    let $load_31: ref Array<u8>;
     let l: ref "core:prelude/string.wado//String";
     let a: i32;
     let b: i32;
@@ -151,9 +155,9 @@ fn "cross_destruct_patterns.wado/run"() with Stdout {
     let $sroa_$iter_0_index: i32;
     $local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 };
     $local_22.used = 3;
-    self_52 = $local_22.repr;
+    self_52 = local.tee $load_0($local_22.repr);
     builtin::array_copy<u8>(self_52, 0, global:cross_destruct_patterns.wado::$const_obj_9, 0, 1);
-    self_56 = $local_22.repr;
+    self_56 = $load_0;
     offset_57 = 0 + 1;
     builtin::array_copy<u8>(self_56, offset_57, global:cross_destruct_patterns.wado::$const_obj_3, 0, 2);
     $local_23 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_22 };
@@ -175,9 +179,9 @@ fn "cross_destruct_patterns.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_43);
     $local_24 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 };
     $local_24.used = 8;
-    self_102 = $local_24.repr;
+    self_102 = local.tee $load_9($local_24.repr);
     builtin::array_copy<u8>(self_102, 0, global:cross_destruct_patterns.wado::$const_obj_6, 0, 6);
-    self_106 = $local_24.repr;
+    self_106 = $load_9;
     offset_107 = 0 + 6;
     builtin::array_copy<u8>(self_106, offset_107, global:cross_destruct_patterns.wado::$const_obj_3, 0, 2);
     $local_25 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_24 };
@@ -206,7 +210,7 @@ fn "cross_destruct_patterns.wado/run"() with Stdout {
                     break $inline_core_prelude_slice_wado_SliceValueIter_cross_destruct_patterns_wado_Tagged__core_prelude_traits_wado_Iterator__next_47: ref.null none;
                 }
                 v_147 = builtin::array_get_value<ref "cross_destruct_patterns.wado//Tagged">(elements, $sroa_$iter_0_index);
-                item = struct.new "cross_destruct_patterns.wado//Tagged" { label: ref.as_non_null(v_148 = v_147.label; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_5: ref Array<u8>; $array_clone_src_5 = v_148.repr; let $array_clone_len_7: i32; $array_clone_len_7 = v_148.used; let $array_clone_dst_6: ref Array<u8>; $array_clone_dst_6 = builtin::array_new<u8>($array_clone_len_7); builtin::array_copy<u8>($array_clone_dst_6, 0, $array_clone_src_5, 0, $array_clone_len_7); $array_clone_dst_6), used: v_148.used }), coords: ref.as_non_null(v_149 = v_147.coords; struct.new "tuple//[i32, i32]" { 0: v_149.0, 1: v_149.1 }) };
+                item = struct.new "cross_destruct_patterns.wado//Tagged" { label: ref.as_non_null(v_148 = v_147.label; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_5: ref Array<u8>; $array_clone_src_5 = v_148.repr; let $array_clone_len_7: i32; $array_clone_len_7 = local.tee $load_20(v_148.used); let $array_clone_dst_6: ref Array<u8>; $array_clone_dst_6 = builtin::array_new<u8>($array_clone_len_7); builtin::array_copy<u8>($array_clone_dst_6, 0, $array_clone_src_5, 0, $array_clone_len_7); $array_clone_dst_6), used: $load_20 }), coords: ref.as_non_null(v_149 = v_147.coords; struct.new "tuple//[i32, i32]" { 0: v_149.0, 1: v_149.1 }) };
                 $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
                 break $inline_core_prelude_slice_wado_SliceValueIter_cross_destruct_patterns_wado_Tagged__core_prelude_traits_wado_Iterator__next_47: item;
             };
@@ -227,9 +231,9 @@ fn "cross_destruct_patterns.wado/run"() with Stdout {
                 }
                 start_155 = $local_26.used;
                 $local_26.used = new_used_154;
-                self_157 = $local_26.repr;
+                self_157 = local.tee $load_31($local_26.repr);
                 builtin::array_copy<u8>(self_157, start_155, l.repr, 0, self_151);
-                self_161 = $local_26.repr;
+                self_161 = $load_31;
                 offset_162 = start_155 + self_151;
                 builtin::array_copy<u8>(self_161, offset_162, global:cross_destruct_patterns.wado::$const_obj_3, 0, 2);
                 "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(a + b, $local_26);
@@ -342,19 +346,20 @@ fn "core:rt/write_string_to_stream$spec0"(tx, $mv$message$repr, $mv$message$used
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -417,7 +422,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l29;

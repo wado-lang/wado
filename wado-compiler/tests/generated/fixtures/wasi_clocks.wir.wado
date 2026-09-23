@@ -147,7 +147,7 @@ fn "wasi_clocks.wado/run"() with Stdout, MonotonicClock {
         "core:rt/write_string_to_stream"(tx_47, $mv_arg_8.repr, $mv_arg_8.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_43);
     }
-    if select i32(select i32(t1 >u 0_i64, 1, t2 >u 0_i64), 1, t3 >u 0_i64) {
+    if ((t1 >u 0_i64) | (t2 >u 0_i64)) | (t3 >u 0_i64) {
         rx_58 = builtin::i32_wrap_i64(local.tee packed_57("wasi/stream-new"()));
         tx_59 = builtin::i32_wrap_i64(packed_57 >> 32_i64);
         handle_55 = "wasi_clocks.wado/$cm_binding__Stdout_write_via_stream"(rx_58);
@@ -273,7 +273,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l6;

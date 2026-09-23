@@ -72,6 +72,8 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "reflect_member_read_shares.wado/run"() with Stdout {
+    let $load_1: i32;
+    let $load_3: i32;
     let $local_3: ref "core:prelude/string.wado//String";
     let v_7: ref "core:prelude//List<i32>";
     let v_8: ref "core:prelude//List<i32>";
@@ -86,22 +88,22 @@ fn "reflect_member_read_shares.wado/run"() with Stdout {
     let $array_clone_src_1: ref Array<i32>;
     $array_clone_src_1 = v_7.repr;
     let $array_clone_len_3: i32;
-    $array_clone_len_3 = v_7.used;
+    $array_clone_len_3 = local.tee $load_1(v_7.used);
     let $array_clone_dst_2: ref Array<i32>;
     $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3);
     builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
     drop($array_clone_dst_2);
-    $sroa_$sroa_h_xs_used = v_7.used;
+    $sroa_$sroa_h_xs_used = $load_1;
     v_8 = black_box(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4, 5), used: 3 });
     let $array_clone_src_4: ref Array<i32>;
     $array_clone_src_4 = v_8.repr;
     let $array_clone_len_6: i32;
-    $array_clone_len_6 = v_8.used;
+    $array_clone_len_6 = local.tee $load_3(v_8.used);
     let $array_clone_dst_5: ref Array<i32>;
     $array_clone_dst_5 = builtin::array_new<i32>($array_clone_len_6);
     builtin::array_copy<i32>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6);
     drop($array_clone_dst_5);
-    $sroa_$sroa_h_ys_used = v_8.used;
+    $sroa_$sroa_h_ys_used = $load_3;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee n(local.tee n($sroa_$sroa_h_xs_used) + $sroa_$sroa_h_ys_used), $local_3);
     rx_29 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
@@ -193,19 +195,20 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -268,7 +271,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l22;

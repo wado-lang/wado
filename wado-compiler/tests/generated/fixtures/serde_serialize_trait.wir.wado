@@ -77,6 +77,8 @@ global global:serde_serialize_trait.wado::$const_obj_5: ref null Array<u8> = arr
 global global:serde_serialize_trait.wado::$const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(52, 50), used: 2 };
 
 fn "serde_serialize_trait.wado/run"() with Stdout {
+    let $load_4: i32;
+    let $load_12: i32;
     let ser: ref "serde_serialize_trait.wado//TextSerializer";
     let $local_3_3: ref "core:prelude/string.wado//String";
     let $local_4_4: ref "core:prelude/string.wado//String";
@@ -105,11 +107,11 @@ fn "serde_serialize_trait.wado/run"() with Stdout {
     let $array_clone_src_1: ref Array<u8>;
     $array_clone_src_1 = v_32.repr;
     let $array_clone_len_3: i32;
-    $array_clone_len_3 = v_32.used;
+    $array_clone_len_3 = local.tee $load_4(v_32.used);
     let $array_clone_dst_2: ref Array<u8>;
     $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
     builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $sroa_other_used_106 = v_32.used;
+    $sroa_other_used_106 = $load_4;
     $inline_core_prelude_string_wado_String__internal_push_string_13: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_13 $sroa_other_used_106 == 0;
         new_used_41 = 5 + $sroa_other_used_106;
@@ -135,11 +137,11 @@ fn "serde_serialize_trait.wado/run"() with Stdout {
     let $array_clone_src_6: ref Array<u8>;
     $array_clone_src_6 = v_74.repr;
     let $array_clone_len_8: i32;
-    $array_clone_len_8 = v_74.used;
+    $array_clone_len_8 = local.tee $load_12(v_74.used);
     let $array_clone_dst_7: ref Array<u8>;
     $array_clone_dst_7 = builtin::array_new<u8>($array_clone_len_8);
     builtin::array_copy<u8>($array_clone_dst_7, 0, $array_clone_src_6, 0, $array_clone_len_8);
-    $sroa_other_used_110 = v_74.used;
+    $sroa_other_used_110 = $load_12;
     $inline_core_prelude_string_wado_String__internal_push_string_30: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_30 $sroa_other_used_110 == 0;
         new_used_83 = 8 + $sroa_other_used_110;
@@ -179,23 +181,25 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
 fn "serde_serialize_trait.wado/serde_serialize_trait.wado/TextSerializer^serde_serialize_trait.wado/Serializer::serialize_string"(self, v) {
+    let $load_2: i32;
     let $local_2: ref "core:prelude/string.wado//String";
     let new_used_30: i32;
     let start_31: i32;
@@ -212,11 +216,11 @@ fn "serde_serialize_trait.wado/serde_serialize_trait.wado/TextSerializer^serde_s
     let $array_clone_src_1: ref Array<u8>;
     $array_clone_src_1 = v.repr;
     let $array_clone_len_3: i32;
-    $array_clone_len_3 = v.used;
+    $array_clone_len_3 = local.tee $load_2(v.used);
     let $array_clone_dst_2: ref Array<u8>;
     $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
     builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $sroa_other_used_62 = v.used;
+    $sroa_other_used_62 = $load_2;
     $inline_core_prelude_string_wado_String__internal_push_string_10: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_10 $sroa_other_used_62 == 0;
         new_used_30 = 1 + $sroa_other_used_62;
@@ -311,7 +315,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l8;

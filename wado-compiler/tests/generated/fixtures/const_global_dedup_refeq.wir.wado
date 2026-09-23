@@ -35,17 +35,15 @@ type "functype//const_global_dedup_refeq.wado/$initialize_module" = fn();  // Ty
 
 type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(14)
 
-type "functype//core:prelude/fpfmt.wado/$initialize_module" = fn();  // TypeId(15)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(15)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(16)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(18)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -82,14 +80,12 @@ fn "const_global_dedup_refeq.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:const_global_dedup_refeq.wado::$modules_initialized);
         cold_path;
-        "core:prelude/fpfmt.wado/$initialize_module"();
         "const_global_dedup_refeq.wado/$initialize_module"();
         global:const_global_dedup_refeq.wado::$modules_initialized = 1;
     };
     $inline__initialize_modules_2: block {
         break_if $inline__initialize_modules_2 @likely(global:const_global_dedup_refeq.wado::$modules_initialized);
         cold_path;
-        "core:prelude/fpfmt.wado/$initialize_module"();
         "const_global_dedup_refeq.wado/$initialize_module"();
         global:const_global_dedup_refeq.wado::$modules_initialized = 1;
     };
@@ -127,9 +123,6 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
     $mv_field_4 = $mv$message$used + 1;
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx, new_repr, 0, $mv_field_4);
     "wasi/stream-drop-writable"(tx);
-}
-
-fn "core:prelude/fpfmt.wado/$initialize_module"() {
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self, $mv$data$repr, $mv$data$start, $mv$data$end) {
@@ -191,7 +184,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l3;

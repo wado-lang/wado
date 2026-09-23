@@ -187,6 +187,7 @@ fn "value_copy_array_get_mono.wado/$test_1_element_copy_inside_a_match_arm"() {
 }
 
 fn "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_independent"() {
+    let $load_1: ref "Array<value_copy_array_get_mono.wado/Cell>";
     let dst: ref "core:prelude//List<value_copy_array_get_mono.wado/Cell>";
     let $v0_2: i32;
     let $v0_6: i32;
@@ -199,9 +200,9 @@ fn "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_i
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono.wado/Cell>::grow"(dst);
     }
-    builtin::array_set<ref "value_copy_array_get_mono.wado//Cell">(dst.repr, 0, struct.new "value_copy_array_get_mono.wado//Cell" { v: 7 });
+    builtin::array_set<ref "value_copy_array_get_mono.wado//Cell">(local.tee $load_1(dst.repr), 0, struct.new "value_copy_array_get_mono.wado//Cell" { v: 7 });
     dst.used = 1;
-    builtin::array_get_value<ref "value_copy_array_get_mono.wado//Cell">(dst.repr, 0).v = 88;
+    builtin::array_get_value<ref "value_copy_array_get_mono.wado//Cell">($load_1, 0).v = 88;
     $v0_2 = arr = builtin::array_new<ref "value_copy_array_get_mono.wado//Cell">(1); builtin::array_set<ref "value_copy_array_get_mono.wado//Cell">(arr, 0, struct.new "value_copy_array_get_mono.wado//Cell" { v: 9 }); builtin::array_get_value<ref "value_copy_array_get_mono.wado//Cell">(arr, 0).v;
     if @unlikely($v0_2 != 9) {
         cold_path;
@@ -212,7 +213,7 @@ fn "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_i
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono.wado/Cell>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec1"($v1_48);
         unreachable;
-    }; builtin::array_get_value<ref "value_copy_array_get_mono.wado//Cell">(dst.repr, 0).v;
+    }; builtin::array_get_value<ref "value_copy_array_get_mono.wado//Cell">($load_1, 0).v;
     if @unlikely($v0_6 != 88) {
         cold_path;
         "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_independent$cold0"($v0_6);
@@ -294,6 +295,8 @@ fn "value_copy_array_get_mono.wado/$cm_export__$test_4_copy_in_a_loop_body"() {
 }
 
 fn "value_copy_array_get_mono.wado/$test_0_direct_list_index_binding_copies$cold2"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_8: ref "core:prelude/string.wado//String";
     let $local_9: ref "core:prelude/format.wado//Formatter";
     let self_23: ref Array<u8>;
@@ -314,18 +317,18 @@ fn "value_copy_array_get_mono.wado/$test_0_direct_list_index_binding_copies$cold
     let start_77: i32;
     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(134), used: 0 };
     $local_8.used = 95;
-    self_23 = $local_8.repr;
+    self_23 = local.tee $load_0($local_8.repr);
     builtin::array_copy<u8>(self_23, 0, global:value_copy_array_get_mono.wado::$const_obj_25, 0, 20);
-    self_27 = $local_8.repr;
+    self_27 = $load_0;
     offset_28 = 0 + 20;
     builtin::array_copy<u8>(self_27, offset_28, global:value_copy_array_get_mono.wado::$const_obj_24, 0, 40);
-    self_31 = $local_8.repr;
+    self_31 = $load_0;
     offset_32 = 0 + 60;
     builtin::array_copy<u8>(self_31, offset_32, global:value_copy_array_get_mono.wado::$const_obj_23, 0, 4);
-    self_35 = $local_8.repr;
+    self_35 = $load_0;
     offset_36 = 0 + 64;
     builtin::array_copy<u8>(self_35, offset_36, global:value_copy_array_get_mono.wado::$const_obj_22, 0, 30);
-    self_39 = $local_8.repr;
+    self_39 = $load_0;
     offset_40 = 0 + 94;
     builtin::array_copy<u8>(self_39, offset_40, global:value_copy_array_get_mono.wado::$const_obj_21, 0, 1);
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
@@ -337,9 +340,9 @@ fn "value_copy_array_get_mono.wado/$test_0_direct_list_index_binding_copies$cold
     }
     start_51 = $local_8.used;
     $local_8.used = new_used_50;
-    self_53 = $local_8.repr;
+    self_53 = local.tee $load_5($local_8.repr);
     builtin::array_copy<u8>(self_53, start_51, global:value_copy_array_get_mono.wado::$const_obj_20, 0, 30);
-    self_57 = $local_8.repr;
+    self_57 = $load_5;
     offset_58 = start_51 + 30;
     builtin::array_copy<u8>(self_57, offset_58, global:value_copy_array_get_mono.wado::$const_obj_19, 0, 14);
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
@@ -357,6 +360,8 @@ fn "value_copy_array_get_mono.wado/$test_0_direct_list_index_binding_copies$cold
 }
 
 fn "value_copy_array_get_mono.wado/$test_1_element_copy_inside_a_match_arm$cold0"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_10: ref "core:prelude/string.wado//String";
     let $local_11: ref "core:prelude/format.wado//Formatter";
     let self_21: ref Array<u8>;
@@ -377,18 +382,18 @@ fn "value_copy_array_get_mono.wado/$test_1_element_copy_inside_a_match_arm$cold0
     let start_75: i32;
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
     $local_10.used = 94;
-    self_21 = $local_10.repr;
+    self_21 = local.tee $load_0($local_10.repr);
     builtin::array_copy<u8>(self_21, 0, global:value_copy_array_get_mono.wado::$const_obj_25, 0, 20);
-    self_25 = $local_10.repr;
+    self_25 = $load_0;
     offset_26 = 0 + 20;
     builtin::array_copy<u8>(self_25, offset_26, global:value_copy_array_get_mono.wado::$const_obj_32, 0, 39);
-    self_29 = $local_10.repr;
+    self_29 = $load_0;
     offset_30 = 0 + 59;
     builtin::array_copy<u8>(self_29, offset_30, global:value_copy_array_get_mono.wado::$const_obj_23, 0, 4);
-    self_33 = $local_10.repr;
+    self_33 = $load_0;
     offset_34 = 0 + 63;
     builtin::array_copy<u8>(self_33, offset_34, global:value_copy_array_get_mono.wado::$const_obj_22, 0, 30);
-    self_37 = $local_10.repr;
+    self_37 = $load_0;
     offset_38 = 0 + 93;
     builtin::array_copy<u8>(self_37, offset_38, global:value_copy_array_get_mono.wado::$const_obj_21, 0, 1);
     $local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_10 };
@@ -400,9 +405,9 @@ fn "value_copy_array_get_mono.wado/$test_1_element_copy_inside_a_match_arm$cold0
     }
     start_49 = $local_10.used;
     $local_10.used = new_used_48;
-    self_51 = $local_10.repr;
+    self_51 = local.tee $load_5($local_10.repr);
     builtin::array_copy<u8>(self_51, start_49, global:value_copy_array_get_mono.wado::$const_obj_28, 0, 27);
-    self_55 = $local_10.repr;
+    self_55 = $load_5;
     offset_56 = start_49 + 27;
     builtin::array_copy<u8>(self_55, offset_56, global:value_copy_array_get_mono.wado::$const_obj_27, 0, 11);
     $local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_10 };
@@ -420,6 +425,8 @@ fn "value_copy_array_get_mono.wado/$test_1_element_copy_inside_a_match_arm$cold0
 }
 
 fn "value_copy_array_get_mono.wado/$test_1_element_copy_inside_a_match_arm$cold1"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_8: ref "core:prelude/string.wado//String";
     let $local_9: ref "core:prelude/format.wado//Formatter";
     let self_21: ref Array<u8>;
@@ -440,18 +447,18 @@ fn "value_copy_array_get_mono.wado/$test_1_element_copy_inside_a_match_arm$cold1
     let start_75: i32;
     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(134), used: 0 };
     $local_8.used = 94;
-    self_21 = $local_8.repr;
+    self_21 = local.tee $load_0($local_8.repr);
     builtin::array_copy<u8>(self_21, 0, global:value_copy_array_get_mono.wado::$const_obj_25, 0, 20);
-    self_25 = $local_8.repr;
+    self_25 = $load_0;
     offset_26 = 0 + 20;
     builtin::array_copy<u8>(self_25, offset_26, global:value_copy_array_get_mono.wado::$const_obj_32, 0, 39);
-    self_29 = $local_8.repr;
+    self_29 = $load_0;
     offset_30 = 0 + 59;
     builtin::array_copy<u8>(self_29, offset_30, global:value_copy_array_get_mono.wado::$const_obj_23, 0, 4);
-    self_33 = $local_8.repr;
+    self_33 = $load_0;
     offset_34 = 0 + 63;
     builtin::array_copy<u8>(self_33, offset_34, global:value_copy_array_get_mono.wado::$const_obj_22, 0, 30);
-    self_37 = $local_8.repr;
+    self_37 = $load_0;
     offset_38 = 0 + 93;
     builtin::array_copy<u8>(self_37, offset_38, global:value_copy_array_get_mono.wado::$const_obj_21, 0, 1);
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
@@ -463,9 +470,9 @@ fn "value_copy_array_get_mono.wado/$test_1_element_copy_inside_a_match_arm$cold1
     }
     start_49 = $local_8.used;
     $local_8.used = new_used_48;
-    self_51 = $local_8.repr;
+    self_51 = local.tee $load_5($local_8.repr);
     builtin::array_copy<u8>(self_51, start_49, global:value_copy_array_get_mono.wado::$const_obj_20, 0, 30);
-    self_55 = $local_8.repr;
+    self_55 = $load_5;
     offset_56 = start_49 + 30;
     builtin::array_copy<u8>(self_55, offset_56, global:value_copy_array_get_mono.wado::$const_obj_19, 0, 14);
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
@@ -483,6 +490,8 @@ fn "value_copy_array_get_mono.wado/$test_1_element_copy_inside_a_match_arm$cold1
 }
 
 fn "value_copy_array_get_mono.wado/$test_2_nested_struct_element_field_mutation_copies$cold2"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_8: ref "core:prelude/string.wado//String";
     let $local_9: ref "core:prelude/format.wado//Formatter";
     let self_23: ref Array<u8>;
@@ -503,18 +512,18 @@ fn "value_copy_array_get_mono.wado/$test_2_nested_struct_element_field_mutation_
     let start_77: i32;
     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(134), used: 0 };
     $local_8.used = 106;
-    self_23 = $local_8.repr;
+    self_23 = local.tee $load_0($local_8.repr);
     builtin::array_copy<u8>(self_23, 0, global:value_copy_array_get_mono.wado::$const_obj_25, 0, 20);
-    self_27 = $local_8.repr;
+    self_27 = $load_0;
     offset_28 = 0 + 20;
     builtin::array_copy<u8>(self_27, offset_28, global:value_copy_array_get_mono.wado::$const_obj_64, 0, 51);
-    self_31 = $local_8.repr;
+    self_31 = $load_0;
     offset_32 = 0 + 71;
     builtin::array_copy<u8>(self_31, offset_32, global:value_copy_array_get_mono.wado::$const_obj_23, 0, 4);
-    self_35 = $local_8.repr;
+    self_35 = $load_0;
     offset_36 = 0 + 75;
     builtin::array_copy<u8>(self_35, offset_36, global:value_copy_array_get_mono.wado::$const_obj_22, 0, 30);
-    self_39 = $local_8.repr;
+    self_39 = $load_0;
     offset_40 = 0 + 105;
     builtin::array_copy<u8>(self_39, offset_40, global:value_copy_array_get_mono.wado::$const_obj_21, 0, 1);
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
@@ -526,9 +535,9 @@ fn "value_copy_array_get_mono.wado/$test_2_nested_struct_element_field_mutation_
     }
     start_51 = $local_8.used;
     $local_8.used = new_used_50;
-    self_53 = $local_8.repr;
+    self_53 = local.tee $load_5($local_8.repr);
     builtin::array_copy<u8>(self_53, start_51, global:value_copy_array_get_mono.wado::$const_obj_20, 0, 30);
-    self_57 = $local_8.repr;
+    self_57 = $load_5;
     offset_58 = start_51 + 30;
     builtin::array_copy<u8>(self_57, offset_58, global:value_copy_array_get_mono.wado::$const_obj_19, 0, 14);
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
@@ -546,6 +555,8 @@ fn "value_copy_array_get_mono.wado/$test_2_nested_struct_element_field_mutation_
 }
 
 fn "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_independent$cold0"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_12: ref "core:prelude/string.wado//String";
     let $local_13: ref "core:prelude/format.wado//Formatter";
     let self_23: ref Array<u8>;
@@ -566,18 +577,18 @@ fn "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_i
     let start_77: i32;
     $local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(127), used: 0 };
     $local_12.used = 110;
-    self_23 = $local_12.repr;
+    self_23 = local.tee $load_0($local_12.repr);
     builtin::array_copy<u8>(self_23, 0, global:value_copy_array_get_mono.wado::$const_obj_25, 0, 20);
-    self_27 = $local_12.repr;
+    self_27 = $load_0;
     offset_28 = 0 + 20;
     builtin::array_copy<u8>(self_27, offset_28, global:value_copy_array_get_mono.wado::$const_obj_72, 0, 55);
-    self_31 = $local_12.repr;
+    self_31 = $load_0;
     offset_32 = 0 + 75;
     builtin::array_copy<u8>(self_31, offset_32, global:value_copy_array_get_mono.wado::$const_obj_23, 0, 4);
-    self_35 = $local_12.repr;
+    self_35 = $load_0;
     offset_36 = 0 + 79;
     builtin::array_copy<u8>(self_35, offset_36, global:value_copy_array_get_mono.wado::$const_obj_22, 0, 30);
-    self_39 = $local_12.repr;
+    self_39 = $load_0;
     offset_40 = 0 + 109;
     builtin::array_copy<u8>(self_39, offset_40, global:value_copy_array_get_mono.wado::$const_obj_21, 0, 1);
     $local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_12 };
@@ -589,9 +600,9 @@ fn "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_i
     }
     start_51 = $local_12.used;
     $local_12.used = new_used_50;
-    self_53 = $local_12.repr;
+    self_53 = local.tee $load_5($local_12.repr);
     builtin::array_copy<u8>(self_53, start_51, global:value_copy_array_get_mono.wado::$const_obj_68, 0, 27);
-    self_57 = $local_12.repr;
+    self_57 = $load_5;
     offset_58 = start_51 + 27;
     builtin::array_copy<u8>(self_57, offset_58, global:value_copy_array_get_mono.wado::$const_obj_67, 0, 10);
     $local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_12 };
@@ -609,6 +620,8 @@ fn "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_i
 }
 
 fn "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_independent$cold2"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_8: ref "core:prelude/string.wado//String";
     let $local_9: ref "core:prelude/format.wado//Formatter";
     let self_23: ref Array<u8>;
@@ -629,18 +642,18 @@ fn "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_i
     let start_77: i32;
     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(134), used: 0 };
     $local_8.used = 110;
-    self_23 = $local_8.repr;
+    self_23 = local.tee $load_0($local_8.repr);
     builtin::array_copy<u8>(self_23, 0, global:value_copy_array_get_mono.wado::$const_obj_25, 0, 20);
-    self_27 = $local_8.repr;
+    self_27 = $load_0;
     offset_28 = 0 + 20;
     builtin::array_copy<u8>(self_27, offset_28, global:value_copy_array_get_mono.wado::$const_obj_72, 0, 55);
-    self_31 = $local_8.repr;
+    self_31 = $load_0;
     offset_32 = 0 + 75;
     builtin::array_copy<u8>(self_31, offset_32, global:value_copy_array_get_mono.wado::$const_obj_23, 0, 4);
-    self_35 = $local_8.repr;
+    self_35 = $load_0;
     offset_36 = 0 + 79;
     builtin::array_copy<u8>(self_35, offset_36, global:value_copy_array_get_mono.wado::$const_obj_22, 0, 30);
-    self_39 = $local_8.repr;
+    self_39 = $load_0;
     offset_40 = 0 + 109;
     builtin::array_copy<u8>(self_39, offset_40, global:value_copy_array_get_mono.wado::$const_obj_21, 0, 1);
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
@@ -652,9 +665,9 @@ fn "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_i
     }
     start_51 = $local_8.used;
     $local_8.used = new_used_50;
-    self_53 = $local_8.repr;
+    self_53 = local.tee $load_5($local_8.repr);
     builtin::array_copy<u8>(self_53, start_51, global:value_copy_array_get_mono.wado::$const_obj_20, 0, 30);
-    self_57 = $local_8.repr;
+    self_57 = $load_5;
     offset_58 = start_51 + 30;
     builtin::array_copy<u8>(self_57, offset_58, global:value_copy_array_get_mono.wado::$const_obj_19, 0, 14);
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
@@ -672,6 +685,8 @@ fn "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_i
 }
 
 fn "value_copy_array_get_mono.wado/$test_4_copy_in_a_loop_body$cold0"(sum) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_17: ref "core:prelude/string.wado//String";
     let $local_18: ref "core:prelude/format.wado//Formatter";
     let self_28: ref Array<u8>;
@@ -692,18 +707,18 @@ fn "value_copy_array_get_mono.wado/$test_4_copy_in_a_loop_body$cold0"(sum) {
     let start_82: i32;
     $local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(118), used: 0 };
     $local_17.used = 82;
-    self_28 = $local_17.repr;
+    self_28 = local.tee $load_0($local_17.repr);
     builtin::array_copy<u8>(self_28, 0, global:value_copy_array_get_mono.wado::$const_obj_25, 0, 20);
-    self_32 = $local_17.repr;
+    self_32 = $load_0;
     offset_33 = 0 + 20;
     builtin::array_copy<u8>(self_32, offset_33, global:value_copy_array_get_mono.wado::$const_obj_96, 0, 27);
-    self_36 = $local_17.repr;
+    self_36 = $load_0;
     offset_37 = 0 + 47;
     builtin::array_copy<u8>(self_36, offset_37, global:value_copy_array_get_mono.wado::$const_obj_23, 0, 4);
-    self_40 = $local_17.repr;
+    self_40 = $load_0;
     offset_41 = 0 + 51;
     builtin::array_copy<u8>(self_40, offset_41, global:value_copy_array_get_mono.wado::$const_obj_22, 0, 30);
-    self_44 = $local_17.repr;
+    self_44 = $load_0;
     offset_45 = 0 + 81;
     builtin::array_copy<u8>(self_44, offset_45, global:value_copy_array_get_mono.wado::$const_obj_21, 0, 1);
     $local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_17 };
@@ -715,9 +730,9 @@ fn "value_copy_array_get_mono.wado/$test_4_copy_in_a_loop_body$cold0"(sum) {
     }
     start_56 = $local_17.used;
     $local_17.used = new_used_55;
-    self_58 = $local_17.repr;
+    self_58 = local.tee $load_5($local_17.repr);
     builtin::array_copy<u8>(self_58, start_56, global:value_copy_array_get_mono.wado::$const_obj_92, 0, 23);
-    self_62 = $local_17.repr;
+    self_62 = $load_5;
     offset_63 = start_56 + 23;
     builtin::array_copy<u8>(self_62, offset_63, global:value_copy_array_get_mono.wado::$const_obj_91, 0, 5);
     $local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_17 };
@@ -735,6 +750,8 @@ fn "value_copy_array_get_mono.wado/$test_4_copy_in_a_loop_body$cold0"(sum) {
 }
 
 fn "value_copy_array_get_mono.wado/$test_4_copy_in_a_loop_body$cold3"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_11: ref "core:prelude/string.wado//String";
     let $local_12: ref "core:prelude/format.wado//Formatter";
     let self_28: ref Array<u8>;
@@ -755,18 +772,18 @@ fn "value_copy_array_get_mono.wado/$test_4_copy_in_a_loop_body$cold3"($v0) {
     let start_82: i32;
     $local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(134), used: 0 };
     $local_11.used = 82;
-    self_28 = $local_11.repr;
+    self_28 = local.tee $load_0($local_11.repr);
     builtin::array_copy<u8>(self_28, 0, global:value_copy_array_get_mono.wado::$const_obj_25, 0, 20);
-    self_32 = $local_11.repr;
+    self_32 = $load_0;
     offset_33 = 0 + 20;
     builtin::array_copy<u8>(self_32, offset_33, global:value_copy_array_get_mono.wado::$const_obj_96, 0, 27);
-    self_36 = $local_11.repr;
+    self_36 = $load_0;
     offset_37 = 0 + 47;
     builtin::array_copy<u8>(self_36, offset_37, global:value_copy_array_get_mono.wado::$const_obj_23, 0, 4);
-    self_40 = $local_11.repr;
+    self_40 = $load_0;
     offset_41 = 0 + 51;
     builtin::array_copy<u8>(self_40, offset_41, global:value_copy_array_get_mono.wado::$const_obj_22, 0, 30);
-    self_44 = $local_11.repr;
+    self_44 = $load_0;
     offset_45 = 0 + 81;
     builtin::array_copy<u8>(self_44, offset_45, global:value_copy_array_get_mono.wado::$const_obj_21, 0, 1);
     $local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_11 };
@@ -778,9 +795,9 @@ fn "value_copy_array_get_mono.wado/$test_4_copy_in_a_loop_body$cold3"($v0) {
     }
     start_56 = $local_11.used;
     $local_11.used = new_used_55;
-    self_58 = $local_11.repr;
+    self_58 = local.tee $load_5($local_11.repr);
     builtin::array_copy<u8>(self_58, start_56, global:value_copy_array_get_mono.wado::$const_obj_20, 0, 30);
-    self_62 = $local_11.repr;
+    self_62 = $load_5;
     offset_63 = start_56 + 30;
     builtin::array_copy<u8>(self_62, offset_63, global:value_copy_array_get_mono.wado::$const_obj_19, 0, 14);
     $local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_11 };
@@ -880,6 +897,9 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono.wado/Cell>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec0"(index) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_14: ref Array<u8>;
@@ -909,18 +929,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono
     let start_94: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 };
     $local_4.used = 64;
-    self_14 = $local_4.repr;
+    self_14 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_14, 0, global:value_copy_array_get_mono.wado::$const_obj_25, 0, 20);
-    self_18 = $local_4.repr;
+    self_18 = $load_0;
     offset_19 = 0 + 20;
     builtin::array_copy<u8>(self_18, offset_19, global:core:prelude/list.wado::$const_obj_169, 0, 17);
-    self_22 = $local_4.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 37;
     builtin::array_copy<u8>(self_22, offset_23, global:value_copy_array_get_mono.wado::$const_obj_23, 0, 4);
-    self_26 = $local_4.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 41;
     builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/list.wado::$const_obj_167, 0, 22);
-    self_30 = $local_4.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:value_copy_array_get_mono.wado::$const_obj_21, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -932,15 +952,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono
     }
     start_42 = $local_4.used;
     $local_4.used = new_used_41;
-    self_44 = $local_4.repr;
+    self_44 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_44, start_42, global:core:prelude/list.wado::$const_obj_165, 0, 2);
-    self_48 = $local_4.repr;
+    self_48 = $load_5;
     offset_49 = start_42 + 2;
     builtin::array_copy<u8>(self_48, offset_49, global:core:prelude/list.wado::$const_obj_164, 0, 19);
-    self_52 = $local_4.repr;
+    self_52 = $load_5;
     offset_53 = start_42 + 21;
     builtin::array_copy<u8>(self_52, offset_53, global:core:prelude/list.wado::$const_obj_163, 0, 30);
-    self_56 = $local_4.repr;
+    self_56 = $load_5;
     offset_57 = start_42 + 51;
     builtin::array_copy<u8>(self_56, offset_57, global:core:prelude/list.wado::$const_obj_162, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -952,9 +972,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono
     }
     start_68 = $local_4.used;
     $local_4.used = new_used_67;
-    self_70 = $local_4.repr;
+    self_70 = local.tee $load_10($local_4.repr);
     builtin::array_copy<u8>(self_70, start_68, global:value_copy_array_get_mono.wado::$const_obj_18, 0, 1);
-    self_74 = $local_4.repr;
+    self_74 = $load_10;
     offset_75 = start_68 + 1;
     builtin::array_copy<u8>(self_74, offset_75, global:core:prelude/list.wado::$const_obj_160, 0, 11);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -972,6 +992,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono.wado/Cell>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec1"($v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_14: ref Array<u8>;
@@ -1001,18 +1024,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono
     let start_94: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 };
     $local_4.used = 64;
-    self_14 = $local_4.repr;
+    self_14 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_14, 0, global:value_copy_array_get_mono.wado::$const_obj_25, 0, 20);
-    self_18 = $local_4.repr;
+    self_18 = $load_0;
     offset_19 = 0 + 20;
     builtin::array_copy<u8>(self_18, offset_19, global:core:prelude/list.wado::$const_obj_169, 0, 17);
-    self_22 = $local_4.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 37;
     builtin::array_copy<u8>(self_22, offset_23, global:value_copy_array_get_mono.wado::$const_obj_23, 0, 4);
-    self_26 = $local_4.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 41;
     builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/list.wado::$const_obj_167, 0, 22);
-    self_30 = $local_4.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:value_copy_array_get_mono.wado::$const_obj_21, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -1024,15 +1047,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono
     }
     start_42 = $local_4.used;
     $local_4.used = new_used_41;
-    self_44 = $local_4.repr;
+    self_44 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_44, start_42, global:core:prelude/list.wado::$const_obj_165, 0, 2);
-    self_48 = $local_4.repr;
+    self_48 = $load_5;
     offset_49 = start_42 + 2;
     builtin::array_copy<u8>(self_48, offset_49, global:core:prelude/list.wado::$const_obj_164, 0, 19);
-    self_52 = $local_4.repr;
+    self_52 = $load_5;
     offset_53 = start_42 + 21;
     builtin::array_copy<u8>(self_52, offset_53, global:core:prelude/list.wado::$const_obj_163, 0, 30);
-    self_56 = $local_4.repr;
+    self_56 = $load_5;
     offset_57 = start_42 + 51;
     builtin::array_copy<u8>(self_56, offset_57, global:core:prelude/list.wado::$const_obj_162, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -1044,9 +1067,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono
     }
     start_68 = $local_4.used;
     $local_4.used = new_used_67;
-    self_70 = $local_4.repr;
+    self_70 = local.tee $load_10($local_4.repr);
     builtin::array_copy<u8>(self_70, start_68, global:value_copy_array_get_mono.wado::$const_obj_18, 0, 1);
-    self_74 = $local_4.repr;
+    self_74 = $load_10;
     offset_75 = start_68 + 1;
     builtin::array_copy<u8>(self_74, offset_75, global:core:prelude/list.wado::$const_obj_160, 0, 11);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -1064,19 +1087,20 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -1139,7 +1163,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l57;
@@ -1148,13 +1172,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_array_get_mono.wado/Cell>::grow"(self) {
+    let $load_0: ref "Array<value_copy_array_get_mono.wado/Cell>";
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "Array<value_copy_array_get_mono.wado/Cell>";
     let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    a = local.tee capacity(builtin::array_len(local.tee $load_0(self.repr))) * 2;
     new_repr = builtin::array_new<ref "value_copy_array_get_mono.wado//Cell">(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "value_copy_array_get_mono.wado//Cell">(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<ref "value_copy_array_get_mono.wado//Cell">(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 

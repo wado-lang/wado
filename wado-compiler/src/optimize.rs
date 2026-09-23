@@ -7,6 +7,7 @@
 mod aggregate_forward;
 mod alias;
 mod arena_query;
+mod bounds;
 mod census;
 mod clone_forward;
 mod closure_devirt;
@@ -335,11 +336,11 @@ fn run_dce(
         profiler.span_start(&span);
         let functions_before = live_bodies(project);
         let globals_before = project.globals.len();
-        let mut effects = compute_fn_effects(&project.functions, &project.builtin_registry);
+        let mut effects = compute_fn_effects(project);
         if unhoist_unobserved_globals(project, descriptors, &effects) {
             // A rewritten body only lost work, so its real summary shrank, and
             // the stale table refuses deletions nothing has a reason to refuse.
-            effects = compute_fn_effects(&project.functions, &project.builtin_registry);
+            effects = compute_fn_effects(project);
         }
         let analysis = analyze_dce(project, descriptors);
         // Clearing an unreachable function's body leaves its entry describing

@@ -19,7 +19,7 @@ use super::drop_value::DropValueRule;
 use super::elide_box_local::build_elide_box_local;
 use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
-use super::identity_cast::IdentityCastRule;
+use super::identity_cast::{IdentityCastRule, IdentityDerefRule};
 use super::if_chain_to_match::IfChainToMatchRule;
 use super::known_case::KnownCaseRule;
 use super::labeled_block_fusion::{build_labeled_block_fusion, build_slot_temp_sroa};
@@ -90,7 +90,7 @@ pub(super) fn run_peephole(
          built for a run that visits no function. `gated!` owns that skip."
     );
     // Once for the run.
-    let effects = compute_fn_effects(&project.functions, &project.builtin_registry);
+    let effects = compute_fn_effects(project);
     gate.run_gated(gated_pass, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the ref-elimination rule is
@@ -176,6 +176,7 @@ pub(super) fn run_peephole(
             // Ahead of every rule matching on the shape of a value: a cast that
             // changes no representation is what hides that shape.
             &IdentityCastRule,
+            &IdentityDerefRule,
             &aggregate_forward_rule,
             &elide_rule,
             &const_fold_rule,

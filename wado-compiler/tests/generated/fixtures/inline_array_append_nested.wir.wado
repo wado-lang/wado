@@ -78,6 +78,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:inline_array_append_nested.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(108, 101, 110, 61);
 
 fn "inline_array_append_nested.wado/run"() with Stdout {
+    let $load_2: ref Array<i32>;
     let $local_1: ref "core:prelude/string.wado//String";
     let elements: ref Array<i32>;
     let i: i32;
@@ -104,11 +105,11 @@ fn "inline_array_append_nested.wado/run"() with Stdout {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_c_items);
             }
-            builtin::array_set<i32>($sroa_c_items.repr, used_9, value_8);
+            builtin::array_set<i32>(local.tee $load_2($sroa_c_items.repr), used_9, value_8);
             $sroa_c_items.used = used_9 + 1;
             value_15 = i * 2;
             used_16 = $sroa_c_items.used;
-            if @unlikely(used_16 >= builtin::array_len($sroa_c_items.repr)) {
+            if @unlikely(used_16 >= builtin::array_len($load_2)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_c_items);
             }
@@ -218,19 +219,20 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -293,7 +295,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l27;
@@ -302,13 +304,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
+    let $load_0: ref Array<i32>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<i32>;
     let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    a = local.tee capacity(builtin::array_len(local.tee $load_0(self.repr))) * 2;
     new_repr = builtin::array_new<i32>(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<i32>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
