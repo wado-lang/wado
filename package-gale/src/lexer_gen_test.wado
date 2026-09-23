@@ -182,6 +182,21 @@ fn lexer_source<S: AsStrSlice>(src: S) -> String {
     return w.to_string();
 }
 
+test "gen_lexer: the first-char dispatch is one match, not an else-if chain" {
+    // A chain tests every branch in turn, so the letters and digits a real
+    // grammar spends its time on sit behind the punctuation. One `match` is a
+    // single decision whatever the arm count.
+    let out = lexer_source("lexer grammar L; A : 'a' ; B : 'b' ; N : [0-9]+ ;");
+    assert out.contains("match first_char {"), out;
+    assert !out.contains("if first_char matches"), out;
+}
+
+test "gen_lexer: a dispatch with no wildcard rule still covers every char" {
+    // `char` has no finite case list, so the arms alone never exhaust it.
+    let out = lexer_source("lexer grammar L; A : 'a' ; B : 'b' ;");
+    assert out.contains("_ => {},"), out;
+}
+
 test "gen_lexer: tail alternation of unequal length uses the longest-match emit" {
     // ANTLR4's lexer takes the longest arm (`I` matches `ab`, not `a`).
     let out = lexer_source("lexer grammar L; I : ('a' | 'ab') ; J : . ;");
@@ -193,7 +208,18 @@ test "gen_lexer: tail alternation of equal length keeps the first-match emit" {
     // coincide; the cheaper emit stays byte-identical for the common shape.
     let out = lexer_source("lexer grammar L; WS : (' ' | '\n') ;");
     assert !out.contains("alts_best_"), out;
-    assert out.contains("alts_ok_"), out;
+    assert out.contains("alts_done_"), out;
+}
+
+test "gen_lexer: first-match arms are siblings, not a cascade" {
+    // Nesting each arm inside the previous one's `if !ok` costs a level per
+    // alternative for a guard the flat form already carries.
+    let out = lexer_source("lexer grammar L; K : ('a' | 'b' | 'c' | 'd') 'z' ;");
+    assert !out.contains("alts_ok_"), out;
+    for let line of out.lines() {
+        let indent = line.len() - line.trim_start().len();
+        assert indent < 24, line;
+    }
 }
 
 test "gen_lexer: alternation followed by a suffix keeps the first-match emit" {
