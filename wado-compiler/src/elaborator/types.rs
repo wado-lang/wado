@@ -704,7 +704,10 @@ pub enum TypeError {
     },
 
     /// A bound naming something that is not a declared trait.
-    UnknownBound { name: String, span: Span },
+    UnknownBound {
+        name: String,
+        span: Span,
+    },
 
     /// A trait reaches itself through its supertrait clause, so no type could
     /// ever satisfy the obligation. `chain` is the path back to the trait,

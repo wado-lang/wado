@@ -2257,12 +2257,12 @@ fn check_bounds_name_traits(
         let mut walk = Bounds {
             module: module_source,
             resolve,
-            unknown: Vec::new(),
+            unknown,
         };
         for item in &module.items {
             walk.visit_item(item);
         }
-        unknown.append(&mut walk.unknown);
+        unknown = walk.unknown;
     }
     unknown
 }
