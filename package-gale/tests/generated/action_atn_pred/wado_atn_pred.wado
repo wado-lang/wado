@@ -475,6 +475,10 @@ impl CstStore {
         return self.tag[i] matches { Open };
     }
 
+    pub fn is_token(&self, i: i32) -> bool {
+        return self.tag[i] matches { Tok | Miss | Skip };
+    }
+
     pub fn child_kind(&self, i: i32) -> ChildKind {
         return match self.tag[i] {
             Open => ChildKind::Node,
