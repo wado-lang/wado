@@ -187,7 +187,10 @@ fn test_branch_hint_offsets_point_at_branch_opcodes() {
                 unchecked_range, ..
             } = payload.unwrap()
             {
-                let (count, br_if) = check_module(fixture, &wasm[unchecked_range.start as usize..unchecked_range.end as usize]);
+                let (count, br_if) = check_module(
+                    fixture,
+                    &wasm[unchecked_range.start as usize..unchecked_range.end as usize],
+                );
                 total_hints += count;
                 saw_br_if |= br_if;
             }

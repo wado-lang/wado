@@ -155,7 +155,9 @@ export fn run() with Stdout {
             unchecked_range, ..
         }) = payload
         {
-            core_modules.push(result.wasm[unchecked_range.start as usize..unchecked_range.end as usize].to_vec());
+            core_modules.push(
+                result.wasm[unchecked_range.start as usize..unchecked_range.end as usize].to_vec(),
+            );
         }
     }
     for module in &core_modules {

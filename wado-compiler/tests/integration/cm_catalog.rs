@@ -1922,18 +1922,18 @@ fn cm_lib_rejects_two_types_sharing_a_cm_name() {
 #[test]
 fn map_last_wins_on_a_repeated_key() {
     let wasm = compile_catalog(OptLevel::O0);
-    let engine = crate::common::engine();
-    let rt = crate::common::runtime();
+    let engine = engine();
+    let rt = runtime();
 
     rt.block_on(async {
         let component = Component::new(engine, &wasm).expect("instantiate component type");
-        let linker = crate::common::linker(engine).expect("build linker");
-        let state = crate::common::WasiState::new_with_pipes(
+        let linker = linker(engine).expect("build linker");
+        let state = WasiState::new_with_pipes(
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        crate::common::limit_store(&mut store, crate::common::DEFAULT_TIMEOUT_MS);
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await

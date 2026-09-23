@@ -732,7 +732,7 @@ impl WasiHttpHooks for TestHttpCtx {
 
 /// Finish a fixture's [`WasiCtx`], granting socket *creation* but no network.
 ///
-/// wasmtime 48 made creating a TCP/UDP socket a permission of its own, off by
+/// wasmtime makes creating a TCP/UDP socket a permission of its own, off by
 /// default. A fixture that only constructs a socket — to pattern-match the
 /// `Result` it comes back in, say — would otherwise fail before reaching what
 /// it tests. Reaching the network stays denied: no `inherit_network`, so the

@@ -28,6 +28,10 @@ use super::types::{
 };
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
+use crate::name::FqTypeName;
+use crate::name::LocalMethodName;
+use crate::tir::CallArg;
+use crate::tir::FunctionRef;
 use crate::tir::StructDef;
 
 /// The binder `impl<K: Ord> IndexAssign<K> for TreeMap<K, V>` declares, which is
@@ -112,21 +116,13 @@ fn synthesize_lift_inner(
         let tt = ctx.type_table.borrow();
         let items = tt.compiler_items();
         (
+            items.struct_name(CompilerItem::String).to_string(),
+            items.struct_name(CompilerItem::List).to_string(),
             items
-                .struct_name(crate::compiler_item::CompilerItem::String)
-                .to_string(),
-            items
-                .struct_name(crate::compiler_item::CompilerItem::List)
-                .to_string(),
-            items
-                .struct_name_opt(crate::compiler_item::CompilerItem::TreeMap)
+                .struct_name_opt(CompilerItem::TreeMap)
                 .map(str::to_string),
-            items
-                .variant_name(crate::compiler_item::CompilerItem::Option)
-                .to_string(),
-            items
-                .variant_name(crate::compiler_item::CompilerItem::Result)
-                .to_string(),
+            items.variant_name(CompilerItem::Option).to_string(),
+            items.variant_name(CompilerItem::Result).to_string(),
         )
     };
     match ty {
@@ -834,8 +830,7 @@ fn tree_map_instance(tt: &TypeTable, tid: TypeId) -> Option<(TypeId, TypeId, Typ
     let ResolvedType::GenericInstance { def, type_args } = tt.get(tid) else {
         return None;
     };
-    let is_tree_map =
-        tt.compiler_item_def(crate::compiler_item::CompilerItem::TreeMap) == Some(*def);
+    let is_tree_map = tt.compiler_item_def(CompilerItem::TreeMap) == Some(*def);
     match type_args.as_slice() {
         [key, value] if is_tree_map => Some((tid, *key, *value)),
         _ => None,
@@ -872,17 +867,14 @@ pub(super) fn synthesize_lift_map(
                 let value_tid = ctx.cm_type_id(value_ty, &mut tt);
                 (tt.make_tree_map(key_tid, value_tid), key_tid, value_tid)
             };
-        let map_head = tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::TreeMap);
+        let map_head = tt.compiler_struct_fq_name(CompilerItem::TreeMap);
         let items = tt.compiler_items();
-        let map_source = items
-            .require_struct(crate::compiler_item::CompilerItem::TreeMap)
-            .0
-            .clone();
+        let map_source = items.require_struct(CompilerItem::TreeMap).0.clone();
         let index_assign = items
-            .trait_fq(crate::compiler_item::CompilerItem::IndexAssign)
-            .with_args(vec![crate::name::FqTypeName::binder(TREE_MAP_KEY_BINDER)]);
+            .trait_fq(CompilerItem::IndexAssign)
+            .with_args(vec![FqTypeName::binder(TREE_MAP_KEY_BINDER)]);
         let method = items
-            .method_name(crate::compiler_item::CompilerItem::TreeMapIndexAssign)
+            .method_name(CompilerItem::TreeMapIndexAssign)
             .to_string();
         (
             map_type_id,
@@ -947,23 +939,19 @@ pub(super) fn synthesize_lift_map(
         .unwrap_or_else(|_| panic!("a map pair lifts exactly a key and a value"));
 
     let (index_assign_trait, index_assign_method) = index_assign;
-    let info =
-        crate::name::LocalMethodName::new(map_head, Some(index_assign_trait), index_assign_method);
+    let info = LocalMethodName::new(map_head, Some(index_assign_trait), index_assign_method);
     let mangled = info.to_mangled_name();
     loop_stmts.push(expr_stmt(TirExpr::new(
         TirExprKind::method_call(
             Box::new(local_ref(result_local, "$map", map_type_id)),
-            crate::tir::FunctionRef {
+            FunctionRef {
                 module_source: map_source,
                 name: mangled,
                 monomorph_info: None,
                 method_info: Some(info),
             },
             vec![],
-            vec![
-                crate::tir::CallArg::new(key, false),
-                crate::tir::CallArg::new(value, false),
-            ],
+            vec![CallArg::new(key, false), CallArg::new(value, false)],
         ),
         TypeTable::UNIT,
         synth_span(),

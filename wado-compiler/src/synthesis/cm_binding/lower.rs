@@ -29,6 +29,7 @@ use crate::compiler_item::CompilerItem;
 use crate::name::FqTypeName;
 use crate::synthesis::cm_binding::types::{cm_val_type_to_type_id, cm_zero};
 use crate::tir::TirBlock;
+use crate::tir::TirUnaryOp;
 
 /// Join two CM flat slot types via the single Canonical ABI join
 /// ([`cm_abi::CmValType::join`]) so a lowered flat arg matches the core import's
@@ -858,7 +859,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
     let (key_tid, value_tid) = {
         let tt = ctx.type_table.borrow();
         match tt.get(map_type_id) {
-            crate::tir::ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
                 (type_args[0], type_args[1])
             }
             other => panic!("a `map` lower needs a two-argument TreeMap, got {other:?}"),
@@ -884,34 +885,26 @@ pub(super) fn synthesize_lower_map_to_buffer(
         };
         let opt = tt.make_option(ref_pair);
         let iter_def = tt
-            .compiler_item_def(crate::compiler_item::CompilerItem::TreeMapEntriesIter)
+            .compiler_item_def(CompilerItem::TreeMapEntriesIter)
             .expect("the TreeMap entries iterator is a registered compiler item");
         let iter = tt.make_generic_instance(iter_def, vec![key_tid, value_tid]);
-        let map_head = tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::TreeMap);
-        let iter_head =
-            tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::TreeMapEntriesIter);
+        let map_head = tt.compiler_struct_fq_name(CompilerItem::TreeMap);
+        let iter_head = tt.compiler_struct_fq_name(CompilerItem::TreeMapEntriesIter);
         let items = tt.compiler_items();
-        let map_source = items
-            .require_struct(crate::compiler_item::CompilerItem::TreeMap)
-            .0
-            .clone();
+        let map_source = items.require_struct(CompilerItem::TreeMap).0.clone();
         let iter_source = items
-            .require_struct(crate::compiler_item::CompilerItem::TreeMapEntriesIter)
+            .require_struct(CompilerItem::TreeMapEntriesIter)
             .0
             .clone();
-        let next = crate::name::LocalMethodName::new(
+        let next = LocalMethodName::new(
             iter_head,
-            Some(items.trait_fq(crate::compiler_item::CompilerItem::Iterator)),
+            Some(items.trait_fq(CompilerItem::Iterator)),
             items
-                .method_name(crate::compiler_item::CompilerItem::TreeMapEntriesIterNext)
+                .method_name(CompilerItem::TreeMapEntriesIterNext)
                 .to_string(),
         );
-        let len_method = items
-            .method_name(crate::compiler_item::CompilerItem::TreeMapLen)
-            .to_string();
-        let entries_method = items
-            .method_name(crate::compiler_item::CompilerItem::TreeMapEntries)
-            .to_string();
+        let len_method = items.method_name(CompilerItem::TreeMapLen).to_string();
+        let entries_method = items.method_name(CompilerItem::TreeMapEntries).to_string();
         (
             map_head,
             map_source,
@@ -1060,7 +1053,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
         );
         let deref = TirExpr::new(
             TirExprKind::Unary {
-                op: crate::tir::TirUnaryOp::Deref,
+                op: TirUnaryOp::Deref,
                 expr: Box::new(field),
             },
             slot_tid,
@@ -1091,7 +1084,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
         },
         guard: None,
         body: TirExpr::new(
-            TirExprKind::Block(crate::tir::TirBlock::new(case_stmts, span)),
+            TirExprKind::Block(TirBlock::new(case_stmts, span)),
             TypeTable::UNIT,
             span,
         ),
@@ -1107,7 +1100,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
         },
         guard: None,
         body: TirExpr::new(
-            TirExprKind::Block(crate::tir::TirBlock::new(Vec::new(), span)),
+            TirExprKind::Block(TirBlock::new(Vec::new(), span)),
             TypeTable::UNIT,
             span,
         ),

@@ -33,6 +33,8 @@ use super::cm_free::{
 };
 use super::import_adapter::make_binding_function;
 use super::lift::synthesize_lift_list;
+use super::lift::synthesize_lift_map;
+use super::lower::synthesize_lower_map_to_buffer;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id,
@@ -445,7 +447,7 @@ fn lower_to_flat_inner(
             if ctx
                 .type_table
                 .borrow()
-                .compiler_item_def(crate::compiler_item::CompilerItem::TreeMap)
+                .compiler_item_def(CompilerItem::TreeMap)
                 == Some(*def)
                 && type_args.len() == 2 =>
         {
@@ -463,10 +465,9 @@ fn lower_to_flat_inner(
                     type_id_to_ast_type(type_args[1], &tt, ctx.cm_interface_registry),
                 )
             };
-            let (buffer_stmts, base_local, len_local) =
-                super::lower::synthesize_lower_map_to_buffer(
-                    &key_ast, &value_ast, value, next_local, locals, &lower_ctx,
-                );
+            let (buffer_stmts, base_local, len_local) = synthesize_lower_map_to_buffer(
+                &key_ast, &value_ast, value, next_local, locals, &lower_ctx,
+            );
             stmts.extend(buffer_stmts);
             vec![
                 FlatLocal {
@@ -960,7 +961,7 @@ pub(super) fn synthesize_lift_from_flat_params(
             n if names.tree_map.as_deref() == Some(n) && generic.args.len() == 2 => {
                 let tmp_ptr_local =
                     spill_ptr_len_to_temp(flat_param_locals, next_local, stmts, locals);
-                let lifted = super::lift::synthesize_lift_map(
+                let lifted = synthesize_lift_map(
                     &generic.args[0],
                     &generic.args[1],
                     local_ref(tmp_ptr_local, "$lift_tmp", TypeTable::I32),

@@ -130,7 +130,7 @@ pub fn map_key_rejection(type_table: &TypeTable, key: TypeId) -> Option<String> 
         ResolvedType::Struct { def, .. } => matches!(
             (
                 def.decl(),
-                type_table.compiler_item_def(crate::compiler_item::CompilerItem::String),
+                type_table.compiler_item_def(CompilerItem::String),
             ),
             (Some(found), Some(string)) if found == string
         ),
@@ -3825,6 +3825,7 @@ impl CmInterfaceRegistry {
     }
 }
 
+use crate::compiler_item::CompilerItem;
 use wasm_encoder::{
     ComponentTypeRef, ComponentValType, InstanceType, PrimitiveValType, TypeBounds,
 };

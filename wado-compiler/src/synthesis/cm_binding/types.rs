@@ -18,6 +18,7 @@ use crate::tir::{
     TirVariantDecl, TypeId, TypeTable,
 };
 
+use crate::component_model::map_key_rejection;
 use crate::component_model::{future_payload_rejection, stream_payload_rejection};
 use crate::defs::DefId;
 use crate::name::{FqTraitName, FqTypeName};
@@ -726,7 +727,7 @@ fn check_cm_boundary_representable_inner(
                     }
                     Ok(())
                 } else if type_table
-                    .compiler_item_def(crate::compiler_item::CompilerItem::TreeMap)
+                    .compiler_item_def(CompilerItem::TreeMap)
                     .is_some_and(|tree_map| tree_map == *def)
                 {
                     // `map<K, V>`: the key comes from the CM's `keytype`
@@ -735,8 +736,7 @@ fn check_cm_boundary_representable_inner(
                         panic!("`TreeMap` is declared with two type parameters");
                     };
                     let (key, value) = (*key, *value);
-                    if let Some(reason) = crate::component_model::map_key_rejection(type_table, key)
-                    {
+                    if let Some(reason) = map_key_rejection(type_table, key) {
                         return Err(reason);
                     }
                     recurse(value, visited)
