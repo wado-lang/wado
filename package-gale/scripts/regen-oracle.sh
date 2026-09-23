@@ -12,12 +12,12 @@
 # which this tree-pinning driver does not cover.
 #
 # Usage: scripts/regen-oracle.sh [sqlite|json|all]   (default: all)
-# Needs java+javac and a built `wado` (WADO env, default ../target/release/wado).
+# Needs java+javac and a built `wado` (WADO env, default ../target/debug/wado).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 export ANTLR4_VERSION="${ANTLR4_VERSION:-4.13.2}"
-WADO="${WADO:-../target/release/wado}"
+WADO="${WADO:-../target/debug/wado}"
 
 # Strip ANTLR4's <EOF> (Gale omits it) and collapse whitespace — safe only for
 # WS-skipping grammars, where no tree token carries a significant space.
