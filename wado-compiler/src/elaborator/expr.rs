@@ -19,6 +19,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::call::{DefaultTypeBinding, slot_type_bindings};
 use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
+use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
@@ -44,6 +45,7 @@ use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
 use crate::primitive::PrimitiveType;
 use crate::tir::{AnonStructId, StructDef};
+use std::rc::Rc;
 
 /// Outcome of trying to derive type arguments for a generic function
 /// reference from an expected `fn(...)` (or `&fn(...)`) type. Distinguishes
@@ -284,25 +286,6 @@ fn declared_pairs<'a>(
         }
         declared.get(slot).map(|&type_id| (field, type_id))
     })
-}
-
-/// Shape projection of a match-arm pattern, used solely for exhaustiveness /
-/// overlap analysis on the AST. It captures exactly the pattern shape the
-/// checks read, one distinction per `TirPattern` distinction they depend on:
-/// catch-all (wildcard / binding / reversed-or-empty range / bad range bound),
-/// enum / variant case names, bool literals, integer ranges and points, an
-/// opaque `Other` (strings, structs, tuples, constant-value patterns), and
-/// `Or` alternatives.
-enum ExhPattern {
-    CatchAll,
-    EnumCase(String),
-    VariantCase(String),
-    BoolLit(bool),
-    /// Inclusive integer range `[lo, hi]`.
-    Range(i128, i128),
-    IntLit(i128),
-    Other,
-    Or(Vec<ExhPattern>),
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -2798,152 +2781,89 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (body_type, arm.body.span())
     }
 
-    /// Exhaustiveness runs on the AST: the body walk materializes no
-    /// `TirMatchArm` / `TirPattern` to check. Each arm pattern is classified
-    /// into an [`ExhPattern`] — a shape projection carrying every distinction
-    /// the checks make (case-name disambiguation, range bounds,
-    /// const-vs-literal, reversed/empty-range → catch-all) — and the checks
-    /// read that projection.
+    /// Report the values no guardless arm covers, and the arms no value can
+    /// reach. Guarded arms take part in neither.
     fn check_match_exhaustiveness(
         &mut self,
         arms: &[MatchArm],
         scrutinee_type: TypeId,
         span: Span,
     ) {
-        // Coverage is asked of the structure the scrutinee's cases come from, so
-        // that it agrees with what pattern resolution asks.
-        let scrutinee_type = self
-            .tysys
-            .type_table
-            .borrow()
-            .scrutinee_structure_head(scrutinee_type);
-
-        // Classify each arm pattern once (shape only), pairing it with whether
-        // the arm is guardless (guarded arms never contribute to coverage).
-        let classified: Vec<(bool, ExhPattern)> = arms
-            .iter()
-            .map(|arm| {
-                let guardless = arm.guard.is_none();
-                (guardless, self.exh_pattern(&arm.pattern, scrutinee_type))
-            })
-            .collect();
-
-        // Always check for overlapping range patterns first.
-        self.check_range_overlaps(&classified, span);
-
-        // If any arm has a wildcard or binding pattern (without a guard), the match is exhaustive
-        if classified
-            .iter()
-            .any(|(guardless, pat)| *guardless && Self::is_catch_all_pattern(pat))
-        {
+        // An ill-typed scrutinee was reported where it was typed; its patterns
+        // classify as nothing.
+        if matches!(scrutinee_type, TypeTable::ERROR | TypeTable::UNKNOWN) {
             return;
         }
+        let classified: Vec<(bool, Pat)> = arms
+            .iter()
+            .map(|arm| {
+                (
+                    arm.guard.is_none(),
+                    self.exh_pattern(&arm.pattern, scrutinee_type),
+                )
+            })
+            .collect();
+        self.check_range_overlaps(&classified, span);
+        self.check_shadowed_narrowings(arms, &classified);
 
-        let tt = self.tysys.type_table.borrow();
-        let resolved = tt.get(scrutinee_type).clone();
-        drop(tt);
-
-        match &resolved {
-            ResolvedType::Enum { .. } => {
-                if let Some(enum_info) = self.enum_of_type(scrutinee_type) {
-                    let all_cases: IndexSet<&str> =
-                        enum_info.cases.iter().map(|c| c.name.as_str()).collect();
-                    let covered: IndexSet<&str> = {
-                        let mut names = Vec::new();
-                        for (_, pat) in &classified {
-                            Self::collect_enum_case_names(pat, &mut names);
-                        }
-                        names.into_iter().collect()
-                    };
-                    let missing: Vec<&&str> = all_cases.difference(&covered).collect();
-                    if !missing.is_empty() {
-                        let missing_names: Vec<String> =
-                            missing.iter().map(|s| (*s).to_string()).collect();
-                        let _ = self.emit(TypeError::InvalidPattern {
-                            message: format!(
-                                "non-exhaustive match: missing {}",
-                                Self::format_missing_cases(&missing_names),
-                            ),
-                            span,
-                        });
-                    }
-                }
-            }
-            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
-                self.check_variant_exhaustiveness(&classified, scrutinee_type, span);
-            }
-            ResolvedType::Primitive(PrimitiveType::Bool) => {
-                let has_true = classified
-                    .iter()
-                    .any(|(_, pat)| Self::pattern_contains_bool(pat, true));
-                let has_false = classified
-                    .iter()
-                    .any(|(_, pat)| Self::pattern_contains_bool(pat, false));
-                if !has_true || !has_false {
-                    let mut missing = Vec::new();
-                    if !has_true {
-                        missing.push("true".to_string());
-                    }
-                    if !has_false {
-                        missing.push("false".to_string());
-                    }
-                    let _ = self.emit(TypeError::InvalidPattern {
-                        message: format!(
-                            "non-exhaustive match: missing {}",
-                            Self::format_missing_cases(&missing),
-                        ),
-                        span,
-                    });
-                }
-            }
-            ResolvedType::Primitive(prim) => {
-                if let Some((type_min, type_max)) = Self::primitive_range(*prim) {
-                    self.check_integer_range_exhaustiveness(&classified, type_min, type_max, span);
-                }
-            }
-            _ => {
-                // For other types (strings, structs, etc.) we don't check exhaustiveness.
-            }
+        let guardless: Vec<&Pat> = classified
+            .iter()
+            .filter(|(guardless, _)| *guardless)
+            .map(|(_, pattern)| pattern)
+            .collect();
+        let missing = exhaustiveness::uncovered(&guardless);
+        if missing.is_empty() {
+            return;
         }
+        let message = if matches!(missing.as_slice(), [Witness::Wild]) {
+            let is_resource = matches!(
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .get(self.structure_head(scrutinee_type)),
+                ResolvedType::Resource { .. }
+            );
+            if is_resource {
+                "non-exhaustive match: type patterns cannot cover every type the host may \
+                 hand back; add a final `_` arm"
+            } else {
+                "non-exhaustive match: add a final `_` arm"
+            }
+            .to_string()
+        } else {
+            let rendered: Vec<String> = missing.iter().map(ToString::to_string).collect();
+            format!(
+                "non-exhaustive match: missing {}",
+                Self::format_missing_cases(&rendered)
+            )
+        };
+        let _ = self.emit(TypeError::InvalidPattern { message, span });
     }
 
-    /// Project an AST match-arm pattern onto the shape exhaustiveness reads,
-    /// mirroring `resolve_if_pattern_inner`'s `TirPattern`-shape decisions.
-    fn exh_pattern(&mut self, pattern: &ast::Pattern, scrutinee_type: TypeId) -> ExhPattern {
+    fn structure_head(&self, type_id: TypeId) -> TypeId {
+        self.tysys
+            .type_table
+            .borrow()
+            .scrutinee_structure_head(type_id)
+    }
+
+    /// Project an AST pattern onto the shape coverage reads, asked of the
+    /// structure its type wraps, as pattern resolution asks it.
+    fn exh_pattern(&mut self, pattern: &ast::Pattern, scrutinee_type: TypeId) -> Pat {
+        let scrutinee_type = self.structure_head(scrutinee_type);
         match pattern {
-            ast::Pattern::Wildcard | ast::Pattern::Error(_) => ExhPattern::CatchAll,
+            ast::Pattern::Wildcard | ast::Pattern::Error(_) => Pat::Wild,
             ast::Pattern::Ident { name, .. } | ast::Pattern::MutIdent { name, .. } => {
-                // A bare identifier is a case when it names one (delegates to the
-                // Variant branch), an opaque constant-value pattern when it names
-                // an immutable global, or otherwise a binding (catch-all).
-                if !matches!(pattern, ast::Pattern::MutIdent { .. })
-                    && self.is_known_case_of_type(scrutinee_type, name, None)
-                {
-                    return self.exh_pattern(
-                        &ast::Pattern::Variant {
-                            variant_name: name.clone(),
-                            variant_qualifier: None,
-                            name_id: None,
-                            name_span: Span::default(),
-                            bindings: vec![],
-                            span: Span::default(),
-                        },
-                        scrutinee_type,
-                    );
+                // A bare identifier is a case when it names one, a constant-value
+                // pattern when it names an immutable global, else a binding.
+                let is_mut = matches!(pattern, ast::Pattern::MutIdent { .. });
+                if !is_mut && self.is_known_case_of_type(scrutinee_type, name, None) {
+                    return self.exh_case(scrutinee_type, name, None);
                 }
-                if !matches!(pattern, ast::Pattern::MutIdent { .. }) {
-                    if let Some(&(_ty, mutable)) = self.sem.decls.current_module_globals.get(name)
-                        && !mutable
-                    {
-                        return ExhPattern::Other;
-                    }
-                    if let Some((_m, _n, _ty, mutable)) = self.sem.decls.imported_globals.get(name)
-                        && !*mutable
-                    {
-                        return ExhPattern::Other;
-                    }
+                if !is_mut && self.is_immutable_global(name) {
+                    return Pat::Opaque;
                 }
-                ExhPattern::CatchAll
+                Pat::Wild
             }
             ast::Pattern::Literal(lit) => self.exh_literal(lit, scrutinee_type),
             ast::Pattern::Variant {
@@ -2957,7 +2877,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 bindings,
                 scrutinee_type,
             ),
-            ast::Pattern::Or(alternatives) => ExhPattern::Or(
+            ast::Pattern::Or(alternatives) => Pat::Or(
                 alternatives
                     .iter()
                     .map(|alt| self.exh_pattern(alt, scrutinee_type))
@@ -2966,7 +2886,121 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Pattern::Range {
                 start, end, kind, ..
             } => self.exh_range(start, end, *kind, scrutinee_type),
-            ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => ExhPattern::Other,
+            ast::Pattern::Tuple(patterns, _) => {
+                let Some(types) = self.tysys.type_table.borrow().as_tuple(scrutinee_type) else {
+                    return Pat::Wild;
+                };
+                let elements = types
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &ty)| {
+                        patterns
+                            .get(i)
+                            .map_or(Pat::Wild, |p| self.exh_pattern(p, ty))
+                    })
+                    .collect();
+                Pat::Product {
+                    fields: None,
+                    elements,
+                }
+            }
+            ast::Pattern::Struct { fields, .. } => {
+                let Some(declared) = self.struct_field_types(scrutinee_type) else {
+                    return Pat::Wild;
+                };
+                let elements = declared
+                    .iter()
+                    .map(|(name, ty)| {
+                        fields
+                            .iter()
+                            .find(|f| f.field_name == *name)
+                            .map_or(Pat::Wild, |f| self.exh_pattern(&f.pattern, *ty))
+                    })
+                    .collect();
+                Pat::Product {
+                    fields: Some(declared.into_iter().map(|(name, _)| name).collect()),
+                    elements,
+                }
+            }
+            ast::Pattern::Typed {
+                id, pattern: inner, ..
+            } => {
+                let target = *self.sem.types.pattern_ascriptions.get(id).expect(
+                    "a match arm's type pattern is resolved before its exhaustiveness is checked",
+                );
+                if self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_resource_narrowing(scrutinee_type, target)
+                {
+                    Pat::Narrow(target)
+                } else {
+                    self.exh_pattern(inner, target)
+                }
+            }
+        }
+    }
+
+    /// A struct's fields in declaration order, typed at this instance.
+    fn struct_field_types(&self, struct_type: TypeId) -> Option<Vec<(String, TypeId)>> {
+        let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
+        let (info, type_args) = match resolved {
+            ResolvedType::Struct { def, .. } => (self.lookup_struct_fields_of(def)?, Vec::new()),
+            ResolvedType::GenericInstance { type_args, .. } => {
+                (self.struct_fields_of_type(struct_type)?, type_args)
+            }
+            _ => return None,
+        };
+        Some(
+            info.fields
+                .iter()
+                .map(|(name, ty, _)| {
+                    (
+                        name.clone(),
+                        self.tysys.substitute_type_params(*ty, &type_args),
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    /// Report a type-pattern arm an earlier guardless one always takes first:
+    /// every value of its type is already a value of the earlier arm's.
+    fn check_shadowed_narrowings(&self, arms: &[MatchArm], classified: &[(bool, Pat)]) {
+        let mut shadowed = Vec::new();
+        {
+            let tt = self.tysys.type_table.borrow();
+            for (later, (_, pattern)) in classified.iter().enumerate() {
+                let Pat::Narrow(target) = pattern else {
+                    continue;
+                };
+                let earlier =
+                    classified[..later]
+                        .iter()
+                        .find_map(|(guardless, earlier)| match earlier {
+                            Pat::Narrow(earlier) if *guardless => {
+                                let takes = tt.type_key(*earlier) == tt.type_key(*target)
+                                    || tt.is_resource_narrowing(*earlier, *target);
+                                takes.then_some(*earlier)
+                            }
+                            _ => None,
+                        });
+                if let Some(earlier) = earlier {
+                    shadowed.push((
+                        arms[later].span,
+                        format!(
+                            "unreachable arm: every `{}` is `{}`, which an earlier arm \
+                             already takes",
+                            tt.type_name(*target),
+                            tt.type_name(earlier)
+                        ),
+                    ));
+                }
+            }
+        }
+        for (span, message) in shadowed {
+            let _ = self.emit(TypeError::InvalidPattern { message, span });
         }
     }
 
@@ -2977,67 +3011,116 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .is_unsigned_int(scrutinee_type)
     }
 
-    fn exh_literal(&self, lit: &Literal, scrutinee_type: TypeId) -> ExhPattern {
-        match lit {
-            Literal::Number(repr) => {
-                if util::is_float_only_literal(repr) {
-                    // Old path returned `Wildcard` (a catch-all) after emitting
-                    // the float-literal error during binding.
-                    return ExhPattern::CatchAll;
-                }
-                if self.exh_is_unsigned(scrutinee_type) {
-                    match util::parse_u128_literal(repr) {
-                        Ok(v) => ExhPattern::IntLit(v as i128),
-                        Err(_) => ExhPattern::IntLit(0),
-                    }
-                } else {
-                    match util::parse_i128_literal(repr) {
-                        Ok(v) => ExhPattern::IntLit(v),
-                        Err(_) => ExhPattern::IntLit(0),
-                    }
-                }
-            }
-            Literal::Bool(b) => ExhPattern::BoolLit(*b),
-            Literal::Char(raw) => {
-                ExhPattern::IntLit(escape::unescape_char(raw).unwrap_or('\0') as i128)
-            }
-            Literal::Byte(raw) => {
-                ExhPattern::IntLit(i128::from(escape::unescape_byte(raw).unwrap_or(0)))
-            }
-            Literal::Null => {
-                // `null` coerces to a `None` variant pattern when the scrutinee
-                // has a `None` case; otherwise it is an opaque `Null` literal.
-                if self.exh_null_none_case(scrutinee_type).is_some() {
-                    ExhPattern::VariantCase(
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .compiler_variant_case_name(CompilerItem::OptionNone)
-                            .to_string(),
-                    )
-                } else {
-                    ExhPattern::Other
-                }
-            }
-            _ => ExhPattern::Other,
+    /// The values an integer pattern of this type may take.
+    fn int_domain(&self, scrutinee_type: TypeId) -> Option<IntDomain> {
+        let ResolvedType::Primitive(prim) = *self.tysys.type_table.borrow().get(scrutinee_type)
+        else {
+            return None;
+        };
+        Self::primitive_range(prim).map(|(min, max)| IntDomain {
+            min,
+            max,
+            is_char: prim == PrimitiveType::Char,
+        })
+    }
+
+    fn exh_int(&self, lo: i128, hi: i128, scrutinee_type: TypeId) -> Pat {
+        Pat::Int {
+            lo,
+            hi,
+            domain: self.int_domain(scrutinee_type),
         }
     }
 
-    /// Mirrors `try_null_as_none_pattern`: returns the `None` case name when the
-    /// scrutinee is a variant type that has a `None` case.
-    fn exh_null_none_case(&self, scrutinee_type: TypeId) -> Option<()> {
-        let variant_info = self.variant_of_type(scrutinee_type)?;
-        let none_case_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_variant_case_name(CompilerItem::OptionNone)
-            .to_string();
-        variant_info
+    fn exh_literal(&mut self, lit: &Literal, scrutinee_type: TypeId) -> Pat {
+        // A literal that does not parse was reported where it was lexed or
+        // resolved, and takes no value here.
+        let value = match lit {
+            Literal::Number(repr) if util::is_float_only_literal(repr) => return Pat::Wild,
+            Literal::Number(repr) => {
+                if self.exh_is_unsigned(scrutinee_type) {
+                    util::parse_u128_literal(repr).map(|v| v as i128).ok()
+                } else {
+                    util::parse_i128_literal(repr).ok()
+                }
+            }
+            Literal::Bool(b) => return Pat::Bool(*b),
+            Literal::Char(raw) => escape::unescape_char(raw).ok().map(|c| c as i128),
+            Literal::Byte(raw) => escape::unescape_byte(raw).ok().map(i128::from),
+            // `null` is the `None` case where the scrutinee has one.
+            Literal::Null => {
+                let none = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .compiler_variant_case_name(CompilerItem::OptionNone)
+                    .to_string();
+                return if self.is_known_case_of_type(scrutinee_type, &none, None) {
+                    self.exh_case(scrutinee_type, &none, None)
+                } else {
+                    Pat::Opaque
+                };
+            }
+            _ => return Pat::Opaque,
+        };
+        value.map_or(Pat::Opaque, |v| self.exh_int(v, v, scrutinee_type))
+    }
+
+    /// The case `name` of the enum or variant `scrutinee_type`, its payload
+    /// pattern classified at the payload's type.
+    fn exh_case(
+        &mut self,
+        scrutinee_type: TypeId,
+        name: &str,
+        payload: Option<&ast::Pattern>,
+    ) -> Pat {
+        if let Some(enum_info) = self.enum_of_type(scrutinee_type) {
+            let cases: Rc<[Case]> = enum_info
+                .cases
+                .iter()
+                .map(|c| Case {
+                    name: c.name.clone(),
+                    has_payload: false,
+                })
+                .collect();
+            let Some(index) = cases.iter().position(|c| c.name == name) else {
+                return Pat::Wild;
+            };
+            return Pat::Case {
+                cases,
+                index,
+                payload: None,
+            };
+        }
+        let Some(variant_info) = self.variant_of_type(scrutinee_type).cloned() else {
+            return Pat::Wild;
+        };
+        let Some(index) = variant_info.cases.iter().position(|c| c.name == name) else {
+            return Pat::Wild;
+        };
+        let cases: Rc<[Case]> = variant_info
             .cases
             .iter()
-            .any(|c| c.name == none_case_name)
-            .then_some(())
+            .map(|c| Case {
+                name: c.name.clone(),
+                has_payload: c.payload != TypeTable::UNIT,
+            })
+            .collect();
+        let payload = payload.filter(|_| cases[index].has_payload).map(|p| {
+            let type_args = match self.tysys.type_table.borrow().get(scrutinee_type) {
+                ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                _ => Vec::new(),
+            };
+            let payload_type = self
+                .tysys
+                .substitute_type_params(variant_info.cases[index].payload, &type_args);
+            Box::new(self.exh_pattern(p, payload_type))
+        });
+        Pat::Case {
+            cases,
+            index,
+            payload,
+        }
     }
 
     fn exh_variant(
@@ -3046,74 +3129,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         variant_qualifier: Option<&ast::Type>,
         bindings: &[ast::Pattern],
         scrutinee_type: TypeId,
-    ) -> ExhPattern {
+    ) -> Pat {
         let normalized = self
             .strip_ns_prefix(variant_name)
             .unwrap_or(variant_name)
             .to_string();
 
-        // Bare uppercase identifier that is not a known case: an associated
-        // constant resolves to a `Literal` (if the const body is a literal) or
-        // an opaque `ConstantValue`; otherwise it is a binding (catch-all).
+        // A bare name that is no case: an associated constant is its value or
+        // an opaque constant-value pattern; anything else is a binding.
         if bindings.is_empty()
             && !self.is_known_case_of_type(scrutinee_type, &normalized, variant_qualifier)
         {
-            if let Some(AssocConstSig {
+            let Some(AssocConstSig {
                 value: const_expr, ..
             }) = self.associated_constant_qualified(variant_qualifier, variant_name)
-            {
-                if let ast::Expr::Literal(lit) = &const_expr {
-                    match &lit.value {
-                        Literal::Number(repr) if !util::is_float_only_literal(repr) => {
-                            if self.exh_is_unsigned(scrutinee_type) {
-                                if let Ok(v) = util::parse_u128_literal(repr) {
-                                    return ExhPattern::IntLit(v as i128);
-                                }
-                            } else if let Ok(v) = util::parse_i128_literal(repr) {
-                                return ExhPattern::IntLit(v);
-                            }
-                        }
-                        Literal::Bool(v) => return ExhPattern::BoolLit(*v),
-                        Literal::Char(raw) => {
-                            let c = escape::unescape_char(raw).unwrap_or('\0');
-                            return ExhPattern::IntLit(c as i128);
-                        }
-                        Literal::Byte(raw) => {
-                            return ExhPattern::IntLit(i128::from(
-                                escape::unescape_byte(raw).unwrap_or(0),
-                            ));
-                        }
-                        _ => {}
+            else {
+                return Pat::Wild;
+            };
+            return match &const_expr {
+                ast::Expr::Literal(lit) if !matches!(lit.value, Literal::Null) => {
+                    match self.exh_literal(&lit.value, scrutinee_type) {
+                        pattern @ (Pat::Int { .. } | Pat::Bool(_)) => pattern,
+                        _ => Pat::Opaque,
                     }
                 }
-                // Opaque constant-value pattern.
-                return ExhPattern::Other;
-            }
-            // Binding (catch-all).
-            return ExhPattern::CatchAll;
+                _ => Pat::Opaque,
+            };
         }
 
-        // Qualifier mismatch → old path returned `Wildcard` (catch-all).
+        // A mismatched qualifier was reported where the pattern was resolved.
         if !self.pattern_qualifier_matches_scrutinee(scrutinee_type, variant_qualifier) {
-            return ExhPattern::CatchAll;
+            return Pat::Wild;
         }
-
-        let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-        match &resolved {
-            ResolvedType::Enum { .. } => {
-                if let Some(enum_info) = self.enum_of_type(scrutinee_type)
-                    && enum_info.find_case(&normalized).is_some()
-                {
-                    return ExhPattern::EnumCase(normalized);
-                }
-                // Unknown enum / case → old path returned `Wildcard`.
-                ExhPattern::CatchAll
-            }
-            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
-                ExhPattern::VariantCase(normalized)
-            }
-            _ => ExhPattern::CatchAll,
-        }
+        self.exh_case(scrutinee_type, &normalized, bindings.first())
     }
 
     fn exh_range(
@@ -3122,95 +3170,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         end: &ast::Pattern,
         kind: ast::RangeKind,
         scrutinee_type: TypeId,
-    ) -> ExhPattern {
+    ) -> Pat {
+        // Bad or empty bounds were reported where the pattern was resolved.
         let is_unsigned = self.exh_is_unsigned(scrutinee_type);
         let (Some(start_val), Some(end_val)) = (
             util::range_endpoint_to_i128(start, is_unsigned),
             util::range_endpoint_to_i128(end, is_unsigned),
         ) else {
-            // Bad bounds → old path returned `Wildcard` (catch-all).
-            return ExhPattern::CatchAll;
+            return Pat::Wild;
         };
         let inclusive = matches!(kind, ast::RangeKind::Inclusive);
-        // Reversed / empty ranges → old path returned `Wildcard` (catch-all).
         let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
         if order.is_gt() || (!inclusive && order.is_ge()) {
-            return ExhPattern::CatchAll;
+            return Pat::Wild;
         }
         let hi = if inclusive { end_val } else { end_val - 1 };
-        ExhPattern::Range(start_val, hi)
-    }
-
-    fn check_variant_exhaustiveness(
-        &self,
-        classified: &[(bool, ExhPattern)],
-        scrutinee_type: TypeId,
-        span: Span,
-    ) {
-        if let Some(variant_info) = self.variant_of_type(scrutinee_type) {
-            let all_cases: IndexSet<&str> =
-                variant_info.cases.iter().map(|c| c.name.as_str()).collect();
-            let covered: IndexSet<&str> = {
-                let mut names = Vec::new();
-                for (_, pat) in classified {
-                    Self::collect_variant_case_names(pat, &mut names);
-                }
-                names.into_iter().collect()
-            };
-            let missing: Vec<&&str> = all_cases.difference(&covered).collect();
-            if !missing.is_empty() {
-                let missing_names: Vec<String> = missing.iter().map(|s| (*s).to_string()).collect();
-                let _ = self.emit(TypeError::InvalidPattern {
-                    message: format!(
-                        "non-exhaustive match: missing {}",
-                        Self::format_missing_cases(&missing_names),
-                    ),
-                    span,
-                });
-            }
-        }
-    }
-
-    fn is_catch_all_pattern(pattern: &ExhPattern) -> bool {
-        match pattern {
-            ExhPattern::CatchAll => true,
-            ExhPattern::Or(alternatives) => alternatives.iter().any(Self::is_catch_all_pattern),
-            _ => false,
-        }
-    }
-
-    fn collect_enum_case_names<'a>(pattern: &'a ExhPattern, out: &mut Vec<&'a str>) {
-        match pattern {
-            ExhPattern::EnumCase(case_name) => out.push(case_name),
-            ExhPattern::Or(alternatives) => {
-                for alt in alternatives {
-                    Self::collect_enum_case_names(alt, out);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn collect_variant_case_names<'a>(pattern: &'a ExhPattern, out: &mut Vec<&'a str>) {
-        match pattern {
-            ExhPattern::VariantCase(variant_name) => out.push(variant_name),
-            ExhPattern::Or(alternatives) => {
-                for alt in alternatives {
-                    Self::collect_variant_case_names(alt, out);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn pattern_contains_bool(pattern: &ExhPattern, value: bool) -> bool {
-        match pattern {
-            ExhPattern::BoolLit(b) => *b == value,
-            ExhPattern::Or(alternatives) => alternatives
-                .iter()
-                .any(|p| Self::pattern_contains_bool(p, value)),
-            _ => false,
-        }
+        self.exh_int(start_val, hi, scrutinee_type)
     }
 
     fn format_missing_cases(cases: &[String]) -> String {
@@ -3237,83 +3212,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn collect_ranges_from_pattern(pattern: &ExhPattern) -> Vec<(i128, i128)> {
+    fn collect_ranges_from_pattern(pattern: &Pat) -> Vec<(i128, i128)> {
         match pattern {
-            ExhPattern::Range(start, end) => vec![(*start, *end)],
-            ExhPattern::IntLit(v) => vec![(*v, *v)],
-            ExhPattern::BoolLit(b) => vec![(i128::from(*b), i128::from(*b))],
-            ExhPattern::Or(alts) => {
-                let mut result = Vec::new();
-                for alt in alts {
-                    result.extend(Self::collect_ranges_from_pattern(alt));
-                }
-                result
-            }
+            Pat::Int { lo, hi, .. } => vec![(*lo, *hi)],
+            Pat::Bool(b) => vec![(i128::from(*b), i128::from(*b))],
+            Pat::Or(alts) => alts
+                .iter()
+                .flat_map(Self::collect_ranges_from_pattern)
+                .collect(),
             _ => vec![],
         }
     }
 
-    fn check_integer_range_exhaustiveness(
-        &self,
-        classified: &[(bool, ExhPattern)],
-        type_min: i128,
-        type_max: i128,
-        span: Span,
-    ) {
-        // Collect all ranges from all arms (only arms without guards count)
-        let mut all_ranges: Vec<(i128, i128)> = Vec::new();
-        let mut has_catch_all = false;
-
-        for (guardless, pat) in classified {
-            if *guardless && Self::is_catch_all_pattern(pat) {
-                has_catch_all = true;
-            }
-            if !*guardless {
-                continue;
-            }
-            all_ranges.extend(Self::collect_ranges_from_pattern(pat));
-        }
-
-        if has_catch_all {
-            return;
-        }
-
-        // Check exhaustiveness: sort ranges and verify they cover [type_min, type_max]
-        if all_ranges.is_empty() {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: "non-exhaustive match: integer type requires a wildcard `_` or full range coverage".to_string(),
-                span,
-            });
-            return;
-        }
-
-        all_ranges.sort_unstable();
-        // Merge overlapping/adjacent ranges
-        let mut merged: Vec<(i128, i128)> = Vec::new();
-        for (lo, hi) in all_ranges {
-            if let Some(last) = merged.last_mut() {
-                if lo <= last.1 + 1 {
-                    last.1 = last.1.max(hi);
-                } else {
-                    merged.push((lo, hi));
-                }
-            } else {
-                merged.push((lo, hi));
-            }
-        }
-
-        // Check if merged ranges cover [type_min, type_max]
-        let covers = merged.len() == 1 && merged[0].0 <= type_min && merged[0].1 >= type_max;
-        if !covers {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: "non-exhaustive match: not all values in the integer range are covered"
-                    .to_string(),
-                span,
-            });
-        }
-    }
-
-    fn check_range_overlaps(&self, classified: &[(bool, ExhPattern)], span: Span) {
+    fn check_range_overlaps(&self, classified: &[(bool, Pat)], span: Span) {
         // Collect ranges per arm (only guardless arms)
         let mut arm_ranges: Vec<Vec<(i128, i128)>> = Vec::new();
         for (guardless, pat) in classified {

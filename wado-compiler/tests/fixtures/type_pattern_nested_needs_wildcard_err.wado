@@ -1,0 +1,14 @@
+// A type pattern inside a payload covers no more of it than one at the top.
+use { Element, HtmlInputElement } from "web:dom";
+
+fn kind(o: Option<Element>) -> i32 {
+    return match o {
+        Some(input: HtmlInputElement) => 1,
+        None => 0,
+    };
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "non-exhaustive match: missing case `Some(_)`"}

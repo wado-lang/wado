@@ -343,7 +343,7 @@ pub fn file_stem<S: AsStrSlice>(path: S) -> Option<StrSlice> {
     let Some(at) = extension_dot(&name) else {
         return Option::Some(name);
     };
-    return Option::Some(name.sub(0, at));
+    return Option::Some(name.slice(0, at));
 }
 
 /// The last component of `path` after its final `.`, or `None` where the name
@@ -355,7 +355,7 @@ pub fn extension<S: AsStrSlice>(path: S) -> Option<StrSlice> {
     let Some(at) = extension_dot(&name) else {
         return null;
     };
-    return Option::Some(name.sub(at + 1, name.len()));
+    return Option::Some(name.slice(at + 1, name.len()));
 }
 
 /// `path` with its `.` dropped and its `..` applied, as text: nothing is
@@ -370,12 +370,12 @@ pub fn normalize<S: AsStrSlice>(path: S) -> Result<String, FsError> {
     let mut kept: List<StrSlice> = [];
     let mut start = 0;
     while start <= view.len() {
-        let rest = view.sub(start, view.len());
+        let rest = view.slice(start, view.len());
         let end = match rest.find("/") {
             Some(at) => start + at,
             None => view.len(),
         };
-        let part = view.sub(start, end);
+        let part = view.slice(start, end);
         start = end + 1;
         if part.is_empty() || part == "." {
             continue;
@@ -521,17 +521,17 @@ pub fn create_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preope
 fn split_last<S: AsStrSlice>(path: S) -> Option<[StrSlice, StrSlice]> {
     let mut view = path.as_str_slice();
     while view.len() > 1 && view.ends_with("/") {
-        view = view.sub(0, view.len() - 1);
+        view = view.slice(0, view.len() - 1);
     }
     if view.is_empty() || view == "." || view == "/" {
         return null;
     }
     let Some(at) = view.rfind("/") else {
-        return Option::Some([view.sub(0, 0), view]);
+        return Option::Some([view.slice(0, 0), view]);
     };
     return Option::Some([
-        view.sub(0, at),
-        view.sub(at + 1, view.len()),
+        view.slice(0, at),
+        view.slice(at + 1, view.len()),
     ]);
 }
 

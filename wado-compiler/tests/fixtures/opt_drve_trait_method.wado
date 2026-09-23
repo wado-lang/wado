@@ -8,7 +8,8 @@
 // the method kept returning `Pair`; now DRVE voids the return.
 //
 // Voiding it kills the body — the `Pair` it built was the return value — so both
-// parameters are unread and DAE takes them too: the method ends up `fn()`.
+// parameters are unread and DAE takes them too: the method ends up `fn()`. The
+// global it bumps keeps the call from being deleted outright.
 
 use { println, Stdout } from "core:cli";
 
@@ -20,9 +21,12 @@ trait Maker with () {
 
 struct Factory { seed: i32 }
 
+global mut MADE: i32 = 0;
+
 impl Maker for Factory {
     #[inline(never)]
     fn make(&self, x: i32) -> Pair {
+        MADE += 1;
         return Pair { a: x + 1, b: x + 2 };
     }
 }
@@ -35,12 +39,12 @@ fn opaque(x: i32) -> i32 {
 export fn run() with Stdout {
     let f = Factory { seed: opaque(3) };
     f.make(opaque(1));
-    println("done");
+    println(`done ${MADE}`);
 }
 
 __DATA__
 {
-    "stdout": "done\n",
+    "stdout": "done 1\n",
     "wir_expect:O2": ["Maker::make\" = fn();"],
     "wir_not_expect:O2": ["Maker::make\" = fn(ref \"opt_drve_trait_method.wado//Factory\", i32) -> ref"]
 }

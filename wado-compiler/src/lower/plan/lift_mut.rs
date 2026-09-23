@@ -9,7 +9,7 @@ use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
     TirStructPatternField, TypeId, TypeTable,
 };
-use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
+use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt, remap_local_reads};
 use crate::token::Span;
 
 /// Idempotent: a second walk finds no `mut` bindings to lift.
@@ -140,10 +140,43 @@ impl MutBindingLifter {
                     self.lift_in_pattern(alt, span, prefix_stmts);
                 }
             }
+            TirPattern::Narrow {
+                name: Some(name),
+                local_index,
+                type_id,
+                test,
+            } => {
+                if !self.local_is_mut(*local_index) {
+                    return;
+                }
+                let fresh_index = self.alloc_local(*type_id);
+                prefix_stmts.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: name.clone(),
+                        local_index: *local_index,
+                        is_mut: true,
+                        is_reactive: false,
+                        type_id: *type_id,
+                        value: TirExpr::new(
+                            TirExprKind::Local {
+                                index: fresh_index,
+                                name: format!("$match_mut_lift_{fresh_index}"),
+                            },
+                            *type_id,
+                            span,
+                        ),
+                        skip_value_copy: false,
+                    },
+                    span,
+                ));
+                remap_local_reads(test, *local_index, fresh_index);
+                *local_index = fresh_index;
+            }
             TirPattern::Wildcard
             | TirPattern::Literal(_)
             | TirPattern::Enum { .. }
             | TirPattern::ConstantValue { .. }
+            | TirPattern::Narrow { name: None, .. }
             | TirPattern::Range { .. } => {}
         }
     }

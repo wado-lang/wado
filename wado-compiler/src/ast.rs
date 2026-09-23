@@ -4,6 +4,8 @@ use crate::attribute::{
     ALLOW, CM, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS, TIMEOUT_MS, TODO, UNAVAILABLE,
     WASM_MODULE, WIRE,
 };
+use std::borrow::Cow;
+
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
@@ -1041,6 +1043,10 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
             for p in bindings {
                 v.visit_pattern(p);
             }
+        }
+        Pattern::Typed { pattern, ty, .. } => {
+            v.visit_pattern(pattern);
+            v.visit_type(ty);
         }
         Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {}
     }
@@ -2394,6 +2400,22 @@ pub struct LetStmt {
     pub span: Span,
 }
 
+impl LetStmt {
+    /// The pattern a `let … else` tests: an annotation is the type pattern it
+    /// ascribes, keyed by this statement's id.
+    pub fn else_pattern(&self) -> Cow<'_, Pattern> {
+        match &self.ty {
+            Some(ty) => Cow::Owned(Pattern::Typed {
+                id: self.id,
+                pattern: Box::new(self.pattern.clone()),
+                ty: ty.clone(),
+                span: self.name_span.merge(&ty.span()),
+            }),
+            None => Cow::Borrowed(&self.pattern),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ExprStmt {
     pub id: AstId,
@@ -3385,6 +3407,14 @@ pub enum Pattern {
         start: Box<Pattern>,
         end: Box<Pattern>,
         kind: RangeKind,
+        span: Span,
+    },
+    /// Type pattern: `input: HtmlInputElement`. Matches a value of `ty`, which
+    /// `pattern` then binds. A `let` keeps a top-level ascription in `LetStmt::ty`.
+    Typed {
+        id: AstId,
+        pattern: Box<Pattern>,
+        ty: Type,
         span: Span,
     },
     /// Placeholder for a pattern that failed to parse, emitted by error

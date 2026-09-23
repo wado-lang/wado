@@ -301,6 +301,7 @@ fn pattern_binds(pattern: &ast::Pattern, target: AstId) -> bool {
     match pattern {
         ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => *id == target,
         ast::Pattern::Tuple(..)
+        | ast::Pattern::Typed { .. }
         | ast::Pattern::Or(_)
         | ast::Pattern::Struct { .. }
         | ast::Pattern::Variant { .. }

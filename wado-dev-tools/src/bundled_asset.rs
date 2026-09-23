@@ -60,7 +60,7 @@ fn strip(wasm: &[u8]) -> Vec<u8> {
         };
         out.section(&wasm_encoder::RawSection {
             id,
-            data: &wasm[range.start..range.end],
+            data: &wasm[range.start as usize..range.end as usize],
         });
     }
     out.finish()

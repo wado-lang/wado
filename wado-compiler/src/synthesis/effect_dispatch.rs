@@ -946,6 +946,8 @@ fn build_dispatch_wrapper_function(
         effects: vec![],
         retains: vec![],
         immediates: vec![],
+        trap: None,
+        linear_memory: None,
         body: Some(body),
         span,
         local_count: next_local,
@@ -1395,7 +1397,9 @@ impl MaxLocalIndex {
     fn walk_pattern(&mut self, pattern: &TirPattern) {
         use crate::tir::TirPattern;
         match pattern {
-            TirPattern::Binding { local_index, .. } => self.note(*local_index),
+            TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } => {
+                self.note(*local_index);
+            }
             TirPattern::Tuple(items, _) | TirPattern::Or(items) => {
                 for p in items {
                     self.walk_pattern(p);

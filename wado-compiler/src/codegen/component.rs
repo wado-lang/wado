@@ -16,7 +16,8 @@ use crate::component_model::{
     CmInterfaceRegistry, CmTypeGen, CmTypeSink, CmVariantCase, ERROR_CODE_WADO_NAME,
     FIELDS_WADO_NAME, InstanceSink, RESPONSE_WADO_NAME, ResKind, classify_future_payload_from_ast,
     classify_stream_payload_from_ast, cm_decl_in_interface, cm_instance_key,
-    cm_return_needs_outptr, emit_cm_defined, parse_resource_func, wado_primitive_name_to_cm,
+    cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
+    wado_primitive_name_to_cm,
 };
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -2372,7 +2373,7 @@ fn generate_cm_imports(
 
         // The CM operations behind them, one per CM name. The instance type
         // describes the imported interface, which exports each name once.
-        let cm_functions = one_per_cm_name(&supported_functions);
+        let cm_functions = one_per_cm_name(supported_functions.iter().copied());
 
         // Collect resource types referenced in any function signature. The plan
         // guarantees these resolve to resources this interface defines itself
@@ -2971,22 +2972,14 @@ fn handler_result_key(
 
 /// Export one function into an interface's instance type, emitting on the way
 /// whatever types its signature reaches.
-///
-/// A CM interface exports a name once however many Wado names bind it, so
-/// `exported` carries the names already written and a repeat is dropped here
-/// rather than at each caller's own list.
 fn export_func_in_instance_type(
     instance_type: &mut InstanceType,
     type_idx: &mut u32,
     type_gen: &mut CmTypeGen,
     project: &NirPackage,
     resource_exports: &IndexMap<&str, u32>,
-    exported: &mut IndexSet<String>,
     func: &CmFunctionInfo,
 ) {
-    if !exported.insert(func.wasi_func_name.clone()) {
-        return;
-    }
     let registry = &project.cm_interface_registry;
     let resolved_return = func
         .return_type
@@ -3106,8 +3099,6 @@ fn import_resource_defining_interface(
             .map(|(i, (_, cm_name))| (cm_name.as_str(), i as u32))
             .collect();
 
-        let mut exported_func_names: IndexSet<String> = IndexSet::default();
-
         // A constructor or static first, since emitting its signature emits the
         // types the methods then reference (the error-code variant and its
         // payload records).
@@ -3135,14 +3126,13 @@ fn import_resource_defining_interface(
             .filter(|f| is_constructor_or_static(f))
             .chain(plain_funcs.iter())
             .chain(all_funcs.iter().filter(|f| is_used_method(f)));
-        for func in exported {
+        for func in one_per_cm_name(exported) {
             export_func_in_instance_type(
                 &mut instance_type,
                 &mut type_idx,
                 &mut type_gen,
                 project,
                 &resource_exports,
-                &mut exported_func_names,
                 func,
             );
         }
@@ -3823,7 +3813,7 @@ fn import_resource_using_interfaces(
             .iter()
             .filter(|func| emits_function(project, func))
             .collect();
-        let cm_functions = one_per_cm_name(&supported_functions);
+        let cm_functions = one_per_cm_name(supported_functions.iter().copied());
 
         // Collect resources used in function signatures
         let needed_resources = project
@@ -4283,18 +4273,6 @@ fn generate_cm_world_func_imports(
             wasm_encoder::ComponentTypeRef::Func(func_type),
         );
     }
-}
-
-/// One entry per CM function name, keeping the first binding of each. A CM
-/// interface exports a name once however many Wado names bind it, so anything
-/// describing the interface walks this rather than the bindings.
-fn one_per_cm_name<'a>(funcs: &[&'a CmFunctionInfo]) -> Vec<&'a CmFunctionInfo> {
-    let mut seen = IndexSet::default();
-    funcs
-        .iter()
-        .filter(|func| seen.insert(func.wasi_func_name.clone()))
-        .copied()
-        .collect()
 }
 
 /// Alias `func` out of its interface instance under its own local name. Two

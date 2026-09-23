@@ -39,6 +39,10 @@ Full intended scope; checked items are implemented.
 - [x] A `variant` with no payload-bearing case, bare and inside
       `option` / `list` / `tuple` — it lays out as its bare discriminant, and
       the same stride-or-offset reads are what show that width
+- [x] `map<k, v>`: the same bytes as `list<tuple<k, v>>` under its own type
+      constructor. One row per key shape that lowers differently (`string`,
+      a scalar), a repeated-key round trip for the last-wins rule, and a `map`
+      in an async call's params buffer
 
 ### `future<T>` (consume/produce)
 
@@ -68,9 +72,9 @@ Full intended scope; checked items are implemented.
 
 ### Calling conventions
 
-- [x] Narrow scalars in the indirect params buffer. An `option` param puts every
-      param in one buffer, each at its tuple-layout offset, so a scalar stored
-      wider than its CM size writes past its slot
+- [x] Narrow scalars in the indirect params buffer. Past four flat params an
+      async call puts every param in one buffer, each at its tuple-layout
+      offset, so a scalar stored wider than its CM size writes past its slot
 
 ### Test oracle
 

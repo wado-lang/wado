@@ -594,6 +594,7 @@ fn pattern_bindings(pattern: &Pattern, is_mut: bool, refutable: bool, out: &mut 
                 recurse(&field.pattern, out);
             }
         }
+        Pattern::Typed { pattern, .. } => recurse(pattern, out),
         // An `|` alternative binds the same names in each branch, so the first
         // answers for all of them; the rest bind nothing new.
         Pattern::Or(patterns) => {

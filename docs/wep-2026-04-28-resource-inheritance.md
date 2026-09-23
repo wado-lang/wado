@@ -449,8 +449,7 @@ degrades to a plain annotation, so a generator may emit the same shape whether o
 not the narrowing turns out to be trivial. The sibling and unrelated rows stay
 errors — neither can ever match.
 
-Both `S` and `T` must be unrestricted. The check is redundant given the v1 gating
-(`extends` requires it), but the compiler validates it defensively.
+Both `S` and `T` are unrestricted, because `extends` requires it on both sides.
 
 #### Generic targets are forbidden in v1
 
@@ -720,9 +719,12 @@ Implemented, with tests in `wado-compiler/tests/integration/unrestricted_resourc
 
 - The registry reads that newtype two ways. `resolve_type` peels the handle to its `u32`, the view the boundary decides with: the flat ABI, the canonical options, the emitted WIT. `value_type` keeps the resource's own type, the view the guest holds. A binding's signature takes the second, because `Option<Element>` and `Option<u32>` are distinct GC types (`tests/integration/web_dom.rs`). `cm_type_to_type_id` finds the resource's `TypeId` under its package, a `web:` package being one flat file.
 
+- Type patterns. `p: T` is a pattern wherever one stands, and a `let` annotation is that pattern. An ascription `T` strictly extending the subject's type narrows: a plain `let` rejects it as refutable, and a `match` over one needs a final `_` and reports an arm an earlier ancestor arm shadows. Each narrowing target `R` imports `lang#is-r`, called on the handle before the arm is taken.
+- `Eq`. `==` / `!=` on two handles one of whose types extends the other calls `lang#is-same`. Every chain root binds it, and the registry keeps the one import they share.
+
 Not built:
 
-- The type pattern, its `is-T` imports, and the `Eq` / `Inspect` / `Display` host imports. Pattern ascription (`p: T`) is unparsed, so no part of narrowing exists yet; the `let` annotation is still a separate grammar slot (`letStatement : 'let' pattern (':' typeRef)? …`) rather than the pattern form this WEP specifies.
+- The `Inspect` / `Display` host imports.
 - Rule (5), visibility judged at the declaring module, and the unenforced parent-visibility bullet above. Both need per-method visibility on resources, which nothing asks for yet.
 - Declaring `linearity = "unrestricted"` on the non-owning tokens (`Waitable`, `core:icu`'s interned handles), which still take their value semantics from the absence of a `dtor`; and generic resources on either side of `extends`.
 - Calling a `#[cm(...)]` member a user module declares. The registry is built from the bundled binding modules and from component dependencies, so a binding declared anywhere else reaches WIR build with no import, and `wir_build` collects it as a `CmImportViolation` the driver reports (`wado-compiler/tests/integration/cm_resource_unbound.rs`). Declaring one without calling it still type-checks.

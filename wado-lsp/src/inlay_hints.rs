@@ -148,6 +148,8 @@ impl<'a> HintCollector<'a> {
                     self.hint_pattern_bindings(p);
                 }
             }
+            // The ascription already states the type.
+            Pattern::Typed { .. } => {}
             Pattern::Range { .. } | Pattern::Literal(_) | Pattern::Wildcard | Pattern::Error(_) => {
             }
         }

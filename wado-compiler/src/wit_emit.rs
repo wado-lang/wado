@@ -16,7 +16,8 @@ use std::sync::Arc;
 use crate::ast;
 use crate::ast::NamedType;
 use crate::component_model::{
-    CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, parse_resource_func,
+    CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, one_per_cm_name,
+    parse_resource_func,
 };
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, is_bundled_specifier};
@@ -606,7 +607,7 @@ impl<'a> Emitter<'a> {
         let mut resource_funcs: BTreeMap<String, Vec<ResourceFunc>> = BTreeMap::new();
         let mut free_funcs: Vec<StandaloneFunc> = Vec::new();
         for info in infos.iter().filter(|i| i.path == fq) {
-            for func in &info.functions {
+            for func in one_per_cm_name(&info.functions) {
                 if let Some((kind, resource, member)) = parse_resource_func(&func.wasi_func_name) {
                     let rf = self.build_resource_func(func, kind, member, fq, &mut uses)?;
                     resource_funcs
@@ -934,6 +935,7 @@ impl<'a> Emitter<'a> {
             ResolvedType::GenericInstance { def, type_args } => match self.types.def_name(*def) {
                 "Option" if type_args.len() == 1 => CmShape::Option(type_args[0]),
                 "List" if type_args.len() == 1 => CmShape::List(type_args[0]),
+                "TreeMap" if type_args.len() == 2 => CmShape::Map(type_args[0], type_args[1]),
                 n if TypeTable::is_tuple_type(n) => CmShape::Tuple(type_args.clone()),
                 "Result" if type_args.len() == 2 => CmShape::Result {
                     ok: self.non_unit(type_args[0]),
@@ -1021,8 +1023,14 @@ impl<'a> Emitter<'a> {
 pub(crate) enum CmShape<T> {
     Option(T),
     List(T),
+    /// 🗺️ `map<K, V>` — the `list<tuple<K, V>>` bytes under their own
+    /// constructor, so a consumer reads an associative container.
+    Map(T, T),
     Tuple(Vec<T>),
-    Result { ok: Option<T>, err: Option<T> },
+    Result {
+        ok: Option<T>,
+        err: Option<T>,
+    },
     Future(Option<T>),
     Stream(Option<T>),
     Leaf,
@@ -1042,6 +1050,7 @@ fn assemble<T>(
         CmShape::Leaf => unreachable!("leaves are rendered by the front-end, not assembled"),
         CmShape::Option(t) => Type::option(render(t)?),
         CmShape::List(t) => Type::list(render(t)?),
+        CmShape::Map(k, v) => Type::map(render(k)?, render(v)?),
         CmShape::Tuple(ts) => {
             let mut elems = Vec::with_capacity(ts.len());
             for t in ts {
@@ -1081,6 +1090,7 @@ fn classify_ast(ty: &ast::Type) -> CmShape<ast::Type> {
         AstType::Generic(g) => match g.name.as_str() {
             "Option" if g.args.len() == 1 => CmShape::Option(g.args[0].clone()),
             "List" if g.args.len() == 1 => CmShape::List(g.args[0].clone()),
+            "TreeMap" if g.args.len() == 2 => CmShape::Map(g.args[0].clone(), g.args[1].clone()),
             "Result" if g.args.len() == 2 => CmShape::Result {
                 ok: non_unit_ast(&g.args[0]),
                 err: non_unit_ast(&g.args[1]),

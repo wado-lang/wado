@@ -1,0 +1,49 @@
+// A dead global's initializer whose loop no counter bounds may never return,
+// and running forever is observable: the call stays although nothing reads the
+// global. Only a loop counting a local up to a constant is known to end. The
+// bodies do nothing that could trap, so divergence is what keeps each call.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn collatz_steps(start: i64) -> i32 {
+    let mut n = start;
+    let mut steps = 0;
+    while n != 1 {
+        n = if (n & 1) == 0 { n >> 1 } else { 3 * n + 1 };
+        steps += 1;
+    }
+    return steps;
+}
+
+#[inline(never)]
+fn counts_to_a_parameter(limit: i32) -> i32 {
+    let mut i = 0;
+    let mut odd = 0;
+    while i < limit {
+        if (i & 1) == 1 {
+            odd += 1;
+        }
+        i += 1;
+    }
+    return odd;
+}
+
+global STEPS: i32 = collatz_steps(builtin::black_box(27));
+global ODD: i32 = counts_to_a_parameter(builtin::black_box(10));
+
+fn read() -> i32 {
+    return STEPS + ODD;
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_expect:O2": [
+        "collatz_steps",
+        "counts_to_a_parameter"
+    ]
+}

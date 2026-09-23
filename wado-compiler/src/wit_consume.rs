@@ -11,7 +11,8 @@
 use crate::ast::{
     AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EnumCase, EnumDecl, FlagsDecl,
     FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module, NamedType,
-    Newtype, Param, SelfKind, StructDecl, StructField, Type, VariantCase, VariantDecl, Visibility,
+    Newtype, Param, SelfKind, StructDecl, StructField, Type, UseDecl, UseItem, VariantCase,
+    VariantDecl, Visibility,
 };
 use crate::attribute::{CM, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
@@ -142,6 +143,10 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
         }]
     };
 
+    if b.uses_tree_map {
+        let tree_map_use = b.tree_map_use();
+        b.items.insert(0, tree_map_use);
+    }
     let source_interfaces = b.source_interfaces;
     let module = Module::with_metadata(
         b.items,
@@ -171,6 +176,7 @@ struct Builder {
     items: Vec<Item>,
     errors: Vec<String>,
     source_interfaces: SourceInterfaceBatch,
+    uses_tree_map: bool,
 }
 
 impl Builder {
@@ -181,7 +187,30 @@ impl Builder {
             items: Vec::new(),
             errors: Vec::new(),
             source_interfaces: SourceInterfaceBatch::default(),
+            uses_tree_map: false,
         }
+    }
+
+    /// `use { TreeMap } from "core:collections";`, the one binding type the
+    /// prelude does not supply.
+    fn tree_map_use(&mut self) -> Item {
+        Item::Use(UseDecl {
+            id: self.id(),
+            attrs: Vec::new(),
+            visibility: Visibility::Private,
+            source: "core:collections".to_string(),
+            source_span: syn(),
+            source_id: self.id(),
+            items: vec![UseItem::Simple {
+                id: self.id(),
+                name: "TreeMap".to_string(),
+                name_span: syn(),
+                alias: None,
+            }],
+            items_span: Some(syn()),
+            attributes: None,
+            span: syn(),
+        })
     }
 
     fn id(&mut self) -> AstId {
@@ -523,6 +552,12 @@ impl Builder {
                 let inner = self.map_type(resolve, t, current_fq);
                 self.generic("List", vec![inner])
             }
+            CmShape::Map(k, v) => {
+                let key = self.map_type(resolve, k, current_fq);
+                let value = self.map_type(resolve, v, current_fq);
+                self.uses_tree_map = true;
+                self.generic("TreeMap", vec![key, value])
+            }
             CmShape::Tuple(ts) => {
                 let mut elems = Vec::with_capacity(ts.len());
                 for t in ts {
@@ -630,6 +665,7 @@ fn classify_wit(resolve: &Resolve, ty: WitType) -> CmShape<WitType> {
     match &td.kind {
         TypeDefKind::Option(t) => CmShape::Option(*t),
         TypeDefKind::List(t) => CmShape::List(*t),
+        TypeDefKind::Map(k, v) => CmShape::Map(*k, *v),
         TypeDefKind::Tuple(t) => CmShape::Tuple(t.types.clone()),
         TypeDefKind::Result(r) => CmShape::Result {
             ok: r.ok,

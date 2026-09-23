@@ -1,0 +1,41 @@
+// A trait's unavailable method is owed by no impl. A call on an implementing
+// type, or through a bound, reaches it: instance and static alike.
+
+trait Named with () {
+    fn name(&self) -> i32;
+
+    #[unavailable("use `name`")]
+    fn old_name(&self);
+
+    #[unavailable("use `A { v }`")]
+    fn create();
+}
+
+struct A {
+    v: i32,
+}
+
+impl Named for A {
+    fn name(&self) -> i32 {
+        return self.v;
+    }
+}
+
+fn via_bound<T: Named>() {
+    T::create();
+}
+
+export fn run() {
+    let a = A { v: 1 };
+    a.old_name();
+    A::create();
+    via_bound::<A>();
+}
+
+__DATA__
+{
+    "compile_error": "`Named::create` is unavailable: use `A { v }`",
+    "compile_error_count": 2,
+    "compile_errors_contains": ["`Named::old_name` is unavailable: use `name`"],
+    "compile_errors_not_contains": ["does not implement", "does not define", "no method"]
+}

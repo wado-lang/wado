@@ -638,7 +638,7 @@ condition: a[0] == 1
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($sroa_c_used);
         unreachable;
     }; builtin::array_get_value<i32>(local.tee $load_27(arr_69.repr), 0) * 2;
-    if @unlikely((1 & (0 < $sroa_c_used)) == 0) {
+    if @unlikely(0 >= $sroa_c_used) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0"($sroa_c_used);
         unreachable;
@@ -920,12 +920,11 @@ fn "mut_param.wado/$test_9_a_closure_s_mut_param"() {
 
 fn "mut_param.wado/$cm_export__$test_0_a_primitive_mut_param"() {
     let x: i32;
-    let n_11: i32;
-    let n_12: i32;
-    n_11 = local.tee n_11(local.tee x(black_box(5))) + 1;
-    if @unlikely(n_11 != 6) {
+    let n: i32;
+    n = local.tee n(local.tee x(black_box(5))) + 1;
+    if @unlikely(n != 6) {
         cold_path;
-        "mut_param.wado/$test_0_a_primitive_mut_param$cold2"(x, n_11);
+        "mut_param.wado/$test_0_a_primitive_mut_param$cold2"(x, n);
         unreachable;
     }
     if @unlikely(x != 5) {
@@ -933,7 +932,6 @@ fn "mut_param.wado/$cm_export__$test_0_a_primitive_mut_param"() {
         "mut_param.wado/$test_0_a_primitive_mut_param$cold1"(x);
         unreachable;
     }
-    drop(local.tee n_12(x) * 2);
     if @unlikely(x != 5) {
         cold_path;
         "mut_param.wado/$test_0_a_primitive_mut_param$cold0"(x);

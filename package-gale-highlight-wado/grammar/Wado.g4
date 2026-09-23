@@ -343,7 +343,7 @@ labeledBlock
     ;
 
 letStatement
-    : attribute* 'reactive'? 'let' pattern (':' typeRef)? ('=' expression ('else' block)?)?
+    : attribute* 'reactive'? 'let' pattern ('=' expression ('else' block)?)?
     ;
 
 assertStatement
@@ -386,7 +386,7 @@ forHead
 
 forTail
     : 'of' exprNoStruct
-    | (':' typeRef)? '=' expression ';' condition? ';' exprNoStruct?
+    | '=' expression ';' condition? ';' exprNoStruct?
     ;
 
 whileStatement
@@ -640,7 +640,7 @@ pattern
     ;
 
 patternRange
-    : patternPrimary (('..<' | '..=') patternPrimary)?
+    : patternPrimary (('..<' | '..=') patternPrimary)? (':' typeRef)?
     ;
 
 patternPrimary

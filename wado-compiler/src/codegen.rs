@@ -64,7 +64,7 @@ fn validate_or_report(
     entry_module: &ModuleSource,
     subject: &'static str,
     file_stem: &'static str,
-    describe: impl FnOnce(&[u8], usize) -> Option<String>,
+    describe: impl FnOnce(&[u8], u64) -> Option<String>,
     undescribed: &str,
 ) -> Option<InvalidArtifact> {
     let mut validator = wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
@@ -102,14 +102,14 @@ fn validate_core_module(wasm: &[u8], entry_module: &ModuleSource) -> Option<Inva
 /// (index + demangled name), the body-relative byte offset, and a disassembled
 /// window of operators around the failure so the failing instruction is named
 /// rather than left as a raw module offset.
-fn describe_offending_location(wasm: &[u8], offset: usize) -> Option<String> {
+fn describe_offending_location(wasm: &[u8], offset: u64) -> Option<String> {
     use crate::hashmap::IndexMap;
     use wasmparser::{Name, Parser, Payload};
     let mut import_funcs = 0u32;
     let mut defined = 0u32;
     let mut names: IndexMap<u32, String> = IndexMap::default();
     // The function whose body contains `offset`, as (index, body start, ops).
-    let mut hit: Option<(u32, usize, Vec<(usize, String)>)> = None;
+    let mut hit: Option<(u32, u64, Vec<(u64, String)>)> = None;
     for payload in Parser::new(0).parse_all(wasm) {
         match payload.ok()? {
             Payload::ImportSection(reader) => {

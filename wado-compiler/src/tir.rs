@@ -1215,6 +1215,37 @@ impl TypeTable {
         self.resource_chain(sub).any(|current| current == sup)
     }
 
+    /// Whether only the host can tell a `value` is a `target`: `target` is a
+    /// resource strictly extending `value`'s, which makes both unrestricted.
+    #[must_use]
+    pub fn is_resource_narrowing(&self, value: TypeId, target: TypeId) -> bool {
+        let (ResolvedType::Resource { def: value }, ResolvedType::Resource { def: target }) =
+            (self.get(value), self.get(target))
+        else {
+            return false;
+        };
+        value != target && self.is_resource_subtype(*target, *value)
+    }
+
+    /// The root resource whose `$same` compares `a` and `b` by identity: both
+    /// unrestricted, one extending the other.
+    #[must_use]
+    pub fn identity_root(&mut self, a: TypeId, b: TypeId) -> Option<TypeId> {
+        let joined = self.resource_join(a, b)?;
+        let ResolvedType::Resource { def } = self.get(joined) else {
+            return None;
+        };
+        let def = *def;
+        if !self.is_unrestricted_resource(def) {
+            return None;
+        }
+        let root = self
+            .resource_chain(def)
+            .last()
+            .expect("a chain starts at its own resource");
+        Some(self.make_resource(root))
+    }
+
     /// Attach the program's declarations, so a nominal type can render its
     /// head once it carries one instead of a spelling.
     pub fn attach_defs(&mut self, defs: std::sync::Arc<DefTable>) {
@@ -3611,6 +3642,14 @@ impl TypeTable {
         self.make_generic_instance(def, vec![element])
     }
 
+    /// Create a `TreeMap<K, V>` type — the Wado spelling of CM `map<K, V>`.
+    pub fn make_tree_map(&mut self, key: TypeId, value: TypeId) -> TypeId {
+        let def = self
+            .compiler_item_def(CompilerItem::TreeMap)
+            .expect("the TreeMap declaration is a registered compiler item");
+        self.make_generic_instance(def, vec![key, value])
+    }
+
     /// Create the `ByteList` newtype (`type ByteList = List<u8>`).
     pub fn make_byte_list(&mut self) -> TypeId {
         let base = self.make_list(TypeTable::U8);
@@ -5600,6 +5639,15 @@ pub enum TirPattern {
         inclusive: bool,
         is_unsigned: bool,
     },
+    /// A type pattern the host decides: holds the scrutinee at the narrower
+    /// `type_id`, and matches only when `test`, which reads that local, holds.
+    /// `name` is the binding it makes, `None` for `_`.
+    Narrow {
+        name: Option<String>,
+        local_index: u32,
+        type_id: TypeId,
+        test: Box<TirExpr>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -6173,6 +6221,10 @@ pub struct TirFunction {
     /// `#[immediate(...)]` — parameters lowered to a Wasm immediate, whose
     /// argument must still be a literal when codegen reads it.
     pub immediates: Vec<String>,
+    /// `#[trap(...)]` on a bodyless declaration — when the call can trap.
+    pub trap: Option<TrapSpec<String>>,
+    /// `#[linear_memory(...)]` on a bodyless declaration.
+    pub linear_memory: Option<LinearMemory>,
     pub body: Option<TirBlock>,
     pub span: Span,
     pub local_count: u32,
@@ -6341,6 +6393,61 @@ pub struct RetainSpec<Param> {
     pub into: Option<Param>,
 }
 
+/// One `#[trap(...)]` condition: the call traps exactly where one fails.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TrapCheck<Param> {
+    /// `negative = p` — traps when `p < 0`.
+    Negative(Param),
+    /// `outside = a, at = i, len = n` — traps unless `[i, i + n)` lies within
+    /// the array `a`. `at` defaults to 0, `len` to 1.
+    Outside {
+        array: Param,
+        at: Option<Param>,
+        len: Option<Param>,
+    },
+    /// `unset = a` — traps when the element read is a slot of `a` that holds no
+    /// value, as a reference element `array_new` left at its default does.
+    Unset(Param),
+}
+
+/// What a bodyless declaration's `#[trap(...)]` attributes state. Silence is
+/// "may trap"; `#[trap(never)]` is a spec with no checks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrapSpec<Param> {
+    pub checks: Vec<TrapCheck<Param>>,
+    /// `result_len = p` — the returned array holds exactly `p` elements.
+    pub result_len: Option<Param>,
+}
+
+impl<P> TrapSpec<P> {
+    fn map<Q>(&self, mut f: impl FnMut(&P) -> Q) -> TrapSpec<Q> {
+        TrapSpec {
+            checks: self
+                .checks
+                .iter()
+                .map(|check| match check {
+                    TrapCheck::Negative(p) => TrapCheck::Negative(f(p)),
+                    TrapCheck::Outside { array, at, len } => TrapCheck::Outside {
+                        array: f(array),
+                        at: at.as_ref().map(&mut f),
+                        len: len.as_ref().map(&mut f),
+                    },
+                    TrapCheck::Unset(array) => TrapCheck::Unset(f(array)),
+                })
+                .collect(),
+            result_len: self.result_len.as_ref().map(f),
+        }
+    }
+}
+
+/// `#[linear_memory(...)]`: how a bodyless declaration touches linear memory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinearMemory {
+    Read,
+    /// Writes, and reads too: a store is ordered against every other access.
+    Write,
+}
+
 /// What a bodyless `core:builtin` declared about storage, by parameter position.
 /// Link snapshots it because monomorphization drops the generic declarations.
 #[derive(Debug, Clone, Default)]
@@ -6357,6 +6464,10 @@ pub struct BuiltinDeclaration {
     /// reads the argument's literal value, so nothing may rewrite it into a
     /// load.
     pub immediate_params: IndexSet<usize>,
+    /// `#[trap(...)]`, or `None` where the declaration states none.
+    pub trap: Option<TrapSpec<usize>>,
+    /// `#[linear_memory(...)]`, or `None` where it touches none.
+    pub linear_memory: Option<LinearMemory>,
 }
 
 /// All a declaration lookup reads of a call. TIR and NIR each carry their own
@@ -6441,6 +6552,27 @@ impl BuiltinDeclarations {
         self.get(call.into())
             .map(|d| d.immediate_params.clone())
             .unwrap_or_default()
+    }
+
+    /// What `call` declared with `#[trap(...)]`; `None` is "may trap".
+    pub fn trap<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&TrapSpec<usize>> {
+        self.get(call.into())?.trap.as_ref()
+    }
+
+    /// What `call` declared with `#[linear_memory(...)]`.
+    pub fn linear_memory<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> Option<LinearMemory> {
+        self.get(call.into())?.linear_memory
+    }
+
+    /// The positions `call` takes by `&mut`, `None` where nothing was snapshot.
+    pub fn mut_params<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> Option<&IndexSet<usize>> {
+        self.get(call.into()).map(|d| &d.mut_params)
     }
 
     /// Whether the call declared `#[result(owned)]`: the object it hands back
@@ -6539,6 +6671,13 @@ impl TirFunction {
             .map(move |name| self.param_position(name))
     }
 
+    /// This declaration's `#[trap(...)]` by parameter position.
+    pub fn trap_by_position(&self) -> Option<TrapSpec<usize>> {
+        self.trap
+            .as_ref()
+            .map(|spec| spec.map(|name| self.param_position(name)))
+    }
+
     /// Take the body's frame, leaving an empty one. The counterpart of
     /// [`Self::set_frame`]: a caller moving a body elsewhere takes what
     /// describes its locals with it.
@@ -6595,6 +6734,8 @@ impl TirFunction {
             effects: Vec::new(),
             retains: Vec::new(),
             immediates: Vec::new(),
+            trap: None,
+            linear_memory: None,
             body: Some(body),
             span,
             local_count: u32::try_from(locals.len()).expect("local count fits in u32"),

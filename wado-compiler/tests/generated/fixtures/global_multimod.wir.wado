@@ -39,23 +39,21 @@ type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  
 
 type "functype//./sub/global_multimod_helper.wado/$initialize_module" = fn();  // TypeId(16)
 
-type "functype//core:prelude/fpfmt.wado/$initialize_module" = fn();  // TypeId(17)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(17)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(18)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(18)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(19)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(19)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(20)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(20)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(21)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(22)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(23)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(24)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -115,7 +113,6 @@ fn "global_multimod.wado/run"() with Stdout {
         break_if $inline__initialize_modules_0 @likely(global:global_multimod.wado::$modules_initialized);
         cold_path;
         "./sub/global_multimod_helper.wado/$initialize_module"();
-        "core:prelude/fpfmt.wado/$initialize_module"();
         "global_multimod.wado/$initialize_module"();
         global:global_multimod.wado::$modules_initialized = 1;
     };
@@ -191,7 +188,6 @@ fn "global_multimod.wado/$cm_export__run"() {
         break_if $inline__initialize_modules_0 @likely(global:global_multimod.wado::$modules_initialized);
         cold_path;
         "./sub/global_multimod_helper.wado/$initialize_module"();
-        "core:prelude/fpfmt.wado/$initialize_module"();
         "global_multimod.wado/$initialize_module"();
         global:global_multimod.wado::$modules_initialized = 1;
     };
@@ -277,9 +273,6 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 
 fn "./sub/global_multimod_helper.wado/$initialize_module"() {
     global:./sub/global_multimod_helper.wado::HELPER_COUNTER = 42;
-}
-
-fn "core:prelude/fpfmt.wado/$initialize_module"() {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {

@@ -79,25 +79,16 @@ callbacks are encoded via linking (above) or via `stream`/`future` values.
 
 ## What engines implement
 
-### wasmtime statically rejects donut adapters
+### wasmtime executes donut adapters since 49
 
-wasmtime's fused-adapter compiler (FACT) compiles any adapter whose lift and
-lower sides are the same instance **or in an ancestor relation** to an
-unconditional trap — `crates/environ/src/fact/trampoline.rs:117-127`
-(wasmtime 47):
+Through wasmtime 48, the fused-adapter compiler (FACT) compiled any adapter whose
+lift and lower sides were the same instance or in an ancestor relation into an
+unconditional trap. That over-approximated the spec's guard, which traps only
+recursive reentry, so every donut call trapped.
 
-```rust
-// If the lift and lower instances are equal, or if one is an ancestor of
-// the other, we trap unconditionally.  This ensures that recursive
-// reentrance via an adapter is impossible.
-```
-
-This over-approximates the spec's "trap recursive reentry" runtime guard: a
-donut parent→child call adapter is an ancestor-relation adapter, so **all**
-donut calls trap, not just recursive ones. Verified empirically with a
-hand-written donut component (`wado-compiler/tests/integration/cm_donut_canary.rs`):
-instantiation succeeds, the first parent→child call traps
-`cannot enter component instance`.
+wasmtime 49 runs them. The hand-written donut component in
+`wado-compiler/tests/integration/cm_donut_canary.rs` instantiates and its
+parent→child call returns the expected value.
 
 Sibling adapters (the shape `wasm-compose` produces, and what the component
 -import pipeline uses today) are unaffected.
@@ -192,12 +183,11 @@ runs only on a wado-aware host, forfeiting the portability that is the point of
 targeting Wasm. Rejected on that ground; effect channels reach the same
 dynamic quadrant portably.
 
-### Blocked on engines: donut wrapping
+### Available since wasmtime 49: donut wrapping
 
-The spec-sanctioned mechanism (above). Requires wasmtime's FACT to implement
-the spec's recursive-reentry-only guard instead of the unconditional ancestor
-trap. Worth pursuing upstream; `cm_donut_canary.rs` documents the current
-behavior and will flag when the engine changes.
+The spec-sanctioned mechanism (above). wasmtime 49 executes it, and
+`cm_donut_canary.rs` fails if that stops. Not yet evaluated against provider
+composition and effect channels.
 
 ### Future spec: first-class function values
 
@@ -230,4 +220,4 @@ change. The **host effect pump** is rejected (non-portable).
   provider file spanning several imported interfaces (bind by op name across all)
   is the next increment.
 - Effect channels (dynamic direction): not started; own WEP when motivated.
-- Host effect pump: rejected (non-portable). Donut upstream: blocked on engines.
+- Host effect pump: rejected (non-portable). Donut wrapping: runs on wasmtime 49, not yet evaluated.

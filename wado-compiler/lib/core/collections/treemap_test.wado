@@ -580,11 +580,11 @@ test "get_str and contains_key_str look up by a view" {
     map["beta"] = 2;
 
     let text = "xx-beta-xx".as_str_slice();
-    assert map.contains_key_str(text.sub(3, 7));
-    assert map.get_str(text.sub(3, 7)) matches { Some(v) && v == 2 };
+    assert map.contains_key_str(text.slice(3, 7));
+    assert map.get_str(text.slice(3, 7)) matches { Some(v) && v == 2 };
 
-    assert !map.contains_key_str(text.sub(0, 2));
-    assert map.get_str(text.sub(0, 2)) matches { None };
+    assert !map.contains_key_str(text.slice(0, 2));
+    assert map.get_str(text.slice(0, 2)) matches { None };
 
     assert map.get_str("alpha") matches { Some(v) && v == 1 };
 }
@@ -602,7 +602,7 @@ test "get_ref_str borrows the stored value" {
     map["alpha"] = [1, 2];
 
     let text = "xx-alpha-xx".as_str_slice();
-    assert map.get_ref_str(text.sub(3, 8)) matches { Some(v) && v.len() == 2 };
+    assert map.get_ref_str(text.slice(3, 8)) matches { Some(v) && v.len() == 2 };
     assert map.get_ref_str("beta") matches { None };
 
     map.remove("alpha");

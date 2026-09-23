@@ -90,7 +90,7 @@ pub(super) fn run_peephole(
          built for a run that visits no function. `gated!` owns that skip."
     );
     // Once for the run.
-    let effects = compute_fn_effects(&project.functions, &project.builtin_registry);
+    let effects = compute_fn_effects(project);
     gate.run_gated(gated_pass, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the ref-elimination rule is

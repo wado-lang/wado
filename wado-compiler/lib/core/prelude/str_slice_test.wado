@@ -9,23 +9,23 @@ test "a view of a whole string sees its bytes" {
     assert v.to_string() == "banana";
 }
 
-test "sub takes a byte range counted from the view's start" {
+test "slice takes a byte range counted from the view's start" {
     let v = "banana".as_str_slice();
-    assert v.sub(1, 4).to_string() == "ana";
-    assert v.sub(1, 4).sub(1, 3).to_string() == "na";
-    assert v.sub(2, 2).is_empty();
+    assert v.slice(1, 4).to_string() == "ana";
+    assert v.slice(1, 4).slice(1, 3).to_string() == "na";
+    assert v.slice(2, 2).is_empty();
 }
 
 #[expect_trap]
-test "sub rejects a range out of bounds" {
+test "slice rejects a range out of bounds" {
     let v = "abc".as_str_slice();
-    v.sub(0, 4);
+    v.slice(0, 4);
 }
 
 #[expect_trap]
-test "sub rejects an end off a character boundary" {
+test "slice rejects an end off a character boundary" {
     let v = "日本語".as_str_slice();
-    v.sub(0, 1);
+    v.slice(0, 1);
 }
 
 test "a view's ends are character boundaries" {
@@ -38,6 +38,51 @@ test "a view's ends are character boundaries" {
     assert !v.is_char_boundary(2);
 }
 
+test "floor_char_boundary rounds a byte index down to a character start" {
+    let v = "a日本語".as_str_slice();
+    assert v.floor_char_boundary(0) == 0;
+    assert v.floor_char_boundary(1) == 1;
+    assert v.floor_char_boundary(2) == 1;
+    assert v.floor_char_boundary(3) == 1;
+    assert v.floor_char_boundary(4) == 4;
+    assert v.floor_char_boundary(9) == 7;
+    assert v.floor_char_boundary(10) == 10;
+    assert v.floor_char_boundary(200) == 10;
+}
+
+test "ceil_char_boundary rounds a byte index up to a character start" {
+    let v = "a日本語".as_str_slice();
+    assert v.ceil_char_boundary(0) == 0;
+    assert v.ceil_char_boundary(1) == 1;
+    assert v.ceil_char_boundary(2) == 4;
+    assert v.ceil_char_boundary(3) == 4;
+    assert v.ceil_char_boundary(8) == 10;
+    assert v.ceil_char_boundary(200) == 10;
+}
+
+test "a sub-view's boundaries are counted from its own start" {
+    let v = "日本語".as_str_slice().slice(3, 9);
+    assert v.floor_char_boundary(4) == 3;
+    assert v.ceil_char_boundary(1) == 3;
+    assert v.floor_char_boundary(100) == 6;
+}
+
+test "boundaries of an empty view are 0" {
+    let v = "".as_str_slice();
+    assert v.floor_char_boundary(0) == 0;
+    assert v.ceil_char_boundary(5) == 0;
+}
+
+#[expect_trap]
+test "floor_char_boundary rejects a negative index" {
+    "abc".as_str_slice().floor_char_boundary(-1);
+}
+
+#[expect_trap]
+test "ceil_char_boundary rejects a negative index" {
+    "abc".as_str_slice().ceil_char_boundary(-1);
+}
+
 test "a view iterates by character, not by byte" {
     let v = "日本語".as_str_slice();
     let mut count = 0;
@@ -47,7 +92,7 @@ test "a view iterates by character, not by byte" {
     assert count == 3;
 
     let mut first = ' ';
-    for let c of v.sub(3, 9).chars() {
+    for let c of v.slice(3, 9).chars() {
         first = c;
         break;
     }
@@ -56,20 +101,20 @@ test "a view iterates by character, not by byte" {
 
 test "a view compares as the text it views" {
     let v = "banana".as_str_slice();
-    assert v.sub(1, 4) == "xanax".as_str_slice().sub(1, 4);
-    assert v.sub(0, 3) != v.sub(3, 6);
-    assert v.sub(1, 2) < v.sub(0, 1);
-    assert v.sub(0, 3) < v.sub(0, 4);
+    assert v.slice(1, 4) == "xanax".as_str_slice().slice(1, 4);
+    assert v.slice(0, 3) != v.slice(3, 6);
+    assert v.slice(1, 2) < v.slice(0, 1);
+    assert v.slice(0, 3) < v.slice(0, 4);
 }
 
 test "a view prints as the text it views" {
     let v = "banana".as_str_slice();
-    assert `${v.sub(1, 4)}` == "ana";
-    assert `${v.sub(1, 4):?}` == "\"ana\"";
+    assert `${v.slice(1, 4)}` == "ana";
+    assert `${v.slice(1, 4):?}` == "\"ana\"";
 }
 
 test "a view's bytes reach the byte APIs" {
-    let v = "banana".as_str_slice().sub(1, 4);
+    let v = "banana".as_str_slice().slice(1, 4);
     assert v.as_bytes().len() == 3;
     let mut n = 0;
     for let b of v.bytes() {
@@ -89,5 +134,5 @@ test "AsStrSlice spans owned strings, references, and views" {
     let owned = "banana";
     assert first_byte(&owned) == b'b';
     assert first_byte("banana") == b'b';
-    assert first_byte(owned.as_str_slice().sub(1, 4)) == b'a';
+    assert first_byte(owned.as_str_slice().slice(1, 4)) == b'a';
 }

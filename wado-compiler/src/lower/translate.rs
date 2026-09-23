@@ -2201,6 +2201,9 @@ impl FunctionTranslator<'_, '_> {
             TirPattern::ConstantValue { expr } => PatKind::ConstantValue {
                 expr: self.convert_operand(expr),
             },
+            TirPattern::Narrow { .. } => {
+                panic!("pattern lowering turns every narrowing into a binding and a guard")
+            }
             TirPattern::Range {
                 start,
                 end,
