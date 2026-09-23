@@ -292,6 +292,17 @@ X : 'x' ;");
     assert !str_contains(&report, "shared literal matcher"), report;
 }
 
+test "lexer dump reports an alternation of single chars as one set" {
+    let report = lexer_dump("grammar T;
+r : A ;
+fragment D : [0-9] ;
+A : ('_' | D) 'z' (D | 'x')* ;");
+
+    assert str_contains(&report, "set ('_' | D) — one class test of 2 ranges"), report;
+    assert str_contains(&report, "set (D | 'x') — one class test of 2 ranges"), report;
+    assert str_contains(&report, "char set 2"), report;
+}
+
 test "lexer dump reports a rule made of earlier rules as subsumed" {
     // Every match of `EITHER` is a match of `A` or `B` at the same length, and
     // both are declared first, so `EITHER` never wins and is not dispatched.

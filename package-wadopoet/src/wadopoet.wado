@@ -8,6 +8,8 @@ pub struct CodeWriter {
     indent_level: i32,
     fresh_line: bool,
     id_counter: i32,
+    hoisted_keys: List<String> = [],
+    hoisted: String = "",
 }
 
 impl CodeWriter {
@@ -112,6 +114,34 @@ impl CodeWriter {
         return id;
     }
 
+    /// The name of a top-level function defined once per distinct `key`,
+    /// however many sites ask: `define` renders it from the name.
+    /// `write_hoisted` places the definitions.
+    pub fn hoist_fn<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        key: S,
+        prefix: S1,
+        define: fn(&String) -> String,
+    ) -> String {
+        let index = match self.hoisted_keys.iter_ref().position(|k| *k == key.as_str_slice()) {
+            Some(i) => i,
+            None => self.hoisted_keys.len(),
+        };
+        let name = `${prefix}${index}`;
+        if index == self.hoisted_keys.len() {
+            self.hoisted_keys.push(key.to_string());
+            self.hoisted.push_str(&define(&name));
+        }
+        return name;
+    }
+
+    /// Write every definition `hoist_fn` has queued since the last call.
+    pub fn write_hoisted(&mut self) {
+        let text = self.hoisted;
+        self.hoisted = "";
+        self.raw(&text);
+    }
+
     /// Append raw text with no indentation handling.
     pub fn raw<S: AsStrSlice>(&mut self, text: S) {
         self.buf.push_str(text);
@@ -123,6 +153,7 @@ impl CodeWriter {
     /// Return the generated code. Asserts that indentation is balanced.
     pub fn to_string(&self) -> String {
         assert self.indent_level == 0, `CodeWriter: unbalanced indentation (level=${self.indent_level})`;
+        assert self.hoisted.is_empty(), "CodeWriter: a hoisted definition was never written";
         return self.buf;
     }
 

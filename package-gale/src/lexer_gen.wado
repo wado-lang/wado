@@ -352,6 +352,7 @@ pub fn gen_lexer<S: AsStrSlice>(
         has_members,
         sc_name,
     );
+    w.write_hoisted();
     gen_literal_match_fns(w, lit_tokens, grammar_ci, has_members);
     gen_keyword_classifier_fn(w, &keywords);
     gen_tokenize_fn(
@@ -2217,6 +2218,9 @@ pub variant LexerElemPlan {
     /// strand, so no suffix decision.
     PlainRepeat(LexerNestedPlan),
     Not(LexerNestedPlan),
+    /// A group, `~` or inlined fragment that consumes one char out of a set:
+    /// one class test (`lexer_elem_char_set`).
+    CharSet(CharClass),
     /// A literal, a char class or range, `.`, `EOF`, or a rule reached by call.
     Leaf,
 }
@@ -2283,6 +2287,10 @@ fn plan_seq(alt: &LexerAlternative, all_rules: &List<LexerRule>, ci: bool, tail:
             steps.push(LexerStepPlan::Repeat(LexerRepeatPlan { emit, inner }));
             continue;
         }
+        if let Some(set) = lexer_composite_char_set(elem, all_rules, ci) {
+            steps.push(LexerStepPlan::Elem(LexerElemPlan::CharSet(set)));
+            continue;
+        }
         if let Group(g_alts) = elem {
             let emit = lexer_group_emit(alt, i, all_rules, ci);
             let shape = if emit matches { ArmScoring } {
@@ -2304,6 +2312,9 @@ fn plan_seq(alt: &LexerAlternative, all_rules: &List<LexerRule>, ci: bool, tail:
 }
 
 fn plan_elem(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool, tail: bool) -> LexerElemPlan {
+    if let Some(set) = lexer_composite_char_set(elem, all_rules, ci) {
+        return LexerElemPlan::CharSet(set);
+    }
     return match *elem {
         Group(alts) => LexerElemPlan::Body(plan_body(&alts, all_rules, ci, tail)),
         Repeat(rep) => LexerElemPlan::PlainRepeat(LexerNestedPlan {
@@ -2323,6 +2334,100 @@ fn plan_elem(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool, tail: b
         },
         Literal(_) | CharRange(_) | CharClass(_) | AnyChar => LexerElemPlan::Leaf,
     };
+}
+
+/// `lexer_elem_char_set` of a group, `~` or fragment reference: the composites
+/// a set test replaces. A leaf is already one.
+fn lexer_composite_char_set(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool) -> Option<CharClass> {
+    if elem matches { Literal(_) | CharRange(_) | CharClass(_) | AnyChar | Repeat(_) } {
+        return null;
+    }
+    return lexer_elem_char_set(elem, all_rules, ci);
+}
+
+/// The set `elem` takes exactly one char from, folded for `ci`, when that is
+/// all it does: no action, no predicate, no other length.
+fn lexer_elem_char_set(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool) -> Option<CharClass> {
+    return match elem {
+        Literal(s) => {
+            let mut cs = s.chars();
+            let Some(c) = cs.next() else {
+                return null;
+            };
+            if cs.next() matches { Some(_) } {
+                return null;
+            }
+            Option::Some(folded_class(c, c, ci));
+        },
+        CharRange(pair) => Option::Some(folded_class(pair.0, pair.1, ci)),
+        CharClass(cc) => Option::Some(if ci { expand_char_class_ci(cc) } else { *cc }),
+        Not(n) => match lexer_elem_char_set(&n.element, all_rules, ci) {
+            Some(inner) => Option::Some(CharClass { ranges: inner.ranges, negated: !inner.negated }),
+            None => null,
+        },
+        Group(alts) => lexer_alts_char_set(alts, all_rules, ci),
+        RuleRef(name) => match find_fragment(all_rules, name) {
+            Some(f) => if fragment_is_recursive(f, all_rules) {
+                null;
+            } else {
+                lexer_alts_char_set(&f.body, all_rules, ci);
+            },
+            None => null,
+        },
+        AnyChar | Repeat(_) => null,
+    };
+}
+
+/// The union of the arms' sets, each arm one positive set and nothing else.
+fn lexer_alts_char_set(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, ci: bool) -> Option<CharClass> {
+    let mut ranges: List<CharRange> = [];
+    for let alt of alts {
+        if !alt.actions.is_empty() || alt.elements.len() != 1 {
+            return null;
+        }
+        let Some(set) = lexer_elem_char_set(&alt.elements[0], all_rules, ci) else {
+            return null;
+        };
+        if set.negated {
+            return null;
+        }
+        for let r of &set.ranges {
+            ranges.push(*r);
+        }
+    }
+    return Option::Some(CharClass { ranges: merged_char_ranges(&ranges), negated: false });
+}
+
+fn folded_class(start: char, end: char, ci: bool) -> CharClass {
+    if !ci {
+        return CharClass {
+            ranges: [
+                CharRange { start, end },
+            ],
+            negated: false,
+        };
+    }
+    let mut ranges: List<CharRange> = [];
+    fold_range_ci(start, end, &mut ranges);
+    return CharClass { ranges, negated: false };
+}
+
+/// `ranges` sorted, with overlapping and adjacent ones joined.
+fn merged_char_ranges(ranges: &List<CharRange>) -> List<CharRange> {
+    let mut sorted = *ranges;
+    sorted.sort_by(|a, b| a.start.cmp(&b.start));
+    let mut out: List<CharRange> = [];
+    for let r of &sorted {
+        if !out.is_empty() && r.start as i32 <= out[out.len() - 1].end as i32 + 1 {
+            let last = out.len() - 1;
+            if r.end > out[last].end {
+                out[last].end = r.end;
+            }
+            continue;
+        }
+        out.push(*r);
+    }
+    return out;
 }
 
 /// Emit `alt` from element `from` on, taking every strategy from `plan`. `from`
@@ -3182,6 +3287,7 @@ fn gen_lexer_elem<S: AsStrSlice>(
             };
             gen_lexer_not(w, not_elem, &nested.inner, all_rules, fail_action, ci, ea, hm);
         },
+        CharSet(set) => gen_char_class(w, set, fail_action),
         Leaf => gen_lexer_leaf(w, elem, fail_action, ci, hm),
     }
 }
@@ -3258,7 +3364,7 @@ fn expand_char_class_ci(cc: &CharClass) -> CharClass {
 
 fn gen_char_class<S: AsStrSlice>(w: &mut CodeWriter, cc: &CharClass, fail_action: S) {
     w.line(`if pos >= chars.len() { ${fail_action}; }`);
-    let cond = char_class_disjunction(cc);
+    let cond = char_class_disjunction(w, cc);
     if cc.negated {
         w.line(`if ${cond} { ${fail_action}; }`);
     } else {
@@ -3267,23 +3373,26 @@ fn gen_char_class<S: AsStrSlice>(w: &mut CodeWriter, cc: &CharClass, fail_action
     w.line("pos += 1;");
 }
 
-/// Build `(chars[pos] matches { 'x' | 'lo'..='hi' | ... })` for a char class.
-fn char_class_disjunction(cc: &CharClass) -> String {
+/// A class with more ranges than this is tested by a function defined once,
+/// rather than spelled out at every site: `\p{L}` alone is hundreds.
+global SHARED_CHAR_SET_MIN_RANGES: i32 = 16;
+
+/// `(chars[pos] matches { 'x' | 'lo'..='hi' | ... })` for a char class, or a
+/// call to the shared function testing a large one.
+fn char_class_disjunction(w: &mut CodeWriter, cc: &CharClass) -> String {
     if cc.ranges.len() == 0 {
         return "(false)";
     }
-    let mut s = String::with_capacity(64);
-    s.push_str("(chars[pos] matches { ");
-    let mut first = true;
-    for let range of &cc.ranges {
-        if !first {
-            s.push_str(" | ");
-        }
-        first = false;
-        s.push_str(`${char_range_pat(range.start..=range.end)}`);
+    let pattern = cc.ranges.iter_ref().map(|r| `${char_range_pat(r.start..=r.end)}`).collect().join(" | ");
+    if cc.ranges.len() <= SHARED_CHAR_SET_MIN_RANGES {
+        return `(chars[pos] matches { ${pattern} })`;
     }
-    s.push_str(" })");
-    return s;
+    let name = w.hoist_fn(
+        &pattern,
+        "in_char_set_",
+        |name: &String| `fn ${*name}(c: char) -> bool {\n    return c matches { ${pattern} };\n}\n\n`,
+    );
+    return `${name}(chars[pos])`;
 }
 
 fn gen_lexer_repeat<S: AsStrSlice>(
@@ -3471,15 +3580,6 @@ fn gen_lexer_not<S: AsStrSlice>(
     ea: bool,
     hm: bool,
 ) {
-    if let CharClass(cc) = not_elem.element {
-        let expanded = if ci { expand_char_class_ci(&cc) } else { cc };
-        let flipped = CharClass {
-            ranges: expanded.ranges,
-            negated: !expanded.negated,
-        };
-        gen_char_class(w, &flipped, fail_action);
-        return;
-    }
     let id = w.next_id();
     let label = `not_${id}`;
     w.line(`if pos >= chars.len() { ${fail_action}; }`);
