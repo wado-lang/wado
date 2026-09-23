@@ -423,3 +423,19 @@ test "merge_lex_errors merges each lex-error token in source order, up to the ca
     assert capped.len() == 1;
     assert capped[0].code matches { LexError };
 }
+
+test "merge_lex_errors keeps the earliest errors when the parse reported out of order" {
+    let chars: List<char> = "ab#cd".chars().collect();
+    let mut ts = TokenStream::new(&chars);
+    ts.push_token(0, 0, 1, 0, 0);
+    ts.push_token(0, 1, 2, 0, 0);
+    let _ = ts.push_token_flagged(9, 2, 3, 0, 0, TokenFlags::LexError);
+    ts.push_token(0, 3, 4, 0, 0);
+    let later = Diagnostic::error(DiagnosticCode::ExtraToken, "later", Span::new(4, 5), [], 0, RecoveryAction::Deleted);
+    let pending = Diagnostic::error(DiagnosticCode::MissingToken, "pending", Span::new(0, 1), [], 0, RecoveryAction::None);
+    let mut diags: List<Diagnostic> = [later, pending];
+    merge_lex_errors(&ts, &mut diags, 2);
+    assert diags.len() == 2;
+    assert diags[0].message == "pending";
+    assert diags[1].code matches { LexError };
+}
