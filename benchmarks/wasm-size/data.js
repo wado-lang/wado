@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790190565614,
+  "lastUpdate": 1790202679265,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59061,6 +59061,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d8faae44bf97f04ed9aefcd0b6c3840ae2b495ee"
         },
         "date": 1790190564768,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 290692,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "03599b7966f67cc7edb00951b552a3ee6214b0dc",
+          "message": "Merge pull request #2139 from wado-lang/claude/wasmtime-49-upgrade-dqyjus\n\nfeat(cm): the Component Model `map` type, and wasmtime 49",
+          "timestamp": "2026-09-24T07:13:51+09:00",
+          "tree_id": "279bec700c99e39ddf618967575ebc5df1b23bde",
+          "url": "https://github.com/wado-lang/wado/commit/03599b7966f67cc7edb00951b552a3ee6214b0dc"
+        },
+        "date": 1790202678653,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
