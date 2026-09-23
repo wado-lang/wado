@@ -329,20 +329,12 @@ fn emit_weights(
     names: &Names,
     held: &TreeMap<String, String>,
 ) {
-<<<<<<< HEAD
     let mut weights = StructSpec::new("Weights", Vis::Pub);
-||||||| c795ffa9d
-    out.push_str("\n/// The graph's initializers. Roadmap step 3 fills these from a checkpoint.\n");
-    out.push_str("pub struct Weights {\n");
-=======
-    out.push_str("\n/// The graph's initializers. The caller fills these.\n");
-    out.push_str("pub struct Weights {\n");
->>>>>>> origin/main
     for let vi of &graph.initializers {
         weights.add_pub_field(names.get(&vi.name), tensor_type(shapes, held, &vi.name));
     }
     w.blank();
-    w.line("/// The graph's initializers. Roadmap step 3 fills these from a checkpoint.");
+    w.line("/// The graph's initializers. The caller fills these.");
     weights.emit(w);
 }
 
