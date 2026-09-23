@@ -1148,7 +1148,7 @@ pub enum TokenKind {
 pub global TK_B: i32 = 0;
 pub global TK_EOF: i32 = 1;
 pub global TK_ERROR: i32 = 2;
-pub global TK_LIT_A: i32 = 3;
+pub global TK_LIT_a: i32 = 3;
 
 struct Lexer {
     chars: List<char>,
@@ -1194,7 +1194,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let first_char = lexer.chars[start];
         if first_char matches { 'a' } {
             end = try_lit_a(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_A; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_a; }
         } else if first_char matches { 'b' } {
             end = try_B(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_B; }
@@ -1219,7 +1219,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_B => "B",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_A => "'a'",
+        TK_LIT_a => "'a'",
         _ => "Unknown",
     };
 }
@@ -1477,14 +1477,14 @@ impl Parser {
 
 fn scan_member(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_A { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_body(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && tokens[pos] == TK_LIT_A && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_LIT_a && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         pos = scan_member(tokens, pos);
         if pos < 0 { pos = sp; break; }
@@ -1503,7 +1503,7 @@ fn scan_file(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 }
 
 fn _parse_member__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_A, &EMPTY_SYNC);
+    p.expect(TK_LIT_a, &EMPTY_SYNC);
     return;
 }
 
@@ -1532,7 +1532,7 @@ fn _parse_body__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
-            if p.peek_kind() == TK_LIT_A {
+            if p.peek_kind() == TK_LIT_a {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
                 let _rec_sav = p.recovering;

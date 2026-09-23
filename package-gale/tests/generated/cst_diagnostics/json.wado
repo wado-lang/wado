@@ -2078,9 +2078,9 @@ pub global TK_LIT_RBRACE: i32 = 7;
 pub global TK_LIT_COLON: i32 = 8;
 pub global TK_LIT_LBRACKET: i32 = 9;
 pub global TK_LIT_RBRACKET: i32 = 10;
-pub global TK_LIT_TRUE: i32 = 11;
-pub global TK_LIT_FALSE: i32 = 12;
-pub global TK_LIT_NULL: i32 = 13;
+pub global TK_LIT_true: i32 = 11;
+pub global TK_LIT_false: i32 = 12;
+pub global TK_LIT_null: i32 = 13;
 
 struct Lexer {
     chars: List<char>,
@@ -2220,37 +2220,37 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_lbrace(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_LBRACE(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '{' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_comma(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_COMMA(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ',' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_rbrace(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_RBRACE(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '}' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_colon(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_COLON(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ':' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_lbracket(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_LBRACKET(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '[' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_rbracket(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_RBRACKET(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ']' { return -1; }
     return pos + 1;
@@ -2301,34 +2301,34 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             end = try_STRING(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_STRING; }
         } else if first_char matches { ',' } {
-            end = try_lit_comma(&lexer.chars, start);
+            end = try_lit_COMMA(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
         } else if first_char matches { '-' | '0' } {
             end = try_NUMBER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUMBER; }
         } else if first_char matches { ':' } {
-            end = try_lit_colon(&lexer.chars, start);
+            end = try_lit_COLON(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_COLON; }
         } else if first_char matches { '[' } {
-            end = try_lit_lbracket(&lexer.chars, start);
+            end = try_lit_LBRACKET(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
         } else if first_char matches { ']' } {
-            end = try_lit_rbracket(&lexer.chars, start);
+            end = try_lit_RBRACKET(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
         } else if first_char matches { 'f' } {
             end = try_lit_false(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_FALSE; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_false; }
         } else if first_char matches { 'n' } {
             end = try_lit_null(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_NULL; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_null; }
         } else if first_char matches { 't' } {
             end = try_lit_true(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_TRUE; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_true; }
         } else if first_char matches { '{' } {
-            end = try_lit_lbrace(&lexer.chars, start);
+            end = try_lit_LBRACE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; }
         } else if first_char matches { '}' } {
-            end = try_lit_rbrace(&lexer.chars, start);
+            end = try_lit_RBRACE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; }
         } else if first_char matches { '1'..='9' } {
             end = try_NUMBER(&lexer.chars, start);
@@ -2370,9 +2370,9 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_LIT_COLON => "':'",
         TK_LIT_LBRACKET => "'['",
         TK_LIT_RBRACKET => "']'",
-        TK_LIT_TRUE => "'true'",
-        TK_LIT_FALSE => "'false'",
-        TK_LIT_NULL => "'null'",
+        TK_LIT_true => "'true'",
+        TK_LIT_false => "'false'",
+        TK_LIT_null => "'null'",
         _ => "Unknown",
     };
 }
@@ -2767,13 +2767,13 @@ fn scan_value(tokens: &Array<i32>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_TRUE {
+        } else if alt_kind == TK_LIT_true {
             pos = start + 1;
             break scan_alts;
-        } else if alt_kind == TK_LIT_FALSE {
+        } else if alt_kind == TK_LIT_false {
             pos = start + 1;
             break scan_alts;
-        } else if alt_kind == TK_LIT_NULL {
+        } else if alt_kind == TK_LIT_null {
             pos = start + 1;
             break scan_alts;
         } else {
@@ -2970,16 +2970,16 @@ fn _parse_value__inner(p: &mut Parser) -> () {
         _parse_arr(p);
         return;
     }
-    if kind == TK_LIT_TRUE {
-        p.expect(TK_LIT_TRUE, &EMPTY_SYNC);
+    if kind == TK_LIT_true {
+        p.expect(TK_LIT_true, &EMPTY_SYNC);
         return;
     }
-    if kind == TK_LIT_FALSE {
-        p.expect(TK_LIT_FALSE, &EMPTY_SYNC);
+    if kind == TK_LIT_false {
+        p.expect(TK_LIT_false, &EMPTY_SYNC);
         return;
     }
-    if kind == TK_LIT_NULL {
-        p.expect(TK_LIT_NULL, &EMPTY_SYNC);
+    if kind == TK_LIT_null {
+        p.expect(TK_LIT_null, &EMPTY_SYNC);
         return;
     }
     p.no_viable(
@@ -3071,7 +3071,7 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_FALSE | TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_NULL | TK_LIT_TRUE | TK_NUMBER | TK_STRING };
+    return k matches { TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_false | TK_LIT_null | TK_LIT_true | TK_NUMBER | TK_STRING };
 }
 
 global EMPTY_SYNC: List<i32> = [];
@@ -3079,7 +3079,7 @@ global SYNC_0: List<i32> = [TK_STRING];
 global SYNC_1: List<i32> = [TK_LIT_RBRACE];
 global SYNC_2: List<i32> = [TK_LIT_LBRACE];
 global SYNC_3: List<i32> = [TK_LIT_COLON];
-global SYNC_4: List<i32> = [TK_LIT_FALSE, TK_LIT_LBRACE, TK_LIT_LBRACKET, TK_LIT_NULL, TK_LIT_TRUE, TK_NUMBER, TK_STRING];
+global SYNC_4: List<i32> = [TK_LIT_LBRACE, TK_LIT_LBRACKET, TK_LIT_false, TK_LIT_null, TK_LIT_true, TK_NUMBER, TK_STRING];
 global SYNC_5: List<i32> = [TK_LIT_RBRACKET];
 global SYNC_6: List<i32> = [TK_LIT_LBRACKET];
 

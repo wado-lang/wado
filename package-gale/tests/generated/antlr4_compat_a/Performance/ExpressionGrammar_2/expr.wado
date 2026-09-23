@@ -1082,9 +1082,9 @@ pub global TK_ID: i32 = 0;
 pub global TK_WS: i32 = 1;
 pub global TK_ERROR: i32 = 2;
 pub global TK_EOF: i32 = 3;
-pub global TK_LIT_NOT: i32 = 4;
-pub global TK_LIT_AND: i32 = 5;
-pub global TK_LIT_OR: i32 = 6;
+pub global TK_LIT_not: i32 = 4;
+pub global TK_LIT_and: i32 = 5;
+pub global TK_LIT_or: i32 = 6;
 
 struct Lexer {
     chars: List<char>,
@@ -1195,21 +1195,21 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_ERROR; }
         } else if first_char matches { 'a' } {
             end = try_lit_and(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_AND; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_and; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
             end = try_ERROR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ERROR; }
         } else if first_char matches { 'n' } {
             end = try_lit_not(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_NOT; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_not; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
             end = try_ERROR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ERROR; }
         } else if first_char matches { 'o' } {
             end = try_lit_or(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_OR; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_or; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
             end = try_ERROR(&lexer.chars, start);
@@ -1251,9 +1251,9 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WS => "WS",
         TK_ERROR => "ERROR",
         TK_EOF => "Eof",
-        TK_LIT_NOT => "'not'",
-        TK_LIT_AND => "'and'",
-        TK_LIT_OR => "'or'",
+        TK_LIT_not => "'not'",
+        TK_LIT_and => "'and'",
+        TK_LIT_or => "'or'",
         _ => "Unknown",
     };
 }
@@ -1525,7 +1525,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
         if alt_kind == TK_ID {
             pos = start + 1;
             break scan_alts;
-        } else if alt_kind == TK_LIT_NOT {
+        } else if alt_kind == TK_LIT_not {
             pos = start + 1;
             try_1: {
                 pos = scan_expr(tokens, pos, 0);
@@ -1542,7 +1542,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_expr_lr_2(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_AND { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_and { return -1; }
     pos += 1;
     pos = scan_expr(tokens, pos, 3);
     if pos < 0 { return -1; }
@@ -1551,7 +1551,7 @@ fn scan_expr_lr_2(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_expr_lr_3(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_OR { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_or { return -1; }
     pos += 1;
     pos = scan_expr(tokens, pos, 2);
     if pos < 0 { return -1; }
@@ -1564,7 +1564,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         let _lr_pos0 = pos;
-        if suffix_kind == TK_LIT_AND {
+        if suffix_kind == TK_LIT_and {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_2(tokens, pos);
@@ -1572,7 +1572,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
             } else {
                 break;
             }
-        } else if suffix_kind == TK_LIT_OR {
+        } else if suffix_kind == TK_LIT_or {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_3(tokens, pos);
@@ -1613,8 +1613,8 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
         p.expect(TK_ID, &EMPTY_SYNC);
         return;
     }
-    if kind == TK_LIT_NOT {
-        p.expect(TK_LIT_NOT, &SYNC_0);
+    if kind == TK_LIT_not {
+        p.expect(TK_LIT_not, &SYNC_0);
         _parse_expr(p, 3);
         return;
     }
@@ -1635,25 +1635,25 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     loop {
         if p.recovering { break; }
         let _sk = p.peek_kind();
-        if _sk == TK_LIT_AND {
+        if _sk == TK_LIT_and {
             if 2 >= min_prec {
                 if scan_expr_lr_2(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
-                p.expect(TK_LIT_AND, &EMPTY_SYNC);
+                p.expect(TK_LIT_and, &EMPTY_SYNC);
                 _parse_expr(p, 3);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
             }
-        } else if _sk == TK_LIT_OR {
+        } else if _sk == TK_LIT_or {
             if 1 >= min_prec {
                 if scan_expr_lr_3(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
-                p.expect(TK_LIT_OR, &EMPTY_SYNC);
+                p.expect(TK_LIT_or, &EMPTY_SYNC);
                 _parse_expr(p, 2);
                 p.b.finish_node(p.last_end());
             } else {
@@ -1732,5 +1732,5 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_ID, TK_LIT_NOT];
+global SYNC_0: List<i32> = [TK_ID, TK_LIT_not];
 

@@ -1079,8 +1079,8 @@ pub enum TokenKind {
 pub global TK_Z: i32 = 0;
 pub global TK_EOF: i32 = 1;
 pub global TK_ERROR: i32 = 2;
-pub global TK_LIT_X: i32 = 3;
-pub global TK_LIT_Y: i32 = 4;
+pub global TK_LIT_x: i32 = 3;
+pub global TK_LIT_y: i32 = 4;
 
 struct Lexer {
     chars: List<char>,
@@ -1132,10 +1132,10 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let first_char = lexer.chars[start];
         if first_char matches { 'x' } {
             end = try_lit_x(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_X; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_x; }
         } else if first_char matches { 'y' } {
             end = try_lit_y(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_Y; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_y; }
         } else if first_char matches { 'z' } {
             end = try_Z(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Z; }
@@ -1160,8 +1160,8 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_Z => "Z",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_X => "'x'",
-        TK_LIT_Y => "'y'",
+        TK_LIT_x => "'x'",
+        TK_LIT_y => "'y'",
         _ => "Unknown",
     };
 }
@@ -1636,9 +1636,9 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_X | TK_LIT_Y };
+    return k matches { TK_LIT_x | TK_LIT_y };
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_X, TK_LIT_Y];
+global SYNC_0: List<i32> = [TK_LIT_x, TK_LIT_y];
 

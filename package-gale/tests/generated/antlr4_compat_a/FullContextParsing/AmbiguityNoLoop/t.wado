@@ -1996,7 +1996,7 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_at(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_AT(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '@' { return -1; }
     return pos + 1;
@@ -2016,7 +2016,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char matches { '@' } {
-            end = try_lit_at(&lexer.chars, start);
+            end = try_lit_AT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_AT; }
         } else if first_char matches { 'a'..='z' } {
             end = try_ID(&lexer.chars, start);

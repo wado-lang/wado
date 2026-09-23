@@ -1083,8 +1083,8 @@ pub global TK_INT: i32 = 1;
 pub global TK_WS: i32 = 2;
 pub global TK_EOF: i32 = 3;
 pub global TK_ERROR: i32 = 4;
-pub global TK_LIT_INT: i32 = 5;
-pub global TK_LIT_FLOAT: i32 = 6;
+pub global TK_LIT_int: i32 = 5;
+pub global TK_LIT_float: i32 = 6;
 pub global TK_LIT_SEMI: i32 = 7;
 pub global TK_LIT_EQ: i32 = 8;
 
@@ -1181,13 +1181,13 @@ fn try_lit_float(chars: &List<char>, start: i32) -> i32 {
     return pos + 5;
 }
 
-fn try_lit_semi(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_SEMI(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ';' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_eq(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_EQ(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '=' { return -1; }
     return pos + 1;
@@ -1207,19 +1207,19 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char matches { ';' } {
-            end = try_lit_semi(&lexer.chars, start);
+            end = try_lit_SEMI(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; }
         } else if first_char matches { '=' } {
-            end = try_lit_eq(&lexer.chars, start);
+            end = try_lit_EQ(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
         } else if first_char matches { 'f' } {
             end = try_lit_float(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_FLOAT; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_float; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if first_char matches { 'i' } {
             end = try_lit_int(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_INT; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_int; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if first_char matches { 'a'..='z' } {
@@ -1261,8 +1261,8 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_INT => "'int'",
-        TK_LIT_FLOAT => "'float'",
+        TK_LIT_int => "'int'",
+        TK_LIT_float => "'float'",
         TK_LIT_SEMI => "';'",
         TK_LIT_EQ => "'='",
         _ => "Unknown",
@@ -1899,11 +1899,11 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_FLOAT | TK_LIT_INT };
+    return k matches { TK_LIT_float | TK_LIT_int };
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_FLOAT, TK_LIT_INT];
+global SYNC_0: List<i32> = [TK_LIT_float, TK_LIT_int];
 global SYNC_1: List<i32> = [TK_LIT_EQ];
 global SYNC_2: List<i32> = [TK_LIT_SEMI];
 global SYNC_3: List<i32> = [TK_INT];

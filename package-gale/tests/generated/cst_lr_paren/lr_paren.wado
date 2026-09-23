@@ -1142,19 +1142,19 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_star(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_STAR(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '*' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_lparen(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_LPAREN(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '(' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_rparen(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_RPAREN(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ')' { return -1; }
     return pos + 1;
@@ -1174,13 +1174,13 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char matches { '(' } {
-            end = try_lit_lparen(&lexer.chars, start);
+            end = try_lit_LPAREN(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
         } else if first_char matches { ')' } {
-            end = try_lit_rparen(&lexer.chars, start);
+            end = try_lit_RPAREN(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
         } else if first_char matches { '*' } {
-            end = try_lit_star(&lexer.chars, start);
+            end = try_lit_STAR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
         } else if first_char matches { 'a'..='z' } {
             end = try_ID(&lexer.chars, start);

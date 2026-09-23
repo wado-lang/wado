@@ -1077,9 +1077,9 @@ pub enum TokenKind {
 
 pub global TK_EOF: i32 = 0;
 pub global TK_ERROR: i32 = 1;
-pub global TK_LIT_X: i32 = 2;
-pub global TK_LIT_Y: i32 = 3;
-pub global TK_LIT_Z: i32 = 4;
+pub global TK_LIT_x: i32 = 2;
+pub global TK_LIT_y: i32 = 3;
+pub global TK_LIT_z: i32 = 4;
 
 struct Lexer {
     chars: List<char>,
@@ -1130,13 +1130,13 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let first_char = lexer.chars[start];
         if first_char matches { 'x' } {
             end = try_lit_x(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_X; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_x; }
         } else if first_char matches { 'y' } {
             end = try_lit_y(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_Y; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_y; }
         } else if first_char matches { 'z' } {
             end = try_lit_z(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_Z; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_z; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1157,9 +1157,9 @@ pub fn token_kind_name(kind: i32) -> String {
     return match kind {
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_X => "'x'",
-        TK_LIT_Y => "'y'",
-        TK_LIT_Z => "'z'",
+        TK_LIT_x => "'x'",
+        TK_LIT_y => "'y'",
+        TK_LIT_z => "'z'",
         _ => "Unknown",
     };
 }
@@ -1526,17 +1526,17 @@ fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
         let gp_0 = pos;
         let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         let mut sg_0_best = -1;
-        if sgk_0 == TK_LIT_X {
+        if sgk_0 == TK_LIT_x {
             pos = gp_0;
             sg_0_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break sg_0_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_x { break sg_0_0; }
                 pos += 1;
                 if pos > sg_0_best { sg_0_best = pos; }
             }
-        } else if sgk_0 == TK_LIT_Y {
+        } else if sgk_0 == TK_LIT_y {
             pos = gp_0;
             sg_0_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_Y { break sg_0_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_y { break sg_0_1; }
                 pos += 1;
                 if pos > sg_0_best { sg_0_best = pos; }
             }
@@ -1549,7 +1549,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_Z { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_z { return -1; }
     pos += 1;
     return pos;
 }
@@ -1586,17 +1586,17 @@ fn _parse_a__inner(p: &mut Parser) -> () {
             let gp_1 = pos;
             let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
             let mut sg_1_best = -1;
-            if sgk_1 == TK_LIT_X {
+            if sgk_1 == TK_LIT_x {
                 pos = gp_1;
                 sg_1_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break sg_1_0; }
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_x { break sg_1_0; }
                     pos += 1;
                     if pos > sg_1_best { sg_1_best = pos; }
                 }
-            } else if sgk_1 == TK_LIT_Y {
+            } else if sgk_1 == TK_LIT_y {
                 pos = gp_1;
                 sg_1_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_Y { break sg_1_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_y { break sg_1_1; }
                     pos += 1;
                     if pos > sg_1_best { sg_1_best = pos; }
                 }
@@ -1612,7 +1612,7 @@ fn _parse_a__inner(p: &mut Parser) -> () {
         if rep_scan_pos < 0 { break; }
         let lit_x_or_lit_y = p.expect_set(&SYNC_0);
     }
-    let lit_z = p.expect(TK_LIT_Z, &EMPTY_SYNC);
+    let lit_z = p.expect(TK_LIT_z, &EMPTY_SYNC);
     return;
 }
 
@@ -1688,9 +1688,9 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_X | TK_LIT_Y };
+    return k matches { TK_LIT_x | TK_LIT_y };
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_X, TK_LIT_Y];
+global SYNC_0: List<i32> = [TK_LIT_x, TK_LIT_y];
 

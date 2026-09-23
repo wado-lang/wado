@@ -1087,8 +1087,8 @@ pub global TK_SEMI: i32 = 3;
 pub global TK_WS: i32 = 4;
 pub global TK_EOF: i32 = 5;
 pub global TK_ERROR: i32 = 6;
-pub global TK_LIT_P: i32 = 7;
-pub global TK_LIT_Q: i32 = 8;
+pub global TK_LIT_p: i32 = 7;
+pub global TK_LIT_q: i32 = 8;
 
 struct Lexer {
     chars: List<char>,
@@ -1195,10 +1195,10 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_C; }
         } else if first_char matches { 'p' } {
             end = try_lit_p(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_P; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_p; }
         } else if first_char matches { 'q' } {
             end = try_lit_q(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_Q; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_q; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1229,8 +1229,8 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_P => "'p'",
-        TK_LIT_Q => "'q'",
+        TK_LIT_p => "'p'",
+        TK_LIT_q => "'q'",
         _ => "Unknown",
     };
 }
@@ -1490,10 +1490,10 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if alt_kind == TK_LIT_P {
+        if alt_kind == TK_LIT_p {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_P { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_p { break try_0; }
                 pos += 1;
                 let gp_0 = pos;
                 let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1559,10 +1559,10 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_Q {
+        } else if alt_kind == TK_LIT_q {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_Q { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_q { break try_1; }
                 pos += 1;
                 let gp_2 = pos;
                 let sgk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1642,8 +1642,8 @@ fn scan_t(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn _parse_s__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
-    if kind == TK_LIT_P {
-        p.expect(TK_LIT_P, &SYNC_0);
+    if kind == TK_LIT_p {
+        p.expect(TK_LIT_p, &SYNC_0);
         let mut _plus_first = true;
         loop {
             if p.recovering { break; }
@@ -1690,8 +1690,8 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         p.expect(TK_EOF, &EMPTY_SYNC);
         return;
     }
-    if kind == TK_LIT_Q {
-        p.expect(TK_LIT_Q, &SYNC_2);
+    if kind == TK_LIT_q {
+        p.expect(TK_LIT_q, &SYNC_2);
         let mut _plus_first = true;
         loop {
             if p.recovering { break; }
@@ -1852,5 +1852,5 @@ global SYNC_1: List<i32> = [TK_SEMI];
 global SYNC_2: List<i32> = [TK_A];
 global SYNC_3: List<i32> = [TK_B];
 global SYNC_4: List<i32> = [TK_C];
-global SYNC_5: List<i32> = [TK_LIT_P, TK_LIT_Q];
+global SYNC_5: List<i32> = [TK_LIT_p, TK_LIT_q];
 

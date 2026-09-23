@@ -1081,7 +1081,7 @@ pub global TK_ID: i32 = 0;
 pub global TK_WS: i32 = 1;
 pub global TK_EOF: i32 = 2;
 pub global TK_ERROR: i32 = 3;
-pub global TK_LIT_X: i32 = 4;
+pub global TK_LIT_x: i32 = 4;
 pub global TK_LIT_EQ: i32 = 5;
 
 struct Lexer {
@@ -1147,7 +1147,7 @@ fn try_lit_x(chars: &List<char>, start: i32) -> i32 {
     return pos + 1;
 }
 
-fn try_lit_eq(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_EQ(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '=' { return -1; }
     return pos + 1;
@@ -1167,11 +1167,11 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char matches { '=' } {
-            end = try_lit_eq(&lexer.chars, start);
+            end = try_lit_EQ(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
         } else if first_char matches { 'x' } {
             end = try_lit_x(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_X; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_x; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else if first_char matches { 'a'..='z' } {
@@ -1207,7 +1207,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_X => "'x'",
+        TK_LIT_x => "'x'",
         TK_LIT_EQ => "'='",
         _ => "Unknown",
     };
@@ -1466,7 +1466,7 @@ impl Parser {
 
 fn scan_prog(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && tokens[pos] == TK_LIT_X {
+    while pos < tokens.len() && tokens[pos] == TK_LIT_x {
         let sp = pos;
         pos = scan_item(tokens, pos);
         if pos < 0 { pos = sp; break; }
@@ -1482,7 +1482,7 @@ fn scan_prog(tokens: &Array<i32>, pos: i32) -> i32 {
         }
         pos = rs_0;
         let rk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_0_ok && !(rk_0 == TK_LIT_X) { pos = sp; break; }
+        if !rs_0_ok && !(rk_0 == TK_LIT_x) { pos = sp; break; }
     }
     pos = scan_trailer(tokens, pos);
     if pos < 0 { return -1; }
@@ -1493,7 +1493,7 @@ fn scan_prog(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_item(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_X { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_x { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
@@ -1502,7 +1502,7 @@ fn scan_item(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_trailer(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_X { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_x { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
     pos += 1;
@@ -1530,11 +1530,11 @@ fn _parse_prog__inner(p: &mut Parser) -> () {
             }
             pos = rep_body_end;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(rep_body_end_kind == TK_LIT_X) { break rep_scan; }
+            if !rep_body_end_ok && !(rep_body_end_kind == TK_LIT_x) { break rep_scan; }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
-            if p.peek_kind() == TK_LIT_X {
+            if p.peek_kind() == TK_LIT_x {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
                 let _rec_sav = p.recovering;
@@ -1567,7 +1567,7 @@ fn _parse_prog(p: &mut Parser) -> () {
 }
 
 fn _parse_item__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_X, &SYNC_0);
+    p.expect(TK_LIT_x, &SYNC_0);
     p.expect(TK_ID, &EMPTY_SYNC);
     return;
 }
@@ -1584,7 +1584,7 @@ fn _parse_item(p: &mut Parser) -> () {
 }
 
 fn _parse_trailer__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_X, &SYNC_1);
+    p.expect(TK_LIT_x, &SYNC_1);
     p.expect(TK_LIT_EQ, &EMPTY_SYNC);
     return;
 }

@@ -1077,8 +1077,8 @@ pub enum TokenKind {
 
 pub global TK_EOF: i32 = 0;
 pub global TK_ERROR: i32 = 1;
-pub global TK_LIT_X: i32 = 2;
-pub global TK_LIT_Y: i32 = 3;
+pub global TK_LIT_x: i32 = 2;
+pub global TK_LIT_y: i32 = 3;
 
 struct Lexer {
     chars: List<char>,
@@ -1123,10 +1123,10 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let first_char = lexer.chars[start];
         if first_char matches { 'x' } {
             end = try_lit_x(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_X; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_x; }
         } else if first_char matches { 'y' } {
             end = try_lit_y(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_Y; }
+            if end > best_end { best_end = end; best_kind = TK_LIT_y; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1147,8 +1147,8 @@ pub fn token_kind_name(kind: i32) -> String {
     return match kind {
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_X => "'x'",
-        TK_LIT_Y => "'y'",
+        TK_LIT_x => "'x'",
+        TK_LIT_y => "'y'",
         _ => "Unknown",
     };
 }
@@ -1513,14 +1513,14 @@ fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_b(tokens, pos);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_X { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_x { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_b(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_Y { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_y { return -1; }
     pos += 1;
     return pos;
 }
@@ -1549,7 +1549,7 @@ fn _parse_s(p: &mut Parser) -> SVals {
 
 fn _parse_a__inner(p: &mut Parser) -> () {
     let b = _parse_b(p);
-    let lit_x = p.expect(TK_LIT_X, &EMPTY_SYNC);
+    let lit_x = p.expect(TK_LIT_x, &EMPTY_SYNC);
     return;
 }
 
@@ -1565,7 +1565,7 @@ fn _parse_a(p: &mut Parser) -> () {
 }
 
 fn _parse_b__inner(p: &mut Parser) -> () {
-    let lit_y = p.expect(TK_LIT_Y, &EMPTY_SYNC);
+    let lit_y = p.expect(TK_LIT_y, &EMPTY_SYNC);
     return;
 }
 

@@ -1194,19 +1194,19 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_star(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_STAR(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '*' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_comma(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_COMMA(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ',' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_gtgt(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_GTGT(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '>' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '>' { return -1; }
@@ -1227,13 +1227,13 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
         } else if first_char matches { '*' } {
-            end = try_lit_star(&lexer.chars, start);
+            end = try_lit_STAR(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
         } else if first_char matches { ',' } {
-            end = try_lit_comma(&lexer.chars, start);
+            end = try_lit_COMMA(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
         } else if first_char matches { '>' } {
-            end = try_lit_gtgt(&lexer.chars, start);
+            end = try_lit_GTGT(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_GTGT; }
         } else if first_char matches { '_' | 'a'..='z' | 'A'..='Z' } {
             end = try_ID(&lexer.chars, start);
