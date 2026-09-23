@@ -1116,7 +1116,7 @@ trait Eq<Rhs = Self> { fn eq(&self, other: &Rhs) -> bool; }
 // float it is IEEE 754-2019 `totalOrder`, as C++20's `std::strong_order` is:
 // -NaN < -Inf < -0 < +0 < +Inf < +NaN. The comparison operators keep IEEE's
 // answers on every float, so `sort()` and `<` disagree about a NaN — see
-// WEP: Comparison Traits. Any other type takes its `<` from `cmp`.
+// WEP: The Operator Order and the Total Order. Any other type reads `cmp`.
 trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }
 
 // For default value (implemented for primitives, String, List<T>,

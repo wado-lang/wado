@@ -204,4 +204,4 @@ omission goes in Decision.
 - [Loam — Lowered Operators, Ahead-of-time Modules](./wep-2026-09-20-loam.md)
 - [Grog — Protocol Buffers for Wado](./wep-2026-09-22-grog.md)
 - [Half-Precision Primitives (`f16` / `bf16`)](./wep-2026-09-22-half-precision-primitives.md)
-- [Comparison Traits — the Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md)
+- [The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md)

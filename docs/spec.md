@@ -3604,7 +3604,7 @@ so a NaN answers false and the two zeroes are one value. `f32` and `f64` get
 that from their instructions and `f16` / `bf16` from an impl, so the four agree.
 `Ordering` has three cases and an IEEE comparison has four answers, which is why
 one trait cannot carry both orders. See
-[WEP: Comparison Traits](./wep-2026-09-23-comparison-traits.md).
+[WEP: The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md).
 
 #### Default Implementations
 
