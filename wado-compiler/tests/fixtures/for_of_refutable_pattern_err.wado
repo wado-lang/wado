@@ -1,0 +1,27 @@
+// A `for` binding matches every element: a pattern that can fail is rejected
+// wherever it sits, rather than silently ending the loop.
+fn each<..T>(t: [..T]) {
+    for let Some(v) of t {}
+}
+
+export fn run() {
+    let xs: List<Option<i32>> = [null, Option::<i32>::Some(2)];
+    for let Some(x) of xs {}
+    for let None of xs {}
+    let pairs: List<[Option<i32>, i32]> = [[null, 1]];
+    for let [Some(a), b] of pairs {}
+    for let [Some(a), b] of [[Option::<i32>::Some(1), 2]] {}
+    let t: [Option<i32>, i32] = [null, 2];
+    let [Some(c), d] = t;
+    each([1]);
+}
+
+__DATA__
+{
+  "compile_error": ":4:5: analysis error: invalid pattern: refutable pattern in `for` binding: `Some` may not match",
+  "compile_error_count": 6,
+  "compile_errors_contains": [
+    "refutable pattern in `for` binding: `None` may not match",
+    "refutable pattern in `let` binding: `Some` may not match"
+  ]
+}

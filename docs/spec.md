@@ -720,6 +720,8 @@ scope: {
 
 The binding is a copy of each element (value semantics), so modifying it does not affect the original collection. For-of works with any type implementing `IntoIterator`, not just arrays.
 
+The binding must match every element, as a `let` pattern must. A pattern that can fail (`for let Some(x) of xs`, a narrowing type pattern) is a compile error. Match on the element in the body instead.
+
 #### Tuple for-of (compile-time expansion)
 
 When the iterable is a tuple, the loop body is expanded once per element at compile time. Each expansion independently types the binding, enabling heterogeneous iteration with per-element trait dispatch.
@@ -5802,7 +5804,7 @@ Whether the pattern can fail is decided statically, from the subject's type `S`:
 | `T <: S`, `T ≠ S` | refutable — a runtime test, and only where `extends` relates the two |
 | otherwise         | a type error, as a mismatched annotation is today                    |
 
-An irrefutable ascription still drives type context, so `let x: i64 = 42` coerces the literal as before. A refutable one needs a pattern position that admits failure, so `let` rejects it exactly as it rejects `let Some(x) = opt`:
+An irrefutable ascription still drives type context, so `let x: i64 = 42` coerces the literal as before. A refutable one needs a pattern position that admits failure, so `let` and a `for` binding reject it exactly as they reject `Some(x)`:
 
 ```wado
 let n: Node = el;                                   // Element <: Node — irrefutable upcast

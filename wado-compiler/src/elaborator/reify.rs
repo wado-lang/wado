@@ -4634,7 +4634,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 name,
                 span: name_span,
             } => (name.clone(), Some(*id), *name_span),
-            ast::Pattern::Tuple(..) => {
+            ast::Pattern::Tuple(..) | ast::Pattern::Wildcard => {
                 (format!("$pattern_temp_{unique_id}"), None, Span::default())
             }
             _ => {

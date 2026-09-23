@@ -12,7 +12,7 @@ use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 
 use super::Elaborator;
-use super::types::{FunctionContext, TypeError};
+use super::types::{BindingSite, FunctionContext, TypeError};
 use super::util;
 use crate::ast::{RangeKind, StructPatternField, wire_numbers_of};
 use crate::compiler_item::CompilerItem;
@@ -645,7 +645,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .is_resource_narrowing(value_type, type_id)
             {
-                self.reject_refutable_narrowing(value_type, type_id, let_stmt.name_span);
+                self.reject_refutable_narrowing(
+                    value_type,
+                    type_id,
+                    let_stmt.name_span,
+                    BindingSite::Let,
+                );
             } else {
                 self.typecheck(value_type, type_id, ast_value.span());
             }
@@ -688,13 +693,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
-                // Tuple / struct destructuring: binds the sub-patterns into
-                // `ctx` and records their local symbols.
                 self.resolve_let_pattern(
                     &let_stmt.pattern,
                     type_id,
                     let_stmt.is_mut,
                     let_stmt.span,
+                    BindingSite::Let,
                     ctx,
                 );
             }
@@ -703,7 +707,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // discarded; nothing to bind.
             }
             _ => {
-                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);
+                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span, BindingSite::Let);
             }
         }
     }
@@ -808,7 +812,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
             }
             _ => {
-                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);
+                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span, BindingSite::Let);
             }
         }
     }
@@ -820,52 +824,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// arms, `if let`, and `while let`.
     ///
     /// Emits a compile error and returns `false` if the pattern is refutable.
-    fn check_irrefutable_pattern(&mut self, pattern: &ast::Pattern, span: Span) -> bool {
-        match pattern {
+    fn check_irrefutable_pattern(
+        &mut self,
+        pattern: &ast::Pattern,
+        span: Span,
+        site: BindingSite,
+    ) -> bool {
+        let reason = match pattern {
             // `Pattern::Error` is a parser recovery placeholder; treat it as
             // irrefutable so it does not cascade a second "refutable" error.
             Pattern::Ident { .. }
             | Pattern::MutIdent { .. }
             | Pattern::Wildcard
-            | Pattern::Error(_) => true,
-            Pattern::Tuple(patterns, _) => patterns
-                .iter()
-                .all(|p| self.check_irrefutable_pattern(p, span)),
-            Pattern::Struct { fields, .. } => fields
-                .iter()
-                .all(|f| self.check_irrefutable_pattern(&f.pattern, span)),
+            | Pattern::Error(_) => return true,
+            Pattern::Tuple(patterns, _) => {
+                return patterns
+                    .iter()
+                    .all(|p| self.check_irrefutable_pattern(p, span, site));
+            }
+            Pattern::Struct { fields, .. } => {
+                return fields
+                    .iter()
+                    .all(|f| self.check_irrefutable_pattern(&f.pattern, span, site));
+            }
             // Whether the ascription narrows is a question of types, which
-            // `resolve_let_pattern` answers.
-            Pattern::Typed { pattern, .. } => self.check_irrefutable_pattern(pattern, span),
-            Pattern::Literal(_) => {
-                let _ = self.emit(TypeError::InvalidPattern {
-                    message: "refutable pattern in `let` binding: literal patterns may not match; use `if let` instead".to_string(),
-                    span,
-                });
-                false
+            // the pattern's resolution answers.
+            Pattern::Typed { pattern, .. } => {
+                return self.check_irrefutable_pattern(pattern, span, site);
             }
-            Pattern::Variant { variant_name, .. } => {
-                let _ = self.emit(TypeError::InvalidPattern {
-                    message: format!("refutable pattern in `let` binding: `{variant_name}` may not match; use `if let` instead"),
-                    span,
-                });
-                false
-            }
-            Pattern::Or(_) => {
-                let _ = self.emit(TypeError::InvalidPattern {
-                    message: "refutable pattern in `let` binding: or-patterns may not match; use `if let` or `match` instead".to_string(),
-                    span,
-                });
-                false
-            }
-            Pattern::Range { .. } => {
-                let _ = self.emit(TypeError::InvalidPattern {
-                    message: "refutable pattern in `let` binding: range patterns may not match; use `if let` instead".to_string(),
-                    span,
-                });
-                false
-            }
-        }
+            Pattern::Literal(_) => "literal patterns may not match".to_string(),
+            Pattern::Variant { variant_name, .. } => format!("`{variant_name}` may not match"),
+            Pattern::Or(_) => "or-patterns may not match".to_string(),
+            Pattern::Range { .. } => "range patterns may not match".to_string(),
+        };
+        self.reject_refutable(site, &reason, span);
+        false
+    }
+
+    fn reject_refutable(&mut self, site: BindingSite, reason: &str, span: Span) {
+        let (position, remedy) = match site {
+            BindingSite::Let => ("`let` binding", "use `let ... else` or `if let` instead"),
+            BindingSite::ForOf => ("`for` binding", "match on the element in the loop body instead"),
+        };
+        let _ = self.emit(TypeError::InvalidPattern {
+            message: format!("refutable pattern in {position}: {reason}; {remedy}"),
+            span,
+        });
     }
 
     /// Whether `case_name`, written under `qualifier`, is a case the scrutinee
@@ -1079,8 +1083,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_id: TypeId,
         is_mut: bool,
         span: Span,
+        site: BindingSite,
         ctx: &mut FunctionContext,
     ) {
+        self.check_irrefutable_pattern(pattern, span, site);
         // Match ergonomics for let patterns: peel references from the type
         // when the pattern is a compound (tuple/struct) pattern.
         let (peeled_type, ref_binding) = match pattern {
@@ -1108,7 +1114,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => (type_id, RefBinding::None),
         };
-        self.resolve_let_pattern_inner(pattern, peeled_type, is_mut, span, ctx, ref_binding);
+        self.resolve_let_pattern_inner(pattern, peeled_type, is_mut, span, site, ctx, ref_binding);
     }
 
     /// Whether a struct pattern's qualifier names the scrutinee's own head.
@@ -1165,6 +1171,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_id: TypeId,
         is_mut: bool,
         span: Span,
+        site: BindingSite,
         ctx: &mut FunctionContext,
         ref_binding: RefBinding,
     ) {
@@ -1225,7 +1232,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
                 ) {
-                    self.resolve_let_pattern_inner(p, elem_type, is_mut, span, ctx, ref_binding);
+                    self.resolve_let_pattern_inner(p, elem_type, is_mut, span, site, ctx, ref_binding);
                 }
             }
             ast::Pattern::Struct {
@@ -1290,6 +1297,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         field_type,
                         is_mut,
                         field.span,
+                        site,
                         ctx,
                         ref_binding,
                     );
@@ -1340,11 +1348,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .is_resource_narrowing(type_id, target)
                 {
-                    self.reject_refutable_narrowing(type_id, target, *typed_span);
+                    self.reject_refutable_narrowing(type_id, target, *typed_span, site);
                 } else {
                     self.check_ascription(type_id, target, *typed_span);
                 }
-                self.resolve_let_pattern_inner(inner, target, is_mut, span, ctx, ref_binding);
+                self.resolve_let_pattern_inner(inner, target, is_mut, span, site, ctx, ref_binding);
             }
             // Wildcard binds nothing. Refutable patterns (literal / variant /
             // or / range) in let position already had an error emitted by
@@ -1604,6 +1612,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The parser does not use case to disambiguate; instead, we check
                 // whether the name is a known case of the scrutinee type.
                 if !is_mut && self.is_known_case_of_type(scrutinee_type, name, None) {
+                    if let Some(site) = ctx.irrefutable_site {
+                        self.reject_refutable(site, &format!("`{name}` may not match"), *name_span);
+                    }
                     // Delegate to the Variant branch with empty bindings.
                     // Preserve the identifier's AstId/span as name_id/name_span so
                     // LSP jump-to-def on `None`/`Red` still resolves to the case decl.
@@ -1626,6 +1637,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // introduces no binding but reads the global — record the
                 // use→def edge so it is not flagged dead (mirrors the expr path).
                 if !is_mut && self.is_immutable_global(name) {
+                    if let Some(site) = ctx.irrefutable_site {
+                        self.reject_refutable(site, &format!("`{name}` may not match"), *name_span);
+                    }
                     self.record_item_reference_by_name(*id, name);
                     return Vec::new();
                 }
@@ -2123,7 +2137,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .is_resource_narrowing(scrutinee_type, target)
                 {
-                    self.check_narrowing_shape(inner, ref_binding, *typed_span);
+                    match ctx.irrefutable_site {
+                        Some(site) => self.reject_refutable_narrowing(
+                            scrutinee_type,
+                            target,
+                            *typed_span,
+                            site,
+                        ),
+                        None => self.check_narrowing_shape(inner, ref_binding, *typed_span),
+                    }
                 } else {
                     self.check_ascription(scrutinee_type, target, *typed_span);
                 }
@@ -2183,18 +2205,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// A narrowing where the pattern cannot fail over to anything.
-    fn reject_refutable_narrowing(&mut self, value: TypeId, target: TypeId, span: Span) {
-        let (value, target) = {
+    fn reject_refutable_narrowing(
+        &mut self,
+        value: TypeId,
+        target: TypeId,
+        span: Span,
+        site: BindingSite,
+    ) {
+        let reason = {
             let tt = self.tysys.type_table.borrow();
-            (tt.type_name(value), tt.type_name(target))
+            format!(
+                "not every `{}` is `{}`",
+                tt.type_name(value),
+                tt.type_name(target)
+            )
         };
-        let _ = self.emit(TypeError::InvalidPattern {
-            message: format!(
-                "refutable pattern in `let` binding: not every `{value}` is `{target}`; \
-                 use `let ... else` or `if let` instead"
-            ),
-            span,
-        });
+        self.reject_refutable(site, &reason, span);
     }
 
     /// True when the scrutinee is a variant type that has a `None` case, so a
@@ -2548,17 +2574,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        // Resolve the body with the binding having the element type
+        if !self.check_irrefutable_pattern(&for_of.binding, for_of.span, BindingSite::ForOf) {
+            return;
+        }
+        let name_or_wildcard = |p: &Pattern| matches!(p, Pattern::Ident { .. } | Pattern::Wildcard);
+        let supported = match &for_of.binding {
+            Pattern::Tuple(elems, _) => elems.iter().all(name_or_wildcard),
+            binding => name_or_wildcard(binding),
+        };
+        if !supported {
+            let _ = self.emit(TypeError::InvalidPattern {
+                message: "a `for` over a type pack binds a name, `_`, or a tuple of them"
+                    .to_string(),
+                span: for_of.span,
+            });
+            return;
+        }
+
         let (binding_name, binding_id, binding_name_span) = match &for_of.binding {
             Pattern::Ident { id, name, span } => (name.clone(), Some(*id), Some(*span)),
-            Pattern::Tuple(..) => {
-                // For destructuring patterns like [a, b], use a synthetic name
-                // and resolve the destructuring in the body
-                (format!("$pattern_temp_{unique_id}"), None, None)
-            }
-            _ => {
-                panic!("variadic for-of does not support this binding pattern")
-            }
+            _ => (format!("$pattern_temp_{unique_id}"), None, None),
         };
 
         let is_mut = for_of.is_mut;
@@ -2693,6 +2728,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     enum_tuple_type,
                     for_of.is_mut,
                     span,
+                    BindingSite::ForOf,
                     ctx,
                 );
             } else {
@@ -2724,6 +2760,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             bind_elem_type,
                             for_of.is_mut,
                             span,
+                            BindingSite::ForOf,
                             ctx,
                         );
                     }
@@ -2959,7 +2996,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             for_of.binding.clone()
         };
+        self.check_irrefutable_pattern(&binding, span, BindingSite::ForOf);
+        ctx.irrefutable_site = Some(BindingSite::ForOf);
         self.resolve_if_pattern_inner(&binding, item_type, ctx, span, RefBinding::None);
+        ctx.irrefutable_site = None;
         self.resolve_block(&for_of.body, ctx, None);
         ctx.exit_scope();
 

@@ -697,7 +697,7 @@ impl<'a> PatternLowerer<'a> {
                 bindings,
                 payload_type,
                 ..
-            } => {
+            } if !bindings.iter().any(Self::pattern_is_refutable) => {
                 let case_index = *case_index;
                 let temp_index = self.alloc_local(elem_type);
                 let temp_name = format!("$variant_{temp_index}");
@@ -854,13 +854,12 @@ impl<'a> PatternLowerer<'a> {
                 conditions.push(test);
                 *sub = binding;
             }
-            TirPattern::Struct { .. } | TirPattern::Tuple(..) | TirPattern::Or(..) => {
-                // Compound sub-patterns (struct/tuple/or inside variant payload or
-                // another compound). These may themselves contain refutable sub-patterns
-                // (e.g. `Branch([Leaf(a), Leaf(b)])`), so we use `build_pattern_check`
-                // to recursively generate the full check expression including both
-                // variant tag tests and payload extractions. The whole thing becomes
-                // a single bool condition in the guard.
+            TirPattern::Struct { .. }
+            | TirPattern::Tuple(..)
+            | TirPattern::Or(..)
+            | TirPattern::Variant { .. } => {
+                // A compound whose parts may be refutable at any depth
+                // (`Branch([Leaf(a), Leaf(b)])`, `Some(Some(1))`) is tested whole.
                 let temp_index = self.alloc_local(elem_type);
                 let temp_name = format!("$compound_{temp_index}");
                 let temp_expr = TirExpr::new(
