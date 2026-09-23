@@ -2,12 +2,12 @@
 // `Err(ErrorCode)` from `Client::send`, and that the guest can match on it.
 //
 // The harness has no mock for this path, so its `send_request` hook fails.
-// wasmtime 48 renders an embedder hook's error through `error_to_p3` into a
+// wasmtime renders an embedder hook's error through `error_to_p3` into a
 // guest-visible `ErrorCode` — the hook signature carries no trap channel — so
 // what this pins is the guest's own view of the failure. The 502 below can
 // only come from the `Err` arm, which is the assertion.
 
-use { Request, Response, ErrorCode, Fields, Headers, Scheme, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Headers, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode>
@@ -26,7 +26,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
 
     let [reply_trailers_future, reply_trailers_tx] =
         Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let reply_headers = Fields::new();
+    let reply_headers = Headers::new();
     let [reply, _reply_future] = Response::new(reply_headers, null, reply_trailers_future);
     match result {
         Result::Ok(_) => reply.set_status_code(200),
