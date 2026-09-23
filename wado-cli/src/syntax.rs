@@ -166,7 +166,7 @@ fn generate_vocabulary() -> serde_json::Value {
     }
     let prelude: Vec<serde_json::Value> = prelude_names()
         .into_iter()
-        .map(|(name, kind)| json!({ "name": name, "kind": kind.label(), "is_type": kind.is_type() }))
+        .map(|(name, kind)| json!({ "name": name, "kind": kind.label() }))
         .collect();
     json!({
         "keywords": texts(KEYWORDS),

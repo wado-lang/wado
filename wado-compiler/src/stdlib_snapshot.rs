@@ -92,10 +92,9 @@ pub fn prewarm() {
 /// # Panics
 /// If called from inside [`build_snapshot`].
 pub fn prelude_names() -> Vec<(String, DefKind)> {
-    let snap = get_or_init_snapshot().expect("prelude_names is not called while the snapshot builds");
-    let resolutions = snap
-        .resolutions()
-        .expect("the stdlib snapshot is complete");
+    let snap =
+        get_or_init_snapshot().expect("prelude_names is not called while the snapshot builds");
+    let resolutions = snap.resolutions().expect("the stdlib snapshot is complete");
     let defs = resolutions.defs();
     let mut names: Vec<(String, DefKind)> = resolutions
         .prelude_names()

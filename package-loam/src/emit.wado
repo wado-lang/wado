@@ -164,7 +164,7 @@ impl Names {
     fn of(graph: &Graph, axes: &List<String>) -> Result<Names, EmitError> {
         let mut reserved = module_idents();
         for let axis of *axes {
-            if reserved.contains(axis) || is_reserved(axis) {
+            if is_bound(&reserved, &axis) {
                 builtin::cold_path();
                 return Result::Err(EmitError::ReservedAxis(axis));
             }
@@ -191,7 +191,7 @@ impl Names {
         let mut ident = sanitize(tensor);
         // A name the generated module already binds is not this tensor's to
         // take, and a trailing `_` is a name no other rule here produces.
-        while self.reserved.contains(ident) || is_reserved(ident) {
+        while is_bound(&self.reserved, &ident) {
             ident = `${ident}_`;
         }
         if let Some(other) = taken.get(ident) {
@@ -215,6 +215,11 @@ impl Names {
 /// The kernels every generated module carries, inlined rather than imported so
 /// the module stands on its own.
 global RUNTIME: String = #include_str("./runtime/tensor.wado");
+
+/// Whether `name` already means something in the generated module.
+fn is_bound(module: &TreeSet<String>, name: &String) -> bool {
+    return module.contains(*name) || is_reserved(name);
+}
 
 /// The names the generated module binds before it names an axis or a tensor,
 /// beyond the language's own. The runtime's are read out of the runtime itself,
