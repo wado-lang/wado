@@ -1178,6 +1178,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
+<<<<<<< HEAD
         if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
@@ -1199,6 +1200,60 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         } else if first_char matches { 'q' } {
             end = try_lit_q(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_q; }
+||||||| 8dc1347e3
+        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
+            end = try_WS(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WS; }
+        } else if first_char matches { ';' } {
+            end = try_SEMI(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_SEMI; }
+        } else if first_char matches { 'a' } {
+            end = try_A(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_A; }
+        } else if first_char matches { 'b' } {
+            end = try_B(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_B; }
+        } else if first_char matches { 'c' } {
+            end = try_C(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_C; }
+        } else if first_char matches { 'p' } {
+            end = try_lit_p(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_P; }
+        } else if first_char matches { 'q' } {
+            end = try_lit_q(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_Q; }
+=======
+        match first_char {
+            '\t' | '\n' | '\r' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            ';' => {
+                end = try_SEMI(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_SEMI; }
+            },
+            'a' => {
+                end = try_A(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_A; }
+            },
+            'b' => {
+                end = try_B(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_B; }
+            },
+            'c' => {
+                end = try_C(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_C; }
+            },
+            'p' => {
+                end = try_lit_p(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_P; }
+            },
+            'q' => {
+                end = try_lit_q(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_Q; }
+            },
+            _ => {},
+>>>>>>> origin/main
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

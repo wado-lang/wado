@@ -52,6 +52,7 @@ impl FunctionTranslator<'_, '_> {
         &mut self,
         scrutinee: Operand,
         min_value: i64,
+        table: &[Option<usize>],
         arms: &[BlockId],
         default: BlockId,
         result_type: TypeId,
@@ -71,36 +72,50 @@ impl FunctionTranslator<'_, '_> {
             ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
         );
 
-        let adjusted = if min_value != 0 {
-            if is_i64 {
-                WirInstr::I32WrapI64(Box::new(WirInstr::I64Sub(
-                    Box::new(scrut),
-                    Box::new(WirInstr::I64Const(min_value)),
-                )))
-            } else {
-                WirInstr::I32Sub(
-                    Box::new(scrut),
-                    Box::new(WirInstr::I32Const(min_value as i32)),
-                )
+        // A 64-bit offset is range-checked before it narrows: wrapping first
+        // would land a value 2^32 away from an entry on that entry.
+        let mut offset_local: Vec<WirInstr> = Vec::new();
+        let adjusted = if is_i64 {
+            let switch_id = self.match_counter;
+            self.match_counter += 1;
+            let name = self.unshadowed(format!("$switch_offset_{switch_id}"));
+            let offset = WirInstr::I64Sub(Box::new(scrut), Box::new(WirInstr::I64Const(min_value)));
+            offset_local.extend(declare_and_set_local(name.clone(), WirType::I64, offset));
+            let get = || WirInstr::LocalGet {
+                name: name.clone(),
+                result_ty: WirType::I64,
+            };
+            WirInstr::Select {
+                condition: Box::new(WirInstr::I64LtU(
+                    Box::new(get()),
+                    Box::new(WirInstr::I64Const(table.len() as i64)),
+                )),
+                if_true: Box::new(WirInstr::I32WrapI64(Box::new(get()))),
+                if_false: Box::new(WirInstr::I32Const(table.len() as i32)),
+                ty: Some(WirType::I32),
             }
-        } else if is_i64 {
-            WirInstr::I32WrapI64(Box::new(scrut))
+        } else if min_value != 0 {
+            WirInstr::I32Sub(
+                Box::new(scrut),
+                Box::new(WirInstr::I32Const(min_value as i32)),
+            )
         } else {
             scrut
         };
 
         let num_arms = arms.len();
 
-        // br_table targets: target[i] = i + 1 (depth to arm[i]'s wrapper block)
-        // Block nesting (innermost to outermost): default, arm[0], arm[1], ..., arm[n-1], result
-        // From br_table: depth 0 = default block, depth i+1 = arm[i]'s block
-        let targets: Vec<u32> = (1..=num_arms as u32).collect();
-        let default_target = 0u32; // Default block is innermost
+        // Block nesting (innermost to outermost): default, arm[0], ..., arm[n-1], result,
+        // so from the br_table depth 0 is the default and depth i+1 is arm[i].
+        let targets: Vec<u32> = table
+            .iter()
+            .map(|arm| arm.map_or(0, |i| i as u32 + 1))
+            .collect();
 
         let br_table = WirInstr::BrTable {
             index: Box::new(adjusted),
             targets,
-            default: default_target,
+            default: 0,
         };
 
         // The br_table switch generates wrapper blocks around each arm body.
@@ -183,12 +198,16 @@ impl FunctionTranslator<'_, '_> {
             current = next;
         }
 
-        // Outer result block
-        WirInstr::Block {
+        let switch = WirInstr::Block {
             label: None,
             result: result_wir_type,
             body: current,
+        };
+        if offset_local.is_empty() {
+            return switch;
         }
+        offset_local.push(switch);
+        WirInstr::Seq(offset_local)
     }
 
     /// Bind `let [a, b] = builtin::i64_mul_wide_u(…)` straight into the binding

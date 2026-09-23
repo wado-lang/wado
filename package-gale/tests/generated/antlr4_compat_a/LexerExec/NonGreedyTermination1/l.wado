@@ -1116,24 +1116,23 @@ fn try_STRING(chars: &List<char>, start: i32) -> i32 {
         }
         pos = ng_saved_0;
         let alts_saved_1 = pos;
-        let mut alts_ok_1 = false;
-        alts_1_0: {
-            pos = alts_saved_1;
-            if pos >= chars.len() || chars[pos] != '!' { break alts_1_0; }
-            pos += 1;
-            if pos >= chars.len() || chars[pos] != '!' { break alts_1_0; }
-            pos += 1;
-            alts_ok_1 = true;
-        }
-        if !alts_ok_1 {
+        alts_done_1: {
+            alts_1_0: {
+                pos = alts_saved_1;
+                if pos >= chars.len() || chars[pos] != '!' { break alts_1_0; }
+                pos += 1;
+                if pos >= chars.len() || chars[pos] != '!' { break alts_1_0; }
+                pos += 1;
+                break alts_done_1;
+            }
             alts_1_1: {
                 pos = alts_saved_1;
                 if pos >= chars.len() { break alts_1_1; }
                 pos += 1;
-                alts_ok_1 = true;
+                break alts_done_1;
             }
+            return -1;
         }
-        if !alts_ok_1 { return -1; }
     }
     return pos;
 }
@@ -1148,9 +1147,12 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '!' } {
-            end = try_STRING(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_STRING; }
+        match first_char {
+            '!' => {
+                end = try_STRING(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_STRING; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

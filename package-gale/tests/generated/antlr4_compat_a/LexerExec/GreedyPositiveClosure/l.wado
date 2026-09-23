@@ -1155,42 +1155,40 @@ fn try_CMT(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_5 = pos;
-    let mut alts_ok_5 = false;
-    alts_5_0: {
-        pos = alts_saved_5;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_5_0; }
-        pos += 1;
-        alts_ok_5 = true;
-    }
-    if !alts_ok_5 {
+    alts_done_5: {
+        alts_5_0: {
+            pos = alts_saved_5;
+            if pos >= chars.len() || chars[pos] != ' ' { break alts_5_0; }
+            pos += 1;
+            break alts_done_5;
+        }
         alts_5_1: {
             pos = alts_saved_5;
             if pos >= chars.len() || chars[pos] != '\t' { break alts_5_1; }
             pos += 1;
-            alts_ok_5 = true;
+            break alts_done_5;
         }
+        return -1;
     }
-    if !alts_ok_5 { return -1; }
     loop {
         let rep_saved_4 = pos;
         rep_4: {
             let alts_saved_7 = pos;
-            let mut alts_ok_7 = false;
-            alts_7_0: {
-                pos = alts_saved_7;
-                if pos >= chars.len() || chars[pos] != ' ' { break alts_7_0; }
-                pos += 1;
-                alts_ok_7 = true;
-            }
-            if !alts_ok_7 {
+            alts_done_7: {
+                alts_7_0: {
+                    pos = alts_saved_7;
+                    if pos >= chars.len() || chars[pos] != ' ' { break alts_7_0; }
+                    pos += 1;
+                    break alts_done_7;
+                }
                 alts_7_1: {
                     pos = alts_saved_7;
                     if pos >= chars.len() || chars[pos] != '\t' { break alts_7_1; }
                     pos += 1;
-                    alts_ok_7 = true;
+                    break alts_done_7;
                 }
+                break rep_4;
             }
-            if !alts_ok_7 { break rep_4; }
             continue;
         }
         pos = rep_saved_4;
@@ -1209,12 +1207,16 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '\t' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { '/' } {
-            end = try_CMT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CMT; }
+        match first_char {
+            '\t' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            '/' => {
+                end = try_CMT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_CMT; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

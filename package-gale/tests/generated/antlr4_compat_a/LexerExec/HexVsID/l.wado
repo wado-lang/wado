@@ -1114,75 +1114,68 @@ fn try_HexLiteral(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
     let alts_saved_0 = pos;
-    let mut alts_ok_0 = false;
-    alts_0_0: {
-        pos = alts_saved_0;
-        if pos >= chars.len() || chars[pos] != 'x' { break alts_0_0; }
-        pos += 1;
-        alts_ok_0 = true;
-    }
-    if !alts_ok_0 {
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= chars.len() || chars[pos] != 'x' { break alts_0_0; }
+            pos += 1;
+            break alts_done_0;
+        }
         alts_0_1: {
             pos = alts_saved_0;
             if pos >= chars.len() || chars[pos] != 'X' { break alts_0_1; }
             pos += 1;
-            alts_ok_0 = true;
+            break alts_done_0;
         }
+        return -1;
     }
-    if !alts_ok_0 { return -1; }
     let alts_saved_2 = pos;
-    let mut alts_ok_2 = false;
-    alts_2_0: {
-        pos = alts_saved_2;
-        if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break alts_2_0; }
-        pos += 1;
-        alts_ok_2 = true;
-    }
-    if !alts_ok_2 {
+    alts_done_2: {
+        alts_2_0: {
+            pos = alts_saved_2;
+            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break alts_2_0; }
+            pos += 1;
+            break alts_done_2;
+        }
         alts_2_1: {
             pos = alts_saved_2;
             if pos >= chars.len() || !(chars[pos] matches { 'a'..='f' }) { break alts_2_1; }
             pos += 1;
-            alts_ok_2 = true;
+            break alts_done_2;
         }
-        if !alts_ok_2 {
-            alts_2_2: {
-                pos = alts_saved_2;
-                if pos >= chars.len() || !(chars[pos] matches { 'A'..='F' }) { break alts_2_2; }
-                pos += 1;
-                alts_ok_2 = true;
-            }
+        alts_2_2: {
+            pos = alts_saved_2;
+            if pos >= chars.len() || !(chars[pos] matches { 'A'..='F' }) { break alts_2_2; }
+            pos += 1;
+            break alts_done_2;
         }
+        return -1;
     }
-    if !alts_ok_2 { return -1; }
     loop {
         let rep_saved_1 = pos;
         rep_1: {
             let alts_saved_4 = pos;
-            let mut alts_ok_4 = false;
-            alts_4_0: {
-                pos = alts_saved_4;
-                if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break alts_4_0; }
-                pos += 1;
-                alts_ok_4 = true;
-            }
-            if !alts_ok_4 {
+            alts_done_4: {
+                alts_4_0: {
+                    pos = alts_saved_4;
+                    if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break alts_4_0; }
+                    pos += 1;
+                    break alts_done_4;
+                }
                 alts_4_1: {
                     pos = alts_saved_4;
                     if pos >= chars.len() || !(chars[pos] matches { 'a'..='f' }) { break alts_4_1; }
                     pos += 1;
-                    alts_ok_4 = true;
+                    break alts_done_4;
                 }
-                if !alts_ok_4 {
-                    alts_4_2: {
-                        pos = alts_saved_4;
-                        if pos >= chars.len() || !(chars[pos] matches { 'A'..='F' }) { break alts_4_2; }
-                        pos += 1;
-                        alts_ok_4 = true;
-                    }
+                alts_4_2: {
+                    pos = alts_saved_4;
+                    if pos >= chars.len() || !(chars[pos] matches { 'A'..='F' }) { break alts_4_2; }
+                    pos += 1;
+                    break alts_done_4;
                 }
+                break rep_1;
             }
-            if !alts_ok_4 { break rep_1; }
             continue;
         }
         pos = rep_saved_1;
@@ -1225,54 +1218,50 @@ fn try_DecimalLiteral(chars: &List<char>, start: i32) -> i32 {
 fn try_FloatingPointLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_7 = pos;
-    let mut alts_ok_7 = false;
-    alts_7_0: {
-        pos = alts_saved_7;
-        if pos >= chars.len() || chars[pos] != '0' { break alts_7_0; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != 'x' { break alts_7_0; }
-        pos += 1;
-        alts_ok_7 = true;
-    }
-    if !alts_ok_7 {
+    alts_done_7: {
+        alts_7_0: {
+            pos = alts_saved_7;
+            if pos >= chars.len() || chars[pos] != '0' { break alts_7_0; }
+            pos += 1;
+            if pos >= chars.len() || chars[pos] != 'x' { break alts_7_0; }
+            pos += 1;
+            break alts_done_7;
+        }
         alts_7_1: {
             pos = alts_saved_7;
             if pos >= chars.len() || chars[pos] != '0' { break alts_7_1; }
             pos += 1;
             if pos >= chars.len() || chars[pos] != 'X' { break alts_7_1; }
             pos += 1;
-            alts_ok_7 = true;
+            break alts_done_7;
         }
+        return -1;
     }
-    if !alts_ok_7 { return -1; }
     loop {
         let rep_saved_8 = pos;
         rep_8: {
             let alts_saved_9 = pos;
-            let mut alts_ok_9 = false;
-            alts_9_0: {
-                pos = alts_saved_9;
-                if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break alts_9_0; }
-                pos += 1;
-                alts_ok_9 = true;
-            }
-            if !alts_ok_9 {
+            alts_done_9: {
+                alts_9_0: {
+                    pos = alts_saved_9;
+                    if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break alts_9_0; }
+                    pos += 1;
+                    break alts_done_9;
+                }
                 alts_9_1: {
                     pos = alts_saved_9;
                     if pos >= chars.len() || !(chars[pos] matches { 'a'..='f' }) { break alts_9_1; }
                     pos += 1;
-                    alts_ok_9 = true;
+                    break alts_done_9;
                 }
-                if !alts_ok_9 {
-                    alts_9_2: {
-                        pos = alts_saved_9;
-                        if pos >= chars.len() || !(chars[pos] matches { 'A'..='F' }) { break alts_9_2; }
-                        pos += 1;
-                        alts_ok_9 = true;
-                    }
+                alts_9_2: {
+                    pos = alts_saved_9;
+                    if pos >= chars.len() || !(chars[pos] matches { 'A'..='F' }) { break alts_9_2; }
+                    pos += 1;
+                    break alts_done_9;
                 }
+                break rep_8;
             }
-            if !alts_ok_9 { break rep_8; }
             continue;
         }
         pos = rep_saved_8;
@@ -1287,30 +1276,27 @@ fn try_FloatingPointLiteral(chars: &List<char>, start: i32) -> i32 {
             let rep_saved_11 = pos;
             rep_11: {
                 let alts_saved_12 = pos;
-                let mut alts_ok_12 = false;
-                alts_12_0: {
-                    pos = alts_saved_12;
-                    if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break alts_12_0; }
-                    pos += 1;
-                    alts_ok_12 = true;
-                }
-                if !alts_ok_12 {
+                alts_done_12: {
+                    alts_12_0: {
+                        pos = alts_saved_12;
+                        if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break alts_12_0; }
+                        pos += 1;
+                        break alts_done_12;
+                    }
                     alts_12_1: {
                         pos = alts_saved_12;
                         if pos >= chars.len() || !(chars[pos] matches { 'a'..='f' }) { break alts_12_1; }
                         pos += 1;
-                        alts_ok_12 = true;
+                        break alts_done_12;
                     }
-                    if !alts_ok_12 {
-                        alts_12_2: {
-                            pos = alts_saved_12;
-                            if pos >= chars.len() || !(chars[pos] matches { 'A'..='F' }) { break alts_12_2; }
-                            pos += 1;
-                            alts_ok_12 = true;
-                        }
+                    alts_12_2: {
+                        pos = alts_saved_12;
+                        if pos >= chars.len() || !(chars[pos] matches { 'A'..='F' }) { break alts_12_2; }
+                        pos += 1;
+                        break alts_done_12;
                     }
+                    break rep_11;
                 }
-                if !alts_ok_12 { break rep_11; }
                 continue;
             }
             pos = rep_saved_11;
@@ -1349,42 +1335,40 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_16 = pos;
-    let mut alts_ok_16 = false;
-    alts_16_0: {
-        pos = alts_saved_16;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_16_0; }
-        pos += 1;
-        alts_ok_16 = true;
-    }
-    if !alts_ok_16 {
+    alts_done_16: {
+        alts_16_0: {
+            pos = alts_saved_16;
+            if pos >= chars.len() || chars[pos] != ' ' { break alts_16_0; }
+            pos += 1;
+            break alts_done_16;
+        }
         alts_16_1: {
             pos = alts_saved_16;
             if pos >= chars.len() || chars[pos] != '\n' { break alts_16_1; }
             pos += 1;
-            alts_ok_16 = true;
+            break alts_done_16;
         }
+        return -1;
     }
-    if !alts_ok_16 { return -1; }
     loop {
         let rep_saved_15 = pos;
         rep_15: {
             let alts_saved_18 = pos;
-            let mut alts_ok_18 = false;
-            alts_18_0: {
-                pos = alts_saved_18;
-                if pos >= chars.len() || chars[pos] != ' ' { break alts_18_0; }
-                pos += 1;
-                alts_ok_18 = true;
-            }
-            if !alts_ok_18 {
+            alts_done_18: {
+                alts_18_0: {
+                    pos = alts_saved_18;
+                    if pos >= chars.len() || chars[pos] != ' ' { break alts_18_0; }
+                    pos += 1;
+                    break alts_done_18;
+                }
                 alts_18_1: {
                     pos = alts_saved_18;
                     if pos >= chars.len() || chars[pos] != '\n' { break alts_18_1; }
                     pos += 1;
-                    alts_ok_18 = true;
+                    break alts_done_18;
                 }
+                break rep_15;
             }
-            if !alts_ok_18 { break rep_15; }
             continue;
         }
         pos = rep_saved_15;
@@ -1403,30 +1387,32 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '\n' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { '.' } {
-            end = try_DOT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOT; }
-        } else if first_char matches { '0' } {
-            end = try_HexLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_HexLiteral; }
-            end = try_DecimalLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DecimalLiteral; }
-            end = try_FloatingPointLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_FloatingPointLiteral; }
-        } else if first_char matches { '1'..='9' } {
-            end = try_DecimalLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DecimalLiteral; }
-        } else if first_char matches { 'a'..='z' } {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else {
-            end = try_DecimalLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DecimalLiteral; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
+        match first_char {
+            '\n' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            '.' => {
+                end = try_DOT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_DOT; }
+            },
+            '0' => {
+                end = try_HexLiteral(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_HexLiteral; }
+                end = try_DecimalLiteral(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_DecimalLiteral; }
+                end = try_FloatingPointLiteral(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_FloatingPointLiteral; }
+            },
+            '1'..='9' => {
+                end = try_DecimalLiteral(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_DecimalLiteral; }
+            },
+            'a'..='z' => {
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

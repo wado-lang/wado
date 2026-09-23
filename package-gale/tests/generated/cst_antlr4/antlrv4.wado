@@ -2466,23 +2466,22 @@ fn try_DOC_COMMENT(chars: &List<char>, start: i32) -> i32 {
         let mut ng_exit_0 = false;
         ng_0: {
             let alts_saved_1 = pos;
-            let mut alts_ok_1 = false;
-            alts_1_0: {
-                pos = alts_saved_1;
-                if pos >= chars.len() || chars[pos] != '*' { break alts_1_0; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != '/' { break alts_1_0; }
-                pos += 1;
-                alts_ok_1 = true;
-            }
-            if !alts_ok_1 {
+            alts_done_1: {
+                alts_1_0: {
+                    pos = alts_saved_1;
+                    if pos >= chars.len() || chars[pos] != '*' { break alts_1_0; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '/' { break alts_1_0; }
+                    pos += 1;
+                    break alts_done_1;
+                }
                 alts_1_1: {
                     pos = alts_saved_1;
                     if pos < chars.len() { break alts_1_1; }
-                    alts_ok_1 = true;
+                    break alts_done_1;
                 }
+                break ng_0;
             }
-            if !alts_ok_1 { break ng_0; }
             ng_exit_0 = true;
         }
         if ng_exit_0 {
@@ -2506,23 +2505,22 @@ fn try_BLOCK_COMMENT(chars: &List<char>, start: i32) -> i32 {
         let mut ng_exit_2 = false;
         ng_2: {
             let alts_saved_3 = pos;
-            let mut alts_ok_3 = false;
-            alts_3_0: {
-                pos = alts_saved_3;
-                if pos >= chars.len() || chars[pos] != '*' { break alts_3_0; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != '/' { break alts_3_0; }
-                pos += 1;
-                alts_ok_3 = true;
-            }
-            if !alts_ok_3 {
+            alts_done_3: {
+                alts_3_0: {
+                    pos = alts_saved_3;
+                    if pos >= chars.len() || chars[pos] != '*' { break alts_3_0; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '/' { break alts_3_0; }
+                    pos += 1;
+                    break alts_done_3;
+                }
                 alts_3_1: {
                     pos = alts_saved_3;
                     if pos < chars.len() { break alts_3_1; }
-                    alts_ok_3 = true;
+                    break alts_done_3;
                 }
+                break ng_2;
             }
-            if !alts_ok_3 { break ng_2; }
             ng_exit_2 = true;
         }
         if ng_exit_2 {
@@ -3117,265 +3115,210 @@ fn try_NOT(chars: &List<char>, start: i32) -> i32 {
 fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_10 = pos;
-    let mut alts_ok_10 = false;
-    alts_10_0: {
-        pos = alts_saved_10;
-        if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_10_0; }
-        pos += 1;
-        alts_ok_10 = true;
-    }
-    if !alts_ok_10 {
+    alts_done_10: {
+        alts_10_0: {
+            pos = alts_saved_10;
+            if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_10_0; }
+            pos += 1;
+            break alts_done_10;
+        }
         alts_10_1: {
             pos = alts_saved_10;
             if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_10_1; }
             pos += 1;
-            alts_ok_10 = true;
+            break alts_done_10;
         }
-        if !alts_ok_10 {
-            alts_10_2: {
-                pos = alts_saved_10;
-                if pos >= chars.len() || !(chars[pos] matches { 'À'..='Ö' }) { break alts_10_2; }
-                pos += 1;
-                alts_ok_10 = true;
-            }
-            if !alts_ok_10 {
-                alts_10_3: {
-                    pos = alts_saved_10;
-                    if pos >= chars.len() || !(chars[pos] matches { 'Ø'..='ö' }) { break alts_10_3; }
-                    pos += 1;
-                    alts_ok_10 = true;
-                }
-                if !alts_ok_10 {
-                    alts_10_4: {
-                        pos = alts_saved_10;
-                        if pos >= chars.len() || !(chars[pos] matches { 'ø'..='˿' }) { break alts_10_4; }
-                        pos += 1;
-                        alts_ok_10 = true;
-                    }
-                    if !alts_ok_10 {
-                        alts_10_5: {
-                            pos = alts_saved_10;
-                            if pos >= chars.len() || !(chars[pos] matches { 'Ͱ'..='ͽ' }) { break alts_10_5; }
-                            pos += 1;
-                            alts_ok_10 = true;
-                        }
-                        if !alts_ok_10 {
-                            alts_10_6: {
-                                pos = alts_saved_10;
-                                if pos >= chars.len() || !(chars[pos] matches { 'Ϳ'..='῿' }) { break alts_10_6; }
-                                pos += 1;
-                                alts_ok_10 = true;
-                            }
-                            if !alts_ok_10 {
-                                alts_10_7: {
-                                    pos = alts_saved_10;
-                                    if pos >= chars.len() || !(chars[pos] matches { '‌'..='‍' }) { break alts_10_7; }
-                                    pos += 1;
-                                    alts_ok_10 = true;
-                                }
-                                if !alts_ok_10 {
-                                    alts_10_8: {
-                                        pos = alts_saved_10;
-                                        if pos >= chars.len() || !(chars[pos] matches { '⁰'..='↏' }) { break alts_10_8; }
-                                        pos += 1;
-                                        alts_ok_10 = true;
-                                    }
-                                    if !alts_ok_10 {
-                                        alts_10_9: {
-                                            pos = alts_saved_10;
-                                            if pos >= chars.len() || !(chars[pos] matches { 'Ⰰ'..='⿯' }) { break alts_10_9; }
-                                            pos += 1;
-                                            alts_ok_10 = true;
-                                        }
-                                        if !alts_ok_10 {
-                                            alts_10_10: {
-                                                pos = alts_saved_10;
-                                                if pos >= chars.len() || !(chars[pos] matches { '、'..='퟿' }) { break alts_10_10; }
-                                                pos += 1;
-                                                alts_ok_10 = true;
-                                            }
-                                            if !alts_ok_10 {
-                                                alts_10_11: {
-                                                    pos = alts_saved_10;
-                                                    if pos >= chars.len() || !(chars[pos] matches { '豈'..='﷏' }) { break alts_10_11; }
-                                                    pos += 1;
-                                                    alts_ok_10 = true;
-                                                }
-                                                if !alts_ok_10 {
-                                                    alts_10_12: {
-                                                        pos = alts_saved_10;
-                                                        if pos >= chars.len() || !(chars[pos] matches { 'ﷰ'..='�' }) { break alts_10_12; }
-                                                        pos += 1;
-                                                        alts_ok_10 = true;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        alts_10_2: {
+            pos = alts_saved_10;
+            if pos >= chars.len() || !(chars[pos] matches { 'À'..='Ö' }) { break alts_10_2; }
+            pos += 1;
+            break alts_done_10;
         }
+        alts_10_3: {
+            pos = alts_saved_10;
+            if pos >= chars.len() || !(chars[pos] matches { 'Ø'..='ö' }) { break alts_10_3; }
+            pos += 1;
+            break alts_done_10;
+        }
+        alts_10_4: {
+            pos = alts_saved_10;
+            if pos >= chars.len() || !(chars[pos] matches { 'ø'..='˿' }) { break alts_10_4; }
+            pos += 1;
+            break alts_done_10;
+        }
+        alts_10_5: {
+            pos = alts_saved_10;
+            if pos >= chars.len() || !(chars[pos] matches { 'Ͱ'..='ͽ' }) { break alts_10_5; }
+            pos += 1;
+            break alts_done_10;
+        }
+        alts_10_6: {
+            pos = alts_saved_10;
+            if pos >= chars.len() || !(chars[pos] matches { 'Ϳ'..='῿' }) { break alts_10_6; }
+            pos += 1;
+            break alts_done_10;
+        }
+        alts_10_7: {
+            pos = alts_saved_10;
+            if pos >= chars.len() || !(chars[pos] matches { '‌'..='‍' }) { break alts_10_7; }
+            pos += 1;
+            break alts_done_10;
+        }
+        alts_10_8: {
+            pos = alts_saved_10;
+            if pos >= chars.len() || !(chars[pos] matches { '⁰'..='↏' }) { break alts_10_8; }
+            pos += 1;
+            break alts_done_10;
+        }
+        alts_10_9: {
+            pos = alts_saved_10;
+            if pos >= chars.len() || !(chars[pos] matches { 'Ⰰ'..='⿯' }) { break alts_10_9; }
+            pos += 1;
+            break alts_done_10;
+        }
+        alts_10_10: {
+            pos = alts_saved_10;
+            if pos >= chars.len() || !(chars[pos] matches { '、'..='퟿' }) { break alts_10_10; }
+            pos += 1;
+            break alts_done_10;
+        }
+        alts_10_11: {
+            pos = alts_saved_10;
+            if pos >= chars.len() || !(chars[pos] matches { '豈'..='﷏' }) { break alts_10_11; }
+            pos += 1;
+            break alts_done_10;
+        }
+        alts_10_12: {
+            pos = alts_saved_10;
+            if pos >= chars.len() || !(chars[pos] matches { 'ﷰ'..='�' }) { break alts_10_12; }
+            pos += 1;
+            break alts_done_10;
+        }
+        return -1;
     }
-    if !alts_ok_10 { return -1; }
     loop {
         let rep_saved_11 = pos;
         rep_11: {
             let alts_saved_12 = pos;
-            let mut alts_ok_12 = false;
-            alts_12_0: {
-                pos = alts_saved_12;
-                let alts_saved_13 = pos;
-                let mut alts_ok_13 = false;
-                alts_13_0: {
-                    pos = alts_saved_13;
-                    if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_13_0; }
-                    pos += 1;
-                    alts_ok_13 = true;
-                }
-                if !alts_ok_13 {
-                    alts_13_1: {
-                        pos = alts_saved_13;
-                        if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_13_1; }
-                        pos += 1;
-                        alts_ok_13 = true;
-                    }
-                    if !alts_ok_13 {
+            alts_done_12: {
+                alts_12_0: {
+                    pos = alts_saved_12;
+                    let alts_saved_13 = pos;
+                    alts_done_13: {
+                        alts_13_0: {
+                            pos = alts_saved_13;
+                            if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_13_0; }
+                            pos += 1;
+                            break alts_done_13;
+                        }
+                        alts_13_1: {
+                            pos = alts_saved_13;
+                            if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_13_1; }
+                            pos += 1;
+                            break alts_done_13;
+                        }
                         alts_13_2: {
                             pos = alts_saved_13;
                             if pos >= chars.len() || !(chars[pos] matches { 'À'..='Ö' }) { break alts_13_2; }
                             pos += 1;
-                            alts_ok_13 = true;
+                            break alts_done_13;
                         }
-                        if !alts_ok_13 {
-                            alts_13_3: {
-                                pos = alts_saved_13;
-                                if pos >= chars.len() || !(chars[pos] matches { 'Ø'..='ö' }) { break alts_13_3; }
-                                pos += 1;
-                                alts_ok_13 = true;
-                            }
-                            if !alts_ok_13 {
-                                alts_13_4: {
-                                    pos = alts_saved_13;
-                                    if pos >= chars.len() || !(chars[pos] matches { 'ø'..='˿' }) { break alts_13_4; }
-                                    pos += 1;
-                                    alts_ok_13 = true;
-                                }
-                                if !alts_ok_13 {
-                                    alts_13_5: {
-                                        pos = alts_saved_13;
-                                        if pos >= chars.len() || !(chars[pos] matches { 'Ͱ'..='ͽ' }) { break alts_13_5; }
-                                        pos += 1;
-                                        alts_ok_13 = true;
-                                    }
-                                    if !alts_ok_13 {
-                                        alts_13_6: {
-                                            pos = alts_saved_13;
-                                            if pos >= chars.len() || !(chars[pos] matches { 'Ϳ'..='῿' }) { break alts_13_6; }
-                                            pos += 1;
-                                            alts_ok_13 = true;
-                                        }
-                                        if !alts_ok_13 {
-                                            alts_13_7: {
-                                                pos = alts_saved_13;
-                                                if pos >= chars.len() || !(chars[pos] matches { '‌'..='‍' }) { break alts_13_7; }
-                                                pos += 1;
-                                                alts_ok_13 = true;
-                                            }
-                                            if !alts_ok_13 {
-                                                alts_13_8: {
-                                                    pos = alts_saved_13;
-                                                    if pos >= chars.len() || !(chars[pos] matches { '⁰'..='↏' }) { break alts_13_8; }
-                                                    pos += 1;
-                                                    alts_ok_13 = true;
-                                                }
-                                                if !alts_ok_13 {
-                                                    alts_13_9: {
-                                                        pos = alts_saved_13;
-                                                        if pos >= chars.len() || !(chars[pos] matches { 'Ⰰ'..='⿯' }) { break alts_13_9; }
-                                                        pos += 1;
-                                                        alts_ok_13 = true;
-                                                    }
-                                                    if !alts_ok_13 {
-                                                        alts_13_10: {
-                                                            pos = alts_saved_13;
-                                                            if pos >= chars.len() || !(chars[pos] matches { '、'..='퟿' }) { break alts_13_10; }
-                                                            pos += 1;
-                                                            alts_ok_13 = true;
-                                                        }
-                                                        if !alts_ok_13 {
-                                                            alts_13_11: {
-                                                                pos = alts_saved_13;
-                                                                if pos >= chars.len() || !(chars[pos] matches { '豈'..='﷏' }) { break alts_13_11; }
-                                                                pos += 1;
-                                                                alts_ok_13 = true;
-                                                            }
-                                                            if !alts_ok_13 {
-                                                                alts_13_12: {
-                                                                    pos = alts_saved_13;
-                                                                    if pos >= chars.len() || !(chars[pos] matches { 'ﷰ'..='�' }) { break alts_13_12; }
-                                                                    pos += 1;
-                                                                    alts_ok_13 = true;
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                        alts_13_3: {
+                            pos = alts_saved_13;
+                            if pos >= chars.len() || !(chars[pos] matches { 'Ø'..='ö' }) { break alts_13_3; }
+                            pos += 1;
+                            break alts_done_13;
                         }
+                        alts_13_4: {
+                            pos = alts_saved_13;
+                            if pos >= chars.len() || !(chars[pos] matches { 'ø'..='˿' }) { break alts_13_4; }
+                            pos += 1;
+                            break alts_done_13;
+                        }
+                        alts_13_5: {
+                            pos = alts_saved_13;
+                            if pos >= chars.len() || !(chars[pos] matches { 'Ͱ'..='ͽ' }) { break alts_13_5; }
+                            pos += 1;
+                            break alts_done_13;
+                        }
+                        alts_13_6: {
+                            pos = alts_saved_13;
+                            if pos >= chars.len() || !(chars[pos] matches { 'Ϳ'..='῿' }) { break alts_13_6; }
+                            pos += 1;
+                            break alts_done_13;
+                        }
+                        alts_13_7: {
+                            pos = alts_saved_13;
+                            if pos >= chars.len() || !(chars[pos] matches { '‌'..='‍' }) { break alts_13_7; }
+                            pos += 1;
+                            break alts_done_13;
+                        }
+                        alts_13_8: {
+                            pos = alts_saved_13;
+                            if pos >= chars.len() || !(chars[pos] matches { '⁰'..='↏' }) { break alts_13_8; }
+                            pos += 1;
+                            break alts_done_13;
+                        }
+                        alts_13_9: {
+                            pos = alts_saved_13;
+                            if pos >= chars.len() || !(chars[pos] matches { 'Ⰰ'..='⿯' }) { break alts_13_9; }
+                            pos += 1;
+                            break alts_done_13;
+                        }
+                        alts_13_10: {
+                            pos = alts_saved_13;
+                            if pos >= chars.len() || !(chars[pos] matches { '、'..='퟿' }) { break alts_13_10; }
+                            pos += 1;
+                            break alts_done_13;
+                        }
+                        alts_13_11: {
+                            pos = alts_saved_13;
+                            if pos >= chars.len() || !(chars[pos] matches { '豈'..='﷏' }) { break alts_13_11; }
+                            pos += 1;
+                            break alts_done_13;
+                        }
+                        alts_13_12: {
+                            pos = alts_saved_13;
+                            if pos >= chars.len() || !(chars[pos] matches { 'ﷰ'..='�' }) { break alts_13_12; }
+                            pos += 1;
+                            break alts_done_13;
+                        }
+                        break alts_12_0;
                     }
+                    break alts_done_12;
                 }
-                if !alts_ok_13 { break alts_12_0; }
-                alts_ok_12 = true;
-            }
-            if !alts_ok_12 {
                 alts_12_1: {
                     pos = alts_saved_12;
                     if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break alts_12_1; }
                     pos += 1;
-                    alts_ok_12 = true;
+                    break alts_done_12;
                 }
-                if !alts_ok_12 {
-                    alts_12_2: {
-                        pos = alts_saved_12;
-                        if pos >= chars.len() || chars[pos] != '_' { break alts_12_2; }
-                        pos += 1;
-                        alts_ok_12 = true;
-                    }
-                    if !alts_ok_12 {
-                        alts_12_3: {
-                            pos = alts_saved_12;
-                            if pos >= chars.len() || chars[pos] != '·' { break alts_12_3; }
-                            pos += 1;
-                            alts_ok_12 = true;
-                        }
-                        if !alts_ok_12 {
-                            alts_12_4: {
-                                pos = alts_saved_12;
-                                if pos >= chars.len() || !(chars[pos] matches { '̀'..='ͯ' }) { break alts_12_4; }
-                                pos += 1;
-                                alts_ok_12 = true;
-                            }
-                            if !alts_ok_12 {
-                                alts_12_5: {
-                                    pos = alts_saved_12;
-                                    if pos >= chars.len() || !(chars[pos] matches { '‿'..='⁀' }) { break alts_12_5; }
-                                    pos += 1;
-                                    alts_ok_12 = true;
-                                }
-                            }
-                        }
-                    }
+                alts_12_2: {
+                    pos = alts_saved_12;
+                    if pos >= chars.len() || chars[pos] != '_' { break alts_12_2; }
+                    pos += 1;
+                    break alts_done_12;
                 }
+                alts_12_3: {
+                    pos = alts_saved_12;
+                    if pos >= chars.len() || chars[pos] != '·' { break alts_12_3; }
+                    pos += 1;
+                    break alts_done_12;
+                }
+                alts_12_4: {
+                    pos = alts_saved_12;
+                    if pos >= chars.len() || !(chars[pos] matches { '̀'..='ͯ' }) { break alts_12_4; }
+                    pos += 1;
+                    break alts_done_12;
+                }
+                alts_12_5: {
+                    pos = alts_saved_12;
+                    if pos >= chars.len() || !(chars[pos] matches { '‿'..='⁀' }) { break alts_12_5; }
+                    pos += 1;
+                    break alts_done_12;
+                }
+                break rep_11;
             }
-            if !alts_ok_12 { break rep_11; }
             continue;
         }
         pos = rep_saved_11;
@@ -3436,92 +3379,86 @@ fn try_ARGUMENT_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
         }
         pos = ng_saved_16;
         let alts_saved_17 = pos;
-        let mut alts_ok_17 = false;
-        alts_17_0: {
-            pos = alts_saved_17;
-            if pos >= chars.len() || chars[pos] != '\\' { break alts_17_0; }
-            pos += 1;
-            let alts_saved_18 = pos;
-            let mut alts_ok_18 = false;
-            alts_18_0: {
-                pos = alts_saved_18;
-                if pos >= chars.len() { break alts_18_0; }
-                if !((chars[pos] matches { 'b' | 't' | 'n' | 'f' | 'r' | '"' | '\'' | '\\' })) { break alts_18_0; }
+        alts_done_17: {
+            alts_17_0: {
+                pos = alts_saved_17;
+                if pos >= chars.len() || chars[pos] != '\\' { break alts_17_0; }
                 pos += 1;
-                alts_ok_18 = true;
-            }
-            if !alts_ok_18 {
-                alts_18_1: {
-                    pos = alts_saved_18;
-                    if pos >= chars.len() || chars[pos] != 'u' { break alts_18_1; }
-                    pos += 1;
-                    let opt_saved_19 = pos;
-                    let mut opt_ok_19 = false;
-                    rep_19: {
-                        if pos >= chars.len() { break rep_19; }
-                        if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_19; }
+                let alts_saved_18 = pos;
+                alts_done_18: {
+                    alts_18_0: {
+                        pos = alts_saved_18;
+                        if pos >= chars.len() { break alts_18_0; }
+                        if !((chars[pos] matches { 'b' | 't' | 'n' | 'f' | 'r' | '"' | '\'' | '\\' })) { break alts_18_0; }
                         pos += 1;
-                        let opt_saved_20 = pos;
-                        let mut opt_ok_20 = false;
-                        rep_20: {
-                            if pos >= chars.len() { break rep_20; }
-                            if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_20; }
-                            pos += 1;
-                            let opt_saved_21 = pos;
-                            let mut opt_ok_21 = false;
-                            rep_21: {
-                                if pos >= chars.len() { break rep_21; }
-                                if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_21; }
-                                pos += 1;
-                                let opt_saved_22 = pos;
-                                let mut opt_ok_22 = false;
-                                rep_22: {
-                                    if pos >= chars.len() { break rep_22; }
-                                    if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_22; }
-                                    pos += 1;
-                                    opt_ok_22 = true;
-                                }
-                                if !opt_ok_22 { pos = opt_saved_22; }
-                                opt_ok_21 = true;
-                            }
-                            if !opt_ok_21 { pos = opt_saved_21; }
-                            opt_ok_20 = true;
-                        }
-                        if !opt_ok_20 { pos = opt_saved_20; }
-                        opt_ok_19 = true;
+                        break alts_done_18;
                     }
-                    if !opt_ok_19 { pos = opt_saved_19; }
-                    alts_ok_18 = true;
-                }
-                if !alts_ok_18 {
+                    alts_18_1: {
+                        pos = alts_saved_18;
+                        if pos >= chars.len() || chars[pos] != 'u' { break alts_18_1; }
+                        pos += 1;
+                        let opt_saved_19 = pos;
+                        let mut opt_ok_19 = false;
+                        rep_19: {
+                            if pos >= chars.len() { break rep_19; }
+                            if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_19; }
+                            pos += 1;
+                            let opt_saved_20 = pos;
+                            let mut opt_ok_20 = false;
+                            rep_20: {
+                                if pos >= chars.len() { break rep_20; }
+                                if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_20; }
+                                pos += 1;
+                                let opt_saved_21 = pos;
+                                let mut opt_ok_21 = false;
+                                rep_21: {
+                                    if pos >= chars.len() { break rep_21; }
+                                    if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_21; }
+                                    pos += 1;
+                                    let opt_saved_22 = pos;
+                                    let mut opt_ok_22 = false;
+                                    rep_22: {
+                                        if pos >= chars.len() { break rep_22; }
+                                        if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_22; }
+                                        pos += 1;
+                                        opt_ok_22 = true;
+                                    }
+                                    if !opt_ok_22 { pos = opt_saved_22; }
+                                    opt_ok_21 = true;
+                                }
+                                if !opt_ok_21 { pos = opt_saved_21; }
+                                opt_ok_20 = true;
+                            }
+                            if !opt_ok_20 { pos = opt_saved_20; }
+                            opt_ok_19 = true;
+                        }
+                        if !opt_ok_19 { pos = opt_saved_19; }
+                        break alts_done_18;
+                    }
                     alts_18_2: {
                         pos = alts_saved_18;
                         if pos >= chars.len() { break alts_18_2; }
                         pos += 1;
-                        alts_ok_18 = true;
+                        break alts_done_18;
                     }
-                    if !alts_ok_18 {
-                        alts_18_3: {
-                            pos = alts_saved_18;
-                            if pos < chars.len() { break alts_18_3; }
-                            alts_ok_18 = true;
-                        }
+                    alts_18_3: {
+                        pos = alts_saved_18;
+                        if pos < chars.len() { break alts_18_3; }
+                        break alts_done_18;
                     }
+                    break alts_17_0;
                 }
+                break alts_done_17;
             }
-            if !alts_ok_18 { break alts_17_0; }
-            alts_ok_17 = true;
-        }
-        if !alts_ok_17 {
             alts_17_1: {
                 pos = alts_saved_17;
                 if pos >= chars.len() { break alts_17_1; }
                 if (chars[pos] matches { '"' | '\r' | '\n' | '\\' }) { break alts_17_1; }
                 pos += 1;
-                alts_ok_17 = true;
+                break alts_done_17;
             }
+            return -1;
         }
-        if !alts_ok_17 { return -1; }
     }
     return pos;
 }
@@ -3553,48 +3490,46 @@ fn try_ARGUMENT_CONTENT(chars: &List<char>, start: i32) -> i32 {
 fn try_LEXER_CHAR_SET_BODY(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_24 = pos;
-    let mut alts_ok_24 = false;
-    alts_24_0: {
-        pos = alts_saved_24;
-        if pos >= chars.len() { break alts_24_0; }
-        if (chars[pos] matches { ']' | '\\' }) { break alts_24_0; }
-        pos += 1;
-        alts_ok_24 = true;
-    }
-    if !alts_ok_24 {
+    alts_done_24: {
+        alts_24_0: {
+            pos = alts_saved_24;
+            if pos >= chars.len() { break alts_24_0; }
+            if (chars[pos] matches { ']' | '\\' }) { break alts_24_0; }
+            pos += 1;
+            break alts_done_24;
+        }
         alts_24_1: {
             pos = alts_saved_24;
             if pos >= chars.len() || chars[pos] != '\\' { break alts_24_1; }
             pos += 1;
             if pos >= chars.len() { break alts_24_1; }
             pos += 1;
-            alts_ok_24 = true;
+            break alts_done_24;
         }
+        return -1;
     }
-    if !alts_ok_24 { return -1; }
     loop {
         let rep_saved_23 = pos;
         rep_23: {
             let alts_saved_26 = pos;
-            let mut alts_ok_26 = false;
-            alts_26_0: {
-                pos = alts_saved_26;
-                if pos >= chars.len() { break alts_26_0; }
-                if (chars[pos] matches { ']' | '\\' }) { break alts_26_0; }
-                pos += 1;
-                alts_ok_26 = true;
-            }
-            if !alts_ok_26 {
+            alts_done_26: {
+                alts_26_0: {
+                    pos = alts_saved_26;
+                    if pos >= chars.len() { break alts_26_0; }
+                    if (chars[pos] matches { ']' | '\\' }) { break alts_26_0; }
+                    pos += 1;
+                    break alts_done_26;
+                }
                 alts_26_1: {
                     pos = alts_saved_26;
                     if pos >= chars.len() || chars[pos] != '\\' { break alts_26_1; }
                     pos += 1;
                     if pos >= chars.len() { break alts_26_1; }
                     pos += 1;
-                    alts_ok_26 = true;
+                    break alts_done_26;
                 }
+                break rep_23;
             }
-            if !alts_ok_26 { break rep_23; }
             continue;
         }
         pos = rep_saved_23;
@@ -3637,224 +3572,270 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with LexerAdaptor {
         let mut best_more = false;
         let mut best_channel: i32 = 0;
         if current_mode == 0 {
-            if first_char matches { '\t' | '\n' | '\u{c}' | '\r' | ' ' } {
-                end = try_WS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 2; best_act = -1; }
-            } else if first_char matches { '#' } {
-                end = try_POUND(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_POUND; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '$' } {
-                end = try_DOLLAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_DOLLAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '\'' } {
-                end = try_STRING_LITERAL(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_UNTERMINATED_STRING_LITERAL(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_STRING_LITERAL; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '(' } {
-                end = try_LPAREN(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LPAREN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { ')' } {
-                end = try_RPAREN(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_RPAREN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '*' } {
-                end = try_STAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_STAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '+' } {
-                end = try_PLUS_ASSIGN(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_PLUS_ASSIGN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_PLUS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_PLUS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { ',' } {
-                end = try_COMMA(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_COMMA; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '-' } {
-                end = try_RARROW(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_RARROW; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '.' } {
-                end = try_RANGE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_RANGE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_DOT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_DOT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '/' } {
-                end = try_DOC_COMMENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_DOC_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
-                end = try_BLOCK_COMMENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
-                end = try_LINE_COMMENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LINE_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
-            } else if first_char matches { '0' } {
-                end = try_INT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_INT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { ':' } {
-                end = try_COLON(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_COLON; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_COLONCOLON(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_COLONCOLON; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { ';' } {
-                end = try_SEMI(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_SEMI; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '<' } {
-                end = try_LT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '=' } {
-                end = try_ASSIGN(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ASSIGN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '>' } {
-                end = try_GT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_GT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '?' } {
-                end = try_QUESTION(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_QUESTION; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '@' } {
-                end = try_AT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_AT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '[' } {
-                end = try_BEGIN_ARGUMENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_BEGIN_ARGUMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 0; }
-            } else if first_char matches { 'c' } {
-                end = try_CHANNELS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_CHANNELS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_CATCH(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_CATCH; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ID(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { 'f' } {
-                end = try_FRAGMENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_FRAGMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_FINALLY(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_FINALLY; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ID(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { 'g' } {
-                end = try_GRAMMAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_GRAMMAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ID(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { 'i' } {
-                end = try_IMPORT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_IMPORT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ID(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { 'l' } {
-                end = try_LEXER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LEXER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_LOCALS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LOCALS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ID(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { 'm' } {
-                end = try_MODE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_MODE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ID(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { 'o' } {
-                end = try_OPTIONS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_OPTIONS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ID(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { 'p' } {
-                end = try_PARSER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_PARSER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_PROTECTED(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_PROTECTED; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_PUBLIC(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_PUBLIC; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_PRIVATE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_PRIVATE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ID(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { 'r' } {
-                end = try_RETURNS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_RETURNS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ID(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { 't' } {
-                end = try_TOKENS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_TOKENS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_THROWS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_THROWS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ID(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '{' } {
-                end = try_ACTION(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ACTION; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '|' } {
-                end = try_OR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_OR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '}' } {
-                end = try_RBRACE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_RBRACE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '~' } {
-                end = try_NOT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NOT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '1'..='9' } {
-                end = try_INT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_INT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { 'A'..='Z' | 'a'..='z' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='˿' | 'Ͱ'..='ͽ' | 'Ϳ'..='῿' | '‌'..='‍' | '⁰'..='↏' | 'Ⰰ'..='⿯' | '、'..='퟿' | '豈'..='﷏' | 'ﷰ'..='�' } {
-                end = try_ID(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else {
-                end = try_INT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_INT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ID(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            match first_char {
+                '\t' | '\n' | '\u{c}' | '\r' | ' ' => {
+                    end = try_WS(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 2; best_act = -1; }
+                },
+                '#' => {
+                    end = try_POUND(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_POUND; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '$' => {
+                    end = try_DOLLAR(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_DOLLAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '\'' => {
+                    end = try_STRING_LITERAL(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_UNTERMINATED_STRING_LITERAL(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_STRING_LITERAL; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '(' => {
+                    end = try_LPAREN(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_LPAREN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                ')' => {
+                    end = try_RPAREN(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_RPAREN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '*' => {
+                    end = try_STAR(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_STAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '+' => {
+                    end = try_PLUS_ASSIGN(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_PLUS_ASSIGN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_PLUS(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_PLUS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                ',' => {
+                    end = try_COMMA(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_COMMA; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '-' => {
+                    end = try_RARROW(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_RARROW; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '.' => {
+                    end = try_RANGE(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_RANGE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_DOT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_DOT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '/' => {
+                    end = try_DOC_COMMENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_DOC_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
+                    end = try_BLOCK_COMMENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
+                    end = try_LINE_COMMENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_LINE_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
+                },
+                '0' | '1'..='9' => {
+                    end = try_INT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_INT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                ':' => {
+                    end = try_COLON(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_COLON; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_COLONCOLON(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_COLONCOLON; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                ';' => {
+                    end = try_SEMI(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_SEMI; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '<' => {
+                    end = try_LT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_LT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '=' => {
+                    end = try_ASSIGN(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ASSIGN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '>' => {
+                    end = try_GT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_GT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '?' => {
+                    end = try_QUESTION(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_QUESTION; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '@' => {
+                    end = try_AT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_AT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                'A'..='Z' | 'a'..='b' | 'd'..='e' | 'h' | 'j'..='k' | 'n' | 'q' | 's' | 'u'..='z' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='˿' | 'Ͱ'..='ͽ' | 'Ϳ'..='῿' | '‌'..='‍' | '⁰'..='↏' | 'Ⰰ'..='⿯' | '、'..='퟿' | '豈'..='﷏' | 'ﷰ'..='�' => {
+                    end = try_ID(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '[' => {
+                    end = try_BEGIN_ARGUMENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_BEGIN_ARGUMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 0; }
+                },
+                'c' => {
+                    end = try_CHANNELS(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_CHANNELS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_CATCH(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_CATCH; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ID(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                'f' => {
+                    end = try_FRAGMENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_FRAGMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_FINALLY(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_FINALLY; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ID(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                'g' => {
+                    end = try_GRAMMAR(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_GRAMMAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ID(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                'i' => {
+                    end = try_IMPORT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_IMPORT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ID(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                'l' => {
+                    end = try_LEXER(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_LEXER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_LOCALS(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_LOCALS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ID(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                'm' => {
+                    end = try_MODE(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_MODE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ID(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                'o' => {
+                    end = try_OPTIONS(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_OPTIONS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ID(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                'p' => {
+                    end = try_PARSER(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_PARSER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_PROTECTED(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_PROTECTED; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_PUBLIC(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_PUBLIC; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_PRIVATE(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_PRIVATE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ID(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                'r' => {
+                    end = try_RETURNS(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_RETURNS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ID(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                't' => {
+                    end = try_TOKENS(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_TOKENS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_THROWS(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_THROWS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ID(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '{' => {
+                    end = try_ACTION(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ACTION; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '|' => {
+                    end = try_OR(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_OR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '}' => {
+                    end = try_RBRACE(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_RBRACE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '~' => {
+                    end = try_NOT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_NOT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                _ => {},
             }
         } else if current_mode == 1 {
-            if first_char matches { '"' } {
-                end = try_ARGUMENT_STRING_LITERAL(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ARGUMENT_CONTENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '\'' } {
-                end = try_ARGUMENT_CHAR_LITERAL(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ARGUMENT_CONTENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '[' } {
-                end = try_NESTED_ARGUMENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = 1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ARGUMENT_CONTENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '\\' } {
-                end = try_ARGUMENT_ESCAPE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ARGUMENT_CONTENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { ']' } {
-                end = try_END_ARGUMENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_END_ARGUMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 1; }
-                end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ARGUMENT_CONTENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else {
-                end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ARGUMENT_CONTENT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            match first_char {
+                '"' => {
+                    end = try_ARGUMENT_STRING_LITERAL(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ARGUMENT_CONTENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '#'..='&' | '('..='Z' => {
+                    end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ARGUMENT_CONTENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '\'' => {
+                    end = try_ARGUMENT_CHAR_LITERAL(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ARGUMENT_CONTENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '[' => {
+                    end = try_NESTED_ARGUMENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = 1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ARGUMENT_CONTENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '\\' => {
+                    end = try_ARGUMENT_ESCAPE(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ARGUMENT_CONTENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                ']' => {
+                    end = try_END_ARGUMENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_END_ARGUMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 1; }
+                    end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ARGUMENT_CONTENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                _ => {
+                    end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_ARGUMENT_CONTENT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
             }
         } else if current_mode == 2 {
-            if first_char matches { ']' } {
-                end = try_LEXER_CHAR_SET_BODY(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET_BODY; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = true; best_channel = 0; best_act = -1; }
-                end = try_LEXER_CHAR_SET(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_UNTERMINATED_CHAR_SET(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else {
-                end = try_LEXER_CHAR_SET_BODY(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET_BODY; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = true; best_channel = 0; best_act = -1; }
-                end = try_UNTERMINATED_CHAR_SET(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            match first_char {
+                ']' => {
+                    end = try_LEXER_CHAR_SET_BODY(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET_BODY; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = true; best_channel = 0; best_act = -1; }
+                    end = try_LEXER_CHAR_SET(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                    end = try_UNTERMINATED_CHAR_SET(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                _ => {
+                    end = try_LEXER_CHAR_SET_BODY(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET_BODY; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = true; best_channel = 0; best_act = -1; }
+                    end = try_UNTERMINATED_CHAR_SET(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
             }
         }
         if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode && best_set_mode < 0) {

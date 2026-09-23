@@ -1196,58 +1196,52 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_3 = pos;
-    let mut alts_ok_3 = false;
-    alts_3_0: {
-        pos = alts_saved_3;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_3_0; }
-        pos += 1;
-        alts_ok_3 = true;
-    }
-    if !alts_ok_3 {
+    alts_done_3: {
+        alts_3_0: {
+            pos = alts_saved_3;
+            if pos >= chars.len() || chars[pos] != ' ' { break alts_3_0; }
+            pos += 1;
+            break alts_done_3;
+        }
         alts_3_1: {
             pos = alts_saved_3;
             if pos >= chars.len() || chars[pos] != '\t' { break alts_3_1; }
             pos += 1;
-            alts_ok_3 = true;
+            break alts_done_3;
         }
-        if !alts_ok_3 {
-            alts_3_2: {
-                pos = alts_saved_3;
-                if pos >= chars.len() || chars[pos] != '\n' { break alts_3_2; }
-                pos += 1;
-                alts_ok_3 = true;
-            }
+        alts_3_2: {
+            pos = alts_saved_3;
+            if pos >= chars.len() || chars[pos] != '\n' { break alts_3_2; }
+            pos += 1;
+            break alts_done_3;
         }
+        return -1;
     }
-    if !alts_ok_3 { return -1; }
     loop {
         let rep_saved_2 = pos;
         rep_2: {
             let alts_saved_5 = pos;
-            let mut alts_ok_5 = false;
-            alts_5_0: {
-                pos = alts_saved_5;
-                if pos >= chars.len() || chars[pos] != ' ' { break alts_5_0; }
-                pos += 1;
-                alts_ok_5 = true;
-            }
-            if !alts_ok_5 {
+            alts_done_5: {
+                alts_5_0: {
+                    pos = alts_saved_5;
+                    if pos >= chars.len() || chars[pos] != ' ' { break alts_5_0; }
+                    pos += 1;
+                    break alts_done_5;
+                }
                 alts_5_1: {
                     pos = alts_saved_5;
                     if pos >= chars.len() || chars[pos] != '\t' { break alts_5_1; }
                     pos += 1;
-                    alts_ok_5 = true;
+                    break alts_done_5;
                 }
-                if !alts_ok_5 {
-                    alts_5_2: {
-                        pos = alts_saved_5;
-                        if pos >= chars.len() || chars[pos] != '\n' { break alts_5_2; }
-                        pos += 1;
-                        alts_ok_5 = true;
-                    }
+                alts_5_2: {
+                    pos = alts_saved_5;
+                    if pos >= chars.len() || chars[pos] != '\n' { break alts_5_2; }
+                    pos += 1;
+                    break alts_done_5;
                 }
+                break rep_2;
             }
-            if !alts_ok_5 { break rep_2; }
             continue;
         }
         pos = rep_saved_2;
@@ -1314,6 +1308,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
+<<<<<<< HEAD
         if first_char matches { '\t' | '\n' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
@@ -1349,6 +1344,86 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         } else {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
+||||||| 8dc1347e3
+        if first_char matches { '\t' | '\n' | ' ' } {
+            end = try_WS(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WS; }
+        } else if first_char matches { 'e' } {
+            end = try_lit_else(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_ELSE; }
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else if first_char matches { 'i' } {
+            end = try_lit_if(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_IF; }
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else if first_char matches { 'r' } {
+            end = try_lit_return(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_RETURN; }
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else if first_char matches { 't' } {
+            end = try_lit_then(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_THEN; }
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else if first_char matches { '{' } {
+            end = try_lit_lbrace(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; }
+        } else if first_char matches { '}' } {
+            end = try_lit_rbrace(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; }
+        } else if first_char matches { 'a'..='z' } {
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+        } else {
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
+=======
+        match first_char {
+            '\t' | '\n' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            'a'..='d' | 'f'..='h' | 'j'..='q' | 's' | 'u'..='z' => {
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            'e' => {
+                end = try_lit_else(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_ELSE; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            'i' => {
+                end = try_lit_if(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_IF; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            'r' => {
+                end = try_lit_return(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_RETURN; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            't' => {
+                end = try_lit_then(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_THEN; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            '{' => {
+                end = try_lit_lbrace(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_LBRACE; }
+            },
+            '}' => {
+                end = try_lit_rbrace(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; }
+            },
+            _ => {},
+>>>>>>> origin/main
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

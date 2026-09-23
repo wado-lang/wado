@@ -1369,24 +1369,32 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let first_char = lexer.chars[start];
         let mut best_more = false;
         let mut best_channel: i32 = 0;
-        if first_char matches { '\n' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; best_more = false; best_channel = 0; best_act = -1; }
-        } else if first_char matches { 'a' } {
-            end = try_A(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_A; best_more = false; best_channel = 0; best_act = 0; }
-        } else if first_char matches { 'b' } {
-            end = try_B(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_B; best_more = false; best_channel = 0; best_act = -1; }
-        } else if first_char matches { 'd' } {
-            end = try_D(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_D; best_more = false; best_channel = 0; best_act = 1; }
-        } else if first_char matches { 'p' } {
-            end = try_P(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_P; best_more = false; best_channel = 0; best_act = 2; }
-        } else if first_char matches { 'r' } {
-            end = try_R(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_R; best_more = false; best_channel = 0; best_act = 3; }
+        match first_char {
+            '\n' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; best_more = false; best_channel = 0; best_act = -1; }
+            },
+            'a' => {
+                end = try_A(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_A; best_more = false; best_channel = 0; best_act = 0; }
+            },
+            'b' => {
+                end = try_B(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_B; best_more = false; best_channel = 0; best_act = -1; }
+            },
+            'd' => {
+                end = try_D(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_D; best_more = false; best_channel = 0; best_act = 1; }
+            },
+            'p' => {
+                end = try_P(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_P; best_more = false; best_channel = 0; best_act = 2; }
+            },
+            'r' => {
+                end = try_R(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_R; best_more = false; best_channel = 0; best_act = 3; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

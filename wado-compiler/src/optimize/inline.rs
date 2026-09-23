@@ -3013,13 +3013,21 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
         ExprKind::Switch {
             scrutinee,
             min_value,
+            table,
             arms,
             default,
         } => {
-            let (s, mv, arms, d) = (*scrutinee, *min_value, arms.clone(), *default);
+            let (s, mv, table, arms, d) = (
+                *scrutinee,
+                *min_value,
+                table.clone(),
+                arms.clone(),
+                *default,
+            );
             ExprKind::Switch {
                 scrutinee: splice_operand(caller, callee, s, ctx),
                 min_value: mv,
+                table,
                 arms: arms
                     .into_iter()
                     .map(|b| splice_block(caller, callee, b, ctx))

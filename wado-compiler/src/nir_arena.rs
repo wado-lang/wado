@@ -325,6 +325,9 @@ pub enum ExprKind {
     Switch {
         scrutinee: Operand,
         min_value: i64,
+        /// Per value from `min_value`, the index into `arms` it dispatches to;
+        /// `None` goes to `default`. Many values share one arm body.
+        table: Vec<Option<usize>>,
         arms: Vec<BlockId>,
         default: BlockId,
     },
@@ -1045,11 +1048,13 @@ impl Body {
             ExprKind::Switch {
                 scrutinee,
                 min_value,
+                table,
                 arms,
                 default,
             } => ExprKind::Switch {
                 scrutinee: self.clone_operand(scrutinee),
                 min_value,
+                table,
                 arms: arms.into_iter().map(|a| self.clone_block(a)).collect(),
                 default: self.clone_block(default),
             },

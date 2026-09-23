@@ -1,0 +1,31 @@
+// An or-pattern arm on an `i128` / `u128` scrutinee tests each alternative,
+// with or without a single-value arm beside it.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn beside_literal(n: u128) -> i32 {
+    return match n {
+        0 => 10,
+        1 | 2 => 20,
+        _ => 30,
+    };
+}
+
+#[inline(never)]
+fn only_or_arms(n: i128) -> i32 {
+    return match n {
+        1 | 2 => 1,
+        3..=5 | 9 => 2,
+        _ => 0,
+    };
+}
+
+export fn run() with Stdout {
+    println(`${beside_literal(builtin::black_box(7 as u128))} ${beside_literal(builtin::black_box(2 as u128))}`);
+    println(`${only_or_arms(builtin::black_box(9 as i128))} ${only_or_arms(builtin::black_box(4 as i128))} ${only_or_arms(builtin::black_box(7 as i128))}`);
+}
+
+__DATA__
+{
+    "stdout": "30 20\n2 2 0\n"
+}
