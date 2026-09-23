@@ -2060,16 +2060,18 @@ pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32,
     return best;
 }
 
-pub struct HighlightOverride {
-    pub rule_name: String,
-    pub token_kind: i32,
-    pub capture: String,
+pub struct RuleCapture {
+    pub rule_id: i32,
+    pub capture_id: i32,
+    pub order: i32,
 }
 
 pub struct HighlightMapping {
-    pub defaults: List<String>,
-    pub rule_names: List<String>,
-    pub overrides: List<HighlightOverride>,
+    pub capture_names: List<String>,
+    pub capture_classes: List<String>,
+    pub default_ids: List<i32>,
+    pub overrides_by_kind: List<List<RuleCapture>>,
+    pub rule_captures: List<RuleCapture>,
 }
 
 pub struct HighlightCapture {
@@ -2078,78 +2080,53 @@ pub struct HighlightCapture {
     pub end: i32,
 }
 
-struct RuleCapture {
-    rule_id: i32,
-    capture_id: i32,
-}
-
 pub struct HighlightVisitor {
-    pub capture_names: List<String>,
-    pub capture_classes: List<String>,
-    default_ids: List<i32>,
-    overrides_by_kind: List<List<RuleCapture>>,
+    mapping: &HighlightMapping,
     rule_stack: List<i32>,
+    rule_capture_stack: List<i32>,
     visited: List<bool>,
     pub captures: List<HighlightCapture>,
 }
 
-fn name_index<S: AsStrSlice>(names: &List<String>, value: S) -> i32 {
-    for let mut i = 0; i < names.len(); i += 1 {
-        if value == names[i] {
-            return i;
-        }
+fn first_written(rule_capture: i32, other: i32) -> i32 {
+    if rule_capture < 0 {
+        return other;
     }
-    return -1;
-}
-
-fn capture_id_of<S: AsStrSlice>(names: &mut List<String>, classes: &mut List<String>, capture: S) -> i32 {
-    let found = name_index(names, capture);
-    if found >= 0 {
-        return found;
+    if other < 0 {
+        return rule_capture;
     }
-    classes.push(class_text(capture));
-    names.push(capture.to_string());
-    return names.len() - 1;
+    return i32::min(rule_capture, other);
 }
 
 impl HighlightVisitor {
-    pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
-        let mut capture_names: List<String> = [];
-        let mut capture_classes: List<String> = [];
-        let mut default_ids: List<i32> = List::with_capacity(mapping.defaults.len());
-        for let d of &mapping.defaults {
-            if d.is_empty() {
-                default_ids.push(-1);
-            } else {
-                default_ids.push(capture_id_of(&mut capture_names, &mut capture_classes, d));
-            }
-        }
-        let mut overrides_by_kind: List<List<RuleCapture>> = [];
-        for let ov of &mapping.overrides {
-            let rule_id = name_index(&mapping.rule_names, &ov.rule_name);
-            if rule_id < 0 {
-                continue;
-            }
-            let capture_id = capture_id_of(&mut capture_names, &mut capture_classes, &ov.capture);
-            while overrides_by_kind.len() <= ov.token_kind {
-                overrides_by_kind.push([]);
-            }
-            overrides_by_kind[ov.token_kind].push(RuleCapture { rule_id, capture_id });
-        }
-        return HighlightVisitor {
-            capture_names,
-            capture_classes,
-            default_ids,
-            overrides_by_kind,
-            rule_stack: [],
-            visited: [],
-            captures: [],
-        };
+    pub fn new(mapping: &HighlightMapping) -> HighlightVisitor {
+        return HighlightVisitor { mapping, rule_stack: [], rule_capture_stack: [], visited: [], captures: [] };
     }
 
-    fn classify(&self, kind: i32) -> i32 {
-        if kind >= 0 && kind < self.overrides_by_kind.len() {
-            for let candidate of &self.overrides_by_kind[kind] {
+    fn enclosing_rule_capture(&self) -> i32 {
+        let depth = self.rule_capture_stack.len();
+        return if depth == 0 { -1 } else { self.rule_capture_stack[depth - 1] };
+    }
+
+    fn own_rule_capture(&self, rule_id: i32) -> i32 {
+        for let mut i = 0; i < self.mapping.rule_captures.len(); i += 1 {
+            if self.mapping.rule_captures[i].rule_id == rule_id {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    fn classify(&self, kind: i32, rule_capture: i32) -> i32 {
+        let mut before = i32::MAX;
+        if rule_capture >= 0 {
+            before = self.mapping.rule_captures[rule_capture].order;
+        }
+        if kind >= 0 && kind < self.mapping.overrides_by_kind.len() {
+            for let candidate of &self.mapping.overrides_by_kind[kind] {
+                if candidate.order > before {
+                    break;
+                }
                 for let rule_id of &self.rule_stack {
                     if *rule_id == candidate.rule_id {
                         return candidate.capture_id;
@@ -2157,8 +2134,11 @@ impl HighlightVisitor {
                 }
             }
         }
-        if kind >= 0 && kind < self.default_ids.len() {
-            return self.default_ids[kind];
+        if rule_capture >= 0 {
+            return self.mapping.rule_captures[rule_capture].capture_id;
+        }
+        if kind >= 0 && kind < self.mapping.default_ids.len() {
+            return self.mapping.default_ids[kind];
         }
         return -1;
     }
@@ -2167,10 +2147,17 @@ impl HighlightVisitor {
 impl HighlightVisitor {
     pub fn hl_enter(&mut self, rule_id: i32) {
         self.rule_stack.push(rule_id);
+        if !self.mapping.rule_captures.is_empty() {
+            let active = first_written(self.own_rule_capture(rule_id), self.enclosing_rule_capture());
+            self.rule_capture_stack.push(active);
+        }
     }
 
     pub fn hl_exit(&mut self) {
         self.rule_stack.pop();
+        if !self.mapping.rule_captures.is_empty() {
+            self.rule_capture_stack.pop();
+        }
     }
 
     pub fn hl_visit_token(&mut self, toks: &TokenStream, idx: i32) {
@@ -2183,7 +2170,7 @@ impl HighlightVisitor {
 
     fn hl_capture_token(&mut self, toks: &TokenStream, idx: i32) {
         for let mut t = toks.triv_lo[idx]; t < toks.triv_hi[idx]; t += 1 {
-            let id = self.classify(toks.triv_kinds[t]);
+            let id = self.classify(toks.triv_kinds[t], -1);
             if id >= 0 {
                 self.captures.push(
                     HighlightCapture { capture_id: id, start: toks.triv_starts[t], end: toks.triv_ends[t] },
@@ -2193,7 +2180,7 @@ impl HighlightVisitor {
         if toks.is_empty_text(idx) {
             return;
         }
-        let id = self.classify(toks.kinds[idx]);
+        let id = self.classify(toks.kinds[idx], self.enclosing_rule_capture());
         if id >= 0 {
             self.captures.push(
                 HighlightCapture { capture_id: id, start: toks.starts[idx], end: toks.ends[idx] },
@@ -2204,6 +2191,7 @@ impl HighlightVisitor {
     pub fn hl_cover_unvisited(&mut self, toks: &TokenStream) {
         let walked = self.captures.len();
         self.rule_stack = [];
+        self.rule_capture_stack = [];
         for let mut i = 0; i < toks.len(); i += 1 {
             if i < self.visited.len() && self.visited[i] {
                 continue;
@@ -2260,18 +2248,6 @@ fn push_escaped_upto<S: AsStrSlice>(out: &mut String, source: S, cur: &mut HtmlC
     out.push_str_range_unchecked(source, run, bi);
     cur.byte_index = bi;
     cur.char_index = pos;
-}
-
-fn class_text<S: AsStrSlice>(capture: S) -> String {
-    let mut out = String::with_capacity(capture.len());
-    for let c of capture.chars() {
-        if c == '.' {
-            out.push(' ');
-        } else {
-            out.push(c);
-        }
-    }
-    return out;
 }
 
 pub fn highlight_html<S: AsStrSlice>(source: S, captures: &List<HighlightCapture>, classes: &List<String>) -> String {
@@ -3324,78 +3300,62 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
     return String::new();
 }
 
-pub fn highlight_mapping() -> HighlightMapping {
-    let defaults: List<String> = [
-        "string",  // TK_STRING
-        "number",  // TK_NUMBER
-        "",  // TK_WS
-        "",  // TK_EOF
-        "",  // TK_ERROR
-        "punctuation.bracket",  // TK_LIT_LBRACE
-        "punctuation.delimiter",  // TK_LIT_COMMA
-        "punctuation.bracket",  // TK_LIT_RBRACE
-        "punctuation.delimiter",  // TK_LIT_COLON
-        "punctuation.bracket",  // TK_LIT_LBRACKET
-        "punctuation.bracket",  // TK_LIT_RBRACKET
-        "constant.builtin",  // TK_LIT_true
-        "constant.builtin",  // TK_LIT_false
-        "constant.builtin",  // TK_LIT_null
-    ];
-    let rule_names: List<String> = [
-        "json",
-        "obj",
-        "pair",
-        "arr",
-        "value",
-    ];
-    let overrides: List<HighlightOverride> = [
-        HighlightOverride { rule_name: "arr", token_kind: 1, capture: "constant" },
-    ];
-    return HighlightMapping { defaults, rule_names, overrides };
-}
-
-pub fn capture_vocabulary() -> List<String> {
-    return [
+pub global HIGHLIGHT_MAPPING: HighlightMapping = HighlightMapping {
+    capture_names: [
         "constant",
         "constant.builtin",
         "number",
         "punctuation.bracket",
         "punctuation.delimiter",
         "string",
-    ];
+    ],
+    capture_classes: [
+        "constant",
+        "constant builtin",
+        "number",
+        "punctuation bracket",
+        "punctuation delimiter",
+        "string",
+    ],
+    default_ids: [
+        5,  // TK_STRING @string
+        2,  // TK_NUMBER @number
+        -1,  // TK_WS
+        -1,  // TK_EOF
+        -1,  // TK_ERROR
+        3,  // TK_LIT_LBRACE @punctuation.bracket
+        4,  // TK_LIT_COMMA @punctuation.delimiter
+        3,  // TK_LIT_RBRACE @punctuation.bracket
+        4,  // TK_LIT_COLON @punctuation.delimiter
+        3,  // TK_LIT_LBRACKET @punctuation.bracket
+        3,  // TK_LIT_RBRACKET @punctuation.bracket
+        1,  // TK_LIT_true @constant.builtin
+        1,  // TK_LIT_false @constant.builtin
+        1,  // TK_LIT_null @constant.builtin
+    ],
+    overrides_by_kind: [
+        [],  // TK_STRING
+        [  // TK_NUMBER
+            RuleCapture { rule_id: RK_ARR as i32, capture_id: 0, order: 11 },  // @constant
+        ],
+    ],
+    rule_captures: [],
+};
+
+pub fn capture_vocabulary() -> List<String> {
+    return HIGHLIGHT_MAPPING.capture_names;
 }
 
 pub fn highlight_result<S: AsStrSlice>(result: &ParseResult, input: S) -> String {
-    let mapping = highlight_mapping();
-    let mut visitor = HighlightVisitor::new(mapping);
+    let mut visitor = HighlightVisitor::new(&HIGHLIGHT_MAPPING);
     highlight_walk(&mut visitor, &result.tokens, &result.cst);
     visitor.hl_cover_unvisited(&result.tokens);
-    return highlight_html(input, &visitor.captures, &visitor.capture_classes);
+    return highlight_html(input, &visitor.captures, &HIGHLIGHT_MAPPING.capture_classes);
 }
 
 pub fn highlight<S: AsStrSlice>(input: S) -> String {
     let result = parse(input);
     return highlight_result(&result, input);
-}
-
-use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
-use fs from "core:fs";
-use { Preopens } from "wasi:filesystem";
-
-export fn run() with (Stdout, Stderr, Environment, Preopens) {
-    let arguments = args();
-    if arguments.len() < 1 {
-        eprintln("Usage: <highlighter> <input-file>");
-        return;
-    }
-    let input = match fs::read_to_string(&arguments[0]) {
-        Ok(text) => text,
-        Err(e) => {
-            eprintln(`error: ${e}`);
-            return;
-        },
-    };
-    print(highlight(&input));
 }
 
 fn _kind_set_0(k: i32) -> bool {

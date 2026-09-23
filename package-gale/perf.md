@@ -198,12 +198,12 @@ Whole branch against `origin/main`, four alternating pairs, ranges disjoint:
 The mask test also retires the "multi-token guard re-test" item below as a
 cost: the re-tested `_kind_set_37` is now a subtract and a compare.
 
-One lever is left in the highlight half. `HighlightVisitor::new` re-resolves a
-fully static mapping on every call, ~170 `capture_id_of` scans plus the
-`class_text` rewrites, about 2.5% of the profile. The compile-time engine
-cannot fold it, its 10K-step budget being far under the string compares that
-takes, so the fix is `highlight_gen` emitting the resolved `default_ids` and
-`capture_classes` tables directly.
+The last lever in the highlight half has since landed. `HighlightVisitor::new`
+re-resolved a fully static mapping on every call, ~170 `capture_id_of` scans
+plus the `class_text` rewrites, about 2.5% of the profile. The compile-time
+engine could not fold it, its 10K-step budget being far under the string
+compares that takes. `highlight_gen` now emits the resolved tables as the
+`HIGHLIGHT_MAPPING` global, which the visitor borrows.
 
 ### Live profile (`syntax_highlight`, 2999 leaf samples @1 ms, 2026-09-02)
 

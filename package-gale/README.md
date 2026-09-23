@@ -435,7 +435,13 @@ yourself. Two forms:
 
 ; override: within a parser rule, a token -> capture (the context tier)
 (functionCall (IDENTIFIER) @function)
+
+; rule capture: every token under a rule whose alternatives are each one token
+(keyword) @variable
 ```
+
+Where an override and a rule capture both reach a token, the one written first
+in the query wins.
 
 Match a token by its **lexer-rule name** `(NAME)` when the parser references it
 by name, and by **literal text** `"…"` when it appears inline in parser rules

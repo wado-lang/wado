@@ -294,9 +294,9 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // needs a longest-match tournament; the FOLLOW runtime / mask globals only
     // when lowering built a caller-FOLLOW gate (`emit_follow`).
     let ef = ctx.emit_follow();
-    // A superClass grammar can't be highlighted: the `highlight` / exported
-    // `run` entries call `tokenize` / `parse` (base effect) but can't install
-    // the handler. Skip it (warned below) instead of emitting uncompilable code.
+    // A superClass grammar can't be highlighted: the `highlight` entry calls
+    // `tokenize` / `parse` (base effect) but can't install the handler. Skip it
+    // (warned below) instead of emitting uncompilable code.
     let any_base = ctx.has_superclass() || ctx.has_parser_superclass();
     let emit_highlight = options.highlight_query matches { Some(_) } && !any_base;
     gen_runtime(&mut w, ef, ctx.needs_atn(), needs_latn, emit_highlight, ctx.has_superclass());
