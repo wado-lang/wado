@@ -1265,15 +1265,6 @@ impl Parser {
     }
 }
 
-fn scan_start(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_STR { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_start__inner(p: &mut Parser) -> () {
     p.expect(TK_STR, &SYNC_0);
     p.expect(TK_EOF, &EMPTY_SYNC);

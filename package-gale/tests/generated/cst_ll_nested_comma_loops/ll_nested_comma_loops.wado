@@ -1368,50 +1368,6 @@ impl Parser {
     }
 }
 
-fn scan_start(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_list(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LBRACK { return -1; }
-    pos += 1;
-    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
-        let sp = pos;
-        pos = scan_elems(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_RBRACK { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_elems(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_alt(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        sg_0_done: {
-            sg_0: {
-                pos += 1;
-                pos = scan_alt(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-                if pos < 0 { break sg_0; }
-                break sg_0_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
-}
-
 fn scan_alt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_item(tokens, pos, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
@@ -1754,11 +1710,10 @@ global SYNC_1: List<i32> = [TK_ID, TK_LBRACE];
 global SYNC_2: List<i32> = [TK_COMMA];
 global SYNC_3: List<i32> = [TK_ID];
 
-global FOLLOW_SETS: List<List<i32>> = [[256], [64], [2], [9], [4], [16], [1]];
+global FOLLOW_SETS: List<List<i32>> = [[256], [64], [2], [9], [4], [16]];
 global FOLLOW_MASK_0: i64 = 1;
 global FOLLOW_MASK_1: i64 = 2;
 global FOLLOW_MASK_2: i64 = 1027;
 global FOLLOW_MASK_3: i64 = 1029;
 global FOLLOW_MASK_4: i64 = 6;
-global FOLLOW_MASK_5: i64 = 1795;
 

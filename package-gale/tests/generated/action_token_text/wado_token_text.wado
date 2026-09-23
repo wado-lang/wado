@@ -1324,17 +1324,6 @@ impl Parser {
     }
 }
 
-fn scan_r(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_r__inner(p: &mut Parser) -> () {
     let a = p.expect(TK_ID, &SYNC_0);
     p.expect(TK_LIT_PLUS, &SYNC_1);

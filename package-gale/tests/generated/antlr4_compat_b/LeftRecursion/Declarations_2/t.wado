@@ -1393,15 +1393,6 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_declarator(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_declarator_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -1504,13 +1495,6 @@ fn scan_declarator(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
             break;
         }
     }
-    return pos;
-}
-
-fn scan_e(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_INT { return -1; }
-    pos += 1;
     return pos;
 }
 

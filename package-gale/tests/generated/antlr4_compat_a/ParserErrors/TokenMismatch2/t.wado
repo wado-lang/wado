@@ -1333,43 +1333,6 @@ impl Parser {
     }
 }
 
-fn scan_stat(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    osl_0_done: {
-        if pos < tokens.len() && tokens[pos] == TK_LIT_LPAREN && pos + 1 < tokens.len() && tokens[pos + 1] == TK_ID {
-            let sol_1_save = pos;
-            sol_1: {
-                pos += 1;
-                pos = scan_expr(tokens, pos);
-                if pos < 0 { break sol_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sol_1; }
-                pos += 1;
-                break osl_0_done;
-            }
-            pos = sol_1_save;
-            break osl_0_done;
-        }
-        if pos < tokens.len() && tokens[pos] == TK_LIT_LPAREN && pos + 1 < tokens.len() && tokens[pos + 1] == TK_LIT_RPAREN {
-            pos += 2;
-            break osl_0_done;
-        }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_expr(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_STR { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_stat__inner(p: &mut Parser) -> () {
     if p.peek_kind() == TK_LIT_LPAREN {
         p.expect(TK_LIT_LPAREN, &SYNC_0);

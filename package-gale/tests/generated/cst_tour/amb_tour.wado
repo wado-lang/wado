@@ -1287,15 +1287,6 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_stat(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_stat_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
@@ -1331,13 +1322,6 @@ fn scan_stat(tokens: &Array<i32>, pos: i32) -> i32 {
         }
     }
     return pos;
-}
-
-fn scan_expr(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
 }
 
 fn _parse_prog__inner(p: &mut Parser) -> () {

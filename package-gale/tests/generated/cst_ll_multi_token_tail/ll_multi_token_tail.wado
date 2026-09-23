@@ -1314,59 +1314,6 @@ impl Parser {
     }
 }
 
-fn scan_r(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_a(tokens, pos, FOLLOW_MASK_0);
-    if pos < 0 { return -1; }
-    pos = scan_c(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_a(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_N { return -1; }
-    pos += 1;
-    sg_0_done: {
-        sg_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_X { break sg_0; }
-            pos += 1;
-            if pos >= tokens.len() || tokens[pos] != TK_Y { break sg_0; }
-            pos += 1;
-            break sg_0_done;
-        }
-        return -1;
-    }
-    while pos < tokens.len() && tokens[pos] == TK_X && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        sg_1_done: {
-            sg_1: {
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_Y { break sg_1; }
-                pos += 1;
-                break sg_1_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
-}
-
-fn scan_c(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_X { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_Y { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_Z { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_r__inner(p: &mut Parser) -> () {
     _parse_a(p, FOLLOW_MASK_0);
     _parse_c(p);
@@ -1514,6 +1461,4 @@ global SYNC_2: List<i32> = [TK_Z];
 
 global FOLLOW_SETS: List<List<i32>> = [[2], [4], [8], [32]];
 global FOLLOW_MASK_0: i64 = 67305985;
-global FOLLOW_MASK_1: i64 = 4;
-global FOLLOW_MASK_2: i64 = 513;
 

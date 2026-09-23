@@ -1235,40 +1235,6 @@ impl Parser {
     }
 }
 
-fn scan_start(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_xs(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_xs(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    while pos < tokens.len() && _kind_set_0(tokens[pos]) {
-        let sp = pos;
-        pos += 1;
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-        let rk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_0(rk_0)) {
-            let rs_0 = pos;
-            let mut rs_0_ok = false;
-            rsv_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_A { break rsv_0; }
-                pos += 1;
-                rs_0_ok = true;
-            }
-            pos = rs_0;
-            if !rs_0_ok { pos = sp; break; }
-        }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_start__inner(p: &mut Parser) -> () {
     _parse_xs(p);
     p.expect(TK_EOF, &EMPTY_SYNC);

@@ -1248,47 +1248,6 @@ impl Parser {
     }
 }
 
-fn scan_r(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_a(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_X {
-            let mut best: i32 = -1;
-            pos = start + 1;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_Z { break try_1; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_0: {
-                pos += 1;
-                while pos < tokens.len() && tokens[pos] == TK_X {
-                    pos += 1;
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_Y { break try_0; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
-        } else {
-            return -1;
-        }
-    }
-    return pos;
-}
-
 fn _parse_r__inner(p: &mut Parser) -> () {
     _parse_a(p);
     p.expect(TK_EOF, &EMPTY_SYNC);

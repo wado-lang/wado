@@ -1629,64 +1629,6 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    SCAN_STACK.push(8);
-    pos = scan_e(tokens, pos, 0);
-    SCAN_STACK.pop();
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_e_atom(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_INT { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_e_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { return -1; }
-    pos += 1;
-    SCAN_STACK.push(23);
-    pos = scan_e(tokens, pos, 3);
-    SCAN_STACK.pop();
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_e_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] == TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_e_atom(tokens, pos);
-    if pos < 0 { return -1; }
-    loop {
-        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, 0, tokens, pos, TK_EOF, min_prec);
-        let _lr_pos0 = pos;
-        if _atn_alt == 0 {
-            pos = scan_e_lr_0(tokens, pos);
-            if pos < 0 { return -1; }
-        } else if _atn_alt == 1 {
-            pos = scan_e_lr_1(tokens, pos);
-            if pos < 0 { return -1; }
-        } else {
-            break;
-        }
-        if pos == _lr_pos0 {
-            break;
-        }
-    }
-    return pos;
-}
-
 fn _parse_prog__inner(p: &mut Parser) -> () {
     p.atn_ret_pending = 8;
     _parse_e(p);

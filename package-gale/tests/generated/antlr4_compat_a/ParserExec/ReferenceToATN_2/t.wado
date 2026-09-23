@@ -1383,35 +1383,6 @@ impl Parser {
     }
 }
 
-fn scan_a(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        pos += 1;
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-        let dk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_0(dk_0) || dk_0 == TK_ATN || dk_0 == TK_EOF) {
-            let dc_0 = pos;
-            let mut dc_0_exit = false;
-            pos = sp;
-            dcl_0: {
-                if pos < tokens.len() && tokens[pos] == TK_ATN {
-                    pos += 1;
-                }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_EOF) { dc_0_exit = true; }
-            }
-            if dc_0_exit { pos = sp; break; }
-            pos = dc_0;
-        }
-    }
-    if pos < tokens.len() && tokens[pos] == TK_ATN && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        pos += 1;
-    }
-    return pos;
-}
-
 fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let _rule_start_tok = p.pos;
     loop {

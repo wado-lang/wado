@@ -1223,37 +1223,6 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_A {
-            let mut best: i32 = -1;
-            pos = start + 1;
-            if pos > best { best = pos; }
-            pos = start;
-            try_1: {
-                pos = scan_t(tokens, pos);
-                if pos < 0 { break try_1; }
-                if pos > best { best = pos; }
-            }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
-        } else {
-            return -1;
-        }
-    }
-    return pos;
-}
-
-fn scan_u(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_t(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }

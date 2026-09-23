@@ -896,22 +896,9 @@ impl Lexer {
 
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_0 = pos;
-    alts_done_0: {
-        alts_0_0: {
-            pos = alts_saved_0;
-            if pos >= chars.len() || chars[pos] != ' ' { break alts_0_0; }
-            pos += 1;
-            break alts_done_0;
-        }
-        alts_0_1: {
-            pos = alts_saved_0;
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_0_1; }
-            pos += 1;
-            break alts_done_0;
-        }
-        return -1;
-    }
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { '\n' | ' ' })) { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -1275,6 +1262,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1315,41 +1314,25 @@ impl Parser {
     }
 }
 
-fn scan_b(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
-fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
-    let scan_start = pos;
-    let mut pos = pos;
-    pos = scan_b(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos == scan_start { return -1; }
-    return pos;
-}
-
 fn _parse_b__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_b {
-        p.expect(TK_LIT_b, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_LIT_c {
-        p.expect(TK_LIT_c, &EMPTY_SYNC);
+        p.take();
         if !p.speculating {
             p.emit(`M.b\n`);
         }
         return;
     }
     if kind == TK_B {
-        p.expect(TK_B, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_A {
-        p.expect(TK_A, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -1446,10 +1429,6 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
         return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
     return String::new();
-}
-
-fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_A | TK_B | TK_LIT_b | TK_LIT_c };
 }
 
 global EMPTY_SYNC: List<i32> = [];

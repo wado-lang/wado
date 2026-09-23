@@ -900,22 +900,9 @@ fn try_B(chars: &List<char>, start: i32) -> i32 {
 
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_0 = pos;
-    alts_done_0: {
-        alts_0_0: {
-            pos = alts_saved_0;
-            if pos >= chars.len() || chars[pos] != ' ' { break alts_0_0; }
-            pos += 1;
-            break alts_done_0;
-        }
-        alts_0_1: {
-            pos = alts_saved_0;
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_0_1; }
-            pos += 1;
-            break alts_done_0;
-        }
-        return -1;
-    }
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { '\n' | ' ' })) { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -1260,6 +1247,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1298,22 +1297,6 @@ impl Parser {
         self.fail_on_token("got", included, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
-}
-
-fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
-    let scan_start = pos;
-    let mut pos = pos;
-    pos = scan_a(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos == scan_start { return -1; }
-    return pos;
-}
-
-fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn _parse_s__inner(p: &mut Parser) -> () {

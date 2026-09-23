@@ -1360,19 +1360,6 @@ impl Parser {
     }
 }
 
-fn scan_a(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    while pos < tokens.len() && tokens[pos] == TK_ID && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        pos += 1;
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
-}
-
 fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let _rule_start_tok = p.pos;
     let mut _plus_first = true;

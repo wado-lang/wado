@@ -1,6 +1,7 @@
 use { Alternative, Element, Visibility } from "./ir.wado";
 use { FOLLOW_PARAM, symbol_char_names, char_hex_name } from "./ident.wado";
 use { CodeWriter } from "lib:wadopoet";
+use { TreeSet } from "core:collections";
 use { unwrap_label } from "./lr_util.wado";
 pub use { escape_ident, escape_case, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 
@@ -21,6 +22,51 @@ pub fn gen_visibility_comment(w: &mut CodeWriter, visibility: &Visibility) {
         return;
     }
     w.line(`// rule visibility: ${label} (ignored by codegen, matches ANTLR4)`);
+}
+
+fn is_ident_byte(b: u8) -> bool {
+    return b == b'_' || b >= b'0' && b <= b'9' || b >= b'a' && b <= b'z' || b >= b'A' && b <= b'Z';
+}
+
+/// Every name generated `text` calls: an identifier followed by `(` that is
+/// not the one a `fn` defines.
+pub fn collect_called_names(text: &String, out: &mut TreeSet<String>) {
+    let n = text.len();
+    let mut i = 0;
+    while i < n {
+        if !is_ident_byte(text.get_byte_unchecked(i)) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < n && is_ident_byte(text.get_byte_unchecked(i)) {
+            i += 1;
+        }
+        if i < n && text.get_byte_unchecked(i) == b'(' && !follows_fn_keyword(text, start) {
+            out.insert(text.as_str_slice().sub(start, i).to_string());
+        }
+    }
+}
+
+fn follows_fn_keyword(text: &String, start: i32) -> bool {
+    return start >= 3 && text.as_str_slice().sub(start - 3, start) == "fn ";
+}
+
+/// The top-level functions generated `text` defines.
+pub fn defined_fn_names(text: &String) -> List<String> {
+    let mut out: List<String> = [];
+    for let line of text.split("\n") {
+        if !line.starts_with("fn ") {
+            continue;
+        }
+        let rest = line.as_str_slice().sub(3, line.len());
+        let mut end = 0;
+        while end < rest.len() && is_ident_byte(rest.get_byte_unchecked(end)) {
+            end += 1;
+        }
+        out.push(rest.sub(0, end).to_string());
+    }
+    return out;
 }
 
 pub fn rule_type_name<S: AsStrSlice>(name: S) -> String {

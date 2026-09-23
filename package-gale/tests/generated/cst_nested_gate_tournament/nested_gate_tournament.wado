@@ -1449,110 +1449,6 @@ impl Parser {
     }
 }
 
-fn scan_start(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_block(tokens, pos, gate, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_block(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LB { return -1; }
-    pos += 1;
-    pos = scan_stmts(tokens, pos, gate, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_RB { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_stmts(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let start = pos;
-    let start_gate = *gate;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if _kind_set_0(alt_kind) {
-            let mut best: i32 = -1;
-            let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
-            try_1: {
-                pos = scan_expr(tokens, pos, gate, 0);
-                if pos < 0 { break try_1; }
-                if pos > best { best = pos; best_gate = *gate; }
-            }
-            pos = start;
-            *gate = start_gate;
-            try_0: {
-                pos = scan_stmt(tokens, pos, gate);
-                if pos < 0 { break try_0; }
-                while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-                    let sp = pos;
-                    let sp_gate = *gate;
-                    pos = scan_stmt(tokens, pos, gate);
-                    if pos < 0 {
-                        pos = sp;
-                        *gate = sp_gate;
-                        break;
-                    }
-                    if pos == sp { break; }
-                    let dk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if !(_kind_set_0(dk_0) || _kind_set_0(dk_0) || dk_0 == TK_RB) {
-                        let dc_0 = pos;
-                        let dc_0_gate = *gate;
-                        let mut dc_0_exit = false;
-                        pos = sp;
-                        *gate = sp_gate;
-                        dcl_0: {
-                            if pos < tokens.len() && _kind_set_0(tokens[pos]) {
-                                let sp = pos;
-                                let sp_gate = *gate;
-                                pos = scan_expr(tokens, pos, gate, 0);
-                                if pos < 0 {
-                                    pos = sp;
-                                    *gate = sp_gate;
-                                }
-                            }
-                            let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                            if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RB) { dc_0_exit = true; }
-                        }
-                        if dc_0_exit {
-                            pos = sp;
-                            *gate = sp_gate;
-                            break;
-                        }
-                        pos = dc_0;
-                        *gate = dc_0_gate;
-                    }
-                }
-                if pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-                    let sp = pos;
-                    let sp_gate = *gate;
-                    pos = scan_expr(tokens, pos, gate, 0);
-                    if pos < 0 {
-                        pos = sp;
-                        *gate = sp_gate;
-                    }
-                }
-                if pos > best { best = pos; best_gate = *gate; }
-            }
-            if best >= 0 {
-                pos = best;
-                *gate = best_gate;
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
-        }
-    }
-    return pos;
-}
-
 fn scan_stmt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos, gate, 0);
@@ -2106,11 +2002,9 @@ global SYNC_1: List<i32> = [TK_ID];
 global SYNC_2: List<i32> = [TK_RB];
 global SYNC_3: List<i32> = [TK_LB];
 
-global FOLLOW_SETS: List<List<i32>> = [[128], [16], [32], [8], [4]];
+global FOLLOW_SETS: List<List<i32>> = [[128], [16]];
 global FOLLOW_MASK_0: i64 = 1;
 global FOLLOW_MASK_1: i64 = 2;
-global FOLLOW_MASK_2: i64 = 3;
-global FOLLOW_MASK_3: i64 = 132356;
 
 struct ScanGate {
     no_brace: i32 = 0,

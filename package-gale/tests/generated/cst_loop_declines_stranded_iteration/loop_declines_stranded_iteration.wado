@@ -1395,26 +1395,6 @@ impl Parser {
     }
 }
 
-fn scan_start(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_block(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LB { return -1; }
-    pos += 1;
-    pos = scan_stmts(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_RB { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_stmts_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_stmt(tokens, pos, 0);
@@ -1940,8 +1920,7 @@ global SYNC_3: List<i32> = [TK_LB, TK_LET];
 global SYNC_4: List<i32> = [TK_ID];
 global SYNC_5: List<i32> = [TK_RB];
 
-global FOLLOW_SETS: List<List<i32>> = [[1024], [128], [8]];
+global FOLLOW_SETS: List<List<i32>> = [[1024], [128]];
 global FOLLOW_MASK_0: i64 = 1;
 global FOLLOW_MASK_1: i64 = 2;
-global FOLLOW_MASK_2: i64 = 3;
 

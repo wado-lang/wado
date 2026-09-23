@@ -65,9 +65,18 @@ test "the same action with a translatable members block reaches the gate" {
 
 // The gate is parser state that every scan walks by reference, never a global.
 test "the scan gate lives on the parser" {
-    let out = gen_source(&members_grammar("    int n = 0;"));
+    let out = gen_source("grammar C;
+options { language = Java; }
+@parser::members {
+    int n = 0;
+}
+s : (r | r B)* EOF ;
+r : A { n = 1; } A+ ;
+A : 'a' ;
+B : 'b' ;
+");
     assert out.contains("scan_gate: ScanGate = ScanGate {}"), out;
-    assert out.contains("fn scan_r(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate)"), out;
+    assert out.contains("fn scan_r(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,"), out;
     assert !out.contains("global mut"), out;
 }
 

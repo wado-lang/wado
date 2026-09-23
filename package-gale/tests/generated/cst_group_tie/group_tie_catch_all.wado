@@ -1337,48 +1337,6 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_F { return -1; }
-    pos += 1;
-    let gp_0 = pos;
-    let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    let mut sg_0_best = -1;
-    if sgk_0 == TK_ID {
-        pos = gp_0;
-        pos += 1;
-        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-            let sp = pos;
-            sg_1_done: {
-                sg_1: {
-                    pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1; }
-                    pos += 1;
-                    break sg_1_done;
-                }
-                pos = -1;
-            }
-            if pos < 0 { pos = sp; break; }
-            if pos == sp { break; }
-        }
-        if pos > sg_0_best { sg_0_best = pos; }
-        pos = gp_0;
-        sg_0_1: {
-            pos = scan_pair(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-            if pos < 0 { break sg_0_1; }
-            if pos > sg_0_best { sg_0_best = pos; }
-        }
-    }
-    if sg_0_best >= 0 {
-        pos = sg_0_best;
-    } else {
-        pos = gp_0;
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_pair(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
@@ -1402,25 +1360,11 @@ fn scan_pair(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_op(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
 fn scan_opt_tail(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_LIT_T && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         pos += 1;
     }
-    return pos;
-}
-
-fn scan_item(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
     return pos;
 }
 
@@ -1692,8 +1636,6 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_ID];
 global SYNC_1: List<i32> = [TK_LIT_COMMA, TK_LIT_J];
 
-global FOLLOW_SETS: List<List<i32>> = [[32], [1], [4]];
-global FOLLOW_MASK_0: i64 = 513;
-global FOLLOW_MASK_1: i64 = 3;
-global FOLLOW_MASK_2: i64 = 2;
+global FOLLOW_SETS: List<List<i32>> = [[4]];
+global FOLLOW_MASK_1: i64 = 1;
 

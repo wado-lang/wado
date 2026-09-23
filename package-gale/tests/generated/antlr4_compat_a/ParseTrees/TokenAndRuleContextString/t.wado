@@ -1227,6 +1227,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1269,22 +1281,6 @@ impl Parser {
 
 struct SVals {
     _node_r: i32 = -1,
-}
-
-fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
-    let scan_start = pos;
-    let mut pos = pos;
-    pos = scan_a(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos == scan_start { return -1; }
-    return pos;
-}
-
-fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_x { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn _parse_s__inner(p: &mut Parser) -> SVals {

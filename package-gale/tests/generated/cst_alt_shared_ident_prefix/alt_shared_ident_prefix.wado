@@ -1419,57 +1419,6 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_match_expr(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_match_expr(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_match { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_IDENT { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
-    pos += 1;
-    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
-        let sp = pos;
-        sg_0_done: {
-            sg_0: {
-                pos = scan_arm(tokens, pos, 0);
-                if pos < 0 { break sg_0; }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-                    let sp = pos;
-                    sg_1_done: {
-                        sg_1: {
-                            pos += 1;
-                            pos = scan_arm(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-                            if pos < 0 { break sg_1; }
-                            break sg_1_done;
-                        }
-                        pos = -1;
-                    }
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
-                }
-                if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-                    pos += 1;
-                }
-                break sg_0_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_arm(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_pattern(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
@@ -2061,9 +2010,8 @@ global SYNC_3: List<i32> = [TK_IDENT, TK_LIT_LPAREN, TK_LIT_U5f, TK_LIT_mut];
 global SYNC_4: List<i32> = [TK_IDENT, TK_LIT_LPAREN, TK_LIT_RPAREN, TK_LIT_U5f, TK_LIT_mut];
 global SYNC_5: List<i32> = [TK_LIT_COLONCOLON];
 
-global FOLLOW_SETS: List<List<i32>> = [[4], [64], [3585], [256], [1], [8192]];
+global FOLLOW_SETS: List<List<i32>> = [[4], [64], [3585], [256], [1]];
 global FOLLOW_MASK_0: i64 = 1;
 global FOLLOW_MASK_1: i64 = 770;
 global FOLLOW_MASK_2: i64 = 1284;
-global FOLLOW_MASK_3: i64 = 1286;
 

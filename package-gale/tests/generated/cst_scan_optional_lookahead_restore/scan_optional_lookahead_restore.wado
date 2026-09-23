@@ -1399,45 +1399,6 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_stmt(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_ID {
-            let mut best: i32 = -1;
-            pos = start;
-            try_0: {
-                pos = scan_item(tokens, pos, follow);
-                if pos < 0 { break try_0; }
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_1: {
-                pos = scan_item(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_z { break try_1; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
-        } else {
-            return -1;
-        }
-    }
-    return pos;
-}
-
 fn scan_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -1559,13 +1520,6 @@ fn scan_inner(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         }
     }
-    return pos;
-}
-
-fn scan_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
     return pos;
 }
 
@@ -2012,9 +1966,7 @@ global SYNC_1: List<i32> = [TK_LIT_LPAREN, TK_NUMBER];
 global SYNC_2: List<i32> = [TK_LIT_idx];
 global SYNC_3: List<i32> = [TK_ID, TK_LIT_LPAREN];
 
-global FOLLOW_SETS: List<List<i32>> = [[8], [32], [512], [514], [1024]];
+global FOLLOW_SETS: List<List<i32>> = [[8], [32]];
 global FOLLOW_MASK_0: i64 = 1;
 global FOLLOW_MASK_1: i64 = 2;
-global FOLLOW_MASK_2: i64 = 1027;
-global FOLLOW_MASK_3: i64 = 5;
 

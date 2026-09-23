@@ -1302,18 +1302,6 @@ impl Parser {
     }
 }
 
-fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
-        let sp = pos;
-        pos += 1;
-        if pos < 0 { pos = sp; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_c { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_a__inner(p: &mut Parser) -> () {
     if _kind_set_0(p.peek_kind()) {
         p.expect_set(&SYNC_0);

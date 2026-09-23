@@ -800,7 +800,7 @@ ID : [a-w]+ ;
 
 test "a scan tests a one-token rule inline, and trusts a callee that consumes" {
     let input = "grammar T;
-s : n EOF ;
+s : (n | n K1)* EOF ;
 n : a ;
 a : ID | k | '(' a ')' ;
 k : K1 | K2 ;
@@ -816,6 +816,35 @@ K2 : 'J' ;
     let n = extract_fn_body(&output, "fn scan_n(");
     assert n.len() > 0, output;
     assert !str_contains(&n, "scan_start"), `scan_a never matches empty\n${n}`;
+}
+
+test "a scan function nothing calls is not emitted" {
+    let input = "grammar T;
+s : a b EOF ;
+a : X Y ;
+b : (c | c Z)* ;
+c : W+ ;
+X : 'x' ; Y : 'y' ; Z : 'z' ; W : 'w' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    assert !str_contains(&output, "fn scan_a("), output;
+    assert str_contains(&output, "fn scan_c("), output;
+}
+
+test "every emitted FOLLOW mask is named by a call" {
+    let mut grammar = parse_grammar(#include_str("../tests/grammars/SQLite.g4"), "SQLite.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    let mut masks = 0;
+    for let line of output.split("\n") {
+        if !line.starts_with("global FOLLOW_MASK_") {
+            continue;
+        }
+        masks += 1;
+        let name = line.split(":").next().unwrap().to_string().split(" ").last().unwrap().to_string();
+        assert count_substr(&output, `${name},`) + count_substr(&output, `${name})`) + count_substr(&output, `${name} `) > 0, `${name} is never named`;
+    }
+    assert masks > 0, "SQLite interns FOLLOW masks";
 }
 
 test "an element is bound only where an action reads it" {

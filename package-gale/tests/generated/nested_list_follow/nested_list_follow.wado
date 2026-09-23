@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["grammars/nested_list_follow.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/nested_list_follow.g4"])]
 
 pub struct Span {
     pub start: i32,
@@ -606,6 +606,9 @@ impl TreeBuilder {
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
+        if self.last_finished >= checkpoint {
+            self.last_finished += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -615,6 +618,9 @@ impl TreeBuilder {
         self.alt.truncate(checkpoint);
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
+        }
+        if self.last_finished >= checkpoint {
+            self.last_finished = -1;
         }
     }
 
@@ -1290,6 +1296,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1330,49 +1348,14 @@ impl Parser {
     }
 }
 
-fn scan_top(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_items(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_items(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let scan_start = pos;
-    let mut pos = pos;
-    pos = scan_item(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        sg_0_done: {
-            sg_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_0; }
-                pos += 1;
-                pos = scan_item(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-                if pos < 0 { break sg_0; }
-                break sg_0_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos == scan_start { return -1; }
-    return pos;
-}
-
 fn scan_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIT_LBRACKET {
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { break try_0; }
-                pos += 1;
                 if pos < tokens.len() && _kind_set_0(tokens[pos]) {
                     let sp = pos;
                     sg_1_done: {
@@ -1383,7 +1366,6 @@ fn scan_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                                 let sp = pos;
                                 sg_2_done: {
                                     sg_2: {
-                                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_2; }
                                         pos += 1;
                                         pos = scan_item(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
                                         if pos < 0 { break sg_2; }
@@ -1406,18 +1388,13 @@ fn scan_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_ID {
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_1; }
-                pos += 1;
-                if pos < tokens.len() && tokens[pos] == TK_LIT_LT && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-                    let sp = pos;
-                    pos = scan_targs(tokens, pos, follow);
-                    if pos < 0 { pos = sp; }
-                }
-                break scan_alts;
+            pos = start + 1;
+            if pos < tokens.len() && tokens[pos] == TK_LIT_LT && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+                let sp = pos;
+                pos = scan_targs(tokens, pos, follow);
+                if pos < 0 { pos = sp; }
             }
-            return -1;
+            break scan_alts;
         } else {
             return -1;
         }
@@ -1435,7 +1412,6 @@ fn scan_targs(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         let sp = pos;
         sg_3_done: {
             sg_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_3; }
                 pos += 1;
                 pos = scan_item(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
                 if pos < 0 { break sg_3; }
@@ -1511,7 +1487,7 @@ fn _parse_items(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACKET {
-        p.expect(TK_LIT_LBRACKET, &SYNC_1);
+        p.take();
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
             let tokens = &p.kinds;
@@ -1522,7 +1498,6 @@ fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let sp = pos;
                 sg_5_done: {
                     sg_5: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_5; }
                         pos += 1;
                         pos = scan_item(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
                         if pos < 0 { break sg_5; }
@@ -1565,7 +1540,7 @@ fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
         return;
     }
     if kind == TK_ID {
-        p.expect(TK_ID, &SYNC_2);
+        p.take();
         if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LIT_LT) {
             _parse_targs(p, follow);
         }
@@ -1701,8 +1676,6 @@ fn _kind_set_0(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_ID, TK_LIT_LBRACKET];
-global SYNC_1: List<i32> = [TK_ID, TK_LIT_LBRACKET, TK_LIT_RBRACKET];
-global SYNC_2: List<i32> = [TK_LIT_LT];
 
 global FOLLOW_SETS: List<List<i32>> = [[4], [16], [33]];
 global FOLLOW_MASK_0: i64 = 1;

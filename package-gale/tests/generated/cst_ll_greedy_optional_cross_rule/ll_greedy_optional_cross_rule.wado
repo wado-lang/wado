@@ -1422,43 +1422,6 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_stmt(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_let { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
-    pos += 1;
-    pos = scan_expression(tokens, pos, 0, 0);
-    if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_LIT_else {
-        let sp = pos;
-        sg_0_done: {
-            sg_0: {
-                pos += 1;
-                pos = scan_block(tokens, pos);
-                if pos < 0 { break sg_0; }
-                break sg_0_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -1761,7 +1724,6 @@ global SYNC_3: List<i32> = [TK_LIT_LBRACE];
 global SYNC_4: List<i32> = [TK_INT];
 global SYNC_5: List<i32> = [TK_LIT_RBRACE];
 
-global FOLLOW_SETS: List<List<i32>> = [[8], [256]];
+global FOLLOW_SETS: List<List<i32>> = [[8]];
 global FOLLOW_MASK_0: i64 = 1;
-global FOLLOW_MASK_1: i64 = 2;
 

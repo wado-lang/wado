@@ -1617,19 +1617,6 @@ impl Parser {
     }
 }
 
-fn scan_equation(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_expression(tokens, pos, FOLLOW_MASK_0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || !_kind_set_5(tokens[pos]) { return -1; }
-    pos += 1;
-    pos = scan_expression(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_multiplying_expression(tokens, pos, follow);
@@ -1768,27 +1755,6 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_scientific(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_SCIENTIFIC_NUMBER { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_constant(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_4(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
-fn scan_variable(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_VARIABLE { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_func_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_2(tokens[pos]) { return -1; }
@@ -1814,20 +1780,6 @@ fn scan_func_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
     return pos;
-}
-
-fn scan_funcname(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_2(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
-fn scan_relop(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_5(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
 }
 
 fn _parse_equation__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -2325,12 +2277,10 @@ global SYNC_4: List<i32> = [TK_EULER, TK_I, TK_PI];
 global SYNC_5: List<i32> = [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_LN, TK_LOG, TK_SIN, TK_SQRT, TK_TAN];
 global SYNC_6: List<i32> = [TK_EQ, TK_GT, TK_LT];
 
-global FOLLOW_SETS: List<List<i32>> = [[229376], [65018879], [134217728], [1048576], [1024], [512], [262144]];
+global FOLLOW_SETS: List<List<i32>> = [[229376], [134217728], [1048576], [65018879], [1024], [262144]];
 global FOLLOW_MASK_0: i64 = 1;
-global FOLLOW_MASK_1: i64 = 2;
-global FOLLOW_MASK_2: i64 = 3;
-global FOLLOW_MASK_3: i64 = 516;
+global FOLLOW_MASK_2: i64 = 2;
+global FOLLOW_MASK_3: i64 = 1027;
 global FOLLOW_MASK_4: i64 = 5;
-global FOLLOW_MASK_5: i64 = 518;
-global FOLLOW_MASK_6: i64 = 519;
+global FOLLOW_MASK_6: i64 = 1030;
 

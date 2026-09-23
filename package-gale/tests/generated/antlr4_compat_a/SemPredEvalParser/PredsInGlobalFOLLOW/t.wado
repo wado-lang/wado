@@ -1352,51 +1352,6 @@ impl Parser {
     fn pred(&mut self, v: bool) -> bool { self.emit(`eval=${v}\n`); return v; }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_e(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_BANG { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_t(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_e(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_e_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    return pos;
-}
-
-fn scan_e(tokens: &Array<i32>, pos: i32) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_ID {
-            let mut best: i32 = -1;
-            pos = start + 1;
-            if pos > best { best = pos; }
-            let try_1_end = scan_e_alt_1(tokens, start);
-            if try_1_end > best { best = try_1_end; }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
-        } else {
-            pos = scan_e_alt_1(tokens, start);
-            if pos >= 0 { break scan_alts; }
-            return -1;
-        }
-    }
-    return pos;
-}
-
 fn _parse_s__inner(p: &mut Parser) -> () {
     _parse_e(p);
     if !p.speculating {

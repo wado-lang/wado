@@ -1300,34 +1300,6 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    let gp_0 = pos;
-    let mut sg_0_best = -1;
-    pos = gp_0;
-    sg_0_0: {
-        pos = scan_x(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
-        if pos < 0 { break sg_0_0; }
-        if pos > sg_0_best { sg_0_best = pos; }
-    }
-    pos = gp_0;
-    sg_0_1: {
-        if pos >= tokens.len() || tokens[pos] != TK_B { break sg_0_1; }
-        pos += 1;
-        if pos > sg_0_best { sg_0_best = pos; }
-    }
-    if sg_0_best >= 0 {
-        pos = sg_0_best;
-    } else {
-        pos = gp_0;
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_x(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {

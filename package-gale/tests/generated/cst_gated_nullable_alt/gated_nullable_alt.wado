@@ -1383,63 +1383,6 @@ impl Parser {
     }
 }
 
-fn scan_start(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
-    let start = pos;
-    let start_gate = *gate;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_ON {
-            pos = start + 1;
-            *gate = start_gate;
-            try_0: {
-                gate.on = 1;
-                pos = scan_body(tokens, pos, gate);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_OFF {
-            pos = start + 1;
-            *gate = start_gate;
-            try_1: {
-                pos = scan_body(tokens, pos, gate);
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
-        }
-    }
-    return pos;
-}
-
-fn scan_body(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LB { return -1; }
-    pos += 1;
-    let gp_0 = pos;
-    let gp_0_gate = *gate;
-    sg_0_done: {
-        let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if sgk_0 == TK_ID {
-            if pos < tokens.len() && tokens[pos] == TK_ID {
-                pos += 1;
-            }
-            break sg_0_done;
-        } else if sgk_0 == TK_LP {
-            pos += 1;
-            break sg_0_done;
-        }
-        pos = gp_0;
-        *gate = gp_0_gate;
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_RB { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_start__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_ON {

@@ -5,9 +5,16 @@
 
 use { LoweredGrammar } from "./gir.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
-use { join_kinds, FOLLOW_SLOT_BITS, FOLLOW_CONT_SLOTS, FOLLOW_MAX_POSITION_ID } from "./gen_util.wado";
+use {
+    join_kinds,
+    collect_called_names,
+    FOLLOW_SLOT_BITS,
+    FOLLOW_CONT_SLOTS,
+    FOLLOW_MAX_POSITION_ID,
+} from "./gen_util.wado";
 use { MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
 use { CodeWriter, FnSpec } from "lib:wadopoet";
+use { TreeSet } from "core:collections";
 
 /// Scan-side twin of `gen_lookahead_condition`. Uses
 /// `tokens[pos + d]` (guarded by `pos + d < tokens.len()`) instead
@@ -96,8 +103,10 @@ pub fn gen_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -
 /// keyed by canonical token order.
 pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
     let entries = ctx.kind_sets();
+    let mut called = TreeSet::<String>::new();
+    collect_called_names(&w.to_string(), &mut called);
     for let mut idx = 0; idx < entries.len(); idx += 1 {
-        if !ctx.kind_set_is_used(idx) {
+        if !ctx.kind_set_is_used(idx) || !called.contains(`_kind_set_${entries[idx].id}`) {
             continue;
         }
         if idx < lowered.kind_sets.len() {

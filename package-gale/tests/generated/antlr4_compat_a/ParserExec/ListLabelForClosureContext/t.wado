@@ -1389,81 +1389,6 @@ impl Parser {
     }
 }
 
-fn scan_if_statement(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_if { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
-    pos += 1;
-    let gp_0 = pos;
-    sg_0_done: {
-        let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if sgk_0 == TK_LIT_then {
-            sg_0_0: {
-                sg_1_done: {
-                    sg_1: {
-                        pos += 1;
-                        while pos < tokens.len() && tokens[pos] == TK_LIT_a {
-                            let sp = pos;
-                            pos += 1;
-                            if pos < 0 { pos = sp; break; }
-                            if pos == sp { break; }
-                            let rk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                            if !(rk_2 == TK_LIT_a) {
-                                let rs_2 = pos;
-                                let mut rs_2_ok = false;
-                                rsv_2: {
-                                    while pos < tokens.len() && tokens[pos] == TK_LIT_else {
-                                        let sp = pos;
-                                        pos = scan_else_if_statement(tokens, pos, 0);
-                                        if pos < 0 { pos = sp; break; }
-                                        if pos == sp { break; }
-                                    }
-                                    if pos < tokens.len() && tokens[pos] == TK_LIT_a {
-                                        let sp = pos;
-                                        pos += 1;
-                                        if pos < 0 { pos = sp; }
-                                    }
-                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_end { break rsv_2; }
-                                    pos += 1;
-                                    if pos >= tokens.len() || tokens[pos] != TK_LIT_if { break rsv_2; }
-                                    pos += 1;
-                                    rs_2_ok = true;
-                                }
-                                pos = rs_2;
-                                if !rs_2_ok { pos = sp; break; }
-                            }
-                        }
-                        while pos < tokens.len() && tokens[pos] == TK_LIT_else {
-                            let sp = pos;
-                            pos = scan_else_if_statement(tokens, pos, 0);
-                            if pos < 0 { pos = sp; break; }
-                            if pos == sp { break; }
-                        }
-                        if pos < tokens.len() && tokens[pos] == TK_LIT_a {
-                            let sp = pos;
-                            pos += 1;
-                            if pos < 0 { pos = sp; }
-                        }
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_end { break sg_1; }
-                        pos += 1;
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_if { break sg_1; }
-                        pos += 1;
-                        break sg_1_done;
-                    }
-                    break sg_0_0;
-                }
-                break sg_0_done;
-            }
-        } else if sgk_0 == TK_LIT_a {
-            pos += 1;
-            break sg_0_done;
-        }
-        pos = gp_0;
-    }
-    return pos;
-}
-
 fn scan_else_if_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_else { return -1; }
@@ -1480,27 +1405,6 @@ fn scan_else_if_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    return pos;
-}
-
-fn scan_expression(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_executable_statement(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_else_statement(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
-    pos += 1;
     return pos;
 }
 
@@ -1787,9 +1691,5 @@ global SYNC_1: List<i32> = [TK_LIT_a, TK_LIT_else, TK_LIT_end];
 global SYNC_2: List<i32> = [TK_LIT_if];
 global SYNC_3: List<i32> = [TK_LIT_a, TK_LIT_then];
 
-global FOLLOW_SETS: List<List<i32>> = [[72], [32], [4], [64], [8], [16]];
-global FOLLOW_MASK_0: i64 = 1;
-global FOLLOW_MASK_1: i64 = 84148994;
-global FOLLOW_MASK_2: i64 = 774;
-global FOLLOW_MASK_3: i64 = 5;
+global FOLLOW_SETS: List<List<i32>> = [];
 

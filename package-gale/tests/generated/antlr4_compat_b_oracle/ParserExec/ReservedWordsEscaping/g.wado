@@ -1434,21 +1434,6 @@ struct ArgsVals {
     return: i32 = 0,
 }
 
-fn scan_root(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let scan_start = pos;
-    let mut pos = pos;
-    pos = scan_continue(tokens, pos, 0, 0);
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        pos = scan_continue(tokens, pos, 0, 0);
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos == scan_start { return -1; }
-    return pos;
-}
-
 fn scan_continue_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -1516,20 +1501,6 @@ fn scan_continue(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 =
             break;
         }
     }
-    return pos;
-}
-
-fn scan_args(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_FOR { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_for(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_FOR { return -1; }
-    pos += 1;
     return pos;
 }
 

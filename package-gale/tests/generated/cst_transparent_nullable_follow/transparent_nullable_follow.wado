@@ -1247,29 +1247,6 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    let gp_0 = pos;
-    sg_0_done: {
-        let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_0(sgk_0) {
-            if pos < tokens.len() && tokens[pos] == TK_A {
-                pos += 1;
-            }
-            break sg_0_done;
-        } else if sgk_0 == TK_B {
-            pos += 1;
-            break sg_0_done;
-        }
-        pos = gp_0;
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_s__inner(p: &mut Parser) -> () {
     let grp_kind = p.peek_kind();
     if _kind_set_0(grp_kind) {

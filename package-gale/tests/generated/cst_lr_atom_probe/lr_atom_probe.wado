@@ -1405,29 +1405,6 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
-    pos += 1;
-    pos = scan_e(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
-    pos += 1;
-    pos = scan_tail(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_tail(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    while pos < tokens.len() && tokens[pos] == TK_LIT_z && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        pos += 1;
-    }
-    return pos;
-}
-
 fn scan_e_atom_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
@@ -1531,13 +1508,6 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         }
     }
     return pos;
-}
-
-fn scan_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
 }
 
 fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -1858,10 +1828,6 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_ID, TK_LIT_case, TK_LIT_end, TK_LIT_then, TK_LIT_when];
 global SYNC_1: List<i32> = [TK_EOF, TK_LIT_z];
 
-global FOLLOW_SETS: List<List<i32>> = [[32], [4], [512], [1024], [3841]];
-global FOLLOW_MASK_0: i64 = 1;
-global FOLLOW_MASK_1: i64 = 2;
-global FOLLOW_MASK_2: i64 = 3;
-global FOLLOW_MASK_3: i64 = 1284;
-global FOLLOW_MASK_4: i64 = 1283;
+global FOLLOW_SETS: List<List<i32>> = [[4]];
+global FOLLOW_MASK_1: i64 = 1;
 

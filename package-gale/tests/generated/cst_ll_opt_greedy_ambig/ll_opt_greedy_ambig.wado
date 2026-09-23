@@ -1249,58 +1249,6 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
-        let sp = pos;
-        pos += 1;
-        if pos < 0 {
-            pos = sp;
-        } else {
-            let bp = pos;
-            let mut opt_ok: bool = false;
-            opt_probe: {
-                while pos < tokens.len() && tokens[pos] == TK_NULL {
-                    let sp = pos;
-                    pos += 1;
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_EOF { break opt_probe; }
-                pos += 1;
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if probe_kind == TK_EOF { opt_ok = true; }
-            }
-            pos = if opt_ok { bp } else { sp };
-        }
-    }
-    while pos < tokens.len() && tokens[pos] == TK_NULL {
-        let sp = pos;
-        pos += 1;
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_t(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
-fn scan_c(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_NULL { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_s__inner(p: &mut Parser) -> () {
     p.expect(TK_ID, &SYNC_0);
     let mut opt_enter: bool = false;

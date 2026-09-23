@@ -1259,73 +1259,12 @@ impl Parser {
     }
 }
 
-fn scan_list(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    while pos < tokens.len() && tokens[pos] == TK_LIT_SEMI {
-        pos += 1;
-    }
-    pos = scan_stmt(tokens, pos);
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_LIT_SEMI {
-        let sp = pos;
-        sg_0_done: {
-            sg_0: {
-                pos += 1;
-                while pos < tokens.len() && tokens[pos] == TK_LIT_SEMI {
-                    pos += 1;
-                }
-                pos = scan_stmt(tokens, pos);
-                if pos < 0 { break sg_0; }
-                break sg_0_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-        let rk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(rk_1 == TK_LIT_SEMI) {
-            let rs_1 = pos;
-            let mut rs_1_ok = false;
-            rsv_1: {
-                while pos < tokens.len() && tokens[pos] == TK_LIT_SEMI {
-                    pos += 1;
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_1; }
-                pos += 1;
-                rs_1_ok = true;
-            }
-            pos = rs_1;
-            if !rs_1_ok { pos = sp; break; }
-        }
-    }
-    while pos < tokens.len() && tokens[pos] == TK_LIT_SEMI {
-        pos += 1;
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_LIT_k {
         pos += 1;
     }
     if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_sa(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_sb(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_b { return -1; }
     pos += 1;
     return pos;
 }

@@ -6176,28 +6176,6 @@ fn scan_type_member(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_array_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_primary_type(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_OpenBracket { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_tuple_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_OpenBracket { return -1; }
-    pos += 1;
-    pos = scan_tuple_element_types(tokens, pos, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_tuple_element_types(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
@@ -6514,27 +6492,6 @@ fn scan_parameter_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_required_parameter_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_required_parameter(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_Comma && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        sg_15_done: {
-            sg_15: {
-                pos += 1;
-                pos = scan_required_parameter(tokens, pos, follow);
-                if pos < 0 { break sg_15; }
-                break sg_15_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
-}
-
 fn scan_parameter(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -6657,13 +6614,6 @@ fn scan_required_parameter(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
         if pos < 0 { pos = sp; }
     }
     return pos;
-}
-
-fn scan_accessibility_modifier(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_11(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
 }
 
 fn scan_identifier_or_pattern(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -6997,19 +6947,6 @@ fn scan_namespace_name(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_import_alias_declaration(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_19(tokens[pos]) { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_Assign { return -1; }
-    pos += 1;
-    pos = scan_namespace_name(tokens, pos, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_decorator_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_decorator(tokens, pos);
@@ -7116,18 +7053,6 @@ fn scan_decorator_call_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0
     if pos < 0 { return -1; }
     pos = scan_arguments(tokens, pos, follow);
     if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_program(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos < tokens.len() && _kind_set_17(tokens[pos]) {
-        let sp = pos;
-        pos = scan_source_elements(tokens, pos, (FOLLOW_MASK_24 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
     return pos;
 }
 
@@ -7901,13 +7826,6 @@ fn scan_module_export_name(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_imported_binding(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_49(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
 fn scan_import_default(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_alias_name(tokens, pos, (FOLLOW_MASK_27 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -8395,13 +8313,6 @@ fn scan_variable_declaration(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
     return pos;
 }
 
-fn scan_empty_statement_(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_expression_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_expression_sequence(tokens, pos, follow);
@@ -8643,13 +8554,6 @@ fn scan_iteration_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
         }
     }
     return pos;
-}
-
-fn scan_var_modifier(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_25(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
 }
 
 fn scan_continue_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
@@ -11436,13 +11340,6 @@ fn scan_arrow_function_body(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
     return pos;
 }
 
-fn scan_assignment_operator(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_72(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
 fn scan_literal(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -11524,20 +11421,6 @@ fn scan_template_string_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
     return pos;
 }
 
-fn scan_numeric_literal(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_30(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
-fn scan_bigint_literal(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_31(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
 fn scan_getter(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_19(tokens[pos]) { return -1; }
@@ -11598,13 +11481,6 @@ fn scan_identifier_name(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_identifier(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_19(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
 fn scan_identifier_or_key_word_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_19(tokens[pos]) { return -1; }
@@ -11658,13 +11534,6 @@ fn scan_reserved_word(tokens: &Array<i32>, pos: i32) -> i32 {
         }
     }
     return pos;
-}
-
-fn scan_keyword(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_33(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
 }
 
 fn scan_eos_alt_2(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -22754,7 +22623,7 @@ global SYNC_88: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, T
 global SYNC_89: List<i32> = [TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_Let, TK_Module, TK_New, TK_NullLiteral, TK_Number, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
 global SYNC_90: List<i32> = [TK_As, TK_Async, TK_Await, TK_Boolean, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_Let, TK_Module, TK_New, TK_Number, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
 
-global FOLLOW_SETS: List<List<i32>> = [[0, 1], [2048], [i32::MIN, 0, i32::MIN, -2097131, 583], [4096], [-2147483480, 469762688, -2139027200, -2097131, 1607], [64], [16], [0, 0, 0, 0, 128], [168, 469762048, -2139029248, -2097131, 1607], [256], [8], [32], [0, 33554432], [131072], [136, 201326592, -32, -33, 863], [136, 201326592, -32, -33, 607], [45056], [-2130968404, -67108864, -1, -1, 3679], [32768], [0, 0, 0, 37748736], [0, 0, 0, 0, 2], [128], [0, 0, i32::MIN, -2097131, 583], [8, -67108864, -31, -33, 1631], [1024], [0, 0, 0, 0, 256], [32, 0, i32::MIN, -2097131, 583], [0, 0, 0, 0, 2097152], [-2147483616], [16777344, 201326592, -32, -33, 607], [0, 0, 0, 1], [0, 0, 0, 0, 1024], [136, 0, i32::MIN, -2097131, 591], [-2130967380, -67108864, -1, -1, 3967], [0, 0, 1048576], [0, 0, 536870912], [0, 0, 512], [0, 0, 24576], [1152], [16777216], [136, 0, -32, -33, 607], [-2114125652, -67108864, -1, -1, 3679], [36864], [536870920, -67108864, -31, -33, 1631]];
+global FOLLOW_SETS: List<List<i32>> = [[0, 1], [2048], [i32::MIN, 0, i32::MIN, -2097131, 583], [4096], [-2147483480, 469762688, -2139027200, -2097131, 1607], [64], [16], [0, 0, 0, 0, 128], [168, 469762048, -2139029248, -2097131, 1607], [256], [8], [32], [0, 33554432], [136, 201326592, -32, -33, 863], [136, 201326592, -32, -33, 607], [-2130968404, -67108864, -1, -1, 3679], [128], [0, 0, i32::MIN, -2097131, 583], [8, -67108864, -31, -33, 1631], [1024], [0, 0, 0, 0, 2097152], [-2147483616], [16777344, 201326592, -32, -33, 607], [0, 0, 0, 1], [0, 0, 0, 0, 1024], [136, 0, i32::MIN, -2097131, 591], [-2130967380, -67108864, -1, -1, 3967], [0, 0, 1048576], [0, 0, 536870912], [32768], [0, 0, 24576], [1152], [16777216], [-2114125652, -67108864, -1, -1, 3679], [36864]];
 global FOLLOW_MASK_0: i64 = 1;
 global FOLLOW_MASK_1: i64 = 770;
 global FOLLOW_MASK_2: i64 = 1284;
@@ -22766,48 +22635,37 @@ global FOLLOW_MASK_7: i64 = 10;
 global FOLLOW_MASK_8: i64 = 1803;
 global FOLLOW_MASK_9: i64 = 12;
 global FOLLOW_MASK_10: i64 = 331014;
-global FOLLOW_MASK_11: i64 = 14;
-global FOLLOW_MASK_12: i64 = 3842;
-global FOLLOW_MASK_13: i64 = 16;
-global FOLLOW_MASK_14: i64 = 17;
-global FOLLOW_MASK_15: i64 = 4612;
-global FOLLOW_MASK_16: i64 = 5139;
-global FOLLOW_MASK_17: i64 = 3093;
-global FOLLOW_MASK_18: i64 = 22;
-global FOLLOW_MASK_19: i64 = 5890;
-global FOLLOW_MASK_20: i64 = 6146;
-global FOLLOW_MASK_21: i64 = 5892;
-global FOLLOW_MASK_22: i64 = 25;
-global FOLLOW_MASK_23: i64 = 6938;
-global FOLLOW_MASK_24: i64 = 28;
-global FOLLOW_MASK_25: i64 = 29;
-global FOLLOW_MASK_26: i64 = 30;
+global FOLLOW_MASK_12: i64 = 3586;
+global FOLLOW_MASK_13: i64 = 15;
+global FOLLOW_MASK_15: i64 = 4100;
+global FOLLOW_MASK_18: i64 = 17;
+global FOLLOW_MASK_19: i64 = 4610;
+global FOLLOW_MASK_20: i64 = 4866;
+global FOLLOW_MASK_22: i64 = 20;
+global FOLLOW_MASK_24: i64 = 21;
+global FOLLOW_MASK_25: i64 = 22;
+global FOLLOW_MASK_26: i64 = 23;
 global FOLLOW_MASK_27: i64 = 2;
-global FOLLOW_MASK_28: i64 = 8223;
-global FOLLOW_MASK_29: i64 = 33;
-global FOLLOW_MASK_30: i64 = 8450;
-global FOLLOW_MASK_31: i64 = 18;
-global FOLLOW_MASK_32: i64 = 8710;
-global FOLLOW_MASK_33: i64 = 1182755;
-global FOLLOW_MASK_34: i64 = 4644;
-global FOLLOW_MASK_35: i64 = 23;
-global FOLLOW_MASK_36: i64 = 5638;
-global FOLLOW_MASK_37: i64 = 4645;
-global FOLLOW_MASK_38: i64 = 19;
-global FOLLOW_MASK_39: i64 = 8723;
-global FOLLOW_MASK_40: i64 = 38;
-global FOLLOW_MASK_41: i64 = 39;
-global FOLLOW_MASK_42: i64 = 24;
-global FOLLOW_MASK_43: i64 = 302721026;
-global FOLLOW_MASK_44: i64 = 1182466;
+global FOLLOW_MASK_28: i64 = 6424;
+global FOLLOW_MASK_30: i64 = 6658;
+global FOLLOW_MASK_31: i64 = 16;
+global FOLLOW_MASK_32: i64 = 6918;
+global FOLLOW_MASK_33: i64 = 1051676;
+global FOLLOW_MASK_34: i64 = 4125;
+global FOLLOW_MASK_35: i64 = 18;
+global FOLLOW_MASK_36: i64 = 4358;
+global FOLLOW_MASK_38: i64 = 30;
+global FOLLOW_MASK_40: i64 = 31;
+global FOLLOW_MASK_41: i64 = 32;
+global FOLLOW_MASK_42: i64 = 19;
+global FOLLOW_MASK_43: i64 = 269164802;
+global FOLLOW_MASK_44: i64 = 1051394;
 global FOLLOW_MASK_45: i64 = 3079;
-global FOLLOW_MASK_46: i64 = 41;
-global FOLLOW_MASK_47: i64 = 10754;
-global FOLLOW_MASK_48: i64 = 43;
-global FOLLOW_MASK_49: i64 = 1184519;
+global FOLLOW_MASK_47: i64 = 8706;
+global FOLLOW_MASK_48: i64 = 35;
+global FOLLOW_MASK_49: i64 = 1056263;
 global FOLLOW_MASK_50: i64 = 1548;
-global FOLLOW_MASK_51: i64 = 4610;
-global FOLLOW_MASK_52: i64 = 4627;
-global FOLLOW_MASK_53: i64 = 4621;
-global FOLLOW_MASK_54: i64 = 44;
+global FOLLOW_MASK_51: i64 = 4098;
+global FOLLOW_MASK_52: i64 = 4126;
+global FOLLOW_MASK_53: i64 = 4109;
 

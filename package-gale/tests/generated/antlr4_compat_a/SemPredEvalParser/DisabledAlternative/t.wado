@@ -1282,21 +1282,6 @@ impl Parser {
     }
 }
 
-fn scan_cpp_compilation_unit(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_content(tokens, pos);
-    if pos < 0 { return -1; }
-    while pos < tokens.len() {
-        let sp = pos;
-        pos = scan_content(tokens, pos);
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_content_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] == TK_EOF { return -1; }
@@ -1323,13 +1308,6 @@ fn scan_content(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         }
     }
-    return pos;
-}
-
-fn scan_anything(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ANY_CHAR { return -1; }
-    pos += 1;
     return pos;
 }
 

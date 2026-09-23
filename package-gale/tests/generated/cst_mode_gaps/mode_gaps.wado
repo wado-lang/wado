@@ -1342,19 +1342,6 @@ impl Parser {
     }
 }
 
-fn scan_text(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    while pos < tokens.len() && _kind_set_0(tokens[pos]) {
-        let sp = pos;
-        pos += 1;
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_text__inner(p: &mut Parser) -> () {
     loop {
         if p.recovering { break; }

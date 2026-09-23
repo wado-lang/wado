@@ -23,7 +23,7 @@ use { TokenKinds, append_ids } from "./token_kinds.wado";
 use { gate_body_of, SCAN_GATE_HANDLE, SCAN_GATE_FIELD } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 
 /// A token-kind set interned during parser codegen. Multi-element
 /// `<expr> matches { TK_X | TK_Y | ... }` checks are emitted as
@@ -303,6 +303,7 @@ pub struct GenContext {
     /// By snake name, the kinds of each rule whose scan is one token test.
     one_token_rules: TreeMap<String, List<String>>,
     snake_index: TreeMap<String, i32>,
+    follow_mask_used: TreeSet<i32>,
 }
 
 fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
@@ -396,6 +397,7 @@ impl GenContext {
             in_scan_fn: false,
             one_token_rules,
             snake_index,
+            follow_mask_used: TreeSet::new(),
         };
     }
 
@@ -2307,10 +2309,21 @@ impl GenContext {
         return self.follow_mask_depths[id] >= FOLLOW_MAX_DEPTH;
     }
 
-    /// All interned FOLLOW masks in `FOLLOW_MASK_<id>` order (insertion
-    /// order). Consumed by the global-emit pass.
+    /// The global naming FOLLOW mask `id`, which is emitted because of this.
+    pub fn follow_mask_ref(&mut self, id: i32) -> String {
+        self.follow_mask_used.insert(id);
+        return `FOLLOW_MASK_${id}`;
+    }
+
+    /// The FOLLOW masks some emitted code names, in `FOLLOW_MASK_<id>` order.
     pub fn follow_masks(&self) -> List<FollowMaskEntry> {
-        return self.follow_mask_registry.values().iter_value().collect();
+        let mut out: List<FollowMaskEntry> = [];
+        for let entry of self.follow_mask_registry.values().iter_value() {
+            if self.follow_mask_used.contains(entry.id) {
+                out.push(entry);
+            }
+        }
+        return out;
     }
 
     /// Render a token-set membership check on `expr`.

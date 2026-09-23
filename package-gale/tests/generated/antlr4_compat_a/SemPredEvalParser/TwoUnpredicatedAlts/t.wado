@@ -1344,24 +1344,6 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && tokens[pos] == TK_ID {
-        return pos + 1;
-    }
-    return -1;
-}
-
 fn _parse_s__inner(p: &mut Parser) -> () {
     _parse_a(p);
     p.expect(TK_LIT_SEMI, &SYNC_0);

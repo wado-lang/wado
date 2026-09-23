@@ -1336,24 +1336,6 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_KW {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_ID {
-            pos = start + 1;
-            break scan_alts;
-        } else {
-            return -1;
-        }
-    }
-    return pos;
-}
-
 fn _parse_s__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_KW {

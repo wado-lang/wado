@@ -1326,112 +1326,6 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_list(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos < tokens.len() && tokens[pos] == TK_IDENT && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        pos += 1;
-        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-            let sp = pos;
-            sg_0_done: {
-                sg_0: {
-                    pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_0; }
-                    pos += 1;
-                    break sg_0_done;
-                }
-                pos = -1;
-            }
-            if pos < 0 { pos = sp; break; }
-            if pos == sp { break; }
-        }
-        if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-            pos += 1;
-        }
-        if pos < 0 { pos = sp; }
-    }
-    return pos;
-}
-
-fn scan_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_wrapped(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_wrapped(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LIT_LBRACE {
-            pos = start;
-            try_0: {
-                pos = scan_braced(tokens, pos, follow);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_IDENT {
-            pos = start + 1;
-            break scan_alts;
-        } else {
-            return -1;
-        }
-    }
-    return pos;
-}
-
-fn scan_braced(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
-    pos += 1;
-    if pos < tokens.len() && tokens[pos] == TK_IDENT {
-        let sp = pos;
-        pos += 1;
-        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-            let sp = pos;
-            sg_1_done: {
-                sg_1: {
-                    pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_1; }
-                    pos += 1;
-                    break sg_1_done;
-                }
-                pos = -1;
-            }
-            if pos < 0 { pos = sp; break; }
-            if pos == sp { break; }
-        }
-        if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-            pos += 1;
-        }
-        if pos < 0 { pos = sp; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_arm(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_IDENT { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_prog__inner(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_list(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_EOF, &EMPTY_SYNC);
@@ -1729,7 +1623,6 @@ global SYNC_0: List<i32> = [TK_IDENT];
 global SYNC_1: List<i32> = [TK_IDENT, TK_LIT_LBRACE];
 global SYNC_2: List<i32> = [TK_IDENT, TK_LIT_RBRACE];
 
-global FOLLOW_SETS: List<List<i32>> = [[4], [16], [1]];
+global FOLLOW_SETS: List<List<i32>> = [[4]];
 global FOLLOW_MASK_0: i64 = 1;
-global FOLLOW_MASK_1: i64 = 770;
 

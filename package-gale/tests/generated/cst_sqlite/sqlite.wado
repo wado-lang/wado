@@ -2705,39 +2705,6 @@ impl Parser {
     }
 }
 
-fn scan_parse(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    while pos < tokens.len() && _kind_set_1(tokens[pos]) {
-        let sp = pos;
-        sg_0_done: {
-            let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_0(sgk_0) {
-                sg_0_0: {
-                    pos = scan_sql_stmt_list(tokens, pos, 0);
-                    if pos < 0 { break sg_0_0; }
-                    break sg_0_done;
-                }
-            } else if sgk_0 == TK_UNEXPECTED_CHAR {
-                pos += 1;
-                break sg_0_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_error(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_UNEXPECTED_CHAR { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_sql_stmt_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_SCOL {
@@ -5187,13 +5154,6 @@ fn scan_update_stmt_limited(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
     return pos;
 }
 
-fn scan_vacuum_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_K_VACUUM { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_column_def(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_column_name(tokens, pos);
@@ -7396,27 +7356,6 @@ fn scan_signed_number(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_literal_value(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_41(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
-fn scan_unary_operator(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_43(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
-fn scan_error_message(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_module_argument_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos, follow, 0);
@@ -7450,20 +7389,6 @@ fn scan_module_argument(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     }
     return pos;
-}
-
-fn scan_column_alias(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_29(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
-fn scan_keyword(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_37(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
 }
 
 fn scan_name(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -15146,10 +15071,6 @@ fn _kind_set_0(k: i32) -> bool {
     return k matches { TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_SCOL };
 }
 
-fn _kind_set_1(k: i32) -> bool {
-    return k matches { TK_K_ALTER | TK_K_ANALYZE | TK_K_ATTACH | TK_K_BEGIN | TK_K_COMMIT | TK_K_CREATE | TK_K_DELETE | TK_K_DETACH | TK_K_DROP | TK_K_END | TK_K_EXPLAIN | TK_K_INSERT | TK_K_PRAGMA | TK_K_REINDEX | TK_K_RELEASE | TK_K_REPLACE | TK_K_ROLLBACK | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_UPDATE | TK_K_VACUUM | TK_K_VALUES | TK_K_WITH | TK_SCOL | TK_UNEXPECTED_CHAR };
-}
-
 fn _kind_set_2(k: i32) -> bool {
     return k matches { TK_K_COMMIT | TK_K_END };
 }
@@ -15464,38 +15385,25 @@ global SYNC_93: List<i32> = [TK_IDENTIFIER, TK_STRING_LITERAL];
 global SYNC_94: List<i32> = [TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT];
 global SYNC_95: List<i32> = [TK_IDENTIFIER, TK_OPEN_PAR, TK_STRING_LITERAL];
 
-global FOLLOW_SETS: List<List<i32>> = [[2], [-16777212, -1, -1, -1, 10485759], [67108864, 0, 0, 16777216], [0, 1], [0, 0, 0, i32::MIN, 8192], [0, 0, 33554440, 0, 256], [16], [-16776316, -1, -1, -1, 33554431], [0, 0, 0, 1024], [4], [4, 1], [0, 32], [0, 0, 0, 0, 2048], [0, 67108864], [0, 0, 1024], [0, 0, 8388608, 33554432], [8], [-16776252, -1, -1, -1, 33554431], [0, 0, 0, 0, 1024], [0, 0, 0, 0, 1], [32], [0, 8394752, 0, 1114272, 512], [0, 0, 0, 0, 65536], [0, 0, 0, 0, 16], [0, 0, 2], [i32::MIN], [0, 2048, 512, 65536, 512], [64]];
-global FOLLOW_MASK_0: i64 = 513;
-global FOLLOW_MASK_1: i64 = 3;
-global FOLLOW_MASK_2: i64 = 516;
-global FOLLOW_MASK_3: i64 = 5;
-global FOLLOW_MASK_4: i64 = 6;
-global FOLLOW_MASK_5: i64 = 2055;
-global FOLLOW_MASK_6: i64 = 521;
-global FOLLOW_MASK_7: i64 = 522;
-global FOLLOW_MASK_8: i64 = 519;
-global FOLLOW_MASK_9: i64 = 11;
-global FOLLOW_MASK_10: i64 = 12;
-global FOLLOW_MASK_11: i64 = 4;
-global FOLLOW_MASK_12: i64 = 525;
-global FOLLOW_MASK_13: i64 = 3854;
-global FOLLOW_MASK_14: i64 = 16;
-global FOLLOW_MASK_15: i64 = 526855;
-global FOLLOW_MASK_16: i64 = 17;
-global FOLLOW_MASK_17: i64 = 4615;
-global FOLLOW_MASK_18: i64 = 19;
-global FOLLOW_MASK_19: i64 = 532;
-global FOLLOW_MASK_20: i64 = 2069;
-global FOLLOW_MASK_21: i64 = 7;
-global FOLLOW_MASK_22: i64 = 22;
-global FOLLOW_MASK_23: i64 = 8;
-global FOLLOW_MASK_24: i64 = 10;
-global FOLLOW_MASK_25: i64 = 23;
-global FOLLOW_MASK_26: i64 = 2072;
-global FOLLOW_MASK_27: i64 = 2071;
-global FOLLOW_MASK_28: i64 = 25;
-global FOLLOW_MASK_29: i64 = 2074;
-global FOLLOW_MASK_30: i64 = 27;
-global FOLLOW_MASK_31: i64 = 7169;
+global FOLLOW_SETS: List<List<i32>> = [[0, 1], [-16777212, -1, -1, -1, 10485759], [0, 0, 0, i32::MIN, 8192], [0, 0, 33554440, 0, 256], [16], [-16776316, -1, -1, -1, 33554431], [0, 32], [0, 67108864], [0, 0, 1024], [0, 0, 8388608, 33554432], [8], [-16776252, -1, -1, -1, 33554431], [0, 0, 0, 0, 1024], [0, 0, 0, 0, 1], [0, 0, 0, 0, 65536], [0, 0, 0, 0, 16], [0, 0, 2], [i32::MIN]];
+global FOLLOW_MASK_2: i64 = 513;
+global FOLLOW_MASK_3: i64 = 3;
+global FOLLOW_MASK_4: i64 = 4;
+global FOLLOW_MASK_5: i64 = 1541;
+global FOLLOW_MASK_8: i64 = 517;
+global FOLLOW_MASK_10: i64 = 7;
+global FOLLOW_MASK_11: i64 = 1;
+global FOLLOW_MASK_13: i64 = 2312;
+global FOLLOW_MASK_14: i64 = 10;
+global FOLLOW_MASK_16: i64 = 11;
+global FOLLOW_MASK_17: i64 = 3077;
+global FOLLOW_MASK_18: i64 = 13;
+global FOLLOW_MASK_19: i64 = 526;
+global FOLLOW_MASK_21: i64 = 5;
+global FOLLOW_MASK_25: i64 = 15;
+global FOLLOW_MASK_26: i64 = 1552;
+global FOLLOW_MASK_27: i64 = 1551;
+global FOLLOW_MASK_28: i64 = 17;
+global FOLLOW_MASK_29: i64 = 1554;
 global FOLLOW_MASK_32: i64 = 2;
 

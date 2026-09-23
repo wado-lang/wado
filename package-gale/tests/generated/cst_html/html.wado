@@ -2090,129 +2090,6 @@ impl Parser {
     }
 }
 
-fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        pos += 1;
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-        let dk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_0(dk_0) || _kind_set_8(dk_0) || dk_0 == TK_EOF) {
-            let dc_0 = pos;
-            let mut dc_0_exit = false;
-            pos = sp;
-            dcl_0: {
-                if pos < tokens.len() && tokens[pos] == TK_XML {
-                    pos += 1;
-                }
-                while pos < tokens.len() && _kind_set_0(tokens[pos]) {
-                    let sp = pos;
-                    pos += 1;
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
-                }
-                if pos < tokens.len() && tokens[pos] == TK_DTD {
-                    pos += 1;
-                }
-                while pos < tokens.len() && _kind_set_0(tokens[pos]) {
-                    let sp = pos;
-                    pos += 1;
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
-                }
-                while pos < tokens.len() && _kind_set_1(tokens[pos]) {
-                    let sp = pos;
-                    pos = scan_html_elements(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
-                }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_EOF) { dc_0_exit = true; }
-            }
-            if dc_0_exit { pos = sp; break; }
-            pos = dc_0;
-        }
-    }
-    if pos < tokens.len() && tokens[pos] == TK_XML && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        pos += 1;
-    }
-    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        pos += 1;
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-        let dk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_0(dk_1) || _kind_set_9(dk_1) || dk_1 == TK_EOF) {
-            let dc_1 = pos;
-            let mut dc_1_exit = false;
-            pos = sp;
-            dcl_1: {
-                if pos < tokens.len() && tokens[pos] == TK_DTD {
-                    pos += 1;
-                }
-                while pos < tokens.len() && _kind_set_0(tokens[pos]) {
-                    let sp = pos;
-                    pos += 1;
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
-                }
-                while pos < tokens.len() && _kind_set_1(tokens[pos]) {
-                    let sp = pos;
-                    pos = scan_html_elements(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
-                }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_EOF) { dc_1_exit = true; }
-            }
-            if dc_1_exit { pos = sp; break; }
-            pos = dc_1;
-        }
-    }
-    if pos < tokens.len() && tokens[pos] == TK_DTD && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        pos += 1;
-    }
-    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        pos += 1;
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-        let dk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_0(dk_2) || _kind_set_1(dk_2) || dk_2 == TK_EOF) {
-            let dc_2 = pos;
-            let mut dc_2_exit = false;
-            pos = sp;
-            dcl_2: {
-                while pos < tokens.len() && _kind_set_1(tokens[pos]) {
-                    let sp = pos;
-                    pos = scan_html_elements(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
-                }
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_EOF) { dc_2_exit = true; }
-            }
-            if dc_2_exit { pos = sp; break; }
-            pos = dc_2;
-        }
-    }
-    while pos < tokens.len() && _kind_set_1(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        pos = scan_html_elements(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
-}
-
-fn scan_scriptlet_or_sea_ws(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
 fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_2(tokens[pos]) {
@@ -2372,13 +2249,6 @@ fn scan_html_attribute(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_html_chardata(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_6(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
 fn scan_html_misc(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -2395,13 +2265,6 @@ fn scan_html_misc(tokens: &Array<i32>, pos: i32) -> i32 {
         }
     }
     return pos;
-}
-
-fn scan_html_comment(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_5(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
 }
 
 fn scan_script(tokens: &Array<i32>, pos: i32) -> i32 {

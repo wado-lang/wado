@@ -1214,15 +1214,6 @@ impl Parser {
     }
 }
 
-fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_a__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0);
     p.expect_set(&SYNC_0);
@@ -1290,10 +1281,6 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
         return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &_token_names());
     }
     return String::new();
-}
-
-fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_b | TK_LIT_c };
 }
 
 global EMPTY_SYNC: List<i32> = [];

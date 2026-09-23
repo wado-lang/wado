@@ -1381,19 +1381,6 @@ impl Parser {
     }
 }
 
-fn scan_sexpr(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    while pos < tokens.len() && _kind_set_0(tokens[pos]) {
-        let sp = pos;
-        pos = scan_item(tokens, pos);
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_item(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -1444,13 +1431,6 @@ fn scan_list_(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
     return pos;
-}
-
-fn scan_atom(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_1(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
 }
 
 fn _parse_sexpr__inner(p: &mut Parser) -> () {

@@ -934,13 +934,15 @@ fn try_lit_RBRACE(chars: &List<char>, start: i32) -> i32 {
 }
 
 fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
-    let len = end - start;
-    if len == 1 {
-        if chars[start].eq_ignore_ascii_case(&'a') {
-            if chars[start + 0] == 'a' { return TK_A; }
-        } else if chars[start].eq_ignore_ascii_case(&'b') {
-            if chars[start + 0] == 'b' { return TK_B; }
-        }
+    match end - start {
+        1 => {
+            match chars[start] {
+                'a' => { return TK_A; },
+                'b' => { return TK_B; },
+                _ => {},
+            }
+        },
+        _ => {},
     }
     return -1;
 }
@@ -960,33 +962,30 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '\t' | '\n' | '\r' | ' ' => {
                 end = try_WHITESPACE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_WHITESPACE; best_channel = 1; }
-                end = try_ERROR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ERROR; best_channel = 0; }
             },
             '$' => {
                 end = try_lit_DOLLARLBRACE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_DOLLARLBRACE; best_channel = 0; }
-                end = try_ERROR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ERROR; best_channel = 0; }
             },
             '}' => {
                 end = try_lit_RBRACE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_RBRACE; best_channel = 0; }
             },
-            _ => {
-                end = try_ERROR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ERROR; best_channel = 0; }
-            },
+            _ => {},
         }
-        if best_end > start {
-            let kw_kind = classify_keyword(&lexer.chars, start, best_end);
-            if kw_kind >= 0 { best_kind = kw_kind; }
+        if best_end <= start {
+            end = try_ERROR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ERROR; best_channel = 0; }
         }
         if best_end <= start {
             let _ = ts.push_token_flagged(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
             triv_lo = ts.trivia_mark();
             lexer.pos = start + 1;
         } else {
+            if best_kind == TK_ERROR {
+                let kw_kind = classify_keyword(&lexer.chars, start, best_end);
+                if kw_kind >= 0 { best_kind = kw_kind; best_channel = 0; }
+            }
             let tok_start = start;
             if best_channel != 0 {
                 ts.push_trivia(best_kind, tok_start, best_end, best_channel);
@@ -1319,6 +1318,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1359,24 +1370,6 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_DOLLARLBRACE { return -1; }
-    pos += 1;
-    pos = scan_v(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_v(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
 fn _parse_s__inner(p: &mut Parser) -> () {
     let lit_dollarlbrace = p.expect(TK_LIT_DOLLARLBRACE, &SYNC_0);
     let v = _parse_v(p);
@@ -1402,11 +1395,11 @@ fn _parse_v__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_A {
         p.b.set_alt(0);
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     } else if kind == TK_B {
         p.b.set_alt(1);
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -1484,10 +1477,6 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
         return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
     return String::new();
-}
-
-fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_A | TK_B };
 }
 
 global EMPTY_SYNC: List<i32> = [];

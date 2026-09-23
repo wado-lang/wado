@@ -1250,17 +1250,6 @@ impl Parser {
     }
 }
 
-fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_IF { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_IDENT { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_stmt__inner(p: &mut Parser) -> () {
     p.expect(TK_IF, &SYNC_0);
     p.expect(TK_IDENT, &SYNC_1);

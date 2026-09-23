@@ -1247,34 +1247,6 @@ impl Parser {
     }
 }
 
-fn scan_r(tokens: &Array<i32>, pos: i32) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_A {
-            let mut best: i32 = -1;
-            pos = start + 1;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_B { break try_0; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            pos = start + 1;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_C { break try_1; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
-        } else {
-            return -1;
-        }
-    }
-    return pos;
-}
-
 fn _parse_r__inner_alt_0(p: &mut Parser) -> () {
     p.expect(TK_A, &SYNC_0);
     p.expect(TK_B, &EMPTY_SYNC);

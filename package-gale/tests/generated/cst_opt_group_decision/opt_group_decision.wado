@@ -1350,122 +1350,12 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LIT_K {
-            pos = start + 1;
-            try_0: {
-                pos = scan_body(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
-                if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_0; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_EOF { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_LIT_W {
-            pos = start + 1;
-            try_1: {
-                pos = scan_wild(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_EOF { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
-        }
-    }
-    return pos;
-}
-
-fn scan_body(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos < tokens.len() && tokens[pos] == TK_ID && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        let gp_0 = pos;
-        let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        let mut sg_0_best = -1;
-        if sgk_0 == TK_ID {
-            pos = gp_0;
-            pos += 1;
-            if pos > sg_0_best { sg_0_best = pos; }
-            pos = gp_0;
-            pos += 1;
-            if pos > sg_0_best { sg_0_best = pos; }
-            pos = gp_0;
-            sg_0_2: {
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_0_2; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_0_2; }
-                pos += 1;
-                if pos > sg_0_best { sg_0_best = pos; }
-            }
-        }
-        if sg_0_best >= 0 {
-            pos = sg_0_best;
-        } else {
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; }
-    }
-    return pos;
-}
-
-fn scan_wild(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos < tokens.len() && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        let gp_1 = pos;
-        let mut sg_1_best = -1;
-        pos = gp_1;
-        sg_1_0: {
-            pos = scan_assign(tokens, pos);
-            if pos < 0 { break sg_1_0; }
-            if pos > sg_1_best { sg_1_best = pos; }
-        }
-        pos = gp_1;
-        sg_1_1: {
-            if pos >= tokens.len() || tokens[pos] == TK_EOF { break sg_1_1; }
-            pos += 1;
-            if pos > sg_1_best { sg_1_best = pos; }
-        }
-        if sg_1_best >= 0 {
-            pos = sg_1_best;
-        } else {
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; }
-    }
-    return pos;
-}
-
 fn scan_assign(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_word(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     return pos;
@@ -1756,8 +1646,7 @@ global SYNC_1: List<i32> = [TK_LIT_K, TK_LIT_W];
 global SYNC_2: List<i32> = [TK_ID];
 global SYNC_3: List<i32> = [TK_LIT_EQ];
 
-global FOLLOW_SETS: List<List<i32>> = [[32], [4], [128], [1]];
+global FOLLOW_SETS: List<List<i32>> = [[32], [4]];
 global FOLLOW_MASK_0: i64 = 513;
 global FOLLOW_MASK_1: i64 = 2;
-global FOLLOW_MASK_2: i64 = 1027;
 

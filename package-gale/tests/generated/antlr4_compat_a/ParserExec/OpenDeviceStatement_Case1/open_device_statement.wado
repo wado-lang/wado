@@ -1450,21 +1450,6 @@ impl Parser {
     }
 }
 
-fn scan_program(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_statement(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_LIT_OPEN {
-        let sp = pos;
-        pos = scan_statement(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_OPEN { return -1; }

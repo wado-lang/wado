@@ -47,6 +47,8 @@ use {
     follow_yields_call,
     follow_yields_call_of,
     rule_kind_const,
+    collect_called_names,
+    defined_fn_names,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, FnSpec, ParamSpec, wado } from "lib:wadopoet";
@@ -206,7 +208,7 @@ fn add_follow_param(f: &mut FnSpec) {
 }
 
 /// `", <FollowArg args>"` when the grammar emits FOLLOW machinery, else `""`.
-fn follow_arg_sep(ctx: &GenContext, emit_follow: bool, arg: &FollowArg) -> String {
+fn follow_arg_sep(ctx: &mut GenContext, emit_follow: bool, arg: &FollowArg) -> String {
     if emit_follow {
         return `, ${follow_arg_expr(ctx, arg)}`;
     }
@@ -260,26 +262,65 @@ pub fn gen_parser(
     if ctx.is_trace() {
         gen_trace_helpers(w);
     }
-    gen_scan_functions(w, grammar, lowered, ctx);
+    let scan_chunks = gen_scan_functions(grammar, lowered, ctx);
+    let mut parse_w = CodeWriter::new();
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         let rule = &grammar.parser_rules[i];
         let lowered_rule = &lowered.parser_rules[i];
         ctx.set_current_rule_index(i);
-        gen_parse_fn(w, rule, lowered_rule, ctx);
+        gen_parse_fn(&mut parse_w, rule, lowered_rule, ctx);
     }
     // The runtime-FOLLOW redesign retired per-(rule, mask) variant
     // emission: each rule is emitted exactly once and threads the
     // caller's continuation at runtime via the `follow` argument (see
     // `follow_yields` / `FollowArg`). The follow-mask globals are
     // emitted by `gen_follow_mask_globals` at the end of codegen.
-    gen_predicate_fns(w, ctx);
+    gen_predicate_fns(&mut parse_w, ctx);
     if !ctx.fragment_entries().is_empty() {
         let entries = compute_fragment_entries(grammar, ctx);
-        gen_recover_helpers(w, &entries, ctx);
+        gen_recover_helpers(&mut parse_w, &entries, ctx);
     }
-    gen_parse_entry(w, lowered, ctx);
+    gen_parse_entry(&mut parse_w, lowered, ctx);
+    let parse_text = parse_w.to_string();
+    for let chunk of &called_scan_chunks(&scan_chunks, &parse_text) {
+        w.raw(chunk);
+    }
+    w.raw(&parse_text);
     warn_unhandled_actions(grammar, ctx);
 }
+
+/// The scan chunks something calls, in emit order: a chunk is kept when the
+/// parse code or a kept chunk calls a function it defines.
+fn called_scan_chunks(chunks: &List<String>, parse_text: &String) -> List<String> {
+    let mut called = TreeSet::<String>::new();
+    collect_called_names(parse_text, &mut called);
+    let mut kept: List<bool> = [];
+    let mut defined: List<List<String>> = [];
+    for let chunk of chunks {
+        kept.push(false);
+        defined.push(defined_fn_names(chunk));
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for let mut i = 0; i < chunks.len(); i += 1 {
+            if kept[i] || !defined[i].iter_ref().any(|n| called.contains(*n)) {
+                continue;
+            }
+            kept[i] = true;
+            changed = true;
+            collect_called_names(&chunks[i], &mut called);
+        }
+    }
+    let mut out: List<String> = [];
+    for let mut i = 0; i < chunks.len(); i += 1 {
+        if kept[i] {
+            out.push(chunks[i]);
+        }
+    }
+    return out;
+}
+
 
 /// Consume the matched `kind` and return its index: EOF matches in place (the
 /// stream holds one EOF; advancing past it reads out of bounds, ANTLR4's
@@ -393,13 +434,18 @@ fn alt_scan_is_full(elements: &List<Element>, ctx: &mut GenContext) -> bool {
 // successful recognition, or -1 on failure. Used to disambiguate Ambiguous
 // alternatives without expensive speculative parsing.
 
-fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
+/// Each rule's scan functions, as one chunk per rule.
+fn gen_scan_functions(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) -> List<String> {
     let was_scan = ctx.set_in_scan_fn(true);
+    let mut chunks: List<String> = [];
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         ctx.set_current_rule_index(i);
-        gen_scan_function(w, &grammar.parser_rules[i], &lowered.parser_rules[i], ctx);
+        let mut w = CodeWriter::with_capacity(1024);
+        gen_scan_function(&mut w, &grammar.parser_rules[i], &lowered.parser_rules[i], ctx);
+        chunks.push(w.to_string());
     }
     ctx.set_in_scan_fn(was_scan);
+    return chunks;
 }
 
 fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
@@ -1840,7 +1886,7 @@ fn gen_scan_op_element<S: AsStrSlice>(
             // rule-entry wrapper does. Pop before the fail check so an early return
             // never leaks the frame.
             let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
-            let cont = if rc.lr_cont_mask >= 0 { `, FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
+            let cont = if rc.lr_cont_mask >= 0 { `, ${ctx.follow_mask_ref(rc.lr_cont_mask)}` } else { "" };
             assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
             let call = `pos = ${fn_name}(tokens, pos${ctx.scan_gate_arg()}${follow_arg_str}${min_prec_arg}${cont});`;
             if push_ret >= 0 {
@@ -1909,7 +1955,7 @@ fn gen_scan_op_element_assign(
             } else {
                 String::new();
             };
-            let cont = if rc.lr_cont_mask >= 0 { `, FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
+            let cont = if rc.lr_cont_mask >= 0 { `, ${ctx.follow_mask_ref(rc.lr_cont_mask)}` } else { "" };
             assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
             w.line(`pos = ${fn_name}(tokens, pos${ctx.scan_gate_arg()}${follow_arg_str}${min_prec_arg}${cont});`);
         },
@@ -3863,7 +3909,7 @@ fn gen_op_leaf(
             // reads a single source.
             gen_atn_ret_pending(w, ctx, r.atn_call_site);
             let argsfx = call_arg_suffix(&r, ctx);
-            let cont = if r.lr_cont_mask >= 0 { `, FOLLOW_MASK_${r.lr_cont_mask}` } else { "" };
+            let cont = if r.lr_cont_mask >= 0 { `, ${ctx.follow_mask_ref(r.lr_cont_mask)}` } else { "" };
             let bind = leaf_binding(ctx, &r.dedup_base, &r.field);
             if let Some(min_prec) = r.min_prec_arg {
                 w.line(`${bind}${fn_name}(p${follow_arg_str}, ${min_prec}${cont}${argsfx});`);
@@ -6244,18 +6290,18 @@ fn gen_iter_caller_follow_gate<S: AsStrSlice>(w: &mut CodeWriter, rep_op: &Repea
 /// Render the runtime FOLLOW argument expression for a
 /// `RuleCall` per its `FollowArg`. Passed as the callee's `follow`
 /// parameter (parse and scan share the spelling — both bind `follow`).
-fn follow_arg_expr(ctx: &GenContext, arg: &FollowArg) -> String {
+fn follow_arg_expr(ctx: &mut GenContext, arg: &FollowArg) -> String {
     return match arg {
         NoFollow => "0",
         Forward => follow_forward_args(),
-        Mask(id) => `FOLLOW_MASK_${*id}`,
+        Mask(id) => ctx.follow_mask_ref(*id),
         // The caller's continuation shifts along behind the new head, starting
         // where the head stops constraining. What that pushes past the last
         // slot begins at a depth the gate does not read.
-        Combined(id) => follow_composed(`FOLLOW_MASK_${*id}`, ctx.follow_mask_positions(*id), false),
+        Combined(id) => follow_composed(ctx.follow_mask_ref(*id), ctx.follow_mask_positions(*id), false),
         // Same, and what the caller wants opens a fresh reading: the loop
         // iteration and it are alternatives, not a sequence.
-        AltMask(id) => follow_composed(`FOLLOW_MASK_${*id}`, ctx.follow_mask_positions(*id), true),
+        AltMask(id) => follow_composed(ctx.follow_mask_ref(*id), ctx.follow_mask_positions(*id), true),
     };
 }
 
@@ -6369,7 +6415,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
 /// malformed deeper in. Returns the call expression (`_parse_R(p)` /
 /// `_parse_R(p, mp)`) used to re-parse it for a precise error, or `null` when
 /// the repeated element is not a single RuleRef (no standalone parse fn).
-fn rep_recovery_expr(rep_op: &RepeatOp, ctx: &GenContext) -> Option<String> {
+fn rep_recovery_expr(rep_op: &RepeatOp, ctx: &mut GenContext) -> Option<String> {
     if let LeafRuleCall = rep_op.body_shape {
         if let RuleCall(r) = &rep_op.body {
             let fn_name = `_parse_${r.target_snake}`;
