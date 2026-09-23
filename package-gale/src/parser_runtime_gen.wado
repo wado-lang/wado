@@ -171,31 +171,22 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.line("assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;");
     w.line("let tokens = tokenize(input);");
     w.line("let mut p = Parser::new(tokens);");
-    if ctx.emit_actions() {
-        // Lexer prints happen before any parser print, as they do on ANTLR4's
-        // stdout: seed the sink with what tokenizing produced.
-        w.line("p.output = p.tokens.output;");
-    }
     w.line("p.max_errors = max_errors;");
+    w.line("push_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);");
     w.line("entry(&mut p);");
     // The parser is infallible: a failure leaves `p.recovering` set and the
     // deepest error in `p.pending`. Surface it as one diagnostic; the partial
     // tree (open nodes folded by each wrapper's `finish_node`) is still returned.
     w.begin("if p.recovering && p.diagnostics.len() < max_errors");
-    w.begin("if let Some(e) = &p.pending");
-    w.line("let lc = line_col(p.tokens.chars, e.span.start);");
-    w.line(
-        "let mut d = Diagnostic::error(p.pending_code, e.full_message(), e.span, lc.0, lc.1);",
-    );
-    // Carry the active rule chain (innermost-first, as each rule wrapper pushed
-    // it on the way up) so tooling can report the context that failed.
-    w.line("d.rule_stack = e.rule_stack;");
+    w.begin("if let Some(d) = p.pending");
     w.line("p.diagnostics.push(d);");
     w.end();
     w.end();
+    w.line("resolve_positions(&mut p.diagnostics, p.tokens.chars);");
     if ctx.emit_actions() {
+        // Lexer prints precede parser prints in the one sink, as on ANTLR4's stdout.
         w.line(
-            "return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.output };",
+            "return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.tokens.output };",
         );
     } else {
         w.line("return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
@@ -242,11 +233,9 @@ fn emit_consume_kind_return(w: &mut CodeWriter) {
 }
 
 /// Shared prologue for the `report_*` diagnostic methods: drop the diagnostic
-/// (and fold the parse) once `max_errors` is reached, otherwise resolve the
-/// `line:col` for `span.start`.
+/// (and fold the parse) once `max_errors` is reached.
 fn emit_diag_prologue(w: &mut CodeWriter) {
     w.line("if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }");
-    w.line("let lc = line_col(self.tokens.chars, span.start);");
 }
 
 pub fn gen_parser_struct<S: AsStrSlice>(
@@ -273,7 +262,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // malformed element to harvest a precise inner error). The input-entry
     // reports it over the shallow "expected <closer>" error when it reaches
     // at least as far into the token stream.
-    s.add_field("pending", "Option<ParseError>");
+    s.add_field("pending", "Option<Diagnostic>");
     // Error-recovery flag. The parser is infallible: a match method that cannot
     // consume its terminal records the failure (into `pending`) and sets this
     // instead of propagating a `Result`. While set, every match method and rule
@@ -283,10 +272,6 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // speculative re-parse saves and restores it so a probe never aborts the
     // real parse.
     s.add_field("recovering", "bool");
-    // Diagnostic code for the pending failure (`UnexpectedToken` for a plain
-    // mismatch, `NoViableAlternative` when no alternative applied); the entry
-    // surfaces it with `pending`.
-    s.add_field("pending_code", "DiagnosticCode");
     // Set while a speculative parse runs (a scan-gated repeat's recovery probe,
     // an LR alt save-and-rewind). Recovery edits are suppressed: a mismatch
     // fails (records the deepest error, sets `recovering`) instead of
@@ -320,8 +305,9 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // against it unchanged.
     s.add_field("b", "TreeBuilder");
     s.add_field("diagnostics", "List<Diagnostic>");
+    // Eager because `token_line` answers through the `&Parser` predicates hold.
     if emit_actions {
-        s.add_field("output", "String");
+        s.add_field("line_starts", "List<i32>");
     }
     // `@members` fields: defaulted so `Parser::new`'s literal can omit them.
     for let mf of &members.fields {
@@ -350,7 +336,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     f.emit_begin(w);
     w.line("let kinds = tokens.kinds.to_array();");
     let mut init = String::from(
-        "tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX",
+        "tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX",
     );
     if trace {
         init.push_str(", trace_depth: 0");
@@ -360,7 +346,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     }
     init.push_str(", b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: []");
     if emit_actions {
-        init.push_str(", output: \"\"");
+        init.push_str(", line_starts: line_starts(tokens.chars)");
     }
     w.line(`return Parser { ${init} };`);
     w.end();
@@ -374,7 +360,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         fem.set_receiver("&mut self");
         fem.add_param("s", "String");
         fem.emit_begin(w);
-        w.line("self.output.push_str(&s);");
+        w.line("self.tokens.output.push_str(&s);");
         w.end();
         w.blank();
 
@@ -428,7 +414,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         fln.add_param("i", "i32");
         fln.set_return_type("i32");
         fln.emit_begin(w);
-        w.line("return line_col(self.tokens.chars, self.tokens.span_at(i).start).0;");
+        w.line("return line_col_at(&self.line_starts, self.tokens.starts[i]).0;");
         w.end();
         w.blank();
 
@@ -437,7 +423,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         fcol.add_param("i", "i32");
         fcol.set_return_type("i32");
         fcol.emit_begin(w);
-        w.line("return line_col(self.tokens.chars, self.tokens.span_at(i).start).1;");
+        w.line("return line_col_at(&self.line_starts, self.tokens.starts[i]).1;");
         w.end();
         w.blank();
 
@@ -484,12 +470,8 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         fts.add_param("end", "i32");
         fts.set_return_type("String");
         fts.emit_begin(w);
-        w.line("let mut out = String::new();");
         w.line("let hi = if end < self.tokens.chars.len() { end } else { self.tokens.chars.len() };");
-        w.begin("for let mut i = start; i < hi; i += 1");
-        w.line("out.push(self.tokens.chars[i]);");
-        w.end();
-        w.line("return out;");
+        w.line("return chars_text(self.tokens.chars, start, hi);");
         w.end();
         w.blank();
 
@@ -571,24 +553,22 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         w.blank();
     }
 
-    // Build a ParseError at the current position, resolving `line:col` from the
-    // source. `rule_stack` is filled by the rule-entry wrappers as it propagates.
-    let mut fe = FnSpec::new("error");
-    fe.set_receiver("&self");
-    fe.add_param("message", "String");
-    fe.add_param("span", "Span");
-    fe.add_param("expected", "&List<i32>");
-    fe.set_return_type("ParseError");
-    fe.emit_begin(w);
-    w.line("let lc = line_col(self.tokens.chars, span.start);");
-    w.line("return ParseError::at(message, span, kind_names(expected), lc.0, lc.1);");
+    // Only a failure deeper than the pending one replaces it, so each decides
+    // this before paying for its message.
+    let mut fsup = FnSpec::new("supersedes_pending");
+    fsup.set_receiver("&self");
+    fsup.add_param("start", "i32");
+    fsup.set_return_type("bool");
+    fsup.emit_begin(w);
+    w.line("if let Some(cur) = &self.pending { return start > cur.span.start; }");
+    w.line("return true;");
     w.end();
     w.blank();
 
     // Record an unrecoverable match failure and enter recovery. Infallible
     // replacement for the old `return Result::Err(...)`: the deepest failure is
-    // kept in `pending` (with its `code`) and `recovering` short-circuits the
-    // rest of the descent until the entry surfaces it.
+    // kept in `pending` and `recovering` short-circuits the rest of the descent
+    // until the entry surfaces it. `rule_stack` fills in as the descent unwinds.
     let mut ff = FnSpec::new("fail");
     ff.set_receiver("&mut self");
     ff.add_param("message", "String");
@@ -596,12 +576,41 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     ff.add_param("expected", "&List<i32>");
     ff.add_param("code", "DiagnosticCode");
     ff.emit_begin(w);
-    // Decide from the span before building: a discarded error would otherwise
-    // pay for one `token_kind_name` String per expected kind.
-    w.line("let take = if let Some(cur) = &self.pending { span.start > cur.span.start } else { true };");
-    w.begin("if take");
-    w.line("self.pending = Option::Some(self.error(message, span, expected));");
-    w.line("self.pending_code = code;");
+    w.begin("if self.supersedes_pending(span.start)");
+    w.line(
+        "self.pending = Option::Some(Diagnostic::error(code, with_expected(message, &kind_names(expected)), span, *expected, self.kinds[self.pos], RecoveryAction::None));",
+    );
+    w.end();
+    w.line("self.recovering = true;");
+    w.end();
+    w.blank();
+
+    // A mismatch at the current token, reported as `<what> "<its text>"`.
+    let mut fot = FnSpec::new("fail_on_token");
+    fot.set_receiver("&mut self");
+    fot.add_param("what", "String");
+    fot.add_param("expected", "&List<i32>");
+    fot.add_param("code", "DiagnosticCode");
+    fot.emit_begin(w);
+    w.begin("if self.supersedes_pending(self.tokens.starts[self.pos])");
+    w.line(
+        "self.fail(`${what} \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), expected, code);",
+    );
+    w.end();
+    w.line("self.recovering = true;");
+    w.end();
+    w.blank();
+
+    // At EOF the wanted terminal closes a construct the input never finished.
+    let mut fok = FnSpec::new("fail_on_kind");
+    fok.set_receiver("&mut self");
+    fok.add_param("kind", "i32");
+    fok.emit_begin(w);
+    w.begin("if self.supersedes_pending(self.tokens.starts[self.pos])");
+    w.line(
+        "let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };",
+    );
+    w.line("self.fail_on_token(\"got\", &([kind] as List<i32>), code);");
     w.end();
     w.line("self.recovering = true;");
     w.end();
@@ -639,7 +648,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         pm.set_receiver("&self");
         pm.set_return_type("String");
         pm.emit_begin(w);
-        w.line("if let Some(e) = &self.pending { return e.full_message(); }");
+        w.line("if let Some(e) = &self.pending { return e.message; }");
         w.line("return String::new();");
         w.end();
         w.blank();
@@ -662,24 +671,27 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // required terminal (`MissingToken`).
     let mut rex = FnSpec::new("report_extra");
     rex.set_receiver("&mut self");
-    rex.add_param("span", "Span");
+    rex.add_param("kind", "i32");
     rex.emit_begin(w);
     emit_diag_prologue(w);
     w.line(
-        "self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"${self.tokens.token_text(self.pos)}\"`, span, lc.0, lc.1));",
+        "self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::Deleted));",
     );
     w.end();
     w.blank();
 
+    // At EOF the insertion closes a construct the input never finished.
     let mut rmi = FnSpec::new("report_missing");
     rmi.set_receiver("&mut self");
     rmi.add_param("kind", "i32");
-    rmi.add_param("span", "Span");
     rmi.emit_begin(w);
     emit_diag_prologue(w);
-    w.line("let name = token_kind_name(kind);");
+    w.line("let found = self.kinds[self.pos];");
+    w.line("let at_eof = found == TK_EOF;");
+    w.line("let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };");
+    w.line("let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };");
     w.line(
-        "self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing ${name}`, span, lc.0, lc.1));",
+        "self.diagnostics.push(Diagnostic::error(code, `missing ${token_kind_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));",
     );
     w.end();
     w.blank();
@@ -687,11 +699,11 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // Record an unexpected-token error opening an `<error>` recovery region.
     let mut run = FnSpec::new("report_unexpected");
     run.set_receiver("&mut self");
-    run.add_param("span", "Span");
+    run.add_param("kind", "i32");
     run.emit_begin(w);
     emit_diag_prologue(w);
     w.line(
-        "self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input \"${self.tokens.token_text(self.pos)}\"`, span, lc.0, lc.1));",
+        "self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));",
     );
     w.end();
     w.blank();
@@ -783,14 +795,12 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // backtracks (committing an edit here could steal tokens that belong to the
     // caller's continuation, which static scan cannot rule out).
     w.begin("if self.speculating");
-    w.line(
-        "self.fail(`got \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), &([kind] as List<i32>), DiagnosticCode::UnexpectedToken);",
-    );
+    w.line("self.fail_on_kind(kind);");
     w.line("return self.pos;");
     w.end();
     if fragment_recovery {
         w.begin("if kind == TK_EOF && self.kinds[self.pos] != TK_EOF");
-        w.line("self.report_unexpected(self.tokens.span_at(self.pos));");
+        w.line("self.report_unexpected(kind);");
         w.line("self.b.start_error(self.tokens.span_at(self.pos).start);");
         w.begin("loop");
         w.line("if self.kinds[self.pos] == TK_EOF { break; }");
@@ -803,7 +813,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // single-token deletion: the current token is spurious, the expected one
     // follows it.
     w.begin("if self.peek_at(1) == kind");
-    w.line("self.report_extra(self.tokens.span_at(self.pos));");
+    w.line("self.report_extra(kind);");
     w.line("let _sk = self.advance();");
     w.line("self.tokens.mark_skipped(_sk);");
     w.line("self.b.skip(_sk);");
@@ -812,7 +822,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // single-token insertion: the current token continues the rule, so the
     // expected one is missing.
     w.begin("if self.in_set(self.kinds[self.pos], sync)");
-    w.line("self.report_missing(kind, self.tokens.span_at(self.pos));");
+    w.line("self.report_missing(kind);");
     w.line("let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);");
     w.line("self.b.missing(_syn);");
     w.line("return _syn;");
@@ -822,7 +832,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // region and resync to it, then continue; otherwise record the deepest
     // failure and unwind.
     w.begin("if !sync.is_empty()");
-    w.line("self.report_unexpected(self.tokens.span_at(self.pos));");
+    w.line("self.report_unexpected(kind);");
     w.begin("if self.kinds[self.pos] != TK_EOF");
     w.line("self.b.start_error(self.tokens.span_at(self.pos).start);");
     w.begin("loop");
@@ -844,14 +854,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line("return _syn2;");
     w.end();
     // no sync info: record the deepest failure and unwind.
-    w.line("self.fail(");
-    w.indent();
-    w.line("`got \"${self.tokens.token_text(self.pos)}\"`,");
-    w.line("self.tokens.span_at(self.pos),");
-    w.line("&([kind] as List<i32>),");
-    w.line("DiagnosticCode::UnexpectedToken,");
-    w.dedent();
-    w.line(");");
+    w.line("self.fail_on_kind(kind);");
     w.line("return self.pos;");
     w.end();
     w.blank();
@@ -866,16 +869,9 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.begin("if self.kinds[self.pos] != TK_EOF");
     emit_consume_return(w);
     w.end();
-    w.line("self.fail(");
-    w.indent();
     // `any` wants no particular kind, so it carries the wanted set in the
     // message instead of the (kind-id) `expected` list.
-    w.line("`expected any token; got \"${self.tokens.token_text(self.pos)}\"`,");
-    w.line("self.tokens.span_at(self.pos),");
-    w.line("&EMPTY_SYNC,");
-    w.line("DiagnosticCode::UnexpectedToken,");
-    w.dedent();
-    w.line(");");
+    w.line("self.fail_on_token(\"expected any token; got\", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);");
     w.line("return self.pos;");
     w.end();
     w.blank();
@@ -892,14 +888,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.begin("if k != TK_EOF && !self.in_set(k, excluded)");
     emit_consume_return(w);
     w.end();
-    w.line("self.fail(");
-    w.indent();
-    w.line("`unexpected token \"${self.tokens.token_text(self.pos)}\"`,");
-    w.line("self.tokens.span_at(self.pos),");
-    w.line("&EMPTY_SYNC,");
-    w.line("DiagnosticCode::UnexpectedToken,");
-    w.dedent();
-    w.line(");");
+    w.line("self.fail_on_token(\"unexpected token\", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);");
     w.line("return self.pos;");
     w.end();
     w.blank();
@@ -921,14 +910,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     emit_consume_return(w);
     w.end();
-    w.line("self.fail(");
-    w.indent();
-    w.line("`got \"${self.tokens.token_text(self.pos)}\"`,");
-    w.line("self.tokens.span_at(self.pos),");
-    w.line("included,");
-    w.line("DiagnosticCode::UnexpectedToken,");
-    w.dedent();
-    w.line(");");
+    w.line("self.fail_on_token(\"got\", included, DiagnosticCode::UnexpectedToken);");
     w.line("return self.pos;");
     w.end();
 

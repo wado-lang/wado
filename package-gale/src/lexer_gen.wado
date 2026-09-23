@@ -462,16 +462,6 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSu
     f2.emit_begin(w);
     w.line("return self.pos >= self.chars.len();");
     w.end();
-    w.blank();
-
-    let mut f3 = FnSpec::new("slice");
-    f3.set_receiver("&self");
-    f3.add_param("start", "i32");
-    f3.add_param("end", "i32");
-    f3.set_return_type("LexerSlice");
-    f3.emit_begin(w);
-    w.line("return LexerSlice::new(&self.chars, start, end);");
-    w.end();
 
     if surface.commit_latches {
         gen_lexer_action_methods(w, surface, vis);
@@ -4741,7 +4731,10 @@ fn gen_tokenize_fn<S: AsStrSlice>(
         String::from("best_end <= start");
     };
     w.begin(`if ${no_match_guard}`);
-    emit_token_commit(w, "TK_ERROR", "start", "start + 1");
+    w.line(
+        "let _ = ts.push_token_flagged(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark(), TokenFlags::LexError);",
+    );
+    w.line("triv_lo = ts.trivia_mark();");
     w.line("lexer.pos = start + 1;");
     w.else_begin("else");
 

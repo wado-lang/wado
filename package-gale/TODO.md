@@ -29,7 +29,7 @@ Empty right now.
 
 Design in [`action.md`](./action.md). Landed: every lexer emit the match can take replays its translatable actions in place (restructured repeats included), the lexer `$`-attribute surface answers in a `language = Wado` body, `@lexer::members` works under `language = Java`, and a same-named label resolves against the rule its own alternative called. A body the translator refuses is still reported and dropped rather than replayed — `UnsupportedAction`, warn-and-emit, unchanged. What is left below is held by something other than action execution.
 
-One narrow gap remains in the surface itself: `$line` has no `$`-form, because the inlined runtime carries no line-number helper and adding one would land in every generated parser for an attribute no grammar asks for. A reference to it is a loud error.
+One narrow gap remains in the surface itself: the lexer's `$line` has no `$`-form. The runtime's line index (`line_starts`) is built over the whole input after tokenizing, so a read while lexing would rescan from the start; the lexer would have to count lines as it goes, for an attribute no grammar asks for. A reference to it is a loud error.
 
 ### Not Stage C, and blocked
 

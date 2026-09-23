@@ -68,11 +68,6 @@ impl CstStore {
         return self.tag[i] matches { Open };
     }
 
-    pub fn is_token(&self, i: i32) -> bool {
-        let t = self.tag[i];
-        return t matches { Tok | Miss | Skip };
-    }
-
     pub fn child_kind(&self, i: i32) -> ChildKind {
         return match self.tag[i] {
             Open => ChildKind::Node,
@@ -121,56 +116,9 @@ impl CstStore {
         token_names: &List<String>,
     ) -> String {
         let mut out = String::with_capacity(256);
-        cst_to_string_tree_impl(&mut out, self, i, toks, rule_names, token_names);
+        let _ = render_node(&mut out, &self.tag, &self.a, i, toks, rule_names, token_names);
         return out;
     }
-}
-
-fn cst_to_string_tree_impl(
-    out: &mut String,
-    s: &CstStore,
-    i: i32,
-    toks: &TokenStream,
-    rule_names: &List<String>,
-    token_names: &List<String>,
-) {
-    let node_kind = s.kind(i) as i32;
-    let name = if node_kind == K_ERROR as i32 { "<error>" } else { rule_names[node_kind] };
-    if i + 1 >= s.tag.len() || s.tag[i + 1] matches { Close } {
-        out.push_str(&name);
-        return;
-    }
-    out.push_str("(");
-    out.push_str(&name);
-    let mut c = i + 1;
-    while c < s.next[i] {
-        match s.tag[c] {
-            Open => {
-                out.push_str(" ");
-                cst_to_string_tree_impl(out, s, c, toks, rule_names, token_names);
-                c = s.next[c];
-            },
-            Tok => {
-                if !toks.is_empty_text(s.token_index(c)) {
-                    out.push_str(" ");
-                    toks.push_token_text_escaped(out, s.token_index(c));
-                }
-                c += 1;
-            },
-            Miss => {
-                out.push_str(` <missing ${token_names[toks.kind_at(s.token_index(c))]}>`);
-                c += 1;
-            },
-            Skip => {
-                out.push_str(" <skip ");
-                toks.push_token_text_escaped(out, s.token_index(c));
-                out.push_str(">");
-                c += 1;
-            },
-            Close => c += 1,
-        }
-    }
-    out.push_str(")");
 }
 
 pub struct ParseResult {
@@ -210,10 +158,6 @@ pub struct TreeBuilder {
 }
 
 impl TreeBuilder {
-    pub fn new() -> TreeBuilder {
-        return TreeBuilder { tag: [], a: [], b: [], alt: [], open: [], last_finished: -1 };
-    }
-
     pub fn with_capacity(rows: i32) -> TreeBuilder {
         return TreeBuilder {
             tag: List::with_capacity(rows),
@@ -271,12 +215,10 @@ impl TreeBuilder {
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
-        while self.tag.len() > checkpoint {
-            let _ = self.tag.pop();
-            let _ = self.a.pop();
-            let _ = self.b.pop();
-            let _ = self.alt.pop();
-        }
+        self.tag.truncate(checkpoint);
+        self.a.truncate(checkpoint);
+        self.b.truncate(checkpoint);
+        self.alt.truncate(checkpoint);
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
         }
@@ -405,12 +347,12 @@ impl TreeBuilder {
         token_names: &List<String>,
     ) -> String {
         let mut out = String::with_capacity(128);
-        let _ = render_builder_node(&mut out, &self.tag, &self.a, root, toks, rule_names, token_names);
+        let _ = render_node(&mut out, &self.tag, &self.a, root, toks, rule_names, token_names);
         return out;
     }
 }
 
-fn render_builder_node(
+fn render_node(
     out: &mut String,
     tag: &List<EventTag>,
     a: &List<i32>,
@@ -434,7 +376,7 @@ fn render_builder_node(
         match tag[c] {
             Open => {
                 out.push_str(" ");
-                c = render_builder_node(out, tag, a, c, toks, rule_names, token_names);
+                c = render_node(out, tag, a, c, toks, rule_names, token_names);
             },
             Close => {
                 out.push_str(")");

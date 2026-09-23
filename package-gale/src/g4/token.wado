@@ -1,3 +1,5 @@
+use { Span, chars_text } from "../runtime/lex.wado";
+
 pub enum G4Token {
     Grammar,
     Fragment,
@@ -71,5 +73,63 @@ impl G4Token {
             InvalidEscape => "invalid escape sequence",
             UnexpectedChar => "unexpected character",
         };
+    }
+}
+
+pub struct LexerSlice {
+    pub chars: &List<char>,
+    pub start: i32,
+    pub end: i32,
+}
+
+impl LexerSlice {
+    pub fn new(chars: &List<char>, start: i32, end: i32) -> LexerSlice {
+        return LexerSlice { chars, start, end };
+    }
+
+    pub fn from_string<S: AsStrSlice>(s: S) -> LexerSlice {
+        let chars = s.chars().collect();
+        return LexerSlice { chars: &chars, start: 0, end: chars.len() };
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+
+    pub fn to_string(&self) -> String {
+        return chars_text(self.chars, self.start, self.end);
+    }
+}
+
+impl Display for LexerSlice {
+    fn fmt(&self, f: &mut Formatter) {
+        for let mut i = self.start; i < self.end; i += 1 {
+            f.write_char(self.chars[i]);
+        }
+    }
+}
+
+impl Eq<String> for LexerSlice {
+    fn eq(&self, other: &String) -> bool {
+        let mut i = self.start;
+        for let c of other.chars() {
+            if i >= self.end || c != self.chars[i] {
+                return false;
+            }
+            i += 1;
+        }
+        return i == self.end;
+    }
+}
+
+pub struct Token {
+    pub kind: i32,
+    pub text: LexerSlice,
+    pub span: Span,
+}
+
+impl Token {
+    pub fn new(kind: i32, text: LexerSlice, span: Span) -> Token {
+        return Token { kind, text, span };
     }
 }

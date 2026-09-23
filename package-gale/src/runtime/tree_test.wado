@@ -3,7 +3,7 @@
 
 use { Span, TokenStream, TokenFlags } from "./lex.wado";
 use { NodeKind, K_ERROR, CstStore, ChildKind, TreeBuilder, ParseResult } from "./tree.wado";
-use { Severity, DiagnosticCode, RecoveryAction, RelatedInfo, Diagnostic } from "./diag.wado";
+use { DiagnosticCode, RecoveryAction, Diagnostic, push_lex_errors, resolve_positions } from "./diag.wado";
 
 /// Build a TokenStream over `src` from `[kind, start, end]` specs (no trivia).
 fn stream_of<S: AsStrSlice>(src: S, specs: List<[i32, i32, i32]>) -> TokenStream {
@@ -74,7 +74,7 @@ test "builder builds a flat node and renders an S-expression" {
         [1, 2, 3],
         [0, 4, 5],
     ]);
-    let mut b = TreeBuilder::new();
+    let mut b = TreeBuilder::with_capacity(0);
     b.start_node(0 as NodeKind, 0);
     b.token(0);
     b.token(1);
@@ -95,7 +95,7 @@ test "builder nests child nodes and computes spans" {
         [1, 2, 3],
         [0, 4, 5],
     ]);
-    let mut b = TreeBuilder::new();
+    let mut b = TreeBuilder::with_capacity(0);
     b.start_node(0 as NodeKind, 0);  // expr
     b.start_node(1 as NodeKind, 0);  // term
     b.token(0);
@@ -134,7 +134,7 @@ test "with_capacity pre-sizes without changing the tree" {
 }
 
 test "set_alt stamps the innermost open node" {
-    let mut b = TreeBuilder::new();
+    let mut b = TreeBuilder::with_capacity(0);
     b.start_node(0 as NodeKind, 0);
     b.start_node(1 as NodeKind, 0);
     b.set_alt(3);
@@ -159,7 +159,7 @@ test "missing terminal becomes a Missing child and marks the node incomplete" {
     ts.push_token(1, 2, 3, lo1, ts.trivia_mark());  // '+'  PLUS
     let syn = ts.push_synthetic(0, 3);  // inserted ID at offset 3
 
-    let mut b = TreeBuilder::new();
+    let mut b = TreeBuilder::with_capacity(0);
     b.start_node(0 as NodeKind, 0);
     b.token(0);
     b.token(1);
@@ -183,7 +183,7 @@ test "skipped terminal becomes a Skipped child and marks the node erroneous" {
         [0, 4, 5],
     ]);
     ts.mark_skipped(1);
-    let mut b = TreeBuilder::new();
+    let mut b = TreeBuilder::with_capacity(0);
     b.start_node(0 as NodeKind, 0);
     b.token(0);
     b.skip(1);
@@ -205,7 +205,7 @@ test "error region is a K_ERROR node and bubbles error up to the parent" {
         [0, 4, 5],
     ]);
     ts.mark_skipped(1);
-    let mut b = TreeBuilder::new();
+    let mut b = TreeBuilder::with_capacity(0);
     b.start_node(0 as NodeKind, 0);
     b.token(0);
     b.start_error(2);
@@ -233,7 +233,7 @@ test "start_node_at wraps left-associatively across iterations" {
         [1, 3, 4],
         [0, 4, 5],
     ]);
-    let mut b = TreeBuilder::new();
+    let mut b = TreeBuilder::with_capacity(0);
     let cp = b.checkpoint();
     // atom: (expr 1)
     b.start_node(0 as NodeKind, 0);
@@ -264,7 +264,7 @@ test "truncate rolls the builder back to a checkpoint" {
         [0, 0, 1],
         [0, 2, 3],
     ]);
-    let mut b = TreeBuilder::new();
+    let mut b = TreeBuilder::with_capacity(0);
     b.start_node(0 as NodeKind, 0);
     b.token(0);
     let cp = b.checkpoint();
@@ -280,7 +280,7 @@ test "truncate rolls the builder back to a checkpoint" {
 }
 
 test "next_sibling on the root returns -1 without indexing past the columns" {
-    let mut b = TreeBuilder::new();
+    let mut b = TreeBuilder::with_capacity(0);
     b.start_node(0 as NodeKind, 0);
     b.token(0);
     b.finish_node(1);
@@ -293,7 +293,7 @@ test "next_sibling on the root returns -1 without indexing past the columns" {
 }
 
 test "an unterminated open finalizes gracefully instead of corrupting traversal" {
-    let mut b = TreeBuilder::new();
+    let mut b = TreeBuilder::with_capacity(0);
     b.start_node(0 as NodeKind, 0);
     b.token(0);
     let s = b.finish();
@@ -308,7 +308,7 @@ test "ParseResult ok when there are no diagnostics" {
     let ts = stream_of("a", [
         [0, 0, 1],
     ]);
-    let mut b = TreeBuilder::new();
+    let mut b = TreeBuilder::with_capacity(0);
     b.start_node(0 as NodeKind, 0);
     b.token(0);
     b.finish_node(1);
@@ -321,11 +321,13 @@ test "ParseResult has_errors when an error diagnostic is present" {
     let ts = stream_of("a", [
         [0, 0, 1],
     ]);
-    let mut b = TreeBuilder::new();
+    let mut b = TreeBuilder::with_capacity(0);
     b.start_node(0 as NodeKind, 0);
     b.token(0);
     b.finish_node(1);
-    let diags: List<Diagnostic> = [Diagnostic::error(DiagnosticCode::UnexpectedToken, "boom", Span::new(0, 1), 1, 0)];
+    let diags: List<Diagnostic> = [
+        Diagnostic::error(DiagnosticCode::UnexpectedToken, "boom", Span::new(0, 1), [], 0, RecoveryAction::None),
+    ];
     let result = ParseResult { cst: b.finish(), tokens: ts, diagnostics: diags };
     assert result.has_errors();
     assert !result.ok();
@@ -334,32 +336,49 @@ test "ParseResult has_errors when an error diagnostic is present" {
 
 // === Diagnostic ===
 
-test "Diagnostic::error fills severity and position, defaults the rest" {
-    let d = Diagnostic::error(
-        DiagnosticCode::MissingToken,
-        `expected ',' but found ')'`,
-        Span::new(10, 11),
-        3,
-        7,
-    );
+test "Diagnostic::error carries what was wanted and found, positions resolve later" {
+    let chars: List<char> = "(a,\n  b)".chars().collect();
+    let mut diags: List<Diagnostic> = [
+        Diagnostic::error(
+            DiagnosticCode::MissingToken,
+            "missing ','",
+            Span::new(6, 7),
+            [3],
+            5,
+            RecoveryAction::Inserted,
+        ),
+    ];
+    let d = &diags[0];
     assert d.is_error();
-    assert d.line == 3;
-    assert d.col == 7;
-    assert d.expected.is_empty();
-    assert d.found == -1;
-    assert d.recovery matches { None };
-    assert `${d}` == "error[missing-token] at 3:7: expected ',' but found ')'";
+    assert d.expected == [3];
+    assert d.found == 5;
+    assert d.recovery matches { Inserted };
+    assert d.line == 1 && d.col == 0;
+    resolve_positions(&mut diags, &chars);
+    assert diags[0].line == 2 && diags[0].col == 2;
+    assert `${diags[0]}` == "error[missing-token] at 2:2: missing ','";
 }
 
-test "Diagnostic renders related notes" {
-    let mut d = Diagnostic::error(
-        DiagnosticCode::UnterminatedConstruct,
-        "unterminated group",
-        Span::new(20, 21),
-        5,
-        0,
-    );
-    d.recovery = RecoveryAction::FilledMissing;
-    d.related.push(RelatedInfo { message: "'(' opened here", span: Span::new(4, 5) });
-    assert `${d}` == "error[unterminated-construct] at 5:0: unterminated group\n  note: '(' opened here";
+test "rule_path renders an innermost-first stack outermost-first" {
+    let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, "x", Span::new(0, 1), [], 0, RecoveryAction::None);
+    d.rule_stack = ["statement", "block", "block", "program"];
+    assert d.rule_path() == "program > block > statement";
+}
+
+test "push_lex_errors reports each lex-error token, up to the cap" {
+    let chars: List<char> = "a#b$".chars().collect();
+    let mut ts = TokenStream::new(&chars);
+    ts.push_token(0, 0, 1, 0, 0);
+    let _ = ts.push_token_flagged(9, 1, 2, 0, 0, TokenFlags::LexError);
+    ts.push_token(0, 2, 3, 0, 0);
+    let _ = ts.push_token_flagged(9, 3, 4, 0, 0, TokenFlags::LexError);
+    let mut diags: List<Diagnostic> = [];
+    push_lex_errors(&ts, &mut diags, 10);
+    assert diags.len() == 2;
+    assert diags[0].code matches { LexError };
+    assert diags[0].message == "token recognition error at: '#'";
+    assert diags[1].span == Span::new(3, 4);
+    let mut capped: List<Diagnostic> = [];
+    push_lex_errors(&ts, &mut capped, 1);
+    assert capped.len() == 1;
 }
