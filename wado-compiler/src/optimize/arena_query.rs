@@ -638,13 +638,35 @@ pub(super) fn cast_truncates_a_float(
     types.is_float(body.operand_type(inner)) && types.is_integer(target)
 }
 
-/// Without a type table `Cast` is conservatively trap-capable; with one only a
-/// float source makes it trap.
+/// A `FieldAccess` traps only on a null receiver, and every type a field access
+/// can name is a non-null heap value in NIR — a struct, a reference, or a
+/// generic instance (tuple / `Box` / `List` / user generic). `Option` is the one
+/// nullable type, and it is read via `VariantPayload`, never `FieldAccess`; its
+/// null niche is a WIR representation, chosen after the NIR optimizer has run.
+/// Provable only with a type table.
+pub(super) fn field_receiver_nonnull(
+    body: &Body,
+    types: Option<&TypeTable>,
+    receiver: Operand,
+) -> bool {
+    let Some(types) = types else {
+        return false;
+    };
+    let ty = body.operand_type(receiver);
+    match types.get_pruned(ty) {
+        Some(ResolvedType::Struct { .. } | ResolvedType::Ref(_) | ResolvedType::MutRef(_)) => true,
+        Some(ResolvedType::GenericInstance { .. }) => types.as_option(ty).is_none(),
+        _ => false,
+    }
+}
+
+/// Without a type table `Cast` and `FieldAccess` are conservatively
+/// trap-capable.
 pub(super) fn expr_node_may_trap(body: &Body, id: ExprId) -> bool {
     expr_node_may_trap_typed(body, id, None)
 }
 
-/// [`expr_node_may_trap`], with a type table to settle a cast.
+/// [`expr_node_may_trap`], with a type table to settle a cast or a field read.
 pub(super) fn expr_node_may_trap_typed(body: &Body, id: ExprId, types: Option<&TypeTable>) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Binary { op, .. } => binary_op_may_trap(*op),
@@ -652,22 +674,21 @@ pub(super) fn expr_node_may_trap_typed(body: &Body, id: ExprId, types: Option<&T
         ExprKind::Cast { expr, target_type } => {
             cast_truncates_a_float(body, types, *expr, *target_type)
         }
-        // Heap projections on a possibly-null (or case-mismatched) receiver.
-        ExprKind::FieldAccess { .. }
-        | ExprKind::Index { .. }
+        ExprKind::FieldAccess { expr, .. } => !field_receiver_nonnull(body, types, *expr),
+        // Heap projections on a possibly-null (or case-mismatched, or short)
+        // receiver.
+        ExprKind::Index { .. }
         | ExprKind::VariantTag { .. }
         | ExprKind::VariantTest { .. }
         | ExprKind::VariantPayload { .. } => true,
         // A callee may trap (`panic`, OOB index, division, `unreachable`).
         ExprKind::Call { .. } | ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => true,
-        // A store through a projection traps on a null / OOB / mismatched
-        // receiver; a bare-local rebind does not, but classify the node
-        // conservatively — its sole consumer routes `Assign` through a
-        // dedicated arm, so this value never decides an elision.
-        ExprKind::Assign { .. } => true,
+        // A store traps exactly where reading its target would, and the target
+        // is a child node that answers for itself.
+        ExprKind::Assign { .. }
         // Pure value ops, constructors, constant leaves, global reads/writes,
         // and control-flow (whose sub-trees carry their own traps).
-        ExprKind::GlobalVarGet { .. }
+        | ExprKind::GlobalVarGet { .. }
         | ExprKind::GlobalVarSet { .. }
         | ExprKind::Local { .. }
         | ExprKind::PackedArray(_)

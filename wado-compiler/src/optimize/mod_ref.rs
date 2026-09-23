@@ -12,7 +12,12 @@ use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
-use crate::optimize::arena_query::{cast_truncates_a_float, expr_node_may_trap};
+use crate::nir_package::NirPackage;
+use crate::optimize::arena_query::{
+    cast_truncates_a_float, expr_node_may_trap_typed, field_receiver_nonnull,
+};
+use crate::optimize::bounds::{self, ArrayOp};
+use crate::optimize::inline::recursive_scc_members;
 use crate::tir::TypeTable;
 
 /// Read / write flags for a single state channel (e.g., GC heap or
@@ -124,24 +129,6 @@ struct AccumScope<'a> {
     types: Option<&'a TypeTable>,
 }
 
-/// A `FieldAccess` traps only on a null receiver, and every type a field access
-/// can name is a non-null heap value in Wado — a struct, a reference, or a
-/// generic instance (tuple / `Box` / `List` / user generic). `Option` is the
-/// one nullable type, and it is read via `VariantPayload`, never `FieldAccess`.
-/// Provable only with a type table.
-fn field_receiver_nonnull(body: &Body, scope: &AccumScope<'_>, base: Operand) -> bool {
-    use crate::tir::ResolvedType;
-    let Some(types) = scope.types else {
-        return false;
-    };
-    let ty = body.operand_type(base);
-    match types.get_pruned(ty) {
-        Some(ResolvedType::Struct { .. } | ResolvedType::Ref(_) | ResolvedType::MutRef(_)) => true,
-        Some(ResolvedType::GenericInstance { .. }) => types.as_option(ty).is_none(),
-        _ => false,
-    }
-}
-
 impl ModRef {
     /// Compute the summary of the expression `id` and its sub-tree.
     pub fn of_expr(body: &Body, id: ExprId) -> Self {
@@ -243,7 +230,7 @@ impl ModRef {
             // === Heap reads ===
             ExprKind::FieldAccess { expr, .. } => {
                 self.heap.reads = true;
-                if !field_receiver_nonnull(body, scope, *expr) {
+                if !field_receiver_nonnull(body, scope.types, *expr) {
                     self.may_trap = true;
                 }
                 let expr = *expr;
@@ -438,7 +425,7 @@ impl ModRef {
             }
             ExprKind::FieldAccess { expr, .. } => {
                 self.heap.writes = true;
-                if !field_receiver_nonnull(body, scope, *expr) {
+                if !field_receiver_nonnull(body, scope.types, *expr) {
                     self.may_trap = true;
                 }
                 let expr = *expr;
@@ -648,8 +635,9 @@ pub(super) fn can_move_past(expr_mr: &ModRef, int_mr: &ModRef, candidate: u32) -
 /// What a function does to machine state its caller can observe, resolved
 /// transitively across the call graph — the callee-side refinement of the
 /// per-expression [`ModRef`], which stops at a call boundary. Only globals,
-/// linear memory and I/O are modelled; the GC heap is deliberately absent,
-/// since retention (checked by the client) is what lets a reference escape.
+/// linear memory and I/O are modelled, and of the GC heap only a store into
+/// memory the function did not allocate; retention (checked by the client) is
+/// what lets a reference escape.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) struct FnEffect {
     /// Reads process-wide mutable state (a global, or linear memory), so two
@@ -660,12 +648,16 @@ pub(super) struct FnEffect {
     /// Does component-model I/O, or contains something the analysis cannot
     /// see through (an indirect call, a bodyless non-builtin).
     pub opaque: bool,
-    /// Some execution may trap. A trap is observable, so a caller that would
-    /// *delete* the call — not merely move it — needs this on top of
-    /// [`Self::is_pure`]. Conservative: every bodyless leaf carries it, and a
-    /// body carries the union of its nodes' own traps
-    /// ([`super::arena_query::expr_node_may_trap`]) and its callees'.
+    /// Some execution may trap: a body's own nodes
+    /// ([`super::arena_query::expr_node_may_trap_typed`]), a builtin
+    /// [`builtin_trap`] cannot clear, or a callee's.
     pub may_trap: bool,
+    /// Some execution may never return: a loop [`bounds`] cannot count out, or
+    /// recursion.
+    pub may_diverge: bool,
+    /// Stores into GC memory a caller may hold: through a reference argument,
+    /// a receiver, or anything else the function did not allocate.
+    pub writes_shared_heap: bool,
 }
 
 impl FnEffect {
@@ -678,12 +670,20 @@ impl FnEffect {
         !self.reads_mutable_state && !self.writes_state && !self.opaque
     }
 
+    /// Pure, sure to return without trapping, and storing nowhere a caller can
+    /// look, so a call whose result nothing reads can be deleted.
+    pub fn is_deletable(&self) -> bool {
+        self.is_pure() && !self.may_trap && !self.may_diverge && !self.writes_shared_heap
+    }
+
     pub(super) fn opaque() -> Self {
         Self {
             reads_mutable_state: true,
             writes_state: true,
             opaque: true,
             may_trap: true,
+            may_diverge: true,
+            writes_shared_heap: true,
         }
     }
 
@@ -692,6 +692,8 @@ impl FnEffect {
         self.writes_state |= other.writes_state;
         self.opaque |= other.opaque;
         self.may_trap |= other.may_trap;
+        self.may_diverge |= other.may_diverge;
+        self.writes_shared_heap |= other.writes_shared_heap;
     }
 }
 
@@ -701,7 +703,7 @@ impl FnEffect {
 ///
 /// Wado spells a linear-memory address as a plain `i32`, so these carry no
 /// `&mut` to give them away: the list is the ground truth.
-fn memory_builtin_effect(name: &str) -> Option<FnEffect> {
+fn memory_builtin_effect(name: &str) -> FnEffect {
     let reads = matches!(
         name,
         "i32_load"
@@ -728,43 +730,146 @@ fn memory_builtin_effect(name: &str) -> Option<FnEffect> {
             | "memory_grow"
             | "realloc"
     );
-    (reads || writes).then_some(FnEffect {
+    FnEffect {
         reads_mutable_state: reads || writes,
         writes_state: writes,
-        opaque: false,
-        may_trap: true,
-    })
+        ..FnEffect::default()
+    }
 }
 
-/// Leaf summary for a bodyless function.
+/// How a Wasm-instruction builtin can trap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BuiltinTrap {
+    Never,
+    /// Only on an argument out of the range [`bounds`] checks per call.
+    Array(ArrayOp),
+    /// A trap nothing here rules out, and the answer for any builtin this
+    /// taxonomy does not name.
+    May,
+}
+
+/// The GC-array builtins, by the operands their bounds check reads.
+const ARRAY_BUILTINS: &[(&str, ArrayOp)] = &[
+    ("array_new", ArrayOp::New),
+    ("array_get_value", ArrayOp::Element),
+    ("array_get_value_u8", ArrayOp::Element),
+    ("array_get_ref", ArrayOp::Element),
+    ("array_get_ref_mut", ArrayOp::ElementWrite),
+    ("array_set", ArrayOp::ElementWrite),
+    ("array_set_u8", ArrayOp::ElementWrite),
+    ("array_fill", ArrayOp::Fill),
+    ("array_copy", ArrayOp::Copy),
+    ("array_clone_prefix", ArrayOp::ClonePrefix),
+];
+
+/// Scalar builtins that never trap. `array_len` reads through a reference,
+/// which is never null, and `array_clone` copies exactly its source's length.
+/// `cold_path` and `black_box` stay out: a call to either is there to be kept.
+const TOTAL_BUILTINS: &[&str] = &[
+    "array_len",
+    "array_clone",
+    "memory_size",
+    "memory_grow",
+    "i32_as_char",
+    "i32_and",
+    "i32_eqz",
+    "select",
+    "i64_add128",
+    "i64_sub128",
+    "i64_mul_wide_u",
+    "i64_mul_wide_s",
+    "i32_clz",
+    "i32_ctz",
+    "i32_popcnt",
+    "i64_clz",
+    "i64_ctz",
+    "i64_popcnt",
+    "i64_reinterpret_f64",
+    "f64_reinterpret_i64",
+    "i32_reinterpret_f32",
+    "f32_reinterpret_i32",
+    "u16_reinterpret_f16",
+    "f16_reinterpret_u16",
+    "u16_reinterpret_bf16",
+    "bf16_reinterpret_u16",
+    "f32_abs",
+    "f64_abs",
+    "f32_ceil",
+    "f64_ceil",
+    "f32_floor",
+    "f64_floor",
+    "f32_trunc",
+    "f64_trunc",
+    "f32_nearest",
+    "f64_nearest",
+    "f32_sqrt",
+    "f64_sqrt",
+    "f32_min",
+    "f64_min",
+    "f32_max",
+    "f64_max",
+    "f32_copysign",
+    "f64_copysign",
+];
+
+/// SIMD lane ops are total: lane indices are immediates, float division yields
+/// a NaN or an infinity, and conversions saturate. The linear-memory accesses
+/// are the exception.
+const SIMD_PREFIXES: &[&str] = &[
+    "v128_", "i8x16_", "i16x8_", "i32x4_", "i64x2_", "f32x4_", "f64x2_",
+];
+
+/// The trap taxonomy of the builtins in `core:builtin`. Unlisted is
+/// [`BuiltinTrap::May`], so a new builtin costs optimization, never correctness.
+fn builtin_trap(name: &str) -> BuiltinTrap {
+    if let Some(&(_, op)) = ARRAY_BUILTINS.iter().find(|(n, _)| *n == name) {
+        return BuiltinTrap::Array(op);
+    }
+    let simd = SIMD_PREFIXES.iter().any(|p| name.starts_with(p))
+        && !matches!(name, "v128_load" | "v128_store");
+    if simd || TOTAL_BUILTINS.contains(&name) {
+        BuiltinTrap::Never
+    } else {
+        BuiltinTrap::May
+    }
+}
+
+/// Leaf summary for a bodyless function, with the array builtin it is, if any.
 ///
 /// A builtin carrying a `canonical_name` is a component-model operation
 /// (streams, futures, waitables, tasks, threads) — I/O, hence opaque. The rest
 /// are Wasm instructions: opaque only when they touch linear memory.
 /// Anything bodyless that is not a builtin at all (an extern declaration) is
 /// opaque, since there is no body to inspect.
-fn leaf_effect(f: &NirFunction, registry: &BuiltinRegistry) -> FnEffect {
+fn leaf_effect(f: &NirFunction, registry: &BuiltinRegistry) -> (FnEffect, Option<ArrayOp>) {
     let fref = nir::FunctionRef::from_resolved(f, f.module_source.clone());
     let Some(qualified) = fref
         .builtin_name()
         .or_else(|| fref.monomorphized_builtin_name())
     else {
-        return FnEffect::opaque();
+        return (FnEffect::opaque(), None);
     };
     let bare = qualified.strip_prefix("builtin::").unwrap_or(&qualified);
     if registry
         .get(bare)
         .is_some_and(|info| info.canonical_name.is_some())
     {
-        return FnEffect::opaque();
+        return (FnEffect::opaque(), None);
     }
-    // No builtin carries a trap taxonomy, so every leaf is assumed to trap.
-    // The bit only gates deletion, so the coarse answer costs optimization
-    // rather than correctness.
-    FnEffect {
-        may_trap: true,
-        ..memory_builtin_effect(bare).unwrap_or_default()
-    }
+    let trap = builtin_trap(bare);
+    let array_op = match trap {
+        BuiltinTrap::Array(op) => Some(op),
+        BuiltinTrap::Never | BuiltinTrap::May => None,
+    };
+    let effect = FnEffect {
+        may_trap: trap != BuiltinTrap::Never,
+        writes_shared_heap: matches!(
+            array_op,
+            Some(ArrayOp::ElementWrite | ArrayOp::Fill | ArrayOp::Copy)
+        ),
+        ..memory_builtin_effect(bare)
+    };
+    (effect, array_op)
 }
 
 /// Resolve [`FnEffect`] for every function, indexed by `func_id.index()`.
@@ -772,14 +877,21 @@ fn leaf_effect(f: &NirFunction, registry: &BuiltinRegistry) -> FnEffect {
 /// Least fixpoint from "pure until a reason appears": a function starts at its
 /// own body's contribution, then absorbs each callee's summary until stable.
 /// A cycle of mutually recursive functions that never touch a channel stays
-/// pure, which is what makes ordinary recursive helpers usable.
-pub(super) fn compute_fn_effects(
-    funcs: &[std::rc::Rc<std::cell::RefCell<NirFunction>>],
-    registry: &BuiltinRegistry,
-) -> Vec<FnEffect> {
+/// pure, which is what makes ordinary recursive helpers usable, but it may
+/// diverge.
+pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
     use cranelift_entity::EntityRef;
 
+    let funcs = &project.functions;
+    let types = project.type_table.borrow();
     let mut effects = vec![FnEffect::default(); funcs.len()];
+    let mut array_ops: Vec<Option<ArrayOp>> = vec![None; funcs.len()];
+    for (i, f) in funcs.iter().enumerate() {
+        let f = f.borrow();
+        if f.body.is_none() {
+            (effects[i], array_ops[i]) = leaf_effect(&f, &project.builtin_registry);
+        }
+    }
     // Callee edges as one flat run per function rather than an `IndexSet` each:
     // this walks every function in the package three times per fixed-point round.
     let mut callee_edges: Vec<usize> = Vec::new();
@@ -790,21 +902,41 @@ pub(super) fn compute_fn_effects(
     for (i, f) in funcs.iter().enumerate() {
         let f = f.borrow();
         let Some(body) = &f.body else {
-            effects[i] = leaf_effect(&f, registry);
             continue;
         };
-        let mut own = FnEffect::default();
+        let bounds = bounds::analyze(body, &types, |fid| {
+            array_ops.get(fid.index()).copied().flatten()
+        });
+        let mut own = FnEffect {
+            writes_shared_heap: bounds.writes_shared_heap,
+            ..FnEffect::default()
+        };
         let edge_start = callee_edges.len();
         stack.clear();
         stack.push(NodeRef::Block(body.root));
         while let Some(node) = stack.pop() {
-            if let NodeRef::Expr(id) = node {
-                match &body.exprs[id].kind {
+            match node {
+                NodeRef::Stmt(s) => {
+                    if matches!(body.stmts[s].kind, StmtKind::Loop { .. })
+                        && !bounds.counted.contains(&s)
+                    {
+                        own.may_diverge = true;
+                    }
+                }
+                NodeRef::Expr(id) => match &body.exprs[id].kind {
                     ExprKind::GlobalVarGet { .. } => own.reads_mutable_state = true,
                     ExprKind::GlobalVarSet { .. } => own.writes_state = true,
                     ExprKind::CmRawCall { .. } | ExprKind::IndirectCall { .. } => {
-                        own.opaque = true;
-                        own.may_trap = true;
+                        own.merge(FnEffect::opaque());
+                    }
+                    // The body scan answers for an array builtin at its call
+                    // site: its bounds, and whose memory it writes.
+                    ExprKind::Call { func_id, .. } if array_ops[func_id.index()].is_some() => {
+                        own.merge(FnEffect {
+                            may_trap: !bounds.in_bounds.contains(&id),
+                            writes_shared_heap: false,
+                            ..effects[func_id.index()]
+                        });
                     }
                     // A direct call's trap arrives with its callee's summary.
                     ExprKind::Call { func_id, .. } => {
@@ -814,8 +946,9 @@ pub(super) fn compute_fn_effects(
                             callee_edges.push(callee);
                         }
                     }
-                    _ => own.may_trap |= expr_node_may_trap(body, id),
-                }
+                    _ => own.may_trap |= expr_node_may_trap_typed(body, id, Some(&types)),
+                },
+                NodeRef::Block(_) | NodeRef::Pat(_) => {}
             }
             body.for_each_child(node, |c| stack.push(c));
         }
@@ -826,6 +959,14 @@ pub(super) fn compute_fn_effects(
         }
         effects[i] = own;
         edge_ranges[i] = (edge_start, callee_edges.len());
+    }
+
+    let call_graph: Vec<Vec<usize>> = edge_ranges
+        .iter()
+        .map(|&(lo, hi)| callee_edges[lo..hi].to_vec())
+        .collect();
+    for (effect, recursive) in effects.iter_mut().zip(recursive_scc_members(&call_graph)) {
+        effect.may_diverge |= recursive;
     }
 
     loop {
@@ -1858,5 +1999,27 @@ mod tests {
         );
         assert!(mr_expr(|b| call(b, vec![])).calls);
         assert_eq!(mr_stmt(ret_none).control, Control::NonLocal);
+    }
+
+    #[test]
+    fn builtin_trap_taxonomy_names_real_instruction_builtins() {
+        let registry =
+            BuiltinRegistry::build_from_stdlib(&std::cell::RefCell::new(TypeTable::new()));
+        let listed = ARRAY_BUILTINS
+            .iter()
+            .map(|(n, _)| *n)
+            .chain(TOTAL_BUILTINS.iter().copied());
+        for name in listed {
+            let info = registry
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} is not in core:builtin"));
+            assert!(
+                info.canonical_name.is_none(),
+                "{name} is a canonical import"
+            );
+        }
+        assert_eq!(builtin_trap("unreachable"), BuiltinTrap::May);
+        assert_eq!(builtin_trap("v128_store"), BuiltinTrap::May);
+        assert_eq!(builtin_trap("f64x2_div"), BuiltinTrap::Never);
     }
 }

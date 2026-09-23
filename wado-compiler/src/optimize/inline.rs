@@ -1204,7 +1204,7 @@ pub(super) fn find_recursive_functions(functions: &[Rc<RefCell<NirFunction>>]) -
 
 /// Iterative Tarjan SCC. Returns one bool per node: `true` when the node lies on
 /// a call cycle (a non-singleton SCC member, or a node with a self-edge).
-fn recursive_scc_members(call_graph: &[Vec<usize>]) -> Vec<bool> {
+pub(super) fn recursive_scc_members(call_graph: &[Vec<usize>]) -> Vec<bool> {
     let n = call_graph.len();
     const UNVISITED: usize = usize::MAX;
     let mut index_of = vec![UNVISITED; n];
@@ -1529,7 +1529,7 @@ pub fn inline_functions(
         })
         .collect();
     let const_params = constant_params(project, &written_by_func);
-    let fn_effects = compute_fn_effects(&project.functions, &project.builtin_registry);
+    let fn_effects = compute_fn_effects(project);
     let foldable: Vec<bool> = project
         .functions
         .iter()

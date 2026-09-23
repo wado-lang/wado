@@ -133,7 +133,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     });
 
     // Phase 1 — analysis (all immutable borrows).
-    let fn_effects = compute_fn_effects(&project.functions, &project.builtin_registry);
+    let fn_effects = compute_fn_effects(project);
     let hoistable_pure: Vec<bool> = project
         .functions
         .iter()

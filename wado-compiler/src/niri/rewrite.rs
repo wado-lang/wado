@@ -1127,10 +1127,15 @@ pub(super) fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) ->
     let keep: Operand = match &body.exprs[e].kind {
         ExprKind::Binary { left, op, right } => {
             let (left, op, right) = (*left, *op, *right);
-            match (operand_bool(body, left), op, operand_bool(body, right)) {
-                (Some(false), NirBinaryOp::Or, _) | (Some(true), NirBinaryOp::And, _) => right,
-                (_, NirBinaryOp::Or, Some(false)) | (_, NirBinaryOp::And, Some(true)) => left,
-                _ => return false,
+            let Some(neutral) = neutral_bool(op) else {
+                return false;
+            };
+            if operand_bool(body, left) == Some(neutral) {
+                right
+            } else if operand_bool(body, right) == Some(neutral) {
+                left
+            } else {
+                return false;
             }
         }
         _ => return false,
@@ -1175,6 +1180,16 @@ pub(super) fn rewrite_arith_identity_via<S: EditSink>(sink: &mut S, e: ExprId) -
     }
 }
 
+/// The bool operand a logical operator passes the other one through for. The
+/// eager `&` / `|` / `^` over bools obey the same identities as `&&` / `||`.
+fn neutral_bool(op: NirBinaryOp) -> Option<bool> {
+    match op {
+        NirBinaryOp::And | NirBinaryOp::BitAnd => Some(true),
+        NirBinaryOp::Or | NirBinaryOp::BitOr | NirBinaryOp::BitXor => Some(false),
+        _ => None,
+    }
+}
+
 /// The value a short-circuit collapses to when one operand is its absorbing
 /// element — `true` for `||`, `false` for `&&`. `None` unless the *other*
 /// operand is discardable: `x || true` still evaluates `x` first, so deleting
@@ -1185,8 +1200,8 @@ pub(super) fn absorbing_short_circuit(body: &Body, e: ExprId) -> Option<bool> {
     };
     let (left, op, right) = (*left, *op, *right);
     let absorbing = match op {
-        NirBinaryOp::Or => true,
-        NirBinaryOp::And => false,
+        NirBinaryOp::Or | NirBinaryOp::BitOr => true,
+        NirBinaryOp::And | NirBinaryOp::BitAnd => false,
         _ => return None,
     };
     let discarded = if operand_bool(body, left) == Some(absorbing) {

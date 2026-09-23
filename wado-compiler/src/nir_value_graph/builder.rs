@@ -639,6 +639,20 @@ impl<'a> Builder<'a> {
                 return Some(v);
             }
         }
+        // The same identities on the eager `&` / `|` / `^` over bools, where only
+        // the constant side may go: the other was evaluated, and may trap.
+        if matches!(
+            op,
+            NirBinaryOp::BitAnd | NirBinaryOp::BitOr | NirBinaryOp::BitXor
+        ) {
+            let identity = op == NirBinaryOp::BitAnd;
+            if self.pool.kind(lhs).as_bool() == Some(identity) {
+                return Some(rhs);
+            }
+            if self.pool.kind(rhs).as_bool() == Some(identity) {
+                return Some(lhs);
+            }
+        }
         let lv = self.value_to_const(lhs, left, tt)?;
         let rv = self.value_to_const(rhs, right, tt)?;
         let result = const_eval::eval_binary(lv, op, rv)?;
