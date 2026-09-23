@@ -39,13 +39,6 @@ use crate::ast::{
     AttrArg, Attribute, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
     WIRE_NUMBER_RESERVED, wire_number_of, wire_number_written,
 };
-
-/// What one `#[trap(...)]` attribute states; `never` states nothing.
-#[derive(Default)]
-struct TrapClause {
-    check: Option<tir::TrapCheck<String>>,
-    result_len: Option<String>,
-}
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
@@ -116,6 +109,13 @@ macro_rules! reify_annotation_accessors {
             }
         )+
     };
+}
+
+/// What one `#[trap(...)]` attribute states; `never` states nothing.
+#[derive(Default)]
+struct TrapClause {
+    check: Option<tir::TrapCheck<String>>,
+    result_len: Option<String>,
 }
 
 /// Whether a compound-assign target sub-piece may be left inline (duplicated
