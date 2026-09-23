@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790153051259,
+  "lastUpdate": 1790165539765,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58861,6 +58861,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 300579,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6fc03307fe9148c84854831f0dfa0c1a938eed05",
+          "message": "Merge pull request #2134 from wado-lang/perf/json-twitter\n\nperf(optimizer): json-twitter ser -5%, de -4%; reuse repeated struct field loads",
+          "timestamp": "2026-09-23T20:55:30+09:00",
+          "tree_id": "9881650d6e2b3beb0c75e6ba7749690b11bf42d6",
+          "url": "https://github.com/wado-lang/wado/commit/6fc03307fe9148c84854831f0dfa0c1a938eed05"
+        },
+        "date": 1790165538859,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19245,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 290706,
             "unit": "bytes"
           }
         ]
