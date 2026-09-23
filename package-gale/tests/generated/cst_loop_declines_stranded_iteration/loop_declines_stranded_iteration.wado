@@ -1405,7 +1405,7 @@ fn scan_stmts_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_0(dk_0) || _kind_set_1(dk_0) || dk_0 == TK_RB) {
+        if !(_kind_set_2(dk_0)) {
             let dc_0 = pos;
             let mut dc_0_exit = false;
             pos = sp;
@@ -1416,7 +1416,7 @@ fn scan_stmts_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     if pos < 0 { pos = sp; }
                 }
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RB) { dc_0_exit = true; }
+                if probe_kind == TK_RB && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_0_exit = true; }
             }
             if dc_0_exit { pos = sp; break; }
             pos = dc_0;
@@ -1624,7 +1624,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
             }
             if rep_scan_pos >= 0 {
                 let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-                if !(_kind_set_0(decline_kind) || _kind_set_1(decline_kind) || decline_kind == TK_RB) {
+                if !(_kind_set_2(decline_kind)) {
                     let mut decline_dead: bool = false;
                     decline_scan: {
                         let tokens = &p.kinds;
@@ -1635,7 +1635,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
                             if pos < 0 { pos = sp; }
                         }
                         let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RB) { decline_dead = true; }
+                        if probe_kind == TK_RB && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                     }
                     if decline_dead { break; }
                 }
@@ -1659,7 +1659,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
         _plus_first = false;
         _parse_stmt(p, 0);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_1(p.peek_kind())) {
+    if _kind_set_1(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         _parse_expr(p);
     }
     return;
@@ -1667,7 +1667,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_stmts__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
-    if _kind_set_2(kind) {
+    if _kind_set_3(kind) {
         if kind == TK_LET {
             return _parse_stmts__inner_alt_0(p, follow);
         } else if kind == TK_LB {
@@ -1724,7 +1724,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     }
     if kind == TK_LB {
         _parse_blk(p);
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_SEMI) {
+        if p.peek_kind() == TK_SEMI && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             p.expect(TK_SEMI, &EMPTY_SYNC);
         }
         return;
@@ -1903,6 +1903,10 @@ fn _kind_set_1(k: i32) -> bool {
 }
 
 fn _kind_set_2(k: i32) -> bool {
+    return k matches { TK_ID | TK_LB | TK_LET | TK_RB };
+}
+
+fn _kind_set_3(k: i32) -> bool {
     return k matches { TK_ID | TK_LB | TK_LET };
 }
 

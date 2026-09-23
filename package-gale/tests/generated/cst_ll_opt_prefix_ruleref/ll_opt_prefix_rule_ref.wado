@@ -1401,7 +1401,7 @@ fn _parse_path(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_seg__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_ID, &SYNC_1);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_SEP && p.peek_at(1) == TK_LT) {
+    if (p.peek_kind() == TK_SEP && p.peek_at(1) == TK_LT) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.expect(TK_SEP, &SYNC_2);
         _parse_args(p);
     }

@@ -1683,7 +1683,7 @@ fn _parse_pattern__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_path(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LIT_LPAREN) {
+    if (p.peek_kind() == TK_LIT_LPAREN) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.expect(TK_LIT_LPAREN, &SYNC_4);
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {

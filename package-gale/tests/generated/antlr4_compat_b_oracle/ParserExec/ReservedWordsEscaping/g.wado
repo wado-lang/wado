@@ -1564,7 +1564,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
     if kind == TK_FOR {
         p.b.set_alt(0);
         _parse_for(p);
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_FOR) {
+        if p.peek_kind() == TK_FOR && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_for(p);
         }
         if !p.speculating {

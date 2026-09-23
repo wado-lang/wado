@@ -2337,11 +2337,7 @@ fn gen_scan_decline_stranded(
     }
     let gc = ctx.next_scan_group();
     gen_kind_read(w, `dk_${gc}`, "tokens", "pos");
-    let can_continue = join_or(&[
-        kind_check_or_none(loop_first, `dk_${gc}`, ctx),
-        kind_check_or_none(&duties.decline_cont_first, `dk_${gc}`, ctx),
-        kind_check_or_none(&duties.decline_viable, `dk_${gc}`, ctx),
-    ]);
+    let can_continue = decline_continue_check(loop_first, duties, `dk_${gc}`, ctx);
     w.begin(`if !(${can_continue})`);
     gen_scan_mark(w, ctx, `dc_${gc}`);
     w.line(`let mut dc_${gc}_exit = false;`);
@@ -4509,7 +4505,7 @@ fn emit_probe_verdict<S: AsStrSlice>(w: &mut CodeWriter, probe_viable: &List<Str
     }
     w.line("let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
     let viable = ctx.kind_check_str(probe_viable, "probe_kind");
-    let cond = if mask == "true" { viable } else { `(${mask}) && (${viable})` };
+    let cond = if mask == "true" { viable } else { `${viable} && (${mask})` };
     w.line(`if ${cond} { ${verdict} = true; }`);
 }
 
@@ -5062,7 +5058,7 @@ fn atn_optional_enter_cond(ctx: &GenContext, rep_op: &RepeatOp) -> String {
 /// `gen_op_repeat_optional_{leaf,rulecall}`'s gate.
 fn gate_cond_with_caller_follow<S: AsStrSlice>(cond: S, gate_caller_follow: bool) -> String {
     if gate_caller_follow {
-        return `!(${caller_follow_yields()}) && (${cond})`;
+        return `(${cond}) && !${caller_follow_yields()}`;
     }
     return cond.to_string();
 }
@@ -6221,12 +6217,12 @@ fn probe_decides(
 fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     let verdict = dedup_name("opt_enter", nc);
     let entry_gate = if ctx.current_rule_reads_follow() && r.gate_caller_follow {
-        `!(${follow_yields_call("&p.kinds", "p.pos")}) && `;
+        ` && !${follow_yields_call("&p.kinds", "p.pos")}`;
     } else {
         "";
     };
     w.line(`let mut ${verdict}: bool = false;`);
-    w.begin(`if ${entry_gate}${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}`);
+    w.begin(`if ${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}${entry_gate}`);
     gen_viability_probe(
         w,
         &r.continuation_scan,
@@ -6254,7 +6250,7 @@ fn gen_optional_present<S: AsStrSlice, S1: AsStrSlice>(
     cond: S1,
     ctx: &mut GenContext,
 ) {
-    let guard = if gate_expr.is_empty() { cond.to_string() } else { `!(${gate_expr}) && (${cond})` };
+    let guard = if gate_expr.is_empty() { cond.to_string() } else { `${cond} && !${gate_expr}` };
     w.begin(`if ${guard}`);
     let mut nc: List<[String, i32]> = [];
     gen_op_leaf(w, body, ctx, &mut nc);
@@ -6690,11 +6686,7 @@ fn gen_rep_decline_stranded<S: AsStrSlice>(
     let dead_end = dedup_name("decline_dead", nc);
     w.begin(`if ${scan_pos} >= 0`);
     gen_kind_read(w, &cont_kind, "p.kinds", scan_pos);
-    let can_continue = join_or(&[
-        kind_check_or_none(body_admits, &cont_kind, ctx),
-        kind_check_or_none(&duties.decline_cont_first, &cont_kind, ctx),
-        kind_check_or_none(&duties.decline_viable, &cont_kind, ctx),
-    ]);
+    let can_continue = decline_continue_check(body_admits, duties, &cont_kind, ctx);
     w.begin(`if !(${can_continue})`);
     w.line(`let mut ${dead_end}: bool = false;`);
     gen_viability_probe(w, &duties.decline_scan, &dead_end, "decline_scan", ctx, nc, null, &duties.decline_viable);
@@ -6926,28 +6918,26 @@ fn gen_kind_read<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWrit
     );
 }
 
-/// `kind_check_str` for a set that may be empty — an empty one admits nothing,
-/// so it contributes no disjunct rather than an assertion.
-fn kind_check_or_none<S: AsStrSlice>(kinds: &List<String>, subject: S, ctx: &mut GenContext) -> String {
+/// Whether the token after an iteration lets the walk go on without declining:
+/// another iteration, the continuation, or a viable exit.
+fn decline_continue_check<S: AsStrSlice>(
+    loop_first: &List<String>,
+    duties: &IterationDuties,
+    subject: S,
+    ctx: &mut GenContext,
+) -> String {
+    let mut kinds = *loop_first;
+    for let set of [&duties.decline_cont_first, &duties.decline_viable] {
+        for let k of set {
+            if !kinds.contains(k) {
+                kinds.push(*k);
+            }
+        }
+    }
     if kinds.is_empty() {
-        return String::new();
+        return String::from("false");
     }
-    return ctx.kind_check_str(kinds, subject);
-}
-
-/// `a || b || c`, skipping the empties.
-fn join_or(parts: &List<String>) -> String {
-    let mut out = String::new();
-    for let p of parts {
-        if p.is_empty() {
-            continue;
-        }
-        if !out.is_empty() {
-            out.push_str(" || ");
-        }
-        out.push_str(p);
-    }
-    return if out.is_empty() { String::from("false") } else { out };
+    return ctx.kind_check_str(&kinds, subject);
 }
 
 fn gen_rep_decided_entry<S: AsStrSlice>(

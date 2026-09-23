@@ -1489,7 +1489,7 @@ fn _parse_file_(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_A, &SYNC_1);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_B) {
+    if p.peek_kind() == TK_B && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.expect(TK_B, &EMPTY_SYNC);
     }
     return;

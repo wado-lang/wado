@@ -1333,7 +1333,7 @@ fn _parse_start(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_field__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_ID, &SYNC_0);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_COLON) {
+    if (p.peek_kind() == TK_COLON) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.expect(TK_COLON, &SYNC_1);
         _parse_mods(p, follow);
     }
@@ -1352,7 +1352,7 @@ fn _parse_field(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_mods__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_PUB) {
+    if p.peek_kind() == TK_PUB && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.expect(TK_PUB, &EMPTY_SYNC);
     }
     return;

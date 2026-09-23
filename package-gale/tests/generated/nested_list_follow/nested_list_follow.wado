@@ -1541,7 +1541,7 @@ fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
     }
     if kind == TK_ID {
         p.take();
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LIT_LT) {
+        if p.peek_kind() == TK_LIT_LT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_targs(p, follow);
         }
         return;

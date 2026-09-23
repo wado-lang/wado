@@ -1556,7 +1556,7 @@ fn _parse_stat__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_ID, &SYNC_1);
         p.expect(TK_LIT_then, &SYNC_2);
         _parse_stat(p, follow);
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LIT_else && p.peek_at(1) == TK_ID) {
+        if (p.peek_kind() == TK_LIT_else && p.peek_at(1) == TK_ID) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             p.expect(TK_LIT_else, &SYNC_3);
             p.expect(TK_ID, &EMPTY_SYNC);
         }

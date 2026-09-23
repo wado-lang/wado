@@ -2269,7 +2269,7 @@ fn scan_script(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_OPEN { return -1; }
     pos += 1;
-    if pos >= tokens.len() || !_kind_set_10(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_11(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
@@ -2278,7 +2278,7 @@ fn scan_style(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_STYLE_OPEN { return -1; }
     pos += 1;
-    if pos >= tokens.len() || !_kind_set_11(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_12(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
@@ -2298,7 +2298,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_0(decline_kind) || _kind_set_8(decline_kind) || decline_kind == TK_EOF) {
+            if !(_kind_set_8(decline_kind)) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;
@@ -2328,7 +2328,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         if pos == sp { break; }
                     }
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_EOF) { decline_dead = true; }
+                    if probe_kind == TK_EOF && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                 }
                 if decline_dead { break; }
             }
@@ -2350,7 +2350,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         _parse_scriptlet_or_sea_ws(p);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_XML) {
+    if p.peek_kind() == TK_XML && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.expect(TK_XML, &EMPTY_SYNC);
     }
     loop {
@@ -2367,7 +2367,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos_2 >= 0 {
             let decline_kind_2 = if rep_scan_pos_2 < p.kinds.len() { p.kinds[rep_scan_pos_2] } else { TK_EOF };
-            if !(_kind_set_0(decline_kind_2) || _kind_set_9(decline_kind_2) || decline_kind_2 == TK_EOF) {
+            if !(_kind_set_9(decline_kind_2)) {
                 let mut decline_dead_2: bool = false;
                 decline_scan_2: {
                     let tokens = &p.kinds;
@@ -2388,7 +2388,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         if pos == sp { break; }
                     }
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_EOF) { decline_dead_2 = true; }
+                    if probe_kind == TK_EOF && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead_2 = true; }
                 }
                 if decline_dead_2 { break; }
             }
@@ -2410,7 +2410,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         _parse_scriptlet_or_sea_ws(p);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_DTD) {
+    if p.peek_kind() == TK_DTD && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.expect(TK_DTD, &EMPTY_SYNC);
     }
     loop {
@@ -2427,7 +2427,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos_3 >= 0 {
             let decline_kind_3 = if rep_scan_pos_3 < p.kinds.len() { p.kinds[rep_scan_pos_3] } else { TK_EOF };
-            if !(_kind_set_0(decline_kind_3) || _kind_set_1(decline_kind_3) || decline_kind_3 == TK_EOF) {
+            if !(_kind_set_10(decline_kind_3)) {
                 let mut decline_dead_3: bool = false;
                 decline_scan_3: {
                     let tokens = &p.kinds;
@@ -2439,7 +2439,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         if pos == sp { break; }
                     }
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_EOF) { decline_dead_3 = true; }
+                    if probe_kind == TK_EOF && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead_3 = true; }
                 }
                 if decline_dead_3 { break; }
             }
@@ -2654,7 +2654,7 @@ fn _parse_html_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos += 1;
                 opt_scan_pos = pos;
             }
-            if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (opt_scan_pos >= 0) {
+            if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
                 _parse_html_content(p, FOLLOW_MASK_0);
                 p.expect(TK_TAG_OPEN, &SYNC_3);
                 p.expect(TK_TAG_SLASH, &SYNC_4);
@@ -2700,7 +2700,7 @@ fn _parse_html_element(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_6(p.peek_kind())) {
+    if _kind_set_6(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         _parse_html_chardata(p);
     }
     loop {
@@ -2752,7 +2752,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &SYNC_8);
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_6(p.peek_kind())) {
+        if _kind_set_6(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_html_chardata(p);
         }
     }
@@ -2772,7 +2772,7 @@ fn _parse_html_content(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_html_attribute__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_TAG_NAME, &SYNC_9);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_TAG_EQUALS && p.peek_at(1) == TK_ATTVALUE_VALUE) {
+    if (p.peek_kind() == TK_TAG_EQUALS && p.peek_at(1) == TK_ATTVALUE_VALUE) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.expect(TK_TAG_EQUALS, &SYNC_10);
         p.expect(TK_ATTVALUE_VALUE, &EMPTY_SYNC);
     }
@@ -3028,18 +3028,22 @@ fn _kind_set_7(k: i32) -> bool {
 }
 
 fn _kind_set_8(k: i32) -> bool {
-    return k matches { TK_DTD | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_SEA_WS | TK_STYLE_OPEN | TK_TAG_OPEN | TK_XML };
+    return k matches { TK_DTD | TK_EOF | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_SEA_WS | TK_STYLE_OPEN | TK_TAG_OPEN | TK_XML };
 }
 
 fn _kind_set_9(k: i32) -> bool {
-    return k matches { TK_DTD | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_SEA_WS | TK_STYLE_OPEN | TK_TAG_OPEN };
+    return k matches { TK_DTD | TK_EOF | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_SEA_WS | TK_STYLE_OPEN | TK_TAG_OPEN };
 }
 
 fn _kind_set_10(k: i32) -> bool {
-    return k matches { TK_SCRIPT_BODY | TK_SCRIPT_SHORT_BODY };
+    return k matches { TK_EOF | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_SEA_WS | TK_STYLE_OPEN | TK_TAG_OPEN };
 }
 
 fn _kind_set_11(k: i32) -> bool {
+    return k matches { TK_SCRIPT_BODY | TK_SCRIPT_SHORT_BODY };
+}
+
+fn _kind_set_12(k: i32) -> bool {
     return k matches { TK_STYLE_BODY | TK_STYLE_SHORT_BODY };
 }
 

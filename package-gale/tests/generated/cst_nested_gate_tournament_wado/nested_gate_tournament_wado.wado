@@ -1617,7 +1617,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
             }
             if rep_scan_pos >= 0 {
                 let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-                if !(_kind_set_0(decline_kind) || _kind_set_0(decline_kind) || decline_kind == TK_RB) {
+                if !(_kind_set_1(decline_kind)) {
                     let mut decline_dead: bool = false;
                     decline_scan: {
                         p.scan_gate.noBrace = p.noBrace;
@@ -1633,7 +1633,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
                             }
                         }
                         let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RB) { decline_dead = true; }
+                        if probe_kind == TK_RB && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                     }
                     if decline_dead { break; }
                 }
@@ -1657,7 +1657,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
         _plus_first = false;
         _parse_stmt(p);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_0(p.peek_kind())) {
+    if _kind_set_0(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         _parse_expr(p);
     }
     return;
@@ -1678,7 +1678,7 @@ fn _parse_stmts__inner_scan_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
         }
         if pos == sp { break; }
         let dk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_0(dk_1) || _kind_set_0(dk_1) || dk_1 == TK_RB) {
+        if !(_kind_set_1(dk_1)) {
             let dc_1 = pos;
             let dc_1_gate = *gate;
             let mut dc_1_exit = false;
@@ -1695,7 +1695,7 @@ fn _parse_stmts__inner_scan_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
                     }
                 }
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RB) { dc_1_exit = true; }
+                if probe_kind == TK_RB && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_1_exit = true; }
             }
             if dc_1_exit {
                 pos = sp;
@@ -1993,6 +1993,10 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 
 fn _kind_set_0(k: i32) -> bool {
     return k matches { TK_ID | TK_IF };
+}
+
+fn _kind_set_1(k: i32) -> bool {
+    return k matches { TK_ID | TK_IF | TK_RB };
 }
 
 global EMPTY_SYNC: List<i32> = [];

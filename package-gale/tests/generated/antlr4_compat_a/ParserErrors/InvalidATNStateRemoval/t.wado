@@ -1433,7 +1433,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
     let kind = p.peek_kind();
     if kind == TK_ID {
         _parse_primary(p);
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_ID) {
+        if p.peek_kind() == TK_ID && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_expr(p, follow);
         }
         if !p.speculating {

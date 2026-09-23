@@ -1398,7 +1398,7 @@ fn _parse_a__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
     let kind = p.peek_kind();
     if kind == TK_X {
         p.take();
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_Y) {
+        if p.peek_kind() == TK_Y && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             p.expect(TK_Y, &EMPTY_SYNC);
         }
         return;

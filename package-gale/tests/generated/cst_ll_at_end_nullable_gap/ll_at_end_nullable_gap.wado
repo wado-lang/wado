@@ -2004,7 +2004,7 @@ fn _parse_x(p: &mut Parser) -> () {
 }
 
 fn _parse_nb__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LIT_w) {
+    if p.peek_kind() == TK_LIT_w && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.expect(TK_LIT_w, &EMPTY_SYNC);
     }
     return;

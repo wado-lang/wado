@@ -26199,7 +26199,7 @@ fn scan_type_selector(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { break opt_probe; }
                 pos += 1;
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_32(probe_kind)) { opt_ok = true; }
+                if _kind_set_32(probe_kind) && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { opt_ok = true; }
             }
             pos = if opt_ok { bp } else { sp };
         }
@@ -26235,7 +26235,7 @@ fn scan_universal(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos >= tokens.len() || tokens[pos] != TK_Multiply { break opt_probe; }
                 pos += 1;
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_32(probe_kind)) { opt_ok = true; }
+                if _kind_set_32(probe_kind) && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { opt_ok = true; }
             }
             pos = if opt_ok { bp } else { sp };
         }
@@ -26293,7 +26293,7 @@ fn scan_attrib(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { break opt_probe; }
                 pos += 1;
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_32(probe_kind)) { opt_ok = true; }
+                if _kind_set_32(probe_kind) && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { opt_ok = true; }
             }
             pos = if opt_ok { bp } else { sp };
         }
@@ -29147,7 +29147,7 @@ fn _parse_media_query_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         opt_scan_pos = pos;
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (opt_scan_pos >= 0) {
+    if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         _parse_media_query(p, follow);
         loop {
             if p.recovering { break; }
@@ -29754,7 +29754,7 @@ fn _parse_type_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
             if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { break opt_enter_scan; }
             pos += 1;
             let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_32(probe_kind)) { opt_enter = true; }
+            if _kind_set_32(probe_kind) && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { opt_enter = true; }
         }
     }
     if opt_enter {
@@ -29847,7 +29847,7 @@ fn _parse_universal__inner(p: &mut Parser, follow: i64 = 0) -> () {
             if pos >= tokens.len() || tokens[pos] != TK_Multiply { break opt_enter_scan; }
             pos += 1;
             let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_32(probe_kind)) { opt_enter = true; }
+            if _kind_set_32(probe_kind) && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { opt_enter = true; }
         }
     }
     if opt_enter {
@@ -29919,7 +29919,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
             if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { break opt_enter_scan; }
             pos += 1;
             let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_32(probe_kind)) { opt_enter = true; }
+            if _kind_set_32(probe_kind) && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { opt_enter = true; }
         }
     }
     if opt_enter {
@@ -30449,7 +30449,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if rep_scan_pos_2 < 0 { break; }
         p.expect(TK_SemiColon, &SYNC_18);
         _parse_ws(p, follow);
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_7(p.peek_kind())) {
+        if _kind_set_7(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_declaration(p, follow);
         }
     }
@@ -30473,7 +30473,7 @@ fn _parse_declaration__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_Colon, &SYNC_15);
     _parse_ws(p, FOLLOW_MASK_7);
     _parse_expr(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_Important) {
+    if p.peek_kind() == TK_Important && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         _parse_prio(p, follow);
     }
     return;

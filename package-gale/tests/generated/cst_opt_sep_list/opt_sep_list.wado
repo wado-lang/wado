@@ -1369,7 +1369,7 @@ fn _parse_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         opt_scan_pos = pos;
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (opt_scan_pos >= 0) {
+    if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         _parse_arm(p);
         loop {
             if p.recovering { break; }
@@ -1395,7 +1395,7 @@ fn _parse_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.expect(TK_LIT_COMMA, &SYNC_0);
             _parse_arm(p);
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LIT_COMMA) {
+        if p.peek_kind() == TK_LIT_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
         }
     }

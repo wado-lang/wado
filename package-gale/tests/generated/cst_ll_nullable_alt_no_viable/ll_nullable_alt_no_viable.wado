@@ -1435,7 +1435,7 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(decline_kind == TK_COMMA || decline_kind == TK_COMMA) {
+            if !(decline_kind == TK_COMMA) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;
@@ -1506,12 +1506,12 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.expect(TK_COMMA, &SYNC_4);
             _parse_base(p);
         } else {
-            if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
+            if p.peek_kind() == TK_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
                 p.expect(TK_COMMA, &EMPTY_SYNC);
             }
         }
     } else {
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
+        if p.peek_kind() == TK_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             p.expect(TK_COMMA, &EMPTY_SYNC);
         }
     }

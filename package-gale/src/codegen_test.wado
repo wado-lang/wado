@@ -847,6 +847,29 @@ X : 'x' ; Y : 'y' ; Z : 'z' ;
     assert !str_contains(&output, "fn scan_n("), output;
 }
 
+test "a decline check names each continuing token once" {
+    let input = "grammar T;
+s : (t | t X)* EOF ;
+t : '(' fs? ')' ;
+fs : f (',' f)* ','? ;
+f : at* v? ty ;
+at : '#' '[' ID ']' ;
+v : 'pub' ;
+ty : ID | '(' fs? ')' ;
+X : 'x' ;
+ID : [a-w]+ ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, "decline_kind"), output;
+    for let line of output.split("\n") {
+        let terms: List<String> = line.split(" || ").map(|t| t.trim().to_string()).collect();
+        for let i of 1..<terms.len() {
+            assert terms[i] != terms[i - 1] || terms[i].contains("{"), `a repeated term: ${line}`;
+        }
+    }
+}
+
 test "a scan function nothing calls is not emitted" {
     let input = "grammar T;
 s : a b EOF ;

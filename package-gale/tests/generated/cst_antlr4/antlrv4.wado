@@ -3253,7 +3253,7 @@ fn scan_id_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_4 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(dk_4 == TK_COMMA || dk_4 == TK_COMMA || dk_4 == TK_RBRACE) {
+        if !(_kind_set_16(dk_4)) {
             let dc_4 = pos;
             let mut dc_4_exit = false;
             pos = sp;
@@ -3262,7 +3262,7 @@ fn scan_id_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     pos += 1;
                 }
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RBRACE) { dc_4_exit = true; }
+                if probe_kind == TK_RBRACE && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_4_exit = true; }
             }
             if dc_4_exit { pos = sp; break; }
             pos = dc_4;
@@ -3368,7 +3368,7 @@ fn scan_rule_spec(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_16(alt_kind) {
+        if _kind_set_17(alt_kind) {
             pos = scan_rule_spec_alt_0(tokens, start, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
@@ -3802,7 +3802,7 @@ fn scan_lexer_command(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_17(alt_kind) {
+        if _kind_set_18(alt_kind) {
             let mut best: i32 = -1;
             try_1: {
                 pos = scan_lexer_command_name(tokens, pos);
@@ -3961,7 +3961,7 @@ fn scan_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
-        } else if _kind_set_18(alt_kind) {
+        } else if _kind_set_19(alt_kind) {
             pos = scan_element_alt_1(tokens, start, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
@@ -4031,7 +4031,7 @@ fn scan_predicate_option(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             try_1: {
                 if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || !_kind_set_19(tokens[pos]) { break try_1; }
+                if pos >= tokens.len() || !_kind_set_20(tokens[pos]) { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -4048,7 +4048,7 @@ fn scan_labeled_element(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
-    if pos >= tokens.len() || !_kind_set_20(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_21(tokens[pos]) { return -1; }
     pos += 1;
     sg_13_done: {
         let sgk_13 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -4958,7 +4958,7 @@ fn _parse_id_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(decline_kind == TK_COMMA || decline_kind == TK_COMMA || decline_kind == TK_RBRACE) {
+            if !(_kind_set_16(decline_kind)) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;
@@ -4967,7 +4967,7 @@ fn _parse_id_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         pos += 1;
                     }
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RBRACE) { decline_dead = true; }
+                    if probe_kind == TK_RBRACE && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                 }
                 if decline_dead { break; }
             }
@@ -4976,7 +4976,7 @@ fn _parse_id_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_COMMA, &SYNC_4);
         _parse_identifier(p);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
+    if p.peek_kind() == TK_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.expect(TK_COMMA, &EMPTY_SYNC);
     }
     return;
@@ -5227,7 +5227,7 @@ fn _parse_rule_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
         } else if kind == TK_TOKEN_REF {
             return _parse_rule_spec__inner_alt_1(p, follow);
-        } else if _kind_set_16(kind) {
+        } else if _kind_set_17(kind) {
             return _parse_rule_spec__inner_alt_0(p, follow);
         }
     }
@@ -5343,7 +5343,7 @@ fn _parse_exception_group__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         _parse_exception_handler(p, 0);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_FINALLY) {
+    if p.peek_kind() == TK_FINALLY && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         _parse_finally_clause(p);
     }
     return;
@@ -5648,7 +5648,7 @@ fn _parse_rule_alt_list(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_labeled_alt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_alternative(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_POUND && _kind_set_1(p.peek_at(1))) {
+    if (p.peek_kind() == TK_POUND && _kind_set_1(p.peek_at(1))) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.expect(TK_POUND, &SYNC_4);
         _parse_identifier(p);
     }
@@ -5751,7 +5751,7 @@ fn _parse_lexer_alt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     scope: {
         _parse_lexer_elements(p, follow);
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_RARROW) {
+        if p.peek_kind() == TK_RARROW && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_lexer_commands(p, follow);
         }
         return;
@@ -5842,21 +5842,21 @@ fn _parse_lexer_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if _kind_set_9(kind) {
         _parse_lexer_atom(p, follow);
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_10(p.peek_kind())) {
+        if _kind_set_10(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_ebnf_suffix(p, follow);
         }
         return;
     }
     if kind == TK_LPAREN {
         _parse_lexer_block(p, follow);
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_10(p.peek_kind())) {
+        if _kind_set_10(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_ebnf_suffix(p, follow);
         }
         return;
     }
     if kind == TK_ACTION {
         _parse_action_block(p);
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
+        if p.peek_kind() == TK_QUESTION && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             p.expect(TK_QUESTION, &EMPTY_SYNC);
         }
         return;
@@ -5974,7 +5974,7 @@ fn _parse_lexer_command__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn _parse_lexer_command__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
-    if _kind_set_17(kind) {
+    if _kind_set_18(kind) {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         let _sd_p_1 = _parse_lexer_command__inner_scan_1(_sd_tokens, _sd_pos);
@@ -6184,7 +6184,7 @@ fn _parse_element__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (opt_scan_pos >= 0) {
+    if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         _parse_ebnf_suffix(p, 0);
     }
     return;
@@ -6212,7 +6212,7 @@ fn _parse_element__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (opt_scan_pos >= 0) {
+    if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         _parse_ebnf_suffix(p, 0);
     }
     return;
@@ -6240,7 +6240,7 @@ fn _parse_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 return _parse_element__inner_alt_0(p, follow);
             }
             return _parse_element__inner_alt_1(p, follow);
-        } else if _kind_set_18(kind) {
+        } else if _kind_set_19(kind) {
             return _parse_element__inner_alt_1(p, follow);
         }
     }
@@ -6250,10 +6250,10 @@ fn _parse_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
     }
     if kind == TK_ACTION {
         _parse_action_block(p);
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
+        if p.peek_kind() == TK_QUESTION && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             p.expect(TK_QUESTION, &EMPTY_SYNC);
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LT) {
+        if p.peek_kind() == TK_LT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_predicate_options(p, follow);
         }
         return;
@@ -6352,7 +6352,7 @@ fn _parse_predicate_option__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: 
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
-    if pos >= tokens.len() || !_kind_set_19(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_20(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
@@ -6425,7 +6425,7 @@ fn _parse_labeled_element(p: &mut Parser) -> () {
 
 fn _parse_ebnf__inner(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_block(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_10(p.peek_kind())) {
+    if _kind_set_10(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         _parse_block_suffix(p, follow);
     }
     return;
@@ -6462,21 +6462,21 @@ fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_QUESTION {
         p.take();
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
+        if p.peek_kind() == TK_QUESTION && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             p.expect(TK_QUESTION, &EMPTY_SYNC);
         }
         return;
     }
     if kind == TK_STAR {
         p.take();
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
+        if p.peek_kind() == TK_QUESTION && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             p.expect(TK_QUESTION, &EMPTY_SYNC);
         }
         return;
     }
     if kind == TK_PLUS {
         p.take();
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
+        if p.peek_kind() == TK_QUESTION && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             p.expect(TK_QUESTION, &EMPTY_SYNC);
         }
         return;
@@ -6621,7 +6621,7 @@ fn _parse_atom(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_wildcard__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_DOT, &SYNC_32);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LT) {
+    if p.peek_kind() == TK_LT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         _parse_element_options(p, follow);
     }
     return;
@@ -6654,7 +6654,7 @@ fn _parse_not_set__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_NOT {
         p.pos += 1;
-        if _kind_set_21(p.peek_kind()) {
+        if _kind_set_22(p.peek_kind()) {
             p.pos -= 1;
             return _parse_not_set__inner_alt_0(p, follow);
         } else if p.peek_kind() == TK_LPAREN {
@@ -6724,7 +6724,7 @@ fn _parse_block_set(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_set_element__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_STRING_LITERAL, &SYNC_32);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LT) {
+    if p.peek_kind() == TK_LT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         _parse_element_options(p, follow);
     }
     return;
@@ -6758,7 +6758,7 @@ fn _parse_set_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
         p.take();
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LT) {
+        if p.peek_kind() == TK_LT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_element_options(p, follow);
         }
         return;
@@ -6879,10 +6879,10 @@ fn _parse_block(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_ruleref__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_RULE_REF, &SYNC_37);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_BEGIN_ARGUMENT) {
+    if p.peek_kind() == TK_BEGIN_ARGUMENT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         _parse_arg_action_block(p, follow);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LT) {
+    if p.peek_kind() == TK_LT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         _parse_element_options(p, follow);
     }
     return;
@@ -6921,14 +6921,14 @@ fn _parse_terminal_def__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
         p.take();
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LT) {
+        if p.peek_kind() == TK_LT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_element_options(p, follow);
         }
         return;
     }
     if kind == TK_STRING_LITERAL {
         p.take();
-        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LT) {
+        if p.peek_kind() == TK_LT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_element_options(p, follow);
         }
         return;
@@ -7530,26 +7530,30 @@ fn _kind_set_15(k: i32) -> bool {
 }
 
 fn _kind_set_16(k: i32) -> bool {
-    return k matches { TK_PRIVATE | TK_PROTECTED | TK_PUBLIC | TK_RULE_REF };
+    return k matches { TK_COMMA | TK_RBRACE };
 }
 
 fn _kind_set_17(k: i32) -> bool {
-    return k matches { TK_MODE | TK_RULE_REF | TK_TOKEN_REF };
+    return k matches { TK_PRIVATE | TK_PROTECTED | TK_PUBLIC | TK_RULE_REF };
 }
 
 fn _kind_set_18(k: i32) -> bool {
-    return k matches { TK_DOT | TK_NOT | TK_STRING_LITERAL };
+    return k matches { TK_MODE | TK_RULE_REF | TK_TOKEN_REF };
 }
 
 fn _kind_set_19(k: i32) -> bool {
-    return k matches { TK_ACTION | TK_INT | TK_STRING_LITERAL };
+    return k matches { TK_DOT | TK_NOT | TK_STRING_LITERAL };
 }
 
 fn _kind_set_20(k: i32) -> bool {
-    return k matches { TK_ASSIGN | TK_PLUS_ASSIGN };
+    return k matches { TK_ACTION | TK_INT | TK_STRING_LITERAL };
 }
 
 fn _kind_set_21(k: i32) -> bool {
+    return k matches { TK_ASSIGN | TK_PLUS_ASSIGN };
+}
+
+fn _kind_set_22(k: i32) -> bool {
     return k matches { TK_LEXER_CHAR_SET | TK_STRING_LITERAL | TK_TOKEN_REF };
 }
 

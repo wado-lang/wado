@@ -1466,7 +1466,7 @@ fn _parse_path(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_seg__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_ID, &SYNC_1);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_SEP) {
+    if p.peek_kind() == TK_SEP && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.expect(TK_SEP, &EMPTY_SYNC);
     }
     let mut gd_winner: i32 = -1;
