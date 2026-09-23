@@ -1127,7 +1127,7 @@ pub(super) fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) ->
     let keep: Operand = match &body.exprs[e].kind {
         ExprKind::Binary { left, op, right } => {
             let (left, op, right) = (*left, *op, *right);
-            let Some(neutral) = neutral_bool(op) else {
+            let Some(neutral) = op.bool_identity() else {
                 return false;
             };
             if operand_bool(body, left) == Some(neutral) {
@@ -1177,16 +1177,6 @@ pub(super) fn rewrite_arith_identity_via<S: EditSink>(sink: &mut S, e: ExprId) -
             true
         }
         Operand::Value(v) => sink.redirect_to_value(e, v),
-    }
-}
-
-/// The bool operand a logical operator passes the other one through for. The
-/// eager `&` / `|` / `^` over bools obey the same identities as `&&` / `||`.
-fn neutral_bool(op: NirBinaryOp) -> Option<bool> {
-    match op {
-        NirBinaryOp::And | NirBinaryOp::BitAnd => Some(true),
-        NirBinaryOp::Or | NirBinaryOp::BitOr | NirBinaryOp::BitXor => Some(false),
-        _ => None,
     }
 }
 

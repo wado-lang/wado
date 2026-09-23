@@ -904,9 +904,7 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
         let Some(body) = &f.body else {
             continue;
         };
-        let bounds = bounds::analyze(body, &types, |fid| {
-            array_ops.get(fid.index()).copied().flatten()
-        });
+        let bounds = bounds::analyze(body, &types, |fid| array_ops[fid.index()]);
         let mut own = FnEffect {
             writes_shared_heap: bounds.writes_shared_heap,
             ..FnEffect::default()

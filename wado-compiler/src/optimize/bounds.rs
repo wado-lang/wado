@@ -557,17 +557,10 @@ fn narrow(prim: PrimitiveType) -> bool {
     )
 }
 
+/// [`PrimitiveType::int_range`] where it fits a [`Range`], which `u64` does not.
 fn prim_range(prim: PrimitiveType) -> Option<Range> {
-    Some(match prim {
-        PrimitiveType::I8 => (i8::MIN.into(), i8::MAX.into()),
-        PrimitiveType::I16 => (i16::MIN.into(), i16::MAX.into()),
-        PrimitiveType::I32 => (i32::MIN.into(), i32::MAX.into()),
-        PrimitiveType::I64 => (i64::MIN, i64::MAX),
-        PrimitiveType::U8 => (0, u8::MAX.into()),
-        PrimitiveType::U16 => (0, u16::MAX.into()),
-        PrimitiveType::U32 => (0, u32::MAX.into()),
-        _ => return None,
-    })
+    let (min, max) = prim.int_range()?;
+    Some((i64::try_from(min).ok()?, i64::try_from(max).ok()?))
 }
 
 /// A constant's value, from the sign- or zero-extended pattern the pool keeps.
