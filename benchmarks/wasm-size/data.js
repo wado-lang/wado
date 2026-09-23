@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790142139087,
+  "lastUpdate": 1790143525833,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58709,6 +58709,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/694124e1fc212ca32a5a2b5ee840e2cd7d2be9f6"
         },
         "date": 1790142138128,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19544,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300579,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5e7bc063d03e54e8bc3da0e9eb21337748548300",
+          "message": "Merge pull request #2132 from wado-lang/claude/loam-onnx-inference\n\ndocs(loam): make inference from a .onnx file alone the next goal",
+          "timestamp": "2026-09-23T14:22:37+09:00",
+          "tree_id": "59465ea78ee7c1a04891756a761926baaa581317",
+          "url": "https://github.com/wado-lang/wado/commit/5e7bc063d03e54e8bc3da0e9eb21337748548300"
+        },
+        "date": 1790143525305,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
