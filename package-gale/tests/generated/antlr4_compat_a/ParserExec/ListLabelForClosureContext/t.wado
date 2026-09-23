@@ -1146,11 +1146,11 @@ pub enum TokenKind {
 
 pub global TK_EOF: i32 = 0;
 pub global TK_ERROR: i32 = 1;
-pub global TK_LIT_IF: i32 = 2;
-pub global TK_LIT_THEN: i32 = 3;
-pub global TK_LIT_END: i32 = 4;
-pub global TK_LIT_ELSE: i32 = 5;
-pub global TK_LIT_A: i32 = 6;
+pub global TK_LIT_if: i32 = 2;
+pub global TK_LIT_then: i32 = 3;
+pub global TK_LIT_end: i32 = 4;
+pub global TK_LIT_else: i32 = 5;
+pub global TK_LIT_a: i32 = 6;
 
 struct Lexer {
     chars: List<char>,
@@ -1223,21 +1223,21 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         match first_char {
             'a' => {
                 end = try_lit_a(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_A; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_a; }
             },
             'e' => {
                 end = try_lit_end(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_END; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_end; }
                 end = try_lit_else(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_ELSE; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_else; }
             },
             'i' => {
                 end = try_lit_if(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_IF; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_if; }
             },
             't' => {
                 end = try_lit_then(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_THEN; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_then; }
             },
             _ => {},
         }
@@ -1260,11 +1260,11 @@ pub fn token_kind_name(kind: i32) -> String {
     return match kind {
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_IF => "'if'",
-        TK_LIT_THEN => "'then'",
-        TK_LIT_END => "'end'",
-        TK_LIT_ELSE => "'else'",
-        TK_LIT_A => "'a'",
+        TK_LIT_if => "'if'",
+        TK_LIT_then => "'then'",
+        TK_LIT_end => "'end'",
+        TK_LIT_else => "'else'",
+        TK_LIT_a => "'a'",
         _ => "Unknown",
     };
 }
@@ -1616,21 +1616,21 @@ impl Parser {
 
 fn scan_if_statement(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_if { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos);
     if pos < 0 { return -1; }
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_0_best = -1;
-    if sgk_0 == TK_LIT_THEN {
+    if sgk_0 == TK_LIT_then {
         pos = gp_0;
         sg_0_0: {
             sg_1_done: {
                 sg_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_THEN { break sg_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_then { break sg_1; }
                     pos += 1;
-                    while pos < tokens.len() && tokens[pos] == TK_LIT_A {
+                    while pos < tokens.len() && tokens[pos] == TK_LIT_a {
                         let sp = pos;
                         pos = scan_executable_statement(tokens, pos);
                         if pos < 0 { pos = sp; break; }
@@ -1638,41 +1638,41 @@ fn scan_if_statement(tokens: &Array<i32>, pos: i32) -> i32 {
                         let rs_2 = pos;
                         let mut rs_2_ok = false;
                         rsv_2: {
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_ELSE {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_else {
                                 let sp = pos;
                                 pos = scan_else_if_statement(tokens, pos, 0);
                                 if pos < 0 { pos = sp; break; }
                                 if pos == sp { break; }
                             }
-                            if pos < tokens.len() && tokens[pos] == TK_LIT_A {
+                            if pos < tokens.len() && tokens[pos] == TK_LIT_a {
                                 let sp = pos;
                                 pos = scan_else_statement(tokens, pos);
                                 if pos < 0 { pos = sp; }
                             }
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_END { break rsv_2; }
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_end { break rsv_2; }
                             pos += 1;
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { break rsv_2; }
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_if { break rsv_2; }
                             pos += 1;
                             rs_2_ok = true;
                         }
                         pos = rs_2;
                         let rk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if !rs_2_ok && !(rk_2 == TK_LIT_A) { pos = sp; break; }
+                        if !rs_2_ok && !(rk_2 == TK_LIT_a) { pos = sp; break; }
                     }
-                    while pos < tokens.len() && tokens[pos] == TK_LIT_ELSE {
+                    while pos < tokens.len() && tokens[pos] == TK_LIT_else {
                         let sp = pos;
                         pos = scan_else_if_statement(tokens, pos, 0);
                         if pos < 0 { pos = sp; break; }
                         if pos == sp { break; }
                     }
-                    if pos < tokens.len() && tokens[pos] == TK_LIT_A {
+                    if pos < tokens.len() && tokens[pos] == TK_LIT_a {
                         let sp = pos;
                         pos = scan_else_statement(tokens, pos);
                         if pos < 0 { pos = sp; }
                     }
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_END { break sg_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_end { break sg_1; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { break sg_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_if { break sg_1; }
                     pos += 1;
                     break sg_1_done;
                 }
@@ -1680,7 +1680,7 @@ fn scan_if_statement(tokens: &Array<i32>, pos: i32) -> i32 {
             }
             if pos > sg_0_best { sg_0_best = pos; }
         }
-    } else if sgk_0 == TK_LIT_A {
+    } else if sgk_0 == TK_LIT_a {
         pos = gp_0;
         sg_0_1: {
             pos = scan_executable_statement(tokens, pos);
@@ -1698,15 +1698,15 @@ fn scan_if_statement(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_else_if_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_ELSE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_else { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_if { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_THEN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_then { return -1; }
     pos += 1;
-    while pos < tokens.len() && tokens[pos] == TK_LIT_A && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_LIT_a && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         pos = scan_executable_statement(tokens, pos);
         if pos < 0 { pos = sp; break; }
@@ -1717,31 +1717,31 @@ fn scan_else_if_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
 
 fn scan_expression(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_A { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_executable_statement(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_A { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
     pos += 1;
     return pos;
 }
 
 fn scan_else_statement(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_A { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
     pos += 1;
     return pos;
 }
 
 fn _parse_if_statement__inner(p: &mut Parser) -> () {
-    let lit_if = p.expect(TK_LIT_IF, &SYNC_0);
+    let lit_if = p.expect(TK_LIT_if, &SYNC_0);
     let expression = _parse_expression(p);
     let grp_kind = p.peek_kind();
-    if grp_kind == TK_LIT_THEN {
-        let lit_then = p.expect(TK_LIT_THEN, &SYNC_1);
+    if grp_kind == TK_LIT_then {
+        let lit_then = p.expect(TK_LIT_then, &SYNC_1);
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -1754,30 +1754,30 @@ fn _parse_if_statement__inner(p: &mut Parser) -> () {
                 let rep_body_end = pos;
                 let mut rep_body_end_ok = false;
                 rep_body_end_scan: {
-                    while pos < tokens.len() && tokens[pos] == TK_LIT_ELSE {
+                    while pos < tokens.len() && tokens[pos] == TK_LIT_else {
                         let sp = pos;
                         pos = scan_else_if_statement(tokens, pos, 0);
                         if pos < 0 { pos = sp; break; }
                         if pos == sp { break; }
                     }
-                    if pos < tokens.len() && tokens[pos] == TK_LIT_A {
+                    if pos < tokens.len() && tokens[pos] == TK_LIT_a {
                         let sp = pos;
                         pos = scan_else_statement(tokens, pos);
                         if pos < 0 { pos = sp; }
                     }
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_END { break rep_body_end_scan; }
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_end { break rep_body_end_scan; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { break rep_body_end_scan; }
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_if { break rep_body_end_scan; }
                     pos += 1;
                     rep_body_end_ok = true;
                 }
                 pos = rep_body_end;
                 let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if !rep_body_end_ok && !(rep_body_end_kind == TK_LIT_A) { break rep_scan; }
+                if !rep_body_end_ok && !(rep_body_end_kind == TK_LIT_a) { break rep_scan; }
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 {
-                if p.peek_kind() == TK_LIT_A {
+                if p.peek_kind() == TK_LIT_a {
                     let _rec_pos = p.pos;
                     let _rec_cp = p.b.checkpoint();
                     let _rec_sav = p.recovering;
@@ -1805,7 +1805,7 @@ fn _parse_if_statement__inner(p: &mut Parser) -> () {
                 rep_scan_pos_2 = pos;
             }
             if rep_scan_pos_2 < 0 {
-                if p.peek_kind() == TK_LIT_ELSE {
+                if p.peek_kind() == TK_LIT_else {
                     let _rec_pos = p.pos;
                     let _rec_cp = p.b.checkpoint();
                     let _rec_sav = p.recovering;
@@ -1821,12 +1821,12 @@ fn _parse_if_statement__inner(p: &mut Parser) -> () {
             }
             let else_if_statement = _parse_else_if_statement(p, 0);
         }
-        if p.peek_kind() == TK_LIT_A {
+        if p.peek_kind() == TK_LIT_a {
             let else_statement = _parse_else_statement(p);
         }
-        let lit_end = p.expect(TK_LIT_END, &SYNC_2);
-        let lit_if = p.expect(TK_LIT_IF, &EMPTY_SYNC);
-    } else if grp_kind == TK_LIT_A {
+        let lit_end = p.expect(TK_LIT_end, &SYNC_2);
+        let lit_if = p.expect(TK_LIT_if, &EMPTY_SYNC);
+    } else if grp_kind == TK_LIT_a {
         let executable_statement = _parse_executable_statement(p);
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &SYNC_3);
@@ -1846,10 +1846,10 @@ fn _parse_if_statement(p: &mut Parser) -> () {
 }
 
 fn _parse_else_if_statement__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    let lit_else = p.expect(TK_LIT_ELSE, &SYNC_2);
-    let lit_if = p.expect(TK_LIT_IF, &SYNC_0);
+    let lit_else = p.expect(TK_LIT_else, &SYNC_2);
+    let lit_if = p.expect(TK_LIT_if, &SYNC_0);
     let expression = _parse_expression(p);
-    let lit_then = p.expect(TK_LIT_THEN, &SYNC_0);
+    let lit_then = p.expect(TK_LIT_then, &SYNC_0);
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -1863,7 +1863,7 @@ fn _parse_else_if_statement__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
-            if p.peek_kind() == TK_LIT_A {
+            if p.peek_kind() == TK_LIT_a {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
                 let _rec_sav = p.recovering;
@@ -1894,7 +1894,7 @@ fn _parse_else_if_statement(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_expression__inner(p: &mut Parser) -> () {
-    let lit_a = p.expect(TK_LIT_A, &EMPTY_SYNC);
+    let lit_a = p.expect(TK_LIT_a, &EMPTY_SYNC);
     return;
 }
 
@@ -1910,7 +1910,7 @@ fn _parse_expression(p: &mut Parser) -> () {
 }
 
 fn _parse_executable_statement__inner(p: &mut Parser) -> () {
-    let lit_a = p.expect(TK_LIT_A, &EMPTY_SYNC);
+    let lit_a = p.expect(TK_LIT_a, &EMPTY_SYNC);
     return;
 }
 
@@ -1926,7 +1926,7 @@ fn _parse_executable_statement(p: &mut Parser) -> () {
 }
 
 fn _parse_else_statement__inner(p: &mut Parser) -> () {
-    let lit_a = p.expect(TK_LIT_A, &EMPTY_SYNC);
+    let lit_a = p.expect(TK_LIT_a, &EMPTY_SYNC);
     return;
 }
 
@@ -2014,12 +2014,12 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_A];
-global SYNC_1: List<i32> = [TK_LIT_A, TK_LIT_ELSE, TK_LIT_END];
-global SYNC_2: List<i32> = [TK_LIT_IF];
-global SYNC_3: List<i32> = [TK_LIT_A, TK_LIT_THEN];
+global SYNC_0: List<i32> = [TK_LIT_a];
+global SYNC_1: List<i32> = [TK_LIT_a, TK_LIT_else, TK_LIT_end];
+global SYNC_2: List<i32> = [TK_LIT_if];
+global SYNC_3: List<i32> = [TK_LIT_a, TK_LIT_then];
 
-global FOLLOW_KINDS: List<List<i32>> = [[TK_LIT_A, TK_LIT_THEN], [TK_LIT_ELSE], [TK_LIT_IF], [TK_LIT_A], [TK_LIT_THEN], [TK_LIT_END]];
+global FOLLOW_KINDS: List<List<i32>> = [[TK_LIT_a, TK_LIT_then], [TK_LIT_else], [TK_LIT_if], [TK_LIT_a], [TK_LIT_then], [TK_LIT_end]];
 global FOLLOW_SETS: List<List<i32>> = follow_bitsets(&FOLLOW_KINDS);
 global FOLLOW_MASK_0: i64 = 1;
 global FOLLOW_MASK_1: i64 = 84148994;

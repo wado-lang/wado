@@ -1168,7 +1168,7 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_eq(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_EQ(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '=' { return -1; }
     return pos + 1;
@@ -1198,7 +1198,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_SEMI; }
             },
             '=' => {
-                end = try_lit_eq(&lexer.chars, start);
+                end = try_lit_EQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
             },
             'a'..='z' => {

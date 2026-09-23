@@ -60,7 +60,6 @@ use { alt_has_gate, alt_scan_gate_conditions } from "./action_gen.wado";
 use { gate_assignment } from "./scan_gate.wado";
 use {
     rule_type_name,
-    literal_const_name,
     literal_field_name,
     not_element_field_name,
     case_names_for_rule,
@@ -987,7 +986,7 @@ fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: 
 fn fixed_token_const_name(elem: &Element) -> Option<String> {
     return match *elem {
         TokenRef(t) => Option::Some(`TK_${t.name}`),
-        Literal(l) => Option::Some(literal_const_name(&l.text)),
+        Literal(l) => Option::Some(l.const_name),
         _ => null,
     };
 }
@@ -1838,7 +1837,7 @@ fn compute_lr_conflict_min_prec(
         let elem = &alt.elements[ei];
         match *elem {
             TokenRef(t) => fixed_tokens.push(`TK_${t.name}`),
-            Literal(l) => fixed_tokens.push(literal_const_name(&l.text)),
+            Literal(l) => fixed_tokens.push(l.const_name),
             _ => {
             },
         }
@@ -2176,7 +2175,7 @@ fn lower_scan_element(
     return match *elem {
         TokenRef(t) => ScanElement::Token(ScanTokenElement { kind: `TK_${t.name}` }),
         Literal(l) => ScanElement::Token(ScanTokenElement {
-            kind: literal_const_name(&l.text),
+            kind: l.const_name,
         }),
         RuleRef(r) => ScanElement::RuleCall(ScanRuleCallElement {
             target_snake: r.snake_name,
@@ -3119,7 +3118,7 @@ fn lower_op<S: AsStrSlice>(
         Literal(l) => {
             let base = literal_field_name(&l.text);
             Op::Literal(LiteralOp {
-                kind: literal_const_name(&l.text),
+                kind: l.const_name,
                 field: dedup_name(&base, name_counts),
                 dedup_base: base,
             });
@@ -3568,7 +3567,7 @@ fn lower_token_only_leaf(elem: &Element, counts: &mut List<[String, i32]>) -> Op
         Literal(l) => {
             let base = literal_field_name(&l.text);
             Op::Literal(LiteralOp {
-                kind: literal_const_name(&l.text),
+                kind: l.const_name,
                 field: dedup_name(&base, counts),
                 dedup_base: base,
             });
@@ -3580,7 +3579,7 @@ fn lower_token_only_leaf(elem: &Element, counts: &mut List<[String, i32]>) -> Op
 fn token_only_kind(elem: &Element) -> String {
     return match *elem {
         TokenRef(t) => `TK_${t.name}`,
-        Literal(l) => literal_const_name(&l.text),
+        Literal(l) => l.const_name,
         _ => panic("token_only_kind: classifier permitted non-token leaf"),
     };
 }
@@ -4225,7 +4224,7 @@ fn collect_optional_entry_signature(inner: &Element, ctx: &mut GenContext) -> Li
             if let TokenRef(t) = elem {
                 sig.push([`TK_${t.name}`]);
             } else if let Literal(l) = elem {
-                sig.push([literal_const_name(&l.text)]);
+                sig.push([l.const_name]);
             } else {
                 // Deep: a `RuleRef` to a rule deriving epsilon matches nothing,
                 // so the position this would name may hold what follows it.
@@ -5105,7 +5104,7 @@ fn rebind_group_shape<S: AsStrSlice>(shape: GroupShape, new_field: S) -> GroupSh
 fn collect_excluded_kinds(inner: &Element) -> List<String> {
     return match *inner {
         TokenRef(t) => [`TK_${t.name}`],
-        Literal(l) => [literal_const_name(&l.text)],
+        Literal(l) => [l.const_name],
         Group(g) => collect_excluded_kinds_from_group(&g),
         _ => panic(
             "collect_excluded_kinds: unsupported inner shape (only TokenRef / Literal / single-token-alts Group are valid)",
@@ -5120,7 +5119,7 @@ fn collect_excluded_kinds_from_group(g: &GroupElement) -> List<String> {
         let elem = &alt.elements[0];
         match *elem {
             TokenRef(t) => kinds.push(`TK_${t.name}`),
-            Literal(l) => kinds.push(literal_const_name(&l.text)),
+            Literal(l) => kinds.push(l.const_name),
             _ => panic("collect_excluded_kinds: ~ Group alt must be a single token / literal"),
         }
     }

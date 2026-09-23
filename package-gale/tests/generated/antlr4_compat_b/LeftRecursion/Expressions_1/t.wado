@@ -1084,7 +1084,7 @@ pub global TK_WS: i32 = 2;
 pub global TK_EOF: i32 = 3;
 pub global TK_ERROR: i32 = 4;
 pub global TK_LIT_DOT: i32 = 5;
-pub global TK_LIT_THIS: i32 = 6;
+pub global TK_LIT_this: i32 = 6;
 pub global TK_LIT_MINUS: i32 = 7;
 pub global TK_LIT_STAR: i32 = 8;
 pub global TK_LIT_PLUS: i32 = 9;
@@ -1163,7 +1163,7 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_dot(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_DOT(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '.' { return -1; }
     return pos + 1;
@@ -1178,19 +1178,19 @@ fn try_lit_this(chars: &List<char>, start: i32) -> i32 {
     return pos + 4;
 }
 
-fn try_lit_minus(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_MINUS(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '-' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_star(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_STAR(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '*' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_plus(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_PLUS(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '+' { return -1; }
     return pos + 1;
@@ -1212,19 +1212,19 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_WS; }
             },
             '*' => {
-                end = try_lit_star(&lexer.chars, start);
+                end = try_lit_STAR(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
             },
             '+' => {
-                end = try_lit_plus(&lexer.chars, start);
+                end = try_lit_PLUS(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
             },
             '-' => {
-                end = try_lit_minus(&lexer.chars, start);
+                end = try_lit_MINUS(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
             },
             '.' => {
-                end = try_lit_dot(&lexer.chars, start);
+                end = try_lit_DOT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_DOT; }
             },
             '0'..='9' => {
@@ -1237,7 +1237,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             },
             't' => {
                 end = try_lit_this(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_THIS; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_this; }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
@@ -1271,7 +1271,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_EOF => "Eof",
         TK_ERROR => "Error",
         TK_LIT_DOT => "'.'",
-        TK_LIT_THIS => "'this'",
+        TK_LIT_this => "'this'",
         TK_LIT_MINUS => "'-'",
         TK_LIT_STAR => "'*'",
         TK_LIT_PLUS => "'+'",
@@ -1669,7 +1669,7 @@ fn scan_e_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_THIS { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_this { return -1; }
     pos += 1;
     return pos;
 }
@@ -1839,7 +1839,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                         }
                         p.b.start_node_at(_cp, RK_E, _start);
                         let dot = p.expect(TK_LIT_DOT, &EMPTY_SYNC);
-                        let lit_this = p.expect(TK_LIT_THIS, &EMPTY_SYNC);
+                        let lit_this = p.expect(TK_LIT_this, &EMPTY_SYNC);
                         p.b.finish_node(p.last_end());
                     } else {
                         break;

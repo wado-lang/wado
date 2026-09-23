@@ -1212,25 +1212,25 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_f(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_F(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != 'F' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_comma(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_COMMA(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ',' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_j(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_J(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != 'J' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_t(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_T(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != 'T' { return -1; }
     return pos + 1;
@@ -1252,19 +1252,19 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_WS; }
             },
             ',' => {
-                end = try_lit_comma(&lexer.chars, start);
+                end = try_lit_COMMA(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
             },
             'F' => {
-                end = try_lit_f(&lexer.chars, start);
+                end = try_lit_F(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_F; }
             },
             'J' => {
-                end = try_lit_j(&lexer.chars, start);
+                end = try_lit_J(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_J; }
             },
             'T' => {
-                end = try_lit_t(&lexer.chars, start);
+                end = try_lit_T(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_T; }
             },
             'a'..='z' => {

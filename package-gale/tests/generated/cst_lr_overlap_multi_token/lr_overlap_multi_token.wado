@@ -1142,19 +1142,19 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_lt(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_LT(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '<' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_gt(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_GT(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '>' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_eqeq(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_EQEQ(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '=' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '=' { return -1; }
@@ -1181,15 +1181,15 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_INT; }
             },
             '<' => {
-                end = try_lit_lt(&lexer.chars, start);
+                end = try_lit_LT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
             },
             '=' => {
-                end = try_lit_eqeq(&lexer.chars, start);
+                end = try_lit_EQEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_EQEQ; }
             },
             '>' => {
-                end = try_lit_gt(&lexer.chars, start);
+                end = try_lit_GT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
             },
             _ => {},

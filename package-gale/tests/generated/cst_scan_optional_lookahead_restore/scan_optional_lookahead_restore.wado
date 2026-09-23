@@ -1152,10 +1152,10 @@ pub global TK_NUMBER: i32 = 1;
 pub global TK_WS: i32 = 2;
 pub global TK_EOF: i32 = 3;
 pub global TK_ERROR: i32 = 4;
-pub global TK_LIT_Z: i32 = 5;
-pub global TK_LIT_AS: i32 = 6;
-pub global TK_LIT_IDX: i32 = 7;
-pub global TK_LIT_NO: i32 = 8;
+pub global TK_LIT_z: i32 = 5;
+pub global TK_LIT_as: i32 = 6;
+pub global TK_LIT_idx: i32 = 7;
+pub global TK_LIT_no: i32 = 8;
 pub global TK_LIT_LPAREN: i32 = 9;
 pub global TK_LIT_RPAREN: i32 = 10;
 
@@ -1263,13 +1263,13 @@ fn try_lit_no(chars: &List<char>, start: i32) -> i32 {
     return pos + 2;
 }
 
-fn try_lit_lparen(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_LPAREN(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '(' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_rparen(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_RPAREN(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ')' { return -1; }
     return pos + 1;
@@ -1291,11 +1291,11 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_WS; }
             },
             '(' => {
-                end = try_lit_lparen(&lexer.chars, start);
+                end = try_lit_LPAREN(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
             },
             ')' => {
-                end = try_lit_rparen(&lexer.chars, start);
+                end = try_lit_RPAREN(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
             },
             '0'..='9' => {
@@ -1304,7 +1304,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             },
             'a' => {
                 end = try_lit_as(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_AS; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_as; }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
@@ -1314,19 +1314,19 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             },
             'i' => {
                 end = try_lit_idx(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_IDX; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_idx; }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
             'n' => {
                 end = try_lit_no(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_NO; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_no; }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
             'z' => {
                 end = try_lit_z(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_Z; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_z; }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
@@ -1359,10 +1359,10 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_Z => "'z'",
-        TK_LIT_AS => "'as'",
-        TK_LIT_IDX => "'idx'",
-        TK_LIT_NO => "'no'",
+        TK_LIT_z => "'z'",
+        TK_LIT_as => "'as'",
+        TK_LIT_idx => "'idx'",
+        TK_LIT_no => "'no'",
         TK_LIT_LPAREN => "'('",
         TK_LIT_RPAREN => "')'",
         _ => "Unknown",
@@ -1649,7 +1649,7 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             try_1: {
                 pos = scan_item(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_Z { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_z { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -1686,10 +1686,10 @@ fn scan_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 pos = scan_name(tokens, pos);
                 if pos < 0 { break try_0; }
                 osl_0_done: {
-                    if pos < tokens.len() && tokens[pos] == TK_LIT_AS && pos + 1 < tokens.len() && _kind_set_1(tokens[pos + 1]) {
+                    if pos < tokens.len() && tokens[pos] == TK_LIT_as && pos + 1 < tokens.len() && _kind_set_1(tokens[pos + 1]) {
                         let sol_1_save = pos;
                         sol_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_AS { break sol_1; }
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_as { break sol_1; }
                             pos += 1;
                             pos = scan_alias(tokens, pos);
                             if pos < 0 { break sol_1; }
@@ -1714,21 +1714,21 @@ fn scan_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     let gp_3 = pos;
                     let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     let mut sg_3_best = -1;
-                    if sgk_3 == TK_LIT_IDX {
+                    if sgk_3 == TK_LIT_idx {
                         pos = gp_3;
                         sg_3_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_IDX { break sg_3_0; }
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_idx { break sg_3_0; }
                             pos += 1;
                             pos = scan_name(tokens, pos);
                             if pos < 0 { break sg_3_0; }
                             if pos > sg_3_best { sg_3_best = pos; }
                         }
-                    } else if sgk_3 == TK_LIT_NO {
+                    } else if sgk_3 == TK_LIT_no {
                         pos = gp_3;
                         sg_3_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_NO { break sg_3_1; }
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_no { break sg_3_1; }
                             pos += 1;
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_IDX { break sg_3_1; }
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_idx { break sg_3_1; }
                             pos += 1;
                             if pos > sg_3_best { sg_3_best = pos; }
                         }
@@ -1839,7 +1839,7 @@ fn _parse_stmt__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
 
 fn _parse_stmt__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_item(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_LIT_Z, &EMPTY_SYNC);
+    p.expect(TK_LIT_z, &EMPTY_SYNC);
     return;
 }
 
@@ -1847,7 +1847,7 @@ fn _parse_stmt__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
     let mut pos = pos;
     pos = scan_item(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_Z { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_z { return -1; }
     pos += 1;
     return pos;
 }
@@ -1918,9 +1918,9 @@ fn _parse_item__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
 
 fn _parse_item__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_name(p);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LIT_AS && _kind_set_1(p.peek_at(1))) {
-        if p.peek_kind() == TK_LIT_AS {
-            p.expect(TK_LIT_AS, &EMPTY_SYNC);
+    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LIT_as && _kind_set_1(p.peek_at(1))) {
+        if p.peek_kind() == TK_LIT_as {
+            p.expect(TK_LIT_as, &EMPTY_SYNC);
         }
         _parse_alias(p);
     } else if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_1(p.peek_kind())) {
@@ -1930,25 +1930,25 @@ fn _parse_item__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     let mut gd_best: i32 = -1;
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let gd_kind = p.peek_kind();
-        if gd_kind == TK_LIT_IDX {
+        if gd_kind == TK_LIT_idx {
             gd_winner = 0;
             gd_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_IDX { break gd_scan; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_idx { break gd_scan; }
                 pos += 1;
                 pos = scan_name(tokens, pos);
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
-        } else if gd_kind == TK_LIT_NO {
+        } else if gd_kind == TK_LIT_no {
             gd_winner = 1;
             gd_scan_2: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_NO { break gd_scan_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_no { break gd_scan_2; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_IDX { break gd_scan_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_idx { break gd_scan_2; }
                 pos += 1;
                 gd_best = pos;
             }
@@ -1956,11 +1956,11 @@ fn _parse_item__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     }
     if gd_best >= 0 {
         if gd_winner == 0 {
-            p.expect(TK_LIT_IDX, &SYNC_0);
+            p.expect(TK_LIT_idx, &SYNC_0);
             _parse_name(p);
         } else {
-            p.expect(TK_LIT_NO, &SYNC_2);
-            p.expect(TK_LIT_IDX, &EMPTY_SYNC);
+            p.expect(TK_LIT_no, &SYNC_2);
+            p.expect(TK_LIT_idx, &EMPTY_SYNC);
         }
     }
     return;
@@ -1971,10 +1971,10 @@ fn _parse_item__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
     pos = scan_name(tokens, pos);
     if pos < 0 { return -1; }
     osl_4_done: {
-        if pos < tokens.len() && tokens[pos] == TK_LIT_AS && pos + 1 < tokens.len() && _kind_set_1(tokens[pos + 1]) {
+        if pos < tokens.len() && tokens[pos] == TK_LIT_as && pos + 1 < tokens.len() && _kind_set_1(tokens[pos + 1]) {
             let sol_5_save = pos;
             sol_5: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_AS { break sol_5; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_as { break sol_5; }
                 pos += 1;
                 pos = scan_alias(tokens, pos);
                 if pos < 0 { break sol_5; }
@@ -1999,21 +1999,21 @@ fn _parse_item__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
         let gp_7 = pos;
         let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         let mut sg_7_best = -1;
-        if sgk_7 == TK_LIT_IDX {
+        if sgk_7 == TK_LIT_idx {
             pos = gp_7;
             sg_7_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_IDX { break sg_7_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_idx { break sg_7_0; }
                 pos += 1;
                 pos = scan_name(tokens, pos);
                 if pos < 0 { break sg_7_0; }
                 if pos > sg_7_best { sg_7_best = pos; }
             }
-        } else if sgk_7 == TK_LIT_NO {
+        } else if sgk_7 == TK_LIT_no {
             pos = gp_7;
             sg_7_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_NO { break sg_7_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_no { break sg_7_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_IDX { break sg_7_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_idx { break sg_7_1; }
                 pos += 1;
                 if pos > sg_7_best { sg_7_best = pos; }
             }
@@ -2252,20 +2252,20 @@ fn _kind_set_1(k: i32) -> bool {
 }
 
 fn _kind_set_2(k: i32) -> bool {
-    return k matches { TK_LIT_IDX | TK_LIT_NO };
+    return k matches { TK_LIT_idx | TK_LIT_no };
 }
 
 fn _kind_set_3(k: i32) -> bool {
-    return k matches { TK_ID | TK_LIT_AS | TK_LIT_IDX | TK_LIT_NO };
+    return k matches { TK_ID | TK_LIT_as | TK_LIT_idx | TK_LIT_no };
 }
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_ID];
 global SYNC_1: List<i32> = [TK_LIT_LPAREN, TK_NUMBER];
-global SYNC_2: List<i32> = [TK_LIT_IDX];
+global SYNC_2: List<i32> = [TK_LIT_idx];
 global SYNC_3: List<i32> = [TK_ID, TK_LIT_LPAREN];
 
-global FOLLOW_KINDS: List<List<i32>> = [[TK_EOF], [TK_LIT_Z], [TK_LIT_LPAREN], [TK_LIT_LPAREN, TK_NUMBER], [TK_LIT_RPAREN]];
+global FOLLOW_KINDS: List<List<i32>> = [[TK_EOF], [TK_LIT_z], [TK_LIT_LPAREN], [TK_LIT_LPAREN, TK_NUMBER], [TK_LIT_RPAREN]];
 global FOLLOW_SETS: List<List<i32>> = follow_bitsets(&FOLLOW_KINDS);
 global FOLLOW_MASK_0: i64 = 1;
 global FOLLOW_MASK_1: i64 = 2;

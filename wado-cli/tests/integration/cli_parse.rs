@@ -1069,6 +1069,13 @@ fn syntax_with_format() {
 }
 
 #[test]
+fn syntax_with_json_format() {
+    let parser = Parser::from_args(&["--format", "json"]);
+    let opts = wado_cli::syntax::parse_args(parser).unwrap();
+    assert_eq!(opts.format, wado_cli::syntax::SyntaxFormat::Json);
+}
+
+#[test]
 fn syntax_with_output() {
     let parser = Parser::from_args(&["-o", "out.json"]);
     let opts = wado_cli::syntax::parse_args(parser).unwrap();

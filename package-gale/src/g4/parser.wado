@@ -1004,7 +1004,7 @@ impl G4Parser {
                 options = self.parse_angle_options()?;
             }
             return Result::<Element, ParseError>::Ok(
-                Element::Literal(LiteralElement { text, options }),
+                Element::Literal(LiteralElement::with_options(text, options)),
             );
         }
         if self.is_kind(G4Token::LParen) {

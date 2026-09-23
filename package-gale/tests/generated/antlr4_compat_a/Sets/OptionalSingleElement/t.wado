@@ -1079,7 +1079,7 @@ pub enum TokenKind {
 pub global TK_A: i32 = 0;
 pub global TK_EOF: i32 = 1;
 pub global TK_ERROR: i32 = 2;
-pub global TK_LIT_C: i32 = 3;
+pub global TK_LIT_c: i32 = 3;
 
 struct Lexer {
     chars: List<char>,
@@ -1130,7 +1130,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             },
             'c' => {
                 end = try_lit_c(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_C; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_c; }
             },
             _ => {},
         }
@@ -1154,7 +1154,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_A => "A",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_C => "'c'",
+        TK_LIT_c => "'c'",
         _ => "Unknown",
     };
 }
@@ -1505,7 +1505,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos < tokens.len() && tokens[pos] == TK_A {
         pos += 1;
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_C { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_c { return -1; }
     pos += 1;
     return pos;
 }
@@ -1514,7 +1514,7 @@ fn _parse_a__inner(p: &mut Parser) -> () {
     if p.peek_kind() == TK_A {
         let a = p.expect(TK_A, &EMPTY_SYNC);
     }
-    let lit_c = p.expect(TK_LIT_C, &EMPTY_SYNC);
+    let lit_c = p.expect(TK_LIT_c, &EMPTY_SYNC);
     if !p.speculating {
         p.emit(`${p.input_text()}\n`);
     }

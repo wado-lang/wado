@@ -516,7 +516,7 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
                     }
                 },
                 Literal(l) => {
-                    if ctx.literal_id(&l.text, l.kind_id) == token {
+                    if ctx.literal_id(l) == token {
                         results.push(SllConfig { ..*c, pos: skip_pos + 1 });
                     }
                 },
@@ -544,7 +544,7 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
 
     return match elem {
         TokenRef(t) => if ctx.token_ref_id(&t.name, t.kind_id) == token { sll_step(c, c.pos + 1) } else { [] },
-        Literal(l) => if ctx.literal_id(&l.text, l.kind_id) == token { sll_step(c, c.pos + 1) } else { [] },
+        Literal(l) => if ctx.literal_id(l) == token { sll_step(c, c.pos + 1) } else { [] },
         // Advance past a RuleRef only if the rule always consumes exactly one
         // token. A multi-token rule whose FIRST holds the token is opaque —
         // `build_sll_node` expands it only when needed to resolve ambiguity.

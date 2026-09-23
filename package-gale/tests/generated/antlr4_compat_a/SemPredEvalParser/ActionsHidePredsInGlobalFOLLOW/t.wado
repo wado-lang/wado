@@ -1162,7 +1162,7 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_bang(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_BANG(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '!' { return -1; }
     return pos + 1;
@@ -1184,7 +1184,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_WS; }
             },
             '!' => {
-                end = try_lit_bang(&lexer.chars, start);
+                end = try_lit_BANG(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_BANG; }
             },
             '0'..='9' => {
