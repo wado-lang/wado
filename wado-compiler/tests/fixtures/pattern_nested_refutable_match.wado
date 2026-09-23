@@ -1,0 +1,44 @@
+// A refutable pattern nested at any depth is tested, not only bound.
+use { println, Stdout } from "core:cli";
+
+variant Tree {
+    Leaf(i32),
+    Branch([Tree, Tree]),
+}
+
+fn nested(o: Option<Option<i32>>) -> i32 {
+    return match o {
+        Some(Some(1)) => 1,
+        Some(Some(n)) => n * 10,
+        _ => 0,
+    };
+}
+
+fn in_tuple(t: [Option<i32>, i32]) -> i32 {
+    return match t {
+        [Some(1), _] => 1,
+        [Some(n), m] => n + m,
+        _ => 0,
+    };
+}
+
+fn in_payload(t: Tree) -> i32 {
+    return match t {
+        Branch([Leaf(1), Leaf(b)]) => b,
+        Branch(_) => -1,
+        Leaf(v) => v,
+    };
+}
+
+export fn run() with Stdout {
+    let some2 = builtin::black_box(Option::<Option<i32>>::Some(Option::<i32>::Some(2)));
+    let some1 = builtin::black_box(Option::<Option<i32>>::Some(Option::<i32>::Some(1)));
+    println(`${nested(some1)} ${nested(some2)}`);
+    println(`${in_tuple(builtin::black_box([Option::<i32>::Some(1), 5]))} ${in_tuple(builtin::black_box([Option::<i32>::Some(2), 5]))}`);
+    let hit = Tree::Branch([Tree::Leaf(1), Tree::Leaf(7)]);
+    let miss = Tree::Branch([Tree::Leaf(2), Tree::Leaf(7)]);
+    println(`${in_payload(builtin::black_box(hit))} ${in_payload(builtin::black_box(miss))}`);
+}
+
+__DATA__
+{"stdout": "1 20\n1 7\n7 -1\n"}

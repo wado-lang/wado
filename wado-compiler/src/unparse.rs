@@ -2492,6 +2492,11 @@ impl<'a> Unparser<'a> {
                 }
                 self.unparse_pattern(end);
             }
+            Pattern::Typed { pattern, ty, .. } => {
+                self.unparse_pattern(pattern);
+                self.output.push_str(": ");
+                self.unparse_type(ty);
+            }
             // The formatter is fail-fast on syntax errors, so this placeholder
             // is never reached; emit nothing to keep the match total.
             Pattern::Error(_) => {}
@@ -3931,6 +3936,11 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
             }
             unparse_pattern_into(end, output);
         }
+        Pattern::Typed { pattern, ty, .. } => {
+            unparse_pattern_into(pattern, output);
+            output.push_str(": ");
+            unparse_type_into(ty, output);
+        }
         Pattern::Error(_) => output.push_str("<error>"),
     }
 }
@@ -4973,6 +4983,11 @@ impl<'a> TirUnparser<'a> {
                 self.comma_sep_with(" | ", alternatives, TirUnparser::unparse_tir_pattern);
             }
             TirPattern::ConstantValue { expr } => self.unparse_expr(expr),
+            TirPattern::Narrow { name, type_id, .. } => {
+                self.output.push_str(name.as_deref().unwrap_or("_"));
+                self.output.push_str(": ");
+                self.output.push_str(&self.type_table.type_name(*type_id));
+            }
             TirPattern::Range {
                 start,
                 end,

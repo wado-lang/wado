@@ -1215,6 +1215,37 @@ impl TypeTable {
         self.resource_chain(sub).any(|current| current == sup)
     }
 
+    /// Whether only the host can tell a `value` is a `target`: `target` is a
+    /// resource strictly extending `value`'s, which makes both unrestricted.
+    #[must_use]
+    pub fn is_resource_narrowing(&self, value: TypeId, target: TypeId) -> bool {
+        let (ResolvedType::Resource { def: value }, ResolvedType::Resource { def: target }) =
+            (self.get(value), self.get(target))
+        else {
+            return false;
+        };
+        value != target && self.is_resource_subtype(*target, *value)
+    }
+
+    /// The root resource whose `$same` compares `a` and `b` by identity: both
+    /// unrestricted, one extending the other.
+    #[must_use]
+    pub fn identity_root(&mut self, a: TypeId, b: TypeId) -> Option<TypeId> {
+        let joined = self.resource_join(a, b)?;
+        let ResolvedType::Resource { def } = self.get(joined) else {
+            return None;
+        };
+        let def = *def;
+        if !self.is_unrestricted_resource(def) {
+            return None;
+        }
+        let root = self
+            .resource_chain(def)
+            .last()
+            .expect("a chain starts at its own resource");
+        Some(self.make_resource(root))
+    }
+
     /// Attach the program's declarations, so a nominal type can render its
     /// head once it carries one instead of a spelling.
     pub fn attach_defs(&mut self, defs: std::sync::Arc<DefTable>) {
@@ -5599,6 +5630,15 @@ pub enum TirPattern {
         end: i128,
         inclusive: bool,
         is_unsigned: bool,
+    },
+    /// A type pattern the host decides: holds the scrutinee at the narrower
+    /// `type_id`, and matches only when `test`, which reads that local, holds.
+    /// `name` is the binding it makes, `None` for `_`.
+    Narrow {
+        name: Option<String>,
+        local_index: u32,
+        type_id: TypeId,
+        test: Box<TirExpr>,
     },
 }
 

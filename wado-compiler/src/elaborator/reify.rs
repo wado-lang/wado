@@ -18,7 +18,10 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
+use crate::name::{
+    FqTypeName, IDENTITY_TEST_METHOD, INTERNAL_PREFIX, NARROWING_TEST_METHOD, Receiver,
+    global_init_function, global_name,
+};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
@@ -256,6 +259,13 @@ fn build_literal_from_call(array: TirExpr, call: &LiteralFromCall, span: Span) -
         call.output_type,
         span,
     )
+}
+
+/// What `==` compares when it compares by identity.
+enum Identity {
+    Reference,
+    /// A resource handle, compared under this chain root.
+    Handle(TypeId),
 }
 
 /// Cast a `from` result to the newtype the literal targeted, where it targeted
@@ -2700,7 +2710,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let else_type = tir::block_result_type(&self.tysys.type_table.borrow(), &else_block);
         let else_span = else_block.span;
 
-        let tir_pattern = self.reify_pattern(&l.pattern, scrutinee_type, ctx);
+        let tir_pattern = self.reify_pattern(&l.else_pattern(), scrutinee_type, ctx);
 
         let cont_stmts =
             self.reify_positioned_stmts(rest, block_span, ctx, expected_type, tail_value);
@@ -2871,7 +2881,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify `let pat[: T] = expr;`.
     fn reify_let(&mut self, let_stmt: &ast::LetStmt, ctx: &mut FunctionContext) -> TirStmt {
-        use crate::tir::{TirStmtKind, TypeTable};
+        use crate::tir::TirStmtKind;
         // Uninitialised `let x: T;` — the parser guarantees `ty`
         // is present. The WIR builder zero-initialises the slot;
         // reify emits a Unit placeholder as the `value` and the
@@ -3027,14 +3037,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let_stmt.span,
                 )
             }
+            ast::Pattern::Typed { .. } => {
+                unreachable!("the parser keeps a `let`'s top-level ascription in `LetStmt::ty`")
+            }
             ast::Pattern::Literal(_) | ast::Pattern::Or(_) | ast::Pattern::Range { .. } => {
-                let _ = type_id;
-                let _ = TypeTable::UNKNOWN;
-                // `let 42 = expr;` etc. are refutable patterns and the
-                // elaborator rejects them at annotate time (only
-                // irrefutable patterns are valid in `let`). Hitting
-                // this branch means annotate let a refutable pattern
-                // through — surface the invariant violation here.
+                // Annotate rejects a refutable `let` pattern.
                 panic!(
                     "reify_let: refutable pattern {:?} in let binding (annotate should have rejected)",
                     let_stmt.pattern
@@ -4627,7 +4634,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 name,
                 span: name_span,
             } => (name.clone(), Some(*id), *name_span),
-            ast::Pattern::Tuple(..) => {
+            ast::Pattern::Tuple(..) | ast::Pattern::Wildcard => {
                 (format!("$pattern_temp_{unique_id}"), None, Span::default())
             }
             _ => {
@@ -5369,7 +5376,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{CallArg, ResolvedType, TirBinaryOp, TirExprKind, TirUnaryOp, TypeTable};
+        use crate::tir::{CallArg, ResolvedType, TirExprKind, TirUnaryOp, TypeTable};
 
         // Mirror `resolve_binary_operands_with_coercion`:
         // a numeric-literal operand is typed from the *other* operand (or,
@@ -5435,36 +5442,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             (left, right)
         };
 
-        // Reference equality: when both operands are references, the
-        // elaborator emits `RefEq` / `RefNotEq` (identity comparison)
-        // rather than dispatching to `Eq` — and records no operator
-        // dispatch. The decision is from operand types alone, so reify
-        // reproduces it here.
-        if matches!(binary.op, ast::BinaryOp::Eq | ast::BinaryOp::NotEq) {
-            let both_refs = {
-                let tt = self.tysys.type_table.borrow();
-                matches!(
-                    (tt.get(left.type_id), tt.get(right.type_id)),
-                    (ResolvedType::Ref(_), ResolvedType::Ref(_))
-                        | (ResolvedType::MutRef(_), ResolvedType::MutRef(_))
-                )
-            };
-            if both_refs {
-                let op = if binary.op == ast::BinaryOp::Eq {
-                    TirBinaryOp::RefEq
-                } else {
-                    TirBinaryOp::RefNotEq
-                };
-                return TirExpr::new(
-                    TirExprKind::Binary {
-                        op,
-                        left: Box::new(left),
-                        right: Box::new(right),
-                    },
-                    TypeTable::BOOL,
-                    binary.span,
-                );
-            }
+        if let Some(identity) = self.identity_of(binary.op, left.type_id, right.type_id) {
+            return self.identity_comparison(identity, binary.op, left, right, binary.span);
         }
 
         if let Some(dispatch) = self.ann_operator_dispatch(binary.id) {
@@ -6718,11 +6697,105 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a comparison chain `a < b < c …` into
-    /// `(a < m_0) && (m_0 < m_1) && …` inside a block holding one `$mK` binding
-    /// per middle term, so no term is re-evaluated. Non-primitive operands
-    /// dispatch through the `operator_dispatch` record on the chain's own
-    /// `AstId` — the synthesised inner comparisons have no source id.
+    /// One link of a comparison chain. A non-primitive operand stays a
+    /// `Binary`, which monomorphization turns into its `Eq` / `Ord` call.
+    fn chain_comparison(
+        &mut self,
+        op: ast::BinaryOp,
+        left: TirExpr,
+        right: TirExpr,
+        span: Span,
+    ) -> TirExpr {
+        use crate::tir::{TirExprKind, TypeTable};
+
+        if let Some(identity) = self.identity_of(op, left.type_id, right.type_id) {
+            return self.identity_comparison(identity, op, left, right, span);
+        }
+        TirExpr::new(
+            TirExprKind::Binary {
+                left: Box::new(left),
+                op: ast_binary_op_to_tir(op),
+                right: Box::new(right),
+            },
+            TypeTable::BOOL,
+            span,
+        )
+    }
+
+    /// How `==` / `!=` compares these operands by identity, if it does.
+    fn identity_of(&self, op: ast::BinaryOp, left: TypeId, right: TypeId) -> Option<Identity> {
+        use crate::tir::ResolvedType;
+
+        if !matches!(op, ast::BinaryOp::Eq | ast::BinaryOp::NotEq) {
+            return None;
+        }
+        let mut type_table = self.tysys.type_table.borrow_mut();
+        if matches!(
+            (type_table.get(left), type_table.get(right)),
+            (ResolvedType::Ref(_), ResolvedType::Ref(_))
+                | (ResolvedType::MutRef(_), ResolvedType::MutRef(_))
+        ) {
+            return Some(Identity::Reference);
+        }
+        type_table.identity_root(left, right).map(Identity::Handle)
+    }
+
+    /// `==` / `!=` by identity: `ref.eq` on references, the host's `is-same`
+    /// on resource handles.
+    fn identity_comparison(
+        &mut self,
+        identity: Identity,
+        op: ast::BinaryOp,
+        left: TirExpr,
+        right: TirExpr,
+        span: Span,
+    ) -> TirExpr {
+        use crate::tir::{CallArg, TirBinaryOp, TirExprKind, TirUnaryOp, TypeTable};
+
+        let is_eq = op == ast::BinaryOp::Eq;
+        let same = match identity {
+            Identity::Reference => {
+                let op = if is_eq {
+                    TirBinaryOp::RefEq
+                } else {
+                    TirBinaryOp::RefNotEq
+                };
+                return TirExpr::new(
+                    TirExprKind::Binary {
+                        op,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                );
+            }
+            Identity::Handle(root) => TirExpr::new(
+                TirExprKind::method_call(
+                    Box::new(left),
+                    self.lang_predicate_ref(root, IDENTITY_TEST_METHOD),
+                    vec![],
+                    vec![CallArg::new(right, false)],
+                ),
+                TypeTable::BOOL,
+                span,
+            ),
+        };
+        if is_eq {
+            return same;
+        }
+        TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Not,
+                expr: Box::new(same),
+            },
+            TypeTable::BOOL,
+            span,
+        )
+    }
+
+    /// Reify a comparison chain `a < b < c …` into `(a < $m0) & ($m0 < c) …`
+    /// in a block binding each middle term once.
     fn reify_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
@@ -6730,110 +6803,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::{TirBinaryOp, TirBlock, TirExprKind, TirStmtKind, TypeTable};
 
-        if chain.comparisons.is_empty() {
-            // Degenerate parse — annotate emits `chain.first` as-is.
-            return self.reify_expr(&chain.first, ctx, None);
-        }
-
-        if chain.comparisons.len() == 1 {
-            let cmp = &chain.comparisons[0];
-            let (left, right) = if Elaborator::<H>::takes_shape_from_expected_type(&chain.first)
-                && !Elaborator::<H>::takes_shape_from_expected_type(&cmp.right)
-            {
-                let right = self.reify_expr(&cmp.right, ctx, None);
-                let left = self.reify_expr(&chain.first, ctx, Some(right.type_id));
-                (left, right)
-            } else {
-                let left = self.reify_expr(&chain.first, ctx, None);
-                let right = self.reify_expr(&cmp.right, ctx, Some(left.type_id));
-                (left, right)
-            };
-
-            // Non-primitive comparison dispatches through `Eq::eq` /
-            // `Ord::cmp`; the recording fires on `chain.id`.
-            if let Some(dispatch) = self.ann_operator_dispatch(chain.id) {
-                let receiver = adjust_receiver_for_self_kind(
-                    left,
-                    dispatch.self_kind,
-                    /* is_ref_impl */ false,
-                    chain.span,
-                    &self.tysys.type_table,
-                );
-                let args = vec![right];
-                let call_args: Vec<CallArg> = args
-                    .into_iter()
-                    .zip(dispatch.arg_ref_wraps.iter().copied())
-                    .map(|(arg, wrap)| {
-                        let arg_expr = if wrap {
-                            let arg_ref_type = self
-                                .tysys
-                                .type_table
-                                .borrow_mut()
-                                .intern(ResolvedType::Ref(arg.type_id));
-                            TirExpr::new(
-                                TirExprKind::Unary {
-                                    op: TirUnaryOp::Ref,
-                                    expr: Box::new(arg),
-                                },
-                                arg_ref_type,
-                                chain.span,
-                            )
-                        } else {
-                            arg
-                        };
-                        CallArg::new(arg_expr, false)
-                    })
-                    .collect();
-                let method_call = build_tir_method_call(
-                    receiver,
-                    dispatch.function_ref,
-                    vec![],
-                    call_args,
-                    dispatch.return_type,
-                    chain.span,
-                );
-
-                // Ord ops wrap `cmp(...) ==/!= Less/Greater`;
-                // `!=` via `Eq::eq` wraps with `!`.
-                use ast::BinaryOp;
-                if matches!(
-                    cmp.op,
-                    BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
-                ) {
-                    return ord_bool_from_cmp(
-                        method_call,
-                        cmp.op,
-                        chain.span,
-                        &self.tysys.type_table,
-                    );
-                }
-                if cmp.op == BinaryOp::NotEq && method_call.type_id == TypeTable::BOOL {
-                    return TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Not,
-                            expr: Box::new(method_call),
-                        },
-                        TypeTable::BOOL,
-                        chain.span,
-                    );
-                }
-                return method_call;
-            }
-
-            let recorded_type = self
-                .ann_expression_types(chain.id)
-                .unwrap_or(TypeTable::BOOL);
-            return TirExpr::new(
-                TirExprKind::Binary {
-                    left: Box::new(left),
-                    op: ast_binary_op_to_tir(cmp.op),
-                    right: Box::new(right),
-                },
-                recorded_type,
-                cmp.op_span,
-            );
-        }
-
+        assert!(
+            chain.comparisons.len() >= 2,
+            "the parser makes a single comparison a `Binary`"
+        );
         ctx.enter_scope();
         let mut stmts: Vec<TirStmt> = Vec::new();
 
@@ -6866,15 +6839,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             chain.span,
         );
 
-        let mut acc_tir = TirExpr::new(
-            TirExprKind::Binary {
-                left: Box::new(first_tir),
-                op: ast_binary_op_to_tir(cmp0.op),
-                right: Box::new(m0_ref.clone()),
-            },
-            TypeTable::BOOL,
-            cmp0.op_span,
-        );
+        let mut acc_tir = self.chain_comparison(cmp0.op, first_tir, m0_ref.clone(), cmp0.op_span);
         let mut prev_tir = m0_ref;
 
         let last_idx = chain.comparisons.len() - 1;
@@ -6909,15 +6874,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             };
             let next_prev = right_tir.clone();
-            let cmp_tir = TirExpr::new(
-                TirExprKind::Binary {
-                    left: Box::new(prev_tir),
-                    op: ast_binary_op_to_tir(cmp.op),
-                    right: Box::new(right_tir),
-                },
-                TypeTable::BOOL,
-                cmp.op_span,
-            );
+            let cmp_tir = self.chain_comparison(cmp.op, prev_tir, right_tir, cmp.op_span);
             acc_tir = TirExpr::new(
                 TirExprKind::Binary {
                     left: Box::new(acc_tir),
@@ -10738,11 +10695,113 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Pattern::Struct {
                 fields, has_rest, ..
             } => self.reify_struct_pattern(fields, *has_rest, scrutinee_type, ctx),
+            ast::Pattern::Typed {
+                id,
+                pattern: inner,
+                span,
+                ..
+            } => {
+                let target = self
+                    .ann_pattern_ascription(*id)
+                    .expect("annotate records every type pattern's target");
+                let narrows = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_resource_narrowing(scrutinee_type, target);
+                if narrows {
+                    self.reify_narrowing(inner, target, *span, ctx)
+                } else {
+                    let binding_ty = self.ascribed_binding_type(scrutinee_type, target);
+                    self.reify_pattern(inner, binding_ty, ctx)
+                }
+            }
             // `build_tir_from_state` skips reify for modules with syntax
             // errors, so reify never walks an `Error` placeholder.
             ast::Pattern::Error(_) => {
                 unreachable!("reify does not run on modules with syntax errors")
             }
+        }
+    }
+
+    /// A type pattern that does not narrow keeps the scrutinee's reference kind
+    /// on a target that drops it.
+    fn ascribed_binding_type(&self, scrutinee_type: TypeId, target: TypeId) -> TypeId {
+        let tt = self.tysys.type_table.borrow();
+        if tt.type_key(scrutinee_type) == tt.type_key(target) || tt.peel_refs(target) != target {
+            return target;
+        }
+        drop(tt);
+        self.apply_scrutinee_ref_kind(scrutinee_type, target)
+    }
+
+    /// `name: R` over a supertype of `R`: the value binds at `R`, and the pattern
+    /// holds only when the handle's `is-r` import answers true.
+    fn reify_narrowing(
+        &mut self,
+        inner: &ast::Pattern,
+        target: TypeId,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirPattern {
+        let (name, local_name, local_index) = match inner {
+            ast::Pattern::Ident { id, name, span } | ast::Pattern::MutIdent { id, name, span } => {
+                let is_mut = matches!(inner, ast::Pattern::MutIdent { .. });
+                let local_index = ctx.add_local_at(name.clone(), target, is_mut, Some(*id), *span);
+                (Some(name.clone()), name.clone(), local_index)
+            }
+            ast::Pattern::Wildcard => {
+                let local_name = format!("{INTERNAL_PREFIX}narrowed");
+                let local_index = ctx.add_local(local_name.clone(), target, false, None);
+                (None, local_name, local_index)
+            }
+            other => panic!("annotate rejects a narrowing over {other:?}"),
+        };
+        let receiver = TirExpr::new(
+            TirExprKind::Local {
+                index: local_index,
+                name: local_name,
+            },
+            target,
+            span,
+        );
+        let test = TirExpr::new(
+            TirExprKind::method_call(
+                Box::new(receiver),
+                self.lang_predicate_ref(target, NARROWING_TEST_METHOD),
+                vec![],
+                vec![],
+            ),
+            TypeTable::BOOL,
+            span,
+        );
+        TirPattern::Narrow {
+            name,
+            local_index,
+            type_id: target,
+            test: Box::new(test),
+        }
+    }
+
+    /// `R::method`, one of the host's `lang` predicates over `resource`'s handles.
+    fn lang_predicate_ref(&self, resource: TypeId, method: &str) -> tir::FunctionRef {
+        let method_info = LocalMethodName::new(
+            self.tysys.fq_receiver_of_impl(resource, false),
+            None,
+            method.to_string(),
+        );
+        let module_source = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_head(resource)
+            .map(|(_, m)| m)
+            .expect("a `lang` predicate's receiver is a declared resource");
+        tir::FunctionRef {
+            module_source,
+            name: method_info.to_mangled_name(),
+            monomorph_info: None,
+            method_info: Some(method_info),
         }
     }
 

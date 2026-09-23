@@ -729,6 +729,15 @@ let grade = match score {
     _ => "invalid",
 };
 
+// Type patterns: `p: T` in any pattern position; a `let` annotation is one.
+// Narrowing a resource to one that extends it asks the host, so it is
+// refutable, and a match over type patterns ends in `_`.
+let value = match node {
+    input: HtmlInputElement => input.value(),
+    _ => "",
+};
+let input: HtmlInputElement = el else { return; };
+
 // Constant patterns: an immutable global or associated const matches by
 // value, not a binding. TK_FOO/TK_BAR are `global`s, and a namespace prefix
 // reaches one the same way (`tok::TK_FOO`).

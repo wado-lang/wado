@@ -9,6 +9,7 @@ mod callee;
 mod closure;
 mod coercion;
 mod control_flow;
+mod exhaustiveness;
 mod expr;
 mod handlers;
 mod infer;

@@ -16,7 +16,8 @@ use std::sync::Arc;
 use crate::ast;
 use crate::ast::NamedType;
 use crate::component_model::{
-    CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, parse_resource_func,
+    CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, one_per_cm_name,
+    parse_resource_func,
 };
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, is_bundled_specifier};
@@ -606,7 +607,7 @@ impl<'a> Emitter<'a> {
         let mut resource_funcs: BTreeMap<String, Vec<ResourceFunc>> = BTreeMap::new();
         let mut free_funcs: Vec<StandaloneFunc> = Vec::new();
         for info in infos.iter().filter(|i| i.path == fq) {
-            for func in &info.functions {
+            for func in one_per_cm_name(&info.functions) {
                 if let Some((kind, resource, member)) = parse_resource_func(&func.wasi_func_name) {
                     let rf = self.build_resource_func(func, kind, member, fq, &mut uses)?;
                     resource_funcs

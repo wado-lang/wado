@@ -1,0 +1,17 @@
+// A `for` over a type pack may discard each element.
+use { println, Stdout } from "core:cli";
+
+fn count<..T>(t: [..T]) -> i32 {
+    let mut n = 0;
+    for let _ of t {
+        n += 1;
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    println(`${count([1, "a", true])}`);
+}
+
+__DATA__
+{"stdout": "3\n"}

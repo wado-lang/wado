@@ -100,6 +100,7 @@ pub trait TirMutVisitor {
             TirPattern::Enum { .. }
             | TirPattern::ConstantValue { .. }
             | TirPattern::Range { .. } => {}
+            TirPattern::Narrow { test, .. } => self.visit_expr(test),
             TirPattern::Struct { fields, .. } => {
                 for field in fields {
                     self.visit_pattern(&mut field.pattern);
@@ -302,6 +303,7 @@ pub trait TirRefVisitor {
             TirPattern::Enum { .. }
             | TirPattern::ConstantValue { .. }
             | TirPattern::Range { .. } => {}
+            TirPattern::Narrow { test, .. } => self.visit_expr(test),
             TirPattern::Struct { fields, .. } => {
                 for field in fields {
                     self.visit_pattern(&field.pattern);
@@ -572,7 +574,7 @@ pub fn opt_walk_pattern(visitor: &mut impl TirOptVisitor, pattern: &mut TirPatte
                 changed |= visitor.visit_pattern(&mut f.pattern);
             }
         }
-        TirPattern::ConstantValue { expr } => {
+        TirPattern::ConstantValue { expr } | TirPattern::Narrow { test: expr, .. } => {
             changed |= visitor.visit_expr(expr);
         }
     }
@@ -922,10 +924,33 @@ impl TirMutVisitor for ShiftLocals {
     }
 
     fn visit_pattern(&mut self, pattern: &mut TirPattern) {
-        if let TirPattern::Binding { local_index, .. } = pattern {
+        if let TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } =
+            pattern
+        {
             *local_index += self.offset;
         }
         self.walk_pattern(pattern);
+    }
+}
+
+/// Point every read of local `from` in `expr` at `to`.
+pub fn remap_local_reads(expr: &mut TirExpr, from: u32, to: u32) {
+    RemapLocalReads { from, to }.visit_expr(expr);
+}
+
+struct RemapLocalReads {
+    from: u32,
+    to: u32,
+}
+
+impl TirMutVisitor for RemapLocalReads {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        if let TirExprKind::Local { index, .. } = &mut expr.kind
+            && *index == self.from
+        {
+            *index = self.to;
+        }
+        self.walk_expr(expr);
     }
 }
 

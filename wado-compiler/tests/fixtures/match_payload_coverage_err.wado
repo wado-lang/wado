@@ -1,0 +1,51 @@
+// A case counts as covered only as far as its payload patterns reach, and a
+// guarded arm covers nothing. Each match here missed a value that trapped.
+
+fn literal(o: Option<i32>) -> i32 {
+    return match o {
+        Some(1) => 1,
+        None => 0,
+    };
+}
+
+fn nested(o: Option<Option<bool>>) -> i32 {
+    return match o {
+        Some(Some(true)) => 1,
+        Some(None) => 2,
+        None => 0,
+    };
+}
+
+fn guarded(o: Option<i32>) -> i32 {
+    return match o {
+        Some(x) && x > 0 => x,
+        None => 0,
+    };
+}
+
+fn tuple(t: [bool, bool]) -> i32 {
+    return match t {
+        [true, _] => 1,
+        [false, true] => 2,
+    };
+}
+
+fn text(s: String) -> i32 {
+    return match s {
+        "a" => 1,
+    };
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "non-exhaustive match",
+  "compile_errors_contains": [
+    "missing case `Some(-2147483648..=0)`",
+    "missing case `Some(Some(false))`",
+    "missing case `Some`",
+    "missing case `[false, false]`",
+    "non-exhaustive match: add a final `_` arm"
+  ]
+}

@@ -1,0 +1,12 @@
+// A `for` binding matches every element, so a narrowing there is refutable.
+use { Dom, Node, HtmlInputElement } from "web:dom";
+
+export fn run() with Dom {
+    let nodes: List<Node> = [Dom::document().create_element("div", null)];
+    for let input: HtmlInputElement of nodes {
+        let _ = input.value();
+    }
+}
+
+__DATA__
+{"compile_error":":6:13: analysis error: invalid pattern: refutable pattern in `for` binding: not every `Node` is `HtmlInputElement`; match on the element in the loop body instead"}

@@ -35,6 +35,14 @@ pub const INTERNAL_PREFIX: &str = "$";
 /// anchor would have nothing to bind to. A `const` is the right shape.
 pub const CLOSURE_CALL_METHOD: &str = "$call";
 
+/// Method a narrowing type pattern calls on its target resource: the
+/// receiver's `is-<resource>` import, which answers whether the handle is one.
+pub const NARROWING_TEST_METHOD: &str = "$is";
+
+/// Method `==` calls on the root of two unrestricted handles' chain: the
+/// package's `is-same` import, which answers whether both name one host object.
+pub const IDENTITY_TEST_METHOD: &str = "$same";
+
 /// Separator between a namespace-import alias and the imported member in the
 /// canonical `ns$member` name a `ns::member` reference resolves to. `$` is not
 /// a valid Wado identifier character, so the alias is a single `::`-free token

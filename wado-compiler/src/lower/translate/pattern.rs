@@ -273,7 +273,9 @@ struct PatternLowerer<'a> {
 /// write.
 fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
     match pattern {
-        TirPattern::Binding { type_id, .. } => value_copy::needs_value_copy(*type_id, type_table),
+        TirPattern::Binding { type_id, .. } | TirPattern::Narrow { type_id, .. } => {
+            value_copy::needs_value_copy(*type_id, type_table)
+        }
         TirPattern::Tuple(sub, _)
         | TirPattern::Variant { bindings: sub, .. }
         | TirPattern::Or(sub) => sub.iter().any(|p| binds_by_value(p, type_table)),
@@ -288,6 +290,43 @@ fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
     }
 }
 
+/// Split a `Narrow` into the binding that holds the value and the test that
+/// reads it back.
+fn narrow_into_binding(pattern: &mut TirPattern) -> (TirPattern, TirExpr) {
+    let TirPattern::Narrow {
+        name,
+        local_index,
+        type_id,
+        test,
+    } = std::mem::replace(pattern, TirPattern::Wildcard)
+    else {
+        panic!("narrow_into_binding takes a Narrow pattern");
+    };
+    let binding = TirPattern::Binding {
+        name: name.unwrap_or_else(|| format!("$narrowed_{local_index}")),
+        local_index,
+        type_id,
+    };
+    (binding, *test)
+}
+
+/// Make `arm` hold only where `cond` does, tested ahead of its own guard.
+fn guard_arm(arm: &mut TirMatchArm, cond: TirExpr) {
+    let span = arm.span;
+    arm.guard = Some(match arm.guard.take() {
+        Some(existing) => TirExpr::new(
+            TirExprKind::Binary {
+                op: TirBinaryOp::And,
+                left: Box::new(cond),
+                right: Box::new(existing),
+            },
+            TypeTable::BOOL,
+            span,
+        ),
+        None => cond,
+    });
+}
+
 /// A pattern naming one value or a range of them, with no binding and nothing
 /// the match pre-pass rewrites into a guard.
 fn is_plain_value_pattern(pattern: &TirPattern) -> bool {
@@ -300,7 +339,8 @@ fn is_plain_value_pattern(pattern: &TirPattern) -> bool {
         | TirPattern::Variant { .. }
         | TirPattern::Struct { .. }
         | TirPattern::Or(_)
-        | TirPattern::ConstantValue { .. } => false,
+        | TirPattern::ConstantValue { .. }
+        | TirPattern::Narrow { .. } => false,
     }
 }
 
@@ -448,6 +488,7 @@ impl<'a> PatternLowerer<'a> {
             | TirPattern::Variant { .. }
             | TirPattern::Enum { .. }
             | TirPattern::ConstantValue { .. }
+            | TirPattern::Narrow { .. }
             | TirPattern::Range { .. }
             | TirPattern::Or(_) => true,
             TirPattern::Tuple(sub_patterns, _) => {
@@ -656,7 +697,7 @@ impl<'a> PatternLowerer<'a> {
                 bindings,
                 payload_type,
                 ..
-            } => {
+            } if !bindings.iter().any(Self::pattern_is_refutable) => {
                 let case_index = *case_index;
                 let temp_index = self.alloc_local(elem_type);
                 let temp_name = format!("$variant_{temp_index}");
@@ -807,13 +848,18 @@ impl<'a> PatternLowerer<'a> {
                     type_id: elem_type,
                 };
             }
-            TirPattern::Struct { .. } | TirPattern::Tuple(..) | TirPattern::Or(..) => {
-                // Compound sub-patterns (struct/tuple/or inside variant payload or
-                // another compound). These may themselves contain refutable sub-patterns
-                // (e.g. `Branch([Leaf(a), Leaf(b)])`), so we use `build_pattern_check`
-                // to recursively generate the full check expression including both
-                // variant tag tests and payload extractions. The whole thing becomes
-                // a single bool condition in the guard.
+            TirPattern::Narrow { .. } => {
+                let (binding, mut test) = narrow_into_binding(sub);
+                self.lower_expr(&mut test, type_table);
+                conditions.push(test);
+                *sub = binding;
+            }
+            TirPattern::Struct { .. }
+            | TirPattern::Tuple(..)
+            | TirPattern::Or(..)
+            | TirPattern::Variant { .. } => {
+                // A compound whose parts may be refutable at any depth
+                // (`Branch([Leaf(a), Leaf(b)])`, `Some(Some(1))`) is tested whole.
                 let temp_index = self.alloc_local(elem_type);
                 let temp_name = format!("$compound_{temp_index}");
                 let temp_expr = TirExpr::new(
@@ -969,6 +1015,20 @@ impl<'a> PatternLowerer<'a> {
                     span,
                 );
                 TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)
+            }
+            TirPattern::Narrow { .. } => {
+                let (binding, mut test) = narrow_into_binding(&mut pattern.clone());
+                self.lower_expr(&mut test, type_table);
+                let tested = TirExpr::new(
+                    TirExprKind::Binary {
+                        op: TirBinaryOp::And,
+                        left: Box::new(test),
+                        right: Box::new(continuation),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                );
+                self.build_pattern_check(&binding, value, pattern_type, span, type_table, tested)
             }
             TirPattern::Enum {
                 enum_type,
@@ -1984,6 +2044,9 @@ impl<'a> PatternLowerer<'a> {
                 // Literal/Enum/ConstantValue/Range patterns don't bind anything, just evaluate for side effects
                 out.push(TirStmt::new(TirStmtKind::Expr(value), span));
             }
+            TirPattern::Narrow { .. } => {
+                panic!("a narrowing pattern is refutable, so no `let` destructures through one")
+            }
             TirPattern::Or(alternatives) => {
                 // Or patterns in let-destructure: use first alternative's bindings
                 if let Some(first) = alternatives.first() {
@@ -2046,6 +2109,9 @@ impl<'a> PatternLowerer<'a> {
             | TirPattern::Range { .. } => {
                 // Just evaluate for side effects (no bindings)
                 out.push(TirStmt::new(TirStmtKind::Expr(value), span));
+            }
+            TirPattern::Narrow { .. } => {
+                panic!("a narrowing pattern is extracted into a guard before its lets")
             }
             TirPattern::Or(alternatives) => {
                 // Or patterns in lets: use first alternative's bindings
@@ -2154,18 +2220,7 @@ impl<'a> PatternLowerer<'a> {
                             local_index: temp_index,
                             type_id: scrutinee_type_id,
                         };
-                        arm.guard = Some(match arm.guard.take() {
-                            Some(existing) => TirExpr::new(
-                                TirExprKind::Binary {
-                                    op: TirBinaryOp::And,
-                                    left: Box::new(cond),
-                                    right: Box::new(existing),
-                                },
-                                TypeTable::BOOL,
-                                span,
-                            ),
-                            None => cond,
-                        });
+                        guard_arm(arm, cond);
                     }
                 }
 
@@ -2232,18 +2287,16 @@ impl<'a> PatternLowerer<'a> {
                             local_index: temp_index,
                             type_id: scrutinee_type_id,
                         };
-                        arm.guard = Some(match arm.guard.take() {
-                            Some(existing) => TirExpr::new(
-                                TirExprKind::Binary {
-                                    op: TirBinaryOp::And,
-                                    left: Box::new(cond),
-                                    right: Box::new(existing),
-                                },
-                                TypeTable::BOOL,
-                                span,
-                            ),
-                            None => cond,
-                        });
+                        guard_arm(arm, cond);
+                    }
+                }
+
+                for arm in arms.iter_mut() {
+                    if let TirPattern::Narrow { .. } = &arm.pattern {
+                        let (binding, mut test) = narrow_into_binding(&mut arm.pattern);
+                        self.lower_expr(&mut test, type_table);
+                        arm.pattern = binding;
+                        guard_arm(arm, test);
                     }
                 }
 

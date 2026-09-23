@@ -1,0 +1,15 @@
+// Every `HtmlInputElement` is an `Element`, so the second arm can never run.
+use { Element, HtmlInputElement, Node } from "web:dom";
+
+fn kind(n: Node) -> i32 {
+    return match n {
+        el: Element => 1,
+        input: HtmlInputElement => 2,
+        _ => 0,
+    };
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error":":7:9: analysis error: invalid pattern: unreachable arm: every `HtmlInputElement` is `Element`, which an earlier arm already takes"}

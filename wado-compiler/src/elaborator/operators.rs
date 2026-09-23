@@ -347,6 +347,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // fall through to the normal type mismatch error below.
         }
 
+        // Handles compare by host identity; reify rebuilds the `$same` call.
+        if matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
+            && self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .identity_root(left, right)
+                .is_some()
+        {
+            return TypeTable::BOOL;
+        }
+
         let is_comparison = matches!(
             op,
             BinaryOp::Eq
@@ -1799,42 +1811,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         chain: &ast::ComparisonChainExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        if chain.comparisons.is_empty() {
-            // Degenerate parse — no chain expansion fires, so this is not
-            // a desugar site. Do not record `ComparisonChain` here.
-            return self.resolve_expr(&chain.first, ctx, None);
-        }
-
-        // Single comparison: no middle term to bind, just one Binary.
-        // Same reasoning: no chain expansion took place.
-        if chain.comparisons.len() == 1 {
-            let cmp = &chain.comparisons[0];
-            let (left_tir, right_tir) = self.resolve_binary_operands_with_coercion(
-                &chain.first,
-                cmp.op,
-                &cmp.right,
-                ctx,
-                None,
-            );
-            // When the comparison
-            // takes the operator-trait dispatch path inside
-            // `resolve_binary_op` (non-primitive operands → Eq /
-            // Ord trait methods), tag the recording with the chain's
-            // AstId so reify can replay the same method-call + Ord
-            // wrap shape.
-            return self.resolve_binary_op(
-                left_tir,
-                cmp.op,
-                right_tir,
-                cmp.right.span(),
-                cmp.op_span,
-                Some(chain.id),
-            );
-        }
-
-        // Multi-comparison: actual chain expansion. Tag the node so the
-        // future `reify` pass can replay the same `(a < b) & (b < c)`
-        // shape with the same `$mK` middle bindings.
+        assert!(
+            chain.comparisons.len() >= 2,
+            "the parser makes a single comparison a `Binary`"
+        );
         self.record_desugar(chain.id, DesugarKind::ComparisonChain);
 
         // Enter a fresh scope for the `$mK` bindings so they don't leak
