@@ -556,12 +556,12 @@ fn classify_token(
         Some(category) => classify_keyword(category),
 
         None => match &token.kind {
-            // `self` is the one contextual keyword the language reserves —
-            // `Wado.g4`'s `identifier` rule accepts every other one as a name,
-            // but not this — so it needs no AST position to be recognised, and
-            // the registry files it under `Constant`. Without this it colours
-            // as the parameter binding it resolves to.
+            // `self` and `Self` are the contextual keywords the language
+            // reserves — `Wado.g4`'s `identifier` rule accepts every other one
+            // as a name — so they need no AST position to be recognised. Without
+            // this they colour as the binding and the type they resolve to.
             TokenKind::Ident(name) if name == "self" => CONSTANT,
+            TokenKind::Ident(name) if name == "Self" => KEYWORD,
 
             // The mirror case: `test`, `do`, `resume`, `task`, `trap` and
             // `forward` lex as identifiers and are read as keywords here.

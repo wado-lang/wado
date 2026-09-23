@@ -166,6 +166,7 @@
 "..=" @operator
 
 ; Keywords (inline literals)
+"Self" @keyword
 "as" @keyword
 "assert" @keyword
 "async" @keyword
