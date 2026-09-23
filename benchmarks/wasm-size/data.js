@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790169485779,
+  "lastUpdate": 1790176297007,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58973,6 +58973,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bd26b6859833ae69f05e3f2d62aceff714003818"
         },
         "date": 1790169485330,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 290692,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "396bedaf9458e4b2f68d978990117ce06de655f6",
+          "message": "Merge pull request #2137 from wado-lang/claude/wado-issue-2060-5leilj\n\nfeat(string): floor/ceil_char_boundary, and StrSlice::slice",
+          "timestamp": "2026-09-23T23:54:02+09:00",
+          "tree_id": "dc9765cd28cb760c6dc8d059511e59f56b9c31bb",
+          "url": "https://github.com/wado-lang/wado/commit/396bedaf9458e4b2f68d978990117ce06de655f6"
+        },
+        "date": 1790176296035,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
