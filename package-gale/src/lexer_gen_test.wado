@@ -220,6 +220,24 @@ test "gen_lexer: a large class is one shared function, however many sites test i
     assert !out.contains("in_char_set_1"), out;
 }
 
+test "gen_lexer: arm scoring peeks the suffix from one site, whatever the arm count" {
+    let out = lexer_source("lexer grammar L; I : ('a' | 'ab' | 'abc') 'bcd' ;");
+    assert count_occurrences(&out, "chars[pos] != 'd'") == 2, out;
+}
+
+test "gen_lexer: an optional element's block is labelled as one, not as a loop" {
+    let out = lexer_source("lexer grammar L; A : 'a' 'bc'? ;");
+    assert out.contains("opt_0: {"), out;
+    assert !out.contains("rep_"), out;
+}
+
+test "gen_lexer: a char that prints as nothing is spelled as its escape" {
+    let out = lexer_source("lexer grammar L; WS : [\\u00A0\\u2000-\\u200A] ; BOM : '\\uFEFF' 'é' ;");
+    assert out.contains("matches { '\\u{a0}' | '\\u{2000}'..='\\u{200a}' }"), out;
+    assert out.contains("chars[pos] != '\\u{feff}'"), out;
+    assert out.contains("chars[pos] != 'é'"), out;
+}
+
 test "gen_lexer: a negated single char is one class test" {
     let out = lexer_source("lexer grammar L; S : '\"' ~'\"'* '\"' ;");
     assert out.contains("if (chars[pos] matches { '\"' }) { break"), out;

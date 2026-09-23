@@ -38,6 +38,7 @@ use {
     LEXER_SET_MODE_FIELD,
 } from "./action_translate.wado";
 use { TreeMap, TreeSet } from "core:collections";
+use icu from "core:icu";
 
 /// A grammar literal rendered the way ANTLR4's vocabulary shows it: the source
 /// form, single-quoted.
@@ -1783,14 +1784,26 @@ pub enum LexerAltsEmit {
     FirstMatchNotTail,
     FirstMatchSingleArm,
     FirstMatchFixedLenArms,
+    /// No two arms can match at the same position, so the first to match is
+    /// the only one.
+    FirstMatchArmsDisjoint,
 }
 
-pub fn lexer_alts_emit(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, tail: bool) -> LexerAltsEmit {
+pub fn lexer_alts_emit(
+    alts: &List<LexerAlternative>,
+    all_rules: &List<LexerRule>,
+    ci: bool,
+    tail: bool,
+) -> LexerAltsEmit {
     if !tail {
         return LexerAltsEmit::FirstMatchNotTail;
     }
     return match lexer_alts_lengths(alts, all_rules) {
-        Longest => LexerAltsEmit::MaximalMunch,
+        Longest => if lexer_alts_can_collide(alts, all_rules, ci) {
+            LexerAltsEmit::MaximalMunch;
+        } else {
+            LexerAltsEmit::FirstMatchArmsDisjoint;
+        },
         SingleArm => LexerAltsEmit::FirstMatchSingleArm,
         FixedLenArms => LexerAltsEmit::FirstMatchFixedLenArms,
         ArmPredicate => panic("lexer_alts_lengths never reports the routing question's predicate carve-out"),
@@ -2247,10 +2260,10 @@ fn plan_body(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, ci: boo
     if alts.len() == 1 {
         return LexerBodyPlan::Single(plan_seq(&alts[0], all_rules, ci, tail));
     }
-    let emit = lexer_alts_emit(alts, all_rules, tail);
-    // Maximal munch scans every arm to its end, so each arm inherits the tail
-    // position; first-match does not.
-    let arm_tail = emit matches { MaximalMunch };
+    let emit = lexer_alts_emit(alts, all_rules, ci, tail);
+    // Maximal munch scans every arm to its end, and of disjoint arms only one
+    // can match, so each arm inherits the tail position; first-match does not.
+    let arm_tail = emit matches { MaximalMunch | FirstMatchArmsDisjoint };
     let mut arms: List<LexerSeqPlan> = [];
     for let alt of alts {
         arms.push(plan_seq(alt, all_rules, ci, arm_tail));
@@ -2634,9 +2647,7 @@ pub fn lexer_alts_can_collide(alts: &List<LexerAlternative>, all_rules: &List<Le
     let mut sets: List<LeadingChars> = [];
     for let alt of alts {
         let mut visiting: List<String> = [];
-        // `follow_refs = false`: a rule call is opaque to an arm, which only
-        // has to be told apart from its siblings, not scored against a suffix.
-        let leading = lexer_seq_leading_chars(&alt.elements, all_rules, ci, false, &mut visiting);
+        let leading = lexer_seq_leading_chars(&alt.elements, all_rules, ci, /*follow_refs=*/ true, &mut visiting);
         match leading {
             Some(s) => {
                 if s.nullable {
@@ -3143,33 +3154,44 @@ fn gen_lexer_alts_lookahead_aware<S: AsStrSlice>(
     w.line(`let mut la_reach_${id}: i32 = -1;`);
     w.line(`let mut la_end_${id}: i32 = -1;`);
     w.line(`let mut la_win_${id}: i32 = -1;`);
+    let mut arm_ends: List<String> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
         let label = `la_alt_${id}_${i}`;
+        w.line(`let mut la_arm_${id}_${i}: i32 = -1;`);
         w.begin(`${label}:`);
         w.line(`pos = la_saved_${id};`);
         gen_lexer_arm_probe(w, &alts[i], &arms[i], all_rules, `break ${label}`, ci, ea, hm, replay);
-        w.line(`let la_arm_${id}_${i} = pos;`);
-        w.line(`let mut la_tot_${id}_${i}: i32 = -1;`);
-        gen_lexer_suffix_peek(
-            w,
-            alt,
-            plan,
-            from,
-            all_rules,
-            `la_tot_${id}_${i}`,
-            ci,
-            probe_ea(replay, ea),
-            hm,
-            /*record_end=*/ true,
-        );
-        // Strict `>` over arms in source order gives ANTLR4's tie-break.
-        w.begin(`if la_tot_${id}_${i} > la_reach_${id}`);
-        w.line(`la_reach_${id} = la_tot_${id}_${i};`);
-        w.line(`la_end_${id} = la_arm_${id}_${i};`);
-        w.line(`la_win_${id} = ${i};`);
+        w.line(`la_arm_${id}_${i} = pos;`);
         w.end();
-        w.end();
+        let pattern = if i == alts.len() - 1 { "_" } else { `${i}` };
+        arm_ends.push(`${pattern} => la_arm_${id}_${i}`);
     }
+    // One suffix peek, run from each arm's end in turn: the suffix is emitted
+    // once rather than once per arm.
+    w.begin(`for let mut la_i_${id} = 0; la_i_${id} < ${alts.len()}; la_i_${id} += 1`);
+    w.line(`let la_at_${id} = match la_i_${id} { ${arm_ends.join(", ")} };`);
+    w.line(`if la_at_${id} < 0 { continue; }`);
+    w.line(`pos = la_at_${id};`);
+    w.line(`let mut la_tot_${id}: i32 = -1;`);
+    gen_lexer_suffix_peek(
+        w,
+        alt,
+        plan,
+        from,
+        all_rules,
+        `la_tot_${id}`,
+        ci,
+        probe_ea(replay, ea),
+        hm,
+        /*record_end=*/ true,
+    );
+    // Strict `>` over arms in source order gives ANTLR4's tie-break.
+    w.begin(`if la_tot_${id} > la_reach_${id}`);
+    w.line(`la_reach_${id} = la_tot_${id};`);
+    w.line(`la_end_${id} = la_at_${id};`);
+    w.line(`la_win_${id} = la_i_${id};`);
+    w.end();
+    w.end();
     w.line(`if la_win_${id} < 0 { ${fail_action}; }`);
     if !replay {
         w.line(`pos = la_end_${id};`);
@@ -3239,6 +3261,12 @@ fn gen_lexer_suffix_peek<S: AsStrSlice>(
     let end_var = `peek_end_${id}`;
     let label = `peek_${id}`;
     w.line(`let ${save_var} = pos;`);
+    if lexer_suffix_always_matches(alt, plan, from) {
+        gen_lexer_suffix_seq(w, alt, plan, from, all_rules, "unreachable()", ci, ea, hm);
+        w.line(`${accept_var} = ${if record_end { "pos" } else { save_var }};`);
+        w.line(`pos = ${save_var};`);
+        return;
+    }
     w.line(`let mut ${matched_var} = false;`);
     if record_end {
         w.line(`let mut ${end_var}: i32 = -1;`);
@@ -3254,6 +3282,26 @@ fn gen_lexer_suffix_peek<S: AsStrSlice>(
     w.begin(`if ${matched_var}`);
     w.line(`${accept_var} = ${if record_end { end_var } else { save_var }};`);
     w.end();
+}
+
+/// Whether the steps of `alt` from `from` on match wherever they start: greedy
+/// `?` and `*` loops, which stop rather than fail, with no predicate between.
+fn lexer_suffix_always_matches(alt: &LexerAlternative, plan: &LexerSeqPlan, from: i32) -> bool {
+    if alt.actions.iter_ref().any(|a| a.kind matches { Predicate } && a.before_index >= from) {
+        return false;
+    }
+    for let mut i = from; i < plan.steps.len(); i += 1 {
+        let Repeat(rp) = &plan.steps[i] else {
+            return false;
+        };
+        let Repeat(rep) = &alt.elements[i] else {
+            return false;
+        };
+        if !rep.kind matches { Optional | Star } || rp.emit matches { NonGreedy | LookaheadAware } {
+            return false;
+        }
+    }
+    return true;
 }
 
 fn gen_lexer_elem<S: AsStrSlice>(
@@ -3328,7 +3376,7 @@ fn gen_lexer_leaf<S: AsStrSlice>(w: &mut CodeWriter, elem: &LexerElement, fail_a
                 gen_char_class(w, &cc, fail_action);
             } else {
                 w.line(
-                    `if pos >= chars.len() || !(chars[pos] matches { ${char_range_pat(pair.0..=pair.1)} }) { ${fail_action}; }`,
+                    `if pos >= chars.len() || !(chars[pos] matches { ${char_pat(pair.0, pair.1)} }) { ${fail_action}; }`,
                 );
                 w.line("pos += 1;");
             }
@@ -3383,7 +3431,7 @@ fn char_class_disjunction(w: &mut CodeWriter, cc: &CharClass) -> String {
     if cc.ranges.len() == 0 {
         return "(false)";
     }
-    let pattern = cc.ranges.iter_ref().map(|r| `${char_range_pat(r.start..=r.end)}`).collect().join(" | ");
+    let pattern = cc.ranges.iter_ref().map(|r| char_pat(r.start, r.end)).collect().join(" | ");
     if cc.ranges.len() <= SHARED_CHAR_SET_MIN_RANGES {
         return `(chars[pos] matches { ${pattern} })`;
     }
@@ -3407,7 +3455,7 @@ fn gen_lexer_repeat<S: AsStrSlice>(
     replay: bool = false,
 ) {
     let id = w.next_id();
-    let label = `rep_${id}`;
+    let label = if rep.kind matches { Optional } { `opt_${id}` } else { `rep_${id}` };
     let break_label = `break ${label}`;
     if let Star = rep.kind {
         w.begin("loop");
@@ -4258,7 +4306,28 @@ fn gen_char_mismatch<S: AsStrSlice>(access: S, c: char, ci: bool) -> String {
     if ci && lower != upper {
         return wado`!${expr}.eq_ignore_ascii_case(&'${lower}')`;
     }
-    return wado`${expr} != '${c}'`;
+    return `${expr} != ${char_pat(c, c)}`;
+}
+
+/// A char or range pattern for generated source, spelling as an escape any
+/// char that prints as nothing on its own: a separator, a mark, a format or
+/// control char past ASCII.
+fn char_pat(start: char, end: char) -> String {
+    if start == end {
+        return quoted_char(start);
+    }
+    return `${quoted_char(start)}..=${quoted_char(end)}`;
+}
+
+/// The `General_Category` groups whose chars print as nothing on their own.
+global UNPRINTED_CHAR_GROUPS: List<String> = ["Z", "M", "C"];
+
+fn quoted_char(c: char) -> String {
+    let code = c as u32;
+    if code > 0x7F && UNPRINTED_CHAR_GROUPS.iter_ref().any(|g| icu::value_contains("gc", *g, c) == Option::Some(true)) {
+        return `'\\u{${code:x}}'`;
+    }
+    return `${char_range_pat(c..=c)}`;
 }
 
 fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bool, hm: bool) {
@@ -4784,7 +4853,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         // Grammar order, so a same-length match goes to the first rule in the
         // grammar (ANTLR4's tie-break). Insertion order does not carry it.
         members.sort();
-        let pattern = spans.iter_ref().map(|s| `${char_range_pat(s.start..=s.end)}`).collect().join(" | ");
+        let pattern = spans.iter_ref().map(|s| char_pat(s.start, s.end)).collect().join(" | ");
         if let Some(gi) = group_by_calls.get(members) {
             groups[gi].pattern.push_str(` | ${pattern}`);
         } else {

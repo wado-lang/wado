@@ -1290,12 +1290,27 @@ fn try_B(chars: &List<char>, start: i32) -> i32 {
     let mut la_reach_12: i32 = -1;
     let mut la_end_12: i32 = -1;
     let mut la_win_12: i32 = -1;
+    let mut la_arm_12_0: i32 = -1;
     la_alt_12_0: {
         pos = la_saved_12;
         if pos >= chars.len() || chars[pos] != 'm' { break la_alt_12_0; }
         pos += 1;
-        let la_arm_12_0 = pos;
-        let mut la_tot_12_0: i32 = -1;
+        la_arm_12_0 = pos;
+    }
+    let mut la_arm_12_1: i32 = -1;
+    la_alt_12_1: {
+        pos = la_saved_12;
+        if pos >= chars.len() || chars[pos] != 'm' { break la_alt_12_1; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != 'n' { break la_alt_12_1; }
+        pos += 1;
+        la_arm_12_1 = pos;
+    }
+    for let mut la_i_12 = 0; la_i_12 < 2; la_i_12 += 1 {
+        let la_at_12 = match la_i_12 { 0 => la_arm_12_0, _ => la_arm_12_1 };
+        if la_at_12 < 0 { continue; }
+        pos = la_at_12;
+        let mut la_tot_12: i32 = -1;
         let peek_save_13 = pos;
         let mut peek_ok_13 = false;
         let mut peek_end_13: i32 = -1;
@@ -1348,29 +1363,36 @@ fn try_B(chars: &List<char>, start: i32) -> i32 {
         }
         pos = peek_save_13;
         if peek_ok_13 {
-            la_tot_12_0 = peek_end_13;
+            la_tot_12 = peek_end_13;
         }
-        if la_tot_12_0 > la_reach_12 {
-            la_reach_12 = la_tot_12_0;
-            la_end_12 = la_arm_12_0;
-            la_win_12 = 0;
+        if la_tot_12 > la_reach_12 {
+            la_reach_12 = la_tot_12;
+            la_end_12 = la_at_12;
+            la_win_12 = la_i_12;
         }
     }
-    la_alt_12_1: {
-        pos = la_saved_12;
-        if pos >= chars.len() || chars[pos] != 'm' { break la_alt_12_1; }
+    if la_win_12 < 0 { return -1; }
+    pos = la_end_12;
+    let mut accept_17: i32 = -1;
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { 'n'..='o' })) { return -1; }
+    pos += 1;
+    let peek_save_18 = pos;
+    let mut peek_ok_18 = false;
+    peek_18: {
+        if pos >= chars.len() || chars[pos] != 'o' { break peek_18; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] != 'n' { break la_alt_12_1; }
-        pos += 1;
-        let la_arm_12_1 = pos;
-        let mut la_tot_12_1: i32 = -1;
-        let peek_save_17 = pos;
-        let mut peek_ok_17 = false;
-        let mut peek_end_17: i32 = -1;
-        peek_17: {
-            let mut accept_18: i32 = -1;
-            if pos >= chars.len() { break peek_17; }
-            if !((chars[pos] matches { 'n'..='o' })) { break peek_17; }
+        peek_ok_18 = true;
+    }
+    pos = peek_save_18;
+    if peek_ok_18 {
+        accept_17 = peek_save_18;
+    }
+    loop {
+        let la_saved_17 = pos;
+        la_rep_17: {
+            if pos >= chars.len() { break la_rep_17; }
+            if !((chars[pos] matches { 'n'..='o' })) { break la_rep_17; }
             pos += 1;
             let peek_save_19 = pos;
             let mut peek_ok_19 = false;
@@ -1381,92 +1403,17 @@ fn try_B(chars: &List<char>, start: i32) -> i32 {
             }
             pos = peek_save_19;
             if peek_ok_19 {
-                accept_18 = peek_save_19;
-            }
-            loop {
-                let la_saved_18 = pos;
-                la_rep_18: {
-                    if pos >= chars.len() { break la_rep_18; }
-                    if !((chars[pos] matches { 'n'..='o' })) { break la_rep_18; }
-                    pos += 1;
-                    let peek_save_20 = pos;
-                    let mut peek_ok_20 = false;
-                    peek_20: {
-                        if pos >= chars.len() || chars[pos] != 'o' { break peek_20; }
-                        pos += 1;
-                        peek_ok_20 = true;
-                    }
-                    pos = peek_save_20;
-                    if peek_ok_20 {
-                        accept_18 = peek_save_20;
-                    }
-                    continue;
-                }
-                pos = la_saved_18;
-                break;
-            }
-            if accept_18 < 0 {
-                break peek_17;
-            }
-            pos = accept_18;
-            if pos >= chars.len() || chars[pos] != 'o' { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
-            pos += 1;
-            peek_end_17 = pos;
-            peek_ok_17 = true;
-        }
-        pos = peek_save_17;
-        if peek_ok_17 {
-            la_tot_12_1 = peek_end_17;
-        }
-        if la_tot_12_1 > la_reach_12 {
-            la_reach_12 = la_tot_12_1;
-            la_end_12 = la_arm_12_1;
-            la_win_12 = 1;
-        }
-    }
-    if la_win_12 < 0 { return -1; }
-    pos = la_end_12;
-    let mut accept_21: i32 = -1;
-    if pos >= chars.len() { return -1; }
-    if !((chars[pos] matches { 'n'..='o' })) { return -1; }
-    pos += 1;
-    let peek_save_22 = pos;
-    let mut peek_ok_22 = false;
-    peek_22: {
-        if pos >= chars.len() || chars[pos] != 'o' { break peek_22; }
-        pos += 1;
-        peek_ok_22 = true;
-    }
-    pos = peek_save_22;
-    if peek_ok_22 {
-        accept_21 = peek_save_22;
-    }
-    loop {
-        let la_saved_21 = pos;
-        la_rep_21: {
-            if pos >= chars.len() { break la_rep_21; }
-            if !((chars[pos] matches { 'n'..='o' })) { break la_rep_21; }
-            pos += 1;
-            let peek_save_23 = pos;
-            let mut peek_ok_23 = false;
-            peek_23: {
-                if pos >= chars.len() || chars[pos] != 'o' { break peek_23; }
-                pos += 1;
-                peek_ok_23 = true;
-            }
-            pos = peek_save_23;
-            if peek_ok_23 {
-                accept_21 = peek_save_23;
+                accept_17 = peek_save_19;
             }
             continue;
         }
-        pos = la_saved_21;
+        pos = la_saved_17;
         break;
     }
-    if accept_21 < 0 {
+    if accept_17 < 0 {
         return -1;
     }
-    pos = accept_21;
+    pos = accept_17;
     if pos >= chars.len() || chars[pos] != 'o' { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
     pos += 1;
     return pos;
@@ -1474,83 +1421,83 @@ fn try_B(chars: &List<char>, start: i32) -> i32 {
 
 fn try_C(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let mut accept_24: i32 = -1;
+    let mut accept_20: i32 = -1;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
-    let peek_save_25 = pos;
-    let mut peek_ok_25 = false;
-    peek_25: {
+    let peek_save_21 = pos;
+    let mut peek_ok_21 = false;
+    peek_21: {
         loop {
-            let ng_saved_26 = pos;
-            let mut ng_exit_26 = false;
-            ng_26: {
-                if pos >= chars.len() || chars[pos] != 'z' { break ng_26; }
+            let ng_saved_22 = pos;
+            let mut ng_exit_22 = false;
+            ng_22: {
+                if pos >= chars.len() || chars[pos] != 'z' { break ng_22; }
                 pos += 1;
-                ng_exit_26 = true;
+                ng_exit_22 = true;
             }
-            if ng_exit_26 {
+            if ng_exit_22 {
                 break;
             }
-            pos = ng_saved_26;
-            if pos >= chars.len() { break peek_25; }
+            pos = ng_saved_22;
+            if pos >= chars.len() { break peek_21; }
             pos += 1;
         }
-        peek_ok_25 = true;
+        peek_ok_21 = true;
     }
-    pos = peek_save_25;
-    if peek_ok_25 {
-        accept_24 = peek_save_25;
+    pos = peek_save_21;
+    if peek_ok_21 {
+        accept_20 = peek_save_21;
     }
     loop {
-        let la_saved_24 = pos;
-        la_rep_24: {
-            if pos >= chars.len() || chars[pos] != 'c' { break la_rep_24; }
+        let la_saved_20 = pos;
+        la_rep_20: {
+            if pos >= chars.len() || chars[pos] != 'c' { break la_rep_20; }
             pos += 1;
-            let peek_save_27 = pos;
-            let mut peek_ok_27 = false;
-            peek_27: {
+            let peek_save_23 = pos;
+            let mut peek_ok_23 = false;
+            peek_23: {
                 loop {
-                    let ng_saved_28 = pos;
-                    let mut ng_exit_28 = false;
-                    ng_28: {
-                        if pos >= chars.len() || chars[pos] != 'z' { break ng_28; }
+                    let ng_saved_24 = pos;
+                    let mut ng_exit_24 = false;
+                    ng_24: {
+                        if pos >= chars.len() || chars[pos] != 'z' { break ng_24; }
                         pos += 1;
-                        ng_exit_28 = true;
+                        ng_exit_24 = true;
                     }
-                    if ng_exit_28 {
+                    if ng_exit_24 {
                         break;
                     }
-                    pos = ng_saved_28;
-                    if pos >= chars.len() { break peek_27; }
+                    pos = ng_saved_24;
+                    if pos >= chars.len() { break peek_23; }
                     pos += 1;
                 }
-                peek_ok_27 = true;
+                peek_ok_23 = true;
             }
-            pos = peek_save_27;
-            if peek_ok_27 {
-                accept_24 = peek_save_27;
+            pos = peek_save_23;
+            if peek_ok_23 {
+                accept_20 = peek_save_23;
             }
             continue;
         }
-        pos = la_saved_24;
+        pos = la_saved_20;
         break;
     }
-    if accept_24 < 0 {
+    if accept_20 < 0 {
         return -1;
     }
-    pos = accept_24;
+    pos = accept_20;
     loop {
-        let ng_saved_29 = pos;
-        let mut ng_exit_29 = false;
-        ng_29: {
-            if pos >= chars.len() || chars[pos] != 'z' { break ng_29; }
+        let ng_saved_25 = pos;
+        let mut ng_exit_25 = false;
+        ng_25: {
+            if pos >= chars.len() || chars[pos] != 'z' { break ng_25; }
             pos += 1;
-            ng_exit_29 = true;
+            ng_exit_25 = true;
         }
-        if ng_exit_29 {
+        if ng_exit_25 {
             break;
         }
-        pos = ng_saved_29;
+        pos = ng_saved_25;
         if pos >= chars.len() { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
         pos += 1;
     }
@@ -1559,102 +1506,77 @@ fn try_C(chars: &List<char>, start: i32) -> i32 {
 
 fn try_D(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let la_saved_30 = pos;
-    let mut la_reach_30: i32 = -1;
-    let mut la_end_30: i32 = -1;
-    let mut la_win_30: i32 = -1;
-    la_alt_30_0: {
-        pos = la_saved_30;
-        if pos >= chars.len() || chars[pos] != '-' { break la_alt_30_0; }
+    let la_saved_26 = pos;
+    let mut la_reach_26: i32 = -1;
+    let mut la_end_26: i32 = -1;
+    let mut la_win_26: i32 = -1;
+    let mut la_arm_26_0: i32 = -1;
+    la_alt_26_0: {
+        pos = la_saved_26;
+        if pos >= chars.len() || chars[pos] != '-' { break la_alt_26_0; }
         pos += 1;
-        let la_arm_30_0 = pos;
-        let mut la_tot_30_0: i32 = -1;
-        let peek_save_31 = pos;
-        let mut peek_ok_31 = false;
-        let mut peek_end_31: i32 = -1;
-        peek_31: {
+        la_arm_26_0 = pos;
+    }
+    let mut la_arm_26_1: i32 = -1;
+    la_alt_26_1: {
+        pos = la_saved_26;
+        if pos >= chars.len() || chars[pos] != '-' { break la_alt_26_1; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != '-' { break la_alt_26_1; }
+        pos += 1;
+        la_arm_26_1 = pos;
+    }
+    for let mut la_i_26 = 0; la_i_26 < 2; la_i_26 += 1 {
+        let la_at_26 = match la_i_26 { 0 => la_arm_26_0, _ => la_arm_26_1 };
+        if la_at_26 < 0 { continue; }
+        pos = la_at_26;
+        let mut la_tot_26: i32 = -1;
+        let peek_save_27 = pos;
+        let mut peek_ok_27 = false;
+        let mut peek_end_27: i32 = -1;
+        peek_27: {
             loop {
-                let ng_saved_32 = pos;
-                let mut ng_exit_32 = false;
-                ng_32: {
-                    if pos >= chars.len() || chars[pos] != 'q' { break ng_32; }
+                let ng_saved_28 = pos;
+                let mut ng_exit_28 = false;
+                ng_28: {
+                    if pos >= chars.len() || chars[pos] != 'q' { break ng_28; }
                     pos += 1;
-                    ng_exit_32 = true;
+                    ng_exit_28 = true;
                 }
-                if ng_exit_32 {
+                if ng_exit_28 {
                     break;
                 }
-                pos = ng_saved_32;
-                if pos >= chars.len() { break peek_31; }
+                pos = ng_saved_28;
+                if pos >= chars.len() { break peek_27; }
                 pos += 1;
             }
-            peek_end_31 = pos;
-            peek_ok_31 = true;
+            peek_end_27 = pos;
+            peek_ok_27 = true;
         }
-        pos = peek_save_31;
-        if peek_ok_31 {
-            la_tot_30_0 = peek_end_31;
+        pos = peek_save_27;
+        if peek_ok_27 {
+            la_tot_26 = peek_end_27;
         }
-        if la_tot_30_0 > la_reach_30 {
-            la_reach_30 = la_tot_30_0;
-            la_end_30 = la_arm_30_0;
-            la_win_30 = 0;
-        }
-    }
-    la_alt_30_1: {
-        pos = la_saved_30;
-        if pos >= chars.len() || chars[pos] != '-' { break la_alt_30_1; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != '-' { break la_alt_30_1; }
-        pos += 1;
-        let la_arm_30_1 = pos;
-        let mut la_tot_30_1: i32 = -1;
-        let peek_save_33 = pos;
-        let mut peek_ok_33 = false;
-        let mut peek_end_33: i32 = -1;
-        peek_33: {
-            loop {
-                let ng_saved_34 = pos;
-                let mut ng_exit_34 = false;
-                ng_34: {
-                    if pos >= chars.len() || chars[pos] != 'q' { break ng_34; }
-                    pos += 1;
-                    ng_exit_34 = true;
-                }
-                if ng_exit_34 {
-                    break;
-                }
-                pos = ng_saved_34;
-                if pos >= chars.len() { break peek_33; }
-                pos += 1;
-            }
-            peek_end_33 = pos;
-            peek_ok_33 = true;
-        }
-        pos = peek_save_33;
-        if peek_ok_33 {
-            la_tot_30_1 = peek_end_33;
-        }
-        if la_tot_30_1 > la_reach_30 {
-            la_reach_30 = la_tot_30_1;
-            la_end_30 = la_arm_30_1;
-            la_win_30 = 1;
+        if la_tot_26 > la_reach_26 {
+            la_reach_26 = la_tot_26;
+            la_end_26 = la_at_26;
+            la_win_26 = la_i_26;
         }
     }
-    if la_win_30 < 0 { return -1; }
-    pos = la_end_30;
+    if la_win_26 < 0 { return -1; }
+    pos = la_end_26;
     loop {
-        let ng_saved_35 = pos;
-        let mut ng_exit_35 = false;
-        ng_35: {
-            if pos >= chars.len() || chars[pos] != 'q' { break ng_35; }
+        let ng_saved_29 = pos;
+        let mut ng_exit_29 = false;
+        ng_29: {
+            if pos >= chars.len() || chars[pos] != 'q' { break ng_29; }
             pos += 1;
-            ng_exit_35 = true;
+            ng_exit_29 = true;
         }
-        if ng_exit_35 {
+        if ng_exit_29 {
             break;
         }
-        pos = ng_saved_35;
+        pos = ng_saved_29;
         if pos >= chars.len() { return -1; }
         pos += 1;
     }
@@ -1667,14 +1589,14 @@ fn try_E(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { 'e'..='h' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_36 = pos;
-        rep_36: {
-            if pos >= chars.len() { break rep_36; }
-            if !((chars[pos] matches { 'e'..='h' })) { break rep_36; }
+        let rep_saved_30 = pos;
+        rep_30: {
+            if pos >= chars.len() { break rep_30; }
+            if !((chars[pos] matches { 'e'..='h' })) { break rep_30; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_36;
+        pos = rep_saved_30;
         break;
     }
     pos = try_F(chars, pos);
@@ -1684,45 +1606,45 @@ fn try_E(chars: &List<char>, start: i32) -> i32 {
 
 fn try_G(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let mut accept_38: i32 = -1;
+    let mut accept_32: i32 = -1;
     if pos >= chars.len() || chars[pos] != 'A' { return -1; }
     pos += 1;
-    let peek_save_39 = pos;
-    let mut peek_ok_39 = false;
-    peek_39: {
+    let peek_save_33 = pos;
+    let mut peek_ok_33 = false;
+    peek_33: {
         pos = try_H(chars, pos);
-        if pos < 0 { break peek_39; }
-        peek_ok_39 = true;
+        if pos < 0 { break peek_33; }
+        peek_ok_33 = true;
     }
-    pos = peek_save_39;
-    if peek_ok_39 {
-        accept_38 = peek_save_39;
+    pos = peek_save_33;
+    if peek_ok_33 {
+        accept_32 = peek_save_33;
     }
     loop {
-        let la_saved_38 = pos;
-        la_rep_38: {
-            if pos >= chars.len() || chars[pos] != 'A' { break la_rep_38; }
+        let la_saved_32 = pos;
+        la_rep_32: {
+            if pos >= chars.len() || chars[pos] != 'A' { break la_rep_32; }
             pos += 1;
-            let peek_save_40 = pos;
-            let mut peek_ok_40 = false;
-            peek_40: {
+            let peek_save_34 = pos;
+            let mut peek_ok_34 = false;
+            peek_34: {
                 pos = try_H(chars, pos);
-                if pos < 0 { break peek_40; }
-                peek_ok_40 = true;
+                if pos < 0 { break peek_34; }
+                peek_ok_34 = true;
             }
-            pos = peek_save_40;
-            if peek_ok_40 {
-                accept_38 = peek_save_40;
+            pos = peek_save_34;
+            if peek_ok_34 {
+                accept_32 = peek_save_34;
             }
             continue;
         }
-        pos = la_saved_38;
+        pos = la_saved_32;
         break;
     }
-    if accept_38 < 0 {
+    if accept_32 < 0 {
         return -1;
     }
-    pos = accept_38;
+    pos = accept_32;
     pos = try_H(chars, pos);
     if pos < 0 { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
     return pos;
@@ -1738,15 +1660,7 @@ fn try_F(chars: &List<char>, start: i32) -> i32 {
 fn try_H(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    let not_saved_41 = pos;
-    let mut not_matched_41 = false;
-    not_41: {
-        if pos >= chars.len() || chars[pos] != 'a' { break not_41; }
-        pos += 1;
-        not_matched_41 = true;
-    }
-    pos = not_saved_41;
-    if not_matched_41 { return -1; }
+    if (chars[pos] matches { 'a' }) { return -1; }
     pos += 1;
     return pos;
 }
@@ -1774,8 +1688,6 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_D; }
                 end = try_H(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_H; }
-                end = try_J(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_J; }
             },
             '.'..='@' | 'B'..='W' | 'Y'..='`' | 'b' | 'd' | 'i'..='l' | 'n'..='w' => {
                 end = try_H(&lexer.chars, start);
@@ -1786,8 +1698,6 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_G; }
                 end = try_H(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_H; }
-                end = try_J(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_J; }
             },
             'X' | 'x' => {
                 end = try_F(&lexer.chars, start);
@@ -1800,39 +1710,33 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_A; }
                 end = try_H(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_H; }
-                end = try_J(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_J; }
             },
             'c' => {
                 end = try_C(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_C; }
                 end = try_H(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_H; }
-                end = try_J(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_J; }
             },
             'e'..='h' => {
                 end = try_E(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_E; }
                 end = try_H(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_H; }
-                end = try_J(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_J; }
             },
             'm' => {
                 end = try_B(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_B; }
                 end = try_H(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_H; }
-                end = try_J(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_J; }
             },
             _ => {
                 end = try_H(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_H; }
-                end = try_J(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_J; }
             },
+        }
+        if best_end <= start {
+            end = try_J(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_J; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

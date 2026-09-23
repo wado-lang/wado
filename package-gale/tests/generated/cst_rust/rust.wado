@@ -2675,9 +2675,9 @@ fn try_OUTER_LINE_DOC(chars: &List<char>, start: i32) -> i32 {
     pos += 1;
     let opt_saved_8 = pos;
     let mut opt_ok_8 = false;
-    rep_8: {
-        if pos >= chars.len() { break rep_8; }
-        if (chars[pos] matches { '/' | '\r' | '\n' }) { break rep_8; }
+    opt_8: {
+        if pos >= chars.len() { break opt_8; }
+        if (chars[pos] matches { '/' | '\r' | '\n' }) { break opt_8; }
         pos += 1;
         loop {
             let rep_saved_9 = pos;
@@ -2732,8 +2732,8 @@ fn try_SHEBANG(chars: &List<char>, start: i32) -> i32 with RustLexerBase {
     if !(RustLexerBase::sof(LexerView { chars, start, pos })) { return -1; }
     let opt_saved_11 = pos;
     let mut opt_ok_11 = false;
-    rep_11: {
-        if pos >= chars.len() || chars[pos] != '﻿' { break rep_11; }
+    opt_11: {
+        if pos >= chars.len() || chars[pos] != '\u{feff}' { break opt_11; }
         pos += 1;
         opt_ok_11 = true;
     }
@@ -2762,7 +2762,7 @@ fn try_SHEBANG(chars: &List<char>, start: i32) -> i32 with RustLexerBase {
 fn try_WHITESPACE(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !((chars[pos] matches { ' ' | ' ' | ' ' | ' '..=' ' | ' ' | ' ' | '　' })) { return -1; }
+    if !((chars[pos] matches { ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}' | '\u{202f}' | '\u{205f}' | '\u{3000}' })) { return -1; }
     pos += 1;
     return pos;
 }
@@ -2799,32 +2799,15 @@ fn try_CHAR_LITERAL(chars: &List<char>, start: i32) -> i32 {
     let mut la_reach_14: i32 = -1;
     let mut la_end_14: i32 = -1;
     let mut la_win_14: i32 = -1;
+    let mut la_arm_14_0: i32 = -1;
     la_alt_14_0: {
         pos = la_saved_14;
         if pos >= chars.len() { break la_alt_14_0; }
         if (chars[pos] matches { '\'' | '\\' | '\n' | '\r' | '\t' }) { break la_alt_14_0; }
         pos += 1;
-        let la_arm_14_0 = pos;
-        let mut la_tot_14_0: i32 = -1;
-        let peek_save_15 = pos;
-        let mut peek_ok_15 = false;
-        let mut peek_end_15: i32 = -1;
-        peek_15: {
-            if pos >= chars.len() || chars[pos] != '\'' { break peek_15; }
-            pos += 1;
-            peek_end_15 = pos;
-            peek_ok_15 = true;
-        }
-        pos = peek_save_15;
-        if peek_ok_15 {
-            la_tot_14_0 = peek_end_15;
-        }
-        if la_tot_14_0 > la_reach_14 {
-            la_reach_14 = la_tot_14_0;
-            la_end_14 = la_arm_14_0;
-            la_win_14 = 0;
-        }
+        la_arm_14_0 = pos;
     }
+    let mut la_arm_14_1: i32 = -1;
     la_alt_14_1: {
         pos = la_saved_14;
         if pos >= chars.len() || chars[pos] != '\\' { break la_alt_14_1; }
@@ -2832,77 +2815,41 @@ fn try_CHAR_LITERAL(chars: &List<char>, start: i32) -> i32 {
         if pos >= chars.len() { break la_alt_14_1; }
         if !((chars[pos] matches { '\'' | '"' })) { break la_alt_14_1; }
         pos += 1;
-        let la_arm_14_1 = pos;
-        let mut la_tot_14_1: i32 = -1;
-        let peek_save_16 = pos;
-        let mut peek_ok_16 = false;
-        let mut peek_end_16: i32 = -1;
-        peek_16: {
-            if pos >= chars.len() || chars[pos] != '\'' { break peek_16; }
-            pos += 1;
-            peek_end_16 = pos;
-            peek_ok_16 = true;
-        }
-        pos = peek_save_16;
-        if peek_ok_16 {
-            la_tot_14_1 = peek_end_16;
-        }
-        if la_tot_14_1 > la_reach_14 {
-            la_reach_14 = la_tot_14_1;
-            la_end_14 = la_arm_14_1;
-            la_win_14 = 1;
-        }
+        la_arm_14_1 = pos;
     }
+    let mut la_arm_14_2: i32 = -1;
     la_alt_14_2: {
         pos = la_saved_14;
-        let alts_saved_17 = pos;
-        alts_done_17: {
-            alts_17_0: {
-                pos = alts_saved_17;
-                if pos >= chars.len() || chars[pos] != '\\' { break alts_17_0; }
+        let alts_saved_15 = pos;
+        alts_done_15: {
+            alts_15_0: {
+                pos = alts_saved_15;
+                if pos >= chars.len() || chars[pos] != '\\' { break alts_15_0; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != 'x' { break alts_17_0; }
+                if pos >= chars.len() || chars[pos] != 'x' { break alts_15_0; }
                 pos += 1;
-                if pos >= chars.len() { break alts_17_0; }
-                if !((chars[pos] matches { '0'..='7' })) { break alts_17_0; }
+                if pos >= chars.len() { break alts_15_0; }
+                if !((chars[pos] matches { '0'..='7' })) { break alts_15_0; }
                 pos += 1;
-                if pos >= chars.len() { break alts_17_0; }
-                if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break alts_17_0; }
+                if pos >= chars.len() { break alts_15_0; }
+                if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break alts_15_0; }
                 pos += 1;
-                break alts_done_17;
+                break alts_done_15;
             }
-            alts_17_1: {
-                pos = alts_saved_17;
-                if pos >= chars.len() || chars[pos] != '\\' { break alts_17_1; }
+            alts_15_1: {
+                pos = alts_saved_15;
+                if pos >= chars.len() || chars[pos] != '\\' { break alts_15_1; }
                 pos += 1;
-                if pos >= chars.len() { break alts_17_1; }
-                if !((chars[pos] matches { 'n' | 'r' | 't' | '\\' | '0' })) { break alts_17_1; }
+                if pos >= chars.len() { break alts_15_1; }
+                if !((chars[pos] matches { 'n' | 'r' | 't' | '\\' | '0' })) { break alts_15_1; }
                 pos += 1;
-                break alts_done_17;
+                break alts_done_15;
             }
             break la_alt_14_2;
         }
-        let la_arm_14_2 = pos;
-        let mut la_tot_14_2: i32 = -1;
-        let peek_save_18 = pos;
-        let mut peek_ok_18 = false;
-        let mut peek_end_18: i32 = -1;
-        peek_18: {
-            if pos >= chars.len() || chars[pos] != '\'' { break peek_18; }
-            pos += 1;
-            peek_end_18 = pos;
-            peek_ok_18 = true;
-        }
-        pos = peek_save_18;
-        if peek_ok_18 {
-            la_tot_14_2 = peek_end_18;
-        }
-        if la_tot_14_2 > la_reach_14 {
-            la_reach_14 = la_tot_14_2;
-            la_end_14 = la_arm_14_2;
-            la_win_14 = 2;
-        }
+        la_arm_14_2 = pos;
     }
+    let mut la_arm_14_3: i32 = -1;
     la_alt_14_3: {
         pos = la_saved_14;
         if pos >= chars.len() || chars[pos] != '\\' { break la_alt_14_3; }
@@ -2914,72 +2861,77 @@ fn try_CHAR_LITERAL(chars: &List<char>, start: i32) -> i32 {
         if pos >= chars.len() { break la_alt_14_3; }
         if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break la_alt_14_3; }
         pos += 1;
+        let opt_saved_16 = pos;
+        let mut opt_ok_16 = false;
+        opt_16: {
+            if pos >= chars.len() { break opt_16; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break opt_16; }
+            pos += 1;
+            opt_ok_16 = true;
+        }
+        if !opt_ok_16 { pos = opt_saved_16; }
+        let opt_saved_17 = pos;
+        let mut opt_ok_17 = false;
+        opt_17: {
+            if pos >= chars.len() { break opt_17; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break opt_17; }
+            pos += 1;
+            opt_ok_17 = true;
+        }
+        if !opt_ok_17 { pos = opt_saved_17; }
+        let opt_saved_18 = pos;
+        let mut opt_ok_18 = false;
+        opt_18: {
+            if pos >= chars.len() { break opt_18; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break opt_18; }
+            pos += 1;
+            opt_ok_18 = true;
+        }
+        if !opt_ok_18 { pos = opt_saved_18; }
         let opt_saved_19 = pos;
         let mut opt_ok_19 = false;
-        rep_19: {
-            if pos >= chars.len() { break rep_19; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break rep_19; }
+        opt_19: {
+            if pos >= chars.len() { break opt_19; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break opt_19; }
             pos += 1;
             opt_ok_19 = true;
         }
         if !opt_ok_19 { pos = opt_saved_19; }
         let opt_saved_20 = pos;
         let mut opt_ok_20 = false;
-        rep_20: {
-            if pos >= chars.len() { break rep_20; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break rep_20; }
+        opt_20: {
+            if pos >= chars.len() { break opt_20; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break opt_20; }
             pos += 1;
             opt_ok_20 = true;
         }
         if !opt_ok_20 { pos = opt_saved_20; }
-        let opt_saved_21 = pos;
-        let mut opt_ok_21 = false;
-        rep_21: {
-            if pos >= chars.len() { break rep_21; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break rep_21; }
-            pos += 1;
-            opt_ok_21 = true;
-        }
-        if !opt_ok_21 { pos = opt_saved_21; }
-        let opt_saved_22 = pos;
-        let mut opt_ok_22 = false;
-        rep_22: {
-            if pos >= chars.len() { break rep_22; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break rep_22; }
-            pos += 1;
-            opt_ok_22 = true;
-        }
-        if !opt_ok_22 { pos = opt_saved_22; }
-        let opt_saved_23 = pos;
-        let mut opt_ok_23 = false;
-        rep_23: {
-            if pos >= chars.len() { break rep_23; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break rep_23; }
-            pos += 1;
-            opt_ok_23 = true;
-        }
-        if !opt_ok_23 { pos = opt_saved_23; }
         if pos >= chars.len() || chars[pos] != '}' { break la_alt_14_3; }
         pos += 1;
-        let la_arm_14_3 = pos;
-        let mut la_tot_14_3: i32 = -1;
-        let peek_save_24 = pos;
-        let mut peek_ok_24 = false;
-        let mut peek_end_24: i32 = -1;
-        peek_24: {
-            if pos >= chars.len() || chars[pos] != '\'' { break peek_24; }
+        la_arm_14_3 = pos;
+    }
+    for let mut la_i_14 = 0; la_i_14 < 4; la_i_14 += 1 {
+        let la_at_14 = match la_i_14 { 0 => la_arm_14_0, 1 => la_arm_14_1, 2 => la_arm_14_2, _ => la_arm_14_3 };
+        if la_at_14 < 0 { continue; }
+        pos = la_at_14;
+        let mut la_tot_14: i32 = -1;
+        let peek_save_21 = pos;
+        let mut peek_ok_21 = false;
+        let mut peek_end_21: i32 = -1;
+        peek_21: {
+            if pos >= chars.len() || chars[pos] != '\'' { break peek_21; }
             pos += 1;
-            peek_end_24 = pos;
-            peek_ok_24 = true;
+            peek_end_21 = pos;
+            peek_ok_21 = true;
         }
-        pos = peek_save_24;
-        if peek_ok_24 {
-            la_tot_14_3 = peek_end_24;
+        pos = peek_save_21;
+        if peek_ok_21 {
+            la_tot_14 = peek_end_21;
         }
-        if la_tot_14_3 > la_reach_14 {
-            la_reach_14 = la_tot_14_3;
-            la_end_14 = la_arm_14_3;
-            la_win_14 = 3;
+        if la_tot_14 > la_reach_14 {
+            la_reach_14 = la_tot_14;
+            la_end_14 = la_at_14;
+            la_win_14 = la_i_14;
         }
     }
     if la_win_14 < 0 { return -1; }
@@ -3007,116 +2959,86 @@ fn try_BYTE_LITERAL(chars: &List<char>, start: i32) -> i32 {
     pos += 1;
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
-    let la_saved_25 = pos;
-    let mut la_reach_25: i32 = -1;
-    let mut la_end_25: i32 = -1;
-    let mut la_win_25: i32 = -1;
-    la_alt_25_0: {
-        pos = la_saved_25;
-        if pos >= chars.len() { break la_alt_25_0; }
-        if (chars[pos] matches { '\'' | '\\' }) { break la_alt_25_0; }
+    let la_saved_22 = pos;
+    let mut la_reach_22: i32 = -1;
+    let mut la_end_22: i32 = -1;
+    let mut la_win_22: i32 = -1;
+    let mut la_arm_22_0: i32 = -1;
+    la_alt_22_0: {
+        pos = la_saved_22;
+        if pos >= chars.len() { break la_alt_22_0; }
+        if (chars[pos] matches { '\'' | '\\' }) { break la_alt_22_0; }
         pos += 1;
-        let la_arm_25_0 = pos;
-        let mut la_tot_25_0: i32 = -1;
-        let peek_save_26 = pos;
-        let mut peek_ok_26 = false;
-        let mut peek_end_26: i32 = -1;
-        peek_26: {
-            if pos >= chars.len() || chars[pos] != '\'' { break peek_26; }
-            pos += 1;
-            peek_end_26 = pos;
-            peek_ok_26 = true;
-        }
-        pos = peek_save_26;
-        if peek_ok_26 {
-            la_tot_25_0 = peek_end_26;
-        }
-        if la_tot_25_0 > la_reach_25 {
-            la_reach_25 = la_tot_25_0;
-            la_end_25 = la_arm_25_0;
-            la_win_25 = 0;
-        }
+        la_arm_22_0 = pos;
     }
-    la_alt_25_1: {
-        pos = la_saved_25;
-        if pos >= chars.len() || chars[pos] != '\\' { break la_alt_25_1; }
+    let mut la_arm_22_1: i32 = -1;
+    la_alt_22_1: {
+        pos = la_saved_22;
+        if pos >= chars.len() || chars[pos] != '\\' { break la_alt_22_1; }
         pos += 1;
-        if pos >= chars.len() { break la_alt_25_1; }
-        if !((chars[pos] matches { '\'' | '"' })) { break la_alt_25_1; }
+        if pos >= chars.len() { break la_alt_22_1; }
+        if !((chars[pos] matches { '\'' | '"' })) { break la_alt_22_1; }
         pos += 1;
-        let la_arm_25_1 = pos;
-        let mut la_tot_25_1: i32 = -1;
-        let peek_save_27 = pos;
-        let mut peek_ok_27 = false;
-        let mut peek_end_27: i32 = -1;
-        peek_27: {
-            if pos >= chars.len() || chars[pos] != '\'' { break peek_27; }
-            pos += 1;
-            peek_end_27 = pos;
-            peek_ok_27 = true;
-        }
-        pos = peek_save_27;
-        if peek_ok_27 {
-            la_tot_25_1 = peek_end_27;
-        }
-        if la_tot_25_1 > la_reach_25 {
-            la_reach_25 = la_tot_25_1;
-            la_end_25 = la_arm_25_1;
-            la_win_25 = 1;
-        }
+        la_arm_22_1 = pos;
     }
-    la_alt_25_2: {
-        pos = la_saved_25;
-        let alts_saved_28 = pos;
-        alts_done_28: {
-            alts_28_0: {
-                pos = alts_saved_28;
-                if pos >= chars.len() || chars[pos] != '\\' { break alts_28_0; }
+    let mut la_arm_22_2: i32 = -1;
+    la_alt_22_2: {
+        pos = la_saved_22;
+        let alts_saved_23 = pos;
+        alts_done_23: {
+            alts_23_0: {
+                pos = alts_saved_23;
+                if pos >= chars.len() || chars[pos] != '\\' { break alts_23_0; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != 'x' { break alts_28_0; }
+                if pos >= chars.len() || chars[pos] != 'x' { break alts_23_0; }
                 pos += 1;
-                if pos >= chars.len() { break alts_28_0; }
-                if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break alts_28_0; }
+                if pos >= chars.len() { break alts_23_0; }
+                if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break alts_23_0; }
                 pos += 1;
-                if pos >= chars.len() { break alts_28_0; }
-                if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break alts_28_0; }
+                if pos >= chars.len() { break alts_23_0; }
+                if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { break alts_23_0; }
                 pos += 1;
-                break alts_done_28;
+                break alts_done_23;
             }
-            alts_28_1: {
-                pos = alts_saved_28;
-                if pos >= chars.len() || chars[pos] != '\\' { break alts_28_1; }
+            alts_23_1: {
+                pos = alts_saved_23;
+                if pos >= chars.len() || chars[pos] != '\\' { break alts_23_1; }
                 pos += 1;
-                if pos >= chars.len() { break alts_28_1; }
-                if !((chars[pos] matches { 'n' | 'r' | 't' | '\\' | '0' })) { break alts_28_1; }
+                if pos >= chars.len() { break alts_23_1; }
+                if !((chars[pos] matches { 'n' | 'r' | 't' | '\\' | '0' })) { break alts_23_1; }
                 pos += 1;
-                break alts_done_28;
+                break alts_done_23;
             }
-            break la_alt_25_2;
+            break la_alt_22_2;
         }
-        let la_arm_25_2 = pos;
-        let mut la_tot_25_2: i32 = -1;
-        let peek_save_29 = pos;
-        let mut peek_ok_29 = false;
-        let mut peek_end_29: i32 = -1;
-        peek_29: {
-            if pos >= chars.len() || chars[pos] != '\'' { break peek_29; }
+        la_arm_22_2 = pos;
+    }
+    for let mut la_i_22 = 0; la_i_22 < 3; la_i_22 += 1 {
+        let la_at_22 = match la_i_22 { 0 => la_arm_22_0, 1 => la_arm_22_1, _ => la_arm_22_2 };
+        if la_at_22 < 0 { continue; }
+        pos = la_at_22;
+        let mut la_tot_22: i32 = -1;
+        let peek_save_24 = pos;
+        let mut peek_ok_24 = false;
+        let mut peek_end_24: i32 = -1;
+        peek_24: {
+            if pos >= chars.len() || chars[pos] != '\'' { break peek_24; }
             pos += 1;
-            peek_end_29 = pos;
-            peek_ok_29 = true;
+            peek_end_24 = pos;
+            peek_ok_24 = true;
         }
-        pos = peek_save_29;
-        if peek_ok_29 {
-            la_tot_25_2 = peek_end_29;
+        pos = peek_save_24;
+        if peek_ok_24 {
+            la_tot_22 = peek_end_24;
         }
-        if la_tot_25_2 > la_reach_25 {
-            la_reach_25 = la_tot_25_2;
-            la_end_25 = la_arm_25_2;
-            la_win_25 = 2;
+        if la_tot_22 > la_reach_22 {
+            la_reach_22 = la_tot_22;
+            la_end_22 = la_at_22;
+            la_win_22 = la_i_22;
         }
     }
-    if la_win_25 < 0 { return -1; }
-    pos = la_end_25;
+    if la_win_22 < 0 { return -1; }
+    pos = la_end_22;
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
     return pos;
@@ -3132,794 +3054,330 @@ fn try_RAW_BYTE_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
 
 fn try_INTEGER_LITERAL(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let la_saved_30 = pos;
-    let mut la_reach_30: i32 = -1;
-    let mut la_end_30: i32 = -1;
-    let mut la_win_30: i32 = -1;
-    la_alt_30_0: {
-        pos = la_saved_30;
+    let la_saved_25 = pos;
+    let mut la_reach_25: i32 = -1;
+    let mut la_end_25: i32 = -1;
+    let mut la_win_25: i32 = -1;
+    let mut la_arm_25_0: i32 = -1;
+    la_alt_25_0: {
+        pos = la_saved_25;
         pos = try_DEC_LITERAL(chars, pos);
-        if pos < 0 { break la_alt_30_0; }
-        let la_arm_30_0 = pos;
-        let mut la_tot_30_0: i32 = -1;
-        let peek_save_31 = pos;
-        let mut peek_ok_31 = false;
-        let mut peek_end_31: i32 = -1;
-        peek_31: {
-            let opt_saved_32 = pos;
-            let mut opt_ok_32 = false;
-            rep_32: {
-                let alts_saved_33 = pos;
-                alts_done_33: {
-                    alts_33_0: {
-                        pos = alts_saved_33;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_33_0; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_33_0; }
-                        pos += 1;
-                        break alts_done_33;
-                    }
-                    alts_33_1: {
-                        pos = alts_saved_33;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_33_1; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_33_1; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_33_1; }
-                        pos += 1;
-                        break alts_done_33;
-                    }
-                    alts_33_2: {
-                        pos = alts_saved_33;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_33_2; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '3' { break alts_33_2; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_33_2; }
-                        pos += 1;
-                        break alts_done_33;
-                    }
-                    alts_33_3: {
-                        pos = alts_saved_33;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_33_3; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_33_3; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '4' { break alts_33_3; }
-                        pos += 1;
-                        break alts_done_33;
-                    }
-                    alts_33_4: {
-                        pos = alts_saved_33;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_33_4; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_33_4; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_33_4; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_33_4; }
-                        pos += 1;
-                        break alts_done_33;
-                    }
-                    alts_33_5: {
-                        pos = alts_saved_33;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_33_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 's' { break alts_33_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_33_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'z' { break alts_33_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'e' { break alts_33_5; }
-                        pos += 1;
-                        break alts_done_33;
-                    }
-                    alts_33_6: {
-                        pos = alts_saved_33;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_33_6; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_33_6; }
-                        pos += 1;
-                        break alts_done_33;
-                    }
-                    alts_33_7: {
-                        pos = alts_saved_33;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_33_7; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_33_7; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_33_7; }
-                        pos += 1;
-                        break alts_done_33;
-                    }
-                    alts_33_8: {
-                        pos = alts_saved_33;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_33_8; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '3' { break alts_33_8; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_33_8; }
-                        pos += 1;
-                        break alts_done_33;
-                    }
-                    alts_33_9: {
-                        pos = alts_saved_33;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_33_9; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_33_9; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '4' { break alts_33_9; }
-                        pos += 1;
-                        break alts_done_33;
-                    }
-                    alts_33_10: {
-                        pos = alts_saved_33;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_33_10; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_33_10; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_33_10; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_33_10; }
-                        pos += 1;
-                        break alts_done_33;
-                    }
-                    alts_33_11: {
-                        pos = alts_saved_33;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_33_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 's' { break alts_33_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_33_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'z' { break alts_33_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'e' { break alts_33_11; }
-                        pos += 1;
-                        break alts_done_33;
-                    }
-                    break rep_32;
-                }
-                opt_ok_32 = true;
-            }
-            if !opt_ok_32 { pos = opt_saved_32; }
-            peek_end_31 = pos;
-            peek_ok_31 = true;
-        }
-        pos = peek_save_31;
-        if peek_ok_31 {
-            la_tot_30_0 = peek_end_31;
-        }
-        if la_tot_30_0 > la_reach_30 {
-            la_reach_30 = la_tot_30_0;
-            la_end_30 = la_arm_30_0;
-            la_win_30 = 0;
-        }
+        if pos < 0 { break la_alt_25_0; }
+        la_arm_25_0 = pos;
     }
-    la_alt_30_1: {
-        pos = la_saved_30;
+    let mut la_arm_25_1: i32 = -1;
+    la_alt_25_1: {
+        pos = la_saved_25;
         pos = try_BIN_LITERAL(chars, pos);
-        if pos < 0 { break la_alt_30_1; }
-        let la_arm_30_1 = pos;
-        let mut la_tot_30_1: i32 = -1;
-        let peek_save_34 = pos;
-        let mut peek_ok_34 = false;
-        let mut peek_end_34: i32 = -1;
-        peek_34: {
-            let opt_saved_35 = pos;
-            let mut opt_ok_35 = false;
-            rep_35: {
-                let alts_saved_36 = pos;
-                alts_done_36: {
-                    alts_36_0: {
-                        pos = alts_saved_36;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_36_0; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_36_0; }
-                        pos += 1;
-                        break alts_done_36;
-                    }
-                    alts_36_1: {
-                        pos = alts_saved_36;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_36_1; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_36_1; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_36_1; }
-                        pos += 1;
-                        break alts_done_36;
-                    }
-                    alts_36_2: {
-                        pos = alts_saved_36;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_36_2; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '3' { break alts_36_2; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_36_2; }
-                        pos += 1;
-                        break alts_done_36;
-                    }
-                    alts_36_3: {
-                        pos = alts_saved_36;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_36_3; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_36_3; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '4' { break alts_36_3; }
-                        pos += 1;
-                        break alts_done_36;
-                    }
-                    alts_36_4: {
-                        pos = alts_saved_36;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_36_4; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_36_4; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_36_4; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_36_4; }
-                        pos += 1;
-                        break alts_done_36;
-                    }
-                    alts_36_5: {
-                        pos = alts_saved_36;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_36_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 's' { break alts_36_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_36_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'z' { break alts_36_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'e' { break alts_36_5; }
-                        pos += 1;
-                        break alts_done_36;
-                    }
-                    alts_36_6: {
-                        pos = alts_saved_36;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_36_6; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_36_6; }
-                        pos += 1;
-                        break alts_done_36;
-                    }
-                    alts_36_7: {
-                        pos = alts_saved_36;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_36_7; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_36_7; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_36_7; }
-                        pos += 1;
-                        break alts_done_36;
-                    }
-                    alts_36_8: {
-                        pos = alts_saved_36;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_36_8; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '3' { break alts_36_8; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_36_8; }
-                        pos += 1;
-                        break alts_done_36;
-                    }
-                    alts_36_9: {
-                        pos = alts_saved_36;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_36_9; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_36_9; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '4' { break alts_36_9; }
-                        pos += 1;
-                        break alts_done_36;
-                    }
-                    alts_36_10: {
-                        pos = alts_saved_36;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_36_10; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_36_10; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_36_10; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_36_10; }
-                        pos += 1;
-                        break alts_done_36;
-                    }
-                    alts_36_11: {
-                        pos = alts_saved_36;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_36_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 's' { break alts_36_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_36_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'z' { break alts_36_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'e' { break alts_36_11; }
-                        pos += 1;
-                        break alts_done_36;
-                    }
-                    break rep_35;
-                }
-                opt_ok_35 = true;
-            }
-            if !opt_ok_35 { pos = opt_saved_35; }
-            peek_end_34 = pos;
-            peek_ok_34 = true;
-        }
-        pos = peek_save_34;
-        if peek_ok_34 {
-            la_tot_30_1 = peek_end_34;
-        }
-        if la_tot_30_1 > la_reach_30 {
-            la_reach_30 = la_tot_30_1;
-            la_end_30 = la_arm_30_1;
-            la_win_30 = 1;
-        }
+        if pos < 0 { break la_alt_25_1; }
+        la_arm_25_1 = pos;
     }
-    la_alt_30_2: {
-        pos = la_saved_30;
+    let mut la_arm_25_2: i32 = -1;
+    la_alt_25_2: {
+        pos = la_saved_25;
         pos = try_OCT_LITERAL(chars, pos);
-        if pos < 0 { break la_alt_30_2; }
-        let la_arm_30_2 = pos;
-        let mut la_tot_30_2: i32 = -1;
-        let peek_save_37 = pos;
-        let mut peek_ok_37 = false;
-        let mut peek_end_37: i32 = -1;
-        peek_37: {
-            let opt_saved_38 = pos;
-            let mut opt_ok_38 = false;
-            rep_38: {
-                let alts_saved_39 = pos;
-                alts_done_39: {
-                    alts_39_0: {
-                        pos = alts_saved_39;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_39_0; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_39_0; }
-                        pos += 1;
-                        break alts_done_39;
-                    }
-                    alts_39_1: {
-                        pos = alts_saved_39;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_39_1; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_39_1; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_39_1; }
-                        pos += 1;
-                        break alts_done_39;
-                    }
-                    alts_39_2: {
-                        pos = alts_saved_39;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_39_2; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '3' { break alts_39_2; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_39_2; }
-                        pos += 1;
-                        break alts_done_39;
-                    }
-                    alts_39_3: {
-                        pos = alts_saved_39;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_39_3; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_39_3; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '4' { break alts_39_3; }
-                        pos += 1;
-                        break alts_done_39;
-                    }
-                    alts_39_4: {
-                        pos = alts_saved_39;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_39_4; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_39_4; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_39_4; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_39_4; }
-                        pos += 1;
-                        break alts_done_39;
-                    }
-                    alts_39_5: {
-                        pos = alts_saved_39;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_39_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 's' { break alts_39_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_39_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'z' { break alts_39_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'e' { break alts_39_5; }
-                        pos += 1;
-                        break alts_done_39;
-                    }
-                    alts_39_6: {
-                        pos = alts_saved_39;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_39_6; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_39_6; }
-                        pos += 1;
-                        break alts_done_39;
-                    }
-                    alts_39_7: {
-                        pos = alts_saved_39;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_39_7; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_39_7; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_39_7; }
-                        pos += 1;
-                        break alts_done_39;
-                    }
-                    alts_39_8: {
-                        pos = alts_saved_39;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_39_8; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '3' { break alts_39_8; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_39_8; }
-                        pos += 1;
-                        break alts_done_39;
-                    }
-                    alts_39_9: {
-                        pos = alts_saved_39;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_39_9; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_39_9; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '4' { break alts_39_9; }
-                        pos += 1;
-                        break alts_done_39;
-                    }
-                    alts_39_10: {
-                        pos = alts_saved_39;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_39_10; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_39_10; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_39_10; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_39_10; }
-                        pos += 1;
-                        break alts_done_39;
-                    }
-                    alts_39_11: {
-                        pos = alts_saved_39;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_39_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 's' { break alts_39_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_39_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'z' { break alts_39_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'e' { break alts_39_11; }
-                        pos += 1;
-                        break alts_done_39;
-                    }
-                    break rep_38;
-                }
-                opt_ok_38 = true;
-            }
-            if !opt_ok_38 { pos = opt_saved_38; }
-            peek_end_37 = pos;
-            peek_ok_37 = true;
-        }
-        pos = peek_save_37;
-        if peek_ok_37 {
-            la_tot_30_2 = peek_end_37;
-        }
-        if la_tot_30_2 > la_reach_30 {
-            la_reach_30 = la_tot_30_2;
-            la_end_30 = la_arm_30_2;
-            la_win_30 = 2;
-        }
+        if pos < 0 { break la_alt_25_2; }
+        la_arm_25_2 = pos;
     }
-    la_alt_30_3: {
-        pos = la_saved_30;
+    let mut la_arm_25_3: i32 = -1;
+    la_alt_25_3: {
+        pos = la_saved_25;
         pos = try_HEX_LITERAL(chars, pos);
-        if pos < 0 { break la_alt_30_3; }
-        let la_arm_30_3 = pos;
-        let mut la_tot_30_3: i32 = -1;
-        let peek_save_40 = pos;
-        let mut peek_ok_40 = false;
-        let mut peek_end_40: i32 = -1;
-        peek_40: {
-            let opt_saved_41 = pos;
-            let mut opt_ok_41 = false;
-            rep_41: {
-                let alts_saved_42 = pos;
-                alts_done_42: {
-                    alts_42_0: {
-                        pos = alts_saved_42;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_42_0; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_42_0; }
-                        pos += 1;
-                        break alts_done_42;
-                    }
-                    alts_42_1: {
-                        pos = alts_saved_42;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_42_1; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_42_1; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_42_1; }
-                        pos += 1;
-                        break alts_done_42;
-                    }
-                    alts_42_2: {
-                        pos = alts_saved_42;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_42_2; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '3' { break alts_42_2; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_42_2; }
-                        pos += 1;
-                        break alts_done_42;
-                    }
-                    alts_42_3: {
-                        pos = alts_saved_42;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_42_3; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_42_3; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '4' { break alts_42_3; }
-                        pos += 1;
-                        break alts_done_42;
-                    }
-                    alts_42_4: {
-                        pos = alts_saved_42;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_42_4; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_42_4; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_42_4; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_42_4; }
-                        pos += 1;
-                        break alts_done_42;
-                    }
-                    alts_42_5: {
-                        pos = alts_saved_42;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_42_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 's' { break alts_42_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_42_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'z' { break alts_42_5; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'e' { break alts_42_5; }
-                        pos += 1;
-                        break alts_done_42;
-                    }
-                    alts_42_6: {
-                        pos = alts_saved_42;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_42_6; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_42_6; }
-                        pos += 1;
-                        break alts_done_42;
-                    }
-                    alts_42_7: {
-                        pos = alts_saved_42;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_42_7; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_42_7; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_42_7; }
-                        pos += 1;
-                        break alts_done_42;
-                    }
-                    alts_42_8: {
-                        pos = alts_saved_42;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_42_8; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '3' { break alts_42_8; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_42_8; }
-                        pos += 1;
-                        break alts_done_42;
-                    }
-                    alts_42_9: {
-                        pos = alts_saved_42;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_42_9; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_42_9; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '4' { break alts_42_9; }
-                        pos += 1;
-                        break alts_done_42;
-                    }
-                    alts_42_10: {
-                        pos = alts_saved_42;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_42_10; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '1' { break alts_42_10; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '2' { break alts_42_10; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '8' { break alts_42_10; }
-                        pos += 1;
-                        break alts_done_42;
-                    }
-                    alts_42_11: {
-                        pos = alts_saved_42;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_42_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 's' { break alts_42_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'i' { break alts_42_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'z' { break alts_42_11; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != 'e' { break alts_42_11; }
-                        pos += 1;
-                        break alts_done_42;
-                    }
-                    break rep_41;
+        if pos < 0 { break la_alt_25_3; }
+        la_arm_25_3 = pos;
+    }
+    for let mut la_i_25 = 0; la_i_25 < 4; la_i_25 += 1 {
+        let la_at_25 = match la_i_25 { 0 => la_arm_25_0, 1 => la_arm_25_1, 2 => la_arm_25_2, _ => la_arm_25_3 };
+        if la_at_25 < 0 { continue; }
+        pos = la_at_25;
+        let mut la_tot_25: i32 = -1;
+        let peek_save_26 = pos;
+        let opt_saved_27 = pos;
+        let mut opt_ok_27 = false;
+        opt_27: {
+            let alts_saved_28 = pos;
+            alts_done_28: {
+                alts_28_0: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() || chars[pos] != 'u' { break alts_28_0; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '8' { break alts_28_0; }
+                    pos += 1;
+                    break alts_done_28;
                 }
-                opt_ok_41 = true;
+                alts_28_1: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() || chars[pos] != 'u' { break alts_28_1; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '1' { break alts_28_1; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '6' { break alts_28_1; }
+                    pos += 1;
+                    break alts_done_28;
+                }
+                alts_28_2: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() || chars[pos] != 'u' { break alts_28_2; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '3' { break alts_28_2; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '2' { break alts_28_2; }
+                    pos += 1;
+                    break alts_done_28;
+                }
+                alts_28_3: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() || chars[pos] != 'u' { break alts_28_3; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '6' { break alts_28_3; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '4' { break alts_28_3; }
+                    pos += 1;
+                    break alts_done_28;
+                }
+                alts_28_4: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() || chars[pos] != 'u' { break alts_28_4; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '1' { break alts_28_4; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '2' { break alts_28_4; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '8' { break alts_28_4; }
+                    pos += 1;
+                    break alts_done_28;
+                }
+                alts_28_5: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() || chars[pos] != 'u' { break alts_28_5; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != 's' { break alts_28_5; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != 'i' { break alts_28_5; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != 'z' { break alts_28_5; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != 'e' { break alts_28_5; }
+                    pos += 1;
+                    break alts_done_28;
+                }
+                alts_28_6: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() || chars[pos] != 'i' { break alts_28_6; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '8' { break alts_28_6; }
+                    pos += 1;
+                    break alts_done_28;
+                }
+                alts_28_7: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() || chars[pos] != 'i' { break alts_28_7; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '1' { break alts_28_7; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '6' { break alts_28_7; }
+                    pos += 1;
+                    break alts_done_28;
+                }
+                alts_28_8: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() || chars[pos] != 'i' { break alts_28_8; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '3' { break alts_28_8; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '2' { break alts_28_8; }
+                    pos += 1;
+                    break alts_done_28;
+                }
+                alts_28_9: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() || chars[pos] != 'i' { break alts_28_9; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '6' { break alts_28_9; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '4' { break alts_28_9; }
+                    pos += 1;
+                    break alts_done_28;
+                }
+                alts_28_10: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() || chars[pos] != 'i' { break alts_28_10; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '1' { break alts_28_10; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '2' { break alts_28_10; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '8' { break alts_28_10; }
+                    pos += 1;
+                    break alts_done_28;
+                }
+                alts_28_11: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() || chars[pos] != 'i' { break alts_28_11; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != 's' { break alts_28_11; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != 'i' { break alts_28_11; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != 'z' { break alts_28_11; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != 'e' { break alts_28_11; }
+                    pos += 1;
+                    break alts_done_28;
+                }
+                break opt_27;
             }
-            if !opt_ok_41 { pos = opt_saved_41; }
-            peek_end_40 = pos;
-            peek_ok_40 = true;
+            opt_ok_27 = true;
         }
-        pos = peek_save_40;
-        if peek_ok_40 {
-            la_tot_30_3 = peek_end_40;
-        }
-        if la_tot_30_3 > la_reach_30 {
-            la_reach_30 = la_tot_30_3;
-            la_end_30 = la_arm_30_3;
-            la_win_30 = 3;
+        if !opt_ok_27 { pos = opt_saved_27; }
+        la_tot_25 = pos;
+        pos = peek_save_26;
+        if la_tot_25 > la_reach_25 {
+            la_reach_25 = la_tot_25;
+            la_end_25 = la_at_25;
+            la_win_25 = la_i_25;
         }
     }
-    if la_win_30 < 0 { return -1; }
-    pos = la_end_30;
-    let opt_saved_43 = pos;
-    let mut opt_ok_43 = false;
-    rep_43: {
-        let alts_saved_44 = pos;
-        alts_done_44: {
-            alts_44_0: {
-                pos = alts_saved_44;
-                if pos >= chars.len() || chars[pos] != 'u' { break alts_44_0; }
+    if la_win_25 < 0 { return -1; }
+    pos = la_end_25;
+    let opt_saved_29 = pos;
+    let mut opt_ok_29 = false;
+    opt_29: {
+        let alts_saved_30 = pos;
+        alts_done_30: {
+            alts_30_0: {
+                pos = alts_saved_30;
+                if pos >= chars.len() || chars[pos] != 'u' { break alts_30_0; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '8' { break alts_44_0; }
+                if pos >= chars.len() || chars[pos] != '8' { break alts_30_0; }
                 pos += 1;
-                break alts_done_44;
+                break alts_done_30;
             }
-            alts_44_1: {
-                pos = alts_saved_44;
-                if pos >= chars.len() || chars[pos] != 'u' { break alts_44_1; }
+            alts_30_1: {
+                pos = alts_saved_30;
+                if pos >= chars.len() || chars[pos] != 'u' { break alts_30_1; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '1' { break alts_44_1; }
+                if pos >= chars.len() || chars[pos] != '1' { break alts_30_1; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '6' { break alts_44_1; }
+                if pos >= chars.len() || chars[pos] != '6' { break alts_30_1; }
                 pos += 1;
-                break alts_done_44;
+                break alts_done_30;
             }
-            alts_44_2: {
-                pos = alts_saved_44;
-                if pos >= chars.len() || chars[pos] != 'u' { break alts_44_2; }
+            alts_30_2: {
+                pos = alts_saved_30;
+                if pos >= chars.len() || chars[pos] != 'u' { break alts_30_2; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '3' { break alts_44_2; }
+                if pos >= chars.len() || chars[pos] != '3' { break alts_30_2; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '2' { break alts_44_2; }
+                if pos >= chars.len() || chars[pos] != '2' { break alts_30_2; }
                 pos += 1;
-                break alts_done_44;
+                break alts_done_30;
             }
-            alts_44_3: {
-                pos = alts_saved_44;
-                if pos >= chars.len() || chars[pos] != 'u' { break alts_44_3; }
+            alts_30_3: {
+                pos = alts_saved_30;
+                if pos >= chars.len() || chars[pos] != 'u' { break alts_30_3; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '6' { break alts_44_3; }
+                if pos >= chars.len() || chars[pos] != '6' { break alts_30_3; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '4' { break alts_44_3; }
+                if pos >= chars.len() || chars[pos] != '4' { break alts_30_3; }
                 pos += 1;
-                break alts_done_44;
+                break alts_done_30;
             }
-            alts_44_4: {
-                pos = alts_saved_44;
-                if pos >= chars.len() || chars[pos] != 'u' { break alts_44_4; }
+            alts_30_4: {
+                pos = alts_saved_30;
+                if pos >= chars.len() || chars[pos] != 'u' { break alts_30_4; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '1' { break alts_44_4; }
+                if pos >= chars.len() || chars[pos] != '1' { break alts_30_4; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '2' { break alts_44_4; }
+                if pos >= chars.len() || chars[pos] != '2' { break alts_30_4; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '8' { break alts_44_4; }
+                if pos >= chars.len() || chars[pos] != '8' { break alts_30_4; }
                 pos += 1;
-                break alts_done_44;
+                break alts_done_30;
             }
-            alts_44_5: {
-                pos = alts_saved_44;
-                if pos >= chars.len() || chars[pos] != 'u' { break alts_44_5; }
+            alts_30_5: {
+                pos = alts_saved_30;
+                if pos >= chars.len() || chars[pos] != 'u' { break alts_30_5; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != 's' { break alts_44_5; }
+                if pos >= chars.len() || chars[pos] != 's' { break alts_30_5; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != 'i' { break alts_44_5; }
+                if pos >= chars.len() || chars[pos] != 'i' { break alts_30_5; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != 'z' { break alts_44_5; }
+                if pos >= chars.len() || chars[pos] != 'z' { break alts_30_5; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != 'e' { break alts_44_5; }
+                if pos >= chars.len() || chars[pos] != 'e' { break alts_30_5; }
                 pos += 1;
-                break alts_done_44;
+                break alts_done_30;
             }
-            alts_44_6: {
-                pos = alts_saved_44;
-                if pos >= chars.len() || chars[pos] != 'i' { break alts_44_6; }
+            alts_30_6: {
+                pos = alts_saved_30;
+                if pos >= chars.len() || chars[pos] != 'i' { break alts_30_6; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '8' { break alts_44_6; }
+                if pos >= chars.len() || chars[pos] != '8' { break alts_30_6; }
                 pos += 1;
-                break alts_done_44;
+                break alts_done_30;
             }
-            alts_44_7: {
-                pos = alts_saved_44;
-                if pos >= chars.len() || chars[pos] != 'i' { break alts_44_7; }
+            alts_30_7: {
+                pos = alts_saved_30;
+                if pos >= chars.len() || chars[pos] != 'i' { break alts_30_7; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '1' { break alts_44_7; }
+                if pos >= chars.len() || chars[pos] != '1' { break alts_30_7; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '6' { break alts_44_7; }
+                if pos >= chars.len() || chars[pos] != '6' { break alts_30_7; }
                 pos += 1;
-                break alts_done_44;
+                break alts_done_30;
             }
-            alts_44_8: {
-                pos = alts_saved_44;
-                if pos >= chars.len() || chars[pos] != 'i' { break alts_44_8; }
+            alts_30_8: {
+                pos = alts_saved_30;
+                if pos >= chars.len() || chars[pos] != 'i' { break alts_30_8; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '3' { break alts_44_8; }
+                if pos >= chars.len() || chars[pos] != '3' { break alts_30_8; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '2' { break alts_44_8; }
+                if pos >= chars.len() || chars[pos] != '2' { break alts_30_8; }
                 pos += 1;
-                break alts_done_44;
+                break alts_done_30;
             }
-            alts_44_9: {
-                pos = alts_saved_44;
-                if pos >= chars.len() || chars[pos] != 'i' { break alts_44_9; }
+            alts_30_9: {
+                pos = alts_saved_30;
+                if pos >= chars.len() || chars[pos] != 'i' { break alts_30_9; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '6' { break alts_44_9; }
+                if pos >= chars.len() || chars[pos] != '6' { break alts_30_9; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '4' { break alts_44_9; }
+                if pos >= chars.len() || chars[pos] != '4' { break alts_30_9; }
                 pos += 1;
-                break alts_done_44;
+                break alts_done_30;
             }
-            alts_44_10: {
-                pos = alts_saved_44;
-                if pos >= chars.len() || chars[pos] != 'i' { break alts_44_10; }
+            alts_30_10: {
+                pos = alts_saved_30;
+                if pos >= chars.len() || chars[pos] != 'i' { break alts_30_10; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '1' { break alts_44_10; }
+                if pos >= chars.len() || chars[pos] != '1' { break alts_30_10; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '2' { break alts_44_10; }
+                if pos >= chars.len() || chars[pos] != '2' { break alts_30_10; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '8' { break alts_44_10; }
+                if pos >= chars.len() || chars[pos] != '8' { break alts_30_10; }
                 pos += 1;
-                break alts_done_44;
+                break alts_done_30;
             }
-            alts_44_11: {
-                pos = alts_saved_44;
-                if pos >= chars.len() || chars[pos] != 'i' { break alts_44_11; }
+            alts_30_11: {
+                pos = alts_saved_30;
+                if pos >= chars.len() || chars[pos] != 'i' { break alts_30_11; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != 's' { break alts_44_11; }
+                if pos >= chars.len() || chars[pos] != 's' { break alts_30_11; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != 'i' { break alts_44_11; }
+                if pos >= chars.len() || chars[pos] != 'i' { break alts_30_11; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != 'z' { break alts_44_11; }
+                if pos >= chars.len() || chars[pos] != 'z' { break alts_30_11; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != 'e' { break alts_44_11; }
+                if pos >= chars.len() || chars[pos] != 'e' { break alts_30_11; }
                 pos += 1;
-                break alts_done_44;
+                break alts_done_30;
             }
-            break rep_43;
+            break opt_29;
         }
-        opt_ok_43 = true;
+        opt_ok_29 = true;
     }
-    if !opt_ok_43 { pos = opt_saved_43; }
+    if !opt_ok_29 { pos = opt_saved_29; }
     return pos;
 }
 
@@ -3929,14 +3387,14 @@ fn try_DEC_LITERAL(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { '0'..='9' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_45 = pos;
-        rep_45: {
-            if pos >= chars.len() { break rep_45; }
-            if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_45; }
+        let rep_saved_31 = pos;
+        rep_31: {
+            if pos >= chars.len() { break rep_31; }
+            if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_31; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_45;
+        pos = rep_saved_31;
         break;
     }
     return pos;
@@ -3949,27 +3407,27 @@ fn try_HEX_LITERAL(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != 'x' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_46 = pos;
-        rep_46: {
-            if pos >= chars.len() || chars[pos] != '_' { break rep_46; }
+        let rep_saved_32 = pos;
+        rep_32: {
+            if pos >= chars.len() || chars[pos] != '_' { break rep_32; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_46;
+        pos = rep_saved_32;
         break;
     }
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_47 = pos;
-        rep_47: {
-            if pos >= chars.len() { break rep_47; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break rep_47; }
+        let rep_saved_33 = pos;
+        rep_33: {
+            if pos >= chars.len() { break rep_33; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break rep_33; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_47;
+        pos = rep_saved_33;
         break;
     }
     return pos;
@@ -3982,27 +3440,27 @@ fn try_OCT_LITERAL(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != 'o' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_48 = pos;
-        rep_48: {
-            if pos >= chars.len() || chars[pos] != '_' { break rep_48; }
+        let rep_saved_34 = pos;
+        rep_34: {
+            if pos >= chars.len() || chars[pos] != '_' { break rep_34; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_48;
+        pos = rep_saved_34;
         break;
     }
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { '0'..='7' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_49 = pos;
-        rep_49: {
-            if pos >= chars.len() { break rep_49; }
-            if !((chars[pos] matches { '0'..='7' | '_' })) { break rep_49; }
+        let rep_saved_35 = pos;
+        rep_35: {
+            if pos >= chars.len() { break rep_35; }
+            if !((chars[pos] matches { '0'..='7' | '_' })) { break rep_35; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_49;
+        pos = rep_saved_35;
         break;
     }
     return pos;
@@ -4015,27 +3473,27 @@ fn try_BIN_LITERAL(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != 'b' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_50 = pos;
-        rep_50: {
-            if pos >= chars.len() || chars[pos] != '_' { break rep_50; }
+        let rep_saved_36 = pos;
+        rep_36: {
+            if pos >= chars.len() || chars[pos] != '_' { break rep_36; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_50;
+        pos = rep_saved_36;
         break;
     }
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { '0' | '1' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_51 = pos;
-        rep_51: {
-            if pos >= chars.len() { break rep_51; }
-            if !((chars[pos] matches { '0' | '1' | '_' })) { break rep_51; }
+        let rep_saved_37 = pos;
+        rep_37: {
+            if pos >= chars.len() { break rep_37; }
+            if !((chars[pos] matches { '0' | '1' | '_' })) { break rep_37; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_51;
+        pos = rep_saved_37;
         break;
     }
     return pos;
@@ -4044,95 +3502,95 @@ fn try_BIN_LITERAL(chars: &List<char>, start: i32) -> i32 {
 fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 with RustLexerBase {
     let mut pos = start;
     if !(RustLexerBase::float_literal_possible(LexerView { chars, start, pos })) { return -1; }
-    let alts_saved_52 = pos;
-    let mut alts_best_52 = -1;
-    alts_52_0: {
-        pos = alts_saved_52;
+    let alts_saved_38 = pos;
+    let mut alts_best_38 = -1;
+    alts_38_0: {
+        pos = alts_saved_38;
         pos = try_DEC_LITERAL(chars, pos);
-        if pos < 0 { break alts_52_0; }
-        if pos >= chars.len() || chars[pos] != '.' { break alts_52_0; }
+        if pos < 0 { break alts_38_0; }
+        if pos >= chars.len() || chars[pos] != '.' { break alts_38_0; }
         pos += 1;
-        if !(RustLexerBase::float_dot_possible(LexerView { chars, start, pos })) { break alts_52_0; }
-        if pos > alts_best_52 { alts_best_52 = pos; }
+        if !(RustLexerBase::float_dot_possible(LexerView { chars, start, pos })) { break alts_38_0; }
+        if pos > alts_best_38 { alts_best_38 = pos; }
     }
-    alts_52_1: {
-        pos = alts_saved_52;
+    alts_38_1: {
+        pos = alts_saved_38;
         pos = try_DEC_LITERAL(chars, pos);
-        if pos < 0 { break alts_52_1; }
-        let opt_saved_53 = pos;
-        let mut opt_ok_53 = false;
-        rep_53: {
-            if pos >= chars.len() || chars[pos] != '.' { break rep_53; }
+        if pos < 0 { break alts_38_1; }
+        let opt_saved_39 = pos;
+        let mut opt_ok_39 = false;
+        opt_39: {
+            if pos >= chars.len() || chars[pos] != '.' { break opt_39; }
             pos += 1;
             pos = try_DEC_LITERAL(chars, pos);
-            if pos < 0 { break rep_53; }
-            opt_ok_53 = true;
+            if pos < 0 { break opt_39; }
+            opt_ok_39 = true;
         }
-        if !opt_ok_53 { pos = opt_saved_53; }
-        let opt_saved_54 = pos;
-        let mut opt_ok_54 = false;
-        rep_54: {
-            if pos >= chars.len() { break rep_54; }
-            if !((chars[pos] matches { 'e' | 'E' })) { break rep_54; }
+        if !opt_ok_39 { pos = opt_saved_39; }
+        let opt_saved_40 = pos;
+        let mut opt_ok_40 = false;
+        opt_40: {
+            if pos >= chars.len() { break opt_40; }
+            if !((chars[pos] matches { 'e' | 'E' })) { break opt_40; }
             pos += 1;
-            let opt_saved_55 = pos;
-            let mut opt_ok_55 = false;
-            rep_55: {
-                if pos >= chars.len() { break rep_55; }
-                if !((chars[pos] matches { '+' | '-' })) { break rep_55; }
+            let opt_saved_41 = pos;
+            let mut opt_ok_41 = false;
+            opt_41: {
+                if pos >= chars.len() { break opt_41; }
+                if !((chars[pos] matches { '+' | '-' })) { break opt_41; }
                 pos += 1;
-                opt_ok_55 = true;
+                opt_ok_41 = true;
             }
-            if !opt_ok_55 { pos = opt_saved_55; }
+            if !opt_ok_41 { pos = opt_saved_41; }
             loop {
-                let rep_saved_56 = pos;
-                rep_56: {
-                    if pos >= chars.len() || chars[pos] != '_' { break rep_56; }
+                let rep_saved_42 = pos;
+                rep_42: {
+                    if pos >= chars.len() || chars[pos] != '_' { break rep_42; }
                     pos += 1;
                     continue;
                 }
-                pos = rep_saved_56;
+                pos = rep_saved_42;
                 break;
             }
             pos = try_DEC_LITERAL(chars, pos);
-            if pos < 0 { break rep_54; }
-            opt_ok_54 = true;
+            if pos < 0 { break opt_40; }
+            opt_ok_40 = true;
         }
-        if !opt_ok_54 { pos = opt_saved_54; }
-        let opt_saved_57 = pos;
-        let mut opt_ok_57 = false;
-        rep_57: {
-            let alts_saved_58 = pos;
-            alts_done_58: {
-                alts_58_0: {
-                    pos = alts_saved_58;
-                    if pos >= chars.len() || chars[pos] != 'f' { break alts_58_0; }
+        if !opt_ok_40 { pos = opt_saved_40; }
+        let opt_saved_43 = pos;
+        let mut opt_ok_43 = false;
+        opt_43: {
+            let alts_saved_44 = pos;
+            alts_done_44: {
+                alts_44_0: {
+                    pos = alts_saved_44;
+                    if pos >= chars.len() || chars[pos] != 'f' { break alts_44_0; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '3' { break alts_58_0; }
+                    if pos >= chars.len() || chars[pos] != '3' { break alts_44_0; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '2' { break alts_58_0; }
+                    if pos >= chars.len() || chars[pos] != '2' { break alts_44_0; }
                     pos += 1;
-                    break alts_done_58;
+                    break alts_done_44;
                 }
-                alts_58_1: {
-                    pos = alts_saved_58;
-                    if pos >= chars.len() || chars[pos] != 'f' { break alts_58_1; }
+                alts_44_1: {
+                    pos = alts_saved_44;
+                    if pos >= chars.len() || chars[pos] != 'f' { break alts_44_1; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '6' { break alts_58_1; }
+                    if pos >= chars.len() || chars[pos] != '6' { break alts_44_1; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '4' { break alts_58_1; }
+                    if pos >= chars.len() || chars[pos] != '4' { break alts_44_1; }
                     pos += 1;
-                    break alts_done_58;
+                    break alts_done_44;
                 }
-                break rep_57;
+                break opt_43;
             }
-            opt_ok_57 = true;
+            opt_ok_43 = true;
         }
-        if !opt_ok_57 { pos = opt_saved_57; }
-        if pos > alts_best_52 { alts_best_52 = pos; }
+        if !opt_ok_43 { pos = opt_saved_43; }
+        if pos > alts_best_38 { alts_best_38 = pos; }
     }
-    if alts_best_52 < 0 { return -1; }
-    pos = alts_best_52;
+    if alts_best_38 < 0 { return -1; }
+    pos = alts_best_38;
     return pos;
 }
 
@@ -4545,7 +4003,7 @@ fn in_char_set_0(c: char) -> bool {
 }
 
 fn in_char_set_1(c: char) -> bool {
-    return c matches { '0'..='9' | 'A'..='Z' | '_' | 'a'..='z' | 'ª' | 'µ' | '·' | 'º' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ˁ' | 'ˆ'..='ˑ' | 'ˠ'..='ˤ' | 'ˬ' | 'ˮ' | '̀'..='ʹ' | 'Ͷ'..='ͷ' | 'ͺ'..='ͽ' | 'Ϳ' | 'Ά'..='Ί' | 'Ό' | 'Ύ'..='Ρ' | 'Σ'..='ϵ' | 'Ϸ'..='ҁ' | '҃'..='҇' | 'Ҋ'..='ԯ' | 'Ա'..='Ֆ' | 'ՙ' | 'ՠ'..='ֈ' | '֑'..='ֽ' | 'ֿ' | 'ׁ'..='ׂ' | 'ׄ'..='ׅ' | 'ׇ' | 'א'..='ת' | 'ׯ'..='ײ' | 'ؐ'..='ؚ' | 'ؠ'..='٩' | 'ٮ'..='ۓ' | 'ە'..='ۜ' | '۟'..='ۨ' | '۪'..='ۼ' | 'ۿ' | 'ܐ'..='݊' | 'ݍ'..='ޱ' | '߀'..='ߵ' | 'ߺ' | '߽' | 'ࠀ'..='࠭' | 'ࡀ'..='࡛' | 'ࡠ'..='ࡪ' | 'ࡰ'..='ࢇ' | 'ࢉ'..='࢏' | 'ࢗ'..='࣡' | 'ࣣ'..='ॣ' | '०'..='९' | 'ॱ'..='ঃ' | 'অ'..='ঌ' | 'এ'..='ঐ' | 'ও'..='ন' | 'প'..='র' | 'ল' | 'শ'..='হ' | '়'..='ৄ' | 'ে'..='ৈ' | 'ো'..='ৎ' | 'ৗ' | 'ড়'..='ঢ়' | 'য়'..='ৣ' | '০'..='ৱ' | 'ৼ' | '৾' | 'ਁ'..='ਃ' | 'ਅ'..='ਊ' | 'ਏ'..='ਐ' | 'ਓ'..='ਨ' | 'ਪ'..='ਰ' | 'ਲ'..='ਲ਼' | 'ਵ'..='ਸ਼' | 'ਸ'..='ਹ' | '਼' | 'ਾ'..='ੂ' | 'ੇ'..='ੈ' | 'ੋ'..='੍' | 'ੑ' | 'ਖ਼'..='ੜ' | 'ਫ਼' | '੦'..='ੵ' | 'ઁ'..='ઃ' | 'અ'..='ઍ' | 'એ'..='ઑ' | 'ઓ'..='ન' | 'પ'..='ર' | 'લ'..='ળ' | 'વ'..='હ' | '઼'..='ૅ' | 'ે'..='ૉ' | 'ો'..='્' | 'ૐ' | 'ૠ'..='ૣ' | '૦'..='૯' | 'ૹ'..='૿' | 'ଁ'..='ଃ' | 'ଅ'..='ଌ' | 'ଏ'..='ଐ' | 'ଓ'..='ନ' | 'ପ'..='ର' | 'ଲ'..='ଳ' | 'ଵ'..='ହ' | '଼'..='ୄ' | 'େ'..='ୈ' | 'ୋ'..='୍' | '୕'..='ୗ' | 'ଡ଼'..='ଢ଼' | 'ୟ'..='ୣ' | '୦'..='୯' | 'ୱ' | 'ஂ'..='ஃ' | 'அ'..='ஊ' | 'எ'..='ஐ' | 'ஒ'..='க' | 'ங'..='ச' | 'ஜ' | 'ஞ'..='ட' | 'ண'..='த' | 'ந'..='ப' | 'ம'..='ஹ' | 'ா'..='ூ' | 'ெ'..='ை' | 'ொ'..='்' | 'ௐ' | 'ௗ' | '௦'..='௯' | 'ఀ'..='ఌ' | 'ఎ'..='ఐ' | 'ఒ'..='న' | 'ప'..='హ' | '఼'..='ౄ' | 'ె'..='ై' | 'ొ'..='్' | 'ౕ'..='ౖ' | 'ౘ'..='ౚ' | '౜'..='ౝ' | 'ౠ'..='ౣ' | '౦'..='౯' | 'ಀ'..='ಃ' | 'ಅ'..='ಌ' | 'ಎ'..='ಐ' | 'ಒ'..='ನ' | 'ಪ'..='ಳ' | 'ವ'..='ಹ' | '಼'..='ೄ' | 'ೆ'..='ೈ' | 'ೊ'..='್' | 'ೕ'..='ೖ' | '೜'..='ೞ' | 'ೠ'..='ೣ' | '೦'..='೯' | 'ೱ'..='ೳ' | 'ഀ'..='ഌ' | 'എ'..='ഐ' | 'ഒ'..='ൄ' | 'െ'..='ൈ' | 'ൊ'..='ൎ' | 'ൔ'..='ൗ' | 'ൟ'..='ൣ' | '൦'..='൯' | 'ൺ'..='ൿ' | 'ඁ'..='ඃ' | 'අ'..='ඖ' | 'ක'..='න' | 'ඳ'..='ර' | 'ල' | 'ව'..='ෆ' | '්' | 'ා'..='ු' | 'ූ' | 'ෘ'..='ෟ' | '෦'..='෯' | 'ෲ'..='ෳ' | 'ก'..='ฺ' | 'เ'..='๎' | '๐'..='๙' | 'ກ'..='ຂ' | 'ຄ' | 'ຆ'..='ຊ' | 'ຌ'..='ຣ' | 'ລ' | 'ວ'..='ຽ' | 'ເ'..='ໄ' | 'ໆ' | '່'..='໎' | '໐'..='໙' | 'ໜ'..='ໟ' | 'ༀ' | '༘'..='༙' | '༠'..='༩' | '༵' | '༷' | '༹' | '༾'..='ཇ' | 'ཉ'..='ཬ' | 'ཱ'..='྄' | '྆'..='ྗ' | 'ྙ'..='ྼ' | '࿆' | 'က'..='၉' | 'ၐ'..='ႝ' | 'Ⴀ'..='Ⴥ' | 'Ⴧ' | 'Ⴭ' | 'ა'..='ჺ' | 'ჼ'..='ቈ' | 'ቊ'..='ቍ' | 'ቐ'..='ቖ' | 'ቘ' | 'ቚ'..='ቝ' | 'በ'..='ኈ' | 'ኊ'..='ኍ' | 'ነ'..='ኰ' | 'ኲ'..='ኵ' | 'ኸ'..='ኾ' | 'ዀ' | 'ዂ'..='ዅ' | 'ወ'..='ዖ' | 'ዘ'..='ጐ' | 'ጒ'..='ጕ' | 'ጘ'..='ፚ' | '፝'..='፟' | '፩'..='፱' | 'ᎀ'..='ᎏ' | 'Ꭰ'..='Ᏽ' | 'ᏸ'..='ᏽ' | 'ᐁ'..='ᙬ' | 'ᙯ'..='ᙿ' | 'ᚁ'..='ᚚ' | 'ᚠ'..='ᛪ' | 'ᛮ'..='ᛸ' | 'ᜀ'..='᜕' | 'ᜟ'..='᜴' | 'ᝀ'..='ᝓ' | 'ᝠ'..='ᝬ' | 'ᝮ'..='ᝰ' | 'ᝲ'..='ᝳ' | 'ក'..='៓' | 'ៗ' | 'ៜ'..='៝' | '០'..='៩' | '᠋'..='᠍' | '᠏'..='᠙' | 'ᠠ'..='ᡸ' | 'ᢀ'..='ᢪ' | 'ᢰ'..='ᣵ' | 'ᤀ'..='ᤞ' | 'ᤠ'..='ᤫ' | 'ᤰ'..='᤻' | '᥆'..='ᥭ' | 'ᥰ'..='ᥴ' | 'ᦀ'..='ᦫ' | 'ᦰ'..='ᧉ' | '᧐'..='᧚' | 'ᨀ'..='ᨛ' | 'ᨠ'..='ᩞ' | '᩠'..='᩼' | '᩿'..='᪉' | '᪐'..='᪙' | 'ᪧ' | '᪰'..='᪽' | 'ᪿ'..='᫝' | '᫠'..='᫫' | 'ᬀ'..='ᭌ' | '᭐'..='᭙' | '᭫'..='᭳' | 'ᮀ'..='᯳' | 'ᰀ'..='᰷' | '᱀'..='᱉' | 'ᱍ'..='ᱽ' | 'ᲀ'..='ᲊ' | 'Ა'..='Ჺ' | 'Ჽ'..='Ჿ' | '᳐'..='᳒' | '᳔'..='ᳺ' | 'ᴀ'..='ἕ' | 'Ἐ'..='Ἕ' | 'ἠ'..='ὅ' | 'Ὀ'..='Ὅ' | 'ὐ'..='ὗ' | 'Ὑ' | 'Ὓ' | 'Ὕ' | 'Ὗ'..='ώ' | 'ᾀ'..='ᾴ' | 'ᾶ'..='ᾼ' | 'ι' | 'ῂ'..='ῄ' | 'ῆ'..='ῌ' | 'ῐ'..='ΐ' | 'ῖ'..='Ί' | 'ῠ'..='Ῥ' | 'ῲ'..='ῴ' | 'ῶ'..='ῼ' | '‿'..='⁀' | '⁔' | 'ⁱ' | 'ⁿ' | 'ₐ'..='ₜ' | '⃐'..='⃜' | '⃡' | '⃥'..='⃰' | 'ℂ' | 'ℇ' | 'ℊ'..='ℓ' | 'ℕ' | '℘'..='ℝ' | 'ℤ' | 'Ω' | 'ℨ' | 'K'..='ℹ' | 'ℼ'..='ℿ' | 'ⅅ'..='ⅉ' | 'ⅎ' | 'Ⅰ'..='ↈ' | 'Ⰰ'..='ⳤ' | 'Ⳬ'..='ⳳ' | 'ⴀ'..='ⴥ' | 'ⴧ' | 'ⴭ' | 'ⴰ'..='ⵧ' | 'ⵯ' | '⵿'..='ⶖ' | 'ⶠ'..='ⶦ' | 'ⶨ'..='ⶮ' | 'ⶰ'..='ⶶ' | 'ⶸ'..='ⶾ' | 'ⷀ'..='ⷆ' | 'ⷈ'..='ⷎ' | 'ⷐ'..='ⷖ' | 'ⷘ'..='ⷞ' | 'ⷠ'..='ⷿ' | 'ⸯ' | '々'..='〇' | '〡'..='〯' | '〱'..='〵' | '〸'..='〼' | 'ぁ'..='ゖ' | '゙'..='ゟ' | 'ァ'..='ヺ' | 'ー'..='ヿ' | 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | 'ㆠ'..='ㆿ' | 'ㇰ'..='ㇿ' | '㐀'..='䶿' | '一'..='ꒌ' | 'ꓐ'..='ꓽ' | 'ꔀ'..='ꘌ' | 'ꘐ'..='ꘫ' | 'Ꙁ'..='꙯' | 'ꙴ'..='꙽' | 'ꙿ'..='꛱' | 'ꜗ'..='ꜟ' | 'Ꜣ'..='ꞈ' | 'Ꞌ'..='Ƛ' | '꟱'..='ꠧ' | '꠬' | 'ꡀ'..='ꡳ' | 'ꢀ'..='ꣅ' | '꣐'..='꣙' | '꣠'..='ꣷ' | 'ꣻ' | 'ꣽ'..='꤭' | 'ꤰ'..='꥓' | 'ꥠ'..='ꥼ' | 'ꦀ'..='꧀' | 'ꧏ'..='꧙' | 'ꧠ'..='ꧾ' | 'ꨀ'..='ꨶ' | 'ꩀ'..='ꩍ' | '꩐'..='꩙' | 'ꩠ'..='ꩶ' | 'ꩺ'..='ꫂ' | 'ꫛ'..='ꫝ' | 'ꫠ'..='ꫯ' | 'ꫲ'..='꫶' | 'ꬁ'..='ꬆ' | 'ꬉ'..='ꬎ' | 'ꬑ'..='ꬖ' | 'ꬠ'..='ꬦ' | 'ꬨ'..='ꬮ' | 'ꬰ'..='ꭚ' | 'ꭜ'..='ꭩ' | 'ꭰ'..='ꯪ' | '꯬'..='꯭' | '꯰'..='꯹' | '가'..='힣' | 'ힰ'..='ퟆ' | 'ퟋ'..='ퟻ' | '豈'..='舘' | '並'..='龎' | 'ﬀ'..='ﬆ' | 'ﬓ'..='ﬗ' | 'יִ'..='ﬨ' | 'שׁ'..='זּ' | 'טּ'..='לּ' | 'מּ' | 'נּ'..='סּ' | 'ףּ'..='פּ' | 'צּ'..='ﮱ' | 'ﯓ'..='ﴽ' | 'ﵐ'..='ﶏ' | 'ﶒ'..='ﷇ' | 'ﷰ'..='ﷻ' | '︀'..='️' | '︠'..='︯' | '︳'..='︴' | '﹍'..='﹏' | 'ﹰ'..='ﹴ' | 'ﹶ'..='ﻼ' | '０'..='９' | 'Ａ'..='Ｚ' | '＿' | 'ａ'..='ｚ' | 'ｦ'..='ﾾ' | 'ￂ'..='ￇ' | 'ￊ'..='ￏ' | 'ￒ'..='ￗ' | 'ￚ'..='ￜ' | '𐀀'..='𐀋' | '𐀍'..='𐀦' | '𐀨'..='𐀺' | '𐀼'..='𐀽' | '𐀿'..='𐁍' | '𐁐'..='𐁝' | '𐂀'..='𐃺' | '𐅀'..='𐅴' | '𐇽' | '𐊀'..='𐊜' | '𐊠'..='𐋐' | '𐋠' | '𐌀'..='𐌟' | '𐌭'..='𐍊' | '𐍐'..='𐍺' | '𐎀'..='𐎝' | '𐎠'..='𐏃' | '𐏈'..='𐏏' | '𐏑'..='𐏕' | '𐐀'..='𐒝' | '𐒠'..='𐒩' | '𐒰'..='𐓓' | '𐓘'..='𐓻' | '𐔀'..='𐔧' | '𐔰'..='𐕣' | '𐕰'..='𐕺' | '𐕼'..='𐖊' | '𐖌'..='𐖒' | '𐖔'..='𐖕' | '𐖗'..='𐖡' | '𐖣'..='𐖱' | '𐖳'..='𐖹' | '𐖻'..='𐖼' | '𐗀'..='𐗳' | '𐘀'..='𐜶' | '𐝀'..='𐝕' | '𐝠'..='𐝧' | '𐞀'..='𐞅' | '𐞇'..='𐞰' | '𐞲'..='𐞺' | '𐠀'..='𐠅' | '𐠈' | '𐠊'..='𐠵' | '𐠷'..='𐠸' | '𐠼' | '𐠿'..='𐡕' | '𐡠'..='𐡶' | '𐢀'..='𐢞' | '𐣠'..='𐣲' | '𐣴'..='𐣵' | '𐤀'..='𐤕' | '𐤠'..='𐤹' | '𐥀'..='𐥙' | '𐦀'..='𐦷' | '𐦾'..='𐦿' | '𐨀'..='𐨃' | '𐨅'..='𐨆' | '𐨌'..='𐨓' | '𐨕'..='𐨗' | '𐨙'..='𐨵' | '𐨸'..='𐨺' | '𐨿' | '𐩠'..='𐩼' | '𐪀'..='𐪜' | '𐫀'..='𐫇' | '𐫉'..='𐫦' | '𐬀'..='𐬵' | '𐭀'..='𐭕' | '𐭠'..='𐭲' | '𐮀'..='𐮑' | '𐰀'..='𐱈' | '𐲀'..='𐲲' | '𐳀'..='𐳲' | '𐴀'..='𐴧' | '𐴰'..='𐴹' | '𐵀'..='𐵥' | '𐵩'..='𐵭' | '𐵯'..='𐶅' | '𐺀'..='𐺩' | '𐺫'..='𐺬' | '𐺰'..='𐺱' | '𐻂'..='𐻇' | '𐻺'..='𐼜' | '𐼧' | '𐼰'..='𐽐' | '𐽰'..='𐾅' | '𐾰'..='𐿄' | '𐿠'..='𐿶' | '𑀀'..='𑁆' | '𑁦'..='𑁵' | '𑁿'..='𑂺' | '𑃂' | '𑃐'..='𑃨' | '𑃰'..='𑃹' | '𑄀'..='𑄴' | '𑄶'..='𑄿' | '𑅄'..='𑅇' | '𑅐'..='𑅳' | '𑅶' | '𑆀'..='𑇄' | '𑇉'..='𑇌' | '𑇎'..='𑇚' | '𑇜' | '𑈀'..='𑈑' | '𑈓'..='𑈷' | '𑈾'..='𑉁' | '𑊀'..='𑊆' | '𑊈' | '𑊊'..='𑊍' | '𑊏'..='𑊝' | '𑊟'..='𑊨' | '𑊰'..='𑋪' | '𑋰'..='𑋹' | '𑌀'..='𑌃' | '𑌅'..='𑌌' | '𑌏'..='𑌐' | '𑌓'..='𑌨' | '𑌪'..='𑌰' | '𑌲'..='𑌳' | '𑌵'..='𑌹' | '𑌻'..='𑍄' | '𑍇'..='𑍈' | '𑍋'..='𑍍' | '𑍐' | '𑍗' | '𑍝'..='𑍣' | '𑍦'..='𑍬' | '𑍰'..='𑍴' | '𑎀'..='𑎉' | '𑎋' | '𑎎' | '𑎐'..='𑎵' | '𑎷'..='𑏀' | '𑏂' | '𑏅' | '𑏇'..='𑏊' | '𑏌'..='𑏓' | '𑏡'..='𑏢' | '𑐀'..='𑑊' | '𑑐'..='𑑙' | '𑑞'..='𑑡' | '𑒀'..='𑓅' | '𑓇' | '𑓐'..='𑓙' | '𑖀'..='𑖵' | '𑖸'..='𑗀' | '𑗘'..='𑗝' | '𑘀'..='𑙀' | '𑙄' | '𑙐'..='𑙙' | '𑚀'..='𑚸' | '𑛀'..='𑛉' | '𑛐'..='𑛣' | '𑜀'..='𑜚' | '𑜝'..='𑜫' | '𑜰'..='𑜹' | '𑝀'..='𑝆' | '𑠀'..='𑠺' | '𑢠'..='𑣩' | '𑣿'..='𑤆' | '𑤉' | '𑤌'..='𑤓' | '𑤕'..='𑤖' | '𑤘'..='𑤵' | '𑤷'..='𑤸' | '𑤻'..='𑥃' | '𑥐'..='𑥙' | '𑦠'..='𑦧' | '𑦪'..='𑧗' | '𑧚'..='𑧡' | '𑧣'..='𑧤' | '𑨀'..='𑨾' | '𑩇' | '𑩐'..='𑪙' | '𑪝' | '𑪰'..='𑫸' | '𑭠'..='𑭧' | '𑯀'..='𑯠' | '𑯰'..='𑯹' | '𑰀'..='𑰈' | '𑰊'..='𑰶' | '𑰸'..='𑱀' | '𑱐'..='𑱙' | '𑱲'..='𑲏' | '𑲒'..='𑲧' | '𑲩'..='𑲶' | '𑴀'..='𑴆' | '𑴈'..='𑴉' | '𑴋'..='𑴶' | '𑴺' | '𑴼'..='𑴽' | '𑴿'..='𑵇' | '𑵐'..='𑵙' | '𑵠'..='𑵥' | '𑵧'..='𑵨' | '𑵪'..='𑶎' | '𑶐'..='𑶑' | '𑶓'..='𑶘' | '𑶠'..='𑶩' | '𑶰'..='𑷛' | '𑷠'..='𑷩' | '𑻠'..='𑻶' | '𑼀'..='𑼐' | '𑼒'..='𑼺' | '𑼾'..='𑽂' | '𑽐'..='𑽚' | '𑾰' | '𒀀'..='𒎙' | '𒐀'..='𒑮' | '𒒀'..='𒕃' | '𒾐'..='𒿰' | '𓀀'..='𓐯' | '𓑀'..='𓑕' | '𓑠'..='𔏺' | '𔐀'..='𔙆' | '𖄀'..='𖄹' | '𖠀'..='𖨸' | '𖩀'..='𖩞' | '𖩠'..='𖩩' | '𖩰'..='𖪾' | '𖫀'..='𖫉' | '𖫐'..='𖫭' | '𖫰'..='𖫴' | '𖬀'..='𖬶' | '𖭀'..='𖭃' | '𖭐'..='𖭙' | '𖭣'..='𖭷' | '𖭽'..='𖮏' | '𖵀'..='𖵬' | '𖵰'..='𖵹' | '𖹀'..='𖹿' | '𖺠'..='𖺸' | '𖺻'..='𖻓' | '𖼀'..='𖽊' | '𖽏'..='𖾇' | '𖾏'..='𖾟' | '𖿠'..='𖿡' | '𖿣'..='𖿤' | '𖿰'..='𖿶' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛄲' | '𛅐'..='𛅒' | '𛅕' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𛰀'..='𛱪' | '𛱰'..='𛱼' | '𛲀'..='𛲈' | '𛲐'..='𛲙' | '𛲝'..='𛲞' | '𜳰'..='𜳹' | '𜼀'..='𜼭' | '𜼰'..='𜽆' | '𝅥'..='𝅩' | '𝅭'..='𝅲' | '𝅻'..='𝆂' | '𝆅'..='𝆋' | '𝆪'..='𝆭' | '𝉂'..='𝉄' | '𝐀'..='𝑔' | '𝑖'..='𝒜' | '𝒞'..='𝒟' | '𝒢' | '𝒥'..='𝒦' | '𝒩'..='𝒬' | '𝒮'..='𝒹' | '𝒻' | '𝒽'..='𝓃' | '𝓅'..='𝔅' | '𝔇'..='𝔊' | '𝔍'..='𝔔' | '𝔖'..='𝔜' | '𝔞'..='𝔹' | '𝔻'..='𝔾' | '𝕀'..='𝕄' | '𝕆' | '𝕊'..='𝕐' | '𝕒'..='𝚥' | '𝚨'..='𝛀' | '𝛂'..='𝛚' | '𝛜'..='𝛺' | '𝛼'..='𝜔' | '𝜖'..='𝜴' | '𝜶'..='𝝎' | '𝝐'..='𝝮' | '𝝰'..='𝞈' | '𝞊'..='𝞨' | '𝞪'..='𝟂' | '𝟄'..='𝟋' | '𝟎'..='𝟿' | '𝨀'..='𝨶' | '𝨻'..='𝩬' | '𝩵' | '𝪄' | '𝪛'..='𝪟' | '𝪡'..='𝪯' | '𝼀'..='𝼞' | '𝼥'..='𝼪' | '𞀀'..='𞀆' | '𞀈'..='𞀘' | '𞀛'..='𞀡' | '𞀣'..='𞀤' | '𞀦'..='𞀪' | '𞀰'..='𞁭' | '𞂏' | '𞄀'..='𞄬' | '𞄰'..='𞄽' | '𞅀'..='𞅉' | '𞅎' | '𞊐'..='𞊮' | '𞋀'..='𞋹' | '𞓐'..='𞓹' | '𞗐'..='𞗺' | '𞛀'..='𞛞' | '𞛠'..='𞛵' | '𞛾'..='𞛿' | '𞟠'..='𞟦' | '𞟨'..='𞟫' | '𞟭'..='𞟮' | '𞟰'..='𞟾' | '𞠀'..='𞣄' | '𞣐'..='𞣖' | '𞤀'..='𞥋' | '𞥐'..='𞥙' | '𞸀'..='𞸃' | '𞸅'..='𞸟' | '𞸡'..='𞸢' | '𞸤' | '𞸧' | '𞸩'..='𞸲' | '𞸴'..='𞸷' | '𞸹' | '𞸻' | '𞹂' | '𞹇' | '𞹉' | '𞹋' | '𞹍'..='𞹏' | '𞹑'..='𞹒' | '𞹔' | '𞹗' | '𞹙' | '𞹛' | '𞹝' | '𞹟' | '𞹡'..='𞹢' | '𞹤' | '𞹧'..='𞹪' | '𞹬'..='𞹲' | '𞹴'..='𞹷' | '𞹹'..='𞹼' | '𞹾' | '𞺀'..='𞺉' | '𞺋'..='𞺛' | '𞺡'..='𞺣' | '𞺥'..='𞺩' | '𞺫'..='𞺻' | '🯰'..='🯹' | '𠀀'..='𪛟' | '𪜀'..='𫠝' | '𫠠'..='𬺭' | '𬺰'..='𮯠' | '𮯰'..='𮹝' | '丽'..='𪘀' | '𰀀'..='𱍊' | '𱍐'..='𳑹' | '󠄀'..='󠇯' };
+    return c matches { '0'..='9' | 'A'..='Z' | '_' | 'a'..='z' | 'ª' | 'µ' | '·' | 'º' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ˁ' | 'ˆ'..='ˑ' | 'ˠ'..='ˤ' | 'ˬ' | 'ˮ' | '\u{300}'..='ʹ' | 'Ͷ'..='ͷ' | 'ͺ'..='ͽ' | 'Ϳ' | 'Ά'..='Ί' | 'Ό' | 'Ύ'..='Ρ' | 'Σ'..='ϵ' | 'Ϸ'..='ҁ' | '\u{483}'..='\u{487}' | 'Ҋ'..='ԯ' | 'Ա'..='Ֆ' | 'ՙ' | 'ՠ'..='ֈ' | '\u{591}'..='\u{5bd}' | '\u{5bf}' | '\u{5c1}'..='\u{5c2}' | '\u{5c4}'..='\u{5c5}' | '\u{5c7}' | 'א'..='ת' | 'ׯ'..='ײ' | '\u{610}'..='\u{61a}' | 'ؠ'..='٩' | 'ٮ'..='ۓ' | 'ە'..='\u{6dc}' | '\u{6df}'..='\u{6e8}' | '\u{6ea}'..='ۼ' | 'ۿ' | 'ܐ'..='\u{74a}' | 'ݍ'..='ޱ' | '߀'..='ߵ' | 'ߺ' | '\u{7fd}' | 'ࠀ'..='\u{82d}' | 'ࡀ'..='\u{85b}' | 'ࡠ'..='ࡪ' | 'ࡰ'..='ࢇ' | 'ࢉ'..='࢏' | '\u{897}'..='\u{8e1}' | '\u{8e3}'..='\u{963}' | '०'..='९' | 'ॱ'..='\u{983}' | 'অ'..='ঌ' | 'এ'..='ঐ' | 'ও'..='ন' | 'প'..='র' | 'ল' | 'শ'..='হ' | '\u{9bc}'..='\u{9c4}' | '\u{9c7}'..='\u{9c8}' | '\u{9cb}'..='ৎ' | '\u{9d7}' | 'ড়'..='ঢ়' | 'য়'..='\u{9e3}' | '০'..='ৱ' | 'ৼ' | '\u{9fe}' | '\u{a01}'..='\u{a03}' | 'ਅ'..='ਊ' | 'ਏ'..='ਐ' | 'ਓ'..='ਨ' | 'ਪ'..='ਰ' | 'ਲ'..='ਲ਼' | 'ਵ'..='ਸ਼' | 'ਸ'..='ਹ' | '\u{a3c}' | '\u{a3e}'..='\u{a42}' | '\u{a47}'..='\u{a48}' | '\u{a4b}'..='\u{a4d}' | '\u{a51}' | 'ਖ਼'..='ੜ' | 'ਫ਼' | '੦'..='\u{a75}' | '\u{a81}'..='\u{a83}' | 'અ'..='ઍ' | 'એ'..='ઑ' | 'ઓ'..='ન' | 'પ'..='ર' | 'લ'..='ળ' | 'વ'..='હ' | '\u{abc}'..='\u{ac5}' | '\u{ac7}'..='\u{ac9}' | '\u{acb}'..='\u{acd}' | 'ૐ' | 'ૠ'..='\u{ae3}' | '૦'..='૯' | 'ૹ'..='\u{aff}' | '\u{b01}'..='\u{b03}' | 'ଅ'..='ଌ' | 'ଏ'..='ଐ' | 'ଓ'..='ନ' | 'ପ'..='ର' | 'ଲ'..='ଳ' | 'ଵ'..='ହ' | '\u{b3c}'..='\u{b44}' | '\u{b47}'..='\u{b48}' | '\u{b4b}'..='\u{b4d}' | '\u{b55}'..='\u{b57}' | 'ଡ଼'..='ଢ଼' | 'ୟ'..='\u{b63}' | '୦'..='୯' | 'ୱ' | '\u{b82}'..='ஃ' | 'அ'..='ஊ' | 'எ'..='ஐ' | 'ஒ'..='க' | 'ங'..='ச' | 'ஜ' | 'ஞ'..='ட' | 'ண'..='த' | 'ந'..='ப' | 'ம'..='ஹ' | '\u{bbe}'..='\u{bc2}' | '\u{bc6}'..='\u{bc8}' | '\u{bca}'..='\u{bcd}' | 'ௐ' | '\u{bd7}' | '௦'..='௯' | '\u{c00}'..='ఌ' | 'ఎ'..='ఐ' | 'ఒ'..='న' | 'ప'..='హ' | '\u{c3c}'..='\u{c44}' | '\u{c46}'..='\u{c48}' | '\u{c4a}'..='\u{c4d}' | '\u{c55}'..='\u{c56}' | 'ౘ'..='ౚ' | '౜'..='ౝ' | 'ౠ'..='\u{c63}' | '౦'..='౯' | 'ಀ'..='\u{c83}' | 'ಅ'..='ಌ' | 'ಎ'..='ಐ' | 'ಒ'..='ನ' | 'ಪ'..='ಳ' | 'ವ'..='ಹ' | '\u{cbc}'..='\u{cc4}' | '\u{cc6}'..='\u{cc8}' | '\u{cca}'..='\u{ccd}' | '\u{cd5}'..='\u{cd6}' | '೜'..='ೞ' | 'ೠ'..='\u{ce3}' | '೦'..='೯' | 'ೱ'..='\u{cf3}' | '\u{d00}'..='ഌ' | 'എ'..='ഐ' | 'ഒ'..='\u{d44}' | '\u{d46}'..='\u{d48}' | '\u{d4a}'..='ൎ' | 'ൔ'..='\u{d57}' | 'ൟ'..='\u{d63}' | '൦'..='൯' | 'ൺ'..='ൿ' | '\u{d81}'..='\u{d83}' | 'අ'..='ඖ' | 'ක'..='න' | 'ඳ'..='ර' | 'ල' | 'ව'..='ෆ' | '\u{dca}' | '\u{dcf}'..='\u{dd4}' | '\u{dd6}' | '\u{dd8}'..='\u{ddf}' | '෦'..='෯' | '\u{df2}'..='\u{df3}' | 'ก'..='\u{e3a}' | 'เ'..='\u{e4e}' | '๐'..='๙' | 'ກ'..='ຂ' | 'ຄ' | 'ຆ'..='ຊ' | 'ຌ'..='ຣ' | 'ລ' | 'ວ'..='ຽ' | 'ເ'..='ໄ' | 'ໆ' | '\u{ec8}'..='\u{ece}' | '໐'..='໙' | 'ໜ'..='ໟ' | 'ༀ' | '\u{f18}'..='\u{f19}' | '༠'..='༩' | '\u{f35}' | '\u{f37}' | '\u{f39}' | '\u{f3e}'..='ཇ' | 'ཉ'..='ཬ' | '\u{f71}'..='\u{f84}' | '\u{f86}'..='\u{f97}' | '\u{f99}'..='\u{fbc}' | '\u{fc6}' | 'က'..='၉' | 'ၐ'..='\u{109d}' | 'Ⴀ'..='Ⴥ' | 'Ⴧ' | 'Ⴭ' | 'ა'..='ჺ' | 'ჼ'..='ቈ' | 'ቊ'..='ቍ' | 'ቐ'..='ቖ' | 'ቘ' | 'ቚ'..='ቝ' | 'በ'..='ኈ' | 'ኊ'..='ኍ' | 'ነ'..='ኰ' | 'ኲ'..='ኵ' | 'ኸ'..='ኾ' | 'ዀ' | 'ዂ'..='ዅ' | 'ወ'..='ዖ' | 'ዘ'..='ጐ' | 'ጒ'..='ጕ' | 'ጘ'..='ፚ' | '\u{135d}'..='\u{135f}' | '፩'..='፱' | 'ᎀ'..='ᎏ' | 'Ꭰ'..='Ᏽ' | 'ᏸ'..='ᏽ' | 'ᐁ'..='ᙬ' | 'ᙯ'..='ᙿ' | 'ᚁ'..='ᚚ' | 'ᚠ'..='ᛪ' | 'ᛮ'..='ᛸ' | 'ᜀ'..='\u{1715}' | 'ᜟ'..='\u{1734}' | 'ᝀ'..='\u{1753}' | 'ᝠ'..='ᝬ' | 'ᝮ'..='ᝰ' | '\u{1772}'..='\u{1773}' | 'ក'..='\u{17d3}' | 'ៗ' | 'ៜ'..='\u{17dd}' | '០'..='៩' | '\u{180b}'..='\u{180d}' | '\u{180f}'..='᠙' | 'ᠠ'..='ᡸ' | 'ᢀ'..='ᢪ' | 'ᢰ'..='ᣵ' | 'ᤀ'..='ᤞ' | '\u{1920}'..='\u{192b}' | '\u{1930}'..='\u{193b}' | '᥆'..='ᥭ' | 'ᥰ'..='ᥴ' | 'ᦀ'..='ᦫ' | 'ᦰ'..='ᧉ' | '᧐'..='᧚' | 'ᨀ'..='\u{1a1b}' | 'ᨠ'..='\u{1a5e}' | '\u{1a60}'..='\u{1a7c}' | '\u{1a7f}'..='᪉' | '᪐'..='᪙' | 'ᪧ' | '\u{1ab0}'..='\u{1abd}' | '\u{1abf}'..='\u{1add}' | '\u{1ae0}'..='\u{1aeb}' | '\u{1b00}'..='ᭌ' | '᭐'..='᭙' | '\u{1b6b}'..='\u{1b73}' | '\u{1b80}'..='\u{1bf3}' | 'ᰀ'..='\u{1c37}' | '᱀'..='᱉' | 'ᱍ'..='ᱽ' | 'ᲀ'..='ᲊ' | 'Ა'..='Ჺ' | 'Ჽ'..='Ჿ' | '\u{1cd0}'..='\u{1cd2}' | '\u{1cd4}'..='ᳺ' | 'ᴀ'..='ἕ' | 'Ἐ'..='Ἕ' | 'ἠ'..='ὅ' | 'Ὀ'..='Ὅ' | 'ὐ'..='ὗ' | 'Ὑ' | 'Ὓ' | 'Ὕ' | 'Ὗ'..='ώ' | 'ᾀ'..='ᾴ' | 'ᾶ'..='ᾼ' | 'ι' | 'ῂ'..='ῄ' | 'ῆ'..='ῌ' | 'ῐ'..='ΐ' | 'ῖ'..='Ί' | 'ῠ'..='Ῥ' | 'ῲ'..='ῴ' | 'ῶ'..='ῼ' | '‿'..='⁀' | '⁔' | 'ⁱ' | 'ⁿ' | 'ₐ'..='ₜ' | '\u{20d0}'..='\u{20dc}' | '\u{20e1}' | '\u{20e5}'..='\u{20f0}' | 'ℂ' | 'ℇ' | 'ℊ'..='ℓ' | 'ℕ' | '℘'..='ℝ' | 'ℤ' | 'Ω' | 'ℨ' | 'K'..='ℹ' | 'ℼ'..='ℿ' | 'ⅅ'..='ⅉ' | 'ⅎ' | 'Ⅰ'..='ↈ' | 'Ⰰ'..='ⳤ' | 'Ⳬ'..='ⳳ' | 'ⴀ'..='ⴥ' | 'ⴧ' | 'ⴭ' | 'ⴰ'..='ⵧ' | 'ⵯ' | '\u{2d7f}'..='ⶖ' | 'ⶠ'..='ⶦ' | 'ⶨ'..='ⶮ' | 'ⶰ'..='ⶶ' | 'ⶸ'..='ⶾ' | 'ⷀ'..='ⷆ' | 'ⷈ'..='ⷎ' | 'ⷐ'..='ⷖ' | 'ⷘ'..='ⷞ' | '\u{2de0}'..='\u{2dff}' | 'ⸯ' | '々'..='〇' | '〡'..='\u{302f}' | '〱'..='〵' | '〸'..='〼' | 'ぁ'..='ゖ' | '\u{3099}'..='ゟ' | 'ァ'..='ヺ' | 'ー'..='ヿ' | 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | 'ㆠ'..='ㆿ' | 'ㇰ'..='ㇿ' | '㐀'..='䶿' | '一'..='ꒌ' | 'ꓐ'..='ꓽ' | 'ꔀ'..='ꘌ' | 'ꘐ'..='ꘫ' | 'Ꙁ'..='\u{a66f}' | '\u{a674}'..='\u{a67d}' | 'ꙿ'..='\u{a6f1}' | 'ꜗ'..='ꜟ' | 'Ꜣ'..='ꞈ' | 'Ꞌ'..='Ƛ' | '꟱'..='\u{a827}' | '\u{a82c}' | 'ꡀ'..='ꡳ' | '\u{a880}'..='\u{a8c5}' | '꣐'..='꣙' | '\u{a8e0}'..='ꣷ' | 'ꣻ' | 'ꣽ'..='\u{a92d}' | 'ꤰ'..='\u{a953}' | 'ꥠ'..='ꥼ' | '\u{a980}'..='\u{a9c0}' | 'ꧏ'..='꧙' | 'ꧠ'..='ꧾ' | 'ꨀ'..='\u{aa36}' | 'ꩀ'..='\u{aa4d}' | '꩐'..='꩙' | 'ꩠ'..='ꩶ' | 'ꩺ'..='ꫂ' | 'ꫛ'..='ꫝ' | 'ꫠ'..='\u{aaef}' | 'ꫲ'..='\u{aaf6}' | 'ꬁ'..='ꬆ' | 'ꬉ'..='ꬎ' | 'ꬑ'..='ꬖ' | 'ꬠ'..='ꬦ' | 'ꬨ'..='ꬮ' | 'ꬰ'..='ꭚ' | 'ꭜ'..='ꭩ' | 'ꭰ'..='\u{abea}' | '\u{abec}'..='\u{abed}' | '꯰'..='꯹' | '가'..='힣' | 'ힰ'..='ퟆ' | 'ퟋ'..='ퟻ' | '豈'..='舘' | '並'..='龎' | 'ﬀ'..='ﬆ' | 'ﬓ'..='ﬗ' | 'יִ'..='ﬨ' | 'שׁ'..='זּ' | 'טּ'..='לּ' | 'מּ' | 'נּ'..='סּ' | 'ףּ'..='פּ' | 'צּ'..='ﮱ' | 'ﯓ'..='ﴽ' | 'ﵐ'..='ﶏ' | 'ﶒ'..='ﷇ' | 'ﷰ'..='ﷻ' | '\u{fe00}'..='\u{fe0f}' | '\u{fe20}'..='\u{fe2f}' | '︳'..='︴' | '﹍'..='﹏' | 'ﹰ'..='ﹴ' | 'ﹶ'..='ﻼ' | '０'..='９' | 'Ａ'..='Ｚ' | '＿' | 'ａ'..='ｚ' | 'ｦ'..='ﾾ' | 'ￂ'..='ￇ' | 'ￊ'..='ￏ' | 'ￒ'..='ￗ' | 'ￚ'..='ￜ' | '𐀀'..='𐀋' | '𐀍'..='𐀦' | '𐀨'..='𐀺' | '𐀼'..='𐀽' | '𐀿'..='𐁍' | '𐁐'..='𐁝' | '𐂀'..='𐃺' | '𐅀'..='𐅴' | '\u{101fd}' | '𐊀'..='𐊜' | '𐊠'..='𐋐' | '\u{102e0}' | '𐌀'..='𐌟' | '𐌭'..='𐍊' | '𐍐'..='\u{1037a}' | '𐎀'..='𐎝' | '𐎠'..='𐏃' | '𐏈'..='𐏏' | '𐏑'..='𐏕' | '𐐀'..='𐒝' | '𐒠'..='𐒩' | '𐒰'..='𐓓' | '𐓘'..='𐓻' | '𐔀'..='𐔧' | '𐔰'..='𐕣' | '𐕰'..='𐕺' | '𐕼'..='𐖊' | '𐖌'..='𐖒' | '𐖔'..='𐖕' | '𐖗'..='𐖡' | '𐖣'..='𐖱' | '𐖳'..='𐖹' | '𐖻'..='𐖼' | '𐗀'..='𐗳' | '𐘀'..='𐜶' | '𐝀'..='𐝕' | '𐝠'..='𐝧' | '𐞀'..='𐞅' | '𐞇'..='𐞰' | '𐞲'..='𐞺' | '𐠀'..='𐠅' | '𐠈' | '𐠊'..='𐠵' | '𐠷'..='𐠸' | '𐠼' | '𐠿'..='𐡕' | '𐡠'..='𐡶' | '𐢀'..='𐢞' | '𐣠'..='𐣲' | '𐣴'..='𐣵' | '𐤀'..='𐤕' | '𐤠'..='𐤹' | '𐥀'..='𐥙' | '𐦀'..='𐦷' | '𐦾'..='𐦿' | '𐨀'..='\u{10a03}' | '\u{10a05}'..='\u{10a06}' | '\u{10a0c}'..='𐨓' | '𐨕'..='𐨗' | '𐨙'..='𐨵' | '\u{10a38}'..='\u{10a3a}' | '\u{10a3f}' | '𐩠'..='𐩼' | '𐪀'..='𐪜' | '𐫀'..='𐫇' | '𐫉'..='\u{10ae6}' | '𐬀'..='𐬵' | '𐭀'..='𐭕' | '𐭠'..='𐭲' | '𐮀'..='𐮑' | '𐰀'..='𐱈' | '𐲀'..='𐲲' | '𐳀'..='𐳲' | '𐴀'..='\u{10d27}' | '𐴰'..='𐴹' | '𐵀'..='𐵥' | '\u{10d69}'..='\u{10d6d}' | '𐵯'..='𐶅' | '𐺀'..='𐺩' | '\u{10eab}'..='\u{10eac}' | '𐺰'..='𐺱' | '𐻂'..='𐻇' | '\u{10efa}'..='𐼜' | '𐼧' | '𐼰'..='\u{10f50}' | '𐽰'..='\u{10f85}' | '𐾰'..='𐿄' | '𐿠'..='𐿶' | '\u{11000}'..='\u{11046}' | '𑁦'..='𑁵' | '\u{1107f}'..='\u{110ba}' | '\u{110c2}' | '𑃐'..='𑃨' | '𑃰'..='𑃹' | '\u{11100}'..='\u{11134}' | '𑄶'..='𑄿' | '𑅄'..='𑅇' | '𑅐'..='\u{11173}' | '𑅶' | '\u{11180}'..='𑇄' | '\u{111c9}'..='\u{111cc}' | '\u{111ce}'..='𑇚' | '𑇜' | '𑈀'..='𑈑' | '𑈓'..='\u{11237}' | '\u{1123e}'..='\u{11241}' | '𑊀'..='𑊆' | '𑊈' | '𑊊'..='𑊍' | '𑊏'..='𑊝' | '𑊟'..='𑊨' | '𑊰'..='\u{112ea}' | '𑋰'..='𑋹' | '\u{11300}'..='\u{11303}' | '𑌅'..='𑌌' | '𑌏'..='𑌐' | '𑌓'..='𑌨' | '𑌪'..='𑌰' | '𑌲'..='𑌳' | '𑌵'..='𑌹' | '\u{1133b}'..='\u{11344}' | '\u{11347}'..='\u{11348}' | '\u{1134b}'..='\u{1134d}' | '𑍐' | '\u{11357}' | '𑍝'..='\u{11363}' | '\u{11366}'..='\u{1136c}' | '\u{11370}'..='\u{11374}' | '𑎀'..='𑎉' | '𑎋' | '𑎎' | '𑎐'..='𑎵' | '𑎷'..='\u{113c0}' | '\u{113c2}' | '\u{113c5}' | '\u{113c7}'..='\u{113ca}' | '\u{113cc}'..='𑏓' | '\u{113e1}'..='\u{113e2}' | '𑐀'..='𑑊' | '𑑐'..='𑑙' | '\u{1145e}'..='𑑡' | '𑒀'..='𑓅' | '𑓇' | '𑓐'..='𑓙' | '𑖀'..='\u{115b5}' | '\u{115b8}'..='\u{115c0}' | '𑗘'..='\u{115dd}' | '𑘀'..='\u{11640}' | '𑙄' | '𑙐'..='𑙙' | '𑚀'..='𑚸' | '𑛀'..='𑛉' | '𑛐'..='𑛣' | '𑜀'..='𑜚' | '\u{1171d}'..='\u{1172b}' | '𑜰'..='𑜹' | '𑝀'..='𑝆' | '𑠀'..='\u{1183a}' | '𑢠'..='𑣩' | '𑣿'..='𑤆' | '𑤉' | '𑤌'..='𑤓' | '𑤕'..='𑤖' | '𑤘'..='\u{11935}' | '\u{11937}'..='\u{11938}' | '\u{1193b}'..='\u{11943}' | '𑥐'..='𑥙' | '𑦠'..='𑦧' | '𑦪'..='\u{119d7}' | '\u{119da}'..='𑧡' | '𑧣'..='\u{119e4}' | '𑨀'..='\u{11a3e}' | '\u{11a47}' | '𑩐'..='\u{11a99}' | '𑪝' | '𑪰'..='𑫸' | '\u{11b60}'..='\u{11b67}' | '𑯀'..='𑯠' | '𑯰'..='𑯹' | '𑰀'..='𑰈' | '𑰊'..='\u{11c36}' | '\u{11c38}'..='𑱀' | '𑱐'..='𑱙' | '𑱲'..='𑲏' | '\u{11c92}'..='\u{11ca7}' | '\u{11ca9}'..='\u{11cb6}' | '𑴀'..='𑴆' | '𑴈'..='𑴉' | '𑴋'..='\u{11d36}' | '\u{11d3a}' | '\u{11d3c}'..='\u{11d3d}' | '\u{11d3f}'..='\u{11d47}' | '𑵐'..='𑵙' | '𑵠'..='𑵥' | '𑵧'..='𑵨' | '𑵪'..='\u{11d8e}' | '\u{11d90}'..='\u{11d91}' | '\u{11d93}'..='𑶘' | '𑶠'..='𑶩' | '𑶰'..='𑷛' | '𑷠'..='𑷩' | '𑻠'..='\u{11ef6}' | '\u{11f00}'..='𑼐' | '𑼒'..='\u{11f3a}' | '\u{11f3e}'..='\u{11f42}' | '𑽐'..='\u{11f5a}' | '𑾰' | '𒀀'..='𒎙' | '𒐀'..='𒑮' | '𒒀'..='𒕃' | '𒾐'..='𒿰' | '𓀀'..='𓐯' | '\u{13440}'..='\u{13455}' | '𓑠'..='𔏺' | '𔐀'..='𔙆' | '𖄀'..='𖄹' | '𖠀'..='𖨸' | '𖩀'..='𖩞' | '𖩠'..='𖩩' | '𖩰'..='𖪾' | '𖫀'..='𖫉' | '𖫐'..='𖫭' | '\u{16af0}'..='\u{16af4}' | '𖬀'..='\u{16b36}' | '𖭀'..='𖭃' | '𖭐'..='𖭙' | '𖭣'..='𖭷' | '𖭽'..='𖮏' | '𖵀'..='𖵬' | '𖵰'..='𖵹' | '𖹀'..='𖹿' | '𖺠'..='𖺸' | '𖺻'..='𖻓' | '𖼀'..='𖽊' | '\u{16f4f}'..='\u{16f87}' | '\u{16f8f}'..='𖾟' | '𖿠'..='𖿡' | '𖿣'..='\u{16fe4}' | '\u{16ff0}'..='𖿶' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛄲' | '𛅐'..='𛅒' | '𛅕' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𛰀'..='𛱪' | '𛱰'..='𛱼' | '𛲀'..='𛲈' | '𛲐'..='𛲙' | '\u{1bc9d}'..='\u{1bc9e}' | '𜳰'..='𜳹' | '\u{1cf00}'..='\u{1cf2d}' | '\u{1cf30}'..='\u{1cf46}' | '\u{1d165}'..='\u{1d169}' | '\u{1d16d}'..='\u{1d172}' | '\u{1d17b}'..='\u{1d182}' | '\u{1d185}'..='\u{1d18b}' | '\u{1d1aa}'..='\u{1d1ad}' | '\u{1d242}'..='\u{1d244}' | '𝐀'..='𝑔' | '𝑖'..='𝒜' | '𝒞'..='𝒟' | '𝒢' | '𝒥'..='𝒦' | '𝒩'..='𝒬' | '𝒮'..='𝒹' | '𝒻' | '𝒽'..='𝓃' | '𝓅'..='𝔅' | '𝔇'..='𝔊' | '𝔍'..='𝔔' | '𝔖'..='𝔜' | '𝔞'..='𝔹' | '𝔻'..='𝔾' | '𝕀'..='𝕄' | '𝕆' | '𝕊'..='𝕐' | '𝕒'..='𝚥' | '𝚨'..='𝛀' | '𝛂'..='𝛚' | '𝛜'..='𝛺' | '𝛼'..='𝜔' | '𝜖'..='𝜴' | '𝜶'..='𝝎' | '𝝐'..='𝝮' | '𝝰'..='𝞈' | '𝞊'..='𝞨' | '𝞪'..='𝟂' | '𝟄'..='𝟋' | '𝟎'..='𝟿' | '\u{1da00}'..='\u{1da36}' | '\u{1da3b}'..='\u{1da6c}' | '\u{1da75}' | '\u{1da84}' | '\u{1da9b}'..='\u{1da9f}' | '\u{1daa1}'..='\u{1daaf}' | '𝼀'..='𝼞' | '𝼥'..='𝼪' | '\u{1e000}'..='\u{1e006}' | '\u{1e008}'..='\u{1e018}' | '\u{1e01b}'..='\u{1e021}' | '\u{1e023}'..='\u{1e024}' | '\u{1e026}'..='\u{1e02a}' | '𞀰'..='𞁭' | '\u{1e08f}' | '𞄀'..='𞄬' | '\u{1e130}'..='𞄽' | '𞅀'..='𞅉' | '𞅎' | '𞊐'..='\u{1e2ae}' | '𞋀'..='𞋹' | '𞓐'..='𞓹' | '𞗐'..='𞗺' | '𞛀'..='𞛞' | '𞛠'..='\u{1e6f5}' | '𞛾'..='𞛿' | '𞟠'..='𞟦' | '𞟨'..='𞟫' | '𞟭'..='𞟮' | '𞟰'..='𞟾' | '𞠀'..='𞣄' | '\u{1e8d0}'..='\u{1e8d6}' | '𞤀'..='𞥋' | '𞥐'..='𞥙' | '𞸀'..='𞸃' | '𞸅'..='𞸟' | '𞸡'..='𞸢' | '𞸤' | '𞸧' | '𞸩'..='𞸲' | '𞸴'..='𞸷' | '𞸹' | '𞸻' | '𞹂' | '𞹇' | '𞹉' | '𞹋' | '𞹍'..='𞹏' | '𞹑'..='𞹒' | '𞹔' | '𞹗' | '𞹙' | '𞹛' | '𞹝' | '𞹟' | '𞹡'..='𞹢' | '𞹤' | '𞹧'..='𞹪' | '𞹬'..='𞹲' | '𞹴'..='𞹷' | '𞹹'..='𞹼' | '𞹾' | '𞺀'..='𞺉' | '𞺋'..='𞺛' | '𞺡'..='𞺣' | '𞺥'..='𞺩' | '𞺫'..='𞺻' | '🯰'..='🯹' | '𠀀'..='𪛟' | '𪜀'..='𫠝' | '𫠠'..='𬺭' | '𬺰'..='𮯠' | '𮯰'..='𮹝' | '丽'..='𪘀' | '𰀀'..='𱍊' | '𱍐'..='𳑹' | '\u{e0100}'..='\u{e01ef}' };
 }
 
 fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
@@ -4721,7 +4179,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 end = try_NEWLINE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_NEWLINE; best_channel = 1; }
             },
-            ' ' | ' ' | ' ' | ' '..=' ' | ' ' | ' ' | '　' => {
+            ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}' | '\u{202f}' | '\u{205f}' | '\u{3000}' => {
                 end = try_WHITESPACE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_WHITESPACE; best_channel = 1; }
             },
@@ -4879,7 +4337,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 end = try_AT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_AT; best_channel = 0; }
             },
-            'A'..='Z' | 'a' | 'c'..='q' | 's'..='z' | 'ª' | 'µ' | 'º' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ˁ' | 'ˆ'..='ˑ' | 'ˠ'..='ˤ' | 'ˬ' | 'ˮ' | 'Ͱ'..='ʹ' | 'Ͷ'..='ͷ' | 'ͺ'..='ͽ' | 'Ϳ' | 'Ά' | 'Έ'..='Ί' | 'Ό' | 'Ύ'..='Ρ' | 'Σ'..='ϵ' | 'Ϸ'..='ҁ' | 'Ҋ'..='ԯ' | 'Ա'..='Ֆ' | 'ՙ' | 'ՠ'..='ֈ' | 'א'..='ת' | 'ׯ'..='ײ' | 'ؠ'..='ي' | 'ٮ'..='ٯ' | 'ٱ'..='ۓ' | 'ە' | 'ۥ'..='ۦ' | 'ۮ'..='ۯ' | 'ۺ'..='ۼ' | 'ۿ' | 'ܐ' | 'ܒ'..='ܯ' | 'ݍ'..='ޥ' | 'ޱ' | 'ߊ'..='ߪ' | 'ߴ'..='ߵ' | 'ߺ' | 'ࠀ'..='ࠕ' | 'ࠚ' | 'ࠤ' | 'ࠨ' | 'ࡀ'..='ࡘ' | 'ࡠ'..='ࡪ' | 'ࡰ'..='ࢇ' | 'ࢉ'..='࢏' | 'ࢠ'..='ࣉ' | 'ऄ'..='ह' | 'ऽ' | 'ॐ' | 'क़'..='ॡ' | 'ॱ'..='ঀ' | 'অ'..='ঌ' | 'এ'..='ঐ' | 'ও'..='ন' | 'প'..='র' | 'ল' | 'শ'..='হ' | 'ঽ' | 'ৎ' | 'ড়'..='ঢ়' | 'য়'..='ৡ' | 'ৰ'..='ৱ' | 'ৼ' | 'ਅ'..='ਊ' | 'ਏ'..='ਐ' | 'ਓ'..='ਨ' | 'ਪ'..='ਰ' | 'ਲ'..='ਲ਼' | 'ਵ'..='ਸ਼' | 'ਸ'..='ਹ' | 'ਖ਼'..='ੜ' | 'ਫ਼' | 'ੲ'..='ੴ' | 'અ'..='ઍ' | 'એ'..='ઑ' | 'ઓ'..='ન' | 'પ'..='ર' | 'લ'..='ળ' | 'વ'..='હ' | 'ઽ' | 'ૐ' | 'ૠ'..='ૡ' | 'ૹ' | 'ଅ'..='ଌ' | 'ଏ'..='ଐ' | 'ଓ'..='ନ' | 'ପ'..='ର' | 'ଲ'..='ଳ' | 'ଵ'..='ହ' | 'ଽ' | 'ଡ଼'..='ଢ଼' | 'ୟ'..='ୡ' | 'ୱ' | 'ஃ' | 'அ'..='ஊ' | 'எ'..='ஐ' | 'ஒ'..='க' | 'ங'..='ச' | 'ஜ' | 'ஞ'..='ட' | 'ண'..='த' | 'ந'..='ப' | 'ம'..='ஹ' | 'ௐ' | 'అ'..='ఌ' | 'ఎ'..='ఐ' | 'ఒ'..='న' | 'ప'..='హ' | 'ఽ' | 'ౘ'..='ౚ' | '౜'..='ౝ' | 'ౠ'..='ౡ' | 'ಀ' | 'ಅ'..='ಌ' | 'ಎ'..='ಐ' | 'ಒ'..='ನ' | 'ಪ'..='ಳ' | 'ವ'..='ಹ' | 'ಽ' | '೜'..='ೞ' | 'ೠ'..='ೡ' | 'ೱ'..='ೲ' | 'ഄ'..='ഌ' | 'എ'..='ഐ' | 'ഒ'..='ഺ' | 'ഽ' | 'ൎ' | 'ൔ'..='ൖ' | 'ൟ'..='ൡ' | 'ൺ'..='ൿ' | 'අ'..='ඖ' | 'ක'..='න' | 'ඳ'..='ර' | 'ල' | 'ව'..='ෆ' | 'ก'..='ะ' | 'า'..='ำ' | 'เ'..='ๆ' | 'ກ'..='ຂ' | 'ຄ' | 'ຆ'..='ຊ' | 'ຌ'..='ຣ' | 'ລ' | 'ວ'..='ະ' | 'າ'..='ຳ' | 'ຽ' | 'ເ'..='ໄ' | 'ໆ' | 'ໜ'..='ໟ' | 'ༀ' | 'ཀ'..='ཇ' | 'ཉ'..='ཬ' | 'ྈ'..='ྌ' | 'က'..='ဪ' | 'ဿ' | 'ၐ'..='ၕ' | 'ၚ'..='ၝ' | 'ၡ' | 'ၥ'..='ၦ' | 'ၮ'..='ၰ' | 'ၵ'..='ႁ' | 'ႎ' | 'Ⴀ'..='Ⴥ' | 'Ⴧ' | 'Ⴭ' | 'ა'..='ჺ' | 'ჼ'..='ቈ' | 'ቊ'..='ቍ' | 'ቐ'..='ቖ' | 'ቘ' | 'ቚ'..='ቝ' | 'በ'..='ኈ' | 'ኊ'..='ኍ' | 'ነ'..='ኰ' | 'ኲ'..='ኵ' | 'ኸ'..='ኾ' | 'ዀ' | 'ዂ'..='ዅ' | 'ወ'..='ዖ' | 'ዘ'..='ጐ' | 'ጒ'..='ጕ' | 'ጘ'..='ፚ' | 'ᎀ'..='ᎏ' | 'Ꭰ'..='Ᏽ' | 'ᏸ'..='ᏽ' | 'ᐁ'..='ᙬ' | 'ᙯ'..='ᙿ' | 'ᚁ'..='ᚚ' | 'ᚠ'..='ᛪ' | 'ᛮ'..='ᛰ' | 'ᛱ'..='ᛸ' | 'ᜀ'..='ᜑ' | 'ᜟ'..='ᜱ' | 'ᝀ'..='ᝑ' | 'ᝠ'..='ᝬ' | 'ᝮ'..='ᝰ' | 'ក'..='ឳ' | 'ៗ' | 'ៜ' | 'ᠠ'..='ᡸ' | 'ᢀ'..='ᢄ' | 'ᢅ'..='ᢆ' | 'ᢇ'..='ᢨ' | 'ᢪ' | 'ᢰ'..='ᣵ' | 'ᤀ'..='ᤞ' | 'ᥐ'..='ᥭ' | 'ᥰ'..='ᥴ' | 'ᦀ'..='ᦫ' | 'ᦰ'..='ᧉ' | 'ᨀ'..='ᨖ' | 'ᨠ'..='ᩔ' | 'ᪧ' | 'ᬅ'..='ᬳ' | 'ᭅ'..='ᭌ' | 'ᮃ'..='ᮠ' | 'ᮮ'..='ᮯ' | 'ᮺ'..='ᯥ' | 'ᰀ'..='ᰣ' | 'ᱍ'..='ᱏ' | 'ᱚ'..='ᱽ' | 'ᲀ'..='ᲊ' | 'Ა'..='Ჺ' | 'Ჽ'..='Ჿ' | 'ᳩ'..='ᳬ' | 'ᳮ'..='ᳳ' | 'ᳵ'..='ᳶ' | 'ᳺ' | 'ᴀ'..='ᶿ' | 'Ḁ'..='ἕ' | 'Ἐ'..='Ἕ' | 'ἠ'..='ὅ' | 'Ὀ'..='Ὅ' | 'ὐ'..='ὗ' | 'Ὑ' | 'Ὓ' | 'Ὕ' | 'Ὗ'..='ώ' | 'ᾀ'..='ᾴ' | 'ᾶ'..='ᾼ' | 'ι' | 'ῂ'..='ῄ' | 'ῆ'..='ῌ' | 'ῐ'..='ΐ' | 'ῖ'..='Ί' | 'ῠ'..='Ῥ' | 'ῲ'..='ῴ' | 'ῶ'..='ῼ' | 'ⁱ' | 'ⁿ' | 'ₐ'..='ₜ' | 'ℂ' | 'ℇ' | 'ℊ'..='ℓ' | 'ℕ' | '℘' | 'ℙ'..='ℝ' | 'ℤ' | 'Ω' | 'ℨ' | 'K'..='ℭ' | '℮' | 'ℯ'..='ℹ' | 'ℼ'..='ℿ' | 'ⅅ'..='ⅉ' | 'ⅎ' | 'Ⅰ'..='ↂ' | 'Ↄ'..='ↄ' | 'ↅ'..='ↈ' | 'Ⰰ'..='ⳤ' | 'Ⳬ'..='ⳮ' | 'Ⳳ'..='ⳳ' | 'ⴀ'..='ⴥ' | 'ⴧ' | 'ⴭ' | 'ⴰ'..='ⵧ' | 'ⵯ' | 'ⶀ'..='ⶖ' | 'ⶠ'..='ⶦ' | 'ⶨ'..='ⶮ' | 'ⶰ'..='ⶶ' | 'ⶸ'..='ⶾ' | 'ⷀ'..='ⷆ' | 'ⷈ'..='ⷎ' | 'ⷐ'..='ⷖ' | 'ⷘ'..='ⷞ' | 'ⸯ' | '々'..='〆' | '〇' | '〡'..='〩' | '〱'..='〵' | '〸'..='〺' | '〻'..='〼' | 'ぁ'..='ゖ' | '゛'..='゜' | 'ゝ'..='ゟ' | 'ァ'..='ヺ' | 'ー'..='ヿ' | 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | 'ㆠ'..='ㆿ' | 'ㇰ'..='ㇿ' | '㐀'..='䶿' | '一'..='ꒌ' | 'ꓐ'..='ꓽ' | 'ꔀ'..='ꘌ' | 'ꘐ'..='ꘟ' | 'ꘪ'..='ꘫ' | 'Ꙁ'..='ꙮ' | 'ꙿ'..='ꚝ' | 'ꚠ'..='ꛥ' | 'ꛦ'..='ꛯ' | 'ꜗ'..='ꜟ' | 'Ꜣ'..='ꞈ' | 'Ꞌ'..='Ƛ' | '꟱'..='ꠁ' | 'ꠃ'..='ꠅ' | 'ꠇ'..='ꠊ' | 'ꠌ'..='ꠢ' | 'ꡀ'..='ꡳ' | 'ꢂ'..='ꢳ' | 'ꣲ'..='ꣷ' | 'ꣻ' | 'ꣽ'..='ꣾ' | 'ꤊ'..='ꤥ' | 'ꤰ'..='ꥆ' | 'ꥠ'..='ꥼ' | 'ꦄ'..='ꦲ' | 'ꧏ' | 'ꧠ'..='ꧤ' | 'ꧦ'..='ꧯ' | 'ꧺ'..='ꧾ' | 'ꨀ'..='ꨨ' | 'ꩀ'..='ꩂ' | 'ꩄ'..='ꩋ' | 'ꩠ'..='ꩶ' | 'ꩺ' | 'ꩾ'..='ꪯ' | 'ꪱ' | 'ꪵ'..='ꪶ' | 'ꪹ'..='ꪽ' | 'ꫀ' | 'ꫂ' | 'ꫛ'..='ꫝ' | 'ꫠ'..='ꫪ' | 'ꫲ'..='ꫴ' | 'ꬁ'..='ꬆ' | 'ꬉ'..='ꬎ' | 'ꬑ'..='ꬖ' | 'ꬠ'..='ꬦ' | 'ꬨ'..='ꬮ' | 'ꬰ'..='ꭚ' | 'ꭜ'..='ꭩ' | 'ꭰ'..='ꯢ' | '가'..='힣' | 'ힰ'..='ퟆ' | 'ퟋ'..='ퟻ' | '豈'..='舘' | '並'..='龎' | 'ﬀ'..='ﬆ' | 'ﬓ'..='ﬗ' | 'יִ' | 'ײַ'..='ﬨ' | 'שׁ'..='זּ' | 'טּ'..='לּ' | 'מּ' | 'נּ'..='סּ' | 'ףּ'..='פּ' | 'צּ'..='ﮱ' | 'ﯓ'..='ﴽ' | 'ﵐ'..='ﶏ' | 'ﶒ'..='ﷇ' | 'ﷰ'..='ﷻ' | 'ﹰ'..='ﹴ' | 'ﹶ'..='ﻼ' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ' | 'ｦ'..='ﾾ' | 'ￂ'..='ￇ' | 'ￊ'..='ￏ' | 'ￒ'..='ￗ' | 'ￚ'..='ￜ' | '𐀀'..='𐀋' | '𐀍'..='𐀦' | '𐀨'..='𐀺' | '𐀼'..='𐀽' | '𐀿'..='𐁍' | '𐁐'..='𐁝' | '𐂀'..='𐃺' | '𐅀'..='𐅴' | '𐊀'..='𐊜' | '𐊠'..='𐋐' | '𐌀'..='𐌟' | '𐌭'..='𐍀' | '𐍁' | '𐍂'..='𐍉' | '𐍊' | '𐍐'..='𐍵' | '𐎀'..='𐎝' | '𐎠'..='𐏃' | '𐏈'..='𐏏' | '𐏑'..='𐏕' | '𐐀'..='𐒝' | '𐒰'..='𐓓' | '𐓘'..='𐓻' | '𐔀'..='𐔧' | '𐔰'..='𐕣' | '𐕰'..='𐕺' | '𐕼'..='𐖊' | '𐖌'..='𐖒' | '𐖔'..='𐖕' | '𐖗'..='𐖡' | '𐖣'..='𐖱' | '𐖳'..='𐖹' | '𐖻'..='𐖼' | '𐗀'..='𐗳' | '𐘀'..='𐜶' | '𐝀'..='𐝕' | '𐝠'..='𐝧' | '𐞀'..='𐞅' | '𐞇'..='𐞰' | '𐞲'..='𐞺' | '𐠀'..='𐠅' | '𐠈' | '𐠊'..='𐠵' | '𐠷'..='𐠸' | '𐠼' | '𐠿'..='𐡕' | '𐡠'..='𐡶' | '𐢀'..='𐢞' | '𐣠'..='𐣲' | '𐣴'..='𐣵' | '𐤀'..='𐤕' | '𐤠'..='𐤹' | '𐥀'..='𐥙' | '𐦀'..='𐦷' | '𐦾'..='𐦿' | '𐨀' | '𐨐'..='𐨓' | '𐨕'..='𐨗' | '𐨙'..='𐨵' | '𐩠'..='𐩼' | '𐪀'..='𐪜' | '𐫀'..='𐫇' | '𐫉'..='𐫤' | '𐬀'..='𐬵' | '𐭀'..='𐭕' | '𐭠'..='𐭲' | '𐮀'..='𐮑' | '𐰀'..='𐱈' | '𐲀'..='𐲲' | '𐳀'..='𐳲' | '𐴀'..='𐴣' | '𐵊'..='𐵥' | '𐵯'..='𐶅' | '𐺀'..='𐺩' | '𐺰'..='𐺱' | '𐻂'..='𐻇' | '𐼀'..='𐼜' | '𐼧' | '𐼰'..='𐽅' | '𐽰'..='𐾁' | '𐾰'..='𐿄' | '𐿠'..='𐿶' | '𑀃'..='𑀷' | '𑁱'..='𑁲' | '𑁵' | '𑂃'..='𑂯' | '𑃐'..='𑃨' | '𑄃'..='𑄦' | '𑅄' | '𑅇' | '𑅐'..='𑅲' | '𑅶' | '𑆃'..='𑆲' | '𑇁'..='𑇄' | '𑇚' | '𑇜' | '𑈀'..='𑈑' | '𑈓'..='𑈫' | '𑈿'..='𑉀' | '𑊀'..='𑊆' | '𑊈' | '𑊊'..='𑊍' | '𑊏'..='𑊝' | '𑊟'..='𑊨' | '𑊰'..='𑋞' | '𑌅'..='𑌌' | '𑌏'..='𑌐' | '𑌓'..='𑌨' | '𑌪'..='𑌰' | '𑌲'..='𑌳' | '𑌵'..='𑌹' | '𑌽' | '𑍐' | '𑍝'..='𑍡' | '𑎀'..='𑎉' | '𑎋' | '𑎎' | '𑎐'..='𑎵' | '𑎷' | '𑏑' | '𑏓' | '𑐀'..='𑐴' | '𑑇'..='𑑊' | '𑑟'..='𑑡' | '𑒀'..='𑒯' | '𑓄'..='𑓅' | '𑓇' | '𑖀'..='𑖮' | '𑗘'..='𑗛' | '𑘀'..='𑘯' | '𑙄' | '𑚀'..='𑚪' | '𑚸' | '𑜀'..='𑜚' | '𑝀'..='𑝆' | '𑠀'..='𑠫' | '𑢠'..='𑣟' | '𑣿'..='𑤆' | '𑤉' | '𑤌'..='𑤓' | '𑤕'..='𑤖' | '𑤘'..='𑤯' | '𑤿' | '𑥁' | '𑦠'..='𑦧' | '𑦪'..='𑧐' | '𑧡' | '𑧣' | '𑨀' | '𑨋'..='𑨲' | '𑨺' | '𑩐' | '𑩜'..='𑪉' | '𑪝' | '𑪰'..='𑫸' | '𑯀'..='𑯠' | '𑰀'..='𑰈' | '𑰊'..='𑰮' | '𑱀' | '𑱲'..='𑲏' | '𑴀'..='𑴆' | '𑴈'..='𑴉' | '𑴋'..='𑴰' | '𑵆' | '𑵠'..='𑵥' | '𑵧'..='𑵨' | '𑵪'..='𑶉' | '𑶘' | '𑶰'..='𑷛' | '𑻠'..='𑻲' | '𑼂' | '𑼄'..='𑼐' | '𑼒'..='𑼳' | '𑾰' | '𒀀'..='𒎙' | '𒐀'..='𒑮' | '𒒀'..='𒕃' | '𒾐'..='𒿰' | '𓀀'..='𓐯' | '𓑁'..='𓑆' | '𓑠'..='𔏺' | '𔐀'..='𔙆' | '𖄀'..='𖄝' | '𖠀'..='𖨸' | '𖩀'..='𖩞' | '𖩰'..='𖪾' | '𖫐'..='𖫭' | '𖬀'..='𖬯' | '𖭀'..='𖭃' | '𖭣'..='𖭷' | '𖭽'..='𖮏' | '𖵀'..='𖵬' | '𖹀'..='𖹿' | '𖺠'..='𖺸' | '𖺻'..='𖻓' | '𖼀'..='𖽊' | '𖽐' | '𖾓'..='𖾟' | '𖿠'..='𖿡' | '𖿣' | '𖿲'..='𖿳' | '𖿴'..='𖿶' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛄲' | '𛅐'..='𛅒' | '𛅕' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𛰀'..='𛱪' | '𛱰'..='𛱼' | '𛲀'..='𛲈' | '𛲐'..='𛲙' | '𝐀'..='𝑔' | '𝑖'..='𝒜' | '𝒞'..='𝒟' | '𝒢' | '𝒥'..='𝒦' | '𝒩'..='𝒬' | '𝒮'..='𝒹' | '𝒻' | '𝒽'..='𝓃' | '𝓅'..='𝔅' | '𝔇'..='𝔊' | '𝔍'..='𝔔' | '𝔖'..='𝔜' | '𝔞'..='𝔹' | '𝔻'..='𝔾' | '𝕀'..='𝕄' | '𝕆' | '𝕊'..='𝕐' | '𝕒'..='𝚥' | '𝚨'..='𝛀' | '𝛂'..='𝛚' | '𝛜'..='𝛺' | '𝛼'..='𝜔' | '𝜖'..='𝜴' | '𝜶'..='𝝎' | '𝝐'..='𝝮' | '𝝰'..='𝞈' | '𝞊'..='𝞨' | '𝞪'..='𝟂' | '𝟄'..='𝟋' | '𝼀'..='𝼞' | '𝼥'..='𝼪' | '𞀰'..='𞁭' | '𞄀'..='𞄬' | '𞄷'..='𞄽' | '𞅎' | '𞊐'..='𞊭' | '𞋀'..='𞋫' | '𞓐'..='𞓫' | '𞗐'..='𞗭' | '𞗰' | '𞛀'..='𞛞' | '𞛠'..='𞛢' | '𞛤'..='𞛥' | '𞛧'..='𞛭' | '𞛰'..='𞛴' | '𞛾'..='𞛿' | '𞟠'..='𞟦' | '𞟨'..='𞟫' | '𞟭'..='𞟮' | '𞟰'..='𞟾' | '𞠀'..='𞣄' | '𞤀'..='𞥃' | '𞥋' | '𞸀'..='𞸃' | '𞸅'..='𞸟' | '𞸡'..='𞸢' | '𞸤' | '𞸧' | '𞸩'..='𞸲' | '𞸴'..='𞸷' | '𞸹' | '𞸻' | '𞹂' | '𞹇' | '𞹉' | '𞹋' | '𞹍'..='𞹏' | '𞹑'..='𞹒' | '𞹔' | '𞹗' | '𞹙' | '𞹛' | '𞹝' | '𞹟' | '𞹡'..='𞹢' | '𞹤' | '𞹧'..='𞹪' | '𞹬'..='𞹲' | '𞹴'..='𞹷' | '𞹹'..='𞹼' | '𞹾' | '𞺀'..='𞺉' | '𞺋'..='𞺛' | '𞺡'..='𞺣' | '𞺥'..='𞺩' | '𞺫'..='𞺻' | '𠀀'..='𪛟' | '𪜀'..='𫠝' | '𫠠'..='𬺭' | '𬺰'..='𮯠' | '𮯰'..='𮹝' | '丽'..='𪘀' | '𰀀'..='𱍊' | '𱍐'..='𳑹' => {
+            'A'..='Z' | 'a' | 'c'..='q' | 's'..='z' | 'ª' | 'µ' | 'º' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ˁ' | 'ˆ'..='ˑ' | 'ˠ'..='ˤ' | 'ˬ' | 'ˮ' | 'Ͱ'..='ʹ' | 'Ͷ'..='ͷ' | 'ͺ'..='ͽ' | 'Ϳ' | 'Ά' | 'Έ'..='Ί' | 'Ό' | 'Ύ'..='Ρ' | 'Σ'..='ϵ' | 'Ϸ'..='ҁ' | 'Ҋ'..='ԯ' | 'Ա'..='Ֆ' | 'ՙ' | 'ՠ'..='ֈ' | 'א'..='ת' | 'ׯ'..='ײ' | 'ؠ'..='ي' | 'ٮ'..='ٯ' | 'ٱ'..='ۓ' | 'ە' | 'ۥ'..='ۦ' | 'ۮ'..='ۯ' | 'ۺ'..='ۼ' | 'ۿ' | 'ܐ' | 'ܒ'..='ܯ' | 'ݍ'..='ޥ' | 'ޱ' | 'ߊ'..='ߪ' | 'ߴ'..='ߵ' | 'ߺ' | 'ࠀ'..='ࠕ' | 'ࠚ' | 'ࠤ' | 'ࠨ' | 'ࡀ'..='ࡘ' | 'ࡠ'..='ࡪ' | 'ࡰ'..='ࢇ' | 'ࢉ'..='࢏' | 'ࢠ'..='ࣉ' | 'ऄ'..='ह' | 'ऽ' | 'ॐ' | 'क़'..='ॡ' | 'ॱ'..='ঀ' | 'অ'..='ঌ' | 'এ'..='ঐ' | 'ও'..='ন' | 'প'..='র' | 'ল' | 'শ'..='হ' | 'ঽ' | 'ৎ' | 'ড়'..='ঢ়' | 'য়'..='ৡ' | 'ৰ'..='ৱ' | 'ৼ' | 'ਅ'..='ਊ' | 'ਏ'..='ਐ' | 'ਓ'..='ਨ' | 'ਪ'..='ਰ' | 'ਲ'..='ਲ਼' | 'ਵ'..='ਸ਼' | 'ਸ'..='ਹ' | 'ਖ਼'..='ੜ' | 'ਫ਼' | 'ੲ'..='ੴ' | 'અ'..='ઍ' | 'એ'..='ઑ' | 'ઓ'..='ન' | 'પ'..='ર' | 'લ'..='ળ' | 'વ'..='હ' | 'ઽ' | 'ૐ' | 'ૠ'..='ૡ' | 'ૹ' | 'ଅ'..='ଌ' | 'ଏ'..='ଐ' | 'ଓ'..='ନ' | 'ପ'..='ର' | 'ଲ'..='ଳ' | 'ଵ'..='ହ' | 'ଽ' | 'ଡ଼'..='ଢ଼' | 'ୟ'..='ୡ' | 'ୱ' | 'ஃ' | 'அ'..='ஊ' | 'எ'..='ஐ' | 'ஒ'..='க' | 'ங'..='ச' | 'ஜ' | 'ஞ'..='ட' | 'ண'..='த' | 'ந'..='ப' | 'ம'..='ஹ' | 'ௐ' | 'అ'..='ఌ' | 'ఎ'..='ఐ' | 'ఒ'..='న' | 'ప'..='హ' | 'ఽ' | 'ౘ'..='ౚ' | '౜'..='ౝ' | 'ౠ'..='ౡ' | 'ಀ' | 'ಅ'..='ಌ' | 'ಎ'..='ಐ' | 'ಒ'..='ನ' | 'ಪ'..='ಳ' | 'ವ'..='ಹ' | 'ಽ' | '೜'..='ೞ' | 'ೠ'..='ೡ' | 'ೱ'..='ೲ' | 'ഄ'..='ഌ' | 'എ'..='ഐ' | 'ഒ'..='ഺ' | 'ഽ' | 'ൎ' | 'ൔ'..='ൖ' | 'ൟ'..='ൡ' | 'ൺ'..='ൿ' | 'අ'..='ඖ' | 'ක'..='න' | 'ඳ'..='ර' | 'ල' | 'ව'..='ෆ' | 'ก'..='ะ' | 'า'..='ำ' | 'เ'..='ๆ' | 'ກ'..='ຂ' | 'ຄ' | 'ຆ'..='ຊ' | 'ຌ'..='ຣ' | 'ລ' | 'ວ'..='ະ' | 'າ'..='ຳ' | 'ຽ' | 'ເ'..='ໄ' | 'ໆ' | 'ໜ'..='ໟ' | 'ༀ' | 'ཀ'..='ཇ' | 'ཉ'..='ཬ' | 'ྈ'..='ྌ' | 'က'..='ဪ' | 'ဿ' | 'ၐ'..='ၕ' | 'ၚ'..='ၝ' | 'ၡ' | 'ၥ'..='ၦ' | 'ၮ'..='ၰ' | 'ၵ'..='ႁ' | 'ႎ' | 'Ⴀ'..='Ⴥ' | 'Ⴧ' | 'Ⴭ' | 'ა'..='ჺ' | 'ჼ'..='ቈ' | 'ቊ'..='ቍ' | 'ቐ'..='ቖ' | 'ቘ' | 'ቚ'..='ቝ' | 'በ'..='ኈ' | 'ኊ'..='ኍ' | 'ነ'..='ኰ' | 'ኲ'..='ኵ' | 'ኸ'..='ኾ' | 'ዀ' | 'ዂ'..='ዅ' | 'ወ'..='ዖ' | 'ዘ'..='ጐ' | 'ጒ'..='ጕ' | 'ጘ'..='ፚ' | 'ᎀ'..='ᎏ' | 'Ꭰ'..='Ᏽ' | 'ᏸ'..='ᏽ' | 'ᐁ'..='ᙬ' | 'ᙯ'..='ᙿ' | 'ᚁ'..='ᚚ' | 'ᚠ'..='ᛪ' | 'ᛮ'..='ᛰ' | 'ᛱ'..='ᛸ' | 'ᜀ'..='ᜑ' | 'ᜟ'..='ᜱ' | 'ᝀ'..='ᝑ' | 'ᝠ'..='ᝬ' | 'ᝮ'..='ᝰ' | 'ក'..='ឳ' | 'ៗ' | 'ៜ' | 'ᠠ'..='ᡸ' | 'ᢀ'..='ᢄ' | '\u{1885}'..='\u{1886}' | 'ᢇ'..='ᢨ' | 'ᢪ' | 'ᢰ'..='ᣵ' | 'ᤀ'..='ᤞ' | 'ᥐ'..='ᥭ' | 'ᥰ'..='ᥴ' | 'ᦀ'..='ᦫ' | 'ᦰ'..='ᧉ' | 'ᨀ'..='ᨖ' | 'ᨠ'..='ᩔ' | 'ᪧ' | 'ᬅ'..='ᬳ' | 'ᭅ'..='ᭌ' | 'ᮃ'..='ᮠ' | 'ᮮ'..='ᮯ' | 'ᮺ'..='ᯥ' | 'ᰀ'..='ᰣ' | 'ᱍ'..='ᱏ' | 'ᱚ'..='ᱽ' | 'ᲀ'..='ᲊ' | 'Ა'..='Ჺ' | 'Ჽ'..='Ჿ' | 'ᳩ'..='ᳬ' | 'ᳮ'..='ᳳ' | 'ᳵ'..='ᳶ' | 'ᳺ' | 'ᴀ'..='ᶿ' | 'Ḁ'..='ἕ' | 'Ἐ'..='Ἕ' | 'ἠ'..='ὅ' | 'Ὀ'..='Ὅ' | 'ὐ'..='ὗ' | 'Ὑ' | 'Ὓ' | 'Ὕ' | 'Ὗ'..='ώ' | 'ᾀ'..='ᾴ' | 'ᾶ'..='ᾼ' | 'ι' | 'ῂ'..='ῄ' | 'ῆ'..='ῌ' | 'ῐ'..='ΐ' | 'ῖ'..='Ί' | 'ῠ'..='Ῥ' | 'ῲ'..='ῴ' | 'ῶ'..='ῼ' | 'ⁱ' | 'ⁿ' | 'ₐ'..='ₜ' | 'ℂ' | 'ℇ' | 'ℊ'..='ℓ' | 'ℕ' | '℘' | 'ℙ'..='ℝ' | 'ℤ' | 'Ω' | 'ℨ' | 'K'..='ℭ' | '℮' | 'ℯ'..='ℹ' | 'ℼ'..='ℿ' | 'ⅅ'..='ⅉ' | 'ⅎ' | 'Ⅰ'..='ↂ' | 'Ↄ'..='ↄ' | 'ↅ'..='ↈ' | 'Ⰰ'..='ⳤ' | 'Ⳬ'..='ⳮ' | 'Ⳳ'..='ⳳ' | 'ⴀ'..='ⴥ' | 'ⴧ' | 'ⴭ' | 'ⴰ'..='ⵧ' | 'ⵯ' | 'ⶀ'..='ⶖ' | 'ⶠ'..='ⶦ' | 'ⶨ'..='ⶮ' | 'ⶰ'..='ⶶ' | 'ⶸ'..='ⶾ' | 'ⷀ'..='ⷆ' | 'ⷈ'..='ⷎ' | 'ⷐ'..='ⷖ' | 'ⷘ'..='ⷞ' | 'ⸯ' | '々'..='〆' | '〇' | '〡'..='〩' | '〱'..='〵' | '〸'..='〺' | '〻'..='〼' | 'ぁ'..='ゖ' | '゛'..='゜' | 'ゝ'..='ゟ' | 'ァ'..='ヺ' | 'ー'..='ヿ' | 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | 'ㆠ'..='ㆿ' | 'ㇰ'..='ㇿ' | '㐀'..='䶿' | '一'..='ꒌ' | 'ꓐ'..='ꓽ' | 'ꔀ'..='ꘌ' | 'ꘐ'..='ꘟ' | 'ꘪ'..='ꘫ' | 'Ꙁ'..='ꙮ' | 'ꙿ'..='ꚝ' | 'ꚠ'..='ꛥ' | 'ꛦ'..='ꛯ' | 'ꜗ'..='ꜟ' | 'Ꜣ'..='ꞈ' | 'Ꞌ'..='Ƛ' | '꟱'..='ꠁ' | 'ꠃ'..='ꠅ' | 'ꠇ'..='ꠊ' | 'ꠌ'..='ꠢ' | 'ꡀ'..='ꡳ' | 'ꢂ'..='ꢳ' | 'ꣲ'..='ꣷ' | 'ꣻ' | 'ꣽ'..='ꣾ' | 'ꤊ'..='ꤥ' | 'ꤰ'..='ꥆ' | 'ꥠ'..='ꥼ' | 'ꦄ'..='ꦲ' | 'ꧏ' | 'ꧠ'..='ꧤ' | 'ꧦ'..='ꧯ' | 'ꧺ'..='ꧾ' | 'ꨀ'..='ꨨ' | 'ꩀ'..='ꩂ' | 'ꩄ'..='ꩋ' | 'ꩠ'..='ꩶ' | 'ꩺ' | 'ꩾ'..='ꪯ' | 'ꪱ' | 'ꪵ'..='ꪶ' | 'ꪹ'..='ꪽ' | 'ꫀ' | 'ꫂ' | 'ꫛ'..='ꫝ' | 'ꫠ'..='ꫪ' | 'ꫲ'..='ꫴ' | 'ꬁ'..='ꬆ' | 'ꬉ'..='ꬎ' | 'ꬑ'..='ꬖ' | 'ꬠ'..='ꬦ' | 'ꬨ'..='ꬮ' | 'ꬰ'..='ꭚ' | 'ꭜ'..='ꭩ' | 'ꭰ'..='ꯢ' | '가'..='힣' | 'ힰ'..='ퟆ' | 'ퟋ'..='ퟻ' | '豈'..='舘' | '並'..='龎' | 'ﬀ'..='ﬆ' | 'ﬓ'..='ﬗ' | 'יִ' | 'ײַ'..='ﬨ' | 'שׁ'..='זּ' | 'טּ'..='לּ' | 'מּ' | 'נּ'..='סּ' | 'ףּ'..='פּ' | 'צּ'..='ﮱ' | 'ﯓ'..='ﴽ' | 'ﵐ'..='ﶏ' | 'ﶒ'..='ﷇ' | 'ﷰ'..='ﷻ' | 'ﹰ'..='ﹴ' | 'ﹶ'..='ﻼ' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ' | 'ｦ'..='ﾾ' | 'ￂ'..='ￇ' | 'ￊ'..='ￏ' | 'ￒ'..='ￗ' | 'ￚ'..='ￜ' | '𐀀'..='𐀋' | '𐀍'..='𐀦' | '𐀨'..='𐀺' | '𐀼'..='𐀽' | '𐀿'..='𐁍' | '𐁐'..='𐁝' | '𐂀'..='𐃺' | '𐅀'..='𐅴' | '𐊀'..='𐊜' | '𐊠'..='𐋐' | '𐌀'..='𐌟' | '𐌭'..='𐍀' | '𐍁' | '𐍂'..='𐍉' | '𐍊' | '𐍐'..='𐍵' | '𐎀'..='𐎝' | '𐎠'..='𐏃' | '𐏈'..='𐏏' | '𐏑'..='𐏕' | '𐐀'..='𐒝' | '𐒰'..='𐓓' | '𐓘'..='𐓻' | '𐔀'..='𐔧' | '𐔰'..='𐕣' | '𐕰'..='𐕺' | '𐕼'..='𐖊' | '𐖌'..='𐖒' | '𐖔'..='𐖕' | '𐖗'..='𐖡' | '𐖣'..='𐖱' | '𐖳'..='𐖹' | '𐖻'..='𐖼' | '𐗀'..='𐗳' | '𐘀'..='𐜶' | '𐝀'..='𐝕' | '𐝠'..='𐝧' | '𐞀'..='𐞅' | '𐞇'..='𐞰' | '𐞲'..='𐞺' | '𐠀'..='𐠅' | '𐠈' | '𐠊'..='𐠵' | '𐠷'..='𐠸' | '𐠼' | '𐠿'..='𐡕' | '𐡠'..='𐡶' | '𐢀'..='𐢞' | '𐣠'..='𐣲' | '𐣴'..='𐣵' | '𐤀'..='𐤕' | '𐤠'..='𐤹' | '𐥀'..='𐥙' | '𐦀'..='𐦷' | '𐦾'..='𐦿' | '𐨀' | '𐨐'..='𐨓' | '𐨕'..='𐨗' | '𐨙'..='𐨵' | '𐩠'..='𐩼' | '𐪀'..='𐪜' | '𐫀'..='𐫇' | '𐫉'..='𐫤' | '𐬀'..='𐬵' | '𐭀'..='𐭕' | '𐭠'..='𐭲' | '𐮀'..='𐮑' | '𐰀'..='𐱈' | '𐲀'..='𐲲' | '𐳀'..='𐳲' | '𐴀'..='𐴣' | '𐵊'..='𐵥' | '𐵯'..='𐶅' | '𐺀'..='𐺩' | '𐺰'..='𐺱' | '𐻂'..='𐻇' | '𐼀'..='𐼜' | '𐼧' | '𐼰'..='𐽅' | '𐽰'..='𐾁' | '𐾰'..='𐿄' | '𐿠'..='𐿶' | '𑀃'..='𑀷' | '𑁱'..='𑁲' | '𑁵' | '𑂃'..='𑂯' | '𑃐'..='𑃨' | '𑄃'..='𑄦' | '𑅄' | '𑅇' | '𑅐'..='𑅲' | '𑅶' | '𑆃'..='𑆲' | '𑇁'..='𑇄' | '𑇚' | '𑇜' | '𑈀'..='𑈑' | '𑈓'..='𑈫' | '𑈿'..='𑉀' | '𑊀'..='𑊆' | '𑊈' | '𑊊'..='𑊍' | '𑊏'..='𑊝' | '𑊟'..='𑊨' | '𑊰'..='𑋞' | '𑌅'..='𑌌' | '𑌏'..='𑌐' | '𑌓'..='𑌨' | '𑌪'..='𑌰' | '𑌲'..='𑌳' | '𑌵'..='𑌹' | '𑌽' | '𑍐' | '𑍝'..='𑍡' | '𑎀'..='𑎉' | '𑎋' | '𑎎' | '𑎐'..='𑎵' | '𑎷' | '𑏑' | '𑏓' | '𑐀'..='𑐴' | '𑑇'..='𑑊' | '𑑟'..='𑑡' | '𑒀'..='𑒯' | '𑓄'..='𑓅' | '𑓇' | '𑖀'..='𑖮' | '𑗘'..='𑗛' | '𑘀'..='𑘯' | '𑙄' | '𑚀'..='𑚪' | '𑚸' | '𑜀'..='𑜚' | '𑝀'..='𑝆' | '𑠀'..='𑠫' | '𑢠'..='𑣟' | '𑣿'..='𑤆' | '𑤉' | '𑤌'..='𑤓' | '𑤕'..='𑤖' | '𑤘'..='𑤯' | '𑤿' | '𑥁' | '𑦠'..='𑦧' | '𑦪'..='𑧐' | '𑧡' | '𑧣' | '𑨀' | '𑨋'..='𑨲' | '𑨺' | '𑩐' | '𑩜'..='𑪉' | '𑪝' | '𑪰'..='𑫸' | '𑯀'..='𑯠' | '𑰀'..='𑰈' | '𑰊'..='𑰮' | '𑱀' | '𑱲'..='𑲏' | '𑴀'..='𑴆' | '𑴈'..='𑴉' | '𑴋'..='𑴰' | '𑵆' | '𑵠'..='𑵥' | '𑵧'..='𑵨' | '𑵪'..='𑶉' | '𑶘' | '𑶰'..='𑷛' | '𑻠'..='𑻲' | '𑼂' | '𑼄'..='𑼐' | '𑼒'..='𑼳' | '𑾰' | '𒀀'..='𒎙' | '𒐀'..='𒑮' | '𒒀'..='𒕃' | '𒾐'..='𒿰' | '𓀀'..='𓐯' | '𓑁'..='𓑆' | '𓑠'..='𔏺' | '𔐀'..='𔙆' | '𖄀'..='𖄝' | '𖠀'..='𖨸' | '𖩀'..='𖩞' | '𖩰'..='𖪾' | '𖫐'..='𖫭' | '𖬀'..='𖬯' | '𖭀'..='𖭃' | '𖭣'..='𖭷' | '𖭽'..='𖮏' | '𖵀'..='𖵬' | '𖹀'..='𖹿' | '𖺠'..='𖺸' | '𖺻'..='𖻓' | '𖼀'..='𖽊' | '𖽐' | '𖾓'..='𖾟' | '𖿠'..='𖿡' | '𖿣' | '𖿲'..='𖿳' | '𖿴'..='𖿶' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛄲' | '𛅐'..='𛅒' | '𛅕' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𛰀'..='𛱪' | '𛱰'..='𛱼' | '𛲀'..='𛲈' | '𛲐'..='𛲙' | '𝐀'..='𝑔' | '𝑖'..='𝒜' | '𝒞'..='𝒟' | '𝒢' | '𝒥'..='𝒦' | '𝒩'..='𝒬' | '𝒮'..='𝒹' | '𝒻' | '𝒽'..='𝓃' | '𝓅'..='𝔅' | '𝔇'..='𝔊' | '𝔍'..='𝔔' | '𝔖'..='𝔜' | '𝔞'..='𝔹' | '𝔻'..='𝔾' | '𝕀'..='𝕄' | '𝕆' | '𝕊'..='𝕐' | '𝕒'..='𝚥' | '𝚨'..='𝛀' | '𝛂'..='𝛚' | '𝛜'..='𝛺' | '𝛼'..='𝜔' | '𝜖'..='𝜴' | '𝜶'..='𝝎' | '𝝐'..='𝝮' | '𝝰'..='𝞈' | '𝞊'..='𝞨' | '𝞪'..='𝟂' | '𝟄'..='𝟋' | '𝼀'..='𝼞' | '𝼥'..='𝼪' | '𞀰'..='𞁭' | '𞄀'..='𞄬' | '𞄷'..='𞄽' | '𞅎' | '𞊐'..='𞊭' | '𞋀'..='𞋫' | '𞓐'..='𞓫' | '𞗐'..='𞗭' | '𞗰' | '𞛀'..='𞛞' | '𞛠'..='𞛢' | '𞛤'..='𞛥' | '𞛧'..='𞛭' | '𞛰'..='𞛴' | '𞛾'..='𞛿' | '𞟠'..='𞟦' | '𞟨'..='𞟫' | '𞟭'..='𞟮' | '𞟰'..='𞟾' | '𞠀'..='𞣄' | '𞤀'..='𞥃' | '𞥋' | '𞸀'..='𞸃' | '𞸅'..='𞸟' | '𞸡'..='𞸢' | '𞸤' | '𞸧' | '𞸩'..='𞸲' | '𞸴'..='𞸷' | '𞸹' | '𞸻' | '𞹂' | '𞹇' | '𞹉' | '𞹋' | '𞹍'..='𞹏' | '𞹑'..='𞹒' | '𞹔' | '𞹗' | '𞹙' | '𞹛' | '𞹝' | '𞹟' | '𞹡'..='𞹢' | '𞹤' | '𞹧'..='𞹪' | '𞹬'..='𞹲' | '𞹴'..='𞹷' | '𞹹'..='𞹼' | '𞹾' | '𞺀'..='𞺉' | '𞺋'..='𞺛' | '𞺡'..='𞺣' | '𞺥'..='𞺩' | '𞺫'..='𞺻' | '𠀀'..='𪛟' | '𪜀'..='𫠝' | '𫠠'..='𬺭' | '𬺰'..='𮯠' | '𮯰'..='𮹝' | '丽'..='𪘀' | '𰀀'..='𱍊' | '𱍐'..='𳑹' => {
                 end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
             },
@@ -4937,7 +4395,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 end = try_RCURLYBRACE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_RCURLYBRACE; best_channel = 0; }
             },
-            '﻿' => {
+            '\u{feff}' => {
                 end = try_SHEBANG(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_SHEBANG; best_channel = 1; }
             },

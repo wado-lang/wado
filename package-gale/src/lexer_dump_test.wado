@@ -134,14 +134,37 @@ ID : [a-z]+ ;");
 }
 
 test "lexer dump reports a tail alternation as maximal munch" {
-    // `('0' | [1-9] [0-9]*)` — the arms reach different lengths, and nothing
-    // follows, so every arm is scanned and the longest wins.
+    // `('0' | [0-9] [0-9]*)` — the arms reach different lengths from the same
+    // char, and nothing follows, so every arm is scanned and the longest wins.
+    let report = lexer_dump("grammar T;
+r : INT ;
+INT : '0' | [0-9] [0-9]* ;");
+
+    assert str_contains(&report, "maximal munch"), report;
+    assert str_contains(&report, "maximal munch 1"), report;
+}
+
+test "lexer dump reports a tail alternation of disjoint arms as first-match" {
+    // Only one arm can start at any char, so it is the only one that can match.
     let report = lexer_dump("grammar T;
 r : INT ;
 INT : '0' | [1-9] [0-9]* ;");
 
-    assert str_contains(&report, "maximal munch"), report;
-    assert str_contains(&report, "maximal munch 1"), report;
+    assert str_contains(
+        &report,
+        "alternation ('0' | [1-9] [0-9]*) — first-match: no two arms can match at the same position",
+    ), report;
+    assert str_contains(&report, "maximal munch 0"), report;
+}
+
+test "lexer dump reads a fragment's first chars when telling arms apart" {
+    let report = lexer_dump("grammar T;
+r : NUM ;
+fragment D : [0-9] ;
+NUM : D+ ('.' D*)? | '.' D+ ;");
+
+    assert str_contains(&report, "— first-match: no two arms can match at the same position"), report;
+    assert str_contains(&report, "maximal munch 0"), report;
 }
 
 test "lexer dump reports equal-length arms as first-match" {

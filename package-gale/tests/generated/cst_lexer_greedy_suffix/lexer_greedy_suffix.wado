@@ -1176,79 +1176,35 @@ fn try_LETTERS(chars: &List<char>, start: i32) -> i32 {
     pos += 1;
     let mut accept_0: i32 = -1;
     if pos >= chars.len() { return -1; }
-    let not_saved_1 = pos;
-    let mut not_matched_1 = false;
-    not_1: {
-        let alts_saved_2 = pos;
-        alts_done_2: {
-            alts_2_0: {
-                pos = alts_saved_2;
-                if pos >= chars.len() || chars[pos] != 'b' { break alts_2_0; }
-                pos += 1;
-                break alts_done_2;
-            }
-            alts_2_1: {
-                pos = alts_saved_2;
-                if pos >= chars.len() || chars[pos] != ' ' { break alts_2_1; }
-                pos += 1;
-                break alts_done_2;
-            }
-            break not_1;
-        }
-        not_matched_1 = true;
-    }
-    pos = not_saved_1;
-    if not_matched_1 { return -1; }
+    if (chars[pos] matches { ' ' | 'b' }) { return -1; }
     pos += 1;
-    let peek_save_3 = pos;
-    let mut peek_ok_3 = false;
-    peek_3: {
-        if pos >= chars.len() || chars[pos] != 'c' { break peek_3; }
+    let peek_save_1 = pos;
+    let mut peek_ok_1 = false;
+    peek_1: {
+        if pos >= chars.len() || chars[pos] != 'c' { break peek_1; }
         pos += 1;
-        peek_ok_3 = true;
+        peek_ok_1 = true;
     }
-    pos = peek_save_3;
-    if peek_ok_3 {
-        accept_0 = peek_save_3;
+    pos = peek_save_1;
+    if peek_ok_1 {
+        accept_0 = peek_save_1;
     }
     loop {
         let la_saved_0 = pos;
         la_rep_0: {
             if pos >= chars.len() { break la_rep_0; }
-            let not_saved_4 = pos;
-            let mut not_matched_4 = false;
-            not_4: {
-                let alts_saved_5 = pos;
-                alts_done_5: {
-                    alts_5_0: {
-                        pos = alts_saved_5;
-                        if pos >= chars.len() || chars[pos] != 'b' { break alts_5_0; }
-                        pos += 1;
-                        break alts_done_5;
-                    }
-                    alts_5_1: {
-                        pos = alts_saved_5;
-                        if pos >= chars.len() || chars[pos] != ' ' { break alts_5_1; }
-                        pos += 1;
-                        break alts_done_5;
-                    }
-                    break not_4;
-                }
-                not_matched_4 = true;
-            }
-            pos = not_saved_4;
-            if not_matched_4 { break la_rep_0; }
+            if (chars[pos] matches { ' ' | 'b' }) { break la_rep_0; }
             pos += 1;
-            let peek_save_6 = pos;
-            let mut peek_ok_6 = false;
-            peek_6: {
-                if pos >= chars.len() || chars[pos] != 'c' { break peek_6; }
+            let peek_save_2 = pos;
+            let mut peek_ok_2 = false;
+            peek_2: {
+                if pos >= chars.len() || chars[pos] != 'c' { break peek_2; }
                 pos += 1;
-                peek_ok_6 = true;
+                peek_ok_2 = true;
             }
-            pos = peek_save_6;
-            if peek_ok_6 {
-                accept_0 = peek_save_6;
+            pos = peek_save_2;
+            if peek_ok_2 {
+                accept_0 = peek_save_2;
             }
             continue;
         }
