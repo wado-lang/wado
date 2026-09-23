@@ -5390,10 +5390,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 dispatch.return_type,
                 binary.span,
             );
-            // The source operator decides the wrapping the elaborator applies
-            // after the call: `!=` negates the `eq` result, and an ordering
-            // operator reads the `Ordering` an `Ord::cmp` answers. An
-            // `OperatorOrd` method already answers the operator itself.
+            // `!=` negates `eq`, and an ordering operator reads `cmp`'s
+            // `Ordering`; an `OperatorOrd` method already answers a `bool`.
             return match binary.op {
                 ast::BinaryOp::NotEq if call.type_id == TypeTable::BOOL => TirExpr::new(
                     TirExprKind::Unary {

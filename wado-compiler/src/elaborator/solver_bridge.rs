@@ -1394,9 +1394,8 @@ impl SolverBridge {
         let call_package = module.package_id();
         let module = self.lowering.known_module(module)?;
         let mut found = candidates(&self.program, &env, &ty, method, module);
-        // An out-of-scope candidate stands for "import its trait". A trait the
-        // call site cannot name has no import to suggest, so it is absent
-        // rather than out of scope, and the call reads as a missing method.
+        // An out-of-scope candidate suggests importing its trait, so a trait the
+        // call site cannot name is dropped and the call reads as a missing method.
         {
             let defs = tysys.resolutions.defs();
             found.out_of_scope.retain(|c| {

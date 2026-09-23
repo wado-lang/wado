@@ -568,12 +568,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             // Initialized let: bind the initializer first (uses outer scope vars)
             self.bind_expr(value)?;
 
-            // Same-scope shadowing that derives from the old binding, as
-            // `let x = x + 1` and `let Some(x) = x else …` both do. The old
-            // binding had to stay in scope for `bind_expr` above, so it is
-            // dropped here, before `define` would call it a duplicate. Every
-            // name the pattern binds is checked: a payload shadows exactly as
-            // a plain identifier does.
+            // `let x = x + 1` and `let Some(x) = x else …` shadow the binding the
+            // initializer read, so it leaves scope before `define` calls it a duplicate.
             let mut bound: Vec<String> = Vec::new();
             for_each_pattern_name(&let_stmt.pattern, &mut |name, _| {
                 bound.push(name.to_string());
@@ -619,9 +615,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         }
     }
 
-    /// Walk `pattern` and enter each name it binds, as `kind` defines them.
-    /// One walk for all three kinds: a walk apiece is how `Variant` came to be
-    /// handled in the refutable one and dropped from the other two.
+    /// Enter each name `pattern` binds, as `kind` defines them. One walk for
+    /// every kind: a walk apiece once dropped `Variant` from two of them.
     fn bind_pattern_as(
         &mut self,
         pattern: &Pattern,

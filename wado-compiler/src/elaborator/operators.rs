@@ -228,11 +228,8 @@ impl TypeSystem {
         }
     }
 
-    /// The receiver a primitive's own comparison impl attaches to, where the
-    /// operator has no Wasm instruction to lower to: the half types and
-    /// `v128`. `head` is `operand`'s representation head, so an alias
-    /// (`type f32x4 = v128`) reaches the impl its base writes. Every other
-    /// primitive lowers natively and must not be routed through a call.
+    /// The primitive whose `core:prelude` impl answers an operator on `operand`
+    /// that no Wasm instruction carries. `head` is `operand`'s representation head.
     fn primitive_op_receiver(&self, operand: TypeId, head: TypeId) -> Option<String> {
         if !self.binop_operand_requires_trait(operand) {
             return None;
@@ -271,11 +268,8 @@ impl TypeSystem {
             // lowering for BuiltinArray"). Its comparison dispatches through the
             // element-wise `Eq` / `Ord` impls in `core:prelude/array.wado`.
             ResolvedType::BuiltinArray(_) => true,
-            // Wasm has no instruction for either. `i32.eq` against a `v128` is
-            // invalid core Wasm ("type mismatch: expected i32, found v128"),
-            // and the `u16` a half lowers to would add two bit patterns. Both
-            // dispatch to their `core:prelude` impls, which `Eq` has and the
-            // arithmetic operators deliberately do not.
+            // No Wasm instruction: `i32.eq` on a `v128` is invalid, and a half's
+            // `u16` would add bit patterns. Their `core:prelude` impls answer.
             ResolvedType::Primitive(
                 PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16,
             ) => true,
@@ -468,10 +462,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) {
-                    // `Ord` is the total order, which is not what a float's
-                    // operators mean: a half's `cmp` sorts a NaN at an end
-                    // where its `<` is IEEE. A type whose two orders differ
-                    // writes `OperatorOrd`, and the operators read that.
+                    // A half's `cmp` is the total order and its `<` is IEEE, so
+                    // `OperatorOrd` goes first where a type writes one.
                     let resolved = self
                         .resolve_operator_ord_method(&struct_name, lookup_type_id, op)
                         .or_else(|| {
