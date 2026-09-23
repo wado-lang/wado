@@ -3556,17 +3556,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             | ResolvedType::Variant { .. }
                     )
             };
-            // A type parameter is only settled by monomorphization, and `!`
-            // converts to anything.
+            // Only a settled scalar is known to share nothing with an aggregate:
+            // a reference reads through, and a parameter settles later.
             let source_base = tt.representation_head(source_type);
-            let source_judged_here = !tt.is_wide_int(source_type)
-                && !matches!(
-                    tt.get(source_base),
-                    ResolvedType::TypeParam { .. }
-                        | ResolvedType::InferVar(_)
-                        | ResolvedType::Never
-                );
-            (is_aggregate(source_type) || (source_judged_here && is_aggregate(target_type)))
+            let source_is_scalar = matches!(
+                tt.get(source_base),
+                ResolvedType::Primitive(_)
+                    | ResolvedType::Unit
+                    | ResolvedType::Enum { .. }
+                    | ResolvedType::Flags { .. }
+            );
+            (is_aggregate(source_type) || (source_is_scalar && is_aggregate(target_type)))
                 && source_base != tt.representation_head(target_type)
         };
         if unrelated_aggregate {
