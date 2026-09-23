@@ -202,7 +202,7 @@ struct Candidate {
 
 /// Narrow to the candidates the rule prefers, where any of them qualifies.
 /// A rule that no candidate satisfies decides nothing and leaves the field.
-fn prefer(candidates: &mut Vec<Candidate>, preferred: impl Fn(&Candidate) -> bool) {
+pub(super) fn prefer<C>(candidates: &mut Vec<C>, preferred: impl Fn(&C) -> bool) {
     if candidates.iter().any(&preferred) {
         candidates.retain(&preferred);
     }
@@ -569,6 +569,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The rules, applied once to every candidate whatever rung produced it.
     /// Their order is the design, not an implementation detail.
     fn select_candidate(&self, mut candidates: Vec<Candidate>, arg_types: &[TypeId]) -> Selection {
+        // A reserved name answers only where no method does, so it can say why
+        // without making a call that has a method ambiguous.
+        prefer(&mut candidates, |c| {
+            !self.tysys.unavailable.contains_key(&c.method_id)
+        });
         // The receiver's own declaration shadows an inherited one of the same
         // kind: a receiver-less declaration beside an instance one is no
         // alternative, since different argument lists reach them.

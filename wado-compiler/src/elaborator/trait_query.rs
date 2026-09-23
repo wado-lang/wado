@@ -21,6 +21,7 @@ use super::scope::{
     trait_params_from_impl,
 };
 use super::sig::Param;
+use super::static_call::prefer;
 use super::trait_env::{InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
 use super::types::{
@@ -2204,6 +2205,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .is_some_and(|header| header.methods.iter().any(|m| m.name == method_name))
     }
 
+    /// Whether the trait `key` names reserves `method_name` `#[unavailable]`.
+    fn trait_reserves_method_of(&self, key: &DefId, method_name: &str) -> bool {
+        self.trait_decl_header_of(key).is_some_and(|header| {
+            header
+                .methods
+                .iter()
+                .any(|m| m.name == method_name && m.is_reserved)
+        })
+    }
+
     /// The recorded signature of `method_name` on the trait `trait_name` names
     /// in this frame, with the associated-type declarations its body may name —
     /// the trait's own and every supertrait's, since `Self::Elem` in a
@@ -2545,7 +2556,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 written_self: elaborated.self_type,
             });
         }
-        let candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, args);
+        let mut candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, args);
+        prefer(&mut candidates, |c| {
+            !self.trait_reserves_method_of(&c.decl, method_name)
+        });
         let resolved = candidates.first().and_then(|candidate| {
             self.trait_method_of(&candidate.decl, method_name)
                 .map(|found| (candidate.clone(), found))

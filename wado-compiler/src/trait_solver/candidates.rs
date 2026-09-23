@@ -3,7 +3,7 @@
 //! between them is [`rank`](super::rank).
 
 use super::holds::{impl_applies, newtype_base};
-use super::program::{Env, MethodId, ModuleId, Program, SolverType, TraitDeclId};
+use super::program::{Env, MethodId, ModuleId, Program, SolverType, TraitDeclId, TraitDef};
 use super::rank::{Candidate, Generality};
 
 /// The candidates at one call site, and what the diagnostic needs where there
@@ -33,6 +33,26 @@ pub fn candidates(
         .scopes
         .get(&scope)
         .map_or(&[], |module| &module.traits_in_scope);
+    let answered = collect(program, env, receiver, scope, in_scope, |decl, own| {
+        decl.is_some_and(|d| d.methods.contains(&method)) || own.contains(&method)
+    });
+    if !answered.in_scope.is_empty() || !answered.out_of_scope.is_empty() {
+        return answered;
+    }
+    collect(program, env, receiver, scope, in_scope, |decl, _| {
+        decl.is_some_and(|d| d.reserved.contains(&method))
+    })
+}
+
+/// The impls whose trait or own body `declares` the method.
+fn collect(
+    program: &Program,
+    env: &Env,
+    receiver: &SolverType,
+    scope: ModuleId,
+    in_scope: &[TraitDeclId],
+    declares: impl Fn(Option<&TraitDef>, &[MethodId]) -> bool,
+) -> Candidates {
     let mut found = Candidates::default();
     for (depth, ty) in chain(program, receiver).iter().enumerate() {
         let depth = u32::try_from(depth).expect("a chain shorter than 2^32");
@@ -40,15 +60,8 @@ pub fn candidates(
             let Some(trait_) = def.trait_ else {
                 continue;
             };
-            let declared = program
-                .traits
-                .get(&trait_)
-                .is_some_and(|decl| decl.methods.contains(&method))
-                || program
-                    .impl_methods
-                    .get(&impl_)
-                    .is_some_and(|own| own.contains(&method));
-            if !declared {
+            let own = program.impl_methods.get(&impl_).map_or(&[][..], Vec::as_slice);
+            if !declares(program.traits.get(&trait_), own) {
                 continue;
             }
             let Some(trait_args) = impl_applies(program, env, scope, impl_, def, ty) else {
