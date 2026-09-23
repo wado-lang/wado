@@ -210,6 +210,13 @@ of it is committed work.
 No arithmetic, so every computation widens to `f32` and narrows again to store.
 A generic body bounded on `Add` cannot be instantiated at either type.
 
+`wado doc` filters a trait declaration by visibility but not an impl of one, so
+the generated `core:prelude` page lists `impl OperatorOrd for f16` and its four
+methods with no trait definition anywhere on it, and a reader who calls one is
+told the method does not exist. The trait declaration and its impls reach the
+page from different modules, and nothing carries a trait's visibility across
+that boundary.
+
 A comparison widens both operands and calls, where `f32`'s is one instruction.
 Both have an implementation that never widens: `Eq` reads the bits, since equal
 bits are equal values unless both are NaN and different bits are different
