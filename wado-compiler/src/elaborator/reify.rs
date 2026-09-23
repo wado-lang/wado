@@ -253,6 +253,13 @@ fn build_literal_from_call(array: TirExpr, call: &LiteralFromCall, span: Span) -
     )
 }
 
+/// What `==` compares when it compares by identity.
+enum Identity {
+    Reference,
+    /// A resource handle, compared under this chain root.
+    Handle(TypeId),
+}
+
 /// Cast a `from` result to the newtype the literal targeted, where it targeted
 /// one.
 fn cast_to_newtype(built: TirExpr, newtype_cast_to: Option<tir::TypeId>, span: Span) -> TirExpr {
@@ -5247,7 +5254,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{CallArg, ResolvedType, TirBinaryOp, TirExprKind, TirUnaryOp, TypeTable};
+        use crate::tir::{CallArg, ResolvedType, TirExprKind, TirUnaryOp, TypeTable};
 
         // Mirror `resolve_binary_operands_with_coercion`:
         // a numeric-literal operand is typed from the *other* operand (or,
@@ -5313,64 +5320,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             (left, right)
         };
 
-        // Reference equality: when both operands are references, the
-        // elaborator emits `RefEq` / `RefNotEq` (identity comparison)
-        // rather than dispatching to `Eq` — and records no operator
-        // dispatch. The decision is from operand types alone, so reify
-        // reproduces it here.
-        if matches!(binary.op, ast::BinaryOp::Eq | ast::BinaryOp::NotEq) {
-            let both_refs = {
-                let tt = self.tysys.type_table.borrow();
-                matches!(
-                    (tt.get(left.type_id), tt.get(right.type_id)),
-                    (ResolvedType::Ref(_), ResolvedType::Ref(_))
-                        | (ResolvedType::MutRef(_), ResolvedType::MutRef(_))
-                )
-            };
-            if both_refs {
-                let op = if binary.op == ast::BinaryOp::Eq {
-                    TirBinaryOp::RefEq
-                } else {
-                    TirBinaryOp::RefNotEq
-                };
-                return TirExpr::new(
-                    TirExprKind::Binary {
-                        op,
-                        left: Box::new(left),
-                        right: Box::new(right),
-                    },
-                    TypeTable::BOOL,
-                    binary.span,
-                );
-            }
-            let identity_root = self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .identity_root(left.type_id, right.type_id);
-            if let Some(root) = identity_root {
-                let same = TirExpr::new(
-                    TirExprKind::method_call(
-                        Box::new(left),
-                        self.lang_predicate_ref(root, IDENTITY_TEST_METHOD),
-                        vec![],
-                        vec![CallArg::new(right, false)],
-                    ),
-                    TypeTable::BOOL,
-                    binary.span,
-                );
-                if binary.op == ast::BinaryOp::Eq {
-                    return same;
-                }
-                return TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Not,
-                        expr: Box::new(same),
-                    },
-                    TypeTable::BOOL,
-                    binary.span,
-                );
-            }
+        if let Some(identity) = self.identity_of(binary.op, left.type_id, right.type_id) {
+            return self.identity_comparison(identity, binary.op, left, right, binary.span);
         }
 
         if let Some(dispatch) = self.ann_operator_dispatch(binary.id) {
@@ -6624,11 +6575,105 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a comparison chain `a < b < c …` into
-    /// `(a < m_0) && (m_0 < m_1) && …` inside a block holding one `$mK` binding
-    /// per middle term, so no term is re-evaluated. Non-primitive operands
-    /// dispatch through the `operator_dispatch` record on the chain's own
-    /// `AstId` — the synthesised inner comparisons have no source id.
+    /// One link of a comparison chain. A non-primitive operand stays a
+    /// `Binary`, which monomorphization turns into its `Eq` / `Ord` call.
+    fn chain_comparison(
+        &mut self,
+        op: ast::BinaryOp,
+        left: TirExpr,
+        right: TirExpr,
+        span: Span,
+    ) -> TirExpr {
+        use crate::tir::{TirExprKind, TypeTable};
+
+        if let Some(identity) = self.identity_of(op, left.type_id, right.type_id) {
+            return self.identity_comparison(identity, op, left, right, span);
+        }
+        TirExpr::new(
+            TirExprKind::Binary {
+                left: Box::new(left),
+                op: ast_binary_op_to_tir(op),
+                right: Box::new(right),
+            },
+            TypeTable::BOOL,
+            span,
+        )
+    }
+
+    /// How `==` / `!=` compares these operands by identity, if it does.
+    fn identity_of(&self, op: ast::BinaryOp, left: TypeId, right: TypeId) -> Option<Identity> {
+        use crate::tir::ResolvedType;
+
+        if !matches!(op, ast::BinaryOp::Eq | ast::BinaryOp::NotEq) {
+            return None;
+        }
+        let mut type_table = self.tysys.type_table.borrow_mut();
+        if matches!(
+            (type_table.get(left), type_table.get(right)),
+            (ResolvedType::Ref(_), ResolvedType::Ref(_))
+                | (ResolvedType::MutRef(_), ResolvedType::MutRef(_))
+        ) {
+            return Some(Identity::Reference);
+        }
+        type_table.identity_root(left, right).map(Identity::Handle)
+    }
+
+    /// `==` / `!=` by identity: `ref.eq` on references, the host's `is-same`
+    /// on resource handles.
+    fn identity_comparison(
+        &mut self,
+        identity: Identity,
+        op: ast::BinaryOp,
+        left: TirExpr,
+        right: TirExpr,
+        span: Span,
+    ) -> TirExpr {
+        use crate::tir::{CallArg, TirBinaryOp, TirExprKind, TirUnaryOp, TypeTable};
+
+        let is_eq = op == ast::BinaryOp::Eq;
+        let same = match identity {
+            Identity::Reference => {
+                let op = if is_eq {
+                    TirBinaryOp::RefEq
+                } else {
+                    TirBinaryOp::RefNotEq
+                };
+                return TirExpr::new(
+                    TirExprKind::Binary {
+                        op,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                );
+            }
+            Identity::Handle(root) => TirExpr::new(
+                TirExprKind::method_call(
+                    Box::new(left),
+                    self.lang_predicate_ref(root, IDENTITY_TEST_METHOD),
+                    vec![],
+                    vec![CallArg::new(right, false)],
+                ),
+                TypeTable::BOOL,
+                span,
+            ),
+        };
+        if is_eq {
+            return same;
+        }
+        TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Not,
+                expr: Box::new(same),
+            },
+            TypeTable::BOOL,
+            span,
+        )
+    }
+
+    /// Reify a comparison chain `a < b < c …` into `(a < $m0) & ($m0 < c) …`
+    /// in a block binding each middle term once.
     fn reify_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
@@ -6636,110 +6681,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::{TirBinaryOp, TirBlock, TirExprKind, TirStmtKind, TypeTable};
 
-        if chain.comparisons.is_empty() {
-            // Degenerate parse — annotate emits `chain.first` as-is.
-            return self.reify_expr(&chain.first, ctx, None);
-        }
-
-        if chain.comparisons.len() == 1 {
-            let cmp = &chain.comparisons[0];
-            let (left, right) = if Elaborator::<H>::takes_shape_from_expected_type(&chain.first)
-                && !Elaborator::<H>::takes_shape_from_expected_type(&cmp.right)
-            {
-                let right = self.reify_expr(&cmp.right, ctx, None);
-                let left = self.reify_expr(&chain.first, ctx, Some(right.type_id));
-                (left, right)
-            } else {
-                let left = self.reify_expr(&chain.first, ctx, None);
-                let right = self.reify_expr(&cmp.right, ctx, Some(left.type_id));
-                (left, right)
-            };
-
-            // Non-primitive comparison dispatches through `Eq::eq` /
-            // `Ord::cmp`; the recording fires on `chain.id`.
-            if let Some(dispatch) = self.ann_operator_dispatch(chain.id) {
-                let receiver = adjust_receiver_for_self_kind(
-                    left,
-                    dispatch.self_kind,
-                    /* is_ref_impl */ false,
-                    chain.span,
-                    &self.tysys.type_table,
-                );
-                let args = vec![right];
-                let call_args: Vec<CallArg> = args
-                    .into_iter()
-                    .zip(dispatch.arg_ref_wraps.iter().copied())
-                    .map(|(arg, wrap)| {
-                        let arg_expr = if wrap {
-                            let arg_ref_type = self
-                                .tysys
-                                .type_table
-                                .borrow_mut()
-                                .intern(ResolvedType::Ref(arg.type_id));
-                            TirExpr::new(
-                                TirExprKind::Unary {
-                                    op: TirUnaryOp::Ref,
-                                    expr: Box::new(arg),
-                                },
-                                arg_ref_type,
-                                chain.span,
-                            )
-                        } else {
-                            arg
-                        };
-                        CallArg::new(arg_expr, false)
-                    })
-                    .collect();
-                let method_call = build_tir_method_call(
-                    receiver,
-                    dispatch.function_ref,
-                    vec![],
-                    call_args,
-                    dispatch.return_type,
-                    chain.span,
-                );
-
-                // Ord ops wrap `cmp(...) ==/!= Less/Greater`;
-                // `!=` via `Eq::eq` wraps with `!`.
-                use ast::BinaryOp;
-                if matches!(
-                    cmp.op,
-                    BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
-                ) {
-                    return ord_bool_from_cmp(
-                        method_call,
-                        cmp.op,
-                        chain.span,
-                        &self.tysys.type_table,
-                    );
-                }
-                if cmp.op == BinaryOp::NotEq && method_call.type_id == TypeTable::BOOL {
-                    return TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Not,
-                            expr: Box::new(method_call),
-                        },
-                        TypeTable::BOOL,
-                        chain.span,
-                    );
-                }
-                return method_call;
-            }
-
-            let recorded_type = self
-                .ann_expression_types(chain.id)
-                .unwrap_or(TypeTable::BOOL);
-            return TirExpr::new(
-                TirExprKind::Binary {
-                    left: Box::new(left),
-                    op: ast_binary_op_to_tir(cmp.op),
-                    right: Box::new(right),
-                },
-                recorded_type,
-                cmp.op_span,
-            );
-        }
-
+        assert!(
+            chain.comparisons.len() >= 2,
+            "the parser makes a single comparison a `Binary`"
+        );
         ctx.enter_scope();
         let mut stmts: Vec<TirStmt> = Vec::new();
 
@@ -6772,15 +6717,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             chain.span,
         );
 
-        let mut acc_tir = TirExpr::new(
-            TirExprKind::Binary {
-                left: Box::new(first_tir),
-                op: ast_binary_op_to_tir(cmp0.op),
-                right: Box::new(m0_ref.clone()),
-            },
-            TypeTable::BOOL,
-            cmp0.op_span,
-        );
+        let mut acc_tir = self.chain_comparison(cmp0.op, first_tir, m0_ref.clone(), cmp0.op_span);
         let mut prev_tir = m0_ref;
 
         let last_idx = chain.comparisons.len() - 1;
@@ -6815,15 +6752,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             };
             let next_prev = right_tir.clone();
-            let cmp_tir = TirExpr::new(
-                TirExprKind::Binary {
-                    left: Box::new(prev_tir),
-                    op: ast_binary_op_to_tir(cmp.op),
-                    right: Box::new(right_tir),
-                },
-                TypeTable::BOOL,
-                cmp.op_span,
-            );
+            let cmp_tir = self.chain_comparison(cmp.op, prev_tir, right_tir, cmp.op_span);
             acc_tir = TirExpr::new(
                 TirExprKind::Binary {
                     left: Box::new(acc_tir),

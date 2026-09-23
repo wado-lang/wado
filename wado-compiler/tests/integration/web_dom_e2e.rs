@@ -114,6 +114,7 @@ export fn run() with (Dom, Event) {
 
     assert div == div;
     assert as_node == div;
+    assert div == as_node == div;
     assert div != doc.create_element("div", null);
     assert doc.get_element_by_id("d") matches { Some(found) && found == div };
 

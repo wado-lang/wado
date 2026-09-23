@@ -601,6 +601,19 @@ fn extract_cm_params_attr(attrs: &[Attribute]) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// One entry per CM function name, keeping the first binding of each. A CM
+/// interface exports a name once however many Wado names bind it, so anything
+/// describing the interface walks this rather than the bindings.
+pub fn one_per_cm_name<'a>(
+    funcs: impl IntoIterator<Item = &'a CmFunctionInfo>,
+) -> Vec<&'a CmFunctionInfo> {
+    let mut seen = IndexSet::default();
+    funcs
+        .into_iter()
+        .filter(|func| seen.insert(func.wasi_func_name.as_str()))
+        .collect()
+}
+
 /// Information about a CM function from an interface method
 #[derive(Debug, Clone)]
 pub struct CmFunctionInfo {
