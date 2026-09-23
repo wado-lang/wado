@@ -895,34 +895,9 @@ fn try_LETTERS(chars: &List<char>, start: i32) -> i32 {
     loop {
         let rep_saved_0 = pos;
         rep_0: {
-            let alts_saved_1 = pos;
-            alts_done_1: {
-                alts_1_0: {
-                    pos = alts_saved_1;
-                    if pos >= chars.len() || chars[pos] != 'a' { break alts_1_0; }
-                    pos += 1;
-                    break alts_done_1;
-                }
-                alts_1_1: {
-                    pos = alts_saved_1;
-                    if pos >= chars.len() || chars[pos] != 'ä' { break alts_1_1; }
-                    pos += 1;
-                    break alts_done_1;
-                }
-                alts_1_2: {
-                    pos = alts_saved_1;
-                    if pos >= chars.len() || chars[pos] != '亜' { break alts_1_2; }
-                    pos += 1;
-                    break alts_done_1;
-                }
-                alts_1_3: {
-                    pos = alts_saved_1;
-                    if pos >= chars.len() || chars[pos] != 'あ' { break alts_1_3; }
-                    pos += 1;
-                    break alts_done_1;
-                }
-                break rep_0;
-            }
+            if pos >= chars.len() { break rep_0; }
+            if !((chars[pos] matches { 'a' | 'ä' | 'あ' | '亜' })) { break rep_0; }
+            pos += 1;
             continue;
         }
         pos = rep_saved_0;
@@ -1261,6 +1236,18 @@ impl Parser {
         }
         self.fail_on_kind(kind);
         return self.pos;
+    }
+
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
     }
 
     fn any(&mut self) -> i32 {

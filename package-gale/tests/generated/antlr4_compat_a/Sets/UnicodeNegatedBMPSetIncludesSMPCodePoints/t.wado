@@ -896,51 +896,35 @@ fn try_LETTERS(chars: &List<char>, start: i32) -> i32 {
     pos += 1;
     let mut accept_0: i32 = -1;
     if pos >= chars.len() { return -1; }
-    let not_saved_1 = pos;
-    let mut not_matched_1 = false;
-    not_1: {
-        if pos >= chars.len() || chars[pos] != 'b' { break not_1; }
-        pos += 1;
-        not_matched_1 = true;
-    }
-    pos = not_saved_1;
-    if not_matched_1 { return -1; }
+    if (chars[pos] matches { 'b' }) { return -1; }
     pos += 1;
-    let peek_save_2 = pos;
-    let mut peek_ok_2 = false;
-    peek_2: {
-        if pos >= chars.len() || chars[pos] != 'c' { break peek_2; }
+    let peek_save_1 = pos;
+    let mut peek_ok_1 = false;
+    peek_1: {
+        if pos >= chars.len() || chars[pos] != 'c' { break peek_1; }
         pos += 1;
-        peek_ok_2 = true;
+        peek_ok_1 = true;
     }
-    pos = peek_save_2;
-    if peek_ok_2 {
-        accept_0 = peek_save_2;
+    pos = peek_save_1;
+    if peek_ok_1 {
+        accept_0 = peek_save_1;
     }
     loop {
         let la_saved_0 = pos;
         la_rep_0: {
             if pos >= chars.len() { break la_rep_0; }
-            let not_saved_3 = pos;
-            let mut not_matched_3 = false;
-            not_3: {
-                if pos >= chars.len() || chars[pos] != 'b' { break not_3; }
-                pos += 1;
-                not_matched_3 = true;
-            }
-            pos = not_saved_3;
-            if not_matched_3 { break la_rep_0; }
+            if (chars[pos] matches { 'b' }) { break la_rep_0; }
             pos += 1;
-            let peek_save_4 = pos;
-            let mut peek_ok_4 = false;
-            peek_4: {
-                if pos >= chars.len() || chars[pos] != 'c' { break peek_4; }
+            let peek_save_2 = pos;
+            let mut peek_ok_2 = false;
+            peek_2: {
+                if pos >= chars.len() || chars[pos] != 'c' { break peek_2; }
                 pos += 1;
-                peek_ok_4 = true;
+                peek_ok_2 = true;
             }
-            pos = peek_save_4;
-            if peek_ok_4 {
-                accept_0 = peek_save_4;
+            pos = peek_save_2;
+            if peek_ok_2 {
+                accept_0 = peek_save_2;
             }
             continue;
         }
@@ -1284,6 +1268,18 @@ impl Parser {
         }
         self.fail_on_kind(kind);
         return self.pos;
+    }
+
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
     }
 
     fn any(&mut self) -> i32 {

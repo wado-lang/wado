@@ -894,8 +894,8 @@ fn try_A(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let opt_saved_0 = pos;
     let mut opt_ok_0 = false;
-    rep_0: {
-        if pos >= chars.len() || chars[pos] != 'b' { break rep_0; }
+    opt_0: {
+        if pos >= chars.len() || chars[pos] != 'b' { break opt_0; }
         pos += 1;
         opt_ok_0 = true;
     }
@@ -1233,6 +1233,18 @@ impl Parser {
         }
         self.fail_on_kind(kind);
         return self.pos;
+    }
+
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
     }
 
     fn any(&mut self) -> i32 {

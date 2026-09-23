@@ -2653,6 +2653,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -10250,9 +10262,9 @@ fn _parse_select_stmt(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_K_SELECT {
-        p.expect(TK_K_SELECT, &SYNC_51);
+        p.take();
         if _kind_set_14(p.peek_kind()) {
-            p.expect_set(&SYNC_52);
+            p.expect_set(&SYNC_51);
         }
         _parse_result_column(p, (FOLLOW_MASK_17 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
         loop {
@@ -10276,7 +10288,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            p.expect(TK_COMMA, &SYNC_51);
+            p.expect(TK_COMMA, &SYNC_52);
             _parse_result_column(p, (FOLLOW_MASK_17 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
         }
         if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_K_FROM && _kind_set_4(p.peek_at(1))) {
@@ -10396,7 +10408,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: i64 = 0) -> () {
         return;
     }
     if kind == TK_K_VALUES {
-        p.expect(TK_K_VALUES, &SYNC_45);
+        p.take();
         p.expect(TK_OPEN_PAR, &SYNC_7);
         _parse_expr(p, 0);
         loop {
@@ -11780,7 +11792,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
         }
     }
     if kind == TK_BIND_PARAMETER {
-        p.expect(TK_BIND_PARAMETER, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -13274,7 +13286,7 @@ fn _parse_result_column__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_result_column__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_STAR {
-        p.expect(TK_STAR, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if _kind_set_8(kind) {
@@ -13304,7 +13316,7 @@ fn _parse_result_column__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of result_column matches",
         p.peek_span(),
-        &SYNC_51,
+        &SYNC_52,
     );
     return;
 }
@@ -13761,7 +13773,7 @@ fn _parse_join_clause(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_join_operator__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_COMMA {
-        p.expect(TK_COMMA, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if _kind_set_33(kind) {
@@ -13934,9 +13946,9 @@ fn _parse_join_constraint(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_K_SELECT {
-        p.expect(TK_K_SELECT, &SYNC_51);
+        p.take();
         if _kind_set_14(p.peek_kind()) {
-            p.expect_set(&SYNC_52);
+            p.expect_set(&SYNC_51);
         }
         _parse_result_column(p, (FOLLOW_MASK_17 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
         loop {
@@ -13960,7 +13972,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            p.expect(TK_COMMA, &SYNC_51);
+            p.expect(TK_COMMA, &SYNC_52);
             _parse_result_column(p, (FOLLOW_MASK_17 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
         }
         if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_K_FROM && _kind_set_4(p.peek_at(1))) {
@@ -14080,7 +14092,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: i64 = 0) -> () {
         return;
     }
     if kind == TK_K_VALUES {
-        p.expect(TK_K_VALUES, &SYNC_45);
+        p.take();
         p.expect(TK_OPEN_PAR, &SYNC_7);
         _parse_expr(p, 0);
         loop {
@@ -14245,11 +14257,11 @@ fn _parse_compound_operator__inner(p: &mut Parser) -> () {
         return _parse_compound_operator__inner_alt_0(p);
     }
     if kind == TK_K_INTERSECT {
-        p.expect(TK_K_INTERSECT, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_K_EXCEPT {
-        p.expect(TK_K_EXCEPT, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -14293,7 +14305,7 @@ fn _parse_signed_number(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_literal_value__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if _kind_set_57(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -14318,7 +14330,7 @@ fn _parse_literal_value(p: &mut Parser) -> () {
 fn _parse_unary_operator__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if _kind_set_58(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -14421,7 +14433,7 @@ fn _parse_module_argument(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_column_alias__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if _kind_set_29(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -14446,7 +14458,7 @@ fn _parse_column_alias(p: &mut Parser) -> () {
 fn _parse_keyword__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if _kind_set_37(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -14743,15 +14755,15 @@ fn _parse_savepoint_name(p: &mut Parser) -> () {
 fn _parse_table_alias__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_IDENTIFIER {
-        p.expect(TK_IDENTIFIER, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_STRING_LITERAL {
-        p.expect(TK_STRING_LITERAL, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_OPEN_PAR {
-        p.expect(TK_OPEN_PAR, &SYNC_95);
+        p.take();
         _parse_table_alias(p);
         p.expect(TK_CLOSE_PAR, &EMPTY_SYNC);
         return;
@@ -14794,7 +14806,7 @@ fn _parse_transaction_name(p: &mut Parser) -> () {
 fn _parse_any_name__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_IDENTIFIER {
-        p.expect(TK_IDENTIFIER, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if _kind_set_37(kind) {
@@ -14802,11 +14814,11 @@ fn _parse_any_name__inner(p: &mut Parser) -> () {
         return;
     }
     if kind == TK_STRING_LITERAL {
-        p.expect(TK_STRING_LITERAL, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_OPEN_PAR {
-        p.expect(TK_OPEN_PAR, &SYNC_4);
+        p.take();
         _parse_any_name(p);
         p.expect(TK_CLOSE_PAR, &EMPTY_SYNC);
         return;
@@ -15486,8 +15498,8 @@ global SYNC_47: List<i32> = [TK_K_VALUES];
 global SYNC_48: List<i32> = [TK_K_DEFAULT, TK_K_SELECT, TK_K_VALUES, TK_K_WITH];
 global SYNC_49: List<i32> = [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_MINUS, TK_NUMERIC_LITERAL, TK_OPEN_PAR, TK_PLUS, TK_STRING_LITERAL];
 global SYNC_50: List<i32> = [TK_K_TO, TK_K_TRANSACTION];
-global SYNC_51: List<i32> = [TK_BIND_PARAMETER, TK_BLOB_LITERAL, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_MINUS, TK_NUMERIC_LITERAL, TK_OPEN_PAR, TK_PLUS, TK_STAR, TK_STRING_LITERAL, TK_TILDE];
-global SYNC_52: List<i32> = [TK_K_ALL, TK_K_DISTINCT];
+global SYNC_51: List<i32> = [TK_K_ALL, TK_K_DISTINCT];
+global SYNC_52: List<i32> = [TK_BIND_PARAMETER, TK_BLOB_LITERAL, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_MINUS, TK_NUMERIC_LITERAL, TK_OPEN_PAR, TK_PLUS, TK_STAR, TK_STRING_LITERAL, TK_TILDE];
 global SYNC_53: List<i32> = [TK_K_SELECT, TK_K_VALUES];
 global SYNC_54: List<i32> = [TK_MINUS, TK_NUMERIC_LITERAL, TK_PLUS];
 global SYNC_55: List<i32> = [TK_K_KEY];

@@ -893,15 +893,7 @@ impl Lexer {
 fn try_A(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    let not_saved_0 = pos;
-    let mut not_matched_0 = false;
-    not_0: {
-        if pos >= chars.len() || chars[pos] != 'b' { break not_0; }
-        pos += 1;
-        not_matched_0 = true;
-    }
-    pos = not_saved_0;
-    if not_matched_0 { return -1; }
+    if (chars[pos] matches { 'b' }) { return -1; }
     pos += 1;
     return pos;
 }
@@ -1229,6 +1221,18 @@ impl Parser {
         }
         self.fail_on_kind(kind);
         return self.pos;
+    }
+
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
     }
 
     fn any(&mut self) -> i32 {

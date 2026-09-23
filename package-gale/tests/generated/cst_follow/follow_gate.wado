@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["grammars/follow_gate.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/follow_gate.g4"])]
 
 pub struct Span {
     pub start: i32,
@@ -606,6 +606,9 @@ impl TreeBuilder {
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
+        if self.last_finished >= checkpoint {
+            self.last_finished += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -615,6 +618,9 @@ impl TreeBuilder {
         self.alt.truncate(checkpoint);
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
+        }
+        if self.last_finished >= checkpoint {
+            self.last_finished = -1;
         }
     }
 
@@ -1227,6 +1233,18 @@ impl Parser {
         }
         self.fail_on_kind(kind);
         return self.pos;
+    }
+
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
     }
 
     fn any(&mut self) -> i32 {

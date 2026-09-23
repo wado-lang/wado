@@ -1249,6 +1249,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1453,9 +1465,9 @@ fn _parse_double(p: &mut Parser) -> () {
 fn _parse_item__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_let {
-        p.expect(TK_LIT_let, &SYNC_0);
-        p.expect(TK_ID, &SYNC_1);
-        p.expect(TK_LIT_EQ, &SYNC_0);
+        p.take();
+        p.expect(TK_ID, &SYNC_0);
+        p.expect(TK_LIT_EQ, &SYNC_1);
         p.expect(TK_ID, &SYNC_2);
         p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
         return;
@@ -1601,8 +1613,8 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_ID];
-global SYNC_1: List<i32> = [TK_LIT_EQ];
+global SYNC_0: List<i32> = [TK_LIT_EQ];
+global SYNC_1: List<i32> = [TK_ID];
 global SYNC_2: List<i32> = [TK_LIT_SEMI];
 global SYNC_3: List<i32> = [TK_LIT_LBRACE, TK_LIT_let];
 global SYNC_4: List<i32> = [TK_LIT_LBRACE, TK_LIT_RBRACE, TK_LIT_let];

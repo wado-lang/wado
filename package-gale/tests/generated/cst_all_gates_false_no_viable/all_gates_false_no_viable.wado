@@ -899,26 +899,6 @@ impl Lexer {
     }
 }
 
-fn try_OFF(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'f' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'f' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_ON(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn try_SEMI(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ';' { return -1; }
@@ -978,6 +958,15 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
+    match end - start {
+        2 => { if chars[start] == 'o' && chars[start + 1] == 'n' { return TK_ON; } },
+        3 => { if chars[start] == 'o' && chars[start + 1] == 'f' && chars[start + 2] == 'f' { return TK_OFF; } },
+        _ => {},
+    }
+    return -1;
+}
+
 pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
@@ -997,15 +986,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 end = try_SEMI(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_SEMI; }
             },
-            'a'..='n' | 'p'..='z' => {
-                end = try_ID(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ID; }
-            },
-            'o' => {
-                end = try_OFF(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_OFF; }
-                end = try_ON(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ON; }
+            'a'..='z' => {
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
@@ -1024,6 +1005,10 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             triv_lo = ts.trivia_mark();
             lexer.pos = start + 1;
         } else {
+            if best_kind == TK_ID {
+                let kw_kind = classify_keyword(&lexer.chars, start, best_end);
+                if kw_kind >= 0 { best_kind = kw_kind; }
+            }
             let tok_start = start;
             let is_skip = best_kind matches { TK_WS };
             if is_skip {
@@ -1347,6 +1332,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1496,12 +1493,12 @@ fn _parse_start(p: &mut Parser) -> () {
 fn _parse_stmt__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_OFF {
-        p.expect(TK_OFF, &SYNC_0);
+        p.take();
         _parse_pick(p);
         return;
     }
     if kind == TK_ON {
-        p.expect(TK_ON, &SYNC_0);
+        p.take();
         if !p.speculating {
             p.on = 1;
         }
@@ -1511,7 +1508,7 @@ fn _parse_stmt__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of stmt matches",
         p.peek_span(),
-        &SYNC_1,
+        &SYNC_0,
     );
     return;
 }
@@ -1528,8 +1525,8 @@ fn _parse_stmt(p: &mut Parser) -> () {
 }
 
 fn _parse_pick__inner_alt_1(p: &mut Parser) -> () {
-    p.expect(TK_ID, &SYNC_2);
-    p.expect(TK_LB, &SYNC_0);
+    p.expect(TK_ID, &SYNC_1);
+    p.expect(TK_LB, &SYNC_2);
     p.expect(TK_ID, &SYNC_3);
     p.expect(TK_RB, &SYNC_4);
     p.expect(TK_SEMI, &EMPTY_SYNC);
@@ -1553,8 +1550,8 @@ fn _parse_pick__inner_scan_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate)
 }
 
 fn _parse_pick__inner_alt_0(p: &mut Parser) -> () {
-    p.expect(TK_ID, &SYNC_2);
-    p.expect(TK_LB, &SYNC_0);
+    p.expect(TK_ID, &SYNC_1);
+    p.expect(TK_LB, &SYNC_2);
     p.expect(TK_ID, &SYNC_3);
     p.expect(TK_RB, &EMPTY_SYNC);
     return;
@@ -1603,7 +1600,7 @@ fn _parse_pick__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of pick matches",
         p.peek_span(),
-        &SYNC_0,
+        &SYNC_2,
     );
     return;
 }
@@ -1682,9 +1679,9 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_ID];
-global SYNC_1: List<i32> = [TK_OFF, TK_ON];
-global SYNC_2: List<i32> = [TK_LB];
+global SYNC_0: List<i32> = [TK_OFF, TK_ON];
+global SYNC_1: List<i32> = [TK_LB];
+global SYNC_2: List<i32> = [TK_ID];
 global SYNC_3: List<i32> = [TK_RB];
 global SYNC_4: List<i32> = [TK_SEMI];
 

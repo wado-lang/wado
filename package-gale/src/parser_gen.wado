@@ -3044,7 +3044,7 @@ fn gen_parse_fn_single_token<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRul
                 w.else_begin(`else if ${cond}`);
             }
             w.line(`p.b.set_alt(${i});`);
-            w.line(`let _ = ${PARSER_HANDLE}.expect(${DISPATCH_KIND_LOCAL}, &EMPTY_SYNC);`);
+            w.line(`${PARSER_HANDLE}.take();`);
             w.line("return;");
         }
         w.end();
@@ -3056,8 +3056,7 @@ fn gen_parse_fn_single_token<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRul
 
     let check = ctx.kind_check_str(&firsts, &DISPATCH_KIND_LOCAL);
     w.begin(`if ${check}`);
-    // The token is appended by `expect`; no struct to build.
-    w.line(`let _ = ${PARSER_HANDLE}.expect(${DISPATCH_KIND_LOCAL}, &EMPTY_SYNC);`);
+    w.line(`${PARSER_HANDLE}.take();`);
     w.line("return;");
     w.end();
     gen_error_fallback(w, rule, &type_name, ctx);
@@ -3352,6 +3351,7 @@ fn gen_alt_body<S: AsStrSlice>(
     rule_labeled: bool,
     after_action: &Option<ActionSource>,
     ctx: &mut GenContext,
+    proven_first: &List<String> = &EMPTY_SYNC,
 ) {
     let _ = type_name;
     let _ = variant_case;
@@ -3364,7 +3364,7 @@ fn gen_alt_body<S: AsStrSlice>(
     if rule_labeled {
         w.line(`p.b.set_alt(${alt_index});`);
     }
-    gen_alt_elements(w, &alt.elements, &body.ops, &alt.actions, ctx);
+    gen_alt_elements(w, &alt.elements, &body.ops, &alt.actions, ctx, proven_first);
 
     if ctx.emit_actions() {
         if let Some(a) = after_action {
@@ -3425,6 +3425,7 @@ fn gen_multi_alt_body<S: AsStrSlice>(
         let cond_depth = if depth < pos_sets.len() { depth } else { pos_sets.len() };
 
         let gate_conds = all_gate_conds[i];
+        let proven_first: List<String> = if cond_depth > 0 { pos_sets[0] } else { [] };
         if cond_depth > 0 {
             let cond = build_lookahead_condition(ctx, pos_sets, cond_depth);
             let gate = if gate_conds.is_empty() { String::new() } else { ` && ${join_gate_conds(&gate_conds)}` };
@@ -3449,6 +3450,7 @@ fn gen_multi_alt_body<S: AsStrSlice>(
             rule_alts_labeled(&rule.alternatives),
             &after,
             ctx,
+            &proven_first,
         );
         w.end();
     }
@@ -3527,6 +3529,7 @@ fn gen_alt_elements(
     ops: &List<Op>,
     actions: &List<AltAction>,
     ctx: &mut GenContext,
+    proven_first: &List<String> = &EMPTY_SYNC,
 ) {
     // gen_alt_elements requires 1:1 correspondence between
     // `elements` and `ops` — full-alt bodies (Simple / MultiAlt /
@@ -3562,6 +3565,8 @@ fn gen_alt_elements(
                 panic("gen_alt_elements: Repeat element / op mismatch");
             };
             gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
+        } else if i == 0 && !has_action_before(actions, 0) && leaf_is_proven(op, proven_first) {
+            gen_op_leaf_taken(w, op, ctx, &mut name_counts);
         } else if op_is_leaf(op) {
             // The rule's FIRST-of-rest at this position is the sync set `expect`
             // inserts a missing terminal against (a recovery-only edit; on valid
@@ -3739,6 +3744,37 @@ fn leaf_binding<S: AsStrSlice, S1: AsStrSlice>(ctx: &GenContext, base: S, field:
         return `let ${field} = `;
     }
     return String::new();
+}
+
+fn has_action_before(actions: &List<AltAction>, index: i32) -> bool {
+    for let a of actions {
+        if a.before_index == index {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// A token leaf whose kind the enclosing dispatch has already tested.
+fn leaf_is_proven(op: &Op, proven_first: &List<String>) -> bool {
+    if proven_first.len() != 1 {
+        return false;
+    }
+    return match *op {
+        Token(t) => t.kind == proven_first[0],
+        Literal(l) => l.kind == proven_first[0],
+        _ => false,
+    };
+}
+
+fn gen_op_leaf_taken(w: &mut CodeWriter, op: &Op, ctx: &GenContext, name_counts: &mut List<[String, i32]>) {
+    sync_name_counts_for_op_leaf(op, name_counts);
+    let binding = match *op {
+        Token(t) => leaf_binding(ctx, &t.dedup_base, &t.field),
+        Literal(l) => leaf_binding(ctx, &l.dedup_base, &l.field),
+        _ => panic("gen_op_leaf_taken: only a token leaf is taken"),
+    };
+    w.line(`${binding}p.take();`);
 }
 
 /// Emit a single leaf-op parse line, reading the deduped field name
@@ -8538,6 +8574,7 @@ fn gen_multi_alt_body_alt<S: AsStrSlice, S1: AsStrSlice>(
                 rule_alts_labeled(&rule.alternatives),
                 &after,
                 ctx,
+                &slot_first_union(group, first_sets),
             );
         } else {
             let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx);

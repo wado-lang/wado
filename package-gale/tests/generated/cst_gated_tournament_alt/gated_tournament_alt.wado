@@ -899,15 +899,6 @@ impl Lexer {
     }
 }
 
-fn try_IF(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'f' { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn try_PLUS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '+' { return -1; }
@@ -974,6 +965,14 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
+    match end - start {
+        2 => { if chars[start] == 'i' && chars[start + 1] == 'f' { return TK_IF; } },
+        _ => {},
+    }
+    return -1;
+}
+
 pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
@@ -997,13 +996,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 end = try_SEMI(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_SEMI; }
             },
-            'a'..='h' | 'j'..='z' => {
-                end = try_ID(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ID; }
-            },
-            'i' => {
-                end = try_IF(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_IF; }
+            'a'..='z' => {
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
@@ -1022,6 +1015,10 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             triv_lo = ts.trivia_mark();
             lexer.pos = start + 1;
         } else {
+            if best_kind == TK_ID {
+                let kw_kind = classify_keyword(&lexer.chars, start, best_end);
+                if kw_kind >= 0 { best_kind = kw_kind; }
+            }
             let tok_start = start;
             let is_skip = best_kind matches { TK_WS };
             if is_skip {
@@ -1345,6 +1342,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1555,7 +1564,7 @@ fn _parse_start(p: &mut Parser) -> () {
 fn _parse_stmt__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_IF {
-        p.expect(TK_IF, &SYNC_0);
+        p.take();
         if !p.speculating {
             p.no_brace = p.no_brace + 1;
         }
@@ -1574,7 +1583,7 @@ fn _parse_stmt__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of stmt matches",
         p.peek_span(),
-        &SYNC_1,
+        &SYNC_0,
     );
     return;
 }
@@ -1591,7 +1600,7 @@ fn _parse_stmt(p: &mut Parser) -> () {
 }
 
 fn _parse_block__inner(p: &mut Parser) -> () {
-    p.expect(TK_LB, &SYNC_0);
+    p.expect(TK_LB, &SYNC_1);
     p.expect(TK_ID, &SYNC_2);
     p.expect(TK_RB, &EMPTY_SYNC);
     return;
@@ -1610,7 +1619,7 @@ fn _parse_block(p: &mut Parser) -> () {
 
 fn _parse_expr__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_ID, &SYNC_3);
-    p.expect(TK_LB, &SYNC_0);
+    p.expect(TK_LB, &SYNC_1);
     p.expect(TK_ID, &SYNC_2);
     p.expect(TK_RB, &EMPTY_SYNC);
     return;
@@ -1668,7 +1677,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     p.no_viable(
         "no alternative of expr matches",
         p.peek_span(),
-        &SYNC_0,
+        &SYNC_1,
     );
     return;
 }
@@ -1780,8 +1789,8 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_ID];
-global SYNC_1: List<i32> = [TK_ID, TK_IF];
+global SYNC_0: List<i32> = [TK_ID, TK_IF];
+global SYNC_1: List<i32> = [TK_ID];
 global SYNC_2: List<i32> = [TK_RB];
 global SYNC_3: List<i32> = [TK_LB];
 

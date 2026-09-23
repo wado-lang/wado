@@ -864,6 +864,17 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     w.blank();
 
+    // `p.take()` — consumes the current token, whose kind a dispatch decided.
+    let mut ft = FnSpec::new("take");
+    ft.set_receiver("&mut self");
+    ft.set_return_type("i32");
+    ft.emit_begin(w);
+    w.line("if self.recovering { return self.pos; }");
+    w.line("let kind = self.kinds[self.pos];");
+    emit_consume_kind_return(w);
+    w.end();
+    w.blank();
+
     // `p.any()` — consumes one token of any kind (for `.` wildcard).
     // Fails at EOF.
     let mut f9 = FnSpec::new("any");

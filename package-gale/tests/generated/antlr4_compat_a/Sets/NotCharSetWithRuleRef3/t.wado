@@ -903,29 +903,7 @@ fn try_A(chars: &List<char>, start: i32) -> i32 {
         alts_0_1: {
             pos = alts_saved_0;
             if pos >= chars.len() { break alts_0_1; }
-            let not_saved_1 = pos;
-            let mut not_matched_1 = false;
-            not_1: {
-                let alts_saved_2 = pos;
-                alts_done_2: {
-                    alts_2_0: {
-                        pos = alts_saved_2;
-                        if pos >= chars.len() || chars[pos] != 'a' { break alts_2_0; }
-                        pos += 1;
-                        break alts_done_2;
-                    }
-                    alts_2_1: {
-                        pos = alts_saved_2;
-                        if pos >= chars.len() || chars[pos] != 'c' { break alts_2_1; }
-                        pos += 1;
-                        break alts_done_2;
-                    }
-                    break not_1;
-                }
-                not_matched_1 = true;
-            }
-            pos = not_saved_1;
-            if not_matched_1 { break alts_0_1; }
+            if (chars[pos] matches { 'a' | 'c' }) { break alts_0_1; }
             pos += 1;
             break alts_done_0;
         }
@@ -1257,6 +1235,18 @@ impl Parser {
         }
         self.fail_on_kind(kind);
         return self.pos;
+    }
+
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
     }
 
     fn any(&mut self) -> i32 {

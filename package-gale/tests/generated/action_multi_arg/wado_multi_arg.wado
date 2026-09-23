@@ -1288,6 +1288,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1427,7 +1439,7 @@ fn _parse_e__inner(p: &mut Parser, base: i32 = 0) -> EVals {
         }
     }
     if kind == TK_D {
-        p.expect(TK_D, &EMPTY_SYNC);
+        p.take();
         if !p.speculating {
              p.emit(`d ${vals.acc}`); 
         }

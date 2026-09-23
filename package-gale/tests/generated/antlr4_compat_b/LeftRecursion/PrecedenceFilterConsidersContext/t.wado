@@ -1240,6 +1240,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1393,7 +1405,7 @@ fn _parse_prog(p: &mut Parser) -> () {
 fn _parse_statement__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_a {
-        let letter_a = _parse_letter_a(p);
+        _parse_letter_a(p);
         return;
     }
     p.no_viable(
@@ -1419,8 +1431,8 @@ fn _parse_statement__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_STATEMENT, _start);
-                let letter_a = _parse_letter_a(p);
-                let lit_b = p.expect(TK_LIT_b, &EMPTY_SYNC);
+                _parse_letter_a(p);
+                p.expect(TK_LIT_b, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -1441,7 +1453,7 @@ fn _parse_statement(p: &mut Parser, min_prec: i32 = 0) -> () {
 }
 
 fn _parse_letter_a__inner(p: &mut Parser) -> () {
-    let lit_a = p.expect(TK_LIT_a, &EMPTY_SYNC);
+    p.expect(TK_LIT_a, &EMPTY_SYNC);
     return;
 }
 

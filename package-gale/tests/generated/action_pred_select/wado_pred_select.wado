@@ -1288,6 +1288,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1423,7 +1435,7 @@ fn _parse_item__inner(p: &mut Parser) -> () {
         }
     }
     if kind == TK_C {
-        p.expect(TK_C, &SYNC_1);
+        p.take();
         p.expect(TK_D, &EMPTY_SYNC);
         if !p.speculating {
              p.emit("alt2"); 
@@ -1433,7 +1445,7 @@ fn _parse_item__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of item matches",
         p.peek_span(),
-        &SYNC_2,
+        &SYNC_1,
     );
     return;
 }
@@ -1479,7 +1491,7 @@ fn _parse_fallback__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of fallback matches",
         p.peek_span(),
-        &SYNC_3,
+        &SYNC_2,
     );
     return;
 }
@@ -1567,7 +1579,6 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_B];
-global SYNC_1: List<i32> = [TK_D];
-global SYNC_2: List<i32> = [TK_A, TK_C];
-global SYNC_3: List<i32> = [TK_A];
+global SYNC_1: List<i32> = [TK_A, TK_C];
+global SYNC_2: List<i32> = [TK_A];
 

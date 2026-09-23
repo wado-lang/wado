@@ -940,51 +940,35 @@ fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) {
     let la_start_0 = pos;
     let mut accept_0: i32 = -1;
     if pos >= chars.len() { return; }
-    let not_saved_1 = pos;
-    let mut not_matched_1 = false;
-    not_1: {
-        if pos >= chars.len() || chars[pos] != 'b' { break not_1; }
-        pos += 1;
-        not_matched_1 = true;
-    }
-    pos = not_saved_1;
-    if not_matched_1 { return; }
+    if (chars[pos] matches { 'b' }) { return; }
     pos += 1;
-    let peek_save_2 = pos;
-    let mut peek_ok_2 = false;
-    peek_2: {
-        if pos >= chars.len() || chars[pos] != 'c' { break peek_2; }
+    let peek_save_1 = pos;
+    let mut peek_ok_1 = false;
+    peek_1: {
+        if pos >= chars.len() || chars[pos] != 'c' { break peek_1; }
         pos += 1;
-        peek_ok_2 = true;
+        peek_ok_1 = true;
     }
-    pos = peek_save_2;
-    if peek_ok_2 {
-        accept_0 = peek_save_2;
+    pos = peek_save_1;
+    if peek_ok_1 {
+        accept_0 = peek_save_1;
     }
     loop {
         let la_saved_0 = pos;
         la_rep_0: {
             if pos >= chars.len() { break la_rep_0; }
-            let not_saved_3 = pos;
-            let mut not_matched_3 = false;
-            not_3: {
-                if pos >= chars.len() || chars[pos] != 'b' { break not_3; }
-                pos += 1;
-                not_matched_3 = true;
-            }
-            pos = not_saved_3;
-            if not_matched_3 { break la_rep_0; }
+            if (chars[pos] matches { 'b' }) { break la_rep_0; }
             pos += 1;
-            let peek_save_4 = pos;
-            let mut peek_ok_4 = false;
-            peek_4: {
-                if pos >= chars.len() || chars[pos] != 'c' { break peek_4; }
+            let peek_save_2 = pos;
+            let mut peek_ok_2 = false;
+            peek_2: {
+                if pos >= chars.len() || chars[pos] != 'c' { break peek_2; }
                 pos += 1;
-                peek_ok_4 = true;
+                peek_ok_2 = true;
             }
-            pos = peek_save_4;
-            if peek_ok_4 {
-                accept_0 = peek_save_4;
+            pos = peek_save_2;
+            if peek_ok_2 {
+                accept_0 = peek_save_2;
             }
             continue;
         }
@@ -997,15 +981,7 @@ fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) {
     pos = la_start_0;
     while pos < accept_0 {
         if pos >= chars.len() { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
-        let not_saved_5 = pos;
-        let mut not_matched_5 = false;
-        not_5: {
-            if pos >= chars.len() || chars[pos] != 'b' { break not_5; }
-            pos += 1;
-            not_matched_5 = true;
-        }
-        pos = not_saved_5;
-        if not_matched_5 { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
+        if (chars[pos] matches { 'b' }) { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
         pos += 1;
         lx.count += 1;
     }
@@ -1020,45 +996,29 @@ fn apply_D_actions(lx: &mut Lexer, start: i32, end: i32) {
     if pos >= chars.len() || chars[pos] != 'd' { return; }
     pos += 1;
     loop {
-        let ng_saved_6 = pos;
-        let mut ng_exit_6 = false;
-        ng_6: {
-            if pos >= chars.len() || chars[pos] != 'c' { break ng_6; }
+        let ng_saved_3 = pos;
+        let mut ng_exit_3 = false;
+        ng_3: {
+            if pos >= chars.len() || chars[pos] != 'c' { break ng_3; }
             pos += 1;
-            ng_exit_6 = true;
+            ng_exit_3 = true;
         }
-        pos = ng_saved_6;
-        if ng_exit_6 {
+        pos = ng_saved_3;
+        if ng_exit_3 {
             break;
         }
-        let rep_probe_7_saved = pos;
-        let mut rep_probe_7_ok = false;
-        rep_probe_7: {
-            if pos >= chars.len() { break rep_probe_7; }
-            let not_saved_8 = pos;
-            let mut not_matched_8 = false;
-            not_8: {
-                if pos >= chars.len() || chars[pos] != 'b' { break not_8; }
-                pos += 1;
-                not_matched_8 = true;
-            }
-            pos = not_saved_8;
-            if not_matched_8 { break rep_probe_7; }
+        let rep_probe_4_saved = pos;
+        let mut rep_probe_4_ok = false;
+        rep_probe_4: {
+            if pos >= chars.len() { break rep_probe_4; }
+            if (chars[pos] matches { 'b' }) { break rep_probe_4; }
             pos += 1;
-            rep_probe_7_ok = true;
+            rep_probe_4_ok = true;
         }
-        if !rep_probe_7_ok || pos > end { pos = rep_probe_7_saved; return; }
-        pos = rep_probe_7_saved;
+        if !rep_probe_4_ok || pos > end { pos = rep_probe_4_saved; return; }
+        pos = rep_probe_4_saved;
         if pos >= chars.len() { return; }
-        let not_saved_9 = pos;
-        let mut not_matched_9 = false;
-        not_9: {
-            if pos >= chars.len() || chars[pos] != 'b' { break not_9; }
-            pos += 1;
-            not_matched_9 = true;
-        }
-        pos = not_saved_9;
-        if not_matched_9 { return; }
+        if (chars[pos] matches { 'b' }) { return; }
         pos += 1;
         lx.count += 1;
     }
@@ -1072,78 +1032,54 @@ fn apply_E_actions(lx: &mut Lexer, start: i32, end: i32) {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'e' { return; }
     pos += 1;
-    let la_start_10 = pos;
-    let mut accept_10: i32 = -1;
+    let la_start_5 = pos;
+    let mut accept_5: i32 = -1;
     if pos >= chars.len() { return; }
-    let not_saved_11 = pos;
-    let mut not_matched_11 = false;
-    not_11: {
-        if pos >= chars.len() || chars[pos] != 'b' { break not_11; }
-        pos += 1;
-        not_matched_11 = true;
-    }
-    pos = not_saved_11;
-    if not_matched_11 { return; }
+    if (chars[pos] matches { 'b' }) { return; }
     pos += 1;
-    let peek_save_12 = pos;
-    let mut peek_ok_12 = false;
-    peek_12: {
-        if pos >= chars.len() || chars[pos] != 'c' { break peek_12; }
+    let peek_save_6 = pos;
+    let mut peek_ok_6 = false;
+    peek_6: {
+        if pos >= chars.len() || chars[pos] != 'c' { break peek_6; }
         pos += 1;
-        peek_ok_12 = true;
+        peek_ok_6 = true;
     }
-    pos = peek_save_12;
-    if peek_ok_12 {
-        accept_10 = peek_save_12;
+    pos = peek_save_6;
+    if peek_ok_6 {
+        accept_5 = peek_save_6;
     }
     loop {
-        let la_saved_10 = pos;
-        la_rep_10: {
-            if pos >= chars.len() { break la_rep_10; }
-            let not_saved_13 = pos;
-            let mut not_matched_13 = false;
-            not_13: {
-                if pos >= chars.len() || chars[pos] != 'b' { break not_13; }
-                pos += 1;
-                not_matched_13 = true;
-            }
-            pos = not_saved_13;
-            if not_matched_13 { break la_rep_10; }
+        let la_saved_5 = pos;
+        la_rep_5: {
+            if pos >= chars.len() { break la_rep_5; }
+            if (chars[pos] matches { 'b' }) { break la_rep_5; }
             pos += 1;
-            let peek_save_14 = pos;
-            let mut peek_ok_14 = false;
-            peek_14: {
-                if pos >= chars.len() || chars[pos] != 'c' { break peek_14; }
+            let peek_save_7 = pos;
+            let mut peek_ok_7 = false;
+            peek_7: {
+                if pos >= chars.len() || chars[pos] != 'c' { break peek_7; }
                 pos += 1;
-                peek_ok_14 = true;
+                peek_ok_7 = true;
             }
-            pos = peek_save_14;
-            if peek_ok_14 {
-                accept_10 = peek_save_14;
+            pos = peek_save_7;
+            if peek_ok_7 {
+                accept_5 = peek_save_7;
             }
             continue;
         }
-        pos = la_saved_10;
+        pos = la_saved_5;
         break;
     }
-    if accept_10 < 0 {
+    if accept_5 < 0 {
         return;
     }
-    pos = la_start_10;
-    while pos < accept_10 {
+    pos = la_start_5;
+    while pos < accept_5 {
         if pos >= chars.len() { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
-        let not_saved_15 = pos;
-        let mut not_matched_15 = false;
-        not_15: {
-            if pos >= chars.len() || chars[pos] != 'b' { break not_15; }
-            pos += 1;
-            not_matched_15 = true;
-        }
-        pos = not_saved_15;
-        if not_matched_15 { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
+        if (chars[pos] matches { 'b' }) { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
         pos += 1;
     }
-    if pos != accept_10 { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
+    if pos != accept_5 { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
     lx.count = pos - start;
     if pos >= chars.len() || chars[pos] != 'c' { return; }
     pos += 1;
@@ -1155,16 +1091,16 @@ fn apply_G_actions(lx: &mut Lexer, start: i32, end: i32) {
     if pos >= chars.len() || chars[pos] != 'g' { return; }
     pos += 1;
     loop {
-        let ng_saved_16 = pos;
-        let mut ng_exit_16 = false;
-        ng_16: {
-            if !( pos > start + 2 ) { break ng_16; }
-            if pos >= chars.len() || chars[pos] != 'c' { break ng_16; }
+        let ng_saved_8 = pos;
+        let mut ng_exit_8 = false;
+        ng_8: {
+            if !( pos > start + 2 ) { break ng_8; }
+            if pos >= chars.len() || chars[pos] != 'c' { break ng_8; }
             pos += 1;
-            ng_exit_16 = true;
+            ng_exit_8 = true;
         }
-        pos = ng_saved_16;
-        if ng_exit_16 {
+        pos = ng_saved_8;
+        if ng_exit_8 {
             break;
         }
         if pos >= chars.len() { return; }
@@ -1189,63 +1125,47 @@ fn try_A(lx: &Lexer, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return -1; }
     pos += 1;
-    let mut accept_18: i32 = -1;
+    let mut accept_10: i32 = -1;
     if pos >= chars.len() { return -1; }
-    let not_saved_19 = pos;
-    let mut not_matched_19 = false;
-    not_19: {
-        if pos >= chars.len() || chars[pos] != 'b' { break not_19; }
-        pos += 1;
-        not_matched_19 = true;
-    }
-    pos = not_saved_19;
-    if not_matched_19 { return -1; }
+    if (chars[pos] matches { 'b' }) { return -1; }
     pos += 1;
-    let peek_save_20 = pos;
-    let mut peek_ok_20 = false;
-    peek_20: {
-        if pos >= chars.len() || chars[pos] != 'c' { break peek_20; }
+    let peek_save_11 = pos;
+    let mut peek_ok_11 = false;
+    peek_11: {
+        if pos >= chars.len() || chars[pos] != 'c' { break peek_11; }
         pos += 1;
-        peek_ok_20 = true;
+        peek_ok_11 = true;
     }
-    pos = peek_save_20;
-    if peek_ok_20 {
-        accept_18 = peek_save_20;
+    pos = peek_save_11;
+    if peek_ok_11 {
+        accept_10 = peek_save_11;
     }
     loop {
-        let la_saved_18 = pos;
-        la_rep_18: {
-            if pos >= chars.len() { break la_rep_18; }
-            let not_saved_21 = pos;
-            let mut not_matched_21 = false;
-            not_21: {
-                if pos >= chars.len() || chars[pos] != 'b' { break not_21; }
-                pos += 1;
-                not_matched_21 = true;
-            }
-            pos = not_saved_21;
-            if not_matched_21 { break la_rep_18; }
+        let la_saved_10 = pos;
+        la_rep_10: {
+            if pos >= chars.len() { break la_rep_10; }
+            if (chars[pos] matches { 'b' }) { break la_rep_10; }
             pos += 1;
-            let peek_save_22 = pos;
-            let mut peek_ok_22 = false;
-            peek_22: {
-                if pos >= chars.len() || chars[pos] != 'c' { break peek_22; }
+            let peek_save_12 = pos;
+            let mut peek_ok_12 = false;
+            peek_12: {
+                if pos >= chars.len() || chars[pos] != 'c' { break peek_12; }
                 pos += 1;
-                peek_ok_22 = true;
+                peek_ok_12 = true;
             }
-            pos = peek_save_22;
-            if peek_ok_22 {
-                accept_18 = peek_save_22;
+            pos = peek_save_12;
+            if peek_ok_12 {
+                accept_10 = peek_save_12;
             }
             continue;
         }
-        pos = la_saved_18;
+        pos = la_saved_10;
         break;
     }
-    if accept_18 < 0 {
+    if accept_10 < 0 {
         return -1;
     }
-    pos = accept_18;
+    pos = accept_10;
     if pos >= chars.len() || chars[pos] != 'c' { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
     pos += 1;
     return pos;
@@ -1257,27 +1177,19 @@ fn try_D(lx: &Lexer, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != 'd' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_23 = pos;
-        let mut ng_exit_23 = false;
-        ng_23: {
-            if pos >= chars.len() || chars[pos] != 'c' { break ng_23; }
+        let ng_saved_13 = pos;
+        let mut ng_exit_13 = false;
+        ng_13: {
+            if pos >= chars.len() || chars[pos] != 'c' { break ng_13; }
             pos += 1;
-            ng_exit_23 = true;
+            ng_exit_13 = true;
         }
-        if ng_exit_23 {
+        if ng_exit_13 {
             break;
         }
-        pos = ng_saved_23;
+        pos = ng_saved_13;
         if pos >= chars.len() { return -1; }
-        let not_saved_24 = pos;
-        let mut not_matched_24 = false;
-        not_24: {
-            if pos >= chars.len() || chars[pos] != 'b' { break not_24; }
-            pos += 1;
-            not_matched_24 = true;
-        }
-        pos = not_saved_24;
-        if not_matched_24 { return -1; }
+        if (chars[pos] matches { 'b' }) { return -1; }
         pos += 1;
     }
     return pos;
@@ -1288,63 +1200,47 @@ fn try_E(lx: &Lexer, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'e' { return -1; }
     pos += 1;
-    let mut accept_25: i32 = -1;
+    let mut accept_14: i32 = -1;
     if pos >= chars.len() { return -1; }
-    let not_saved_26 = pos;
-    let mut not_matched_26 = false;
-    not_26: {
-        if pos >= chars.len() || chars[pos] != 'b' { break not_26; }
-        pos += 1;
-        not_matched_26 = true;
-    }
-    pos = not_saved_26;
-    if not_matched_26 { return -1; }
+    if (chars[pos] matches { 'b' }) { return -1; }
     pos += 1;
-    let peek_save_27 = pos;
-    let mut peek_ok_27 = false;
-    peek_27: {
-        if pos >= chars.len() || chars[pos] != 'c' { break peek_27; }
+    let peek_save_15 = pos;
+    let mut peek_ok_15 = false;
+    peek_15: {
+        if pos >= chars.len() || chars[pos] != 'c' { break peek_15; }
         pos += 1;
-        peek_ok_27 = true;
+        peek_ok_15 = true;
     }
-    pos = peek_save_27;
-    if peek_ok_27 {
-        accept_25 = peek_save_27;
+    pos = peek_save_15;
+    if peek_ok_15 {
+        accept_14 = peek_save_15;
     }
     loop {
-        let la_saved_25 = pos;
-        la_rep_25: {
-            if pos >= chars.len() { break la_rep_25; }
-            let not_saved_28 = pos;
-            let mut not_matched_28 = false;
-            not_28: {
-                if pos >= chars.len() || chars[pos] != 'b' { break not_28; }
-                pos += 1;
-                not_matched_28 = true;
-            }
-            pos = not_saved_28;
-            if not_matched_28 { break la_rep_25; }
+        let la_saved_14 = pos;
+        la_rep_14: {
+            if pos >= chars.len() { break la_rep_14; }
+            if (chars[pos] matches { 'b' }) { break la_rep_14; }
             pos += 1;
-            let peek_save_29 = pos;
-            let mut peek_ok_29 = false;
-            peek_29: {
-                if pos >= chars.len() || chars[pos] != 'c' { break peek_29; }
+            let peek_save_16 = pos;
+            let mut peek_ok_16 = false;
+            peek_16: {
+                if pos >= chars.len() || chars[pos] != 'c' { break peek_16; }
                 pos += 1;
-                peek_ok_29 = true;
+                peek_ok_16 = true;
             }
-            pos = peek_save_29;
-            if peek_ok_29 {
-                accept_25 = peek_save_29;
+            pos = peek_save_16;
+            if peek_ok_16 {
+                accept_14 = peek_save_16;
             }
             continue;
         }
-        pos = la_saved_25;
+        pos = la_saved_14;
         break;
     }
-    if accept_25 < 0 {
+    if accept_14 < 0 {
         return -1;
     }
-    pos = accept_25;
+    pos = accept_14;
     if pos >= chars.len() || chars[pos] != 'c' { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
     pos += 1;
     return pos;
@@ -1356,18 +1252,18 @@ fn try_G(lx: &Lexer, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != 'g' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_30 = pos;
-        let mut ng_exit_30 = false;
-        ng_30: {
-            if !( pos > start + 2 ) { break ng_30; }
-            if pos >= chars.len() || chars[pos] != 'c' { break ng_30; }
+        let ng_saved_17 = pos;
+        let mut ng_exit_17 = false;
+        ng_17: {
+            if !( pos > start + 2 ) { break ng_17; }
+            if pos >= chars.len() || chars[pos] != 'c' { break ng_17; }
             pos += 1;
-            ng_exit_30 = true;
+            ng_exit_17 = true;
         }
-        if ng_exit_30 {
+        if ng_exit_17 {
             break;
         }
-        pos = ng_saved_30;
+        pos = ng_saved_17;
         if pos >= chars.len() { return -1; }
         pos += 1;
     }
@@ -1782,6 +1678,18 @@ impl Parser {
         }
         self.fail_on_kind(kind);
         return self.pos;
+    }
+
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
     }
 
     fn any(&mut self) -> i32 {

@@ -933,22 +933,9 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
 
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_4 = pos;
-    alts_done_4: {
-        alts_4_0: {
-            pos = alts_saved_4;
-            if pos >= chars.len() || chars[pos] != ' ' { break alts_4_0; }
-            pos += 1;
-            break alts_done_4;
-        }
-        alts_4_1: {
-            pos = alts_saved_4;
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_4_1; }
-            pos += 1;
-            break alts_done_4;
-        }
-        return -1;
-    }
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { '\n' | ' ' })) { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -1354,6 +1341,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1540,18 +1539,18 @@ fn _parse_s(p: &mut Parser) -> () {
 fn _parse_declarator__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_STAR {
-        let star = p.expect(TK_LIT_STAR, &SYNC_0);
-        let declarator = _parse_declarator(p, 1);
+        p.take();
+        _parse_declarator(p, 1);
         return;
     }
     if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
-        let declarator = _parse_declarator(p);
-        let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
+        p.take();
+        _parse_declarator(p);
+        p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
         return;
     }
     if kind == TK_ID {
-        let id = p.expect(TK_ID, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -1579,9 +1578,9 @@ fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_DECLARATOR, _start);
-                        let lbracket = p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
-                        let e = _parse_e(p);
-                        let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
+                        p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
+                        _parse_e(p);
+                        p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
                         p.b.finish_node(p.last_end());
                     } else {
                         break;
@@ -1592,8 +1591,8 @@ fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_DECLARATOR, _start);
-                        let lbracket = p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
-                        let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
+                        p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
+                        p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
                         p.b.finish_node(p.last_end());
                     } else {
                         break;
@@ -1606,8 +1605,8 @@ fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_DECLARATOR, _start);
-                let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
-                let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
+                p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
+                p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -1628,7 +1627,7 @@ fn _parse_declarator(p: &mut Parser, min_prec: i32 = 0) -> () {
 }
 
 fn _parse_e__inner(p: &mut Parser) -> () {
-    let int = p.expect(TK_INT, &EMPTY_SYNC);
+    p.expect(TK_INT, &EMPTY_SYNC);
     return;
 }
 

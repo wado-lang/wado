@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["grammars/non_greedy.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/non_greedy.g4"])]
 
 pub struct Span {
     pub start: i32,
@@ -606,6 +606,9 @@ impl TreeBuilder {
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
+        if self.last_finished >= checkpoint {
+            self.last_finished += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -615,6 +618,9 @@ impl TreeBuilder {
         self.alt.truncate(checkpoint);
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
+        }
+        if self.last_finished >= checkpoint {
+            self.last_finished = -1;
         }
     }
 
@@ -1249,6 +1255,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1308,10 +1326,8 @@ fn scan_seg(tokens: &Array<i32>, pos: i32) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIT_LPAREN {
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_0; }
-                pos += 1;
                 while pos < tokens.len() && tokens[pos] != TK_EOF && !(tokens[pos] == TK_LIT_RPAREN) { pos += 1; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_0; }
                 pos += 1;
@@ -1319,10 +1335,8 @@ fn scan_seg(tokens: &Array<i32>, pos: i32) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_LIT_LBRACKET {
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { break try_1; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] == TK_EOF { break try_1; }
                 pos += 1;
                 while pos < tokens.len() && tokens[pos] != TK_EOF && !(tokens[pos] == TK_LIT_RBRACKET) { pos += 1; }
@@ -1385,7 +1399,7 @@ fn _parse_start(p: &mut Parser) -> () {
 fn _parse_seg__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_LPAREN {
-        p.expect(TK_LIT_LPAREN, &SYNC_0);
+        p.take();
         while !_kind_set_1(p.peek_kind()) {
             p.any();
         }
@@ -1393,7 +1407,7 @@ fn _parse_seg__inner(p: &mut Parser) -> () {
         return;
     }
     if kind == TK_LIT_LBRACKET {
-        p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
+        p.take();
         _first_iter: {
             p.any();
         }
@@ -1406,7 +1420,7 @@ fn _parse_seg__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of seg matches",
         p.peek_span(),
-        &SYNC_1,
+        &SYNC_0,
     );
     return;
 }
@@ -1491,6 +1505,5 @@ fn _kind_set_2(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_RPAREN];
-global SYNC_1: List<i32> = [TK_LIT_LBRACKET, TK_LIT_LPAREN];
+global SYNC_0: List<i32> = [TK_LIT_LBRACKET, TK_LIT_LPAREN];
 

@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["grammars/ll_ctx_follow.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/ll_ctx_follow.g4"])]
 
 pub struct Span {
     pub start: i32,
@@ -606,6 +606,9 @@ impl TreeBuilder {
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
+        if self.last_finished >= checkpoint {
+            self.last_finished += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -615,6 +618,9 @@ impl TreeBuilder {
         self.alt.truncate(checkpoint);
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
+        }
+        if self.last_finished >= checkpoint {
+            self.last_finished = -1;
         }
     }
 
@@ -1231,6 +1237,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1333,36 +1351,31 @@ fn _parse_r__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if grp_kind == TK_X {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
-        gd_tourney: {
-            let mut gd_end: i32 = -1;
-            gd_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_wrapper(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
-                if pos < 0 { break gd_scan; }
-                pos = scan_b(tokens, pos);
-                if pos < 0 { break gd_scan; }
-                gd_end = pos;
-            }
-            if gd_end > gd_best {
-                gd_best = gd_end;
-                gd_winner = 0;
-            }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_2: i32 = -1;
-            gd_scan_2: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_wrapper(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 { break gd_scan_2; }
-                gd_end_2 = pos;
-            }
-            if gd_end_2 > gd_best {
-                gd_best = gd_end_2;
-                gd_winner = 1;
-            }
+        let mut gd_end: i32 = -1;
+        gd_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_wrapper(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
+            if pos < 0 { break gd_scan; }
+            pos = scan_b(tokens, pos);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+        }
+        if gd_end > gd_best {
+            gd_best = gd_end;
+            gd_winner = 0;
+        }
+        let mut gd_end_2: i32 = -1;
+        gd_scan_2: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_wrapper(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+        }
+        if gd_end_2 > gd_best {
+            gd_best = gd_end_2;
+            gd_winner = 1;
         }
         if gd_winner == 0 {
             _parse_wrapper(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);

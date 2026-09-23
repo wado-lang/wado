@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["grammars/at_end_alt_gaps.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/at_end_alt_gaps.g4"])]
 
 use { TreeMap } from "core:collections";
 
@@ -608,6 +608,9 @@ impl TreeBuilder {
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
+        if self.last_finished >= checkpoint {
+            self.last_finished += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -617,6 +620,9 @@ impl TreeBuilder {
         self.alt.truncate(checkpoint);
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
+        }
+        if self.last_finished >= checkpoint {
+            self.last_finished = -1;
         }
     }
 
@@ -1531,22 +1537,9 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
 
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_2 = pos;
-    alts_done_2: {
-        alts_2_0: {
-            pos = alts_saved_2;
-            if pos >= chars.len() || chars[pos] != ' ' { break alts_2_0; }
-            pos += 1;
-            break alts_done_2;
-        }
-        alts_2_1: {
-            pos = alts_saved_2;
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_2_1; }
-            pos += 1;
-            break alts_done_2;
-        }
-        return -1;
-    }
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { '\n' | ' ' })) { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -1868,6 +1861,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -2042,25 +2047,25 @@ fn _parse_prog(p: &mut Parser) -> () {
 fn _parse_entry__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_LPAREN {
-        p.expect(TK_LIT_LPAREN, &SYNC_0);
+        p.take();
         p.atn_ret_pending = 21;
         _parse_typespec(p);
         p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
         return;
     }
     if kind == TK_LIT_new {
-        p.expect(TK_LIT_new, &SYNC_0);
+        p.take();
         p.atn_ret_pending = 28;
         _parse_typespec(p);
-        p.expect(TK_LIT_LBRACKET, &SYNC_1);
-        p.expect(TK_INT, &SYNC_2);
+        p.expect(TK_LIT_LBRACKET, &SYNC_0);
+        p.expect(TK_INT, &SYNC_1);
         p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
         return;
     }
     p.no_viable(
         "no alternative of entry matches",
         p.peek_span(),
-        &SYNC_3,
+        &SYNC_2,
     );
     return;
 }
@@ -2081,8 +2086,8 @@ fn _parse_entry(p: &mut Parser) -> () {
 }
 
 fn _parse_typespec__inner_alt_1(p: &mut Parser) -> () {
-    p.expect(TK_ID, &SYNC_4);
-    p.expect(TK_LIT_LBRACKET, &SYNC_2);
+    p.expect(TK_ID, &SYNC_3);
+    p.expect(TK_LIT_LBRACKET, &SYNC_1);
     p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
     return;
 }
@@ -2122,7 +2127,7 @@ fn _parse_typespec__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of typespec matches",
         p.peek_span(),
-        &SYNC_0,
+        &SYNC_4,
     );
     return;
 }
@@ -2207,11 +2212,11 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_ID];
-global SYNC_1: List<i32> = [TK_INT];
-global SYNC_2: List<i32> = [TK_LIT_RBRACKET];
-global SYNC_3: List<i32> = [TK_LIT_LPAREN, TK_LIT_new];
-global SYNC_4: List<i32> = [TK_LIT_LBRACKET];
+global SYNC_0: List<i32> = [TK_INT];
+global SYNC_1: List<i32> = [TK_LIT_RBRACKET];
+global SYNC_2: List<i32> = [TK_LIT_LPAREN, TK_LIT_new];
+global SYNC_3: List<i32> = [TK_LIT_LBRACKET];
+global SYNC_4: List<i32> = [TK_ID];
 
 global ATN_SIM: AtnSim = atn_decode(&b"\x03\x00\x03\x00\x2f\x00\x00\x00\x02\x00\x04\x00\x0b\x00\x0f\x00\x23\x00\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x08\x09\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x00\x01\x00\x04\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x07\x00\x10\x00\x24\x00\x09\x00\x02\x00\x0a\x00\x03\x00\x0c\x00\x0a\x00\x0d\x00\x0e\x00\x0f\x00\x08\x00\x12\x00\x19\x00\x04\x00\x13\x00\x14\x00\x15\x00\x05\x00\x17\x00\x18\x00\x11\x00\x1a\x00\x1b\x00\x1c\x00\x05\x00\x1e\x00\x1f\x00\x20\x00\x21\x00\x22\x00\x23\x00\x11\x00\x26\x00\x29\x00\x06\x00\x27\x00\x28\x00\x25\x00\x2a\x00\x2b\x00\x2c\x00\x2d\x00\x2e\x00\x2f\x00\x25\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x16\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
 

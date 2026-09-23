@@ -4077,6 +4077,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -14101,7 +14113,7 @@ fn _parse_macro_invocation(p: &mut Parser) -> () with RustParserBase {
 fn _parse_delim_token_tree__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
     if kind == TK_LPAREN {
-        p.expect(TK_LPAREN, &SYNC_1);
+        p.take();
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -14135,7 +14147,7 @@ fn _parse_delim_token_tree__inner(p: &mut Parser) -> () with RustParserBase {
         return;
     }
     if kind == TK_LSQUAREBRACKET {
-        p.expect(TK_LSQUAREBRACKET, &SYNC_2);
+        p.take();
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -14169,7 +14181,7 @@ fn _parse_delim_token_tree__inner(p: &mut Parser) -> () with RustParserBase {
         return;
     }
     if kind == TK_LCURLYBRACE {
-        p.expect(TK_LCURLYBRACE, &SYNC_3);
+        p.take();
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -14267,7 +14279,7 @@ fn _parse_token_tree__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     p.no_viable(
         "no alternative of tokenTree matches",
         p.peek_span(),
-        &SYNC_4,
+        &SYNC_1,
     );
     return;
 }
@@ -14332,13 +14344,13 @@ fn _parse_token_tree_token__inner(p: &mut Parser) -> () with RustParserBase {
         return;
     }
     if kind == TK_DOLLAR {
-        p.expect(TK_DOLLAR, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of tokenTreeToken matches",
         p.peek_span(),
-        &SYNC_5,
+        &SYNC_2,
     );
     return;
 }
@@ -14356,8 +14368,8 @@ fn _parse_token_tree_token(p: &mut Parser) -> () with RustParserBase {
 
 fn _parse_macro_invocation_semi__inner_alt_0(p: &mut Parser) -> () with RustParserBase {
     _parse_simple_path(p, FOLLOW_MASK_2);
-    p.expect(TK_NOT, &SYNC_6);
-    p.expect(TK_LPAREN, &SYNC_1);
+    p.expect(TK_NOT, &SYNC_3);
+    p.expect(TK_LPAREN, &SYNC_4);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -14387,7 +14399,7 @@ fn _parse_macro_invocation_semi__inner_alt_0(p: &mut Parser) -> () with RustPars
         }
         _parse_token_tree(p, 0);
     }
-    p.expect(TK_RPAREN, &SYNC_7);
+    p.expect(TK_RPAREN, &SYNC_5);
     p.expect(TK_SEMI, &EMPTY_SYNC);
     return;
 }
@@ -14420,8 +14432,8 @@ fn _parse_macro_invocation_semi__inner_scan_0(tokens: &Array<i32>, pos: i32, gat
 
 fn _parse_macro_invocation_semi__inner_alt_1(p: &mut Parser) -> () with RustParserBase {
     _parse_simple_path(p, FOLLOW_MASK_3);
-    p.expect(TK_NOT, &SYNC_8);
-    p.expect(TK_LSQUAREBRACKET, &SYNC_2);
+    p.expect(TK_NOT, &SYNC_6);
+    p.expect(TK_LSQUAREBRACKET, &SYNC_7);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -14451,7 +14463,7 @@ fn _parse_macro_invocation_semi__inner_alt_1(p: &mut Parser) -> () with RustPars
         }
         _parse_token_tree(p, 0);
     }
-    p.expect(TK_RSQUAREBRACKET, &SYNC_7);
+    p.expect(TK_RSQUAREBRACKET, &SYNC_5);
     p.expect(TK_SEMI, &EMPTY_SYNC);
     return;
 }
@@ -14484,8 +14496,8 @@ fn _parse_macro_invocation_semi__inner_scan_1(tokens: &Array<i32>, pos: i32, gat
 
 fn _parse_macro_invocation_semi__inner_alt_2(p: &mut Parser) -> () with RustParserBase {
     _parse_simple_path(p, FOLLOW_MASK_4);
-    p.expect(TK_NOT, &SYNC_9);
-    p.expect(TK_LCURLYBRACE, &SYNC_3);
+    p.expect(TK_NOT, &SYNC_8);
+    p.expect(TK_LCURLYBRACE, &SYNC_9);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -14619,21 +14631,21 @@ fn _parse_macro_rules_definition(p: &mut Parser, follow: i64 = 0) -> () with Rus
 fn _parse_macro_rules_def__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if kind == TK_LPAREN {
-        p.expect(TK_LPAREN, &SYNC_0);
+        p.take();
         _parse_macro_rules(p, (FOLLOW_MASK_6 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
-        p.expect(TK_RPAREN, &SYNC_7);
+        p.expect(TK_RPAREN, &SYNC_5);
         p.expect(TK_SEMI, &EMPTY_SYNC);
         return;
     }
     if kind == TK_LSQUAREBRACKET {
-        p.expect(TK_LSQUAREBRACKET, &SYNC_0);
+        p.take();
         _parse_macro_rules(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
-        p.expect(TK_RSQUAREBRACKET, &SYNC_7);
+        p.expect(TK_RSQUAREBRACKET, &SYNC_5);
         p.expect(TK_SEMI, &EMPTY_SYNC);
         return;
     }
     if kind == TK_LCURLYBRACE {
-        p.expect(TK_LCURLYBRACE, &SYNC_0);
+        p.take();
         _parse_macro_rules(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_RCURLYBRACE, &EMPTY_SYNC);
         return;
@@ -14739,7 +14751,7 @@ fn _parse_macro_rule(p: &mut Parser) -> () with RustParserBase {
 fn _parse_macro_matcher__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
     if kind == TK_LPAREN {
-        p.expect(TK_LPAREN, &SYNC_1);
+        p.take();
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -14773,7 +14785,7 @@ fn _parse_macro_matcher__inner(p: &mut Parser) -> () with RustParserBase {
         return;
     }
     if kind == TK_LSQUAREBRACKET {
-        p.expect(TK_LSQUAREBRACKET, &SYNC_2);
+        p.take();
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -14807,7 +14819,7 @@ fn _parse_macro_matcher__inner(p: &mut Parser) -> () with RustParserBase {
         return;
     }
     if kind == TK_LCURLYBRACE {
-        p.expect(TK_LCURLYBRACE, &SYNC_3);
+        p.take();
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -14860,8 +14872,8 @@ fn _parse_macro_matcher(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_macro_match__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_DOLLAR, &SYNC_6);
-    p.expect(TK_LPAREN, &SYNC_4);
+    p.expect(TK_DOLLAR, &SYNC_3);
+    p.expect(TK_LPAREN, &SYNC_1);
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -14895,7 +14907,7 @@ fn _parse_macro_match__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with R
         _plus_first = false;
         _parse_macro_match(p, 0);
     }
-    p.expect(TK_RPAREN, &SYNC_5);
+    p.expect(TK_RPAREN, &SYNC_2);
     if _kind_set_6(p.peek_kind()) {
         _parse_macro_rep_sep(p);
     }
@@ -14974,7 +14986,7 @@ fn _parse_macro_match__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     p.no_viable(
         "no alternative of macroMatch matches",
         p.peek_span(),
-        &SYNC_4,
+        &SYNC_1,
     );
     return;
 }
@@ -15118,7 +15130,7 @@ fn _parse_macro_rep_sep__inner(p: &mut Parser) -> () with RustParserBase {
         return;
     }
     if kind == TK_DOLLAR {
-        p.expect(TK_DOLLAR, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -15143,7 +15155,7 @@ fn _parse_macro_rep_sep(p: &mut Parser) -> () with RustParserBase {
 fn _parse_macro_rep_op__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_55(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -15649,7 +15661,7 @@ fn _parse_crate_ref__inner(p: &mut Parser) -> () with RustParserBase {
         return;
     }
     if kind == TK_KW_SELFVALUE {
-        p.expect(TK_KW_SELFVALUE, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -16008,7 +16020,7 @@ fn _parse_function_qualifiers(p: &mut Parser, follow: i64 = 0) -> () with RustPa
 fn _parse_abi__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_13(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -18439,7 +18451,7 @@ fn _parse_associated_item(p: &mut Parser) -> () with RustParserBase {
 
 fn _parse_inner_attribute__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_POUND, &SYNC_11);
-    p.expect(TK_NOT, &SYNC_8);
+    p.expect(TK_NOT, &SYNC_6);
     p.expect(TK_LSQUAREBRACKET, &SYNC_57);
     _parse_attr(p, (FOLLOW_MASK_33 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_RSQUAREBRACKET, &EMPTY_SYNC);
@@ -18458,7 +18470,7 @@ fn _parse_inner_attribute(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 }
 
 fn _parse_outer_attribute__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_POUND, &SYNC_8);
+    p.expect(TK_POUND, &SYNC_6);
     p.expect(TK_LSQUAREBRACKET, &SYNC_57);
     _parse_attr(p, (FOLLOW_MASK_33 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_RSQUAREBRACKET, &EMPTY_SYNC);
@@ -18479,7 +18491,7 @@ fn _parse_outer_attribute(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 fn _parse_attr__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if kind == TK_KW_UNSAFE {
-        p.expect(TK_KW_UNSAFE, &SYNC_6);
+        p.take();
         p.expect(TK_LPAREN, &SYNC_57);
         _parse_attr(p, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_RPAREN, &EMPTY_SYNC);
@@ -18518,14 +18530,14 @@ fn _parse_attr_input__inner(p: &mut Parser) -> () with RustParserBase {
         return;
     }
     if kind == TK_EQ {
-        p.expect(TK_EQ, &SYNC_58);
+        p.take();
         _parse_literal_expression(p);
         return;
     }
     p.no_viable(
         "no alternative of attrInput matches",
         p.peek_span(),
-        &SYNC_59,
+        &SYNC_58,
     );
     return;
 }
@@ -18571,7 +18583,7 @@ fn _parse_statement__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with Rus
 fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if kind == TK_SEMI {
-        p.expect(TK_SEMI, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if _kind_set_103(kind) {
@@ -18667,7 +18679,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
     p.no_viable(
         "no alternative of statement matches",
         p.peek_span(),
-        &SYNC_60,
+        &SYNC_59,
     );
     return;
 }
@@ -18713,7 +18725,7 @@ fn _parse_let_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
         }
         _parse_outer_attribute(p, 0);
     }
-    p.expect(TK_KW_LET, &SYNC_61);
+    p.expect(TK_KW_LET, &SYNC_60);
     _parse_pattern_no_top_alt(p, 0);
     if p.peek_kind() == TK_COLON && _kind_set_18(p.peek_at(1)) {
         p.expect(TK_COLON, &SYNC_33);
@@ -18723,7 +18735,7 @@ fn _parse_let_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
         p.expect(TK_EQ, &SYNC_42);
         _parse_expression(p, 0);
         if p.peek_kind() == TK_KW_ELSE && p.peek_at(1) == TK_LCURLYBRACE {
-            p.expect(TK_KW_ELSE, &SYNC_9);
+            p.expect(TK_KW_ELSE, &SYNC_8);
             _parse_block_expression(p, (FOLLOW_MASK_16 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         }
     }
@@ -18949,9 +18961,9 @@ fn _parse_expression__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with Ru
 
 fn _parse_expression__inner_alt_10(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.b.set_alt(10);
+    p.expect_set(&SYNC_61);
+    p.expect(TK_KW_RAW, &SYNC_62);
     p.expect_set(&SYNC_62);
-    p.expect(TK_KW_RAW, &SYNC_63);
-    p.expect_set(&SYNC_63);
     _parse_expression(p, follow, 15);
     return;
 }
@@ -18971,7 +18983,7 @@ fn _parse_expression__inner_scan_10(tokens: &Array<i32>, pos: i32, gate: &mut Sc
 
 fn _parse_expression__inner_alt_11(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.b.set_alt(11);
-    p.expect_set(&SYNC_62);
+    p.expect_set(&SYNC_61);
     if p.peek_kind() == TK_KW_MUT {
         p.expect(TK_KW_MUT, &EMPTY_SYNC);
     }
@@ -19092,7 +19104,7 @@ fn _parse_expression__inner_scan_33(tokens: &Array<i32>, pos: i32, gate: &mut Sc
 
 fn _parse_expression__inner_alt_35(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.b.set_alt(35);
-    p.expect(TK_LPAREN, &SYNC_64);
+    p.expect(TK_LPAREN, &SYNC_63);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -19395,19 +19407,19 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     }
     if kind == TK_STAR {
         p.b.set_alt(12);
-        p.expect(TK_STAR, &SYNC_42);
+        p.take();
         _parse_expression(p, follow, 15);
         return;
     }
     if _kind_set_72(kind) {
         p.b.set_alt(13);
-        p.expect_set(&SYNC_65);
+        p.expect_set(&SYNC_64);
         _parse_expression(p, follow, 15);
         return;
     }
     if kind == TK_DOTDOT {
         p.b.set_alt(25);
-        p.expect(TK_DOTDOT, &SYNC_42);
+        p.take();
         if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_31(p.peek_kind())) {
             _parse_expression(p, follow);
         }
@@ -19415,13 +19427,13 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     }
     if kind == TK_DOTDOTEQ {
         p.b.set_alt(26);
-        p.expect(TK_DOTDOTEQ, &SYNC_42);
+        p.take();
         _parse_expression(p, follow, 4);
         return;
     }
     if kind == TK_KW_CONTINUE {
         p.b.set_alt(30);
-        p.expect(TK_KW_CONTINUE, &SYNC_42);
+        p.take();
         if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LIFETIME_OR_LABEL) {
             p.expect(TK_LIFETIME_OR_LABEL, &EMPTY_SYNC);
         }
@@ -19432,7 +19444,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     }
     if kind == TK_KW_BREAK {
         p.b.set_alt(31);
-        p.expect(TK_KW_BREAK, &SYNC_42);
+        p.take();
         if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LIFETIME_OR_LABEL) {
             p.expect(TK_LIFETIME_OR_LABEL, &EMPTY_SYNC);
         }
@@ -19443,7 +19455,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     }
     if kind == TK_KW_RETURN {
         p.b.set_alt(32);
-        p.expect(TK_KW_RETURN, &SYNC_42);
+        p.take();
         if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_31(p.peek_kind())) {
             _parse_expression(p, follow);
         }
@@ -19473,7 +19485,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     }
     if kind == TK_LSQUAREBRACKET {
         p.b.set_alt(34);
-        p.expect(TK_LSQUAREBRACKET, &SYNC_66);
+        p.take();
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -19706,7 +19718,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(15);
-                let _ = p.expect_set(&SYNC_67);
+                let _ = p.expect_set(&SYNC_65);
                 _parse_expression(p, follow, 14);
                 p.b.finish_node(p.last_end());
             } else {
@@ -19720,7 +19732,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(16);
-                let _ = p.expect_set(&SYNC_68);
+                let _ = p.expect_set(&SYNC_66);
                 _parse_expression(p, follow, 13);
                 p.b.finish_node(p.last_end());
             } else {
@@ -19800,7 +19812,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                         } else if _gk == TK_GT {
                             _parse_shr(p);
                         } else {
-                            let _ = p.expect_set(&SYNC_69);
+                            let _ = p.expect_set(&SYNC_67);
                         }
                         _parse_expression(p, follow, 12);
                         p.b.finish_node(p.last_end());
@@ -19837,7 +19849,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                         } else if _gk == TK_GT {
                             _parse_shr(p);
                         } else {
-                            let _ = p.expect_set(&SYNC_69);
+                            let _ = p.expect_set(&SYNC_67);
                         }
                         _parse_expression(p, follow, 12);
                         p.b.finish_node(p.last_end());
@@ -20015,13 +20027,13 @@ fn _parse_expression(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () w
 fn _parse_comparison_operator__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_77(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of comparisonOperator matches",
         p.peek_span(),
-        &SYNC_70,
+        &SYNC_68,
     );
     return;
 }
@@ -20040,13 +20052,13 @@ fn _parse_comparison_operator(p: &mut Parser) -> () with RustParserBase {
 fn _parse_compound_assign_operator__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_78(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of compoundAssignOperator matches",
         p.peek_span(),
-        &SYNC_71,
+        &SYNC_69,
     );
     return;
 }
@@ -20194,7 +20206,7 @@ fn _parse_expression_with_block__inner(p: &mut Parser, follow: i64 = 0) -> () wi
     p.no_viable(
         "no alternative of expressionWithBlock matches",
         p.peek_span(),
-        &SYNC_72,
+        &SYNC_70,
     );
     return;
 }
@@ -20213,13 +20225,13 @@ fn _parse_expression_with_block(p: &mut Parser, follow: i64 = 0) -> () with Rust
 fn _parse_literal_expression__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_69(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of literalExpression matches",
         p.peek_span(),
-        &SYNC_58,
+        &SYNC_71,
     );
     return;
 }
@@ -20248,7 +20260,7 @@ fn _parse_path_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
     p.no_viable(
         "no alternative of pathExpression matches",
         p.peek_span(),
-        &SYNC_73,
+        &SYNC_72,
     );
     return;
 }
@@ -20265,7 +20277,7 @@ fn _parse_path_expression(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 }
 
 fn _parse_block_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_LCURLYBRACE, &SYNC_74);
+    p.expect(TK_LCURLYBRACE, &SYNC_73);
     if !p.speculating {
         p.no_struct = 0;
     }
@@ -20446,7 +20458,7 @@ fn _parse_statements__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     p.no_viable(
         "no alternative of statements matches",
         p.peek_span(),
-        &SYNC_60,
+        &SYNC_59,
     );
     return;
 }
@@ -20463,7 +20475,7 @@ fn _parse_statements(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 }
 
 fn _parse_async_block_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_KW_ASYNC, &SYNC_75);
+    p.expect(TK_KW_ASYNC, &SYNC_74);
     if p.peek_kind() == TK_KW_MOVE {
         p.expect(TK_KW_MOVE, &EMPTY_SYNC);
     }
@@ -20483,7 +20495,7 @@ fn _parse_async_block_expression(p: &mut Parser, follow: i64 = 0) -> () with Rus
 }
 
 fn _parse_unsafe_block_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_KW_UNSAFE, &SYNC_9);
+    p.expect(TK_KW_UNSAFE, &SYNC_8);
     _parse_block_expression(p, follow);
     return;
 }
@@ -20844,7 +20856,7 @@ fn _parse_struct_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     p.no_viable(
         "no alternative of structExpression matches",
         p.peek_span(),
-        &SYNC_76,
+        &SYNC_75,
     );
     return;
 }
@@ -20862,7 +20874,7 @@ fn _parse_struct_expression(p: &mut Parser, follow: i64 = 0) -> () with RustPars
 
 fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     _parse_path_in_expression(p, FOLLOW_MASK_27);
-    p.expect(TK_LCURLYBRACE, &SYNC_77);
+    p.expect(TK_LCURLYBRACE, &SYNC_76);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -21046,7 +21058,7 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with 
             }
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_COMMA, &SYNC_78);
+        p.expect(TK_COMMA, &SYNC_77);
         _parse_struct_expr_field(p, follow);
     }
     let grp_kind = p.peek_kind();
@@ -21092,7 +21104,7 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with 
             gd_winner = 1;
         }
         if gd_winner == 0 {
-            p.expect(TK_COMMA, &SYNC_79);
+            p.expect(TK_COMMA, &SYNC_78);
             _parse_struct_base(p, follow);
         } else {
             if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
@@ -21213,7 +21225,7 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             } else if grp_kind == TK_INTEGER_LITERAL {
                 _parse_tuple_index(p);
             } else {
-                p.no_viable("no viable alternative", p.peek_span(), &SYNC_80);
+                p.no_viable("no viable alternative", p.peek_span(), &SYNC_79);
             }
             p.expect(TK_COLON, &SYNC_42);
             _parse_expression(p, follow);
@@ -21221,7 +21233,7 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             _parse_identifier(p);
         }
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_80);
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_79);
     }
     return;
 }
@@ -21256,7 +21268,7 @@ fn _parse_struct_base(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase
 
 fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     _parse_path_in_expression(p, FOLLOW_MASK_20);
-    p.expect(TK_LPAREN, &SYNC_64);
+    p.expect(TK_LPAREN, &SYNC_63);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -21504,7 +21516,7 @@ fn _parse_enumeration_variant_expression__inner(p: &mut Parser, follow: i64 = 0)
     p.no_viable(
         "no alternative of enumerationVariantExpression matches",
         p.peek_span(),
-        &SYNC_76,
+        &SYNC_75,
     );
     return;
 }
@@ -21522,7 +21534,7 @@ fn _parse_enumeration_variant_expression(p: &mut Parser, follow: i64 = 0) -> () 
 
 fn _parse_enum_expr_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     _parse_path_in_expression(p, FOLLOW_MASK_27);
-    p.expect(TK_LCURLYBRACE, &SYNC_81);
+    p.expect(TK_LCURLYBRACE, &SYNC_80);
     if _kind_set_36(p.peek_kind()) {
         _parse_enum_expr_fields(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
@@ -21582,7 +21594,7 @@ fn _parse_enum_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
             }
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_COMMA, &SYNC_80);
+        p.expect(TK_COMMA, &SYNC_79);
         _parse_enum_expr_field(p, (FOLLOW_MASK_37 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
@@ -21621,7 +21633,7 @@ fn _parse_enum_expr_field__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () wi
     } else if grp_kind == TK_INTEGER_LITERAL {
         _parse_tuple_index(p);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_80);
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_79);
     }
     p.expect(TK_COLON, &SYNC_42);
     _parse_expression(p, follow);
@@ -21659,7 +21671,7 @@ fn _parse_enum_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
     p.no_viable(
         "no alternative of enumExprField matches",
         p.peek_span(),
-        &SYNC_80,
+        &SYNC_79,
     );
     return;
 }
@@ -21677,7 +21689,7 @@ fn _parse_enum_expr_field(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 
 fn _parse_enum_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     _parse_path_in_expression(p, FOLLOW_MASK_20);
-    p.expect(TK_LPAREN, &SYNC_64);
+    p.expect(TK_LPAREN, &SYNC_63);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         p.scan_gate.no_struct = p.no_struct;
@@ -21850,23 +21862,23 @@ fn _parse_closure_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     if grp_kind == TK_OROR {
         p.expect(TK_OROR, &EMPTY_SYNC);
     } else if grp_kind == TK_OR {
-        p.expect(TK_OR, &SYNC_82);
+        p.expect(TK_OR, &SYNC_81);
         if _kind_set_37(p.peek_kind()) {
             _parse_closure_parameters(p, FOLLOW_MASK_38);
         }
         p.expect(TK_OR, &EMPTY_SYNC);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_83);
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_82);
     }
     let grp_kind_2 = p.peek_kind();
     if _kind_set_31(grp_kind_2) {
         _parse_expression(p, follow);
     } else if grp_kind_2 == TK_RARROW {
-        p.expect(TK_RARROW, &SYNC_84);
+        p.expect(TK_RARROW, &SYNC_83);
         _parse_type_no_bounds(p, FOLLOW_MASK_27);
         _parse_block_expression(p, follow);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_85);
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_84);
     }
     return;
 }
@@ -21923,7 +21935,7 @@ fn _parse_closure_parameters__inner(p: &mut Parser, follow: i64 = 0) -> () with 
             }
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_COMMA, &SYNC_82);
+        p.expect(TK_COMMA, &SYNC_81);
         _parse_closure_param(p, follow);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
@@ -22045,7 +22057,7 @@ fn _parse_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
     } else if grp_kind == TK_KW_FOR {
         _parse_iterator_loop_expression(p, 0);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_86);
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_85);
     }
     return;
 }
@@ -22062,7 +22074,7 @@ fn _parse_loop_expression(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 }
 
 fn _parse_infinite_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_KW_LOOP, &SYNC_9);
+    p.expect(TK_KW_LOOP, &SYNC_8);
     _parse_block_expression(p, follow);
     return;
 }
@@ -22132,8 +22144,8 @@ fn _parse_predicate_loop_expression(p: &mut Parser, follow: i64 = 0) -> () with 
 }
 
 fn _parse_predicate_pattern_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_KW_WHILE, &SYNC_87);
-    p.expect(TK_KW_LET, &SYNC_88);
+    p.expect(TK_KW_WHILE, &SYNC_86);
+    p.expect(TK_KW_LET, &SYNC_87);
     _parse_pattern(p, FOLLOW_MASK_42);
     p.expect(TK_EQ, &SYNC_42);
     if !p.speculating {
@@ -22188,7 +22200,7 @@ fn _parse_predicate_pattern_loop_expression(p: &mut Parser, follow: i64 = 0) -> 
 }
 
 fn _parse_iterator_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_KW_FOR, &SYNC_88);
+    p.expect(TK_KW_FOR, &SYNC_87);
     _parse_pattern(p, FOLLOW_MASK_43);
     p.expect(TK_KW_IN, &SYNC_42);
     if !p.speculating {
@@ -22270,7 +22282,7 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     }
     _parse_block_expression(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_KW_ELSE && _kind_set_106(p.peek_at(1))) {
-        p.expect(TK_KW_ELSE, &SYNC_89);
+        p.expect(TK_KW_ELSE, &SYNC_88);
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LCURLYBRACE {
             _parse_block_expression(p, 0);
@@ -22318,7 +22330,7 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
                 _parse_if_let_expression(p, 0);
             }
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_89);
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_88);
         }
     }
     return;
@@ -22336,8 +22348,8 @@ fn _parse_if_expression(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
 }
 
 fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_KW_IF, &SYNC_87);
-    p.expect(TK_KW_LET, &SYNC_88);
+    p.expect(TK_KW_IF, &SYNC_86);
+    p.expect(TK_KW_LET, &SYNC_87);
     _parse_pattern(p, FOLLOW_MASK_42);
     p.expect(TK_EQ, &SYNC_42);
     if !p.speculating {
@@ -22378,7 +22390,7 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     }
     _parse_block_expression(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_KW_ELSE && _kind_set_106(p.peek_at(1))) {
-        p.expect(TK_KW_ELSE, &SYNC_89);
+        p.expect(TK_KW_ELSE, &SYNC_88);
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LCURLYBRACE {
             _parse_block_expression(p, 0);
@@ -22426,7 +22438,7 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                 _parse_if_let_expression(p, 0);
             }
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_89);
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_88);
         }
     }
     return;
@@ -22444,8 +22456,8 @@ fn _parse_if_let_expression(p: &mut Parser, follow: i64 = 0) -> () with RustPars
 }
 
 fn _parse_let_chain_tail__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_ANDAND, &SYNC_87);
-    p.expect(TK_KW_LET, &SYNC_88);
+    p.expect(TK_ANDAND, &SYNC_86);
+    p.expect(TK_KW_LET, &SYNC_87);
     _parse_pattern(p, FOLLOW_MASK_42);
     p.expect(TK_EQ, &SYNC_42);
     if !p.speculating {
@@ -22478,7 +22490,7 @@ fn _parse_match_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
     if !p.speculating {
         p.no_struct = 0;
     }
-    p.expect(TK_LCURLYBRACE, &SYNC_90);
+    p.expect(TK_LCURLYBRACE, &SYNC_89);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -22738,8 +22750,8 @@ fn _parse_match_arm(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
 }
 
 fn _parse_match_arm_guard__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_KW_IF, &SYNC_87);
-    p.expect(TK_KW_LET, &SYNC_88);
+    p.expect(TK_KW_IF, &SYNC_86);
+    p.expect(TK_KW_LET, &SYNC_87);
     _parse_pattern(p, FOLLOW_MASK_42);
     p.expect(TK_EQ, &SYNC_42);
     _parse_expression(p, (FOLLOW_MASK_41 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
@@ -22827,7 +22839,7 @@ fn _parse_match_arm_guard__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
     p.no_viable(
         "no alternative of matchArmGuard matches",
         p.peek_span(),
-        &SYNC_91,
+        &SYNC_90,
     );
     return;
 }
@@ -22870,7 +22882,7 @@ fn _parse_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_OR, &SYNC_61);
+        p.expect(TK_OR, &SYNC_60);
         _parse_pattern_no_top_alt(p, (FOLLOW_MASK_45 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     }
     return;
@@ -22935,7 +22947,7 @@ fn _parse_pattern_no_top_alt__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     p.no_viable(
         "no alternative of patternNoTopAlt matches",
         p.peek_span(),
-        &SYNC_61,
+        &SYNC_60,
     );
     return;
 }
@@ -23173,7 +23185,7 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
     p.no_viable(
         "no alternative of patternWithoutRange matches",
         p.peek_span(),
-        &SYNC_61,
+        &SYNC_60,
     );
     return;
 }
@@ -23208,35 +23220,35 @@ fn _parse_literal_pattern__inner_alt_9(p: &mut Parser, follow: i64 = 0) -> () wi
 fn _parse_literal_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if kind == TK_KW_TRUE {
-        p.expect(TK_KW_TRUE, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_KW_FALSE {
-        p.expect(TK_KW_FALSE, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_CHAR_LITERAL {
-        p.expect(TK_CHAR_LITERAL, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_BYTE_LITERAL {
-        p.expect(TK_BYTE_LITERAL, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_STRING_LITERAL {
-        p.expect(TK_STRING_LITERAL, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_RAW_STRING_LITERAL {
-        p.expect(TK_RAW_STRING_LITERAL, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_BYTE_STRING_LITERAL {
-        p.expect(TK_BYTE_STRING_LITERAL, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_RAW_BYTE_STRING_LITERAL {
-        p.expect(TK_RAW_BYTE_STRING_LITERAL, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if _kind_set_109(kind) {
@@ -23278,7 +23290,7 @@ fn _parse_literal_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
     p.no_viable(
         "no alternative of literalPattern matches",
         p.peek_span(),
-        &SYNC_92,
+        &SYNC_91,
     );
     return;
 }
@@ -23303,7 +23315,7 @@ fn _parse_identifier_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     }
     _parse_identifier(p);
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_AT && _kind_set_43(p.peek_at(1))) {
-        p.expect(TK_AT, &SYNC_88);
+        p.expect(TK_AT, &SYNC_87);
         _parse_pattern(p, follow);
     }
     return;
@@ -23355,7 +23367,7 @@ fn _parse_rest_pattern(p: &mut Parser) -> () with RustParserBase {
 fn _parse_range_pattern__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.b.set_alt(0);
     _parse_range_pattern_bound(p, FOLLOW_MASK_46);
-    p.expect(TK_DOTDOTEQ, &SYNC_93);
+    p.expect(TK_DOTDOTEQ, &SYNC_92);
     _parse_range_pattern_bound(p, follow);
     return;
 }
@@ -23374,7 +23386,7 @@ fn _parse_range_pattern__inner_scan_0(tokens: &Array<i32>, pos: i32, gate: &mut 
 fn _parse_range_pattern__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.b.set_alt(2);
     _parse_range_pattern_bound(p, FOLLOW_MASK_48);
-    p.expect(TK_DOTDOTDOT, &SYNC_93);
+    p.expect(TK_DOTDOTDOT, &SYNC_92);
     _parse_range_pattern_bound(p, follow);
     return;
 }
@@ -23444,7 +23456,7 @@ fn _parse_range_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     p.no_viable(
         "no alternative of rangePattern matches",
         p.peek_span(),
-        &SYNC_93,
+        &SYNC_92,
     );
     return;
 }
@@ -23479,11 +23491,11 @@ fn _parse_range_pattern_bound__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> (
 fn _parse_range_pattern_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if kind == TK_CHAR_LITERAL {
-        p.expect(TK_CHAR_LITERAL, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_BYTE_LITERAL {
-        p.expect(TK_BYTE_LITERAL, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if _kind_set_109(kind) {
@@ -23529,7 +23541,7 @@ fn _parse_range_pattern_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with
     p.no_viable(
         "no alternative of rangePatternBound matches",
         p.peek_span(),
-        &SYNC_93,
+        &SYNC_92,
     );
     return;
 }
@@ -23546,7 +23558,7 @@ fn _parse_range_pattern_bound(p: &mut Parser, follow: i64 = 0) -> () with RustPa
 }
 
 fn _parse_reference_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect_set(&SYNC_62);
+    p.expect_set(&SYNC_61);
     if p.peek_kind() == TK_KW_MUT {
         p.expect(TK_KW_MUT, &EMPTY_SYNC);
     }
@@ -23567,7 +23579,7 @@ fn _parse_reference_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustPars
 
 fn _parse_struct_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     _parse_path_in_expression(p, FOLLOW_MASK_27);
-    p.expect(TK_LCURLYBRACE, &SYNC_94);
+    p.expect(TK_LCURLYBRACE, &SYNC_93);
     if _kind_set_40(p.peek_kind()) {
         _parse_struct_pattern_elements(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
@@ -23594,7 +23606,7 @@ fn _parse_struct_pattern_elements__inner_alt_1(p: &mut Parser, follow: i64 = 0) 
 fn _parse_struct_pattern_elements__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     _parse_struct_pattern_fields(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
-        p.expect(TK_COMMA, &SYNC_95);
+        p.expect(TK_COMMA, &SYNC_94);
         if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_41(p.peek_kind())) {
             _parse_struct_pattern_et_cetera(p);
         }
@@ -23635,7 +23647,7 @@ fn _parse_struct_pattern_elements__inner(p: &mut Parser, follow: i64 = 0) -> () 
     p.no_viable(
         "no alternative of structPatternElements matches",
         p.peek_span(),
-        &SYNC_96,
+        &SYNC_95,
     );
     return;
 }
@@ -23675,7 +23687,7 @@ fn _parse_struct_pattern_fields__inner(p: &mut Parser, follow: i64 = 0) -> () wi
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_COMMA, &SYNC_97);
+        p.expect(TK_COMMA, &SYNC_96);
         _parse_struct_pattern_field(p, follow);
     }
     return;
@@ -23725,7 +23737,7 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     let grp_kind = p.peek_kind();
     if grp_kind == TK_INTEGER_LITERAL {
         _parse_tuple_index(p);
-        p.expect(TK_COLON, &SYNC_88);
+        p.expect(TK_COLON, &SYNC_87);
         _parse_pattern(p, follow);
     } else if _kind_set_42(grp_kind) {
         let mut gd_winner: i32 = -1;
@@ -23777,7 +23789,7 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () wit
         }
         if gd_winner == 1 {
             _parse_identifier(p);
-            p.expect(TK_COLON, &SYNC_88);
+            p.expect(TK_COLON, &SYNC_87);
             _parse_pattern(p, follow);
         } else {
             if p.peek_kind() == TK_KW_REF {
@@ -23789,7 +23801,7 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () wit
             _parse_identifier(p);
         }
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_98);
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_97);
     }
     return;
 }
@@ -23852,7 +23864,7 @@ fn _parse_struct_pattern_et_cetera(p: &mut Parser) -> () with RustParserBase {
 
 fn _parse_tuple_struct_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     _parse_path_in_expression(p, FOLLOW_MASK_20);
-    p.expect(TK_LPAREN, &SYNC_99);
+    p.expect(TK_LPAREN, &SYNC_98);
     if _kind_set_43(p.peek_kind()) {
         _parse_tuple_struct_items(p, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
@@ -23912,7 +23924,7 @@ fn _parse_tuple_struct_items__inner(p: &mut Parser, follow: i64 = 0) -> () with 
             }
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_COMMA, &SYNC_88);
+        p.expect(TK_COMMA, &SYNC_87);
         _parse_pattern(p, follow);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
@@ -23933,7 +23945,7 @@ fn _parse_tuple_struct_items(p: &mut Parser, follow: i64 = 0) -> () with RustPar
 }
 
 fn _parse_tuple_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_LPAREN, &SYNC_99);
+    p.expect(TK_LPAREN, &SYNC_98);
     if _kind_set_43(p.peek_kind()) {
         _parse_tuple_pattern_items(p, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
@@ -24009,7 +24021,7 @@ fn _parse_tuple_pattern_items__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> (
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        p.expect(TK_COMMA, &SYNC_88);
+        p.expect(TK_COMMA, &SYNC_87);
         _parse_pattern(p, follow);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
@@ -24083,7 +24095,7 @@ fn _parse_tuple_pattern_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
     p.no_viable(
         "no alternative of tuplePatternItems matches",
         p.peek_span(),
-        &SYNC_88,
+        &SYNC_87,
     );
     return;
 }
@@ -24100,7 +24112,7 @@ fn _parse_tuple_pattern_items(p: &mut Parser, follow: i64 = 0) -> () with RustPa
 }
 
 fn _parse_grouped_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_LPAREN, &SYNC_88);
+    p.expect(TK_LPAREN, &SYNC_87);
     _parse_pattern(p, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_RPAREN, &EMPTY_SYNC);
     return;
@@ -24118,7 +24130,7 @@ fn _parse_grouped_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 }
 
 fn _parse_slice_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_LSQUAREBRACKET, &SYNC_100);
+    p.expect(TK_LSQUAREBRACKET, &SYNC_99);
     if _kind_set_43(p.peek_kind()) {
         _parse_slice_pattern_items(p, (FOLLOW_MASK_33 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
@@ -24178,7 +24190,7 @@ fn _parse_slice_pattern_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
             }
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_COMMA, &SYNC_88);
+        p.expect(TK_COMMA, &SYNC_87);
         _parse_pattern(p, follow);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
@@ -24211,7 +24223,7 @@ fn _parse_path_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
     p.no_viable(
         "no alternative of pathPattern matches",
         p.peek_span(),
-        &SYNC_73,
+        &SYNC_72,
     );
     return;
 }
@@ -24556,7 +24568,7 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
     p.no_viable(
         "no alternative of typeNoBounds matches",
         p.peek_span(),
-        &SYNC_84,
+        &SYNC_83,
     );
     return;
 }
@@ -24607,7 +24619,7 @@ fn _parse_never_type(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_tuple_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_LPAREN, &SYNC_101);
+    p.expect(TK_LPAREN, &SYNC_100);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         p.scan_gate.no_struct = p.no_struct;
@@ -24741,7 +24753,7 @@ fn _parse_slice_type(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 }
 
 fn _parse_reference_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect_set(&SYNC_62);
+    p.expect_set(&SYNC_61);
     if _kind_set_16(p.peek_kind()) {
         _parse_lifetime(p);
     }
@@ -24764,8 +24776,8 @@ fn _parse_reference_type(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
 }
 
 fn _parse_raw_pointer_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_STAR, &SYNC_63);
-    p.expect_set(&SYNC_63);
+    p.expect(TK_STAR, &SYNC_62);
+    p.expect_set(&SYNC_62);
     _parse_type_no_bounds(p, follow);
     return;
 }
@@ -24786,12 +24798,12 @@ fn _parse_bare_function_type__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         _parse_for_lifetimes(p, 0);
     }
     _parse_function_type_qualifiers(p, FOLLOW_MASK_49);
-    p.expect(TK_KW_FN, &SYNC_6);
-    p.expect(TK_LPAREN, &SYNC_102);
+    p.expect(TK_KW_FN, &SYNC_3);
+    p.expect(TK_LPAREN, &SYNC_101);
     if _kind_set_44(p.peek_kind()) {
         _parse_function_parameters_maybe_named_variadic(p, FOLLOW_MASK_21);
     }
-    p.expect(TK_RPAREN, &SYNC_103);
+    p.expect(TK_RPAREN, &SYNC_102);
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_RARROW) {
         _parse_bare_function_return_type(p, follow);
     }
@@ -24834,7 +24846,7 @@ fn _parse_function_type_qualifiers(p: &mut Parser, follow: i64 = 0) -> () with R
 }
 
 fn _parse_bare_function_return_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_RARROW, &SYNC_84);
+    p.expect(TK_RARROW, &SYNC_83);
     _parse_type_no_bounds(p, follow);
     return;
 }
@@ -24903,7 +24915,7 @@ fn _parse_function_parameters_maybe_named_variadic__inner(p: &mut Parser, follow
     p.no_viable(
         "no alternative of functionParametersMaybeNamedVariadic matches",
         p.peek_span(),
-        &SYNC_104,
+        &SYNC_103,
     );
     return;
 }
@@ -24960,7 +24972,7 @@ fn _parse_maybe_named_function_parameters__inner(p: &mut Parser, follow: i64 = 0
             }
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_COMMA, &SYNC_104);
+        p.expect(TK_COMMA, &SYNC_103);
         _parse_maybe_named_param(p, follow);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
@@ -25114,7 +25126,7 @@ fn _parse_maybe_named_function_parameters_variadic__inner(p: &mut Parser, follow
         p.expect(TK_COMMA, &EMPTY_SYNC);
     }
     _parse_maybe_named_param(p, FOLLOW_MASK_22);
-    p.expect(TK_COMMA, &SYNC_105);
+    p.expect(TK_COMMA, &SYNC_104);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos_2: i32 = -1;
@@ -25215,7 +25227,7 @@ fn _parse_impl_trait_type(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 }
 
 fn _parse_impl_trait_type_one_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_KW_IMPL, &SYNC_106);
+    p.expect(TK_KW_IMPL, &SYNC_105);
     _parse_trait_bound(p, follow);
     return;
 }
@@ -25350,7 +25362,7 @@ fn _parse_trait_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
         return;
     }
     if kind == TK_LPAREN {
-        p.expect(TK_LPAREN, &SYNC_107);
+        p.take();
         if p.peek_kind() == TK_QUESTION {
             p.expect(TK_QUESTION, &EMPTY_SYNC);
         }
@@ -25364,7 +25376,7 @@ fn _parse_trait_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     p.no_viable(
         "no alternative of traitBound matches",
         p.peek_span(),
-        &SYNC_106,
+        &SYNC_105,
     );
     return;
 }
@@ -25449,7 +25461,7 @@ fn _parse_lifetime_bounds(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 fn _parse_lifetime__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_16(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -25498,7 +25510,7 @@ fn _parse_simple_path__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_PATHSEP, &SYNC_108);
+        p.expect(TK_PATHSEP, &SYNC_106);
         _parse_simple_path_segment(p);
     }
     return;
@@ -25522,25 +25534,25 @@ fn _parse_simple_path_segment__inner(p: &mut Parser) -> () with RustParserBase {
         return;
     }
     if kind == TK_KW_SUPER {
-        p.expect(TK_KW_SUPER, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_KW_SELFVALUE {
-        p.expect(TK_KW_SELFVALUE, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_KW_CRATE {
-        p.expect(TK_KW_CRATE, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_KW_DOLLARCRATE {
-        p.expect(TK_KW_DOLLARCRATE, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of simplePathSegment matches",
         p.peek_span(),
-        &SYNC_108,
+        &SYNC_106,
     );
     return;
 }
@@ -25583,7 +25595,7 @@ fn _parse_path_in_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with 
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_PATHSEP, &SYNC_109);
+        p.expect(TK_PATHSEP, &SYNC_107);
         _parse_path_expr_segment(p, (FOLLOW_MASK_54 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     }
     return;
@@ -25627,29 +25639,29 @@ fn _parse_path_ident_segment__inner(p: &mut Parser) -> () with RustParserBase {
         return;
     }
     if kind == TK_KW_SUPER {
-        p.expect(TK_KW_SUPER, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_KW_SELFVALUE {
-        p.expect(TK_KW_SELFVALUE, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_KW_SELFTYPE {
-        p.expect(TK_KW_SELFTYPE, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_KW_CRATE {
-        p.expect(TK_KW_CRATE, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_KW_DOLLARCRATE {
-        p.expect(TK_KW_DOLLARCRATE, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of pathIdentSegment matches",
         p.peek_span(),
-        &SYNC_109,
+        &SYNC_107,
     );
     return;
 }
@@ -25777,7 +25789,7 @@ fn _parse_generic_args__inner_scan_2(tokens: &Array<i32>, pos: i32, gate: &mut S
 }
 
 fn _parse_generic_args__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_LT, &SYNC_110);
+    p.expect(TK_LT, &SYNC_108);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -25887,7 +25899,7 @@ fn _parse_generic_args__inner_scan_3(tokens: &Array<i32>, pos: i32, gate: &mut S
 }
 
 fn _parse_generic_args__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_LT, &SYNC_111);
+    p.expect(TK_LT, &SYNC_109);
     p.expect(TK_GT, &EMPTY_SYNC);
     return;
 }
@@ -26080,7 +26092,7 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     p.no_viable(
         "no alternative of genericArg matches",
         p.peek_span(),
-        &SYNC_110,
+        &SYNC_108,
     );
     return;
 }
@@ -26116,7 +26128,7 @@ fn _parse_generic_args_const__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     p.no_viable(
         "no alternative of genericArgsConst matches",
         p.peek_span(),
-        &SYNC_112,
+        &SYNC_110,
     );
     return;
 }
@@ -26301,7 +26313,7 @@ fn _parse_qualified_path_in_expression__inner(p: &mut Parser, follow: i64 = 0) -
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        p.expect(TK_PATHSEP, &SYNC_109);
+        p.expect(TK_PATHSEP, &SYNC_107);
         _parse_path_expr_segment(p, (FOLLOW_MASK_54 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     }
     return;
@@ -26322,7 +26334,7 @@ fn _parse_qualified_path_type__inner(p: &mut Parser, follow: i64 = 0) -> () with
     p.expect(TK_LT, &SYNC_33);
     _parse_type_(p, 0);
     if p.peek_kind() == TK_KW_AS && _kind_set_32(p.peek_at(1)) {
-        p.expect(TK_KW_AS, &SYNC_76);
+        p.expect(TK_KW_AS, &SYNC_75);
         _parse_type_path(p, (FOLLOW_MASK_60 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
     p.expect(TK_GT, &EMPTY_SYNC);
@@ -26368,7 +26380,7 @@ fn _parse_qualified_path_in_type__inner(p: &mut Parser, follow: i64 = 0) -> () w
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        p.expect(TK_PATHSEP, &SYNC_109);
+        p.expect(TK_PATHSEP, &SYNC_107);
         _parse_type_path_segment(p, (FOLLOW_MASK_54 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     }
     return;
@@ -26412,7 +26424,7 @@ fn _parse_type_path__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_PATHSEP, &SYNC_109);
+        p.expect(TK_PATHSEP, &SYNC_107);
         _parse_type_path_segment(p, (FOLLOW_MASK_54 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     }
     return;
@@ -26485,11 +26497,11 @@ fn _parse_type_path_segment(p: &mut Parser, follow: i64 = 0) -> () with RustPars
 }
 
 fn _parse_type_path_fn__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_LPAREN, &SYNC_101);
+    p.expect(TK_LPAREN, &SYNC_100);
     if _kind_set_18(p.peek_kind()) {
         _parse_type_path_inputs(p, FOLLOW_MASK_21);
     }
-    p.expect(TK_RPAREN, &SYNC_103);
+    p.expect(TK_RPAREN, &SYNC_102);
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_RARROW && _kind_set_18(p.peek_at(1))) {
         p.expect(TK_RARROW, &SYNC_33);
         _parse_type_(p, follow);
@@ -26570,9 +26582,9 @@ fn _parse_type_path_inputs(p: &mut Parser, follow: i64 = 0) -> () with RustParse
 }
 
 fn _parse_visibility__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_KW_PUB, &SYNC_6);
+    p.expect(TK_KW_PUB, &SYNC_3);
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LPAREN && _kind_set_111(p.peek_at(1))) {
-        p.expect(TK_LPAREN, &SYNC_113);
+        p.expect(TK_LPAREN, &SYNC_111);
         let grp_kind = p.peek_kind();
         if grp_kind == TK_KW_CRATE {
             p.expect(TK_KW_CRATE, &EMPTY_SYNC);
@@ -26584,7 +26596,7 @@ fn _parse_visibility__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
             p.expect(TK_KW_IN, &SYNC_10);
             _parse_simple_path(p, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_113);
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_111);
         }
         p.expect(TK_RPAREN, &EMPTY_SYNC);
     }
@@ -26605,7 +26617,7 @@ fn _parse_visibility(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 fn _parse_identifier__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -26630,13 +26642,13 @@ fn _parse_identifier(p: &mut Parser) -> () with RustParserBase {
 fn _parse_keyword__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_97(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of keyword matches",
         p.peek_span(),
-        &SYNC_114,
+        &SYNC_112,
     );
     return;
 }
@@ -26726,21 +26738,21 @@ fn _parse_macro_identifier_like_token__inner(p: &mut Parser) -> () with RustPars
         }
     }
     if kind == TK_KW_UNDERLINELIFETIME {
-        p.expect(TK_KW_UNDERLINELIFETIME, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_KW_DOLLARCRATE {
-        p.expect(TK_KW_DOLLARCRATE, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_LIFETIME_OR_LABEL {
-        p.expect(TK_LIFETIME_OR_LABEL, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of macroIdentifierLikeToken matches",
         p.peek_span(),
-        &SYNC_115,
+        &SYNC_113,
     );
     return;
 }
@@ -26775,13 +26787,13 @@ fn _parse_macro_literal_token(p: &mut Parser) -> () with RustParserBase {
 fn _parse_macro_punctuation_token__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_54(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of macroPunctuationToken matches",
         p.peek_span(),
-        &SYNC_116,
+        &SYNC_114,
     );
     return;
 }
@@ -26821,7 +26833,7 @@ fn _parse_shl(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_shr__inner(p: &mut Parser) -> () with RustParserBase {
-    p.expect(TK_GT, &SYNC_111);
+    p.expect(TK_GT, &SYNC_109);
     if !p.speculating {
         if !(RustParserBase::next_gt(p)) {
             p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
@@ -28131,15 +28143,15 @@ fn _kind_set_112(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_LCURLYBRACE, TK_LPAREN, TK_LSQUAREBRACKET];
-global SYNC_1: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CARET, TK_CARETEQ, TK_CHAR_LITERAL, TK_COLON, TK_COMMA, TK_DOLLAR, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_FLOAT_LITERAL, TK_GE, TK_GT, TK_INTEGER_LITERAL, TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_RAW, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LCURLYBRACE, TK_LE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUS, TK_PLUSEQ, TK_POUND, TK_QUESTION, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RPAREN, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAR, TK_STAREQ, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_2: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CARET, TK_CARETEQ, TK_CHAR_LITERAL, TK_COLON, TK_COMMA, TK_DOLLAR, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_FLOAT_LITERAL, TK_GE, TK_GT, TK_INTEGER_LITERAL, TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_RAW, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LCURLYBRACE, TK_LE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUS, TK_PLUSEQ, TK_POUND, TK_QUESTION, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RSQUAREBRACKET, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAR, TK_STAREQ, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_3: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CARET, TK_CARETEQ, TK_CHAR_LITERAL, TK_COLON, TK_COMMA, TK_DOLLAR, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_FLOAT_LITERAL, TK_GE, TK_GT, TK_INTEGER_LITERAL, TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_RAW, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LCURLYBRACE, TK_LE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUS, TK_PLUSEQ, TK_POUND, TK_QUESTION, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RCURLYBRACE, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAR, TK_STAREQ, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_4: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CARET, TK_CARETEQ, TK_CHAR_LITERAL, TK_COLON, TK_COMMA, TK_DOLLAR, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_FLOAT_LITERAL, TK_GE, TK_GT, TK_INTEGER_LITERAL, TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_RAW, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LCURLYBRACE, TK_LE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUS, TK_PLUSEQ, TK_POUND, TK_QUESTION, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAR, TK_STAREQ, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_5: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CARET, TK_CARETEQ, TK_CHAR_LITERAL, TK_COLON, TK_COMMA, TK_DOLLAR, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_FLOAT_LITERAL, TK_GE, TK_GT, TK_INTEGER_LITERAL, TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_RAW, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LE, TK_LIFETIME_OR_LABEL, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUS, TK_PLUSEQ, TK_POUND, TK_QUESTION, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAR, TK_STAREQ, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_6: List<i32> = [TK_LPAREN];
-global SYNC_7: List<i32> = [TK_SEMI];
-global SYNC_8: List<i32> = [TK_LSQUAREBRACKET];
-global SYNC_9: List<i32> = [TK_LCURLYBRACE];
+global SYNC_1: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CARET, TK_CARETEQ, TK_CHAR_LITERAL, TK_COLON, TK_COMMA, TK_DOLLAR, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_FLOAT_LITERAL, TK_GE, TK_GT, TK_INTEGER_LITERAL, TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_RAW, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LCURLYBRACE, TK_LE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUS, TK_PLUSEQ, TK_POUND, TK_QUESTION, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAR, TK_STAREQ, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_2: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CARET, TK_CARETEQ, TK_CHAR_LITERAL, TK_COLON, TK_COMMA, TK_DOLLAR, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_FLOAT_LITERAL, TK_GE, TK_GT, TK_INTEGER_LITERAL, TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_RAW, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LE, TK_LIFETIME_OR_LABEL, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUS, TK_PLUSEQ, TK_POUND, TK_QUESTION, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAR, TK_STAREQ, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_3: List<i32> = [TK_LPAREN];
+global SYNC_4: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CARET, TK_CARETEQ, TK_CHAR_LITERAL, TK_COLON, TK_COMMA, TK_DOLLAR, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_FLOAT_LITERAL, TK_GE, TK_GT, TK_INTEGER_LITERAL, TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_RAW, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LCURLYBRACE, TK_LE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUS, TK_PLUSEQ, TK_POUND, TK_QUESTION, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RPAREN, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAR, TK_STAREQ, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_5: List<i32> = [TK_SEMI];
+global SYNC_6: List<i32> = [TK_LSQUAREBRACKET];
+global SYNC_7: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CARET, TK_CARETEQ, TK_CHAR_LITERAL, TK_COLON, TK_COMMA, TK_DOLLAR, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_FLOAT_LITERAL, TK_GE, TK_GT, TK_INTEGER_LITERAL, TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_RAW, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LCURLYBRACE, TK_LE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUS, TK_PLUSEQ, TK_POUND, TK_QUESTION, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RSQUAREBRACKET, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAR, TK_STAREQ, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_8: List<i32> = [TK_LCURLYBRACE];
+global SYNC_9: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CARET, TK_CARETEQ, TK_CHAR_LITERAL, TK_COLON, TK_COMMA, TK_DOLLAR, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_FLOAT_LITERAL, TK_GE, TK_GT, TK_INTEGER_LITERAL, TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_RAW, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LCURLYBRACE, TK_LE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUS, TK_PLUSEQ, TK_POUND, TK_QUESTION, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RCURLYBRACE, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAR, TK_STAREQ, TK_STRING_LITERAL, TK_UNDERSCORE];
 global SYNC_10: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
 global SYNC_11: List<i32> = [TK_NOT];
 global SYNC_12: List<i32> = [TK_KW_MACRORULES, TK_KW_RAW, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
@@ -28188,65 +28200,63 @@ global SYNC_54: List<i32> = [TK_LT];
 global SYNC_55: List<i32> = [TK_KW_ASYNC, TK_KW_CONST, TK_KW_EXTERN, TK_KW_FN, TK_KW_TYPE, TK_KW_UNSAFE];
 global SYNC_56: List<i32> = [TK_KW_ASYNC, TK_KW_CONST, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_EXTERN, TK_KW_FN, TK_KW_MACRORULES, TK_KW_PUB, TK_KW_RAW, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TYPE, TK_KW_UNION, TK_KW_UNSAFE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
 global SYNC_57: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_KW_UNSAFE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
-global SYNC_58: List<i32> = [TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_FALSE, TK_KW_TRUE, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL];
-global SYNC_59: List<i32> = [TK_EQ, TK_LCURLYBRACE, TK_LPAREN, TK_LSQUAREBRACKET];
-global SYNC_60: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_PUB, TK_KW_RAW, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TYPE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_USE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_SEMI, TK_STAR, TK_STRING_LITERAL];
-global SYNC_61: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_62: List<i32> = [TK_AND, TK_ANDAND];
-global SYNC_63: List<i32> = [TK_KW_CONST, TK_KW_MUT];
-global SYNC_64: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RAW, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RPAREN, TK_STAR, TK_STRING_LITERAL];
-global SYNC_65: List<i32> = [TK_MINUS, TK_NOT];
-global SYNC_66: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RAW, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RSQUAREBRACKET, TK_STAR, TK_STRING_LITERAL];
-global SYNC_67: List<i32> = [TK_PERCENT, TK_SLASH, TK_STAR];
-global SYNC_68: List<i32> = [TK_MINUS, TK_PLUS];
-global SYNC_69: List<i32> = [TK_GT, TK_LT];
-global SYNC_70: List<i32> = [TK_EQEQ, TK_GE, TK_GT, TK_LE, TK_LT, TK_NE];
-global SYNC_71: List<i32> = [TK_ANDEQ, TK_CARETEQ, TK_MINUSEQ, TK_OREQ, TK_PERCENTEQ, TK_PLUSEQ, TK_SHLEQ, TK_SHREQ, TK_SLASHEQ, TK_STAREQ];
-global SYNC_72: List<i32> = [TK_KW_ASYNC, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MATCH, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_POUND];
-global SYNC_73: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
-global SYNC_74: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_PUB, TK_KW_RAW, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TYPE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_USE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RCURLYBRACE, TK_SEMI, TK_STAR, TK_STRING_LITERAL];
-global SYNC_75: List<i32> = [TK_KW_MOVE, TK_LCURLYBRACE];
-global SYNC_76: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
-global SYNC_77: List<i32> = [TK_DOTDOT, TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
-global SYNC_78: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
-global SYNC_79: List<i32> = [TK_DOTDOT];
-global SYNC_80: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
-global SYNC_81: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
-global SYNC_82: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_83: List<i32> = [TK_OR, TK_OROR];
-global SYNC_84: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_KW_UNSAFE, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE];
-global SYNC_85: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RAW, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL];
-global SYNC_86: List<i32> = [TK_KW_FOR, TK_KW_LOOP, TK_KW_WHILE];
-global SYNC_87: List<i32> = [TK_KW_LET];
-global SYNC_88: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_89: List<i32> = [TK_KW_IF, TK_LCURLYBRACE];
-global SYNC_90: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RCURLYBRACE, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_91: List<i32> = [TK_KW_IF];
-global SYNC_92: List<i32> = [TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_FALSE, TK_KW_TRUE, TK_MINUS, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL];
-global SYNC_93: List<i32> = [TK_BYTE_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
-global SYNC_94: List<i32> = [TK_DOTDOT, TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
-global SYNC_95: List<i32> = [TK_DOTDOT, TK_POUND];
-global SYNC_96: List<i32> = [TK_DOTDOT, TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
-global SYNC_97: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
-global SYNC_98: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
-global SYNC_99: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RPAREN, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_100: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RSQUAREBRACKET, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_101: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_RPAREN, TK_STAR, TK_UNDERSCORE];
-global SYNC_102: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_IDENTIFIER, TK_RPAREN, TK_STAR, TK_UNDERSCORE];
-global SYNC_103: List<i32> = [TK_RARROW];
-global SYNC_104: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE];
-global SYNC_105: List<i32> = [TK_DOTDOTDOT, TK_POUND];
-global SYNC_106: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FOR, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_LPAREN, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER];
-global SYNC_107: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FOR, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER];
-global SYNC_108: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
-global SYNC_109: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
-global SYNC_110: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_111: List<i32> = [TK_GT];
-global SYNC_112: List<i32> = [TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LCURLYBRACE, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL];
-global SYNC_113: List<i32> = [TK_KW_CRATE, TK_KW_IN, TK_KW_SELFVALUE, TK_KW_SUPER];
-global SYNC_114: List<i32> = [TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD];
-global SYNC_115: List<i32> = [TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_RAW, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LIFETIME_OR_LABEL, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
-global SYNC_116: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_CARET, TK_CARETEQ, TK_COLON, TK_COMMA, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_GE, TK_GT, TK_LE, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUSEQ, TK_POUND, TK_RARROW, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAREQ, TK_UNDERSCORE];
+global SYNC_58: List<i32> = [TK_EQ, TK_LCURLYBRACE, TK_LPAREN, TK_LSQUAREBRACKET];
+global SYNC_59: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_PUB, TK_KW_RAW, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TYPE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_USE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_SEMI, TK_STAR, TK_STRING_LITERAL];
+global SYNC_60: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_61: List<i32> = [TK_AND, TK_ANDAND];
+global SYNC_62: List<i32> = [TK_KW_CONST, TK_KW_MUT];
+global SYNC_63: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RAW, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RPAREN, TK_STAR, TK_STRING_LITERAL];
+global SYNC_64: List<i32> = [TK_MINUS, TK_NOT];
+global SYNC_65: List<i32> = [TK_PERCENT, TK_SLASH, TK_STAR];
+global SYNC_66: List<i32> = [TK_MINUS, TK_PLUS];
+global SYNC_67: List<i32> = [TK_GT, TK_LT];
+global SYNC_68: List<i32> = [TK_EQEQ, TK_GE, TK_GT, TK_LE, TK_LT, TK_NE];
+global SYNC_69: List<i32> = [TK_ANDEQ, TK_CARETEQ, TK_MINUSEQ, TK_OREQ, TK_PERCENTEQ, TK_PLUSEQ, TK_SHLEQ, TK_SHREQ, TK_SLASHEQ, TK_STAREQ];
+global SYNC_70: List<i32> = [TK_KW_ASYNC, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MATCH, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_POUND];
+global SYNC_71: List<i32> = [TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_FALSE, TK_KW_TRUE, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL];
+global SYNC_72: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
+global SYNC_73: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_PUB, TK_KW_RAW, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TYPE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_USE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RCURLYBRACE, TK_SEMI, TK_STAR, TK_STRING_LITERAL];
+global SYNC_74: List<i32> = [TK_KW_MOVE, TK_LCURLYBRACE];
+global SYNC_75: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
+global SYNC_76: List<i32> = [TK_DOTDOT, TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
+global SYNC_77: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
+global SYNC_78: List<i32> = [TK_DOTDOT];
+global SYNC_79: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
+global SYNC_80: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
+global SYNC_81: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_82: List<i32> = [TK_OR, TK_OROR];
+global SYNC_83: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_KW_UNSAFE, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE];
+global SYNC_84: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RAW, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL];
+global SYNC_85: List<i32> = [TK_KW_FOR, TK_KW_LOOP, TK_KW_WHILE];
+global SYNC_86: List<i32> = [TK_KW_LET];
+global SYNC_87: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_88: List<i32> = [TK_KW_IF, TK_LCURLYBRACE];
+global SYNC_89: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RCURLYBRACE, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_90: List<i32> = [TK_KW_IF];
+global SYNC_91: List<i32> = [TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_FALSE, TK_KW_TRUE, TK_MINUS, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL];
+global SYNC_92: List<i32> = [TK_BYTE_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
+global SYNC_93: List<i32> = [TK_DOTDOT, TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
+global SYNC_94: List<i32> = [TK_DOTDOT, TK_POUND];
+global SYNC_95: List<i32> = [TK_DOTDOT, TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
+global SYNC_96: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
+global SYNC_97: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
+global SYNC_98: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RPAREN, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_99: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_RAW, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RSQUAREBRACKET, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_100: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_RPAREN, TK_STAR, TK_UNDERSCORE];
+global SYNC_101: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_IDENTIFIER, TK_RPAREN, TK_STAR, TK_UNDERSCORE];
+global SYNC_102: List<i32> = [TK_RARROW];
+global SYNC_103: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE];
+global SYNC_104: List<i32> = [TK_DOTDOTDOT, TK_POUND];
+global SYNC_105: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FOR, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_LPAREN, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER];
+global SYNC_106: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
+global SYNC_107: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
+global SYNC_108: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_109: List<i32> = [TK_GT];
+global SYNC_110: List<i32> = [TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_RAW, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LCURLYBRACE, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL];
+global SYNC_111: List<i32> = [TK_KW_CRATE, TK_KW_IN, TK_KW_SELFVALUE, TK_KW_SUPER];
+global SYNC_112: List<i32> = [TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD];
+global SYNC_113: List<i32> = [TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_RAW, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LIFETIME_OR_LABEL, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
+global SYNC_114: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_CARET, TK_CARETEQ, TK_COLON, TK_COMMA, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_GE, TK_GT, TK_LE, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUSEQ, TK_POUND, TK_RARROW, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAREQ, TK_UNDERSCORE];
 
 global FOLLOW_SETS: List<List<i32>> = [[0, 0, 0, 67108864], [0, 0, 16777216], [0, 0, 0, i32::MIN], [-2004877296, 123207680, 0, 8388608], [0, 0, 0, -1610612736, 2], [0, 0, 0, 0, 2], [0, 0, 0, 536870912], [0, 0, 0, 0, 4], [0, 0, 0, 2097152], [0, 0, 0, 0, 1], [0, 0, 0, 1073741824], [0, 0, 0, 33554432], [0, 0, 0, 4194304], [0, 106430464], [0, 0, 1310720, 268435456], [-704507196, 1048585], [0, 0, 0, 538968064], [0, 0, 0, 8388608], [0, 0, 1048576, 536870912], [0, 0, 0, 1048576], [142606352, 123207680, 1048576, 545259520], [512], [-1988094320, 133693472, 185729024, -1870362624, 2], [-1988094320, 133693472, 185729024, -1870624768, 2], [1024], [-2113928572, 8], [0, 0, 131072], [-1073741180, 8], [-1446671078, 123207692, 521867232, -1534457856, 2], [0, 106430464, 2048], [0, 0, 67108864], [-1446671078, 123207692, 521867232, -1517680640, 2], [33792, 4], [0, 0, 134217728, 536870912], [0, 0, 134217728], [16384], [0, 0, 0, 128], [8192], [698876176, 123207680, 168366048, -2138929152, 2], [0, 0, 0, 524288], [159383568, 123207680, 592160, 8390656], [0, 0, 0, 131072], [0, 0, 0, 262144], [0, 0, 262144], [159384592, 133693440, 131072, 276824064, 2], [159383568, 123207680, 0, 8388608], [142606352, 123207680], [159383568, 123207680], [0, 10485760, 131072], [0, 0, 0, 1024]];
 global FOLLOW_MASK_0: i64 = 67305985;

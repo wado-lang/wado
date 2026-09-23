@@ -1657,6 +1657,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1721,7 +1733,6 @@ fn scan_obj(tokens: &Array<i32>, pos: i32) -> i32 {
                     let sp = pos;
                     sg_0_done: {
                         sg_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_0; }
                             pos += 1;
                             pos = scan_pair(tokens, pos);
                             if pos < 0 { break sg_0; }
@@ -1777,7 +1788,6 @@ fn scan_arr(tokens: &Array<i32>, pos: i32) -> i32 {
                     let sp = pos;
                     sg_1_done: {
                         sg_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
                             pos += 1;
                             pos = scan_value(tokens, pos);
                             if pos < 0 { break sg_1; }
@@ -2022,11 +2032,11 @@ fn _parse_arr(p: &mut Parser) -> () {
 fn _parse_value__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_STRING {
-        p.expect(TK_STRING, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_NUMBER {
-        p.expect(TK_NUMBER, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_LIT_LBRACE {
@@ -2038,15 +2048,15 @@ fn _parse_value__inner(p: &mut Parser) -> () {
         return;
     }
     if kind == TK_LIT_true {
-        p.expect(TK_LIT_true, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_LIT_false {
-        p.expect(TK_LIT_false, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_LIT_null {
-        p.expect(TK_LIT_null, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(

@@ -1469,6 +1469,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1511,68 +1523,11 @@ impl Parser {
 
 fn scan_start(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    let gp_0 = pos;
-    let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    let mut sg_0_best = -1;
-    if sgk_0 == TK_STR {
-        pos = gp_0;
-        sg_0_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_STR { break sg_0_0; }
-            pos += 1;
-            if pos > sg_0_best { sg_0_best = pos; }
-        }
-    } else if sgk_0 == TK_HAZARD {
-        pos = gp_0;
-        sg_0_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_HAZARD { break sg_0_1; }
-            pos += 1;
-            if pos > sg_0_best { sg_0_best = pos; }
-        }
-    } else if sgk_0 == TK_ID {
-        pos = gp_0;
-        sg_0_2: {
-            if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_0_2; }
-            pos += 1;
-            if pos > sg_0_best { sg_0_best = pos; }
-        }
-    }
-    if sg_0_best >= 0 {
-        pos = sg_0_best;
-    } else {
-        return -1;
-    }
+    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
+    pos += 1;
     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
-        let gp_1 = pos;
-        let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        let mut sg_1_best = -1;
-        if sgk_1 == TK_STR {
-            pos = gp_1;
-            sg_1_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_STR { break sg_1_0; }
-                pos += 1;
-                if pos > sg_1_best { sg_1_best = pos; }
-            }
-        } else if sgk_1 == TK_HAZARD {
-            pos = gp_1;
-            sg_1_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_HAZARD { break sg_1_1; }
-                pos += 1;
-                if pos > sg_1_best { sg_1_best = pos; }
-            }
-        } else if sgk_1 == TK_ID {
-            pos = gp_1;
-            sg_1_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1_2; }
-                pos += 1;
-                if pos > sg_1_best { sg_1_best = pos; }
-            }
-        }
-        if sg_1_best >= 0 {
-            pos = sg_1_best;
-        } else {
-            pos = -1;
-        }
+        pos += 1;
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -1590,36 +1545,8 @@ fn _parse_start__inner(p: &mut Parser) -> () {
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                let gp_2 = pos;
-                let sgk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                let mut sg_2_best = -1;
-                if sgk_2 == TK_STR {
-                    pos = gp_2;
-                    sg_2_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_STR { break sg_2_0; }
-                        pos += 1;
-                        if pos > sg_2_best { sg_2_best = pos; }
-                    }
-                } else if sgk_2 == TK_HAZARD {
-                    pos = gp_2;
-                    sg_2_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_HAZARD { break sg_2_1; }
-                        pos += 1;
-                        if pos > sg_2_best { sg_2_best = pos; }
-                    }
-                } else if sgk_2 == TK_ID {
-                    pos = gp_2;
-                    sg_2_2: {
-                        if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_2_2; }
-                        pos += 1;
-                        if pos > sg_2_best { sg_2_best = pos; }
-                    }
-                }
-                if sg_2_best >= 0 {
-                    pos = sg_2_best;
-                } else {
-                    break rep_scan;
-                }
+                if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break rep_scan; }
+                pos += 1;
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }

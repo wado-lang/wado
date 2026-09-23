@@ -1287,6 +1287,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1356,8 +1368,8 @@ fn _parse_r__inner(p: &mut Parser) -> () {
     let _rule_start_tok = p.pos;
     let kind = p.peek_kind();
     if kind == TK_A {
-        p.expect(TK_A, &SYNC_0);
-        p.expect(TK_B, &SYNC_1);
+        p.take();
+        p.expect(TK_B, &SYNC_0);
         p.expect(TK_C, &EMPTY_SYNC);
         if !p.speculating {
              p.emit(`text=${p.rule_text(_rule_start_tok)} start=${p.token_text(_rule_start_tok)} stop=${p.token_text((p.pos - 1))}`); 
@@ -1365,7 +1377,7 @@ fn _parse_r__inner(p: &mut Parser) -> () {
         return;
     }
     if kind == TK_D {
-        p.expect(TK_D, &EMPTY_SYNC);
+        p.take();
         if !p.speculating {
              p.emit(`d text=${p.rule_text(_rule_start_tok)} start=${p.token_text(_rule_start_tok)}`); 
         }
@@ -1374,7 +1386,7 @@ fn _parse_r__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of r matches",
         p.peek_span(),
-        &SYNC_2,
+        &SYNC_1,
     );
     return;
 }
@@ -1445,7 +1457,6 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_B];
-global SYNC_1: List<i32> = [TK_C];
-global SYNC_2: List<i32> = [TK_A, TK_D];
+global SYNC_0: List<i32> = [TK_C];
+global SYNC_1: List<i32> = [TK_A, TK_D];
 

@@ -1270,6 +1270,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1381,7 +1393,7 @@ fn _parse_program(p: &mut Parser) -> () {
 fn _parse_rule_index_map__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(

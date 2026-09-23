@@ -896,62 +896,18 @@ impl Lexer {
 
 fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_0 = pos;
-    alts_done_0: {
-        alts_0_0: {
-            pos = alts_saved_0;
-            if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_0_0; }
-            pos += 1;
-            break alts_done_0;
-        }
-        alts_0_1: {
-            pos = alts_saved_0;
-            if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_0_1; }
-            pos += 1;
-            break alts_done_0;
-        }
-        alts_0_2: {
-            pos = alts_saved_0;
-            if pos >= chars.len() || chars[pos] != '_' { break alts_0_2; }
-            pos += 1;
-            break alts_done_0;
-        }
-        return -1;
-    }
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { 'A'..='Z' | '_' | 'a'..='z' })) { return -1; }
+    pos += 1;
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            let alts_saved_2 = pos;
-            alts_done_2: {
-                alts_2_0: {
-                    pos = alts_saved_2;
-                    if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_2_0; }
-                    pos += 1;
-                    break alts_done_2;
-                }
-                alts_2_1: {
-                    pos = alts_saved_2;
-                    if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_2_1; }
-                    pos += 1;
-                    break alts_done_2;
-                }
-                alts_2_2: {
-                    pos = alts_saved_2;
-                    if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break alts_2_2; }
-                    pos += 1;
-                    break alts_done_2;
-                }
-                alts_2_3: {
-                    pos = alts_saved_2;
-                    if pos >= chars.len() || chars[pos] != '_' { break alts_2_3; }
-                    pos += 1;
-                    break alts_done_2;
-                }
-                break rep_1;
-            }
+        let rep_saved_0 = pos;
+        rep_0: {
+            if pos >= chars.len() { break rep_0; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='Z' | '_' | 'a'..='z' })) { break rep_0; }
+            pos += 1;
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_0;
         break;
     }
     return pos;
@@ -963,14 +919,14 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { ' ' | '\t' | '\n' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_3 = pos;
-        rep_3: {
-            if pos >= chars.len() { break rep_3; }
-            if !((chars[pos] matches { ' ' | '\t' | '\n' })) { break rep_3; }
+        let rep_saved_1 = pos;
+        rep_1: {
+            if pos >= chars.len() { break rep_1; }
+            if !((chars[pos] matches { ' ' | '\t' | '\n' })) { break rep_1; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_3;
+        pos = rep_saved_1;
         break;
     }
     return pos;
@@ -1368,6 +1324,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1512,7 +1480,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_ID {
         p.b.set_alt(2);
-        let id = p.expect(TK_ID, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -1539,8 +1507,8 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 p.b.set_alt(0);
-                let star = p.expect(TK_LIT_STAR, &EMPTY_SYNC);
-                let a_2 = _parse_expr(p, 3);
+                p.expect(TK_LIT_STAR, &EMPTY_SYNC);
+                _parse_expr(p, 3);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -1553,11 +1521,11 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 p.b.set_alt(1);
                 while !p.recovering && (p.peek_kind() == TK_LIT_COMMA) {
-                    let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
-                    let b_item = _parse_expr(p, 2);
+                    p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
+                    _parse_expr(p, 2);
                 }
-                let lit_gtgt = p.expect(TK_LIT_GTGT, &EMPTY_SYNC);
-                let c = _parse_expr(p, 2);
+                p.expect(TK_LIT_GTGT, &EMPTY_SYNC);
+                _parse_expr(p, 2);
                 p.b.finish_node(p.last_end());
             } else {
                 break;

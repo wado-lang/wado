@@ -970,8 +970,8 @@ fn try_NEWLINE(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let opt_saved_4 = pos;
     let mut opt_ok_4 = false;
-    rep_4: {
-        if pos >= chars.len() || chars[pos] != '\r' { break rep_4; }
+    opt_4: {
+        if pos >= chars.len() || chars[pos] != '\r' { break opt_4; }
         pos += 1;
         opt_ok_4 = true;
     }
@@ -1355,6 +1355,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1599,7 +1611,7 @@ fn _parse_stat__inner(p: &mut Parser) -> () {
     }
     if kind == TK_NEWLINE {
         p.b.set_alt(2);
-        p.expect(TK_NEWLINE, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -1625,17 +1637,17 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_INT {
         p.b.set_alt(2);
-        p.expect(TK_INT, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_ID {
         p.b.set_alt(3);
-        p.expect(TK_ID, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_LIT_LPAREN {
         p.b.set_alt(4);
-        p.expect(TK_LIT_LPAREN, &SYNC_1);
+        p.take();
         _parse_expr(p);
         p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
         return;

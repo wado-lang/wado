@@ -5455,6 +5455,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -12308,7 +12320,7 @@ fn _parse_primary_type__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i3
     let kind = p.peek_kind();
     if kind == TK_OpenParen {
         p.b.set_alt(0);
-        p.expect(TK_OpenParen, &SYNC_4);
+        p.take();
         _parse_type_(p, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_CloseParen, &EMPTY_SYNC);
         return;
@@ -12398,7 +12410,7 @@ fn _parse_primary_type__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i3
     }
     if kind == TK_OpenBracket {
         p.b.set_alt(5);
-        p.expect(TK_OpenBracket, &SYNC_4);
+        p.take();
         _parse_tuple_element_types(p, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_CloseBracket, &EMPTY_SYNC);
         return;
@@ -12410,7 +12422,7 @@ fn _parse_primary_type__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i3
     }
     if kind == TK_This {
         p.b.set_alt(7);
-        p.expect(TK_This, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -12478,35 +12490,35 @@ fn _parse_primary_type(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> ()
 fn _parse_predefined_type__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     let kind = p.peek_kind();
     if kind == TK_Any {
-        p.expect(TK_Any, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_NullLiteral {
-        p.expect(TK_NullLiteral, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_Number {
-        p.expect(TK_Number, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_DecimalLiteral {
-        p.expect(TK_DecimalLiteral, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_Boolean {
-        p.expect(TK_Boolean, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_BooleanLiteral {
-        p.expect(TK_BooleanLiteral, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_String {
-        p.expect(TK_String, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_StringLiteral {
-        p.expect(TK_StringLiteral, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if _kind_set_4(kind) {
@@ -12517,19 +12529,19 @@ fn _parse_predefined_type__inner(p: &mut Parser, follow: i64 = 0) -> () with Typ
         return;
     }
     if kind == TK_Never {
-        p.expect(TK_Never, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_Undefined {
-        p.expect(TK_Undefined, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_Object {
-        p.expect(TK_Object, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_Void {
-        p.expect(TK_Void, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -13535,7 +13547,7 @@ fn _parse_required_parameter(p: &mut Parser, follow: i64 = 0) -> () with TypeScr
 fn _parse_accessibility_modifier__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     let kind = p.peek_kind();
     if _kind_set_11(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -14152,7 +14164,7 @@ fn _parse_decorator_member_expression__inner_atom(p: &mut Parser, follow: i64 = 
         return;
     }
     if kind == TK_OpenParen {
-        p.expect(TK_OpenParen, &SYNC_0);
+        p.take();
         _parse_single_expression(p, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_CloseParen, &EMPTY_SYNC);
         return;
@@ -15615,7 +15627,7 @@ fn _parse_import_from_block__inner(p: &mut Parser, follow: i64 = 0) -> () with T
         return;
     }
     if kind == TK_StringLiteral {
-        p.expect(TK_StringLiteral, &SYNC_37);
+        p.take();
         _parse_eos(p);
         return;
     }
@@ -15639,7 +15651,7 @@ fn _parse_import_from_block(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
 }
 
 fn _parse_import_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_OpenBrace, &SYNC_38);
+    p.expect(TK_OpenBrace, &SYNC_37);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -15741,7 +15753,7 @@ fn _parse_import_module_items(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
 fn _parse_import_alias_name__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     _parse_module_export_name(p);
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_As && _kind_set_49(p.peek_at(1))) {
-        p.expect(TK_As, &SYNC_39);
+        p.expect(TK_As, &SYNC_38);
         _parse_imported_binding(p);
     }
     return;
@@ -15765,13 +15777,13 @@ fn _parse_module_export_name__inner(p: &mut Parser) -> () with TypeScriptParserB
         return;
     }
     if kind == TK_StringLiteral {
-        p.expect(TK_StringLiteral, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of moduleExportName matches",
         p.peek_span(),
-        &SYNC_40,
+        &SYNC_39,
     );
     return;
 }
@@ -15790,13 +15802,13 @@ fn _parse_module_export_name(p: &mut Parser) -> () with TypeScriptParserBase {
 fn _parse_imported_binding__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     let kind = p.peek_kind();
     if _kind_set_49(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of importedBinding matches",
         p.peek_span(),
-        &SYNC_39,
+        &SYNC_38,
     );
     return;
 }
@@ -15836,7 +15848,7 @@ fn _parse_import_namespace__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
     } else if _kind_set_8(grp_kind) {
         _parse_identifier_name(p);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_41);
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_40);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_As && _kind_set_8(p.peek_at(1))) {
         p.expect(TK_As, &SYNC_17);
@@ -15857,7 +15869,7 @@ fn _parse_import_namespace(p: &mut Parser, follow: i64 = 0) -> () with TypeScrip
 }
 
 fn _parse_import_from__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    p.expect(TK_From, &SYNC_42);
+    p.expect(TK_From, &SYNC_41);
     p.expect(TK_StringLiteral, &EMPTY_SYNC);
     return;
 }
@@ -15895,7 +15907,7 @@ fn _parse_alias_name(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParse
 
 fn _parse_export_statement__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(0);
-    p.expect(TK_Export, &SYNC_43);
+    p.expect(TK_Export, &SYNC_42);
     if p.peek_kind() == TK_Default {
         p.expect(TK_Default, &EMPTY_SYNC);
     }
@@ -15933,7 +15945,7 @@ fn _parse_export_statement__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () w
             _parse_declaration(p, 0);
         }
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_43);
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_42);
     }
     _parse_eos(p);
     return;
@@ -15975,7 +15987,7 @@ fn _parse_export_statement__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: 
 
 fn _parse_export_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(1);
-    p.expect(TK_Export, &SYNC_44);
+    p.expect(TK_Export, &SYNC_43);
     p.expect(TK_Default, &SYNC_0);
     _parse_single_expression(p, follow);
     _parse_eos(p);
@@ -16020,7 +16032,7 @@ fn _parse_export_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
     p.no_viable(
         "no alternative of exportStatement matches",
         p.peek_span(),
-        &SYNC_45,
+        &SYNC_44,
     );
     return;
 }
@@ -16072,7 +16084,7 @@ fn _parse_export_from_block(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
 }
 
 fn _parse_export_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_OpenBrace, &SYNC_38);
+    p.expect(TK_OpenBrace, &SYNC_37);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -16174,7 +16186,7 @@ fn _parse_export_module_items(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
 fn _parse_export_alias_name__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     _parse_module_export_name(p);
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_As && _kind_set_23(p.peek_at(1))) {
-        p.expect(TK_As, &SYNC_40);
+        p.expect(TK_As, &SYNC_39);
         _parse_module_export_name(p);
     }
     return;
@@ -16258,7 +16270,7 @@ fn _parse_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScr
     p.no_viable(
         "no alternative of declaration matches",
         p.peek_span(),
-        &SYNC_46,
+        &SYNC_45,
     );
     return;
 }
@@ -16347,7 +16359,7 @@ fn _parse_variable_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         }
     }
     if kind == TK_Declare {
-        p.expect(TK_Declare, &SYNC_47);
+        p.take();
         if _kind_set_25(p.peek_kind()) {
             _parse_var_modifier(p);
         }
@@ -16399,7 +16411,7 @@ fn _parse_variable_declaration_list__inner(p: &mut Parser, follow: i64 = 0) -> (
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_Comma, &SYNC_48);
+        p.expect(TK_Comma, &SYNC_46);
         _parse_variable_declaration(p, (FOLLOW_MASK_30 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     }
     return;
@@ -16425,7 +16437,7 @@ fn _parse_variable_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     } else if grp_kind == TK_OpenBrace {
         _parse_object_literal(p, 0);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_48);
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_46);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_Colon) {
         _parse_type_annotation(p, follow);
@@ -16522,14 +16534,14 @@ fn _parse_if_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPar
 fn _parse_iteration_statement__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(3);
     p.expect(TK_For, &SYNC_26);
-    p.expect(TK_OpenParen, &SYNC_49);
+    p.expect(TK_OpenParen, &SYNC_47);
     _parse_var_modifier(p);
     _parse_variable_declaration_list(p, FOLLOW_MASK_22);
-    p.expect(TK_SemiColon, &SYNC_50);
+    p.expect(TK_SemiColon, &SYNC_48);
     if _kind_set_27(p.peek_kind()) {
         _parse_expression_sequence(p, FOLLOW_MASK_22);
     }
-    p.expect(TK_SemiColon, &SYNC_51);
+    p.expect(TK_SemiColon, &SYNC_49);
     if _kind_set_27(p.peek_kind()) {
         _parse_expression_sequence(p, FOLLOW_MASK_32);
     }
@@ -16571,11 +16583,11 @@ fn _parse_iteration_statement__inner_scan_3(tokens: &Array<i32>, pos: i32, follo
 
 fn _parse_iteration_statement__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(7);
-    p.expect(TK_For, &SYNC_52);
+    p.expect(TK_For, &SYNC_50);
     if p.peek_kind() == TK_Await {
         p.expect(TK_Await, &EMPTY_SYNC);
     }
-    p.expect(TK_OpenParen, &SYNC_49);
+    p.expect(TK_OpenParen, &SYNC_47);
     _parse_var_modifier(p);
     _parse_variable_declaration(p, FOLLOW_MASK_35);
     _parse_identifier(p);
@@ -16635,15 +16647,15 @@ fn _parse_iteration_statement__inner_scan_7(tokens: &Array<i32>, pos: i32, follo
 fn _parse_iteration_statement__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(2);
     p.expect(TK_For, &SYNC_26);
-    p.expect(TK_OpenParen, &SYNC_50);
+    p.expect(TK_OpenParen, &SYNC_48);
     if _kind_set_27(p.peek_kind()) {
         _parse_expression_sequence(p, FOLLOW_MASK_22);
     }
-    p.expect(TK_SemiColon, &SYNC_50);
+    p.expect(TK_SemiColon, &SYNC_48);
     if _kind_set_27(p.peek_kind()) {
         _parse_expression_sequence(p, FOLLOW_MASK_22);
     }
-    p.expect(TK_SemiColon, &SYNC_51);
+    p.expect(TK_SemiColon, &SYNC_49);
     if _kind_set_27(p.peek_kind()) {
         _parse_expression_sequence(p, FOLLOW_MASK_32);
     }
@@ -16686,7 +16698,7 @@ fn _parse_iteration_statement__inner_scan_2(tokens: &Array<i32>, pos: i32, follo
 
 fn _parse_iteration_statement__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(6);
-    p.expect(TK_For, &SYNC_52);
+    p.expect(TK_For, &SYNC_50);
     if p.peek_kind() == TK_Await {
         p.expect(TK_Await, &EMPTY_SYNC);
     }
@@ -16747,7 +16759,7 @@ fn _parse_iteration_statement__inner_scan_6(tokens: &Array<i32>, pos: i32, follo
 fn _parse_iteration_statement__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(5);
     p.expect(TK_For, &SYNC_26);
-    p.expect(TK_OpenParen, &SYNC_49);
+    p.expect(TK_OpenParen, &SYNC_47);
     _parse_var_modifier(p);
     _parse_variable_declaration(p, FOLLOW_MASK_34);
     p.expect(TK_In, &SYNC_0);
@@ -16813,18 +16825,18 @@ fn _parse_iteration_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with
     let kind = p.peek_kind();
     if kind == TK_Do {
         p.b.set_alt(0);
-        p.expect(TK_Do, &SYNC_33);
+        p.take();
         _parse_statement(p, FOLLOW_MASK_33);
         p.expect(TK_While, &SYNC_26);
         p.expect(TK_OpenParen, &SYNC_0);
         _parse_expression_sequence(p, FOLLOW_MASK_4);
-        p.expect(TK_CloseParen, &SYNC_37);
+        p.expect(TK_CloseParen, &SYNC_51);
         _parse_eos(p);
         return;
     }
     if kind == TK_While {
         p.b.set_alt(1);
-        p.expect(TK_While, &SYNC_26);
+        p.take();
         p.expect(TK_OpenParen, &SYNC_0);
         _parse_expression_sequence(p, FOLLOW_MASK_32);
         p.expect(TK_CloseParen, &SYNC_33);
@@ -16886,7 +16898,7 @@ fn _parse_iteration_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with
     p.no_viable(
         "no alternative of iterationStatement matches",
         p.peek_span(),
-        &SYNC_53,
+        &SYNC_52,
     );
     return;
 }
@@ -16905,13 +16917,13 @@ fn _parse_iteration_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
 fn _parse_var_modifier__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     let kind = p.peek_kind();
     if _kind_set_25(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of varModifier matches",
         p.peek_span(),
-        &SYNC_49,
+        &SYNC_47,
     );
     return;
 }
@@ -16928,7 +16940,7 @@ fn _parse_var_modifier(p: &mut Parser) -> () with TypeScriptParserBase {
 }
 
 fn _parse_continue_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_Continue, &SYNC_54);
+    p.expect(TK_Continue, &SYNC_53);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -16956,7 +16968,7 @@ fn _parse_continue_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScr
 }
 
 fn _parse_break_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_Break, &SYNC_54);
+    p.expect(TK_Break, &SYNC_53);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -16984,7 +16996,7 @@ fn _parse_break_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScript
 }
 
 fn _parse_return_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_Return, &SYNC_55);
+    p.expect(TK_Return, &SYNC_54);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -17012,7 +17024,7 @@ fn _parse_return_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScrip
 }
 
 fn _parse_yield_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect_set(&SYNC_56);
+    p.expect_set(&SYNC_55);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -17063,7 +17075,7 @@ fn _parse_switch_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
     p.expect(TK_Switch, &SYNC_26);
     p.expect(TK_OpenParen, &SYNC_0);
     _parse_expression_sequence(p, FOLLOW_MASK_36);
-    p.expect(TK_CloseParen, &SYNC_57);
+    p.expect(TK_CloseParen, &SYNC_56);
     _parse_case_block(p, follow);
     return;
 }
@@ -17080,7 +17092,7 @@ fn _parse_switch_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScrip
 }
 
 fn _parse_case_block__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_OpenBrace, &SYNC_58);
+    p.expect(TK_OpenBrace, &SYNC_57);
     if p.peek_kind() == TK_Case {
         _parse_case_clauses(p, 0);
     }
@@ -17257,7 +17269,7 @@ fn _parse_throw_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScript
 }
 
 fn _parse_try_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_Try, &SYNC_57);
+    p.expect(TK_Try, &SYNC_56);
     _parse_block(p, FOLLOW_MASK_40);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_Catch {
@@ -17268,7 +17280,7 @@ fn _parse_try_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeS
     } else if grp_kind == TK_Finally {
         _parse_finally_production(p, follow);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_59);
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_58);
     }
     return;
 }
@@ -17285,7 +17297,7 @@ fn _parse_try_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
 }
 
 fn _parse_catch_production__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_Catch, &SYNC_60);
+    p.expect(TK_Catch, &SYNC_59);
     if p.peek_kind() == TK_OpenParen && _kind_set_19(p.peek_at(1)) {
         p.expect(TK_OpenParen, &SYNC_9);
         _parse_identifier(p);
@@ -17310,7 +17322,7 @@ fn _parse_catch_production(p: &mut Parser, follow: i64 = 0) -> () with TypeScrip
 }
 
 fn _parse_finally_production__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_Finally, &SYNC_57);
+    p.expect(TK_Finally, &SYNC_56);
     _parse_block(p, follow);
     return;
 }
@@ -17327,7 +17339,7 @@ fn _parse_finally_production(p: &mut Parser, follow: i64 = 0) -> () with TypeScr
 }
 
 fn _parse_debugger_statement__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    p.expect(TK_Debugger, &SYNC_37);
+    p.expect(TK_Debugger, &SYNC_51);
     _parse_eos(p);
     return;
 }
@@ -17347,7 +17359,7 @@ fn _parse_function_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     if p.peek_kind() == TK_Async {
         p.expect(TK_Async, &EMPTY_SYNC);
     }
-    p.expect(TK_Function_, &SYNC_61);
+    p.expect(TK_Function_, &SYNC_60);
     if p.peek_kind() == TK_Multiply {
         p.expect(TK_Multiply, &EMPTY_SYNC);
     }
@@ -17382,7 +17394,7 @@ fn _parse_class_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with T
         _parse_decorator_list(p, 0);
     }
     if p.peek_kind() == TK_Export {
-        p.expect(TK_Export, &SYNC_44);
+        p.expect(TK_Export, &SYNC_43);
         if p.peek_kind() == TK_Default {
             p.expect(TK_Default, &EMPTY_SYNC);
         }
@@ -17889,7 +17901,7 @@ fn _parse_generator_method__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
     if _kind_set_14(p.peek_kind()) {
         _parse_formal_parameter_list(p, FOLLOW_MASK_36);
     }
-    p.expect(TK_CloseParen, &SYNC_57);
+    p.expect(TK_CloseParen, &SYNC_56);
     p.expect(TK_OpenBrace, &SYNC_29);
     _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC);
@@ -17911,7 +17923,7 @@ fn _parse_generator_function_declaration__inner(p: &mut Parser, follow: i64 = 0)
     if p.peek_kind() == TK_Async {
         p.expect(TK_Async, &EMPTY_SYNC);
     }
-    p.expect(TK_Function_, &SYNC_62);
+    p.expect(TK_Function_, &SYNC_61);
     p.expect(TK_Multiply, &SYNC_32);
     if _kind_set_19(p.peek_kind()) {
         _parse_identifier(p);
@@ -17920,7 +17932,7 @@ fn _parse_generator_function_declaration__inner(p: &mut Parser, follow: i64 = 0)
     if _kind_set_14(p.peek_kind()) {
         _parse_formal_parameter_list(p, FOLLOW_MASK_36);
     }
-    p.expect(TK_CloseParen, &SYNC_57);
+    p.expect(TK_CloseParen, &SYNC_56);
     p.expect(TK_OpenBrace, &SYNC_29);
     _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC);
@@ -17939,7 +17951,7 @@ fn _parse_generator_function_declaration(p: &mut Parser, follow: i64 = 0) -> () 
 }
 
 fn _parse_generator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_OpenBrace, &SYNC_62);
+    p.expect(TK_OpenBrace, &SYNC_61);
     _parse_generator_definition(p, 0);
     loop {
         if p.recovering { break; }
@@ -17976,7 +17988,7 @@ fn _parse_generator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with Typ
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_Comma, &SYNC_62);
+        p.expect(TK_Comma, &SYNC_61);
         _parse_generator_definition(p, (FOLLOW_MASK_43 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 32) & FOLLOW_CONT_MASK);
     }
     if p.peek_kind() == TK_Comma {
@@ -17998,7 +18010,7 @@ fn _parse_generator_block(p: &mut Parser, follow: i64 = 0) -> () with TypeScript
 }
 
 fn _parse_generator_definition__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_Multiply, &SYNC_63);
+    p.expect(TK_Multiply, &SYNC_62);
     _parse_iterator_definition(p, follow);
     return;
 }
@@ -18015,7 +18027,7 @@ fn _parse_generator_definition(p: &mut Parser, follow: i64 = 0) -> () with TypeS
 }
 
 fn _parse_iterator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_OpenBrace, &SYNC_63);
+    p.expect(TK_OpenBrace, &SYNC_62);
     _parse_iterator_definition(p, 0);
     loop {
         if p.recovering { break; }
@@ -18052,7 +18064,7 @@ fn _parse_iterator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_Comma, &SYNC_63);
+        p.expect(TK_Comma, &SYNC_62);
         _parse_iterator_definition(p, (FOLLOW_MASK_44 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 24) & FOLLOW_CONT_MASK);
     }
     if p.peek_kind() == TK_Comma {
@@ -18081,7 +18093,7 @@ fn _parse_iterator_definition__inner(p: &mut Parser, follow: i64 = 0) -> () with
     if _kind_set_14(p.peek_kind()) {
         _parse_formal_parameter_list(p, FOLLOW_MASK_36);
     }
-    p.expect(TK_CloseParen, &SYNC_57);
+    p.expect(TK_CloseParen, &SYNC_56);
     p.expect(TK_OpenBrace, &SYNC_29);
     _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC);
@@ -18112,7 +18124,7 @@ fn _parse_class_element_name__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     p.no_viable(
         "no alternative of classElementName matches",
         p.peek_span(),
-        &SYNC_64,
+        &SYNC_63,
     );
     return;
 }
@@ -18209,7 +18221,7 @@ fn _parse_formal_parameter_list__inner_alt_0(p: &mut Parser, follow: i64 = 0) ->
             }
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_Comma, &SYNC_65);
+        p.expect(TK_Comma, &SYNC_64);
         _parse_formal_parameter_arg(p, follow);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_Comma && p.peek_at(1) == TK_Ellipsis) {
@@ -18225,7 +18237,7 @@ fn _parse_formal_parameter_list__inner_alt_0(p: &mut Parser, follow: i64 = 0) ->
 fn _parse_formal_parameter_list__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     _parse_object_literal(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_Colon && _kind_set_14(p.peek_at(1))) {
-        p.expect(TK_Colon, &SYNC_66);
+        p.expect(TK_Colon, &SYNC_65);
         _parse_formal_parameter_list(p, follow);
     }
     return;
@@ -18303,7 +18315,7 @@ fn _parse_formal_parameter_list__inner(p: &mut Parser, follow: i64 = 0) -> () wi
     p.no_viable(
         "no alternative of formalParameterList matches",
         p.peek_span(),
-        &SYNC_66,
+        &SYNC_65,
     );
     return;
 }
@@ -18472,7 +18484,7 @@ fn _parse_source_elements(p: &mut Parser, follow: i64 = 0) -> () with TypeScript
 }
 
 fn _parse_array_literal__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_OpenBracket, &SYNC_67);
+    p.expect(TK_OpenBracket, &SYNC_66);
     _parse_element_list(p, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_CloseBracket, &EMPTY_SYNC);
     return;
@@ -18693,7 +18705,7 @@ fn _parse_array_element(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
 }
 
 fn _parse_object_literal__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_OpenBrace, &SYNC_68);
+    p.expect(TK_OpenBrace, &SYNC_67);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -18741,7 +18753,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            p.expect(TK_Comma, &SYNC_69);
+            p.expect(TK_Comma, &SYNC_68);
             _parse_property_assignment(p, (FOLLOW_MASK_47 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
         }
         if p.peek_kind() == TK_Comma {
@@ -18842,7 +18854,7 @@ fn _parse_property_assignment__inner_alt_4(p: &mut Parser, follow: i64 = 0) -> (
 fn _parse_property_assignment__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(0);
     _parse_property_name(p, FOLLOW_MASK_48);
-    p.expect_set(&SYNC_70);
+    p.expect_set(&SYNC_69);
     _parse_single_expression(p, follow);
     return;
 }
@@ -19086,7 +19098,7 @@ fn _parse_property_assignment__inner(p: &mut Parser, follow: i64 = 0) -> () with
     p.no_viable(
         "no alternative of propertyAssignment matches",
         p.peek_span(),
-        &SYNC_69,
+        &SYNC_68,
     );
     return;
 }
@@ -19104,8 +19116,8 @@ fn _parse_property_assignment(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
 
 fn _parse_get_accessor__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     _parse_getter(p, FOLLOW_MASK_50);
-    p.expect(TK_OpenParen, &SYNC_71);
-    p.expect(TK_CloseParen, &SYNC_72);
+    p.expect(TK_OpenParen, &SYNC_70);
+    p.expect(TK_CloseParen, &SYNC_71);
     if p.peek_kind() == TK_Colon {
         _parse_type_annotation(p, FOLLOW_MASK_18);
     }
@@ -19132,7 +19144,7 @@ fn _parse_set_accessor__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
     if _kind_set_14(p.peek_kind()) {
         _parse_formal_parameter_list(p, FOLLOW_MASK_36);
     }
-    p.expect(TK_CloseParen, &SYNC_57);
+    p.expect(TK_CloseParen, &SYNC_56);
     p.expect(TK_OpenBrace, &SYNC_29);
     _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC);
@@ -19157,7 +19169,7 @@ fn _parse_property_name__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeS
         return;
     }
     if kind == TK_StringLiteral {
-        p.expect(TK_StringLiteral, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if _kind_set_30(kind) {
@@ -19165,7 +19177,7 @@ fn _parse_property_name__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeS
         return;
     }
     if kind == TK_OpenBracket {
-        p.expect(TK_OpenBracket, &SYNC_0);
+        p.take();
         _parse_single_expression(p, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_CloseBracket, &EMPTY_SYNC);
         return;
@@ -19190,7 +19202,7 @@ fn _parse_property_name(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
 }
 
 fn _parse_arguments__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.expect(TK_OpenParen, &SYNC_73);
+    p.expect(TK_OpenParen, &SYNC_72);
     let mut shape_scan_pos: i32 = -1;
     shape_scan: {
         let tokens = &p.kinds;
@@ -19255,7 +19267,7 @@ fn _parse_argument_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeS
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_Comma, &SYNC_74);
+        p.expect(TK_Comma, &SYNC_73);
         _parse_argument(p, follow);
     }
     return;
@@ -19368,7 +19380,7 @@ fn _parse_expression_sequence(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
 
 fn _parse_single_expression__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(1);
-    p.expect(TK_Class, &SYNC_75);
+    p.expect(TK_Class, &SYNC_74);
     if _kind_set_19(p.peek_kind()) {
         _parse_identifier(p);
     }
@@ -20045,37 +20057,37 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
     }
     if kind == TK_PlusPlus {
         p.b.set_alt(14);
-        p.expect(TK_PlusPlus, &SYNC_0);
+        p.take();
         _parse_single_expression(p, follow, 21);
         return;
     }
     if kind == TK_MinusMinus {
         p.b.set_alt(15);
-        p.expect(TK_MinusMinus, &SYNC_0);
+        p.take();
         _parse_single_expression(p, follow, 21);
         return;
     }
     if kind == TK_Plus {
         p.b.set_alt(16);
-        p.expect(TK_Plus, &SYNC_0);
+        p.take();
         _parse_single_expression(p, follow, 21);
         return;
     }
     if kind == TK_Minus {
         p.b.set_alt(17);
-        p.expect(TK_Minus, &SYNC_0);
+        p.take();
         _parse_single_expression(p, follow, 21);
         return;
     }
     if kind == TK_BitNot {
         p.b.set_alt(18);
-        p.expect(TK_BitNot, &SYNC_0);
+        p.take();
         _parse_single_expression(p, follow, 21);
         return;
     }
     if kind == TK_Not {
         p.b.set_alt(19);
-        p.expect(TK_Not, &SYNC_0);
+        p.take();
         _parse_single_expression(p, follow, 21);
         return;
     }
@@ -20411,7 +20423,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                 }
                 p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                 p.b.set_alt(22);
-                let _ = p.expect_set(&SYNC_76);
+                let _ = p.expect_set(&SYNC_75);
                 _parse_single_expression(p, follow, 20);
                 p.b.finish_node(p.last_end());
             } else {
@@ -20424,7 +20436,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                 }
                 p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                 p.b.set_alt(23);
-                let _ = p.expect_set(&SYNC_77);
+                let _ = p.expect_set(&SYNC_76);
                 _parse_single_expression(p, follow, 19);
                 p.b.finish_node(p.last_end());
             } else {
@@ -20517,7 +20529,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                     }
                     p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                     p.b.set_alt(26);
-                    let _ = p.expect_set(&SYNC_78);
+                    let _ = p.expect_set(&SYNC_77);
                     _parse_single_expression(p, follow, 16);
                     p.b.finish_node(p.last_end());
                 } else {
@@ -20530,7 +20542,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                     }
                     p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                     p.b.set_alt(26);
-                    let _ = p.expect_set(&SYNC_78);
+                    let _ = p.expect_set(&SYNC_77);
                     _parse_single_expression(p, follow, 16);
                     p.b.finish_node(p.last_end());
                 } else {
@@ -20543,7 +20555,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                     }
                     p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                     p.b.set_alt(26);
-                    let _ = p.expect_set(&SYNC_78);
+                    let _ = p.expect_set(&SYNC_77);
                     _parse_single_expression(p, follow, 16);
                     p.b.finish_node(p.last_end());
                 } else {
@@ -20623,7 +20635,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                         }
                         p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                         p.b.set_alt(26);
-                        let _ = p.expect_set(&SYNC_78);
+                        let _ = p.expect_set(&SYNC_77);
                         _parse_single_expression(p, follow, 16);
                         p.b.finish_node(p.last_end());
                     } else {
@@ -20664,7 +20676,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                 }
                 p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                 p.b.set_alt(29);
-                let _ = p.expect_set(&SYNC_79);
+                let _ = p.expect_set(&SYNC_78);
                 _parse_single_expression(p, follow, 13);
                 p.b.finish_node(p.last_end());
             } else {
@@ -20929,7 +20941,7 @@ fn _parse_assignable__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
     p.no_viable(
         "no alternative of assignable matches",
         p.peek_span(),
-        &SYNC_80,
+        &SYNC_79,
     );
     return;
 }
@@ -20949,7 +20961,7 @@ fn _parse_anonymous_function__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> ()
     if p.peek_kind() == TK_Async {
         p.expect(TK_Async, &EMPTY_SYNC);
     }
-    p.expect(TK_Function_, &SYNC_81);
+    p.expect(TK_Function_, &SYNC_80);
     if p.peek_kind() == TK_Multiply {
         p.expect(TK_Multiply, &EMPTY_SYNC);
     }
@@ -20957,7 +20969,7 @@ fn _parse_anonymous_function__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> ()
     if _kind_set_14(p.peek_kind()) {
         _parse_formal_parameter_list(p, FOLLOW_MASK_4);
     }
-    p.expect(TK_CloseParen, &SYNC_72);
+    p.expect(TK_CloseParen, &SYNC_71);
     if p.peek_kind() == TK_Colon {
         _parse_type_annotation(p, FOLLOW_MASK_18);
     }
@@ -21054,7 +21066,7 @@ fn _parse_anonymous_function__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     p.no_viable(
         "no alternative of anonymousFunction matches",
         p.peek_span(),
-        &SYNC_82,
+        &SYNC_81,
     );
     return;
 }
@@ -21101,7 +21113,7 @@ fn _parse_arrow_function_parameters__inner(p: &mut Parser, follow: i64 = 0) -> (
         return;
     }
     if kind == TK_OpenParen {
-        p.expect(TK_OpenParen, &SYNC_27);
+        p.take();
         if _kind_set_14(p.peek_kind()) {
             _parse_formal_parameter_list(p, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         }
@@ -21111,7 +21123,7 @@ fn _parse_arrow_function_parameters__inner(p: &mut Parser, follow: i64 = 0) -> (
     p.no_viable(
         "no alternative of arrowFunctionParameters matches",
         p.peek_span(),
-        &SYNC_82,
+        &SYNC_81,
     );
     return;
 }
@@ -21198,13 +21210,13 @@ fn _parse_arrow_function_body(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
 fn _parse_assignment_operator__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     let kind = p.peek_kind();
     if _kind_set_75(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of assignmentOperator matches",
         p.peek_span(),
-        &SYNC_83,
+        &SYNC_82,
     );
     return;
 }
@@ -21223,15 +21235,15 @@ fn _parse_assignment_operator(p: &mut Parser) -> () with TypeScriptParserBase {
 fn _parse_literal__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     let kind = p.peek_kind();
     if kind == TK_NullLiteral {
-        p.expect(TK_NullLiteral, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_BooleanLiteral {
-        p.expect(TK_BooleanLiteral, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_StringLiteral {
-        p.expect(TK_StringLiteral, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_BackTick {
@@ -21239,7 +21251,7 @@ fn _parse_literal__inner(p: &mut Parser) -> () with TypeScriptParserBase {
         return;
     }
     if kind == TK_RegularExpressionLiteral {
-        p.expect(TK_RegularExpressionLiteral, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if _kind_set_30(kind) {
@@ -21253,7 +21265,7 @@ fn _parse_literal__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     p.no_viable(
         "no alternative of literal matches",
         p.peek_span(),
-        &SYNC_84,
+        &SYNC_83,
     );
     return;
 }
@@ -21270,7 +21282,7 @@ fn _parse_literal(p: &mut Parser) -> () with TypeScriptParserBase {
 }
 
 fn _parse_template_string_literal__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    p.expect(TK_BackTick, &SYNC_85);
+    p.expect(TK_BackTick, &SYNC_84);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -21317,23 +21329,23 @@ fn _parse_template_string_literal(p: &mut Parser) -> () with TypeScriptParserBas
 fn _parse_template_string_atom__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     let kind = p.peek_kind();
     if kind == TK_TemplateStringAtom {
-        p.expect(TK_TemplateStringAtom, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_TemplateStringStartExpression {
-        p.expect(TK_TemplateStringStartExpression, &SYNC_0);
+        p.take();
         _parse_single_expression(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC);
         return;
     }
     if kind == TK_TemplateStringEscapeAtom {
-        p.expect(TK_TemplateStringEscapeAtom, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of templateStringAtom matches",
         p.peek_span(),
-        &SYNC_86,
+        &SYNC_85,
     );
     return;
 }
@@ -21352,13 +21364,13 @@ fn _parse_template_string_atom(p: &mut Parser, follow: i64 = 0) -> () with TypeS
 fn _parse_numeric_literal__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     let kind = p.peek_kind();
     if _kind_set_30(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of numericLiteral matches",
         p.peek_span(),
-        &SYNC_87,
+        &SYNC_86,
     );
     return;
 }
@@ -21377,13 +21389,13 @@ fn _parse_numeric_literal(p: &mut Parser) -> () with TypeScriptParserBase {
 fn _parse_bigint_literal__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     let kind = p.peek_kind();
     if _kind_set_31(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of bigintLiteral matches",
         p.peek_span(),
-        &SYNC_88,
+        &SYNC_87,
     );
     return;
 }
@@ -21505,7 +21517,7 @@ fn _parse_identifier_name(p: &mut Parser) -> () with TypeScriptParserBase {
 fn _parse_identifier__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     let kind = p.peek_kind();
     if _kind_set_19(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
@@ -21571,13 +21583,13 @@ fn _parse_identifier_or_key_word__inner(p: &mut Parser) -> () with TypeScriptPar
         }
     }
     if kind == TK_Require {
-        p.expect(TK_Require, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of identifierOrKeyWord matches",
         p.peek_span(),
-        &SYNC_89,
+        &SYNC_88,
     );
     return;
 }
@@ -21600,17 +21612,17 @@ fn _parse_reserved_word__inner(p: &mut Parser) -> () with TypeScriptParserBase {
         return;
     }
     if kind == TK_NullLiteral {
-        p.expect(TK_NullLiteral, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_BooleanLiteral {
-        p.expect(TK_BooleanLiteral, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of reservedWord matches",
         p.peek_span(),
-        &SYNC_90,
+        &SYNC_89,
     );
     return;
 }
@@ -21629,13 +21641,13 @@ fn _parse_reserved_word(p: &mut Parser) -> () with TypeScriptParserBase {
 fn _parse_keyword__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     let kind = p.peek_kind();
     if _kind_set_33(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of keyword matches",
         p.peek_span(),
-        &SYNC_91,
+        &SYNC_90,
     );
     return;
 }
@@ -21654,11 +21666,11 @@ fn _parse_keyword(p: &mut Parser) -> () with TypeScriptParserBase {
 fn _parse_eos__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     let kind = p.peek_kind();
     if kind == TK_SemiColon {
-        p.expect(TK_SemiColon, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if kind == TK_EOF {
-        p.expect(TK_EOF, &EMPTY_SYNC);
+        p.take();
         return;
     }
     if (pred_15(p)) {
@@ -21670,7 +21682,7 @@ fn _parse_eos__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     p.no_viable(
         "no alternative of eos matches",
         p.peek_span(),
-        &SYNC_37,
+        &SYNC_51,
     );
     return;
 }
@@ -22810,61 +22822,60 @@ global SYNC_33: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_At, TK_Awa
 global SYNC_34: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Const, TK_Constructor, TK_Declare, TK_From, TK_Identifier, TK_KeyOf, TK_Let, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Var, TK_Yield];
 global SYNC_35: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
 global SYNC_36: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_37: List<i32> = [TK_EOF, TK_SemiColon];
-global SYNC_38: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_TemplateCloseBrace, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_39: List<i32> = [TK_Await, TK_Identifier, TK_Yield];
-global SYNC_40: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_41: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_42: List<i32> = [TK_StringLiteral];
-global SYNC_43: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_At, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Declare, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_44: List<i32> = [TK_Default];
-global SYNC_45: List<i32> = [TK_Export];
-global SYNC_46: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_At, TK_Boolean, TK_Class, TK_Const, TK_Constructor, TK_Declare, TK_Export, TK_From, TK_Function_, TK_Identifier, TK_KeyOf, TK_Let, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Var, TK_Yield];
-global SYNC_47: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Const, TK_Constructor, TK_From, TK_Identifier, TK_KeyOf, TK_Let, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Require, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Var, TK_Yield];
-global SYNC_48: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_From, TK_Identifier, TK_KeyOf, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Require, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
-global SYNC_49: List<i32> = [TK_Const, TK_Let, TK_Var];
-global SYNC_50: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_SemiColon, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
-global SYNC_51: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_CloseParen, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
-global SYNC_52: List<i32> = [TK_Await, TK_OpenParen];
-global SYNC_53: List<i32> = [TK_Do, TK_For, TK_While];
-global SYNC_54: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_EOF, TK_From, TK_Identifier, TK_KeyOf, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_SemiColon, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
-global SYNC_55: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_EOF, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_SemiColon, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
-global SYNC_56: List<i32> = [TK_Yield, TK_YieldStar];
-global SYNC_57: List<i32> = [TK_OpenBrace];
-global SYNC_58: List<i32> = [TK_Case, TK_Default, TK_TemplateCloseBrace];
-global SYNC_59: List<i32> = [TK_Catch, TK_Finally];
-global SYNC_60: List<i32> = [TK_OpenBrace, TK_OpenParen];
-global SYNC_61: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_From, TK_Identifier, TK_KeyOf, TK_Multiply, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
-global SYNC_62: List<i32> = [TK_Multiply];
-global SYNC_63: List<i32> = [TK_OpenBracket];
-global SYNC_64: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BinaryIntegerLiteral, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Hashtag, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_65: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_At, TK_Await, TK_Boolean, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_66: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_At, TK_Await, TK_Boolean, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_67: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_CloseBracket, TK_Comma, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
-global SYNC_68: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_TemplateCloseBrace, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
-global SYNC_69: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
-global SYNC_70: List<i32> = [TK_Assign, TK_Colon];
-global SYNC_71: List<i32> = [TK_CloseParen];
-global SYNC_72: List<i32> = [TK_Colon, TK_OpenBrace];
-global SYNC_73: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_CloseParen, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
-global SYNC_74: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
-global SYNC_75: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_Extends, TK_From, TK_Identifier, TK_Implements, TK_KeyOf, TK_LessThan, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
-global SYNC_76: List<i32> = [TK_Divide, TK_Modulus, TK_Multiply];
-global SYNC_77: List<i32> = [TK_Minus, TK_Plus];
-global SYNC_78: List<i32> = [TK_GreaterThanEquals, TK_LessThan, TK_LessThanEquals, TK_MoreThan];
-global SYNC_79: List<i32> = [TK_Equals_, TK_IdentityEquals, TK_IdentityNotEquals, TK_NotEquals];
-global SYNC_80: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_81: List<i32> = [TK_Multiply, TK_OpenParen];
-global SYNC_82: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BinaryIntegerLiteral, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_83: List<i32> = [TK_BitAndAssign, TK_BitOrAssign, TK_BitXorAssign, TK_DivideAssign, TK_LeftShiftArithmeticAssign, TK_MinusAssign, TK_ModulusAssign, TK_MultiplyAssign, TK_NullishCoalescingAssign, TK_PlusAssign, TK_PowerAssign, TK_RightShiftArithmeticAssign, TK_RightShiftLogicalAssign];
-global SYNC_84: List<i32> = [TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BooleanLiteral, TK_DecimalLiteral, TK_HexIntegerLiteral, TK_NullLiteral, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_RegularExpressionLiteral, TK_StringLiteral];
-global SYNC_85: List<i32> = [TK_BackTick, TK_TemplateStringAtom, TK_TemplateStringEscapeAtom, TK_TemplateStringStartExpression];
-global SYNC_86: List<i32> = [TK_TemplateStringAtom, TK_TemplateStringEscapeAtom, TK_TemplateStringStartExpression];
-global SYNC_87: List<i32> = [TK_BinaryIntegerLiteral, TK_DecimalLiteral, TK_HexIntegerLiteral, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2];
-global SYNC_88: List<i32> = [TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral];
-global SYNC_89: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_From, TK_Identifier, TK_KeyOf, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_Require, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
-global SYNC_90: List<i32> = [TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_Let, TK_Module, TK_New, TK_NullLiteral, TK_Number, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_91: List<i32> = [TK_As, TK_Async, TK_Await, TK_Boolean, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_Let, TK_Module, TK_New, TK_Number, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
+global SYNC_37: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_TemplateCloseBrace, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
+global SYNC_38: List<i32> = [TK_Await, TK_Identifier, TK_Yield];
+global SYNC_39: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
+global SYNC_40: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
+global SYNC_41: List<i32> = [TK_StringLiteral];
+global SYNC_42: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_At, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Declare, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
+global SYNC_43: List<i32> = [TK_Default];
+global SYNC_44: List<i32> = [TK_Export];
+global SYNC_45: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_At, TK_Boolean, TK_Class, TK_Const, TK_Constructor, TK_Declare, TK_Export, TK_From, TK_Function_, TK_Identifier, TK_KeyOf, TK_Let, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Var, TK_Yield];
+global SYNC_46: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_From, TK_Identifier, TK_KeyOf, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Require, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
+global SYNC_47: List<i32> = [TK_Const, TK_Let, TK_Var];
+global SYNC_48: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_SemiColon, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
+global SYNC_49: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_CloseParen, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
+global SYNC_50: List<i32> = [TK_Await, TK_OpenParen];
+global SYNC_51: List<i32> = [TK_EOF, TK_SemiColon];
+global SYNC_52: List<i32> = [TK_Do, TK_For, TK_While];
+global SYNC_53: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_EOF, TK_From, TK_Identifier, TK_KeyOf, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_SemiColon, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
+global SYNC_54: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_EOF, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_SemiColon, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
+global SYNC_55: List<i32> = [TK_Yield, TK_YieldStar];
+global SYNC_56: List<i32> = [TK_OpenBrace];
+global SYNC_57: List<i32> = [TK_Case, TK_Default, TK_TemplateCloseBrace];
+global SYNC_58: List<i32> = [TK_Catch, TK_Finally];
+global SYNC_59: List<i32> = [TK_OpenBrace, TK_OpenParen];
+global SYNC_60: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_From, TK_Identifier, TK_KeyOf, TK_Multiply, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
+global SYNC_61: List<i32> = [TK_Multiply];
+global SYNC_62: List<i32> = [TK_OpenBracket];
+global SYNC_63: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BinaryIntegerLiteral, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Hashtag, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
+global SYNC_64: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_At, TK_Await, TK_Boolean, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
+global SYNC_65: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_At, TK_Await, TK_Boolean, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
+global SYNC_66: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_CloseBracket, TK_Comma, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
+global SYNC_67: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_TemplateCloseBrace, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
+global SYNC_68: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
+global SYNC_69: List<i32> = [TK_Assign, TK_Colon];
+global SYNC_70: List<i32> = [TK_CloseParen];
+global SYNC_71: List<i32> = [TK_Colon, TK_OpenBrace];
+global SYNC_72: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_CloseParen, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
+global SYNC_73: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
+global SYNC_74: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_Extends, TK_From, TK_Identifier, TK_Implements, TK_KeyOf, TK_LessThan, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
+global SYNC_75: List<i32> = [TK_Divide, TK_Modulus, TK_Multiply];
+global SYNC_76: List<i32> = [TK_Minus, TK_Plus];
+global SYNC_77: List<i32> = [TK_GreaterThanEquals, TK_LessThan, TK_LessThanEquals, TK_MoreThan];
+global SYNC_78: List<i32> = [TK_Equals_, TK_IdentityEquals, TK_IdentityNotEquals, TK_NotEquals];
+global SYNC_79: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
+global SYNC_80: List<i32> = [TK_Multiply, TK_OpenParen];
+global SYNC_81: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BinaryIntegerLiteral, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
+global SYNC_82: List<i32> = [TK_BitAndAssign, TK_BitOrAssign, TK_BitXorAssign, TK_DivideAssign, TK_LeftShiftArithmeticAssign, TK_MinusAssign, TK_ModulusAssign, TK_MultiplyAssign, TK_NullishCoalescingAssign, TK_PlusAssign, TK_PowerAssign, TK_RightShiftArithmeticAssign, TK_RightShiftLogicalAssign];
+global SYNC_83: List<i32> = [TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BooleanLiteral, TK_DecimalLiteral, TK_HexIntegerLiteral, TK_NullLiteral, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_RegularExpressionLiteral, TK_StringLiteral];
+global SYNC_84: List<i32> = [TK_BackTick, TK_TemplateStringAtom, TK_TemplateStringEscapeAtom, TK_TemplateStringStartExpression];
+global SYNC_85: List<i32> = [TK_TemplateStringAtom, TK_TemplateStringEscapeAtom, TK_TemplateStringStartExpression];
+global SYNC_86: List<i32> = [TK_BinaryIntegerLiteral, TK_DecimalLiteral, TK_HexIntegerLiteral, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2];
+global SYNC_87: List<i32> = [TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral];
+global SYNC_88: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_From, TK_Identifier, TK_KeyOf, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_Require, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
+global SYNC_89: List<i32> = [TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_Let, TK_Module, TK_New, TK_NullLiteral, TK_Number, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
+global SYNC_90: List<i32> = [TK_As, TK_Async, TK_Await, TK_Boolean, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_Let, TK_Module, TK_New, TK_Number, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
 
 global FOLLOW_SETS: List<List<i32>> = [[0, 1], [2048], [i32::MIN, 0, i32::MIN, -2097131, 583], [4096], [-2147483480, 469762688, -2139027200, -2097131, 1607], [64], [16], [0, 0, 0, 0, 128], [168, 469762048, -2139029248, -2097131, 1607], [256], [8], [32], [0, 33554432], [131072], [136, 201326592, -32, -33, 863], [136, 201326592, -32, -33, 607], [45056], [-2130968404, -67108864, -1, -1, 3679], [32768], [0, 0, 0, 37748736], [0, 0, 0, 0, 2], [128], [0, 0, i32::MIN, -2097131, 583], [8, -67108864, -31, -33, 1631], [1024], [0, 0, 0, 0, 256], [32, 0, i32::MIN, -2097131, 583], [0, 0, 0, 0, 2097152], [-2147483616], [16777344, 201326592, -32, -33, 607], [0, 0, 0, 1], [0, 0, 0, 0, 1024], [136, 0, i32::MIN, -2097131, 591], [-2130967380, -67108864, -1, -1, 3967], [0, 0, 1048576], [0, 0, 536870912], [0, 0, 512], [0, 0, 24576], [1152], [16777216], [136, 0, -32, -33, 607], [-2114125652, -67108864, -1, -1, 3679], [36864], [536870920, -67108864, -31, -33, 1631]];
 global FOLLOW_MASK_0: i64 = 1;

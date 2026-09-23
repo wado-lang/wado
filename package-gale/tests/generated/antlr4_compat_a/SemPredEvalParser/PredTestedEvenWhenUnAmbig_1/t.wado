@@ -1290,6 +1290,18 @@ impl Parser {
         return self.pos;
     }
 
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
+    }
+
     fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
@@ -1340,7 +1352,7 @@ fn scan_primary(tokens: &Array<i32>, pos: i32) -> i32 {
 fn _parse_primary__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_ID {
-        let id = p.expect(TK_ID, &EMPTY_SYNC);
+        let id = p.take();
         if !p.speculating {
             p.emit(`ID ${p.token_text(id)}\n`);
         }
