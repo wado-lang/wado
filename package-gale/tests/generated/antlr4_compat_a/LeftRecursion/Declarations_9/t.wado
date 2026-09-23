@@ -1603,16 +1603,11 @@ fn _parse_declarator(p: &mut Parser, min_prec: i32 = 0) -> () {
     }
 }
 
-fn _parse_e__inner(p: &mut Parser) -> () {
-    p.expect(TK_INT, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_e(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_E, _start);
-    _parse_e__inner(p);
+    p.expect(TK_INT, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("e");

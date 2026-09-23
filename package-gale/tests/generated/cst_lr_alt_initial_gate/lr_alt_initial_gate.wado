@@ -1451,11 +1451,6 @@ fn _parse_start(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_stmt__inner_alt_1(p: &mut Parser) -> () {
-    _parse_e(p);
-    return;
-}
-
 fn _parse_stmt__inner_scan_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     let mut pos = pos;
     pos = scan_e(tokens, pos, gate, 0);
@@ -1498,7 +1493,7 @@ fn _parse_stmt__inner(p: &mut Parser) -> () {
             _sd_best_i = 1;
         }
         if _sd_best_i == 1 {
-            return _parse_stmt__inner_alt_1(p);
+            return _parse_e(p);
         }
         return _parse_stmt__inner_alt_0(p);
     }

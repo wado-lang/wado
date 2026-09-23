@@ -1992,16 +1992,11 @@ fn _parse_atom(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_scientific__inner(p: &mut Parser) -> () {
-    p.expect(TK_SCIENTIFIC_NUMBER, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_scientific(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SCIENTIFIC, _start);
-    _parse_scientific__inner(p);
+    p.expect(TK_SCIENTIFIC_NUMBER, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("scientific");
@@ -2033,16 +2028,11 @@ fn _parse_constant(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_variable__inner(p: &mut Parser) -> () {
-    p.expect(TK_VARIABLE, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_variable(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_VARIABLE, _start);
-    _parse_variable__inner(p);
+    p.expect(TK_VARIABLE, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("variable");

@@ -1258,16 +1258,11 @@ impl Parser {
     }
 }
 
-fn _parse_member__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_a, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_member(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_MEMBER, _start);
-    _parse_member__inner(p);
+    p.expect(TK_LIT_a, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("member");

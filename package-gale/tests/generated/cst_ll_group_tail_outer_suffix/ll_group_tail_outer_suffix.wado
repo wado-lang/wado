@@ -1455,16 +1455,11 @@ fn _parse_name(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_body__inner(p: &mut Parser) -> () {
-    p.expect(TK_ID, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_body(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_BODY, _start);
-    _parse_body__inner(p);
+    p.expect(TK_ID, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("body");

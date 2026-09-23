@@ -1556,11 +1556,6 @@ fn _parse_block(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_body__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
-    _parse_expr(p);
-    return;
-}
-
 fn _parse_body__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos);
@@ -1645,7 +1640,7 @@ fn _parse_body__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 _sd_best_i = 1;
             }
             if _sd_best_i == 1 {
-                return _parse_body__inner_alt_1(p, follow);
+                return _parse_expr(p);
             }
             return _parse_body__inner_alt_0(p, follow);
         } else if kind == TK_KW_LET {

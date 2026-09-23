@@ -1531,16 +1531,11 @@ fn _parse_braced(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_arm__inner(p: &mut Parser) -> () {
-    p.expect(TK_IDENT, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_arm(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ARM, _start);
-    _parse_arm__inner(p);
+    p.expect(TK_IDENT, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("arm");

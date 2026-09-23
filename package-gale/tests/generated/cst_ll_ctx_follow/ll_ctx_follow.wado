@@ -1362,16 +1362,11 @@ fn _parse_r(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_wrapper__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    _parse_a(p, follow);
-    return;
-}
-
 fn _parse_wrapper(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_WRAPPER, _start);
-    _parse_wrapper__inner(p, follow);
+    _parse_a(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("wrapper");
@@ -1397,16 +1392,11 @@ fn _parse_a(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_b__inner(p: &mut Parser) -> () {
-    p.expect(TK_Y, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_b(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_B, _start);
-    _parse_b__inner(p);
+    p.expect(TK_Y, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("b");

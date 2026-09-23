@@ -1415,32 +1415,22 @@ fn _parse_start(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_animal__inner(p: &mut Parser) -> () {
-    p.expect_set(&SYNC_0, &EXPECTED_0);
-    return;
-}
-
 fn _parse_animal(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ANIMAL, _start);
-    _parse_animal__inner(p);
+    p.expect_set(&SYNC_0, &EXPECTED_0);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("animal");
     }
 }
 
-fn _parse_service__inner(p: &mut Parser) -> () {
-    p.expect_set(&SYNC_1, &EXPECTED_1);
-    return;
-}
-
 fn _parse_service(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SERVICE, _start);
-    _parse_service__inner(p);
+    p.expect_set(&SYNC_1, &EXPECTED_1);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("service");

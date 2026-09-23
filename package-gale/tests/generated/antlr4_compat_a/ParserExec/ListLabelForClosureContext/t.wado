@@ -1568,48 +1568,33 @@ fn _parse_else_if_statement(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_expression__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_a, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_expression(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_EXPRESSION, _start);
-    _parse_expression__inner(p);
+    p.expect(TK_LIT_a, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("expression");
     }
 }
 
-fn _parse_executable_statement__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_a, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_executable_statement(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_EXECUTABLE_STATEMENT, _start);
-    _parse_executable_statement__inner(p);
+    p.expect(TK_LIT_a, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("executableStatement");
     }
 }
 
-fn _parse_else_statement__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_a, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_else_statement(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ELSE_STATEMENT, _start);
-    _parse_else_statement__inner(p);
+    p.expect(TK_LIT_a, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("elseStatement");

@@ -1216,32 +1216,22 @@ impl Parser {
     }
 }
 
-fn _parse_a__inner(p: &mut Parser) -> () {
-    p.expect_set(&SYNC_0, &EXPECTED_0);
-    return;
-}
-
 fn _parse_a(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_A, _start);
-    _parse_a__inner(p);
+    p.expect_set(&SYNC_0, &EXPECTED_0);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("a");
     }
 }
 
-fn _parse_q__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_a, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_q(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_Q, _start);
-    _parse_q__inner(p);
+    p.expect(TK_LIT_a, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("q");

@@ -1342,16 +1342,11 @@ fn _parse_t(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_c__inner(p: &mut Parser) -> () {
-    p.expect(TK_NULL, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_c(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_C, _start);
-    _parse_c__inner(p);
+    p.expect(TK_NULL, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("c");

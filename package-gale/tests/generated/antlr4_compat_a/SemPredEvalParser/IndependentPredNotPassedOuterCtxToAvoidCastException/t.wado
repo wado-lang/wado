@@ -1437,16 +1437,11 @@ fn _parse_s(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_b__inner(p: &mut Parser) -> () {
-    _parse_a(p);
-    return;
-}
-
 fn _parse_b(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_B, _start);
-    _parse_b__inner(p);
+    _parse_a(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("b");

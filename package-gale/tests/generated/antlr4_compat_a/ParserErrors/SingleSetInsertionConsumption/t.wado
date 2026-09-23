@@ -1316,16 +1316,11 @@ impl Parser {
     }
 }
 
-fn _parse_myset__inner(p: &mut Parser) -> () {
-    p.expect_set(&SYNC_0, &EXPECTED_0);
-    return;
-}
-
 fn _parse_myset(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_MYSET, _start);
-    _parse_myset__inner(p);
+    p.expect_set(&SYNC_0, &EXPECTED_0);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("myset");

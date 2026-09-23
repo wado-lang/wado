@@ -1389,16 +1389,11 @@ fn _parse_content(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_anything__inner(p: &mut Parser) -> () {
-    p.expect(TK_ANY_CHAR, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_anything(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ANYTHING, _start);
-    _parse_anything__inner(p);
+    p.expect(TK_ANY_CHAR, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("anything");

@@ -1399,32 +1399,22 @@ fn _parse_stmt(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_sa__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_a, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_sa(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SA, _start);
-    _parse_sa__inner(p);
+    p.expect(TK_LIT_a, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("sa");
     }
 }
 
-fn _parse_sb__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_b, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_sb(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SB, _start);
-    _parse_sb__inner(p);
+    p.expect(TK_LIT_b, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("sb");

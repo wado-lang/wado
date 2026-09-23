@@ -1524,18 +1524,13 @@ fn _parse_a(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_b__inner(p: &mut Parser) -> () {
-    p.expect(TK_Y, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_b(p: &mut Parser) -> () {
     if p.recovering { return; }
     trace_enter(p, "b");
     p.trace_depth += 1;
     let _start = p.peek_start();
     p.b.start_node(RK_B, _start);
-    _parse_b__inner(p);
+    p.expect(TK_Y, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     p.trace_depth -= 1;
     if p.recovering {

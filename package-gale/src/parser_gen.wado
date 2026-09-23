@@ -143,6 +143,7 @@ use {
     alt_initial_gate_conditions,
     mark_alt_gate_answered,
     alt_vals_arg,
+    alt_helper_exit,
     ambiguous_group_predicate_gated,
     call_arg_suffix,
     current_rule_emits_vals,
@@ -384,7 +385,6 @@ fn ensure_alt_scan_fn<S: AsStrSlice>(
 /// The one emitter of a whole-alternative scan function, which both the scan
 /// side and the parse side's tournament call.
 pub fn gen_alt_scan_fn<S: AsStrSlice>(w: &mut CodeWriter, name: S, body: &ScanBody, alt_index: i32, ctx: &mut GenContext) {
-    ctx.record_alt_scan_fn(alt_index, &name);
     let was_scan = ctx.set_in_scan_fn(true);
     let mut f = FnSpec::new(&name);
     add_scan_params(&mut f, ctx);
@@ -392,10 +392,10 @@ pub fn gen_alt_scan_fn<S: AsStrSlice>(w: &mut CodeWriter, name: S, body: &ScanBo
         add_follow_param(&mut f);
     }
     f.set_return_type("i32");
-    f.emit_begin(w);
-    w.line("let mut pos = pos;");
+    let mut bw = CodeWriter::with_capacity(256);
+    bw.line("let mut pos = pos;");
     gen_scan_op_elements(
-        w,
+        &mut bw,
         &body.elements,
         0,
         body.elements.len(),
@@ -404,10 +404,43 @@ pub fn gen_alt_scan_fn<S: AsStrSlice>(w: &mut CodeWriter, name: S, body: &ScanBo
         &body.gates,
         &body.gate_cond,
     );
-    w.line("return pos;");
+    bw.line("return pos;");
+    let params = `tokens, pos${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())}`;
+    ctx.set_in_scan_fn(was_scan);
+    let text = bw.to_string();
+    if let Some(callee) = forwarded_scan_callee(&text, &params) {
+        ctx.record_alt_scan_fn(alt_index, &callee);
+        ctx.set_forwarded_call(&name, &callee);
+        return;
+    }
+    ctx.record_alt_scan_fn(alt_index, &name);
+    f.emit_begin(w);
+    w.write(&text);
     w.end();
     w.blank();
-    ctx.set_in_scan_fn(was_scan);
+}
+
+/// The scan function a scan body only forwards its own parameters to, which its
+/// callers can call instead.
+fn forwarded_scan_callee(body: &String, params: &String) -> Option<String> {
+    let head = "let mut pos = pos;\npos = ";
+    let tail = `(${params});\nif pos < 0 { return -1; }\nreturn pos;\n`;
+    let text = body.as_str_slice();
+    if !text.starts_with(head) || !text.ends_with(&tail) || text.len() <= head.len() + tail.len() {
+        return null;
+    }
+    let callee = text.sub(head.len(), text.len() - tail.len());
+    for let c of callee.chars() {
+        if !(c.is_ascii_alphanumeric() || c == '_') {
+            return null;
+        }
+    }
+    return Option::Some(callee.to_string());
+}
+
+/// The scan function alternative helper `name` is called by.
+fn scan_helper_callee(name: String, ctx: &GenContext) -> String {
+    return ctx.forwarded_call(&name).unwrap_or(name);
 }
 
 /// A scan function's leading parameters: the token kinds, the position, and
@@ -1786,7 +1819,7 @@ fn gen_scan_partition_body<S: AsStrSlice>(
         let guarded = guarded_alts.len() == 1;
         let i = if guarded { guarded_alts[0] } else { unguarded_alts[0] };
         if plan.is_hoisted(i) {
-            w.line(`pos = ${scan_alt_helper_name(base_name, i)}(tokens, start${ctx.scan_gate_arg()}${follow_sep(
+            w.line(`pos = ${scan_helper_callee(scan_alt_helper_name(base_name, i), ctx)}(tokens, start${ctx.scan_gate_arg()}${follow_sep(
                 ctx.current_rule_reads_follow(),
             )});`);
             w.line("if pos >= 0 { break scan_alts; }");
@@ -1825,7 +1858,7 @@ fn gen_scan_partition_body<S: AsStrSlice>(
                 gen_scan_gate_restore(w, ctx, "start");
             }
             w.line(
-                `let try_${i}_end = ${scan_alt_helper_name(base_name, i)}(tokens, start${ctx.scan_gate_arg()}${follow_sep(
+                `let try_${i}_end = ${scan_helper_callee(scan_alt_helper_name(base_name, i), ctx)}(tokens, start${ctx.scan_gate_arg()}${follow_sep(
                     ctx.current_rule_reads_follow(),
                 )});`,
             );
@@ -2968,15 +3001,21 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
     // body fails — see `gen_rule_entry_wrapper`.
     let canonical = `_parse_${rule.snake_name}`;
     let inner = `${canonical}__inner`;
+    let mut iw = CodeWriter::new();
     match *lowered_rule {
-        Simple(_) => gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, &inner),
+        Simple(_) => gen_parse_fn_simple_named(&mut iw, rule, lowered_rule, ctx, &inner),
         MultiAlt(_) | LeftRecursive(_) => gen_parse_fn_named(
-            w,
+            &mut iw,
             rule,
             lowered_rule,
             ctx,
             &inner,
         ),
+    }
+    let inner_text = iw.to_string();
+    let inlined = if rule_takes_min_prec(lowered_rule) { null } else { single_statement_fn_body(&inner_text) };
+    if inlined matches { None } {
+        w.raw(&inner_text);
     }
     gen_rule_entry_wrapper(
         w,
@@ -2990,7 +3029,44 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         &rule_result_type_for(rule, ctx),
         ctx,
         lr_mid_operand_gated(lowered_rule),
+        &inlined,
     );
+}
+
+/// The wrapper calls the rule's inner fn.
+global NO_INLINED_BODY: Option<String> = null;
+
+/// The one statement a unit function's body is before its `return;`, which a
+/// caller passing the same parameters can run in its place.
+fn single_statement_fn_body(text: &String) -> Option<String> {
+    let mut lines: List<String> = [];
+    let mut cur = String::new();
+    for let c of text.chars() {
+        if c == '\n' {
+            lines.push(cur);
+            cur = String::new();
+        } else {
+            cur.push(c);
+        }
+    }
+    if lines.len() != 5 || !cur.is_empty() || lines[2] != "    return;" || lines[3] != "}" || !lines[4].is_empty() {
+        return null;
+    }
+    let head = lines[0].as_str_slice();
+    if !head.starts_with("fn ") || !head.contains(") -> () ") || !head.ends_with(" {") {
+        return null;
+    }
+    let stmt = lines[1].as_str_slice();
+    if !stmt.starts_with("    ") || !stmt.ends_with(";") {
+        return null;
+    }
+    let body = stmt.sub(4, stmt.len());
+    for let c of body.sub(0, body.len() - 1).chars() {
+        if c == ';' || c == '{' || c == '}' {
+            return null;
+        }
+    }
+    return Option::Some(body.to_string());
 }
 
 /// Emit a thin entry wrapper named `outer_name` that delegates to
@@ -3020,6 +3096,7 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     result_type: S2,
     ctx: &GenContext,
     mid_operand_gated: bool = false,
+    inlined_body: &Option<String> = &NO_INLINED_BODY,
 ) {
     let rule_display = &rule.name;
     let returns_vals = result_type_carries_vals(result_type);
@@ -3088,7 +3165,10 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
         w.line(`let _start = p.peek_start();`);
         w.line(`p.b.start_node(${rk}, _start);`);
     }
-    if returns_vals {
+    if let Some(body) = inlined_body {
+        assert !returns_vals, "only a unit body is inlined";
+        w.line(body);
+    } else if returns_vals {
         w.line(`let __vals = ${call};`);
     } else {
         w.line(`${call};`);
@@ -3342,14 +3422,14 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                         add_seeded_vals_param(&mut f, rule);
                     }
                     f.set_return_type(&rule_result_type_for(rule, ctx));
-                    f.emit_begin(w);
+                    let mut hw = CodeWriter::with_capacity(256);
                     if rule_emits_vals(ctx, rule) {
-                        w.line("let mut vals = vals;");
+                        hw.line("let mut vals = vals;");
                     }
-                    emit_span_capture(w, rule, ctx);
+                    emit_span_capture(&mut hw, rule, ctx);
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
                     gen_alt_body(
-                        w,
+                        &mut hw,
                         &type_name,
                         Option::Some(body.case_name),
                         Option::Some(body.struct_name),
@@ -3360,8 +3440,15 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                         &NO_AFTER,
                         ctx,
                     );
-                    w.end();
-                    w.blank();
+                    let helper_body = hw.to_string();
+                    if let Some(call) = forwarded_rule_call(&helper_body) {
+                        ctx.set_forwarded_call(&helper_name, &call);
+                    } else {
+                        f.emit_begin(w);
+                        w.write(&helper_body);
+                        w.end();
+                        w.blank();
+                    }
 
                     // Emit the per-alt scan helper only when the dispatch
                     // actually calls it; a token-led group leaves it dead.
@@ -3507,6 +3594,23 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         w.end();
         w.blank();
     }
+}
+
+/// The rule call an alternative helper's body is and nothing else, which its
+/// callers can make themselves.
+fn forwarded_rule_call(body: &String) -> Option<String> {
+    let tail = ");\nreturn;\n";
+    let text = body.as_str_slice();
+    if !text.starts_with("_parse_") || !text.ends_with(tail) {
+        return null;
+    }
+    let call = text.sub(0, text.len() - tail.len() + 1);
+    for let c of call.chars() {
+        if c == ';' || c == '\n' {
+            return null;
+        }
+    }
+    return Option::Some(call.to_string());
 }
 
 /// An alternative body that runs no `@after` of its own.
@@ -8392,12 +8496,6 @@ fn emit_index_pick_dispatch<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
         w.end();
     }
     w.line(&alt_helper_exit(&fn_name, sorted_indices[sorted_indices.len() - 1], ctx));
-}
-
-/// The statement that runs alternative `idx`'s helper as the rule's finished
-/// alternative.
-fn alt_helper_exit<S: AsStrSlice>(fn_name: S, idx: i32, ctx: &GenContext) -> String {
-    return ctx.alt_exit(`${fn_name}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)})`);
 }
 
 

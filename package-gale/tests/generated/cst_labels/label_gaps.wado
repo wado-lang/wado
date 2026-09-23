@@ -1557,16 +1557,11 @@ fn _parse_pair_stmt(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_key_rule__inner(p: &mut Parser) -> () {
-    p.expect(TK_ID, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_key_rule(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_KEY_RULE, _start);
-    _parse_key_rule__inner(p);
+    p.expect(TK_ID, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("key_rule");

@@ -1541,18 +1541,6 @@ fn _parse_s(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_stmt__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
-    _parse_item(p, follow);
-    return;
-}
-
-fn _parse_stmt__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_item(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_stmt__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_item(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_LIT_z, &EMPTY_SYNC);
@@ -1573,7 +1561,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if kind == TK_ID {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_0 = _parse_stmt__inner_scan_0(_sd_tokens, _sd_pos, follow);
+        let _sd_p_0 = scan_item(_sd_tokens, _sd_pos, follow);
         let _sd_p_1 = _parse_stmt__inner_scan_1(_sd_tokens, _sd_pos, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
@@ -1586,7 +1574,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _sd_best_i = 1;
         }
         if _sd_best_i == 0 {
-            return _parse_stmt__inner_alt_0(p, follow);
+            return _parse_item(p, follow);
         }
         return _parse_stmt__inner_alt_1(p, follow);
     }
@@ -1861,16 +1849,11 @@ fn _parse_inner(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_name__inner(p: &mut Parser) -> () {
-    p.expect(TK_ID, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_NAME, _start);
-    _parse_name__inner(p);
+    p.expect(TK_ID, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("name");

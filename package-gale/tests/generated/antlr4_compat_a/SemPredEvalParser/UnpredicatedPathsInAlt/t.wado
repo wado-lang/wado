@@ -1379,26 +1379,12 @@ fn _parse_s__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_s__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_a(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_s__inner_alt_1(p: &mut Parser) -> () {
     _parse_b(p);
     if !p.speculating {
         p.emit(`alt 2\n`);
     }
     return;
-}
-
-fn _parse_s__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_b(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
 }
 
 fn _parse_s__inner(p: &mut Parser) -> () {
@@ -1411,8 +1397,8 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         } else {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_s__inner_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = _parse_s__inner_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = scan_a(_sd_tokens, _sd_pos);
+            let _sd_p_1 = scan_b(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {

@@ -1698,16 +1698,11 @@ fn _parse_args(p: &mut Parser, else_: i32 = 0) -> ArgsVals {
     return __vals;
 }
 
-fn _parse_for__inner(p: &mut Parser) -> () {
-    p.expect(TK_FOR, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_for(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FOR, _start);
-    _parse_for__inner(p);
+    p.expect(TK_FOR, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("for");

@@ -1619,32 +1619,22 @@ fn _parse_refs(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_ra__inner(p: &mut Parser) -> () {
-    p.expect(TK_A, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_ra(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_RA, _start);
-    _parse_ra__inner(p);
+    p.expect(TK_A, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("ra");
     }
 }
 
-fn _parse_rb__inner(p: &mut Parser) -> () {
-    p.expect(TK_B, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_rb(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_RB, _start);
-    _parse_rb__inner(p);
+    p.expect(TK_B, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("rb");

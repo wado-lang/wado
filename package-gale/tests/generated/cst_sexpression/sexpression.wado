@@ -1502,18 +1502,6 @@ fn _parse_item__inner_scan_2(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_item__inner_alt_1(p: &mut Parser) -> () {
-    _parse_list_(p);
-    return;
-}
-
-fn _parse_item__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_list_(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_item__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
@@ -1524,7 +1512,7 @@ fn _parse_item__inner(p: &mut Parser) -> () {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         let _sd_p_2 = _parse_item__inner_scan_2(_sd_tokens, _sd_pos);
-        let _sd_p_1 = _parse_item__inner_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_1 = scan_list_(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_1 > _sd_best_p {
@@ -1538,7 +1526,7 @@ fn _parse_item__inner(p: &mut Parser) -> () {
         if _sd_best_i == 2 {
             return _parse_item__inner_alt_2(p);
         }
-        return _parse_item__inner_alt_1(p);
+        return _parse_list_(p);
     }
     p.no_viable(
         "no alternative of item matches",

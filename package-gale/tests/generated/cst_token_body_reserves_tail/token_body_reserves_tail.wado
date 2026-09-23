@@ -1279,18 +1279,6 @@ fn _parse_start(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_pick__inner_alt_1(p: &mut Parser) -> () {
-    _parse_as(p);
-    return;
-}
-
-fn _parse_pick__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_as(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_pick__inner_alt_0(p: &mut Parser) -> () {
     _parse_as(p);
     p.expect(TK_SEMI, &EMPTY_SYNC);
@@ -1311,7 +1299,7 @@ fn _parse_pick__inner(p: &mut Parser) -> () {
     if kind == TK_A {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_1 = _parse_pick__inner_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_1 = scan_as(_sd_tokens, _sd_pos);
         let _sd_p_0 = _parse_pick__inner_scan_0(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
@@ -1324,7 +1312,7 @@ fn _parse_pick__inner(p: &mut Parser) -> () {
             _sd_best_i = 1;
         }
         if _sd_best_i == 1 {
-            return _parse_pick__inner_alt_1(p);
+            return _parse_as(p);
         }
         return _parse_pick__inner_alt_0(p);
     }

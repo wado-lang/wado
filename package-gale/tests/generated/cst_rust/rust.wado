@@ -4261,13 +4261,6 @@ fn scan_token_tree(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i
     return pos;
 }
 
-fn scan_token_tree_token_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
-    let mut pos = pos;
-    pos = scan_macro_identifier_like_token(tokens, pos, gate);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_token_tree_token_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_51(tokens[pos]) { return -1; }
@@ -4282,13 +4275,13 @@ fn scan_token_tree_token(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> 
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_52(alt_kind) {
-            pos = scan_token_tree_token_alt_0(tokens, start, gate);
+            pos = scan_macro_identifier_like_token(tokens, start, gate);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if _kind_set_53(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_0_end = scan_token_tree_token_alt_0(tokens, start, gate);
+            let try_0_end = scan_macro_identifier_like_token(tokens, start, gate);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             *gate = start_gate;
             let try_1_end = scan_token_tree_token_alt_1(tokens, start, gate);
@@ -4691,13 +4684,6 @@ fn scan_macro_match(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
     return pos;
 }
 
-fn scan_macro_match_token_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
-    let mut pos = pos;
-    pos = scan_macro_identifier_like_token(tokens, pos, gate);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_macro_match_token_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_51(tokens[pos]) { return -1; }
@@ -4712,13 +4698,13 @@ fn scan_macro_match_token(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) ->
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_52(alt_kind) {
-            pos = scan_macro_match_token_alt_0(tokens, start, gate);
+            pos = scan_macro_identifier_like_token(tokens, start, gate);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if _kind_set_53(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_0_end = scan_macro_match_token_alt_0(tokens, start, gate);
+            let try_0_end = scan_macro_identifier_like_token(tokens, start, gate);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             *gate = start_gate;
             let try_1_end = scan_macro_match_token_alt_1(tokens, start, gate);
@@ -4743,13 +4729,6 @@ fn scan_macro_match_token(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) ->
     return pos;
 }
 
-fn scan_macro_rep_sep_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
-    let mut pos = pos;
-    pos = scan_macro_identifier_like_token(tokens, pos, gate);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_macro_rep_sep_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_51(tokens[pos]) { return -1; }
@@ -4764,13 +4743,13 @@ fn scan_macro_rep_sep(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_52(alt_kind) {
-            pos = scan_macro_rep_sep_alt_0(tokens, start, gate);
+            pos = scan_macro_identifier_like_token(tokens, start, gate);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if _kind_set_53(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_0_end = scan_macro_rep_sep_alt_0(tokens, start, gate);
+            let try_0_end = scan_macro_identifier_like_token(tokens, start, gate);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             *gate = start_gate;
             let try_1_end = scan_macro_rep_sep_alt_1(tokens, start, gate);
@@ -6361,13 +6340,6 @@ fn scan_trait_(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 =
     return pos;
 }
 
-fn scan_implementation_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_trait_impl(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_implementation(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let start = pos;
     let start_gate = *gate;
@@ -6383,7 +6355,7 @@ fn scan_implementation(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
                 if pos > best { best = pos; best_gate = *gate; }
             }
             *gate = start_gate;
-            let try_1_end = scan_implementation_alt_1(tokens, start, gate, follow);
+            let try_1_end = scan_trait_impl(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             if best >= 0 {
                 pos = best;
@@ -6392,7 +6364,7 @@ fn scan_implementation(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
             }
             return -1;
         } else if alt_kind == TK_KW_UNSAFE {
-            pos = scan_implementation_alt_1(tokens, start, gate, follow);
+            pos = scan_trait_impl(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else {
@@ -7125,13 +7097,6 @@ fn scan_where_clause(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow:
     return pos;
 }
 
-fn scan_where_clause_item_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_type_bound_where_clause_item(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_where_clause_item(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let start = pos;
     let start_gate = *gate;
@@ -7147,7 +7112,7 @@ fn scan_where_clause_item(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, fo
                 if pos > best { best = pos; best_gate = *gate; }
             }
             *gate = start_gate;
-            let try_1_end = scan_where_clause_item_alt_1(tokens, start, gate, follow);
+            let try_1_end = scan_type_bound_where_clause_item(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             if best >= 0 {
                 pos = best;
@@ -7156,7 +7121,7 @@ fn scan_where_clause_item(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, fo
             }
             return -1;
         } else if _kind_set_70(alt_kind) {
-            pos = scan_where_clause_item_alt_1(tokens, start, gate, follow);
+            pos = scan_type_bound_where_clause_item(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else {
@@ -7425,20 +7390,6 @@ fn scan_statement_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
     return pos;
 }
 
-fn scan_statement_alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_let_statement(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_statement_alt_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_expression_statement(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let start = pos;
     let start_gate = *gate;
@@ -7454,10 +7405,10 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i6
             let try_1_end = scan_statement_alt_1(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_2_end = scan_statement_alt_2(tokens, start, gate, follow);
+            let try_2_end = scan_let_statement(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_3_end = scan_statement_alt_3(tokens, start, gate, follow);
+            let try_3_end = scan_expression_statement(tokens, start, gate, follow);
             if try_3_end > best { best = try_3_end; best_gate = *gate; }
             if best >= 0 {
                 pos = best;
@@ -7475,7 +7426,7 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i6
             let try_1_end = scan_statement_alt_1(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_3_end = scan_statement_alt_3(tokens, start, gate, follow);
+            let try_3_end = scan_expression_statement(tokens, start, gate, follow);
             if try_3_end > best { best = try_3_end; best_gate = *gate; }
             if best >= 0 {
                 pos = best;
@@ -7489,7 +7440,7 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i6
             let try_1_end = scan_statement_alt_1(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_3_end = scan_statement_alt_3(tokens, start, gate, follow);
+            let try_3_end = scan_expression_statement(tokens, start, gate, follow);
             if try_3_end > best { best = try_3_end; best_gate = *gate; }
             pos = start;
             *gate = start_gate;
@@ -7505,11 +7456,11 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i6
             }
             return -1;
         } else if alt_kind == TK_KW_LET {
-            pos = scan_statement_alt_2(tokens, start, gate, follow);
+            pos = scan_let_statement(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if _kind_set_74(alt_kind) {
-            pos = scan_statement_alt_3(tokens, start, gate, follow);
+            pos = scan_expression_statement(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else {
@@ -7635,13 +7586,6 @@ fn scan_expression_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,
     return pos;
 }
 
-fn scan_expression_atom_alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_path_expression(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_expression_atom_alt_15(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if !((gate.no_struct == 0)) { return -1; }
@@ -7658,20 +7602,6 @@ fn scan_expression_atom_alt_16(tokens: &Array<i32>, pos: i32, gate: &mut ScanGat
     return pos;
 }
 
-fn scan_expression_atom_alt_17(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_closure_expression(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_expression_atom_alt_18(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_expression_with_block(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let start = pos;
     let start_gate = *gate;
@@ -7681,7 +7611,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
         if alt_kind == TK_POUND {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_18_end = scan_expression_atom_alt_18(tokens, start, gate, follow);
+            let try_18_end = scan_expression_with_block(tokens, start, gate, follow);
             if try_18_end > best { best = try_18_end; best_gate = *gate; }
             pos = start;
             *gate = start_gate;
@@ -7733,7 +7663,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
         } else if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_2_end = scan_expression_atom_alt_2(tokens, start, gate, follow);
+            let try_2_end = scan_path_expression(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             *gate = start_gate;
             let try_15_end = scan_expression_atom_alt_15(tokens, start, gate, follow);
@@ -7757,7 +7687,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
         } else if alt_kind == TK_KW_SELFTYPE {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_2_end = scan_expression_atom_alt_2(tokens, start, gate, follow);
+            let try_2_end = scan_path_expression(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             *gate = start_gate;
             let try_15_end = scan_expression_atom_alt_15(tokens, start, gate, follow);
@@ -7772,7 +7702,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             }
             return -1;
         } else if alt_kind == TK_LT {
-            pos = scan_expression_atom_alt_2(tokens, start, gate, follow);
+            pos = scan_path_expression(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if _kind_set_78(alt_kind) {
@@ -8029,10 +7959,10 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
         } else if alt_kind == TK_KW_ASYNC {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_17_end = scan_expression_atom_alt_17(tokens, start, gate, follow);
+            let try_17_end = scan_closure_expression(tokens, start, gate, follow);
             if try_17_end > best { best = try_17_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_18_end = scan_expression_atom_alt_18(tokens, start, gate, follow);
+            let try_18_end = scan_expression_with_block(tokens, start, gate, follow);
             if try_18_end > best { best = try_18_end; best_gate = *gate; }
             if best >= 0 {
                 pos = best;
@@ -8041,11 +7971,11 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             }
             return -1;
         } else if _kind_set_81(alt_kind) {
-            pos = scan_expression_atom_alt_17(tokens, start, gate, follow);
+            pos = scan_closure_expression(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if _kind_set_82(alt_kind) {
-            pos = scan_expression_atom_alt_18(tokens, start, gate, follow);
+            pos = scan_expression_with_block(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else {
@@ -10546,13 +10476,6 @@ fn scan_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 
     return pos;
 }
 
-fn scan_pattern_no_top_alt_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_pattern_without_range(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_pattern_no_top_alt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let start = pos;
     let start_gate = *gate;
@@ -10560,13 +10483,13 @@ fn scan_pattern_no_top_alt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, f
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_94(alt_kind) {
-            pos = scan_pattern_no_top_alt_alt_0(tokens, start, gate, follow);
+            pos = scan_pattern_without_range(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if _kind_set_95(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_0_end = scan_pattern_no_top_alt_alt_0(tokens, start, gate, follow);
+            let try_0_end = scan_pattern_without_range(tokens, start, gate, follow);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             pos = start;
             *gate = start_gate;
@@ -10585,34 +10508,6 @@ fn scan_pattern_no_top_alt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, f
             return -1;
         }
     }
-    return pos;
-}
-
-fn scan_pattern_without_range_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_identifier_pattern(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_pattern_without_range_alt_5(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_struct_pattern(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_pattern_without_range_alt_6(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_tuple_struct_pattern(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_pattern_without_range_alt_10(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_path_pattern(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
     return pos;
 }
 
@@ -10637,22 +10532,22 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
             }
             return -1;
         } else if _kind_set_96(alt_kind) {
-            pos = scan_pattern_without_range_alt_1(tokens, start, gate, follow);
+            pos = scan_identifier_pattern(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if _kind_set_4(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_1_end = scan_pattern_without_range_alt_1(tokens, start, gate, follow);
+            let try_1_end = scan_identifier_pattern(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_5_end = scan_pattern_without_range_alt_5(tokens, start, gate, follow);
+            let try_5_end = scan_struct_pattern(tokens, start, gate, follow);
             if try_5_end > best { best = try_5_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_6_end = scan_pattern_without_range_alt_6(tokens, start, gate, follow);
+            let try_6_end = scan_tuple_struct_pattern(tokens, start, gate, follow);
             if try_6_end > best { best = try_6_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_10_end = scan_pattern_without_range_alt_10(tokens, start, gate, follow);
+            let try_10_end = scan_path_pattern(tokens, start, gate, follow);
             if try_10_end > best { best = try_10_end; best_gate = *gate; }
             *gate = start_gate;
             let try_11_end = scan_pattern_without_range_alt_11(tokens, start, gate, follow);
@@ -10676,13 +10571,13 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
         } else if _kind_set_98(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_5_end = scan_pattern_without_range_alt_5(tokens, start, gate, follow);
+            let try_5_end = scan_struct_pattern(tokens, start, gate, follow);
             if try_5_end > best { best = try_5_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_6_end = scan_pattern_without_range_alt_6(tokens, start, gate, follow);
+            let try_6_end = scan_tuple_struct_pattern(tokens, start, gate, follow);
             if try_6_end > best { best = try_6_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_10_end = scan_pattern_without_range_alt_10(tokens, start, gate, follow);
+            let try_10_end = scan_path_pattern(tokens, start, gate, follow);
             if try_10_end > best { best = try_10_end; best_gate = *gate; }
             *gate = start_gate;
             let try_11_end = scan_pattern_without_range_alt_11(tokens, start, gate, follow);
@@ -10696,13 +10591,13 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
         } else if alt_kind == TK_KW_SELFTYPE {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_5_end = scan_pattern_without_range_alt_5(tokens, start, gate, follow);
+            let try_5_end = scan_struct_pattern(tokens, start, gate, follow);
             if try_5_end > best { best = try_5_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_6_end = scan_pattern_without_range_alt_6(tokens, start, gate, follow);
+            let try_6_end = scan_tuple_struct_pattern(tokens, start, gate, follow);
             if try_6_end > best { best = try_6_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_10_end = scan_pattern_without_range_alt_10(tokens, start, gate, follow);
+            let try_10_end = scan_path_pattern(tokens, start, gate, follow);
             if try_10_end > best { best = try_10_end; best_gate = *gate; }
             if best >= 0 {
                 pos = best;
@@ -10739,7 +10634,7 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
             }
             return -1;
         } else if alt_kind == TK_LT {
-            pos = scan_pattern_without_range_alt_10(tokens, start, gate, follow);
+            pos = scan_path_pattern(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else {
@@ -11473,20 +11368,6 @@ fn scan_path_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow:
     return pos;
 }
 
-fn scan_type__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_type_no_bounds(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_type__alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_trait_object_type(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_type_(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let start = pos;
     let start_gate = *gate;
@@ -11496,10 +11377,10 @@ fn scan_type_(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 
         if _kind_set_104(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_0_end = scan_type__alt_0(tokens, start, gate, follow);
+            let try_0_end = scan_type_no_bounds(tokens, start, gate, follow);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_2_end = scan_type__alt_2(tokens, start, gate, follow);
+            let try_2_end = scan_trait_object_type(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             if best >= 0 {
                 pos = best;
@@ -11510,7 +11391,7 @@ fn scan_type_(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 
         } else if alt_kind == TK_KW_IMPL {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_0_end = scan_type__alt_0(tokens, start, gate, follow);
+            let try_0_end = scan_type_no_bounds(tokens, start, gate, follow);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             pos = start;
             *gate = start_gate;
@@ -11526,38 +11407,17 @@ fn scan_type_(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 
             }
             return -1;
         } else if _kind_set_105(alt_kind) {
-            pos = scan_type__alt_0(tokens, start, gate, follow);
+            pos = scan_type_no_bounds(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if _kind_set_16(alt_kind) {
-            pos = scan_type__alt_2(tokens, start, gate, follow);
+            pos = scan_trait_object_type(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else {
             return -1;
         }
     }
-    return pos;
-}
-
-fn scan_type_no_bounds_alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_trait_object_type_one_bound(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_type_no_bounds_alt_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_type_path(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_type_no_bounds_alt_12(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_bare_function_type(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
     return pos;
 }
 
@@ -11576,7 +11436,7 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
                 if pos > best { best = pos; best_gate = *gate; }
             }
             *gate = start_gate;
-            let try_2_end = scan_type_no_bounds_alt_2(tokens, start, gate, follow);
+            let try_2_end = scan_trait_object_type_one_bound(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             pos = start;
             *gate = start_gate;
@@ -11599,16 +11459,16 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
             }
             return -1;
         } else if _kind_set_106(alt_kind) {
-            pos = scan_type_no_bounds_alt_2(tokens, start, gate, follow);
+            pos = scan_trait_object_type_one_bound(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_KW_FOR {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_2_end = scan_type_no_bounds_alt_2(tokens, start, gate, follow);
+            let try_2_end = scan_trait_object_type_one_bound(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_12_end = scan_type_no_bounds_alt_12(tokens, start, gate, follow);
+            let try_12_end = scan_bare_function_type(tokens, start, gate, follow);
             if try_12_end > best { best = try_12_end; best_gate = *gate; }
             if best >= 0 {
                 pos = best;
@@ -11619,10 +11479,10 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
         } else if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_2_end = scan_type_no_bounds_alt_2(tokens, start, gate, follow);
+            let try_2_end = scan_trait_object_type_one_bound(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_3_end = scan_type_no_bounds_alt_3(tokens, start, gate, follow);
+            let try_3_end = scan_type_path(tokens, start, gate, follow);
             if try_3_end > best { best = try_3_end; best_gate = *gate; }
             pos = start;
             *gate = start_gate;
@@ -11640,10 +11500,10 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
         } else if alt_kind == TK_KW_SELFTYPE {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_2_end = scan_type_no_bounds_alt_2(tokens, start, gate, follow);
+            let try_2_end = scan_trait_object_type_one_bound(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_3_end = scan_type_no_bounds_alt_3(tokens, start, gate, follow);
+            let try_3_end = scan_type_path(tokens, start, gate, follow);
             if try_3_end > best { best = try_3_end; best_gate = *gate; }
             if best >= 0 {
                 pos = best;
@@ -11700,7 +11560,7 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
             }
             return -1;
         } else if _kind_set_107(alt_kind) {
-            pos = scan_type_no_bounds_alt_12(tokens, start, gate, follow);
+            pos = scan_bare_function_type(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else {
@@ -12606,20 +12466,6 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow:
     return pos;
 }
 
-fn scan_generic_arg_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_type_(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_generic_arg_alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_generic_args_const(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_generic_arg(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let start = pos;
     let start_gate = *gate;
@@ -12632,7 +12478,7 @@ fn scan_generic_arg(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
             pos = start + 1;
             if pos > best { best = pos; best_gate = *gate; }
             *gate = start_gate;
-            let try_1_end = scan_generic_arg_alt_1(tokens, start, gate, follow);
+            let try_1_end = scan_type_(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             if best >= 0 {
                 pos = best;
@@ -12641,16 +12487,16 @@ fn scan_generic_arg(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
             }
             return -1;
         } else if _kind_set_112(alt_kind) {
-            pos = scan_generic_arg_alt_1(tokens, start, gate, follow);
+            pos = scan_type_(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if _kind_set_4(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_1_end = scan_generic_arg_alt_1(tokens, start, gate, follow);
+            let try_1_end = scan_type_(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_2_end = scan_generic_arg_alt_2(tokens, start, gate, follow);
+            let try_2_end = scan_generic_args_const(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             pos = start;
             *gate = start_gate;
@@ -12668,10 +12514,10 @@ fn scan_generic_arg(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
         } else if _kind_set_113(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            let try_1_end = scan_generic_arg_alt_1(tokens, start, gate, follow);
+            let try_1_end = scan_type_(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             *gate = start_gate;
-            let try_2_end = scan_generic_arg_alt_2(tokens, start, gate, follow);
+            let try_2_end = scan_generic_args_const(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             if best >= 0 {
                 pos = best;
@@ -12680,7 +12526,7 @@ fn scan_generic_arg(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
             }
             return -1;
         } else if _kind_set_114(alt_kind) {
-            pos = scan_generic_arg_alt_2(tokens, start, gate, follow);
+            pos = scan_generic_args_const(tokens, start, gate, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else {
@@ -13491,26 +13337,16 @@ fn _parse_token_tree(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
     }
 }
 
-fn _parse_token_tree_token__inner_alt_1(p: &mut Parser) -> () with RustParserBase {
-    _parse_macro_literal_token(p);
-    return;
-}
-
-fn _parse_token_tree_token__inner_alt_0(p: &mut Parser) -> () with RustParserBase {
-    _parse_macro_identifier_like_token(p);
-    return;
-}
-
 fn _parse_token_tree_token__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_121(kind) {
         if _kind_set_54(kind) {
-            return _parse_token_tree_token__inner_alt_1(p);
+            return _parse_macro_literal_token(p);
         } else if _kind_set_53(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_0 = scan_token_tree_token_alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate);
+            let _sd_p_0 = scan_macro_identifier_like_token(_sd_tokens, _sd_pos, &mut p.scan_gate);
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_1 = scan_token_tree_token_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate);
             let mut _sd_best_i: i32 = -1;
@@ -13524,11 +13360,11 @@ fn _parse_token_tree_token__inner(p: &mut Parser) -> () with RustParserBase {
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_token_tree_token__inner_alt_0(p);
+                return _parse_macro_identifier_like_token(p);
             }
-            return _parse_token_tree_token__inner_alt_1(p);
+            return _parse_macro_literal_token(p);
         } else if _kind_set_52(kind) {
-            return _parse_token_tree_token__inner_alt_0(p);
+            return _parse_macro_identifier_like_token(p);
         }
     }
     if _kind_set_120(kind) {
@@ -14196,26 +14032,16 @@ fn _parse_macro_match(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase
     }
 }
 
-fn _parse_macro_match_token__inner_alt_1(p: &mut Parser) -> () with RustParserBase {
-    _parse_macro_literal_token(p);
-    return;
-}
-
-fn _parse_macro_match_token__inner_alt_0(p: &mut Parser) -> () with RustParserBase {
-    _parse_macro_identifier_like_token(p);
-    return;
-}
-
 fn _parse_macro_match_token__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_121(kind) {
         if _kind_set_54(kind) {
-            return _parse_macro_match_token__inner_alt_1(p);
+            return _parse_macro_literal_token(p);
         } else if _kind_set_53(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_0 = scan_macro_match_token_alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate);
+            let _sd_p_0 = scan_macro_identifier_like_token(_sd_tokens, _sd_pos, &mut p.scan_gate);
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_1 = scan_macro_match_token_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate);
             let mut _sd_best_i: i32 = -1;
@@ -14229,11 +14055,11 @@ fn _parse_macro_match_token__inner(p: &mut Parser) -> () with RustParserBase {
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_macro_match_token__inner_alt_0(p);
+                return _parse_macro_identifier_like_token(p);
             }
-            return _parse_macro_match_token__inner_alt_1(p);
+            return _parse_macro_literal_token(p);
         } else if _kind_set_52(kind) {
-            return _parse_macro_match_token__inner_alt_0(p);
+            return _parse_macro_identifier_like_token(p);
         }
     }
     if _kind_set_120(kind) {
@@ -14263,42 +14089,27 @@ fn _parse_macro_match_token(p: &mut Parser) -> () with RustParserBase {
     }
 }
 
-fn _parse_macro_frag_spec__inner(p: &mut Parser) -> () with RustParserBase {
-    _parse_identifier(p);
-    return;
-}
-
 fn _parse_macro_frag_spec(p: &mut Parser) -> () with RustParserBase {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_MACRO_FRAG_SPEC, _start);
-    _parse_macro_frag_spec__inner(p);
+    _parse_identifier(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("macroFragSpec");
     }
 }
 
-fn _parse_macro_rep_sep__inner_alt_1(p: &mut Parser) -> () with RustParserBase {
-    _parse_macro_literal_token(p);
-    return;
-}
-
-fn _parse_macro_rep_sep__inner_alt_0(p: &mut Parser) -> () with RustParserBase {
-    _parse_macro_identifier_like_token(p);
-    return;
-}
-
 fn _parse_macro_rep_sep__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_121(kind) {
         if _kind_set_54(kind) {
-            return _parse_macro_rep_sep__inner_alt_1(p);
+            return _parse_macro_literal_token(p);
         } else if _kind_set_53(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_0 = scan_macro_rep_sep_alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate);
+            let _sd_p_0 = scan_macro_identifier_like_token(_sd_tokens, _sd_pos, &mut p.scan_gate);
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_1 = scan_macro_rep_sep_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate);
             let mut _sd_best_i: i32 = -1;
@@ -14312,11 +14123,11 @@ fn _parse_macro_rep_sep__inner(p: &mut Parser) -> () with RustParserBase {
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_macro_rep_sep__inner_alt_0(p);
+                return _parse_macro_identifier_like_token(p);
             }
-            return _parse_macro_rep_sep__inner_alt_1(p);
+            return _parse_macro_literal_token(p);
         } else if _kind_set_52(kind) {
-            return _parse_macro_rep_sep__inner_alt_0(p);
+            return _parse_macro_identifier_like_token(p);
         }
     }
     if _kind_set_120(kind) {
@@ -14371,16 +14182,11 @@ fn _parse_macro_rep_op(p: &mut Parser) -> () with RustParserBase {
     }
 }
 
-fn _parse_macro_transcriber__inner(p: &mut Parser) -> () with RustParserBase {
-    _parse_delim_token_tree(p);
-    return;
-}
-
 fn _parse_macro_transcriber(p: &mut Parser) -> () with RustParserBase {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_MACRO_TRANSCRIBER, _start);
-    _parse_macro_transcriber__inner(p);
+    _parse_delim_token_tree(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("macroTranscriber");
@@ -14650,23 +14456,6 @@ fn _parse_vis_item(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     }
 }
 
-fn _parse_macro_item__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_macro_rules_definition(p, follow);
-    return;
-}
-
-fn _parse_macro_item__inner_scan_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_macro_rules_definition(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_macro_item__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_macro_invocation_semi(p);
-    return;
-}
-
 fn _parse_macro_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_9(kind) {
@@ -14676,7 +14465,7 @@ fn _parse_macro_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_0 = scan_macro_item_alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_1 = _parse_macro_item__inner_scan_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_1 = scan_macro_rules_definition(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -14688,11 +14477,11 @@ fn _parse_macro_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_macro_item__inner_alt_0(p, follow);
+                return _parse_macro_invocation_semi(p);
             }
-            return _parse_macro_item__inner_alt_1(p, follow);
+            return _parse_macro_rules_definition(p, follow);
         } else if _kind_set_62(kind) {
-            return _parse_macro_item__inner_alt_0(p, follow);
+            return _parse_macro_invocation_semi(p);
         }
     }
     p.no_viable(
@@ -15633,39 +15422,15 @@ fn _parse_type_alias(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
     }
 }
 
-fn _parse_struct___inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_struct_struct(p, follow);
-    return;
-}
-
-fn _parse_struct___inner_scan_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_struct_struct(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_struct___inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_tuple_struct(p, follow);
-    return;
-}
-
-fn _parse_struct___inner_scan_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_tuple_struct(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_struct___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if kind == TK_KW_STRUCT {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_0 = _parse_struct___inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_0 = scan_struct_struct(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_1 = _parse_struct___inner_scan_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_1 = scan_tuple_struct(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -15677,9 +15442,9 @@ fn _parse_struct___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
             _sd_best_i = 1;
         }
         if _sd_best_i == 0 {
-            return _parse_struct___inner_alt_0(p, follow);
+            return _parse_struct_struct(p, follow);
         }
-        return _parse_struct___inner_alt_1(p, follow);
+        return _parse_tuple_struct(p, follow);
     }
     p.no_viable(
         "no alternative of struct_ matches",
@@ -16428,23 +16193,6 @@ fn _parse_trait_(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     }
 }
 
-fn _parse_implementation__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_inherent_impl(p, follow);
-    return;
-}
-
-fn _parse_implementation__inner_scan_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_inherent_impl(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_implementation__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_trait_impl(p, follow);
-    return;
-}
-
 fn _parse_implementation__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_122(kind) {
@@ -16452,9 +16200,9 @@ fn _parse_implementation__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_0 = _parse_implementation__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_0 = scan_inherent_impl(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_1 = scan_implementation_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_1 = scan_trait_impl(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -16466,11 +16214,11 @@ fn _parse_implementation__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_implementation__inner_alt_0(p, follow);
+                return _parse_inherent_impl(p, follow);
             }
-            return _parse_implementation__inner_alt_1(p, follow);
+            return _parse_trait_impl(p, follow);
         } else if kind == TK_KW_UNSAFE {
-            return _parse_implementation__inner_alt_1(p, follow);
+            return _parse_trait_impl(p, follow);
         }
     }
     p.no_viable(
@@ -17358,23 +17106,6 @@ fn _parse_where_clause(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
     }
 }
 
-fn _parse_where_clause_item__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_lifetime_where_clause_item(p, follow);
-    return;
-}
-
-fn _parse_where_clause_item__inner_scan_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_lifetime_where_clause_item(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_where_clause_item__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_type_bound_where_clause_item(p, follow);
-    return;
-}
-
 fn _parse_where_clause_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_18(kind) {
@@ -17382,9 +17113,9 @@ fn _parse_where_clause_item__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_0 = _parse_where_clause_item__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_0 = scan_lifetime_where_clause_item(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_1 = scan_where_clause_item_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_1 = scan_type_bound_where_clause_item(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -17396,11 +17127,11 @@ fn _parse_where_clause_item__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_where_clause_item__inner_alt_0(p, follow);
+                return _parse_lifetime_where_clause_item(p, follow);
             }
-            return _parse_where_clause_item__inner_alt_1(p, follow);
+            return _parse_type_bound_where_clause_item(p, follow);
         } else if _kind_set_70(kind) {
-            return _parse_where_clause_item__inner_alt_1(p, follow);
+            return _parse_type_bound_where_clause_item(p, follow);
         }
     }
     p.no_viable(
@@ -17712,31 +17443,11 @@ fn _parse_attr_input(p: &mut Parser) -> () with RustParserBase {
     }
 }
 
-fn _parse_statement__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_let_statement(p, follow);
-    return;
-}
-
-fn _parse_statement__inner_alt_4(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_macro_invocation_semi(p);
-    return;
-}
-
 fn _parse_statement__inner_scan_4(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_macro_invocation_semi(tokens, pos, gate);
     if pos < 0 { return -1; }
     return pos;
-}
-
-fn _parse_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_item(p);
-    return;
-}
-
-fn _parse_statement__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_expression_statement(p, follow);
-    return;
 }
 
 fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -17752,9 +17463,9 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_1 = scan_statement_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_2 = scan_statement_alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_2 = scan_let_statement(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_3 = scan_statement_alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_3 = scan_expression_statement(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -17770,21 +17481,21 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
                 _sd_best_i = 3;
             }
             if _sd_best_i == 1 {
-                return _parse_statement__inner_alt_1(p, follow);
+                return _parse_item(p);
             }
             if _sd_best_i == 2 {
-                return _parse_statement__inner_alt_2(p, follow);
+                return _parse_let_statement(p, follow);
             }
-            return _parse_statement__inner_alt_3(p, follow);
+            return _parse_expression_statement(p, follow);
         } else if kind == TK_KW_LET {
-            return _parse_statement__inner_alt_2(p, follow);
+            return _parse_let_statement(p, follow);
         } else if _kind_set_9(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_1 = scan_statement_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_3 = scan_statement_alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_3 = scan_expression_statement(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_4 = _parse_statement__inner_scan_4(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
@@ -17802,21 +17513,21 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
                 _sd_best_i = 4;
             }
             if _sd_best_i == 1 {
-                return _parse_statement__inner_alt_1(p, follow);
+                return _parse_item(p);
             }
             if _sd_best_i == 3 {
-                return _parse_statement__inner_alt_3(p, follow);
+                return _parse_expression_statement(p, follow);
             }
-            return _parse_statement__inner_alt_4(p, follow);
+            return _parse_macro_invocation_semi(p);
         } else if _kind_set_72(kind) {
-            return _parse_statement__inner_alt_1(p, follow);
+            return _parse_item(p);
         } else if _kind_set_73(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_1 = scan_statement_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_3 = scan_statement_alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_3 = scan_expression_statement(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -17828,11 +17539,11 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
                 _sd_best_i = 3;
             }
             if _sd_best_i == 1 {
-                return _parse_statement__inner_alt_1(p, follow);
+                return _parse_item(p);
             }
-            return _parse_statement__inner_alt_3(p, follow);
+            return _parse_expression_statement(p, follow);
         } else if _kind_set_74(kind) {
-            return _parse_statement__inner_alt_3(p, follow);
+            return _parse_expression_statement(p, follow);
         }
     }
     p.no_viable(
@@ -18386,7 +18097,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_39 = scan_expression_atom_alt_18(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_39 = scan_expression_with_block(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_0 = _parse_expression__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
@@ -18407,9 +18118,9 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_38 = scan_expression_atom_alt_17(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_38 = scan_closure_expression(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_39 = scan_expression_atom_alt_18(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_39 = scan_expression_with_block(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_38 > _sd_best_p {
@@ -18440,7 +18151,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_2 = scan_expression_atom_alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_2 = scan_path_expression(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_36 = scan_expression_atom_alt_15(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
@@ -18481,7 +18192,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_2 = scan_expression_atom_alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_2 = scan_path_expression(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_36 = scan_expression_atom_alt_15(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
@@ -19175,30 +18886,6 @@ fn _parse_compound_assign_operator(p: &mut Parser) -> () with RustParserBase {
     }
 }
 
-fn _parse_expression_with_block__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_if_expression(p, follow);
-    return;
-}
-
-fn _parse_expression_with_block__inner_scan_5(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_if_expression(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_expression_with_block__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_if_let_expression(p, follow);
-    return;
-}
-
-fn _parse_expression_with_block__inner_scan_6(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_if_let_expression(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_expression_with_block__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if kind == TK_POUND {
@@ -19270,16 +18957,16 @@ fn _parse_expression_with_block__inner(p: &mut Parser, follow: i64 = 0) -> () wi
     }
     if kind == TK_KW_IF {
         if _kind_set_31(p.peek_at(1)) {
-            return _parse_expression_with_block__inner_alt_5(p, follow);
+            return _parse_if_expression(p, follow);
         } else if p.peek_at(1) == TK_KW_LET {
-            return _parse_expression_with_block__inner_alt_6(p, follow);
+            return _parse_if_let_expression(p, follow);
         } else {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_5 = _parse_expression_with_block__inner_scan_5(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_5 = scan_if_expression(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_6 = _parse_expression_with_block__inner_scan_6(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_6 = scan_if_let_expression(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_5 > _sd_best_p {
@@ -19292,9 +18979,9 @@ fn _parse_expression_with_block__inner(p: &mut Parser, follow: i64 = 0) -> () wi
             }
             if _sd_best_i >= 0 {
                 if _sd_best_i == 5 {
-                    return _parse_expression_with_block__inner_alt_5(p, follow);
+                    return _parse_if_expression(p, follow);
                 }
-                return _parse_expression_with_block__inner_alt_6(p, follow);
+                return _parse_if_let_expression(p, follow);
             }
         }
     }
@@ -19450,11 +19137,6 @@ fn _parse_block_expression(p: &mut Parser, follow: i64 = 0) -> () with RustParse
     }
 }
 
-fn _parse_statements__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_expression(p, follow);
-    return;
-}
-
 fn _parse_statements__inner_scan_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_expression(tokens, pos, gate, follow, 0);
@@ -19547,7 +19229,7 @@ fn _parse_statements__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
                 _sd_best_i = 1;
             }
             if _sd_best_i == 1 {
-                return _parse_statements__inner_alt_1(p, follow);
+                return _parse_expression(p, follow);
             }
             return _parse_statements__inner_alt_0(p, follow);
         } else if _kind_set_90(kind) {
@@ -19863,56 +19545,15 @@ fn _parse_tuple_elements(p: &mut Parser, follow: i64 = 0) -> TupleElementsVals w
     return __vals;
 }
 
-fn _parse_tuple_index__inner(p: &mut Parser) -> () with RustParserBase {
-    p.expect(TK_INTEGER_LITERAL, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_tuple_index(p: &mut Parser) -> () with RustParserBase {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_TUPLE_INDEX, _start);
-    _parse_tuple_index__inner(p);
+    p.expect(TK_INTEGER_LITERAL, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("tupleIndex");
     }
-}
-
-fn _parse_struct_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_struct_expr_struct(p, follow);
-    return;
-}
-
-fn _parse_struct_expression__inner_scan_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_struct_expr_struct(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_struct_expression__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_struct_expr_tuple(p, follow);
-    return;
-}
-
-fn _parse_struct_expression__inner_scan_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_struct_expr_tuple(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_struct_expression__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_struct_expr_unit(p, follow);
-    return;
-}
-
-fn _parse_struct_expression__inner_scan_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_struct_expr_unit(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
 }
 
 fn _parse_struct_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -19921,11 +19562,11 @@ fn _parse_struct_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_0 = _parse_struct_expression__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_0 = scan_struct_expr_struct(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_1 = _parse_struct_expression__inner_scan_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_1 = scan_struct_expr_tuple(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_2 = _parse_struct_expression__inner_scan_2(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_2 = scan_struct_expr_unit(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -19941,12 +19582,12 @@ fn _parse_struct_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             _sd_best_i = 2;
         }
         if _sd_best_i == 0 {
-            return _parse_struct_expression__inner_alt_0(p, follow);
+            return _parse_struct_expr_struct(p, follow);
         }
         if _sd_best_i == 1 {
-            return _parse_struct_expression__inner_alt_1(p, follow);
+            return _parse_struct_expr_tuple(p, follow);
         }
-        return _parse_struct_expression__inner_alt_2(p, follow);
+        return _parse_struct_expr_unit(p, follow);
     }
     p.no_viable(
         "no alternative of structExpression matches",
@@ -20506,56 +20147,15 @@ fn _parse_struct_expr_tuple(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     }
 }
 
-fn _parse_struct_expr_unit__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_path_in_expression(p, follow);
-    return;
-}
-
 fn _parse_struct_expr_unit(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_STRUCT_EXPR_UNIT, _start);
-    _parse_struct_expr_unit__inner(p, follow);
+    _parse_path_in_expression(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("structExprUnit");
     }
-}
-
-fn _parse_enumeration_variant_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_enum_expr_struct(p, follow);
-    return;
-}
-
-fn _parse_enumeration_variant_expression__inner_scan_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_enum_expr_struct(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_enumeration_variant_expression__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_enum_expr_tuple(p, follow);
-    return;
-}
-
-fn _parse_enumeration_variant_expression__inner_scan_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_enum_expr_tuple(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_enumeration_variant_expression__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_enum_expr_fieldless(p, follow);
-    return;
-}
-
-fn _parse_enumeration_variant_expression__inner_scan_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_enum_expr_fieldless(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
 }
 
 fn _parse_enumeration_variant_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -20564,11 +20164,11 @@ fn _parse_enumeration_variant_expression__inner(p: &mut Parser, follow: i64 = 0)
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_0 = _parse_enumeration_variant_expression__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_0 = scan_enum_expr_struct(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_1 = _parse_enumeration_variant_expression__inner_scan_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_1 = scan_enum_expr_tuple(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_2 = _parse_enumeration_variant_expression__inner_scan_2(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_2 = scan_enum_expr_fieldless(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -20584,12 +20184,12 @@ fn _parse_enumeration_variant_expression__inner(p: &mut Parser, follow: i64 = 0)
             _sd_best_i = 2;
         }
         if _sd_best_i == 0 {
-            return _parse_enumeration_variant_expression__inner_alt_0(p, follow);
+            return _parse_enum_expr_struct(p, follow);
         }
         if _sd_best_i == 1 {
-            return _parse_enumeration_variant_expression__inner_alt_1(p, follow);
+            return _parse_enum_expr_tuple(p, follow);
         }
-        return _parse_enumeration_variant_expression__inner_alt_2(p, follow);
+        return _parse_enum_expr_fieldless(p, follow);
     }
     p.no_viable(
         "no alternative of enumerationVariantExpression matches",
@@ -20692,11 +20292,6 @@ fn _parse_enum_expr_fields(p: &mut Parser, follow: i64 = 0) -> () with RustParse
     }
 }
 
-fn _parse_enum_expr_field__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_identifier(p);
-    return;
-}
-
 fn _parse_enum_expr_field__inner_scan_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_4(tokens[pos]) { return -1; }
@@ -20739,7 +20334,7 @@ fn _parse_enum_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_enum_expr_field__inner_alt_0(p, follow);
+                return _parse_identifier(p);
             }
             return _parse_enum_expr_field__inner_alt_1(p, follow);
         } else if kind == TK_INTEGER_LITERAL {
@@ -20844,16 +20439,11 @@ fn _parse_enum_expr_tuple(p: &mut Parser, follow: i64 = 0) -> () with RustParser
     }
 }
 
-fn _parse_enum_expr_fieldless__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_path_in_expression(p, follow);
-    return;
-}
-
 fn _parse_enum_expr_fieldless(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ENUM_EXPR_FIELDLESS, _start);
-    _parse_enum_expr_fieldless__inner(p, follow);
+    _parse_path_in_expression(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("enumExprFieldless");
@@ -21977,23 +21567,6 @@ fn _parse_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     }
 }
 
-fn _parse_pattern_no_top_alt__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_range_pattern(p, follow);
-    return;
-}
-
-fn _parse_pattern_no_top_alt__inner_scan_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_range_pattern(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_pattern_no_top_alt__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_pattern_without_range(p, follow);
-    return;
-}
-
 fn _parse_pattern_no_top_alt__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_127(kind) {
@@ -22001,9 +21574,9 @@ fn _parse_pattern_no_top_alt__inner(p: &mut Parser, follow: i64 = 0) -> () with 
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_0 = scan_pattern_no_top_alt_alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_0 = scan_pattern_without_range(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_1 = _parse_pattern_no_top_alt__inner_scan_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_1 = scan_range_pattern(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -22015,11 +21588,11 @@ fn _parse_pattern_no_top_alt__inner(p: &mut Parser, follow: i64 = 0) -> () with 
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_pattern_no_top_alt__inner_alt_0(p, follow);
+                return _parse_pattern_without_range(p, follow);
             }
-            return _parse_pattern_no_top_alt__inner_alt_1(p, follow);
+            return _parse_range_pattern(p, follow);
         } else if _kind_set_94(kind) {
-            return _parse_pattern_no_top_alt__inner_alt_0(p, follow);
+            return _parse_pattern_without_range(p, follow);
         }
     }
     p.no_viable(
@@ -22041,55 +21614,6 @@ fn _parse_pattern_no_top_alt(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     }
 }
 
-fn _parse_pattern_without_range__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_identifier_pattern(p, follow);
-    return;
-}
-
-fn _parse_pattern_without_range__inner_alt_11(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_macro_invocation(p);
-    return;
-}
-
-fn _parse_pattern_without_range__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_struct_pattern(p, follow);
-    return;
-}
-
-fn _parse_pattern_without_range__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_tuple_struct_pattern(p, follow);
-    return;
-}
-
-fn _parse_pattern_without_range__inner_alt_10(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_path_pattern(p, follow);
-    return;
-}
-
-fn _parse_pattern_without_range__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_tuple_pattern(p, follow);
-    return;
-}
-
-fn _parse_pattern_without_range__inner_scan_7(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_tuple_pattern(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_pattern_without_range__inner_alt_8(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_grouped_pattern(p, follow);
-    return;
-}
-
-fn _parse_pattern_without_range__inner_scan_8(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_grouped_pattern(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_49(kind) {
@@ -22098,18 +21622,18 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
     }
     if _kind_set_128(kind) {
         if _kind_set_96(kind) {
-            return _parse_pattern_without_range__inner_alt_1(p, follow);
+            return _parse_identifier_pattern(p, follow);
         } else if _kind_set_4(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_1 = scan_pattern_without_range_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_1 = scan_identifier_pattern(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_5 = scan_pattern_without_range_alt_5(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_5 = scan_struct_pattern(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_6 = scan_pattern_without_range_alt_6(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_6 = scan_tuple_struct_pattern(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_10 = scan_pattern_without_range_alt_10(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_10 = scan_path_pattern(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_11 = scan_pattern_without_range_alt_11(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
@@ -22135,27 +21659,27 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
                 _sd_best_i = 11;
             }
             if _sd_best_i == 1 {
-                return _parse_pattern_without_range__inner_alt_1(p, follow);
+                return _parse_identifier_pattern(p, follow);
             }
             if _sd_best_i == 5 {
-                return _parse_pattern_without_range__inner_alt_5(p, follow);
+                return _parse_struct_pattern(p, follow);
             }
             if _sd_best_i == 6 {
-                return _parse_pattern_without_range__inner_alt_6(p, follow);
+                return _parse_tuple_struct_pattern(p, follow);
             }
             if _sd_best_i == 10 {
-                return _parse_pattern_without_range__inner_alt_10(p, follow);
+                return _parse_path_pattern(p, follow);
             }
-            return _parse_pattern_without_range__inner_alt_11(p, follow);
+            return _parse_macro_invocation(p);
         } else if _kind_set_98(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_5 = scan_pattern_without_range_alt_5(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_5 = scan_struct_pattern(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_6 = scan_pattern_without_range_alt_6(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_6 = scan_tuple_struct_pattern(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_10 = scan_pattern_without_range_alt_10(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_10 = scan_path_pattern(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_11 = scan_pattern_without_range_alt_11(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
@@ -22177,24 +21701,24 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
                 _sd_best_i = 11;
             }
             if _sd_best_i == 5 {
-                return _parse_pattern_without_range__inner_alt_5(p, follow);
+                return _parse_struct_pattern(p, follow);
             }
             if _sd_best_i == 6 {
-                return _parse_pattern_without_range__inner_alt_6(p, follow);
+                return _parse_tuple_struct_pattern(p, follow);
             }
             if _sd_best_i == 10 {
-                return _parse_pattern_without_range__inner_alt_10(p, follow);
+                return _parse_path_pattern(p, follow);
             }
-            return _parse_pattern_without_range__inner_alt_11(p, follow);
+            return _parse_macro_invocation(p);
         } else if kind == TK_KW_SELFTYPE {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_5 = scan_pattern_without_range_alt_5(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_5 = scan_struct_pattern(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_6 = scan_pattern_without_range_alt_6(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_6 = scan_tuple_struct_pattern(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_10 = scan_pattern_without_range_alt_10(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_10 = scan_path_pattern(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_5 > _sd_best_p {
@@ -22210,14 +21734,14 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
                 _sd_best_i = 10;
             }
             if _sd_best_i == 5 {
-                return _parse_pattern_without_range__inner_alt_5(p, follow);
+                return _parse_struct_pattern(p, follow);
             }
             if _sd_best_i == 6 {
-                return _parse_pattern_without_range__inner_alt_6(p, follow);
+                return _parse_tuple_struct_pattern(p, follow);
             }
-            return _parse_pattern_without_range__inner_alt_10(p, follow);
+            return _parse_path_pattern(p, follow);
         } else if kind == TK_LT {
-            return _parse_pattern_without_range__inner_alt_10(p, follow);
+            return _parse_path_pattern(p, follow);
         }
     }
     if kind == TK_UNDERSCORE {
@@ -22236,9 +21760,9 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_7 = _parse_pattern_without_range__inner_scan_7(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_7 = scan_tuple_pattern(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_8 = _parse_pattern_without_range__inner_scan_8(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_8 = scan_grouped_pattern(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_7 > _sd_best_p {
@@ -22250,9 +21774,9 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
             _sd_best_i = 8;
         }
         if _sd_best_i == 7 {
-            return _parse_pattern_without_range__inner_alt_7(p, follow);
+            return _parse_tuple_pattern(p, follow);
         }
-        return _parse_pattern_without_range__inner_alt_8(p, follow);
+        return _parse_grouped_pattern(p, follow);
     }
     if kind == TK_LSQUAREBRACKET {
         _parse_slice_pattern(p, follow);
@@ -22408,32 +21932,22 @@ fn _parse_identifier_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     }
 }
 
-fn _parse_wildcard_pattern__inner(p: &mut Parser) -> () with RustParserBase {
-    p.expect(TK_UNDERSCORE, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_wildcard_pattern(p: &mut Parser) -> () with RustParserBase {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_WILDCARD_PATTERN, _start);
-    _parse_wildcard_pattern__inner(p);
+    p.expect(TK_UNDERSCORE, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("wildcardPattern");
     }
 }
 
-fn _parse_rest_pattern__inner(p: &mut Parser) -> () with RustParserBase {
-    p.expect(TK_DOTDOT, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_rest_pattern(p: &mut Parser) -> () with RustParserBase {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_REST_PATTERN, _start);
-    _parse_rest_pattern__inner(p);
+    p.expect(TK_DOTDOT, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("restPattern");
@@ -22672,11 +22186,6 @@ fn _parse_struct_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
     }
 }
 
-fn _parse_struct_pattern_elements__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_struct_pattern_et_cetera(p);
-    return;
-}
-
 fn _parse_struct_pattern_elements__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     _parse_struct_pattern_fields(p, follow);
     if (p.peek_kind() == TK_COMMA) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -22709,11 +22218,11 @@ fn _parse_struct_pattern_elements__inner(p: &mut Parser, follow: i64 = 0) -> () 
                 _sd_best_i = 1;
             }
             if _sd_best_i == 1 {
-                return _parse_struct_pattern_elements__inner_alt_1(p, follow);
+                return _parse_struct_pattern_et_cetera(p);
             }
             return _parse_struct_pattern_elements__inner_alt_0(p, follow);
         } else if kind == TK_DOTDOT {
-            return _parse_struct_pattern_elements__inner_alt_1(p, follow);
+            return _parse_struct_pattern_et_cetera(p);
         } else if _kind_set_102(kind) {
             return _parse_struct_pattern_elements__inner_alt_0(p, follow);
         }
@@ -23038,11 +22547,6 @@ fn _parse_tuple_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
     }
 }
 
-fn _parse_tuple_pattern_items__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_rest_pattern(p);
-    return;
-}
-
 fn _parse_tuple_pattern_items__inner_scan_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_DOTDOT { return -1; }
@@ -23137,7 +22641,7 @@ fn _parse_tuple_pattern_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
                 _sd_best_i = 2;
             }
             if _sd_best_i == 1 {
-                return _parse_tuple_pattern_items__inner_alt_1(p, follow);
+                return _parse_rest_pattern(p);
             }
             if _sd_best_i == 2 {
                 return _parse_tuple_pattern_items__inner_alt_2(p, follow);
@@ -23313,28 +22817,6 @@ fn _parse_path_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
     }
 }
 
-fn _parse_type___inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_impl_trait_type(p, follow);
-    return;
-}
-
-fn _parse_type___inner_scan_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_impl_trait_type(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_type___inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_trait_object_type(p, follow);
-    return;
-}
-
-fn _parse_type___inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_type_no_bounds(p, follow);
-    return;
-}
-
 fn _parse_type___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_18(kind) {
@@ -23342,9 +22824,9 @@ fn _parse_type___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_0 = scan_type__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_0 = scan_type_no_bounds(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_1 = _parse_type___inner_scan_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_1 = scan_impl_trait_type(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -23356,16 +22838,16 @@ fn _parse_type___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_type___inner_alt_0(p, follow);
+                return _parse_type_no_bounds(p, follow);
             }
-            return _parse_type___inner_alt_1(p, follow);
+            return _parse_impl_trait_type(p, follow);
         } else if _kind_set_104(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_0 = scan_type__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_0 = scan_type_no_bounds(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_2 = scan_type__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_2 = scan_trait_object_type(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -23377,13 +22859,13 @@ fn _parse_type___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
                 _sd_best_i = 2;
             }
             if _sd_best_i == 0 {
-                return _parse_type___inner_alt_0(p, follow);
+                return _parse_type_no_bounds(p, follow);
             }
-            return _parse_type___inner_alt_2(p, follow);
+            return _parse_trait_object_type(p, follow);
         } else if _kind_set_16(kind) {
-            return _parse_type___inner_alt_2(p, follow);
+            return _parse_trait_object_type(p, follow);
         } else if _kind_set_105(kind) {
-            return _parse_type___inner_alt_0(p, follow);
+            return _parse_type_no_bounds(p, follow);
         }
     }
     p.no_viable(
@@ -23405,77 +22887,9 @@ fn _parse_type_(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     }
 }
 
-fn _parse_type_no_bounds__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_parenthesized_type(p, follow);
-    return;
-}
-
-fn _parse_type_no_bounds__inner_scan_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_parenthesized_type(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_type_no_bounds__inner_alt_4(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_tuple_type(p, follow);
-    return;
-}
-
-fn _parse_type_no_bounds__inner_scan_4(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_tuple_type(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_type_no_bounds__inner_alt_12(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_bare_function_type(p, follow);
-    return;
-}
-
-fn _parse_type_no_bounds__inner_alt_13(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_macro_invocation(p);
-    return;
-}
-
 fn _parse_type_no_bounds__inner_scan_13(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_macro_invocation(tokens, pos, gate);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_type_no_bounds__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_type_path(p, follow);
-    return;
-}
-
-fn _parse_type_no_bounds__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_trait_object_type_one_bound(p, follow);
-    return;
-}
-
-fn _parse_type_no_bounds__inner_alt_8(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_array_type(p, follow);
-    return;
-}
-
-fn _parse_type_no_bounds__inner_scan_8(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_array_type(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_type_no_bounds__inner_alt_9(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_slice_type(p, follow);
-    return;
-}
-
-fn _parse_type_no_bounds__inner_scan_9(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_slice_type(tokens, pos, gate, follow);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -23487,11 +22901,11 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_0 = _parse_type_no_bounds__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_0 = scan_parenthesized_type(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_2 = scan_type_no_bounds_alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_2 = scan_trait_object_type_one_bound(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_4 = _parse_type_no_bounds__inner_scan_4(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_4 = scan_tuple_type(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -23507,19 +22921,19 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
                 _sd_best_i = 4;
             }
             if _sd_best_i == 0 {
-                return _parse_type_no_bounds__inner_alt_0(p, follow);
+                return _parse_parenthesized_type(p, follow);
             }
             if _sd_best_i == 2 {
-                return _parse_type_no_bounds__inner_alt_2(p, follow);
+                return _parse_trait_object_type_one_bound(p, follow);
             }
-            return _parse_type_no_bounds__inner_alt_4(p, follow);
+            return _parse_tuple_type(p, follow);
         } else if kind == TK_KW_FOR {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_2 = scan_type_no_bounds_alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_2 = scan_trait_object_type_one_bound(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_12 = scan_type_no_bounds_alt_12(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_12 = scan_bare_function_type(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_2 > _sd_best_p {
@@ -23531,18 +22945,18 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
                 _sd_best_i = 12;
             }
             if _sd_best_i == 2 {
-                return _parse_type_no_bounds__inner_alt_2(p, follow);
+                return _parse_trait_object_type_one_bound(p, follow);
             }
-            return _parse_type_no_bounds__inner_alt_12(p, follow);
+            return _parse_bare_function_type(p, follow);
         } else if _kind_set_107(kind) {
-            return _parse_type_no_bounds__inner_alt_12(p, follow);
+            return _parse_bare_function_type(p, follow);
         } else if _kind_set_9(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_2 = scan_type_no_bounds_alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_2 = scan_trait_object_type_one_bound(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_3 = scan_type_no_bounds_alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_3 = scan_type_path(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_13 = _parse_type_no_bounds__inner_scan_13(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
@@ -23560,19 +22974,19 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
                 _sd_best_i = 13;
             }
             if _sd_best_i == 2 {
-                return _parse_type_no_bounds__inner_alt_2(p, follow);
+                return _parse_trait_object_type_one_bound(p, follow);
             }
             if _sd_best_i == 3 {
-                return _parse_type_no_bounds__inner_alt_3(p, follow);
+                return _parse_type_path(p, follow);
             }
-            return _parse_type_no_bounds__inner_alt_13(p, follow);
+            return _parse_macro_invocation(p);
         } else if kind == TK_KW_SELFTYPE {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_2 = scan_type_no_bounds_alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_2 = scan_trait_object_type_one_bound(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_3 = scan_type_no_bounds_alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_3 = scan_type_path(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_2 > _sd_best_p {
@@ -23584,11 +22998,11 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
                 _sd_best_i = 3;
             }
             if _sd_best_i == 2 {
-                return _parse_type_no_bounds__inner_alt_2(p, follow);
+                return _parse_trait_object_type_one_bound(p, follow);
             }
-            return _parse_type_no_bounds__inner_alt_3(p, follow);
+            return _parse_type_path(p, follow);
         } else if _kind_set_106(kind) {
-            return _parse_type_no_bounds__inner_alt_2(p, follow);
+            return _parse_trait_object_type_one_bound(p, follow);
         }
     }
     if kind == TK_KW_IMPL {
@@ -23611,9 +23025,9 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_8 = _parse_type_no_bounds__inner_scan_8(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_8 = scan_array_type(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_9 = _parse_type_no_bounds__inner_scan_9(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_9 = scan_slice_type(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_8 > _sd_best_p {
@@ -23625,9 +23039,9 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             _sd_best_i = 9;
         }
         if _sd_best_i == 8 {
-            return _parse_type_no_bounds__inner_alt_8(p, follow);
+            return _parse_array_type(p, follow);
         }
-        return _parse_type_no_bounds__inner_alt_9(p, follow);
+        return _parse_slice_type(p, follow);
     }
     if kind == TK_UNDERSCORE {
         _parse_inferred_type(p);
@@ -23674,16 +23088,11 @@ fn _parse_parenthesized_type(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     }
 }
 
-fn _parse_never_type__inner(p: &mut Parser) -> () with RustParserBase {
-    p.expect(TK_NOT, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_never_type(p: &mut Parser) -> () with RustParserBase {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_NEVER_TYPE, _start);
-    _parse_never_type__inner(p);
+    p.expect(TK_NOT, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("neverType");
@@ -23934,39 +23343,15 @@ fn _parse_bare_function_return_type(p: &mut Parser, follow: i64 = 0) -> () with 
     }
 }
 
-fn _parse_function_parameters_maybe_named_variadic__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_maybe_named_function_parameters(p, follow);
-    return;
-}
-
-fn _parse_function_parameters_maybe_named_variadic__inner_scan_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_maybe_named_function_parameters(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_function_parameters_maybe_named_variadic__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_maybe_named_function_parameters_variadic(p, follow);
-    return;
-}
-
-fn _parse_function_parameters_maybe_named_variadic__inner_scan_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_maybe_named_function_parameters_variadic(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_function_parameters_maybe_named_variadic__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if _kind_set_44(kind) {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_0 = _parse_function_parameters_maybe_named_variadic__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_0 = scan_maybe_named_function_parameters(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_1 = _parse_function_parameters_maybe_named_variadic__inner_scan_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_1 = scan_maybe_named_function_parameters_variadic(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -23978,9 +23363,9 @@ fn _parse_function_parameters_maybe_named_variadic__inner(p: &mut Parser, follow
             _sd_best_i = 1;
         }
         if _sd_best_i == 0 {
-            return _parse_function_parameters_maybe_named_variadic__inner_alt_0(p, follow);
+            return _parse_maybe_named_function_parameters(p, follow);
         }
-        return _parse_function_parameters_maybe_named_variadic__inner_alt_1(p, follow);
+        return _parse_maybe_named_function_parameters_variadic(p, follow);
     }
     p.no_viable(
         "no alternative of functionParametersMaybeNamedVariadic matches",
@@ -24301,16 +23686,11 @@ fn _parse_impl_trait_type_one_bound(p: &mut Parser, follow: i64 = 0) -> () with 
     }
 }
 
-fn _parse_inferred_type__inner(p: &mut Parser) -> () with RustParserBase {
-    p.expect(TK_UNDERSCORE, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_inferred_type(p: &mut Parser) -> () with RustParserBase {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_INFERRED_TYPE, _start);
-    _parse_inferred_type__inner(p);
+    p.expect(TK_UNDERSCORE, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("inferredType");
@@ -25032,38 +24412,11 @@ fn _parse_generic_args(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
     }
 }
 
-fn _parse_generic_arg__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_lifetime(p);
-    return;
-}
-
 fn _parse_generic_arg__inner_scan_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_16(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
-}
-
-fn _parse_generic_arg__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_generic_args_binding(p, follow);
-    return;
-}
-
-fn _parse_generic_arg__inner_scan_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_generic_args_binding(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_generic_arg__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_generic_args_const(p, follow);
-    return;
-}
-
-fn _parse_generic_arg__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    _parse_type_(p, follow);
-    return;
 }
 
 fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -25075,7 +24428,7 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
             p.scan_gate.no_struct = p.no_struct;
             let _sd_p_0 = _parse_generic_arg__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_1 = scan_generic_arg_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_1 = scan_type_(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -25087,18 +24440,18 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_generic_arg__inner_alt_0(p, follow);
+                return _parse_lifetime(p);
             }
-            return _parse_generic_arg__inner_alt_1(p, follow);
+            return _parse_type_(p, follow);
         } else if _kind_set_4(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_1 = scan_generic_arg_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_1 = scan_type_(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_2 = scan_generic_arg_alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_2 = scan_generic_args_const(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_3 = _parse_generic_arg__inner_scan_3(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_3 = scan_generic_args_binding(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -25114,21 +24467,21 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
                 _sd_best_i = 3;
             }
             if _sd_best_i == 1 {
-                return _parse_generic_arg__inner_alt_1(p, follow);
+                return _parse_type_(p, follow);
             }
             if _sd_best_i == 2 {
-                return _parse_generic_arg__inner_alt_2(p, follow);
+                return _parse_generic_args_const(p, follow);
             }
-            return _parse_generic_arg__inner_alt_3(p, follow);
+            return _parse_generic_args_binding(p, follow);
         } else if _kind_set_114(kind) {
-            return _parse_generic_arg__inner_alt_2(p, follow);
+            return _parse_generic_args_const(p, follow);
         } else if _kind_set_113(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_1 = scan_generic_arg_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_1 = scan_type_(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_2 = scan_generic_arg_alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let _sd_p_2 = scan_generic_args_const(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_1 > _sd_best_p {
@@ -25140,11 +24493,11 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
                 _sd_best_i = 2;
             }
             if _sd_best_i == 1 {
-                return _parse_generic_arg__inner_alt_1(p, follow);
+                return _parse_type_(p, follow);
             }
-            return _parse_generic_arg__inner_alt_2(p, follow);
+            return _parse_generic_args_const(p, follow);
         } else if _kind_set_112(kind) {
-            return _parse_generic_arg__inner_alt_1(p, follow);
+            return _parse_type_(p, follow);
         }
     }
     p.no_viable(
@@ -25718,16 +25071,6 @@ fn _parse_keyword(p: &mut Parser) -> () with RustParserBase {
     }
 }
 
-fn _parse_macro_identifier_like_token__inner_alt_1(p: &mut Parser) -> () with RustParserBase {
-    _parse_identifier(p);
-    return;
-}
-
-fn _parse_macro_identifier_like_token__inner_alt_0(p: &mut Parser) -> () with RustParserBase {
-    _parse_keyword(p);
-    return;
-}
-
 fn _parse_macro_identifier_like_token__inner_alt_2(p: &mut Parser) -> () with RustParserBase {
     p.expect(TK_KW_MACRORULES, &EMPTY_SYNC);
     return;
@@ -25761,11 +25104,11 @@ fn _parse_macro_identifier_like_token__inner(p: &mut Parser) -> () with RustPars
                 _sd_best_i = 2;
             }
             if _sd_best_i == 1 {
-                return _parse_macro_identifier_like_token__inner_alt_1(p);
+                return _parse_identifier(p);
             }
             return _parse_macro_identifier_like_token__inner_alt_2(p);
         } else if _kind_set_118(kind) {
-            return _parse_macro_identifier_like_token__inner_alt_1(p);
+            return _parse_identifier(p);
         } else if kind == TK_KW_UNION {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
@@ -25784,11 +25127,11 @@ fn _parse_macro_identifier_like_token__inner(p: &mut Parser) -> () with RustPars
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_macro_identifier_like_token__inner_alt_0(p);
+                return _parse_keyword(p);
             }
-            return _parse_macro_identifier_like_token__inner_alt_1(p);
+            return _parse_identifier(p);
         } else if _kind_set_117(kind) {
-            return _parse_macro_identifier_like_token__inner_alt_0(p);
+            return _parse_keyword(p);
         }
     }
     if kind == TK_KW_UNDERLINELIFETIME {
@@ -25822,16 +25165,11 @@ fn _parse_macro_identifier_like_token(p: &mut Parser) -> () with RustParserBase 
     }
 }
 
-fn _parse_macro_literal_token__inner(p: &mut Parser) -> () with RustParserBase {
-    _parse_literal_expression(p);
-    return;
-}
-
 fn _parse_macro_literal_token(p: &mut Parser) -> () with RustParserBase {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_MACRO_LITERAL_TOKEN, _start);
-    _parse_macro_literal_token__inner(p);
+    _parse_literal_expression(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("macroLiteralToken");

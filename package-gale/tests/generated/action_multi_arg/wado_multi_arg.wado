@@ -1346,16 +1346,11 @@ struct EVals {
     acc: i32 = 0,
 }
 
-fn _parse_r__inner(p: &mut Parser) -> () {
-    _parse_e(p, 100);
-    return;
-}
-
 fn _parse_r(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_R, _start);
-    _parse_r__inner(p);
+    _parse_e(p, 100);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("r");

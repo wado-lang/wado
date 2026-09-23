@@ -29087,16 +29087,11 @@ fn _parse_namespace_(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_namespace_prefix__inner(p: &mut Parser) -> () {
-    _parse_ident(p);
-    return;
-}
-
 fn _parse_namespace_prefix(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_NAMESPACE_PREFIX, _start);
-    _parse_namespace_prefix__inner(p);
+    _parse_ident(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("namespacePrefix");
@@ -29281,16 +29276,11 @@ fn _parse_media_query(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_media_type__inner(p: &mut Parser) -> () {
-    _parse_ident(p);
-    return;
-}
-
 fn _parse_media_type(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_MEDIA_TYPE, _start);
-    _parse_media_type__inner(p);
+    _parse_ident(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("mediaType");
@@ -29821,16 +29811,11 @@ fn _parse_type_namespace_prefix(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_element_name__inner(p: &mut Parser) -> () {
-    _parse_ident(p);
-    return;
-}
-
 fn _parse_element_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ELEMENT_NAME, _start);
-    _parse_element_name__inner(p);
+    _parse_ident(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("elementName");
@@ -30086,38 +30071,14 @@ fn _parse_negation(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_negation_arg__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
-    _parse_type_selector(p, follow);
-    return;
-}
-
-fn _parse_negation_arg__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_type_selector(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_negation_arg__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
-    _parse_universal(p, follow);
-    return;
-}
-
-fn _parse_negation_arg__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_universal(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_negation_arg__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if _kind_set_9(kind) {
         if _kind_set_12(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos, follow);
-            let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            let _sd_p_0 = scan_type_selector(_sd_tokens, _sd_pos, follow);
+            let _sd_p_1 = scan_universal(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -30129,19 +30090,19 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 _sd_best_i = 1;
             }
             if _sd_best_i == 0 {
-                return _parse_negation_arg__inner_alt_0(p, follow);
+                return _parse_type_selector(p, follow);
             }
-            return _parse_negation_arg__inner_alt_1(p, follow);
+            return _parse_universal(p, follow);
         } else if kind == TK_Pipe {
             if _kind_set_3(p.peek_at(1)) {
-                return _parse_negation_arg__inner_alt_0(p, follow);
+                return _parse_type_selector(p, follow);
             } else if p.peek_at(1) == TK_Multiply {
-                return _parse_negation_arg__inner_alt_1(p, follow);
+                return _parse_universal(p, follow);
             } else {
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_negation_arg__inner_scan_0(_sd_tokens, _sd_pos, follow);
-                let _sd_p_1 = _parse_negation_arg__inner_scan_1(_sd_tokens, _sd_pos, follow);
+                let _sd_p_0 = scan_type_selector(_sd_tokens, _sd_pos, follow);
+                let _sd_p_1 = scan_universal(_sd_tokens, _sd_pos, follow);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -30154,9 +30115,9 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 if _sd_best_i >= 0 {
                     if _sd_best_i == 0 {
-                        return _parse_negation_arg__inner_alt_0(p, follow);
+                        return _parse_type_selector(p, follow);
                     }
-                    return _parse_negation_arg__inner_alt_1(p, follow);
+                    return _parse_universal(p, follow);
                 }
             }
         }
@@ -31575,42 +31536,6 @@ fn _parse_supports_rule(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_supports_condition__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
-    _parse_supports_conjunction(p, follow);
-    return;
-}
-
-fn _parse_supports_condition__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_supports_conjunction(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_supports_condition__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
-    _parse_supports_disjunction(p, follow);
-    return;
-}
-
-fn _parse_supports_condition__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_supports_disjunction(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_supports_condition__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () {
-    _parse_supports_condition_in_parens(p, follow);
-    return;
-}
-
-fn _parse_supports_condition__inner_scan_3(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_supports_condition_in_parens(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_supports_condition__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_Not {
@@ -31620,9 +31545,9 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if _kind_set_37(kind) {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_1 = _parse_supports_condition__inner_scan_1(_sd_tokens, _sd_pos, follow);
-        let _sd_p_2 = _parse_supports_condition__inner_scan_2(_sd_tokens, _sd_pos, follow);
-        let _sd_p_3 = _parse_supports_condition__inner_scan_3(_sd_tokens, _sd_pos, follow);
+        let _sd_p_1 = scan_supports_conjunction(_sd_tokens, _sd_pos, follow);
+        let _sd_p_2 = scan_supports_disjunction(_sd_tokens, _sd_pos, follow);
+        let _sd_p_3 = scan_supports_condition_in_parens(_sd_tokens, _sd_pos, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_1 > _sd_best_p {
@@ -31638,12 +31563,12 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _sd_best_i = 3;
         }
         if _sd_best_i == 1 {
-            return _parse_supports_condition__inner_alt_1(p, follow);
+            return _parse_supports_conjunction(p, follow);
         }
         if _sd_best_i == 2 {
-            return _parse_supports_condition__inner_alt_2(p, follow);
+            return _parse_supports_disjunction(p, follow);
         }
-        return _parse_supports_condition__inner_alt_3(p, follow);
+        return _parse_supports_condition_in_parens(p, follow);
     }
     p.no_viable(
         "no alternative of supportsCondition matches",
@@ -31688,23 +31613,6 @@ fn _parse_supports_condition_in_parens__inner_scan_0(tokens: &Array<i32>, pos: i
     return pos;
 }
 
-fn _parse_supports_condition_in_parens__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
-    _parse_supports_declaration_condition(p, follow);
-    return;
-}
-
-fn _parse_supports_condition_in_parens__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_supports_declaration_condition(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn _parse_supports_condition_in_parens__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
-    _parse_general_enclosed(p);
-    return;
-}
-
 fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if _kind_set_37(kind) {
@@ -31712,7 +31620,7 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: i64 = 0) -
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_0 = _parse_supports_condition_in_parens__inner_scan_0(_sd_tokens, _sd_pos, follow);
-            let _sd_p_1 = _parse_supports_condition_in_parens__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            let _sd_p_1 = scan_supports_declaration_condition(_sd_tokens, _sd_pos, follow);
             let _sd_p_2 = scan_supports_condition_in_parens_alt_2(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
@@ -31732,11 +31640,11 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: i64 = 0) -
                 return _parse_supports_condition_in_parens__inner_alt_0(p, follow);
             }
             if _sd_best_i == 1 {
-                return _parse_supports_condition_in_parens__inner_alt_1(p, follow);
+                return _parse_supports_declaration_condition(p, follow);
             }
-            return _parse_supports_condition_in_parens__inner_alt_2(p, follow);
+            return _parse_general_enclosed(p);
         } else if kind == TK_Function_ {
-            return _parse_supports_condition_in_parens__inner_alt_2(p, follow);
+            return _parse_general_enclosed(p);
         }
     }
     p.no_viable(
@@ -32793,16 +32701,11 @@ fn _parse_feature_value_block(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_feature_type__inner(p: &mut Parser) -> () {
-    p.expect(TK_AtKeyword, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_feature_type(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FEATURE_TYPE, _start);
-    _parse_feature_type__inner(p);
+    p.expect(TK_AtKeyword, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("featureType");

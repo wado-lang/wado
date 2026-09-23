@@ -1410,16 +1410,11 @@ fn _parse_s(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_t__inner(p: &mut Parser) -> () {
-    p.expect(TK_SEMI, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_t(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_T, _start);
-    _parse_t__inner(p);
+    p.expect(TK_SEMI, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("t");

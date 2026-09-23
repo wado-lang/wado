@@ -940,6 +940,21 @@ ID : [a-z]+ ;
     assert !str_contains(&body, "p.expect_set("), body;
 }
 
+test "a function that only forwards is not emitted" {
+    let input = "grammar T;
+s : (r | r X)* EOF ;
+r : n | n Y | z ;
+n : A B ;
+z : A ;
+A : 'a' ; B : 'b' ; X : 'x' ; Y : 'y' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    for let name of ["fn _parse_r__inner_alt_0(", "fn scan_r_alt_0(", "fn _parse_z__inner("] {
+        assert !str_contains(&output, name), output;
+    }
+}
+
 test "a rule's @after is emitted once, whichever alternative finished" {
     let input = "grammar T;
 options { language = Wado; }

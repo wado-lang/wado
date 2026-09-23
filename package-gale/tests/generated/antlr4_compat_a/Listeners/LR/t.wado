@@ -1427,16 +1427,11 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_s__inner(p: &mut Parser) -> () {
-    let r = _parse_e(p);
-    return;
-}
-
 fn _parse_s(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    _parse_s__inner(p);
+    let r = _parse_e(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("s");

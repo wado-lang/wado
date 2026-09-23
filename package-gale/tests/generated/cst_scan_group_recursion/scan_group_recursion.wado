@@ -1422,16 +1422,11 @@ fn _parse_item(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_expr__inner(p: &mut Parser) -> () {
-    _parse_primary(p);
-    return;
-}
-
 fn _parse_expr(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_EXPR, _start);
-    _parse_expr__inner(p);
+    _parse_primary(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("expr");

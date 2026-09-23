@@ -1284,16 +1284,11 @@ fn _parse_s(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_x__inner(p: &mut Parser) -> () {
-    p.any();
-    return;
-}
-
 fn _parse_x(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_X, _start);
-    _parse_x__inner(p);
+    p.any();
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("x");

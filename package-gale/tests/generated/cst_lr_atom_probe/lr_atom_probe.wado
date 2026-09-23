@@ -1645,11 +1645,6 @@ fn _parse_e__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_e__inner_alt_2(p: &mut Parser) -> () {
-    _parse_name(p);
-    return;
-}
-
 fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
@@ -1671,9 +1666,9 @@ fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
             if _sd_best_i == 1 {
                 return _parse_e__inner_alt_1(p);
             }
-            return _parse_e__inner_alt_2(p);
+            return _parse_name(p);
         } else if _kind_set_2(kind) {
-            return _parse_e__inner_alt_2(p);
+            return _parse_name(p);
         }
     }
     p.no_viable(

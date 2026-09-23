@@ -1319,16 +1319,11 @@ struct EVals {
     mode: i32 = 0,
 }
 
-fn _parse_s__inner(p: &mut Parser) -> () {
-    _parse_e(p, 1);
-    return;
-}
-
 fn _parse_s(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    _parse_s__inner(p);
+    _parse_e(p, 1);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("s");

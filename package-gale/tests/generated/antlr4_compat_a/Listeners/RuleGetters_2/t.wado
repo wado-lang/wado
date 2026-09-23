@@ -1375,25 +1375,15 @@ impl Parser {
     }
 }
 
-fn _parse_s__inner(p: &mut Parser) -> () {
-    let r = _parse_a(p);
-    return;
-}
-
 fn _parse_s(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    _parse_s__inner(p);
+    let r = _parse_a(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("s");
     }
-}
-
-fn _parse_a__inner_alt_1(p: &mut Parser) -> () {
-    _parse_b(p);
-    return;
 }
 
 fn _parse_a__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -1436,7 +1426,7 @@ fn _parse_a__inner(p: &mut Parser) -> () {
             _sd_best_i = 1;
         }
         if _sd_best_i == 1 {
-            return _parse_a__inner_alt_1(p);
+            return _parse_b(p);
         }
         return _parse_a__inner_alt_0(p);
     }

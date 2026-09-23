@@ -1984,13 +1984,6 @@ fn _parse_prog__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_prog__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_expr(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_prog__inner_alt_0(p: &mut Parser) -> () {
     p.atn_ret_pending = 8;
     _parse_expr(p);
@@ -2016,7 +2009,7 @@ fn _parse_prog__inner(p: &mut Parser) -> () {
     if _kind_set_0(kind) {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_1 = _parse_prog__inner_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_1 = scan_expr(_sd_tokens, _sd_pos);
         let _sd_p_0 = _parse_prog__inner_scan_0(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;

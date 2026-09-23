@@ -1588,11 +1588,6 @@ fn _parse_block(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_stmts__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
-    _parse_expr(p);
-    return;
-}
-
 fn _parse_stmts__inner_scan_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos, gate, 0);
@@ -1739,7 +1734,7 @@ fn _parse_stmts__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _sd_best_i = 1;
         }
         if _sd_best_i == 1 {
-            return _parse_stmts__inner_alt_1(p, follow);
+            return _parse_expr(p);
         }
         return _parse_stmts__inner_alt_0(p, follow);
     }

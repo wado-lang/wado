@@ -1465,16 +1465,11 @@ fn _parse_para_content(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_s__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_s, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_s(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    _parse_s__inner(p);
+    p.expect(TK_LIT_s, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("s");

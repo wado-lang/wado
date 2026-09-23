@@ -1402,16 +1402,11 @@ fn scan_init_(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_prog__inner(p: &mut Parser) -> () {
-    _parse_decl(p);
-    return;
-}
-
 fn _parse_prog(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_PROG, _start);
-    _parse_prog__inner(p);
+    _parse_decl(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("prog");

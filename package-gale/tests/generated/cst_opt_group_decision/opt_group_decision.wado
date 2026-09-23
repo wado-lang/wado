@@ -1537,32 +1537,22 @@ fn _parse_assign(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_name__inner(p: &mut Parser) -> () {
-    p.expect(TK_ID, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_NAME, _start);
-    _parse_name__inner(p);
+    p.expect(TK_ID, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("name");
     }
 }
 
-fn _parse_word__inner(p: &mut Parser) -> () {
-    p.expect(TK_ID, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_word(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_WORD, _start);
-    _parse_word__inner(p);
+    p.expect(TK_ID, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("word");

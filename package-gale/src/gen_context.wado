@@ -309,6 +309,9 @@ pub struct GenContext {
     /// The block a finished alternative leaves by, where the rule's `@after`
     /// follows it; a finished alternative returns where this is `null`.
     alt_exit_label: Option<String>,
+    /// By helper name, the one call a helper that only forwards would make,
+    /// which its callers make instead.
+    forwarded_calls: TreeMap<String, String>,
 }
 
 fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
@@ -406,6 +409,7 @@ impl GenContext {
             sync_bits_used: TreeSet::new(),
             sync_list_used: TreeSet::new(),
             alt_exit_label: null,
+            forwarded_calls: TreeMap::new(),
         };
     }
 
@@ -2298,6 +2302,14 @@ impl GenContext {
         let id = self.sync_set_registry.len();
         self.sync_set_registry[key] = KindSetEntry { id, tokens: ids };
         return Option::<i32>::Some(id);
+    }
+
+    pub fn set_forwarded_call<S: AsStrSlice, S1: AsStrSlice>(&mut self, helper: S, call: S1) {
+        self.forwarded_calls[helper.to_string()] = call.to_string();
+    }
+
+    pub fn forwarded_call<S: AsStrSlice>(&self, helper: S) -> Option<String> {
+        return self.forwarded_calls.get(helper.to_string());
     }
 
     pub fn set_alt_exit_label(&mut self, label: Option<String>) {
