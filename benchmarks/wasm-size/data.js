@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790176297007,
+  "lastUpdate": 1790190565614,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59017,6 +59017,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/396bedaf9458e4b2f68d978990117ce06de655f6"
         },
         "date": 1790176296035,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 290692,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d8faae44bf97f04ed9aefcd0b6c3840ae2b495ee",
+          "message": "Merge pull request #2138 from wado-lang/claude/tide-downcast-type-match-hzur52\n\nfeat(tide): downcast DOM handles with type patterns, compare them with ==",
+          "timestamp": "2026-09-24T03:51:50+09:00",
+          "tree_id": "5325d5ddf71098eccb1bb16c570ba4b6f2e4d31c",
+          "url": "https://github.com/wado-lang/wado/commit/d8faae44bf97f04ed9aefcd0b6c3840ae2b495ee"
+        },
+        "date": 1790190564768,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
