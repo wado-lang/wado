@@ -59,6 +59,25 @@ test "a character no lexer rule matches is a LexError diagnostic" {
     assert flagged == 1;
 }
 
+test "a later lex error neither takes the error budget nor jumps the order" {
+    let capped = json::parse("{\"a\" 1} #", 1);
+    assert capped.diagnostics.len() == 1;
+    assert !(capped.diagnostics[0].code matches { LexError }), `${capped.diagnostics[0]}`;
+
+    let r = json::parse("{\"a\" 1} #");
+    assert !(r.diagnostics[0].code matches { LexError }), `${r.diagnostics[0]}`;
+    let mut lex_errors = 0;
+    for let mut i = 0; i < r.diagnostics.len(); i += 1 {
+        if r.diagnostics[i].code matches { LexError } {
+            lex_errors += 1;
+        }
+        if i > 0 {
+            assert r.diagnostics[i - 1].span.start <= r.diagnostics[i].span.start;
+        }
+    }
+    assert lex_errors == 1;
+}
+
 test "input ending inside a construct is an unterminated construct" {
     let r = json::parse("[1, 2");
     let d = &r.diagnostics[r.diagnostics.len() - 1];

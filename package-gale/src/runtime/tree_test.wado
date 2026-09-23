@@ -3,7 +3,7 @@
 
 use { Span, TokenStream, TokenFlags } from "./lex.wado";
 use { NodeKind, K_ERROR, CstStore, ChildKind, TreeBuilder, ParseResult } from "./tree.wado";
-use { DiagnosticCode, RecoveryAction, Diagnostic, push_lex_errors, resolve_positions } from "./diag.wado";
+use { DiagnosticCode, RecoveryAction, Diagnostic, merge_lex_errors, resolve_positions } from "./diag.wado";
 
 /// Build a TokenStream over `src` from `[kind, start, end]` specs (no trivia).
 fn stream_of<S: AsStrSlice>(src: S, specs: List<[i32, i32, i32]>) -> TokenStream {
@@ -396,20 +396,23 @@ test "rule_path renders an innermost-first stack outermost-first" {
     assert d.rule_path() == "program > block > statement";
 }
 
-test "push_lex_errors reports each lex-error token, up to the cap" {
+test "merge_lex_errors merges each lex-error token in source order, up to the cap" {
     let chars: List<char> = "a#b$".chars().collect();
     let mut ts = TokenStream::new(&chars);
     ts.push_token(0, 0, 1, 0, 0);
     let _ = ts.push_token_flagged(9, 1, 2, 0, 0, TokenFlags::LexError);
     ts.push_token(0, 2, 3, 0, 0);
     let _ = ts.push_token_flagged(9, 3, 4, 0, 0, TokenFlags::LexError);
-    let mut diags: List<Diagnostic> = [];
-    push_lex_errors(&ts, &mut diags, 10);
-    assert diags.len() == 2;
+    let parse_error = Diagnostic::error(DiagnosticCode::ExtraToken, "extra", Span::new(2, 3), [], 0, RecoveryAction::Deleted);
+    let mut diags: List<Diagnostic> = [parse_error];
+    merge_lex_errors(&ts, &mut diags, 10);
+    assert diags.len() == 3;
     assert diags[0].code matches { LexError };
     assert diags[0].message == "token recognition error at: '#'";
-    assert diags[1].span == Span::new(3, 4);
-    let mut capped: List<Diagnostic> = [];
-    push_lex_errors(&ts, &mut capped, 1);
+    assert diags[1].code matches { ExtraToken };
+    assert diags[2].span == Span::new(3, 4);
+    let mut capped: List<Diagnostic> = [parse_error];
+    merge_lex_errors(&ts, &mut capped, 1);
     assert capped.len() == 1;
+    assert capped[0].code matches { LexError };
 }

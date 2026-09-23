@@ -173,7 +173,6 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.line("let tokens = tokenize(input);");
     w.line("let mut p = Parser::new(tokens);");
     w.line("p.max_errors = max_errors;");
-    w.line("push_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);");
     w.line("entry(&mut p);");
     // The parser is infallible: a failure leaves `p.recovering` set and the
     // deepest error in `p.pending`. Surface it as one diagnostic; the partial
@@ -183,6 +182,7 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.line("p.diagnostics.push(d);");
     w.end();
     w.end();
+    w.line("merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);");
     w.line("resolve_positions(&mut p.diagnostics, p.tokens.chars);");
     if ctx.emit_actions() {
         // Lexer prints precede parser prints in the one sink, as on ANTLR4's stdout.
