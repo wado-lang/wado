@@ -1,0 +1,51 @@
+// A single-field local read once when the peephole session starts can gain a
+// read before it is elided: reference elimination substitutes `t.held` at each
+// use of a `&mut` alias of it, here the inlined `grow`'s `self`. The binding
+// must survive while that read does.
+struct Vec3 {
+    repr: Array<i32>,
+    used: i32,
+}
+
+impl Vec3 {
+    fn push(&mut self, value: i32) {
+        let used = self.used;
+        if used >= self.repr.len() {
+            self.grow();
+        }
+        self.repr[used] = value;
+        self.used = used + 1;
+    }
+
+    fn grow(&mut self) {
+        let capacity = self.repr.len();
+        let mut new_repr: Array<i32> = builtin::array_new(capacity * 2 + 4);
+        builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
+        self.repr = new_repr;
+    }
+}
+
+struct S {
+    buf: Vec3,
+}
+
+struct T {
+    held: Vec3,
+}
+
+#[inline("never")]
+fn moved_into_a_literal(s: &S) -> i32 {
+    let a = s.buf;
+    let mut t = T { held: a };
+    t.held.push(4);
+    return s.buf.used;
+}
+
+test "the alias's read keeps the binding" {
+    let arr: Array<i32> = builtin::array_new(3);
+    let s = S { buf: Vec3 { repr: arr, used: builtin::black_box(3) } };
+    assert moved_into_a_literal(&s) == 3;
+}
+
+__DATA__
+{"test": {}}

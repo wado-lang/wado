@@ -2151,6 +2151,8 @@ impl Monomorphizer {
             effects: generic.effects.clone(),
             retains: generic.retains.clone(),
             immediates: generic.immediates.clone(),
+            trap: generic.trap.clone(),
+            linear_memory: generic.linear_memory,
             body,
             span: generic.span,
             local_count,

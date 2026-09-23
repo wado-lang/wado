@@ -121,10 +121,11 @@ A pure call on such constants qualifies too — it is deterministic and
 side-effect free, so it is a closed constant expression in the same sense.
 Purity comes from `optimize::mod_ref::FnEffect`, a per-callee summary resolved
 as a least fixpoint over the call graph, tracking globals, linear memory and
-component-model I/O. It deliberately excludes the GC heap: a callee that mutates
-objects it allocated itself stays deterministic to its caller, and retention is
-what would let a reference escape. Without that exclusion no `String`-building
-function would qualify.
+component-model I/O. Purity deliberately excludes the GC heap: a callee that
+mutates objects it allocated itself stays deterministic to its caller, and
+retention is what would let a reference escape. Without that exclusion no
+`String`-building function would qualify. A store into memory the callee did not
+allocate is tracked separately, and only deleting a call reads it.
 
 Reads of other globals are excluded — a non-const value cannot promote.
 

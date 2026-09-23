@@ -1,0 +1,17 @@
+// A counted loop whose exclusive bound is its type's minimum runs no step:
+// the last value its interior would see lies below the type.
+#[inline("never")]
+fn count() -> i64 {
+    let mut s: i64 = 0;
+    for let mut i: i64 = 0; i < i64::MIN; i += 1 {
+        s += 1;
+    }
+    return s;
+}
+
+test "the loop runs no step" {
+    assert count() == 0;
+}
+
+__DATA__
+{"test": {}}

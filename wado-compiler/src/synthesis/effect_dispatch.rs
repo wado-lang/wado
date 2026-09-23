@@ -946,6 +946,8 @@ fn build_dispatch_wrapper_function(
         effects: vec![],
         retains: vec![],
         immediates: vec![],
+        trap: None,
+        linear_memory: None,
         body: Some(body),
         span,
         local_count: next_local,

@@ -209,6 +209,18 @@ pub enum NirBinaryOp {
     RefNotEq,
 }
 
+impl NirBinaryOp {
+    /// The bool operand this op passes the other one through for: `true & x`,
+    /// `false | x` and `false ^ x` are `x`, as are their `&&` / `||` forms.
+    pub fn bool_identity(self) -> Option<bool> {
+        match self {
+            Self::And | Self::BitAnd => Some(true),
+            Self::Or | Self::BitOr | Self::BitXor => Some(false),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NirUnaryOp {
     Neg,

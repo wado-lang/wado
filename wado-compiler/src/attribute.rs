@@ -22,6 +22,7 @@ pub const EXPORT_NAME: &str = "export_name";
 pub const GENERATED: &str = "generated";
 pub const IMMEDIATE: &str = "immediate";
 pub const INLINE: &str = "inline";
+pub const LINEAR_MEMORY: &str = "linear_memory";
 pub const NO_PRELUDE: &str = "no_prelude";
 pub const PARAM: &str = "param";
 pub const RESULT: &str = "result";
@@ -31,6 +32,7 @@ pub const STDLIB: &str = "stdlib";
 pub const SYNOPSIS: &str = "synopsis";
 pub const TIMEOUT_MS: &str = "timeout_ms";
 pub const TODO: &str = "TODO";
+pub const TRAP: &str = "trap";
 /// See [WEP: Declared Absence](../../docs/wep-2026-09-13-declared-absence.md).
 pub const UNAVAILABLE: &str = "unavailable";
 pub const WASM_MODULE: &str = "wasm_module";
@@ -186,6 +188,16 @@ pub struct AttributeSchema {
     pub args: AttrArgs,
     /// What the attribute declares, as a diagnostic spells it.
     pub summary: &'static str,
+    /// Set for an attribute that describes a declaration with no body.
+    pub bodyless: Option<Bodyless>,
+}
+
+/// Why a bodyless attribute is refused where it is written: on a function
+/// with a body, and on a `trait` or `interface` method requirement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bodyless {
+    pub on_body: &'static str,
+    pub on_requirement: &'static str,
 }
 
 /// Every place an attribute can be written, which `#[allow(…)]` reaches. The
@@ -252,156 +264,224 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::OneString,
         summary: "the allocator this entry point installs",
+        bodyless: None,
     },
     AttributeSchema {
         name: ALLOW,
         targets: EVERY_TARGET,
         args: AttrArgs::Idents,
         summary: "waive a lint here",
+        bodyless: None,
     },
     AttributeSchema {
         name: AMBIENT,
         targets: FUNCTION_TARGET,
         args: AttrArgs::None,
         summary: "perform this declaration's effects without declaring them",
+        bodyless: None,
     },
     AttributeSchema {
         name: BENIGN,
         targets: FUNCTION_TARGET,
         args: AttrArgs::Words,
         summary: "effects a caller need not declare onward",
+        bodyless: None,
     },
     AttributeSchema {
         name: CANONICAL,
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read("a namespace and a name, as two strings"),
         summary: "the Component Model canonical built-in this lowers to",
+        bodyless: None,
     },
     AttributeSchema {
         name: CM,
         targets: CM_TARGET,
         args: AttrArgs::Read("the CM-side identifier, with an optional `linearity = \"…\"`"),
         summary: "this declaration's identity at the Component Model boundary",
+        bodyless: None,
     },
     AttributeSchema {
         name: CM_HOST_IMPORTS,
         targets: MODULE_TARGET,
         args: AttrArgs::Strings,
         summary: "the host capabilities an imported component itself imports",
+        bodyless: None,
     },
     AttributeSchema {
         name: CM_PARAMS,
         targets: FUNCTION_TARGET,
         args: AttrArgs::OptionalStrings,
         summary: "the CM-side parameter names",
+        bodyless: None,
     },
     AttributeSchema {
         name: COMPILER_ITEM,
         targets: COMPILER_ITEM_TARGET,
         args: AttrArgs::OneString,
         summary: "bind this stdlib declaration to the compiler item of that name",
+        bodyless: None,
     },
     AttributeSchema {
         name: EXPECT_TRAP,
         targets: TEST_TARGET,
         args: AttrArgs::None,
         summary: "the test passes when its body traps",
+        bodyless: None,
     },
     AttributeSchema {
         name: EXPORT,
         targets: FUNCTION_TARGET,
         args: AttrArgs::None,
         summary: "a raw Wasm export, and so an export-boundary root",
+        bodyless: None,
     },
     AttributeSchema {
         name: EXPORT_NAME,
         targets: FUNCTION_TARGET,
         args: AttrArgs::OneString,
         summary: "the name this function is exported under",
+        bodyless: None,
     },
     AttributeSchema {
         name: GENERATED,
         targets: MODULE_TARGET,
         args: AttrArgs::Read("`by = \"…\"` and `sources = [\"…\"]` metadata"),
         summary: "the file is machine-generated",
+        bodyless: None,
     },
     AttributeSchema {
         name: IMMEDIATE,
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read("one parameter name, unquoted"),
         summary: "the parameter lowers to a Wasm immediate",
+        bodyless: Some(Bodyless {
+            on_body: "it describes how codegen lowers the call, and a body is called \
+                      rather than lowered",
+            on_requirement: "it says how codegen lowers one call, and a requirement is \
+                             dispatched to an impl that is called rather than lowered",
+        }),
     },
     AttributeSchema {
         name: INLINE,
         targets: FUNCTION_TARGET,
         args: AttrArgs::OptionalWords,
         summary: "how the inliner should treat this function",
+        bodyless: None,
+    },
+    AttributeSchema {
+        name: LINEAR_MEMORY,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::Read("`read` or `write`"),
+        summary: "how a call to this declaration touches linear memory",
+        bodyless: Some(Bodyless {
+            on_body: "a body states what it touches",
+            on_requirement: "the impl it dispatches to has the body that says what it \
+                             touches, so stating it here binds every call site to a \
+                             promise no implementation makes",
+        }),
     },
     AttributeSchema {
         name: NO_PRELUDE,
         targets: MODULE_TARGET,
         args: AttrArgs::None,
         summary: "the file imports no prelude",
+        bodyless: None,
     },
     AttributeSchema {
         name: PARAM,
         targets: &[AttrTarget::Global],
         args: AttrArgs::Read("`name = \"…\"` and `from_env = \"…\"`"),
         summary: "the global is a build input",
+        bodyless: None,
     },
     AttributeSchema {
         name: RESULT,
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read("`owned`, or `part_of = param`"),
         summary: "what the returned storage belongs to",
+        bodyless: Some(Bodyless {
+            on_body: "a body states what it returns",
+            on_requirement: "the impl it dispatches to has the body that says what its \
+                             result is made of, so stating it here binds every call site \
+                             to a promise no implementation makes",
+        }),
     },
     AttributeSchema {
         name: RETAIN,
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read("a parameter name, with an optional `into = param`"),
         summary: "what this declaration retains a reference to",
+        bodyless: Some(Bodyless {
+            on_body: "a body states what it retains",
+            on_requirement: "the impl it dispatches to has the body that says what it \
+                             keeps, so stating it here binds every call site to a \
+                             promise no implementation makes",
+        }),
     },
     AttributeSchema {
         name: SECRET,
         targets: &[AttrTarget::StructField],
         args: AttrArgs::None,
         summary: "the field's value stays out of debug output",
+        bodyless: None,
     },
     AttributeSchema {
         name: STDLIB,
         targets: MODULE_TARGET,
         args: AttrArgs::OneString,
         summary: "the bundled stdlib path this file is",
+        bodyless: None,
     },
     AttributeSchema {
         name: SYNOPSIS,
         targets: TEST_TARGET,
         args: AttrArgs::None,
         summary: "`wado doc` renders this test as the module's synopsis",
+        bodyless: None,
     },
     AttributeSchema {
         name: TIMEOUT_MS,
         targets: TEST_TARGET,
         args: AttrArgs::OneNumber,
         summary: "how long the test may run",
+        bodyless: None,
     },
     AttributeSchema {
         name: TODO,
         targets: &[AttrTarget::Module, AttrTarget::Test],
         args: AttrArgs::None,
         summary: "the tests are expected to fail until the work lands",
+        bodyless: None,
+    },
+    AttributeSchema {
+        name: TRAP,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::Read(
+            "`never`, or `negative = p` / `outside = a` (with `at = i`, `len = n`) / `unset = a`, \
+             with an optional `result_len = p`",
+        ),
+        summary: "when a call to this declaration traps",
+        bodyless: Some(Bodyless {
+            on_body: "a body states when it traps",
+            on_requirement: "the impl it dispatches to has the body that says when it \
+                             traps, so stating it here binds every call site to a \
+                             promise no implementation makes",
+        }),
     },
     AttributeSchema {
         name: UNAVAILABLE,
         targets: FUNCTION_TARGET,
         args: AttrArgs::OneString,
         summary: "the name is reserved, and why a call cannot have it",
+        bodyless: None,
     },
     AttributeSchema {
         name: WASM_MODULE,
         targets: MODULE_TARGET,
         args: AttrArgs::OneString,
         summary: "the core wasm module name this file imports memory from",
+        bodyless: None,
     },
     AttributeSchema {
         name: WIRE,
@@ -410,6 +490,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
             "`name = \"…\"`, `name_policy = \"…\"`, `number = N`, `positional`, or `default`",
         ),
         summary: "how serialization spells this declaration",
+        bodyless: None,
     },
 ];
 
@@ -417,6 +498,14 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
 #[must_use]
 pub fn lookup(name: &str) -> Option<&'static AttributeSchema> {
     ATTRIBUTES.iter().find(|schema| schema.name == name)
+}
+
+/// The attributes among `attrs` that describe a declaration with no body.
+pub fn bodyless(attrs: &[Attribute]) -> impl Iterator<Item = (&Attribute, &'static str, Bodyless)> {
+    attrs.iter().filter_map(|attr| {
+        let schema = lookup(&attr.name)?;
+        Some((attr, schema.name, schema.bodyless?))
+    })
 }
 
 /// Why an attribute as written is not the one the schema describes.
@@ -691,6 +780,16 @@ mod tests {
         }
         for target in [AttrTarget::Impl, AttrTarget::Use, AttrTarget::Module] {
             assert!(check(ALLOW, &[AttrArg::Ident("dead_code".to_string())], target).is_none());
+        }
+    }
+
+    /// Only a function can have a body, or be a requirement.
+    #[test]
+    fn only_function_attributes_are_bodyless() {
+        for schema in ATTRIBUTES {
+            if schema.bodyless.is_some() {
+                assert_eq!(schema.targets, FUNCTION_TARGET, "`{}`", schema.name);
+            }
         }
     }
 

@@ -6108,6 +6108,61 @@ codegen lowers the call, and a body is called rather than lowered. A `trait` or
 `interface` method requirement is an error for the same reason — it reaches an
 impl, which is called.
 
+#### `#[trap(...)]`
+
+When a call to a declaration with no body traps. Silence means it may trap, so
+the optimizer keeps every call whose result nothing reads. `#[trap(never)]` says
+it never traps, and a check names the one condition it traps on:
+
+```wado
+#[trap(never)]
+pub fn f64_sqrt(x: f64) -> f64;
+
+#[trap(outside = arr, at = idx)]
+#[trap(unset = arr)]
+pub fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
+
+#[trap(outside = dst, at = dst_offset, len = len)]
+#[trap(outside = src, at = src_offset, len = len)]
+pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
+
+#[result(owned)]
+#[trap(negative = len, result_len = len)]
+pub fn array_new<T>(len: i32) -> Array<T>;
+```
+
+`negative = p` traps when `p` is below zero. `outside = a` traps unless the
+range from `at` (0 when absent) of `len` elements (1 when absent) lies within
+the array `a`, and says the call does not replace `a`. `unset = a` traps when
+the element read holds no value: `array_new` leaves a reference element empty,
+while a primitive element always holds one. Each attribute states one
+check and repeats for another; the call traps where any fails. `result_len = p`
+is no check: it says the returned array holds `p` elements, so a later check
+against it can be proved. Running out of memory is not a trap any of these
+describe.
+
+It is an error on a function with a body, which states when it traps itself,
+and on a `trait` or `interface` method requirement, for the reason `#[retain]`
+is.
+
+#### `#[linear_memory(...)]`
+
+How a call to a declaration with no body touches linear memory: `read` or
+`write`. Silence means it touches none. A linear-memory address is a plain
+`i32`, so no parameter type says this, and the attribute is the only source.
+A `read` call is not moved across a `write`, and neither is deleted as if it
+touched nothing.
+
+```wado
+#[linear_memory(read)]
+pub fn i32_load(addr: i32) -> i32;
+
+#[linear_memory(write)]
+pub fn i32_store(addr: i32, value: i32);
+```
+
+It is written once, and is an error where `#[trap]` is.
+
 ### The "mem" Core Module
 
 The Component Model requires each component to provide a linear memory and a `realloc` function. The CM runtime calls `realloc` whenever it needs guest-side linear memory — for example, `stream.read` copies bytes from the host into a guest buffer, and string lifting/lowering also goes through it.

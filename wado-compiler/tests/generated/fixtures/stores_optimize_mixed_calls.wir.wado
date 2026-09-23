@@ -107,10 +107,10 @@ fn "stores_optimize_mixed_calls.wado/run"() with Stdout {
     let $local_12: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
     let new_used: i32;
-    let start_37: i32;
+    let start_36: i32;
     let packed: i64;
-    let rx_45: i32;
-    let tx_46: i32;
+    let rx_44: i32;
+    let tx_45: i32;
     b = struct.new "stores_optimize_mixed_calls.wado//Point" { x: 30, y: 40 };
     b.x = 70;
     $v0_5 = b.x;
@@ -127,15 +127,15 @@ fn "stores_optimize_mixed_calls.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, new_used);
     }
-    start_37 = $local_11.used;
+    start_36 = $local_11.used;
     $local_11.used = new_used;
-    builtin::array_copy<u8>($local_11.repr, start_37, global:stores_optimize_mixed_calls.wado::$const_obj_1, 0, 1);
+    builtin::array_copy<u8>($local_11.repr, start_36, global:stores_optimize_mixed_calls.wado::$const_obj_1, 0, 1);
     $local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_11 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(b.x, $local_12.buf);
-    rx_45 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_46 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "stores_optimize_mixed_calls.wado/$cm_binding__Stdout_write_via_stream"(rx_45);
-    "core:rt/write_string_to_stream"(tx_46, $local_11.repr, $local_11.used);
+    rx_44 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_45 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "stores_optimize_mixed_calls.wado/$cm_binding__Stdout_write_via_stream"(rx_44);
+    "core:rt/write_string_to_stream"(tx_45, $local_11.repr, $local_11.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 

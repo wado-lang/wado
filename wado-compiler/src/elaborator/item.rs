@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use crate::ast::{self, Function, GlobalDecl, SelfKind, Type};
-use crate::attribute::WIRE;
+use crate::attribute::{self, WIRE};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::{
     CompilerItem, CompilerItemKind, RegisterError, Resolved, parse_compiler_item_attrs,
@@ -86,6 +86,8 @@ fn placeholder_function(name: String, span: Span) -> TirFunction {
         effects: vec![],
         retains: vec![],
         immediates: vec![],
+        trap: None,
+        linear_memory: None,
         body: None,
         span,
         local_count: 0,
@@ -2038,28 +2040,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         owner: &str,
         method: &ast::Function,
     ) {
-        for attr in &method.attrs {
-            let detail = match attr.name.as_str() {
-                "retain" => {
-                    "cannot declare `#[retain]`: the impl it dispatches to has the body that \
-                     says what it keeps, so stating it here binds every call site to a promise \
-                     no implementation makes"
-                }
-                "result" => {
-                    "cannot declare `#[result]`: the impl it dispatches to has the body that \
-                     says what its result is made of, so stating it here binds every call site \
-                     to a promise no implementation makes"
-                }
-                "immediate" => {
-                    "cannot declare `#[immediate]`: it says how codegen lowers one call, and a \
-                     requirement is dispatched to an impl that is called rather than lowered"
-                }
-                _ => continue,
-            };
-            let _ = self.emit(TypeError::OperationClauseNotAllowed {
+        for (attr, name, bodyless) in attribute::bodyless(&method.attrs) {
+            let _ = self.emit(TypeError::AttributeOnRequirement {
                 owner: owner.to_string(),
                 operation: method.name.clone(),
-                detail,
+                attribute: name,
+                reason: bodyless.on_requirement,
                 span: attr.span,
             });
         }
