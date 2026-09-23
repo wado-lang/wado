@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["grammars/error_recovery.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/error_recovery.g4"])]
 
 pub struct Span {
     pub start: i32,
@@ -606,6 +606,9 @@ impl TreeBuilder {
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
+        if self.last_finished >= checkpoint {
+            self.last_finished += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -615,6 +618,9 @@ impl TreeBuilder {
         self.alt.truncate(checkpoint);
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
+        }
+        if self.last_finished >= checkpoint {
+            self.last_finished = -1;
         }
     }
 
