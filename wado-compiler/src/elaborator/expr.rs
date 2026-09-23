@@ -481,6 +481,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The expectation a branching expression takes as its result type: one
+    /// still holding an inference variable is for its branches to answer.
+    fn settled_result_expectation(&self, expected_type: Option<TypeId>) -> Option<TypeId> {
+        expected_type.filter(|&t| !self.type_has_infer_hole(t))
+    }
+
+    /// Whether a branch's type waits on its siblings: one still unresolved,
+    /// or one carrying an inference variable the branches are to answer.
+    fn is_undecided_branch(&self, branch: TypeId) -> bool {
+        self.tysys.type_table.borrow().is_indefinite(branch) || self.type_has_infer_hole(branch)
+    }
+
     /// The type of a labeled block expression: its `break` values and its
     /// fall-through tail unified into one, every disagreement reported.
     fn unify_labeled_block(
@@ -489,6 +501,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         break_types: &[TypeId],
         expected_type: Option<TypeId>,
     ) -> TypeId {
+        let expected_type = self.settled_result_expectation(expected_type);
         let tail_type = self.labeled_block_tail_type(lb);
         let branch_types: Vec<TypeId> = break_types
             .iter()
@@ -2083,6 +2096,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 ctx.exit_scope();
 
+                let expected_type = self.settled_result_expectation(expected_type);
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
@@ -2167,6 +2181,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.resolve_block_value(b, ctx, expected_type);
                 }
 
+                let expected_type = self.settled_result_expectation(expected_type);
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
@@ -2581,14 +2596,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if b == TypeTable::NEVER {
             return Some(a);
         }
-        let (a_unknown, b_unknown) = {
-            let tt = self.tysys.type_table.borrow();
-            (tt.is_indefinite(a), tt.is_indefinite(b))
-        };
-        if a_unknown && !b_unknown {
+        let (a_undecided, b_undecided) = (self.is_undecided_branch(a), self.is_undecided_branch(b));
+        if a_undecided && !b_undecided {
             return Some(b);
         }
-        if b_unknown && !a_unknown {
+        if b_undecided && !a_undecided {
             return Some(a);
         }
         self.tysys.type_table.borrow().resource_join(a, b)
@@ -2610,6 +2622,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx, expected_type))
             .collect();
+        let expected_type = self.settled_result_expectation(expected_type);
 
         // A hole from a generic scrutinee (`match gen() { … }`) flows through
         // the bindings into the arm bodies (same `TypeId`). Solve it against the
@@ -2619,7 +2632,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             || self.type_has_infer_hole(scrutinee_type)
         {
             let target = expected_type
-                .filter(|&t| t != TypeTable::UNKNOWN && !self.type_has_infer_hole(t))
+                .filter(|&t| t != TypeTable::UNKNOWN)
                 .or_else(|| {
                     arm_bodies.iter().map(|(t, _)| *t).find(|&t| {
                         t != TypeTable::NEVER
