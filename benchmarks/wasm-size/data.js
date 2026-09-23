@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790166766686,
+  "lastUpdate": 1790169485779,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58949,6 +58949,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 290706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bd26b6859833ae69f05e3f2d62aceff714003818",
+          "message": "Merge pull request #2135 from wado-lang/claude/wado-issue-2101-tah91g\n\nperf(optimize): delete dead calls whose traps are proven away; declare builtin traps and linear-memory access as attributes",
+          "timestamp": "2026-09-23T22:03:41+09:00",
+          "tree_id": "f8e4d9726b475740e98c45f0fe4f33ed123d2aae",
+          "url": "https://github.com/wado-lang/wado/commit/bd26b6859833ae69f05e3f2d62aceff714003818"
+        },
+        "date": 1790169485330,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 290692,
             "unit": "bytes"
           }
         ]
