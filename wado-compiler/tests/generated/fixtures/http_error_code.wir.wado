@@ -216,6 +216,7 @@ fn "http_error_code.wado/$cm_export__handle"(request) {
 }
 
 fn "http_error_code.wado/$cm_task_entry__handle"(request) {
+    let $load_0: i32;
     let $task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let $tv_1: i32;
     let $tv_2: i32;
@@ -398,8 +399,8 @@ fn "http_error_code.wado/$cm_task_entry__handle"(request) {
     $tv_6 = 0;
     $tv_7 = 0;
     $err_val_12 = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err"($task_ret).payload_0;
-    $tv_1 = $err_val_12.discriminant;
-    if $err_val_12.discriminant == 0 {
+    $tv_1 = local.tee $load_0($err_val_12.discriminant);
+    if $load_0 == 0 {
     } else if ref.test "wasi:http/types.wado//ErrorCode::DnsError"($err_val_12) {
         $local_13 = ref.cast "wasi:http/types.wado//ErrorCode::DnsError"($err_val_12).payload_0;
         $local_15 = $local_13.rcode;
@@ -430,18 +431,18 @@ fn "http_error_code.wado/$cm_task_entry__handle"(request) {
         $tv_4 = $local_18;
         $tv_5 = $local_23;
         $tv_6 = $local_24;
-    } else if $err_val_12.discriminant == 2 {
-    } else if $err_val_12.discriminant == 3 {
-    } else if $err_val_12.discriminant == 4 {
-    } else if $err_val_12.discriminant == 5 {
-    } else if $err_val_12.discriminant == 6 {
-    } else if $err_val_12.discriminant == 7 {
-    } else if $err_val_12.discriminant == 8 {
-    } else if $err_val_12.discriminant == 9 {
-    } else if $err_val_12.discriminant == 10 {
-    } else if $err_val_12.discriminant == 11 {
-    } else if $err_val_12.discriminant == 12 {
-    } else if $err_val_12.discriminant == 13 {
+    } else if $load_0 == 2 {
+    } else if $load_0 == 3 {
+    } else if $load_0 == 4 {
+    } else if $load_0 == 5 {
+    } else if $load_0 == 6 {
+    } else if $load_0 == 7 {
+    } else if $load_0 == 8 {
+    } else if $load_0 == 9 {
+    } else if $load_0 == 10 {
+    } else if $load_0 == 11 {
+    } else if $load_0 == 12 {
+    } else if $load_0 == 13 {
     } else if ref.test "wasi:http/types.wado//ErrorCode::TlsAlertReceived"($err_val_12) {
         $local_26 = ref.cast "wasi:http/types.wado//ErrorCode::TlsAlertReceived"($err_val_12).payload_0;
         $local_28 = $local_26.alert_id;
@@ -472,8 +473,8 @@ fn "http_error_code.wado/$cm_task_entry__handle"(request) {
         $tv_4 = $local_33;
         $tv_5 = $local_34;
         $tv_6 = $local_35;
-    } else if $err_val_12.discriminant == 15 {
-    } else if $err_val_12.discriminant == 16 {
+    } else if $load_0 == 15 {
+    } else if $load_0 == 16 {
     } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestBodySize"($err_val_12) {
         $local_39 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestBodySize"($err_val_12).payload_0;
         $local_41 = ref.test "core:prelude/types.wado//Option<u64>::Some"($local_39);
@@ -483,9 +484,9 @@ fn "http_error_code.wado/$cm_task_entry__handle"(request) {
         }
         $tv_2 = $local_41;
         $tv_3 = $local_42;
-    } else if $err_val_12.discriminant == 18 {
-    } else if $err_val_12.discriminant == 19 {
-    } else if $err_val_12.discriminant == 20 {
+    } else if $load_0 == 18 {
+    } else if $load_0 == 19 {
+    } else if $load_0 == 20 {
     } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize"($err_val_12) {
         $local_44 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize"($err_val_12).payload_0;
         $local_46 = ref.test "core:prelude/types.wado//Option<u32>::Some"($local_44);
@@ -579,7 +580,7 @@ fn "http_error_code.wado/$cm_task_entry__handle"(request) {
         $tv_4 = $local_79;
         $tv_5 = $local_84;
         $tv_6 = $local_85;
-    } else if $err_val_12.discriminant == 25 {
+    } else if $load_0 == 25 {
     } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize"($err_val_12) {
         $local_87 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize"($err_val_12).payload_0;
         $local_89 = ref.test "core:prelude/types.wado//Option<u32>::Some"($local_87);
@@ -709,11 +710,11 @@ fn "http_error_code.wado/$cm_task_entry__handle"(request) {
         $tv_2 = $local_138;
         $tv_3 = builtin::i64_extend_i32_s($local_139);
         $tv_4 = $local_140;
-    } else if $err_val_12.discriminant == 33 {
-    } else if $err_val_12.discriminant == 34 {
-    } else if $err_val_12.discriminant == 35 {
-    } else if $err_val_12.discriminant == 36 {
-    } else if $err_val_12.discriminant == 37 {
+    } else if $load_0 == 33 {
+    } else if $load_0 == 34 {
+    } else if $load_0 == 35 {
+    } else if $load_0 == 36 {
+    } else if $load_0 == 37 {
     } else {
         $local_144 = ref.cast "wasi:http/types.wado//ErrorCode::InternalError"($err_val_12).payload_0;
         $local_146 = ref.is_null($local_144) == 0;

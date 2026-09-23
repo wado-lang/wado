@@ -69,6 +69,12 @@ global global:inline_folded_cost.wado::$const_obj_2: ref null Array<u8> = array.
 global global:inline_folded_cost.wado::$const_obj_3: ref null Array<u8> = array.new_fixed<u8>(97, 108, 112, 104, 97);
 
 fn "inline_folded_cost.wado/run"() with Stdout {
+    let $load_2: ref Array<u8>;
+    let $load_4: ref Array<u8>;
+    let $load_8: ref Array<u8>;
+    let $load_11: ref Array<u8>;
+    let $load_15: ref Array<u8>;
+    let $load_18: ref Array<u8>;
     let out_0: ref "core:prelude/string.wado//String";
     let start_21: i32;
     let start_33: i32;
@@ -91,15 +97,15 @@ fn "inline_folded_cost.wado/run"() with Stdout {
     }
     start_21 = out_0.used;
     out_0.used = 1;
-    builtin::array_set_u8(out_0.repr, start_21, 91);
-    if @unlikely(7 > builtin::array_len(out_0.repr)) {
+    builtin::array_set_u8(local.tee $load_2(out_0.repr), start_21, 91);
+    if @unlikely(7 > builtin::array_len($load_2)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_0, 7);
     }
     start_33 = out_0.used;
     out_0.used = 7;
-    builtin::array_copy<u8>(out_0.repr, start_33, global:inline_folded_cost.wado::$const_obj_3, 0, 5);
-    builtin::array_set_u8(out_0.repr, start_33 + 5, 93);
+    builtin::array_copy<u8>(local.tee $load_4(out_0.repr), start_33, global:inline_folded_cost.wado::$const_obj_3, 0, 5);
+    builtin::array_set_u8($load_4, start_33 + 5, 93);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, out_0);
     new_used_144 = out_0.used + 2;
     if @unlikely(new_used_144 > builtin::array_len(out_0.repr)) {
@@ -108,19 +114,19 @@ fn "inline_folded_cost.wado/run"() with Stdout {
     }
     start_145 = out_0.used;
     out_0.used = new_used_144;
-    builtin::array_set_u8(out_0.repr, start_145, 60);
-    builtin::array_set_u8(out_0.repr, start_145 + 1, 63);
+    builtin::array_set_u8(local.tee $load_8(out_0.repr), start_145, 60);
+    builtin::array_set_u8($load_8, start_145 + 1, 63);
     new_used_162 = out_0.used + 8;
-    if @unlikely(new_used_162 > builtin::array_len(out_0.repr)) {
+    if @unlikely(new_used_162 > builtin::array_len($load_8)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_0, new_used_162);
     }
     start_163 = out_0.used;
     out_0.used = new_used_162;
-    builtin::array_copy<u8>(out_0.repr, start_163, global:inline_folded_cost.wado::$const_obj_2, 0, 5);
-    builtin::array_set_u8(out_0.repr, start_163 + 5, 63);
-    builtin::array_set_u8(out_0.repr, start_163 + 6, 62);
-    builtin::array_set_u8(out_0.repr, start_163 + 7, 33);
+    builtin::array_copy<u8>(local.tee $load_11(out_0.repr), start_163, global:inline_folded_cost.wado::$const_obj_2, 0, 5);
+    builtin::array_set_u8($load_11, start_163 + 5, 63);
+    builtin::array_set_u8($load_11, start_163 + 6, 62);
+    builtin::array_set_u8($load_11, start_163 + 7, 33);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(2, out_0);
     new_used_214 = out_0.used + 1;
     if @unlikely(new_used_214 > builtin::array_len(out_0.repr)) {
@@ -129,16 +135,16 @@ fn "inline_folded_cost.wado/run"() with Stdout {
     }
     start_215 = out_0.used;
     out_0.used = new_used_214;
-    builtin::array_set_u8(out_0.repr, start_215, 91);
+    builtin::array_set_u8(local.tee $load_15(out_0.repr), start_215, 91);
     new_used_226 = out_0.used + 6;
-    if @unlikely(new_used_226 > builtin::array_len(out_0.repr)) {
+    if @unlikely(new_used_226 > builtin::array_len($load_15)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_0, new_used_226);
     }
     start_227 = out_0.used;
     out_0.used = new_used_226;
-    builtin::array_copy<u8>(out_0.repr, start_227, global:inline_folded_cost.wado::$const_obj_1, 0, 5);
-    builtin::array_set_u8(out_0.repr, start_227 + 5, 93);
+    builtin::array_copy<u8>(local.tee $load_18(out_0.repr), start_227, global:inline_folded_cost.wado::$const_obj_1, 0, 5);
+    builtin::array_set_u8($load_18, start_227 + 5, 93);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(3, out_0);
     rx_298 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_299 = builtin::i32_wrap_i64(packed >> 32_i64);
@@ -229,19 +235,20 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -304,7 +311,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l28;

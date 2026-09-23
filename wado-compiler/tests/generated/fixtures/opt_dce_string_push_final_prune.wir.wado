@@ -62,21 +62,19 @@ fn "opt_dce_string_push_final_prune.wado/$cm_binding__Stdout_write_via_stream"(d
 
 fn "opt_dce_string_push_final_prune.wado/$cm_export__run"() {
     let s: ref "core:prelude/string.wado//String";
-    let other_2: ref "core:prelude/string.wado//String";
     let start_14: i32;
     let handle: i32;
     let packed: i64;
     let rx_22: i32;
     let tx_23: i32;
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    other_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("this is a long literal"), used: 22 };
     if @unlikely(22 > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, 22);
     }
     start_14 = s.used;
     s.used = 22;
-    builtin::array_copy<u8>(s.repr, start_14, other_2.repr, 0, 22);
+    builtin::array_copy<u8>(s.repr, start_14, array.new_data<u8>("this is a long literal"), 0, 22);
     rx_22 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_23 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "opt_dce_string_push_final_prune.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
@@ -97,19 +95,20 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -172,7 +171,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l4;

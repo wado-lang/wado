@@ -324,6 +324,8 @@ fn "default_arg_scope.wado/$cm_export__$test_14_a_cross_module_default_s_nodes_k
 }
 
 fn "default_arg_scope.wado/$test_9_a_local_of_the_function_taking_a_default_is_not_in_scope_for_it$cold2"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_40: ref "core:prelude/string.wado//String";
     let $local_41: ref "core:prelude/format.wado//Formatter";
     let self_55: ref Array<u8>;
@@ -344,21 +346,21 @@ fn "default_arg_scope.wado/$test_9_a_local_of_the_function_taking_a_default_is_n
     let start_109: i32;
     $local_40 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(126), used: 0 };
     $local_40.used = 118;
-    self_55 = $local_40.repr;
+    self_55 = local.tee $load_0($local_40.repr);
     builtin::array_copy<u8>(self_55, 0, global:default_arg_scope.wado::$const_obj_272, 0, 20);
-    self_59 = $local_40.repr;
+    self_59 = $load_0;
     offset_60 = 0 + 20;
     if ref.is_null(global:default_arg_scope.wado::$const_obj_271) {
         global:default_arg_scope.wado::$const_obj_271 = array.new_data<u8>("$test_9_a_local_of_the_function_taking_a_default_is_not_in_scope_for_it");
     }
     builtin::array_copy<u8>(self_59, offset_60, global:default_arg_scope.wado::$const_obj_271, 0, 71);
-    self_63 = $local_40.repr;
+    self_63 = $load_0;
     offset_64 = 0 + 91;
     builtin::array_copy<u8>(self_63, offset_64, global:default_arg_scope.wado::$const_obj_270, 0, 4);
-    self_67 = $local_40.repr;
+    self_67 = $load_0;
     offset_68 = 0 + 95;
     builtin::array_copy<u8>(self_67, offset_68, global:default_arg_scope.wado::$const_obj_269, 0, 22);
-    self_71 = $local_40.repr;
+    self_71 = $load_0;
     offset_72 = 0 + 117;
     builtin::array_copy<u8>(self_71, offset_72, global:default_arg_scope.wado::$const_obj_268, 0, 1);
     $local_41 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_40 };
@@ -370,9 +372,9 @@ fn "default_arg_scope.wado/$test_9_a_local_of_the_function_taking_a_default_is_n
     }
     start_83 = $local_40.used;
     $local_40.used = new_used_82;
-    self_85 = $local_40.repr;
+    self_85 = local.tee $load_5($local_40.repr);
     builtin::array_copy<u8>(self_85, start_83, global:default_arg_scope.wado::$const_obj_267, 0, 26);
-    self_89 = $local_40.repr;
+    self_89 = $load_5;
     offset_90 = start_83 + 26;
     builtin::array_copy<u8>(self_89, offset_90, global:default_arg_scope.wado::$const_obj_266, 0, 10);
     $local_41 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_40 };
@@ -481,19 +483,20 @@ fn "core:prelude/fpfmt.wado/$initialize_module"() {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -556,7 +559,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l27;

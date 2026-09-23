@@ -61,6 +61,7 @@ global global:serde_deserialize_trait.wado::$const_obj_2: ref null Array<u8> = a
 global global:serde_deserialize_trait.wado::$const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 51, 50, 58, 32, 52, 50), used: 7 };
 
 fn "serde_deserialize_trait.wado/run"() with Stdout {
+    let $load_2: ref Array<u8>;
     let $local_9: ref "core:prelude/string.wado//String";
     let handle_15: i32;
     let packed_36: i64;
@@ -85,12 +86,12 @@ fn "serde_deserialize_trait.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_15);
     $local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
     $local_9.used = 8;
-    builtin::array_copy<u8>($local_9.repr, 0, global:serde_deserialize_trait.wado::$const_obj_2, 0, 8);
+    builtin::array_copy<u8>(local.tee $load_2($local_9.repr), 0, global:serde_deserialize_trait.wado::$const_obj_2, 0, 8);
     let $array_clone_dst_4: ref Array<u8>;
     $array_clone_dst_4 = builtin::array_new<u8>(5);
     builtin::array_copy<u8>($array_clone_dst_4, 0, $sroa_$sroa_d_str_val_repr, 0, 5);
     $local_9.used = 13;
-    builtin::array_copy<u8>($local_9.repr, 8, $array_clone_dst_4, 0, 5);
+    builtin::array_copy<u8>($load_2, 8, $array_clone_dst_4, 0, 5);
     rx_79 = builtin::i32_wrap_i64(local.tee packed_78("wasi/stream-new"()));
     tx_80 = builtin::i32_wrap_i64(packed_78 >> 32_i64);
     handle_48 = "serde_deserialize_trait.wado/$cm_binding__Stdout_write_via_stream"(rx_79);
@@ -184,7 +185,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l2;

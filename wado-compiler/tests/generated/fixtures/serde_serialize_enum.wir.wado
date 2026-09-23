@@ -64,6 +64,8 @@ global global:serde_serialize_enum.wado::$const_obj_2: ref null "core:prelude/st
 global global:serde_serialize_enum.wado::$const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(34, 82, 101, 100, 34), used: 5 };
 
 fn "serde_serialize_enum.wado/run"() with Stdout {
+    let $load_1: i32;
+    let $load_5: i32;
     let message_20: ref "core:prelude/string.wado//String";
     let handle_23: i32;
     let v_25: ref "core:prelude/string.wado//String";
@@ -79,7 +81,7 @@ fn "serde_serialize_enum.wado/run"() with Stdout {
     $sroa_ser_buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($sroa_ser_buf, global:serde_serialize_enum.wado::$const_obj_3);
     v_25 = $sroa_ser_buf;
-    message_20 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_25.repr; let $array_clone_len_3: i32; $array_clone_len_3 = v_25.used; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: v_25.used };
+    message_20 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_25.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_1(v_25.used); let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_1 };
     rx_27 = builtin::i32_wrap_i64(local.tee packed_26("wasi/stream-new"()));
     tx_28 = builtin::i32_wrap_i64(packed_26 >> 32_i64);
     handle_23 = "serde_serialize_enum.wado/$cm_binding__Stdout_write_via_stream"(rx_27);
@@ -87,7 +89,7 @@ fn "serde_serialize_enum.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_23);
     $sroa_ser_buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($sroa_ser_buf, global:serde_serialize_enum.wado::$const_obj_2);
-    message_50 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_6: ref Array<u8>; $array_clone_src_6 = $sroa_ser_buf.repr; let $array_clone_len_8: i32; $array_clone_len_8 = $sroa_ser_buf.used; let $array_clone_dst_7: ref Array<u8>; $array_clone_dst_7 = builtin::array_new<u8>($array_clone_len_8); builtin::array_copy<u8>($array_clone_dst_7, 0, $array_clone_src_6, 0, $array_clone_len_8); $array_clone_dst_7), used: $sroa_ser_buf.used };
+    message_50 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_6: ref Array<u8>; $array_clone_src_6 = $sroa_ser_buf.repr; let $array_clone_len_8: i32; $array_clone_len_8 = local.tee $load_5($sroa_ser_buf.used); let $array_clone_dst_7: ref Array<u8>; $array_clone_dst_7 = builtin::array_new<u8>($array_clone_len_8); builtin::array_copy<u8>($array_clone_dst_7, 0, $array_clone_src_6, 0, $array_clone_len_8); $array_clone_dst_7), used: $load_5 };
     rx_57 = builtin::i32_wrap_i64(local.tee packed_56("wasi/stream-new"()));
     tx_58 = builtin::i32_wrap_i64(packed_56 >> 32_i64);
     handle_53 = "serde_serialize_enum.wado/$cm_binding__Stdout_write_via_stream"(rx_57);
@@ -116,19 +118,20 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -191,7 +194,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l3;

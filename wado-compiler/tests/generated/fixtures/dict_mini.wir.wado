@@ -100,6 +100,9 @@ global global:dict_mini.wado::$const_obj_11: ref null "core:prelude/string.wado/
 global global:dict_mini.wado::$const_obj_12: ref null Array<u8> = array.new_fixed<u8>(110, 97, 109, 101, 58, 32);
 
 fn "dict_mini.wado/run"() with Stdout {
+    let $load_4: i32;
+    let $load_13: i32;
+    let $load_22: i32;
     let name_val: ref "core:prelude/string.wado//String";
     let type_val: ref "core:prelude/string.wado//String";
     let updated_val: ref "core:prelude/string.wado//String";
@@ -180,11 +183,11 @@ fn "dict_mini.wado/run"() with Stdout {
         let $array_clone_src_3: ref Array<u8>;
         $array_clone_src_3 = name_val.repr;
         let $array_clone_len_5: i32;
-        $array_clone_len_5 = name_val.used;
+        $array_clone_len_5 = local.tee $load_4(name_val.used);
         let $array_clone_dst_4: ref Array<u8>;
         $array_clone_dst_4 = builtin::array_new<u8>($array_clone_len_5);
         builtin::array_copy<u8>($array_clone_dst_4, 0, $array_clone_src_3, 0, $array_clone_len_5);
-        $sroa_other_used_257 = name_val.used;
+        $sroa_other_used_257 = $load_4;
         $inline_core_prelude_string_wado_String__internal_push_string_12: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_12 $sroa_other_used_257 == 0;
             new_used_43 = 6 + $sroa_other_used_257;
@@ -216,11 +219,11 @@ fn "dict_mini.wado/run"() with Stdout {
         let $array_clone_src_10: ref Array<u8>;
         $array_clone_src_10 = type_val.repr;
         let $array_clone_len_12: i32;
-        $array_clone_len_12 = type_val.used;
+        $array_clone_len_12 = local.tee $load_13(type_val.used);
         let $array_clone_dst_11: ref Array<u8>;
         $array_clone_dst_11 = builtin::array_new<u8>($array_clone_len_12);
         builtin::array_copy<u8>($array_clone_dst_11, 0, $array_clone_src_10, 0, $array_clone_len_12);
-        $sroa_other_used_263 = type_val.used;
+        $sroa_other_used_263 = $load_13;
         $inline_core_prelude_string_wado_String__internal_push_string_25: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_25 $sroa_other_used_263 == 0;
             new_used_76 = 6 + $sroa_other_used_263;
@@ -253,11 +256,11 @@ fn "dict_mini.wado/run"() with Stdout {
         let $array_clone_src_17: ref Array<u8>;
         $array_clone_src_17 = updated_val.repr;
         let $array_clone_len_19: i32;
-        $array_clone_len_19 = updated_val.used;
+        $array_clone_len_19 = local.tee $load_22(updated_val.used);
         let $array_clone_dst_18: ref Array<u8>;
         $array_clone_dst_18 = builtin::array_new<u8>($array_clone_len_19);
         builtin::array_copy<u8>($array_clone_dst_18, 0, $array_clone_src_17, 0, $array_clone_len_19);
-        $sroa_other_used_269 = updated_val.used;
+        $sroa_other_used_269 = $load_22;
         $inline_core_prelude_string_wado_String__internal_push_string_38: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_38 $sroa_other_used_269 == 0;
             new_used_109 = 14 + $sroa_other_used_269;
@@ -440,19 +443,20 @@ fn "core:rt/write_string_to_stream$spec0"(tx, $mv$message$repr, $mv$message$used
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -515,7 +519,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l40;
@@ -524,17 +528,20 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::grow"(self) {
+    let $load_0: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
     let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    a = local.tee capacity(builtin::array_len(local.tee $load_0(self.repr))) * 2;
     new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
 fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::set$scalar"(self, key, value) {
+    let $load_0: i32;
+    let $load_1: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
     let i_3: i32;
     let self_11: ref "core:prelude/string.wado//String";
     let value_15: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
@@ -548,8 +555,8 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
     let a_end: i32;
     let i_44: i32;
     i_3 = 0;
-    $licm_used_31 = self.used;
-    $licm_repr_32 = self.repr;
+    $licm_used_31 = local.tee $load_0(self.used);
+    $licm_repr_32 = local.tee $load_1(self.repr);
     $licm_repr_33 = key.repr;
     $licm_used_34 = key.used;
     b47: block {
@@ -584,8 +591,8 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
         };
     };
     value_25 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: key, 1: value };
-    used = self.used;
-    if @unlikely(used >= builtin::array_len(self.repr)) {
+    used = $load_0;
+    if @unlikely(used >= builtin::array_len($load_1)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::grow"(self);
     }
