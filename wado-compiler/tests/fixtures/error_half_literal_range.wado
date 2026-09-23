@@ -1,0 +1,10 @@
+// A literal that rounds past binary16's largest finite value is refused
+// rather than stored as an infinity, as an integer literal past its type's
+// range is.
+
+export fn run() {
+    let _x: f16 = 65520.0;
+}
+
+__DATA__
+{"compile_error": "literal out of range for `f16`: 65520.0"}

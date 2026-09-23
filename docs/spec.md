@@ -1862,11 +1862,22 @@ let explicit_positive = 2.5e+10;
 
 ##### Type coercion
 
-Floating-point literals coerce to either `f32` or `f64` when the target type is known:
+Floating-point literals coerce to `f32`, `f64`, `f16` or `bf16` when the target type is known:
 
 ```wado
 let single: f32 = 3.14;
 let double: f64 = 3.14159265358979;
+let half: f16 = 0.5;
+let weights: List<bf16> = [0.5, -1.25, 3.0];
+```
+
+A literal is rounded once, from its decimal text to the nearest value of its
+type, ties to even. One that rounds past the type's largest finite value is a
+compile error, as an integer literal past its type's range is:
+
+```wado
+let x: f16 = 65520.0;             // compile error: literal out of range for `f16`: 65520.0
+let y: f32 = 1e39;                // compile error: literal out of range for `f32`: 1e39
 ```
 
 Type conversion (via `as`):

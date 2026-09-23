@@ -191,11 +191,26 @@ precision value, so an exact-or-fail read would reject ordinary documents.
 Writing is exact, so a round trip through a format that preserves `f32`
 preserves the value.
 
-### What is deliberately absent
+### A literal is rounded once, from its decimal text
 
-Float literal coercion. `let x: f16 = 1.5;` would need the compiler to round,
-which means writing the prelude's `from_f32` a second time in Rust, and the two
-copies would drift. A literal value is written as its bits.
+`let x: f16 = 1.5;` and `let w: List<bf16> = [0.5, -1.25];` take a float
+literal as `f32` does. A tensor written out as source is a list of such
+literals, and one spelled as bits cannot be read.
+
+The literal is rounded once, from its exact decimal value to the nearest half,
+ties to even. Reading it as an `f64` first and narrowing that is two roundings,
+which disagree where the `f64` lands exactly on a midpoint the decimal was not
+on. Every float literal is rounded this way, `f32` included.
+
+The compiler's rounding and the prelude's `from_f32` start from different
+values, a decimal and an `f32`, so they need not agree where the `f32` is itself
+a rounding. Where it is exact they must, and a fixture pins that, so neither
+copy drifts silently.
+
+A literal past the type's largest finite value is a compile error rather than
+an infinity, as an integer literal past its type's range is.
+
+### What is deliberately absent
 
 Conversion between `f16` and `bf16`. Each direction loses something the other
 keeps: `f16` has the shorter exponent range, `bf16` the shorter mantissa.
@@ -224,8 +239,9 @@ zeroes, which is all `Eq` needs. `Ord` would take the sign-magnitude key
 `f32`'s own uses, computed on sixteen bits. Nothing measured has asked for
 either.
 
-No associated constants. `f16::NAN` and its siblings cannot be written, because
-a constant initializer is a literal and these types have none.
+No associated constants. `f16::MAX` and the other finite ones could now be
+written as literals and are not declared. `NAN` and the infinities have no
+literal, so a constant initializer cannot spell them.
 
 No `FromStr`, so a half precision value cannot be parsed from text directly.
 

@@ -7,6 +7,7 @@ use crate::ast::{self, Expr, Literal, LiteralMember, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
+use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::sem::types::{
     CoercionKind, KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, SequenceCoercionFacts,
 };
@@ -145,8 +146,9 @@ fn is_byte_literal_expr(expr: &Expr) -> bool {
 /// the type of its operands: a comparison's is `bool`, which types neither
 /// side of `b'\n' == 10`.
 pub(super) fn is_numeric_literal_target(tt: &TypeTable, target: TypeId) -> bool {
-    // `i128` / `u128` are structs, so `is_numeric` does not see them.
-    tt.is_numeric(target) || tt.wide_int_item(target).is_some()
+    // `i128` / `u128` are structs, so `is_numeric` does not see them, and a
+    // half takes a literal without being numeric: it has no arithmetic.
+    tt.is_numeric(target) || tt.is_half(target) || tt.wide_int_item(target).is_some()
 }
 
 /// Which of two operands resolves first, so the other can take its type.
@@ -330,17 +332,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        if self.tysys.type_table.borrow().is_float(target_type) {
-            return Some(match util::parse_float_literal(repr) {
-                Ok(_) => target_type,
-                Err(message) => {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message,
-                        span: lit.span,
-                    });
-                    target_type
-                }
-            });
+        let format = self
+            .tysys
+            .type_table
+            .borrow()
+            .primitive_head(target_type)
+            .and_then(FloatFormat::of);
+        if let Some(format) = format {
+            if let Err(message) = float_literal_bits(repr, format) {
+                let _ = self.emit(TypeError::InvalidLiteral {
+                    message,
+                    span: whole_span,
+                });
+            }
+            return Some(target_type);
         }
 
         // What is left is `i128` / `u128`: structs, so they reach neither test
@@ -400,7 +405,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             let is_numeric = {
                 let tt = self.tysys.type_table.borrow();
-                tt.is_integer(expected) || tt.is_float(expected)
+                tt.is_integer(expected) || tt.is_float(expected) || tt.is_half(expected)
             };
             if !is_numeric {
                 continue;

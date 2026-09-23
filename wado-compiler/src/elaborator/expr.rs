@@ -31,6 +31,7 @@ use crate::elaborator::control_flow::{
     collect_unresolved_null_breaks, collect_unresolved_null_tails,
     collect_unresolved_null_tails_in_block,
 };
+use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::infer::unify;
 use crate::elaborator::sem::decls::FunctionSig;
 use crate::elaborator::sem::types::{
@@ -606,7 +607,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Default type: i32 if integer-compatible, f64 if float-only
                 if util::is_float_only_literal(repr) {
                     // Must be float (has decimal point or negative exponent)
-                    if let Err(message) = util::parse_float_literal(repr) {
+                    if let Err(message) = float_literal_bits(repr, FloatFormat::F64) {
                         let _ = self.emit(TypeError::InvalidLiteral {
                             message,
                             span: lit.span,

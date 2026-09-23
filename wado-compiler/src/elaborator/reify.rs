@@ -48,6 +48,7 @@ use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
 use crate::elaborator::expr::{
     compose_union_plan, int_literal_cast_operand, int_literal_repr, peel_to_struct,
 };
+use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
@@ -3130,7 +3131,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // only fits as the already-negative value, or a type
                 // mismatch when the operand's literal type differs).
                 if matches!(op, TirUnaryOp::Neg) {
+                    let half = {
+                        let tt = self.tysys.type_table.borrow();
+                        tt.primitive_head(inner.type_id)
+                            .filter(|p| p.is_half())
+                            .and_then(FloatFormat::of)
+                    };
                     match &inner.kind {
+                        TirExprKind::IntLiteral { value, .. } if let Some(format) = half => {
+                            let bits = value ^ format.sign_bit();
+                            return TirExpr::new(
+                                TirExprKind::IntLiteral {
+                                    value: bits,
+                                    repr: format!("{bits:#06x}"),
+                                },
+                                inner.type_id,
+                                span,
+                            );
+                        }
                         TirExprKind::IntLiteral { value, repr } => {
                             return TirExpr::new(
                                 TirExprKind::IntLiteral {
@@ -10041,16 +10059,34 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // production's `resolve_numeric_literal`. An integer literal still
         // defers to the recorded type so `let x: f64 = 1` takes the float path
         // via `is_float_target`.
+        // A half has no float value of its own: its literal is its bits.
+        if base_target == TypeTable::F16 || base_target == TypeTable::BF16 {
+            let format = if base_target == TypeTable::F16 {
+                FloatFormat::F16
+            } else {
+                FloatFormat::BF16
+            };
+            let bits = float_literal_bits(repr, format).unwrap_or(0);
+            return TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: bits,
+                    repr: format!("{bits:#06x}"),
+                },
+                recorded_type,
+                span,
+            );
+        }
         let is_float_target = base_target == TypeTable::F32
             || base_target == TypeTable::F64
             || (recorded_type == TypeTable::UNKNOWN && util::is_float_only_literal(repr));
         if is_float_target {
-            let value: f64 = if util::is_float_only_literal(repr) {
-                util::parse_float_literal(repr).unwrap_or(0.0)
+            // Rounded once, into the target format, so the later narrowing
+            // of an `f32` is exact.
+            let value = if base_target == TypeTable::F32 {
+                let bits = float_literal_bits(repr, FloatFormat::F32).unwrap_or(0);
+                f64::from(f32::from_bits(bits as u32))
             } else {
-                util::parse_u128_literal(repr)
-                    .map(|v| v as f64)
-                    .unwrap_or(0.0)
+                f64::from_bits(float_literal_bits(repr, FloatFormat::F64).unwrap_or(0))
             };
             // The literal's *type* must be a concrete float, not the (possibly
             // UNKNOWN) recorded type: a float-only literal with no recorded

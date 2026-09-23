@@ -202,6 +202,7 @@ i128, u128
 // Every comparison hands the widened value to f32's, so `==` and `<` are IEEE
 // and `Ord` is the total order — the same split f32 has.
 f16, bf16
+let w: List<bf16> = [0.5, -1.25];   // a float literal rounds once, ties to even
 
 // Composites
 String                  // UTF-8 string

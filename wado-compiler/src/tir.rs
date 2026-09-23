@@ -1139,6 +1139,10 @@ impl TypeTable {
         )
     }
 
+    pub fn is_half(&self, id: TypeId) -> bool {
+        self.primitive_head(id).is_some_and(PrimitiveType::is_half)
+    }
+
     pub fn is_numeric(&self, id: TypeId) -> bool {
         self.is_integer(id) || self.is_float(id)
     }

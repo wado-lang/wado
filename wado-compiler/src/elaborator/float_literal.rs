@@ -1,0 +1,234 @@
+//! A float literal rounded once, from its source text into its target format.
+
+use std::cmp::Ordering;
+
+use crate::elaborator::util::normalize_numeric_literal;
+use crate::primitive::PrimitiveType;
+
+/// A binary interchange format a float literal is written into.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FloatFormat {
+    exponent_bits: u32,
+    mantissa_bits: u32,
+    name: &'static str,
+}
+
+impl FloatFormat {
+    pub(crate) const F64: Self = Self::new(11, 52, "f64");
+    pub(crate) const F32: Self = Self::new(8, 23, "f32");
+    pub(crate) const F16: Self = Self::new(5, 10, "f16");
+    pub(crate) const BF16: Self = Self::new(8, 7, "bf16");
+
+    const fn new(exponent_bits: u32, mantissa_bits: u32, name: &'static str) -> Self {
+        Self {
+            exponent_bits,
+            mantissa_bits,
+            name,
+        }
+    }
+
+    /// The format `prim` stores, `None` for a primitive that is not a float.
+    pub(crate) fn of(prim: PrimitiveType) -> Option<Self> {
+        match prim {
+            PrimitiveType::F64 => Some(Self::F64),
+            PrimitiveType::F32 => Some(Self::F32),
+            PrimitiveType::F16 => Some(Self::F16),
+            PrimitiveType::Bf16 => Some(Self::BF16),
+            PrimitiveType::I8
+            | PrimitiveType::I16
+            | PrimitiveType::I32
+            | PrimitiveType::I64
+            | PrimitiveType::U8
+            | PrimitiveType::U16
+            | PrimitiveType::U32
+            | PrimitiveType::U64
+            | PrimitiveType::Bool
+            | PrimitiveType::Char
+            | PrimitiveType::V128 => None,
+        }
+    }
+
+    /// The sign bit, which a negated literal sets.
+    pub(crate) fn sign_bit(self) -> u64 {
+        1 << (self.exponent_bits + self.mantissa_bits)
+    }
+
+    fn bias(self) -> i64 {
+        (1 << (self.exponent_bits - 1)) - 1
+    }
+}
+
+/// `repr` in `format`'s bits, rounded to nearest even from the literal's exact
+/// value. An error names a literal that does not parse or rounds to infinity.
+pub(crate) fn float_literal_bits(repr: &str, format: FloatFormat) -> Result<u64, String> {
+    let clean = normalize_numeric_literal(repr);
+    let radix = [("0x", 16), ("0b", 2), ("0o", 8)]
+        .into_iter()
+        .find_map(|(prefix, radix)| clean.strip_prefix(prefix).map(|digits| (digits, radix)));
+    let (approx, exact) = if let Some((digits, radix)) = radix {
+        let value = u128::from_str_radix(digits, radix)
+            .map_err(|_| format!("invalid integer literal: {repr}"))?;
+        (value as f64, value.to_string())
+    } else {
+        let approx: f64 = clean
+            .parse()
+            .map_err(|_| format!("invalid float literal: {repr}"))?;
+        (approx, clean)
+    };
+    let out_of_range = || format!("literal out of range for `{}`: {repr}", format.name);
+    if approx.is_infinite() {
+        return Err(out_of_range());
+    }
+    if format == FloatFormat::F64 {
+        return Ok(approx.to_bits());
+    }
+    narrow(approx, format, || compare_decimal(&exact, approx)).ok_or_else(out_of_range)
+}
+
+/// `value` rounded to nearest even in `format`, `None` where that is an
+/// infinity. `tie` breaks an exact midpoint: `value` may itself be a rounding
+/// of the literal, which is what it answers for.
+fn narrow(value: f64, format: FloatFormat, tie: impl FnOnce() -> Ordering) -> Option<u64> {
+    assert!(value >= 0.0, "a literal is unsigned until negated");
+    let bits = value.to_bits();
+    let field = (bits >> 52) as i64;
+    let fraction = bits & ((1 << 52) - 1);
+    let (m, e) = if field == 0 {
+        (fraction, -1074)
+    } else {
+        (fraction | (1 << 52), field - 1075)
+    };
+    if m == 0 {
+        return Some(0);
+    }
+    let mb = i64::from(format.mantissa_bits);
+    let emin = 1 - format.bias();
+    let magnitude = e + i64::from(m.ilog2());
+    let lsb = (magnitude - mb).max(emin - mb);
+    let shift = lsb - e;
+    let mut q = if shift <= 0 {
+        m << -shift
+    } else if shift > 54 {
+        0
+    } else {
+        let q = m >> shift;
+        let rem = m & ((1 << shift) - 1);
+        let round_up = match rem.cmp(&(1 << (shift - 1))) {
+            Ordering::Greater => true,
+            Ordering::Less => false,
+            Ordering::Equal => match tie() {
+                Ordering::Greater => true,
+                Ordering::Less => false,
+                Ordering::Equal => q & 1 == 1,
+            },
+        };
+        q + u64::from(round_up)
+    };
+    let mut lsb = lsb;
+    if q == 1 << (mb + 1) {
+        q >>= 1;
+        lsb += 1;
+    }
+    if q < 1 << mb {
+        return Some(q);
+    }
+    let biased = lsb + mb + format.bias();
+    if biased >= (1 << format.exponent_bits) - 1 {
+        return None;
+    }
+    Some(((biased as u64) << mb) | (q - (1 << mb)))
+}
+
+/// The exact decimal `literal` against the exact value of `approx`.
+fn compare_decimal(literal: &str, approx: f64) -> Ordering {
+    // Precision past the longest f64 expansion (767 digits) prints it exactly.
+    let expansion = format!("{approx:.800e}");
+    let [a, b] = [literal, &expansion].map(scientific);
+    a.1.cmp(&b.1).then_with(|| {
+        let len = a.0.len().max(b.0.len());
+        let pad = |d: &[u8]| {
+            (0..len)
+                .map(|i| d.get(i).copied().unwrap_or(b'0'))
+                .collect::<Vec<_>>()
+        };
+        pad(&a.0).cmp(&pad(&b.0))
+    })
+}
+
+/// A nonzero decimal as its significant digits and the power of ten of the
+/// first one.
+fn scientific(text: &str) -> (Vec<u8>, i64) {
+    let (mantissa, exponent) = text.split_once('e').unwrap_or((text, "0"));
+    let exponent: i64 = exponent
+        .parse()
+        .expect("a parsed literal's exponent is an integer");
+    let (int, frac) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    let digits: Vec<u8> = int.bytes().chain(frac.bytes()).collect();
+    let leading = digits.iter().take_while(|&&d| d == b'0').count();
+    let mut significant = digits[leading..].to_vec();
+    while significant.last() == Some(&b'0') {
+        significant.pop();
+    }
+    assert!(!significant.is_empty(), "a tie is never at zero");
+    (
+        significant,
+        int.len() as i64 - leading as i64 - 1 + exponent,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bits(repr: &str, format: FloatFormat) -> u64 {
+        float_literal_bits(repr, format).unwrap()
+    }
+
+    #[test]
+    fn a_literal_rounds_once_from_its_decimal() {
+        // f64 rounds this to f32's midpoint between 1 and its successor, and a
+        // second rounding would take the even side, 1.
+        assert_eq!(
+            bits("1.00000005960464477539062500000000001", FloatFormat::F32),
+            0x3F80_0001
+        );
+        assert_eq!(
+            bits("1.000000059604644775390625", FloatFormat::F32),
+            0x3F80_0000
+        );
+        assert_eq!(
+            bits("1.00000005960464477539062499999999999", FloatFormat::F32),
+            0x3F80_0000
+        );
+        // The same at binary16: the midpoint above 1 is 1 + 2^-11.
+        assert_eq!(
+            bits("1.00048828125000000000000000000000001", FloatFormat::F16),
+            0x3C01
+        );
+        assert_eq!(bits("1.00048828125", FloatFormat::F16), 0x3C00);
+    }
+
+    #[test]
+    fn every_class_lands_on_its_reference_bits() {
+        assert_eq!(bits("0.0", FloatFormat::F16), 0x0000);
+        assert_eq!(bits("1.0", FloatFormat::F16), 0x3C00);
+        assert_eq!(bits("65504.0", FloatFormat::F16), 0x7BFF);
+        assert_eq!(bits("5.9604645e-8", FloatFormat::F16), 0x0001);
+        assert_eq!(bits("6.1035156e-5", FloatFormat::F16), 0x0400);
+        assert_eq!(bits("1e-10", FloatFormat::F16), 0x0000);
+        assert_eq!(bits("2049", FloatFormat::F16), 0x6800);
+        assert_eq!(bits("2051", FloatFormat::F16), 0x6802);
+        assert_eq!(bits("0x10", FloatFormat::F16), 0x4C00);
+        assert_eq!(bits("3.14159265", FloatFormat::BF16), 0x4049);
+        assert_eq!(bits("1e39", FloatFormat::F64), 1e39_f64.to_bits());
+        assert_eq!(bits("1e38", FloatFormat::BF16), 0x7E96);
+    }
+
+    #[test]
+    fn a_literal_past_the_largest_finite_value_is_refused() {
+        assert!(float_literal_bits("65520.0", FloatFormat::F16).is_err());
+        assert_eq!(bits("65519.99", FloatFormat::F16), 0x7BFF);
+        assert!(float_literal_bits("1e39", FloatFormat::F32).is_err());
+        assert!(float_literal_bits("1e400", FloatFormat::F64).is_err());
+    }
+}
