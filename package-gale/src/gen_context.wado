@@ -304,6 +304,8 @@ pub struct GenContext {
     one_token_rules: TreeMap<String, List<String>>,
     snake_index: TreeMap<String, i32>,
     follow_mask_used: TreeSet<i32>,
+    sync_bits_used: TreeSet<i32>,
+    sync_list_used: TreeSet<i32>,
 }
 
 fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
@@ -398,6 +400,8 @@ impl GenContext {
             one_token_rules,
             snake_index,
             follow_mask_used: TreeSet::new(),
+            sync_bits_used: TreeSet::new(),
+            sync_list_used: TreeSet::new(),
         };
     }
 
@@ -2292,10 +2296,30 @@ impl GenContext {
         return Option::<i32>::Some(id);
     }
 
-    /// All interned sync sets in `SYNC_<id>` order. Consumed by the
-    /// global-emit pass.
-    pub fn sync_sets(&self) -> List<KindSetEntry> {
-        return self.sync_set_registry.values().iter_value().collect();
+    /// `SYNC_<id>`, the set as the bits a membership test reads, or
+    /// `EMPTY_SYNC`.
+    pub fn sync_bits_ref(&mut self, tokens: &List<String>) -> String {
+        let Some(id) = self.intern_sync_set(tokens) else { return String::from("EMPTY_SYNC"); };
+        self.sync_bits_used.insert(id);
+        return `SYNC_${id}`;
+    }
+
+    /// `EXPECTED_<id>`, the set as the kind list a diagnostic names, or
+    /// `EMPTY_SYNC`.
+    pub fn sync_list_ref(&mut self, tokens: &List<String>) -> String {
+        let Some(id) = self.intern_sync_set(tokens) else { return String::from("EMPTY_SYNC"); };
+        self.sync_list_used.insert(id);
+        return `EXPECTED_${id}`;
+    }
+
+    /// The interned sync sets, in id order, with whether emitted code tests
+    /// each as bits and whether it names it as a list.
+    pub fn sync_sets(&self) -> List<[KindSetEntry, bool, bool]> {
+        let mut out: List<[KindSetEntry, bool, bool]> = [];
+        for let entry of self.sync_set_registry.values().iter_value() {
+            out.push([entry, self.sync_bits_used.contains(entry.id), self.sync_list_used.contains(entry.id)]);
+        }
+        return out;
     }
 
     /// Intern a runtime FOLLOW-continuation mask. The same canonical mask

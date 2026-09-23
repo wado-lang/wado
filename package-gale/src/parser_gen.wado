@@ -187,6 +187,8 @@ use {
     gen_lookahead_condition,
     gen_scan_lookahead_condition,
     sync_set_ref,
+    expected_set_ref,
+    expect_set_call,
 } from "./kind_set_gen.wado";
 use { group_alt_classes, non_greedy_static_undecided, peel_repeat_body_label, rebind_op_field } from "./lower.wado";
 
@@ -4032,7 +4034,7 @@ fn gen_group_body(
         if !proven.is_empty() && all_contained(proven, &kinds) {
             w.line("p.take();");
         } else {
-            w.line(`let _ = p.expect_set(${sync_set_ref(ctx, &kinds)});`);
+            w.line(`let _ = ${expect_set_call(ctx, &kinds)};`);
         }
         return;
     }
@@ -4100,7 +4102,7 @@ fn gen_alt_dispatch(
     assert !admits_tests_nothing(&last.test) || is_decision_fallback(last), "a Direct chain's last branch admits everything, so no `if` was emitted for the `else` to follow";
     if !is_decision_fallback(last) {
         w.else_begin("else");
-        w.line(`let _ = p.expect_set(${sync_set_ref(ctx, &all_first)});`);
+        w.line(`let _ = ${expect_set_call(ctx, &all_first)};`);
     }
     close_decision_chain(w, &branches);
 }
@@ -5413,7 +5415,7 @@ fn gen_mandatory_first_report<S: AsStrSlice>(w: &mut CodeWriter, inner: &Element
     let Some(admits) = mandatory_first_admits(inner, ctx) else {
         return;
     };
-    let expected_ref = sync_set_ref(ctx, &admits.expected);
+    let expected_ref = expected_set_ref(ctx, &admits.expected);
     w.begin(`if ${plus_flag} && !(${admits.condition})`);
     w.line(`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
     w.line("break;");
@@ -5819,7 +5821,7 @@ fn gen_consume_token_group_op(
         w.line(`${leaf_binding(ctx, &base, &to.field)}p.take();`);
         return;
     }
-    w.line(`${leaf_binding(ctx, &base, &to.field)}p.expect_set(${sync_set_ref(ctx, &kinds)});`);
+    w.line(`${leaf_binding(ctx, &base, &to.field)}${expect_set_call(ctx, &kinds)};`);
 }
 
 fn collect_token_only_kinds(alts: &List<Alternative>) -> List<String> {
@@ -7060,7 +7062,7 @@ fn gen_rep_decided_entry<S: AsStrSlice>(
     // picked and lets the body report what it cannot match. Only where
     // prediction picked nothing is there an answer to give here.
     w.begin(`if ${winner} < 0`);
-    let expected_ref = sync_set_ref(ctx, &decision.expected);
+    let expected_ref = expected_set_ref(ctx, &decision.expected);
     w.line(`if ${plus_flag} { p.no_viable("no viable alternative", p.peek_span(), ${expected_ref}); }`);
     w.line("break;");
     w.end();
@@ -7857,7 +7859,7 @@ fn gen_group_dispatch(
 
 /// The dispatch's last arm, where nothing the group admits is left to take.
 fn gen_group_no_viable(w: &mut CodeWriter, classes: &List<AltClass>, ctx: &mut GenContext) {
-    let expected_ref = sync_set_ref(ctx, &classes_union(classes));
+    let expected_ref = expected_set_ref(ctx, &classes_union(classes));
     w.else_begin("else");
     w.line(`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
 }
@@ -7958,7 +7960,7 @@ fn gen_consume_token_group(
     let base = token_group_field_name(alts);
     let var_name = dedup_name(&base, name_counts);
     let kinds = collect_token_only_kinds(alts);
-    w.line(`${leaf_binding(ctx, &base, &var_name)}p.expect_set(${sync_set_ref(ctx, &kinds)});`);
+    w.line(`${leaf_binding(ctx, &base, &var_name)}${expect_set_call(ctx, &kinds)};`);
 }
 
 // Caller pre-dedups `acc_var`; its declaration is emitted here so the
@@ -8812,7 +8814,7 @@ fn gen_error_fallback<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRule, type
     }
     let msg = wado`"no alternative of ${rule.name} matches"`;
     // Kind ids, not names: `fail` resolves names only for the error it keeps.
-    let expected_ref = sync_set_ref(ctx, &expected);
+    let expected_ref = expected_set_ref(ctx, &expected);
     w.line(`p.no_viable(`);
     w.indent();
     w.line(`${msg},`);

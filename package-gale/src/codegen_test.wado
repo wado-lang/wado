@@ -1332,8 +1332,17 @@ WS : (' '|'\\n') -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_b__inner(");
-    assert str_contains(&body, "p.expect_set(&SYNC_");
-    assert str_contains(&output, "global SYNC_0: List<i32> = [TK_FLOAT, TK_INT];");
+    assert str_contains(&body, "p.expect_set(&SYNC_0, &EXPECTED_0)"), body;
+    assert str_contains(&output, "global EXPECTED_0: List<i32> = [TK_FLOAT, TK_INT];");
+}
+
+test "a sync set is tested as bits, and listed only where a diagnostic names it" {
+    let mut g = parse("grammar T;\ns : A B C EOF ;\nA : 'a' ;\nB : 'b' ;\nC : 'c' ;\n").unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, "global SYNC_0: List<i32> = [2];"), output;
+    assert !str_contains(&output, "global EXPECTED_"), output;
+    let in_set = extract_fn_body(&output, "fn in_set(");
+    assert !str_contains(&in_set, "for let"), in_set;
 }
 
 test "non-greedy optional (??) emits Option<T> + single if" {
@@ -1979,7 +1988,7 @@ test "an open-ended alternative still contributes the first set it does have" {
     // alternative's own tokens have to reach both.
     let mut g = parse(OPEN_ENDED_WITH_FIRST_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let both = "global SYNC_0: List<i32> = [TK_A, TK_B];";
+    let both = "global EXPECTED_0: List<i32> = [TK_A, TK_B];";
     assert find_substr(&output, &both) >= 0, `expected ${both}, got: ${output}`;
 }
 

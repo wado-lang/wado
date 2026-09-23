@@ -1190,8 +1190,9 @@ impl Parser {
     }
 
     fn in_set(&self, k: i32, set: &List<i32>) -> bool {
-        for let x of set { if *x == k { return true; } }
-        return false;
+        let w = k >> 5;
+        if w >= set.len() { return false; }
+        return set[w] >> (k & 31) & 1 == 1;
     }
 
     fn report_extra(&mut self, kind: i32) {
@@ -1341,7 +1342,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: &List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &List<i32>, expected: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if self.in_set(k, included) {
@@ -1353,7 +1354,7 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        self.fail_on_token("got", included, DiagnosticCode::UnexpectedToken);
+        self.fail_on_token("got", expected, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 }
@@ -1501,8 +1502,8 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_static];
-global SYNC_1: List<i32> = [TK_LIT_final];
-global SYNC_2: List<i32> = [TK_LIT_int];
-global SYNC_3: List<i32> = [TK_ID];
+global SYNC_0: List<i32> = [256];
+global SYNC_1: List<i32> = [512];
+global SYNC_2: List<i32> = [1024];
+global SYNC_3: List<i32> = [1];
 

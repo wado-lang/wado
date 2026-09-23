@@ -25313,8 +25313,9 @@ impl Parser {
     }
 
     fn in_set(&self, k: i32, set: &List<i32>) -> bool {
-        for let x of set { if *x == k { return true; } }
-        return false;
+        let w = k >> 5;
+        if w >= set.len() { return false; }
+        return set[w] >> (k & 31) & 1 == 1;
     }
 
     fn report_extra(&mut self, kind: i32) {
@@ -25464,7 +25465,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: &List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &List<i32>, expected: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if self.in_set(k, included) {
@@ -25476,7 +25477,7 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        self.fail_on_token("got", included, DiagnosticCode::UnexpectedToken);
+        self.fail_on_token("got", expected, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 }
@@ -28435,7 +28436,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            p.expect_set(&SYNC_0);
+            p.expect_set(&SYNC_0, &EXPECTED_0);
         }
     }
     loop {
@@ -28475,7 +28476,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            p.expect_set(&SYNC_0);
+            p.expect_set(&SYNC_0, &EXPECTED_0);
         }
     }
     loop {
@@ -28515,7 +28516,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            p.expect_set(&SYNC_0);
+            p.expect_set(&SYNC_0, &EXPECTED_0);
         }
     }
     loop {
@@ -28555,7 +28556,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            p.expect_set(&SYNC_0);
+            p.expect_set(&SYNC_0, &EXPECTED_0);
         }
     }
     p.expect(TK_EOF, &EMPTY_SYNC);
@@ -28648,7 +28649,7 @@ fn _parse_charset__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of charset matches",
         p.peek_span(),
-        &SYNC_4,
+        &EXPECTED_4,
     );
     return;
 }
@@ -28674,7 +28675,7 @@ fn _parse_imports__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     } else if _kind_set_2(grp_kind) {
         _parse_url(p, 0);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_6);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_6);
     }
     _parse_ws(p, 0);
     _parse_media_query_list(p, FOLLOW_MASK_1);
@@ -28724,7 +28725,7 @@ fn _parse_imports__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     } else if _kind_set_2(grp_kind) {
         _parse_url(p, 0);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_6);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_6);
     }
     _parse_ws(p, FOLLOW_MASK_1);
     p.expect(TK_SemiColon, &SYNC_3);
@@ -28771,7 +28772,7 @@ fn _parse_imports__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
     } else if _kind_set_2(grp_kind) {
         _parse_url(p, follow);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_6);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_6);
     }
     _parse_ws(p, follow);
     _parse_media_query_list(p, follow);
@@ -28815,7 +28816,7 @@ fn _parse_imports__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () {
     } else if _kind_set_2(grp_kind) {
         _parse_url(p, follow);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_6);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_6);
     }
     _parse_ws(p, follow);
     return;
@@ -28887,7 +28888,7 @@ fn _parse_imports__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of imports matches",
         p.peek_span(),
-        &SYNC_7,
+        &EXPECTED_7,
     );
     return;
 }
@@ -28927,7 +28928,7 @@ fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     } else if _kind_set_2(grp_kind) {
         _parse_url(p, 0);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_6);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_6);
     }
     _parse_ws(p, FOLLOW_MASK_1);
     p.expect(TK_SemiColon, &SYNC_3);
@@ -29001,7 +29002,7 @@ fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     } else if _kind_set_2(grp_kind) {
         _parse_url(p, follow);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_6);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_6);
     }
     _parse_ws(p, follow);
     return;
@@ -29070,7 +29071,7 @@ fn _parse_namespace___inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of namespace_ matches",
         p.peek_span(),
-        &SYNC_9,
+        &EXPECTED_9,
     );
     return;
 }
@@ -29264,7 +29265,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of mediaQuery matches",
         p.peek_span(),
-        &SYNC_11,
+        &EXPECTED_11,
     );
     return;
 }
@@ -29526,7 +29527,7 @@ fn _parse_combinator__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of combinator matches",
         p.peek_span(),
-        &SYNC_19,
+        &EXPECTED_19,
     );
     return;
 }
@@ -29579,7 +29580,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: i64 = 0) -> ()
                 _parse_universal(p, 0);
             }
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_20);
+            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_20);
         }
         loop {
             if p.recovering { break; }
@@ -29706,7 +29707,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: i64 = 0) -> ()
             }
             if !_plus_first && gd_best <= p.pos { break; }
             if gd_winner < 0 {
-                if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &SYNC_21); }
+                if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_21); }
                 break;
             }
             _plus_first = false;
@@ -29727,7 +29728,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: i64 = 0) -> ()
     p.no_viable(
         "no alternative of simpleSelectorSequence matches",
         p.peek_span(),
-        &SYNC_22,
+        &EXPECTED_22,
     );
     return;
 }
@@ -29942,7 +29943,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        p.expect_set(&SYNC_24);
+        p.expect_set(&SYNC_24, &EXPECTED_24);
         _parse_ws(p, FOLLOW_MASK_12);
         let grp_kind = p.peek_kind();
         if _kind_set_3(grp_kind) {
@@ -29950,7 +29951,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
         } else if grp_kind == TK_String_ {
             p.expect(TK_String_, &EMPTY_SYNC);
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_25);
+            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_25);
         }
         _parse_ws(p, (FOLLOW_MASK_13 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
@@ -29980,7 +29981,7 @@ fn _parse_pseudo__inner(p: &mut Parser, follow: i64 = 0) -> () {
     } else if grp_kind == TK_Function_ {
         _parse_functional_pseudo(p, 0);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_27);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_27);
     }
     return;
 }
@@ -30057,7 +30058,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
         } else if _kind_set_3(grp_kind) {
             _parse_ident(p);
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_29);
+            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_29);
         }
         _parse_ws(p, follow);
     }
@@ -30189,7 +30190,7 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of negationArg matches",
         p.peek_span(),
-        &SYNC_31,
+        &EXPECTED_31,
     );
     return;
 }
@@ -30234,7 +30235,7 @@ fn _parse_operator___inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of operator_ matches",
         p.peek_span(),
-        &SYNC_32,
+        &EXPECTED_32,
     );
     return;
 }
@@ -30279,7 +30280,7 @@ fn _parse_property___inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of property_ matches",
         p.peek_span(),
-        &SYNC_33,
+        &EXPECTED_33,
     );
     return;
 }
@@ -30379,7 +30380,7 @@ fn _parse_ruleset__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of ruleset matches",
         p.peek_span(),
-        &SYNC_34,
+        &EXPECTED_34,
     );
     return;
 }
@@ -30544,7 +30545,7 @@ fn _parse_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of declaration matches",
         p.peek_span(),
-        &SYNC_33,
+        &EXPECTED_33,
     );
     return;
 }
@@ -30619,7 +30620,7 @@ fn _parse_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if !_plus_first && gd_best <= p.pos { break; }
         if gd_winner < 0 {
-            if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &SYNC_37); }
+            if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_37); }
             break;
         }
         _plus_first = false;
@@ -30831,7 +30832,7 @@ fn _parse_term__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of term matches",
         p.peek_span(),
-        &SYNC_38,
+        &EXPECTED_38,
     );
     return;
 }
@@ -31221,7 +31222,7 @@ fn _parse_any___inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of any_ matches",
         p.peek_span(),
-        &SYNC_39,
+        &EXPECTED_39,
     );
     return;
 }
@@ -31276,7 +31277,7 @@ fn _parse_at_rule__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_SemiColon, &SYNC_3);
         _parse_ws(p, follow);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_41);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_41);
     }
     return;
 }
@@ -31321,7 +31322,7 @@ fn _parse_unused__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of unused matches",
         p.peek_span(),
-        &SYNC_42,
+        &EXPECTED_42,
     );
     return;
 }
@@ -31501,7 +31502,7 @@ fn _parse_nested_statement__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of nestedStatement matches",
         p.peek_span(),
-        &SYNC_44,
+        &EXPECTED_44,
     );
     return;
 }
@@ -31657,7 +31658,7 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of supportsCondition matches",
         p.peek_span(),
-        &SYNC_47,
+        &EXPECTED_47,
     );
     return;
 }
@@ -31751,7 +31752,7 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: i64 = 0) -
     p.no_viable(
         "no alternative of supportsConditionInParens matches",
         p.peek_span(),
-        &SYNC_48,
+        &EXPECTED_48,
     );
     return;
 }
@@ -31931,7 +31932,7 @@ fn _parse_supports_declaration_condition(p: &mut Parser, follow: i64 = 0) -> () 
 }
 
 fn _parse_general_enclosed__inner(p: &mut Parser) -> () {
-    p.expect_set(&SYNC_48);
+    p.expect_set(&SYNC_48, &EXPECTED_48);
     loop {
         if p.recovering { break; }
         let mut gd_winner: i32 = -1;
@@ -31995,7 +31996,7 @@ fn _parse_url__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of url matches",
         p.peek_span(),
-        &SYNC_53,
+        &EXPECTED_53,
     );
     return;
 }
@@ -32087,7 +32088,7 @@ fn _parse_calc_sum__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if rep_scan_pos < 0 { break; }
         p.expect(TK_Space, &SYNC_56);
         _parse_ws(p, FOLLOW_MASK_28);
-        p.expect_set(&SYNC_57);
+        p.expect_set(&SYNC_57, &EXPECTED_57);
         _parse_ws(p, FOLLOW_MASK_20);
         p.expect(TK_Space, &SYNC_55);
         _parse_ws(p, FOLLOW_MASK_27);
@@ -32265,7 +32266,7 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of calcValue matches",
         p.peek_span(),
-        &SYNC_59,
+        &EXPECTED_59,
     );
     return;
 }
@@ -32405,7 +32406,7 @@ fn _parse_font_face_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of fontFaceDeclaration matches",
         p.peek_span(),
-        &SYNC_33,
+        &EXPECTED_33,
     );
     return;
 }
@@ -32498,7 +32499,7 @@ fn _parse_keyframe_block(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_keyframe_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect_set(&SYNC_62);
+    p.expect_set(&SYNC_62, &EXPECTED_62);
     _parse_ws(p, follow);
     loop {
         if p.recovering { break; }
@@ -32527,7 +32528,7 @@ fn _parse_keyframe_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if rep_scan_pos < 0 { break; }
         p.expect(TK_Comma, &SYNC_63);
         _parse_ws(p, FOLLOW_MASK_30);
-        p.expect_set(&SYNC_62);
+        p.expect_set(&SYNC_62, &EXPECTED_62);
         _parse_ws(p, follow);
     }
     return;
@@ -32728,7 +32729,7 @@ fn _parse_font_family_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of fontFamilyName matches",
         p.peek_span(),
-        &SYNC_25,
+        &EXPECTED_25,
     );
     return;
 }
@@ -32871,7 +32872,7 @@ fn _parse_ident__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of ident matches",
         p.peek_span(),
-        &SYNC_17,
+        &EXPECTED_17,
     );
     return;
 }
@@ -32901,7 +32902,7 @@ fn _parse_ws__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect_set(&SYNC_3);
+        p.expect_set(&SYNC_3, &EXPECTED_3);
     }
     return;
 }
@@ -33430,73 +33431,81 @@ fn _kind_set_38(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_Cdc, TK_Cdo, TK_Comment, TK_Space];
-global SYNC_1: List<i32> = [TK_Comment, TK_Space, TK_String_];
-global SYNC_2: List<i32> = [TK_Comment, TK_SemiColon, TK_Space];
-global SYNC_3: List<i32> = [TK_Comment, TK_Space];
-global SYNC_4: List<i32> = [TK_Charset];
-global SYNC_5: List<i32> = [TK_Comment, TK_Space, TK_String_, TK_Url, TK_Url_];
-global SYNC_6: List<i32> = [TK_String_, TK_Url, TK_Url_];
-global SYNC_7: List<i32> = [TK_Import];
-global SYNC_8: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_String_, TK_To, TK_Url, TK_Url_];
-global SYNC_9: List<i32> = [TK_Namespace];
-global SYNC_10: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_OpenBrace, TK_OpenParen, TK_Or, TK_Space, TK_To];
-global SYNC_11: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_OpenParen, TK_Or, TK_Space, TK_To];
-global SYNC_12: List<i32> = [TK_Comment, TK_OpenParen, TK_Space];
-global SYNC_13: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_To];
-global SYNC_14: List<i32> = [TK_Colon, TK_Comment, TK_OpenBrace, TK_Space];
-global SYNC_15: List<i32> = [TK_And, TK_CloseBrace, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_SemiColon, TK_Space, TK_To, TK_Underscore, TK_Variable];
-global SYNC_16: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Space, TK_To, TK_Underscore, TK_Variable];
-global SYNC_17: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
-global SYNC_18: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_PseudoNot, TK_Space, TK_To];
-global SYNC_19: List<i32> = [TK_Greater, TK_Plus, TK_Space, TK_Tilde];
-global SYNC_20: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Pipe, TK_To];
-global SYNC_21: List<i32> = [TK_Colon, TK_Dot, TK_Hash, TK_OpenBracket, TK_PseudoNot];
-global SYNC_22: List<i32> = [TK_And, TK_Colon, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_PseudoNot, TK_To];
-global SYNC_23: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Pipe, TK_Space, TK_To];
-global SYNC_24: List<i32> = [TK_DashMatch, TK_Equal, TK_Includes, TK_PrefixMatch, TK_SubstringMatch, TK_SuffixMatch];
-global SYNC_25: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_String_, TK_To];
-global SYNC_26: List<i32> = [TK_And, TK_Colon, TK_From, TK_Function_, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
-global SYNC_27: List<i32> = [TK_And, TK_From, TK_Function_, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
-global SYNC_28: List<i32> = [TK_And, TK_Comment, TK_Dimension, TK_From, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnknownDimension];
-global SYNC_29: List<i32> = [TK_And, TK_Dimension, TK_From, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Plus, TK_String_, TK_To, TK_UnknownDimension];
-global SYNC_30: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_Space, TK_To];
-global SYNC_31: List<i32> = [TK_And, TK_Colon, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_To];
-global SYNC_32: List<i32> = [TK_Comma, TK_Divide, TK_Equal, TK_Space];
-global SYNC_33: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_To, TK_Underscore, TK_Variable];
-global SYNC_34: List<i32> = [TK_And, TK_Colon, TK_DashMatch, TK_Dimension, TK_Dot, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
-global SYNC_35: List<i32> = [TK_And, TK_Calc, TK_Comment, TK_Dimension, TK_DxImageTransform, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Var];
-global SYNC_36: List<i32> = [TK_And, TK_AtKeyword, TK_Colon, TK_Comment, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
-global SYNC_37: List<i32> = [TK_And, TK_AtKeyword, TK_Colon, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
-global SYNC_38: List<i32> = [TK_And, TK_Calc, TK_Dimension, TK_DxImageTransform, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Var];
-global SYNC_39: List<i32> = [TK_And, TK_Colon, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
-global SYNC_40: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_SemiColon, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
-global SYNC_41: List<i32> = [TK_OpenBrace, TK_SemiColon];
-global SYNC_42: List<i32> = [TK_AtKeyword, TK_Cdc, TK_Cdo, TK_OpenBrace, TK_SemiColon];
-global SYNC_43: List<i32> = [TK_And, TK_AtKeyword, TK_CloseBrace, TK_Colon, TK_Comment, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_SemiColon, TK_Space, TK_String_, TK_Supports, TK_To, TK_Underscore, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Variable, TK_Viewport];
-global SYNC_44: List<i32> = [TK_And, TK_AtKeyword, TK_Colon, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Viewport];
-global SYNC_45: List<i32> = [TK_And, TK_AtKeyword, TK_CloseBrace, TK_Colon, TK_Comment, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_Space, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Viewport];
-global SYNC_46: List<i32> = [TK_Comment, TK_Function_, TK_Not, TK_OpenParen, TK_Space];
-global SYNC_47: List<i32> = [TK_Function_, TK_Not, TK_OpenParen];
-global SYNC_48: List<i32> = [TK_Function_, TK_OpenParen];
-global SYNC_49: List<i32> = [TK_Comment, TK_Function_, TK_OpenParen, TK_Space];
-global SYNC_50: List<i32> = [TK_And, TK_Comment, TK_Space];
-global SYNC_51: List<i32> = [TK_Comment, TK_Or, TK_Space];
-global SYNC_52: List<i32> = [TK_CloseParen, TK_Comment, TK_Space];
-global SYNC_53: List<i32> = [TK_Url, TK_Url_];
-global SYNC_54: List<i32> = [TK_Comment, TK_Space, TK_Variable];
-global SYNC_55: List<i32> = [TK_Comment, TK_Dimension, TK_Minus, TK_Number, TK_OpenParen, TK_Percentage, TK_Plus, TK_Space, TK_UnknownDimension];
-global SYNC_56: List<i32> = [TK_Comment, TK_Minus, TK_Plus, TK_Space];
-global SYNC_57: List<i32> = [TK_Minus, TK_Plus];
-global SYNC_58: List<i32> = [TK_Comment, TK_Minus, TK_Number, TK_Plus, TK_Space];
-global SYNC_59: List<i32> = [TK_Dimension, TK_Minus, TK_Number, TK_OpenParen, TK_Percentage, TK_Plus, TK_UnknownDimension];
-global SYNC_60: List<i32> = [TK_Comment, TK_OpenBrace, TK_Space];
-global SYNC_61: List<i32> = [TK_CloseBrace, TK_Comment, TK_From, TK_Percentage, TK_Space, TK_To];
-global SYNC_62: List<i32> = [TK_From, TK_Percentage, TK_To];
-global SYNC_63: List<i32> = [TK_Comment, TK_From, TK_Percentage, TK_Space, TK_To];
-global SYNC_64: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_String_, TK_To];
-global SYNC_65: List<i32> = [TK_AtKeyword, TK_CloseBrace, TK_Comment, TK_Space];
-global SYNC_66: List<i32> = [TK_And, TK_CloseBrace, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_SemiColon, TK_Space, TK_To];
+global SYNC_0: List<i32> = [475136];
+global EXPECTED_0: List<i32> = [TK_Cdc, TK_Cdo, TK_Comment, TK_Space];
+global SYNC_1: List<i32> = [81920, 2048];
+global SYNC_2: List<i32> = [81984];
+global SYNC_3: List<i32> = [81920];
+global EXPECTED_3: List<i32> = [TK_Comment, TK_Space];
+global EXPECTED_4: List<i32> = [TK_Charset];
+global SYNC_5: List<i32> = [536985600, 2048];
+global EXPECTED_6: List<i32> = [TK_String_, TK_Url, TK_Url_];
+global EXPECTED_7: List<i32> = [TK_Import];
+global SYNC_8: List<i32> = [-1610498048, 538576899];
+global EXPECTED_9: List<i32> = [TK_Namespace];
+global SYNC_10: List<i32> = [-2147401708, 538574851];
+global SYNC_11: List<i32> = [-2147401724, 538574851];
+global EXPECTED_11: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_OpenParen, TK_Or, TK_Space, TK_To];
+global SYNC_12: List<i32> = [81924];
+global SYNC_13: List<i32> = [-2147401728, 538574851];
+global SYNC_14: List<i32> = [82192];
+global SYNC_15: List<i32> = [-2147392416, 672792579];
+global SYNC_16: List<i32> = [-2147392512, 672792579];
+global SYNC_17: List<i32> = [i32::MIN, 538574851];
+global EXPECTED_17: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
+global SYNC_18: List<i32> = [-2145298687, 538575363];
+global EXPECTED_19: List<i32> = [TK_Greater, TK_Plus, TK_Space, TK_Tilde];
+global EXPECTED_20: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Pipe, TK_To];
+global EXPECTED_21: List<i32> = [TK_Colon, TK_Dot, TK_Hash, TK_OpenBracket, TK_PseudoNot];
+global EXPECTED_22: List<i32> = [TK_And, TK_Colon, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_PseudoNot, TK_To];
+global SYNC_23: List<i32> = [-2147396608, 538574851];
+global SYNC_24: List<i32> = [1572992, 28672];
+global EXPECTED_24: List<i32> = [TK_DashMatch, TK_Equal, TK_Includes, TK_PrefixMatch, TK_SubstringMatch, TK_SuffixMatch];
+global EXPECTED_25: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_String_, TK_To];
+global SYNC_26: List<i32> = [-2147483392, 1612316675];
+global EXPECTED_27: List<i32> = [TK_And, TK_From, TK_Function_, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
+global SYNC_28: List<i32> = [-2147401728, 538577983];
+global EXPECTED_29: List<i32> = [TK_And, TK_Dimension, TK_From, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Plus, TK_String_, TK_To, TK_UnknownDimension];
+global SYNC_30: List<i32> = [-2145298687, 538574851];
+global EXPECTED_31: List<i32> = [TK_And, TK_Colon, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_To];
+global EXPECTED_32: List<i32> = [TK_Comma, TK_Divide, TK_Equal, TK_Space];
+global EXPECTED_33: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_To, TK_Underscore, TK_Variable];
+global EXPECTED_34: List<i32> = [TK_And, TK_Colon, TK_DashMatch, TK_Dimension, TK_Dot, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
+global SYNC_35: List<i32> = [-266223616, 1916406847];
+global SYNC_36: List<i32> = [-264650475, 1679428671];
+global EXPECTED_37: List<i32> = [TK_And, TK_AtKeyword, TK_Colon, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
+global EXPECTED_38: List<i32> = [TK_And, TK_Calc, TK_Dimension, TK_DxImageTransform, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Var];
+global EXPECTED_39: List<i32> = [TK_And, TK_Colon, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
+global SYNC_40: List<i32> = [-264650411, 1612319807];
+global EXPECTED_41: List<i32> = [TK_OpenBrace, TK_SemiColon];
+global EXPECTED_42: List<i32> = [TK_AtKeyword, TK_Cdc, TK_Cdo, TK_OpenBrace, TK_SemiColon];
+global SYNC_43: List<i32> = [-239470731, 1843367487];
+global EXPECTED_44: List<i32> = [TK_And, TK_AtKeyword, TK_Colon, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Viewport];
+global SYNC_45: List<i32> = [-239478987, 1709149759];
+global SYNC_46: List<i32> = [81924, 1073741825];
+global EXPECTED_47: List<i32> = [TK_Function_, TK_Not, TK_OpenParen];
+global SYNC_48: List<i32> = [4, 1073741824];
+global EXPECTED_48: List<i32> = [TK_Function_, TK_OpenParen];
+global SYNC_49: List<i32> = [81924, 1073741824];
+global SYNC_50: List<i32> = [81920, 2];
+global SYNC_51: List<i32> = [81920, 131072];
+global SYNC_52: List<i32> = [81928];
+global EXPECTED_53: List<i32> = [TK_Url, TK_Url_];
+global SYNC_54: List<i32> = [81920, 134217728];
+global SYNC_55: List<i32> = [268517380, 1084];
+global SYNC_56: List<i32> = [81920, 48];
+global SYNC_57: List<i32> = [0, 48];
+global EXPECTED_57: List<i32> = [TK_Minus, TK_Plus];
+global SYNC_58: List<i32> = [81920, 1072];
+global EXPECTED_59: List<i32> = [TK_Dimension, TK_Minus, TK_Number, TK_OpenParen, TK_Percentage, TK_Plus, TK_UnknownDimension];
+global SYNC_60: List<i32> = [81936];
+global SYNC_61: List<i32> = [268517408, 1572864];
+global SYNC_62: List<i32> = [268435456, 1572864];
+global EXPECTED_62: List<i32> = [TK_From, TK_Percentage, TK_To];
+global SYNC_63: List<i32> = [268517376, 1572864];
+global SYNC_64: List<i32> = [-2147401728, 538576899];
+global SYNC_65: List<i32> = [81952, 67108864];
+global SYNC_66: List<i32> = [-2147401632, 538574851];
 
 global FOLLOW_SETS: List<List<i32>> = [[0, 2048], [64], [536903680, 2048], [16], [-2147401724, 538574851], [i32::MIN, 538574851], [4], [-266305536, 1916406847], [8], [-2145380607, 538575363], [1024], [i32::MIN, 538576899], [2], [i32::MIN, 538577983], [-2145380607, 538574851], [32], [256], [-264732395, 1679428671], [4, 1073741825], [65536], [4, 1073741824], [81920], [0, 2], [0, 131072], [-2147474432, 672792579], [0, 134217728], [268435460, 1084], [0, 48], [0, 1072], [268435456, 1572864], [0, 128]];
 global FOLLOW_MASK_0: i64 = 1;

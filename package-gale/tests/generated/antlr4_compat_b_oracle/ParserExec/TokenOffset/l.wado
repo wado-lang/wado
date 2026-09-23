@@ -1904,8 +1904,9 @@ impl Parser {
     }
 
     fn in_set(&self, k: i32, set: &List<i32>) -> bool {
-        for let x of set { if *x == k { return true; } }
-        return false;
+        let w = k >> 5;
+        if w >= set.len() { return false; }
+        return set[w] >> (k & 31) & 1 == 1;
     }
 
     fn report_extra(&mut self, kind: i32) {
@@ -2055,7 +2056,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: &List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &List<i32>, expected: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if self.in_set(k, included) {
@@ -2067,7 +2068,7 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        self.fail_on_token("got", included, DiagnosticCode::UnexpectedToken);
+        self.fail_on_token("got", expected, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 }
@@ -2091,11 +2092,11 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
             if rep_scan_pos < 0 { break; }
         }
         if _plus_first && !((p.peek_kind() == TK_LIT_1) || (p.peek_kind() == TK_LIT_2) || (p.peek_kind() == TK_LIT_3) || (p.peek_kind() == TK_LIT_4) || (p.peek_kind() == TK_LIT_5) || (p.peek_kind() == TK_LIT_6) || (p.peek_kind() == TK_LIT_7) || (p.peek_kind() == TK_LIT_8) || (p.peek_kind() == TK_LIT_9) || (p.peek_kind() == TK_LIT_10) || (p.peek_kind() == TK_LIT_11) || (p.peek_kind() == TK_LIT_12) || (p.peek_kind() == TK_LIT_13) || (p.peek_kind() == TK_LIT_14) || (p.peek_kind() == TK_LIT_15) || (p.peek_kind() == TK_LIT_16) || (p.peek_kind() == TK_LIT_17) || (p.peek_kind() == TK_LIT_18) || (p.peek_kind() == TK_LIT_19) || (p.peek_kind() == TK_LIT_20) || (p.peek_kind() == TK_LIT_21) || (p.peek_kind() == TK_LIT_22) || (p.peek_kind() == TK_LIT_23) || (p.peek_kind() == TK_LIT_24) || (p.peek_kind() == TK_LIT_25) || (p.peek_kind() == TK_LIT_26) || (p.peek_kind() == TK_LIT_27) || (p.peek_kind() == TK_LIT_28) || (p.peek_kind() == TK_LIT_29) || (p.peek_kind() == TK_LIT_30) || (p.peek_kind() == TK_LIT_31) || (p.peek_kind() == TK_LIT_32) || (p.peek_kind() == TK_LIT_33) || (p.peek_kind() == TK_LIT_34) || (p.peek_kind() == TK_LIT_35) || (p.peek_kind() == TK_LIT_36) || (p.peek_kind() == TK_LIT_37) || (p.peek_kind() == TK_LIT_38) || (p.peek_kind() == TK_LIT_39) || (p.peek_kind() == TK_LIT_40) || (p.peek_kind() == TK_LIT_41) || (p.peek_kind() == TK_LIT_42) || (p.peek_kind() == TK_LIT_43) || (p.peek_kind() == TK_LIT_44) || (p.peek_kind() == TK_LIT_45) || (p.peek_kind() == TK_LIT_46) || (p.peek_kind() == TK_LIT_47) || (p.peek_kind() == TK_LIT_48) || (p.peek_kind() == TK_LIT_49) || (p.peek_kind() == TK_LIT_50) || (p.peek_kind() == TK_LIT_51) || (p.peek_kind() == TK_LIT_52) || (p.peek_kind() == TK_LIT_53) || (p.peek_kind() == TK_LIT_54) || (p.peek_kind() == TK_LIT_55) || (p.peek_kind() == TK_LIT_56) || (p.peek_kind() == TK_LIT_57) || (p.peek_kind() == TK_LIT_58) || (p.peek_kind() == TK_LIT_59) || (p.peek_kind() == TK_LIT_60) || (p.peek_kind() == TK_LIT_61) || (p.peek_kind() == TK_LIT_62) || (p.peek_kind() == TK_LIT_63) || (p.peek_kind() == TK_LIT_64) || (p.peek_kind() == TK_LIT_65) || (p.peek_kind() == TK_LIT_66)) {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
             break;
         }
         _plus_first = false;
-        p.expect_set(&SYNC_0);
+        p.expect_set(&SYNC_0, &EXPECTED_0);
     }
     if !p.speculating {
         p.emit(`${p.rule_text(_rule_start_tok)}\n`);
@@ -2173,7 +2174,8 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_1, TK_LIT_10, TK_LIT_11, TK_LIT_12, TK_LIT_13, TK_LIT_14, TK_LIT_15, TK_LIT_16, TK_LIT_17, TK_LIT_18, TK_LIT_19, TK_LIT_2, TK_LIT_20, TK_LIT_21, TK_LIT_22, TK_LIT_23, TK_LIT_24, TK_LIT_25, TK_LIT_26, TK_LIT_27, TK_LIT_28, TK_LIT_29, TK_LIT_3, TK_LIT_30, TK_LIT_31, TK_LIT_32, TK_LIT_33, TK_LIT_34, TK_LIT_35, TK_LIT_36, TK_LIT_37, TK_LIT_38, TK_LIT_39, TK_LIT_4, TK_LIT_40, TK_LIT_41, TK_LIT_42, TK_LIT_43, TK_LIT_44, TK_LIT_45, TK_LIT_46, TK_LIT_47, TK_LIT_48, TK_LIT_49, TK_LIT_5, TK_LIT_50, TK_LIT_51, TK_LIT_52, TK_LIT_53, TK_LIT_54, TK_LIT_55, TK_LIT_56, TK_LIT_57, TK_LIT_58, TK_LIT_59, TK_LIT_6, TK_LIT_60, TK_LIT_61, TK_LIT_62, TK_LIT_63, TK_LIT_64, TK_LIT_65, TK_LIT_66, TK_LIT_7, TK_LIT_8, TK_LIT_9];
+global SYNC_0: List<i32> = [-8, -1, 31];
+global EXPECTED_0: List<i32> = [TK_LIT_1, TK_LIT_10, TK_LIT_11, TK_LIT_12, TK_LIT_13, TK_LIT_14, TK_LIT_15, TK_LIT_16, TK_LIT_17, TK_LIT_18, TK_LIT_19, TK_LIT_2, TK_LIT_20, TK_LIT_21, TK_LIT_22, TK_LIT_23, TK_LIT_24, TK_LIT_25, TK_LIT_26, TK_LIT_27, TK_LIT_28, TK_LIT_29, TK_LIT_3, TK_LIT_30, TK_LIT_31, TK_LIT_32, TK_LIT_33, TK_LIT_34, TK_LIT_35, TK_LIT_36, TK_LIT_37, TK_LIT_38, TK_LIT_39, TK_LIT_4, TK_LIT_40, TK_LIT_41, TK_LIT_42, TK_LIT_43, TK_LIT_44, TK_LIT_45, TK_LIT_46, TK_LIT_47, TK_LIT_48, TK_LIT_49, TK_LIT_5, TK_LIT_50, TK_LIT_51, TK_LIT_52, TK_LIT_53, TK_LIT_54, TK_LIT_55, TK_LIT_56, TK_LIT_57, TK_LIT_58, TK_LIT_59, TK_LIT_6, TK_LIT_60, TK_LIT_61, TK_LIT_62, TK_LIT_63, TK_LIT_64, TK_LIT_65, TK_LIT_66, TK_LIT_7, TK_LIT_8, TK_LIT_9];
 
 global FOLLOW_SETS: List<List<i32>> = [];
 

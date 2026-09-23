@@ -1122,8 +1122,9 @@ impl Parser {
     }
 
     fn in_set(&self, k: i32, set: &List<i32>) -> bool {
-        for let x of set { if *x == k { return true; } }
-        return false;
+        let w = k >> 5;
+        if w >= set.len() { return false; }
+        return set[w] >> (k & 31) & 1 == 1;
     }
 
     fn report_extra(&mut self, kind: i32) {
@@ -1273,7 +1274,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: &List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &List<i32>, expected: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if self.in_set(k, included) {
@@ -1285,13 +1286,13 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        self.fail_on_token("got", included, DiagnosticCode::UnexpectedToken);
+        self.fail_on_token("got", expected, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 }
 
 fn _parse_a__inner(p: &mut Parser) -> () {
-    let t = p.expect_set(&SYNC_0);
+    let t = p.expect_set(&SYNC_0, &EXPECTED_0);
     if !p.speculating {
         p.emit(`${p.token_text(t)}\n`);
     }
@@ -1364,5 +1365,6 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_x, TK_LIT_y];
+global SYNC_0: List<i32> = [12];
+global EXPECTED_0: List<i32> = [TK_LIT_x, TK_LIT_y];
 

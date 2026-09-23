@@ -1121,8 +1121,9 @@ impl Parser {
     }
 
     fn in_set(&self, k: i32, set: &List<i32>) -> bool {
-        for let x of set { if *x == k { return true; } }
-        return false;
+        let w = k >> 5;
+        if w >= set.len() { return false; }
+        return set[w] >> (k & 31) & 1 == 1;
     }
 
     fn report_extra(&mut self, kind: i32) {
@@ -1272,7 +1273,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: &List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &List<i32>, expected: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if self.in_set(k, included) {
@@ -1284,7 +1285,7 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        self.fail_on_token("got", included, DiagnosticCode::UnexpectedToken);
+        self.fail_on_token("got", expected, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 }
@@ -1405,7 +1406,7 @@ fn _parse_item__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of item matches",
         p.peek_span(),
-        &SYNC_0,
+        &EXPECTED_0,
     );
     return;
 }
@@ -1450,7 +1451,7 @@ fn _parse_primary__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of primary matches",
         p.peek_span(),
-        &SYNC_0,
+        &EXPECTED_0,
     );
     return;
 }
@@ -1474,7 +1475,7 @@ fn _parse_closure__inner(p: &mut Parser) -> () {
         p.expect(TK_PIPE, &SYNC_1);
         p.expect(TK_PIPE, &EMPTY_SYNC);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_2);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_2);
     }
     _parse_expr(p);
     return;
@@ -1568,7 +1569,7 @@ fn _kind_set_1(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_INT, TK_PIPE, TK_PIPEPIPE];
-global SYNC_1: List<i32> = [TK_PIPE];
-global SYNC_2: List<i32> = [TK_PIPE, TK_PIPEPIPE];
+global EXPECTED_0: List<i32> = [TK_INT, TK_PIPE, TK_PIPEPIPE];
+global SYNC_1: List<i32> = [4];
+global EXPECTED_2: List<i32> = [TK_PIPE, TK_PIPEPIPE];
 

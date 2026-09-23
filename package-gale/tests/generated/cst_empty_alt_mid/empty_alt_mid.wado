@@ -1091,8 +1091,9 @@ impl Parser {
     }
 
     fn in_set(&self, k: i32, set: &List<i32>) -> bool {
-        for let x of set { if *x == k { return true; } }
-        return false;
+        let w = k >> 5;
+        if w >= set.len() { return false; }
+        return set[w] >> (k & 31) & 1 == 1;
     }
 
     fn report_extra(&mut self, kind: i32) {
@@ -1242,7 +1243,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: &List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &List<i32>, expected: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if self.in_set(k, included) {
@@ -1254,7 +1255,7 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        self.fail_on_token("got", included, DiagnosticCode::UnexpectedToken);
+        self.fail_on_token("got", expected, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 }
@@ -1270,7 +1271,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         } else if grp_kind == TK_B {
             p.expect(TK_B, &EMPTY_SYNC);
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
         }
         p.expect(TK_EOF, &EMPTY_SYNC);
         return;
@@ -1316,7 +1317,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
             } else {
             }
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
         }
         _parse_x(p);
         p.expect(TK_EOF, &EMPTY_SYNC);
@@ -1325,7 +1326,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of s matches",
         p.peek_span(),
-        &SYNC_1,
+        &EXPECTED_1,
     );
     return;
 }
@@ -1357,7 +1358,7 @@ fn _parse_x__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of x matches",
         p.peek_span(),
-        &SYNC_2,
+        &EXPECTED_2,
     );
     return;
 }
@@ -1434,7 +1435,7 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_A, TK_B, TK_EOF];
-global SYNC_1: List<i32> = [TK_LIT_k, TK_LIT_m];
-global SYNC_2: List<i32> = [TK_A, TK_B];
+global EXPECTED_0: List<i32> = [TK_A, TK_B, TK_EOF];
+global EXPECTED_1: List<i32> = [TK_LIT_k, TK_LIT_m];
+global EXPECTED_2: List<i32> = [TK_A, TK_B];
 

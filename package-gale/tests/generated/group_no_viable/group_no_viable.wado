@@ -1165,8 +1165,9 @@ impl Parser {
     }
 
     fn in_set(&self, k: i32, set: &List<i32>) -> bool {
-        for let x of set { if *x == k { return true; } }
-        return false;
+        let w = k >> 5;
+        if w >= set.len() { return false; }
+        return set[w] >> (k & 31) & 1 == 1;
     }
 
     fn report_extra(&mut self, kind: i32) {
@@ -1316,7 +1317,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: &List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &List<i32>, expected: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if self.in_set(k, included) {
@@ -1328,7 +1329,7 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        self.fail_on_token("got", included, DiagnosticCode::UnexpectedToken);
+        self.fail_on_token("got", expected, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 }
@@ -1343,7 +1344,7 @@ fn _parse_tok__inner(p: &mut Parser) -> () {
     } else if grp_kind == TK_B {
         p.expect(TK_B, &EMPTY_SYNC);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
     }
     p.expect(TK_C, &SYNC_1);
     p.expect(TK_EOF, &EMPTY_SYNC);
@@ -1371,7 +1372,7 @@ fn _parse_gated__inner(p: &mut Parser) -> () {
     } else if grp_kind == TK_B {
         p.expect(TK_B, &EMPTY_SYNC);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
     }
     p.expect(TK_A, &SYNC_1);
     p.expect(TK_EOF, &EMPTY_SYNC);
@@ -1435,7 +1436,7 @@ fn _parse_plus_gated__inner(p: &mut Parser) -> () {
             }
         }
         if gd_winner < 0 {
-            if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &SYNC_0); }
+            if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0); }
             break;
         }
         _plus_first = false;
@@ -1565,7 +1566,7 @@ fn _parse_plus_scan__inner(p: &mut Parser) -> () {
         }
         if !_plus_first && gd_best <= p.pos { break; }
         if gd_winner < 0 {
-            if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &SYNC_3); }
+            if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_3); }
             break;
         }
         _plus_first = false;
@@ -1600,7 +1601,7 @@ fn _parse_refs__inner(p: &mut Parser) -> () {
     } else if grp_kind == TK_B {
         _parse_rb(p);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
     }
     p.expect(TK_C, &SYNC_1);
     p.expect(TK_EOF, &EMPTY_SYNC);
@@ -1749,9 +1750,9 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_A, TK_B];
-global SYNC_1: List<i32> = [TK_EOF];
-global SYNC_2: List<i32> = [TK_B];
-global SYNC_3: List<i32> = [TK_A];
-global SYNC_4: List<i32> = [TK_C];
+global EXPECTED_0: List<i32> = [TK_A, TK_B];
+global SYNC_1: List<i32> = [16];
+global SYNC_2: List<i32> = [2];
+global EXPECTED_3: List<i32> = [TK_A];
+global SYNC_4: List<i32> = [4];
 

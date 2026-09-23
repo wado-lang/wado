@@ -1257,8 +1257,9 @@ impl Parser {
     }
 
     fn in_set(&self, k: i32, set: &List<i32>) -> bool {
-        for let x of set { if *x == k { return true; } }
-        return false;
+        let w = k >> 5;
+        if w >= set.len() { return false; }
+        return set[w] >> (k & 31) & 1 == 1;
     }
 
     fn report_extra(&mut self, kind: i32) {
@@ -1408,7 +1409,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: &List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &List<i32>, expected: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if self.in_set(k, included) {
@@ -1420,7 +1421,7 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        self.fail_on_token("got", included, DiagnosticCode::UnexpectedToken);
+        self.fail_on_token("got", expected, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 }
@@ -1602,7 +1603,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
         } else if grp_kind == TK_IF {
             p.expect(TK_IF, &EMPTY_SYNC);
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
         }
         return vals;
     }
@@ -1629,7 +1630,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
     p.no_viable(
         "no alternative of continue matches",
         p.peek_span(),
-        &SYNC_1,
+        &EXPECTED_1,
     );
     return vals;
 }
@@ -1788,8 +1789,8 @@ fn _kind_set_1(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_FOR, TK_IF];
-global SYNC_1: List<i32> = [TK_BREAK, TK_FOR, TK_IF];
+global EXPECTED_0: List<i32> = [TK_FOR, TK_IF];
+global EXPECTED_1: List<i32> = [TK_BREAK, TK_FOR, TK_IF];
 
 global FOLLOW_SETS: List<List<i32>> = [];
 
