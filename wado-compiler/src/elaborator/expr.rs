@@ -2434,8 +2434,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let mut branches = [then_type, else_type];
         self.settle_branch_holes(&mut branches, None);
-        let [then_type, else_type] = branches;
-        (then_type, else_type)
+        branches.into()
     }
 
     /// Give a numeric-literal branch tail the type a sibling branch fixed, as
@@ -2598,11 +2597,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let target = expected_type
             .filter(|&t| t != TypeTable::UNKNOWN)
             .or_else(|| {
-                branches.iter().copied().find(|&t| {
-                    t != TypeTable::NEVER
-                        && !self.type_has_infer_hole(t)
-                        && !self.tysys.type_table.borrow().is_indefinite(t)
-                })
+                branches
+                    .iter()
+                    .copied()
+                    .find(|&t| t != TypeTable::NEVER && !self.is_undecided_branch(t))
             });
         if let Some(target) = target {
             for &branch in &*branches {
