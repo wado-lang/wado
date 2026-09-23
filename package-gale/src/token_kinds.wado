@@ -26,6 +26,8 @@ pub struct TokenKinds {
     /// `names[id]` is the `TK_*` name of kind `id`.
     pub names: List<String>,
     by_name: TreeMap<String, i32>,
+    /// A literal's text to the `TK_LIT_*` name the lexer declares for it.
+    lit_names: TreeMap<String, String>,
 }
 
 impl TokenKinds {
@@ -34,7 +36,11 @@ impl TokenKinds {
     /// `resolve_kind_ids`); `intern` then assigns ids lazily. Production uses
     /// [`build`] so ids match the emitted `TK_*` values.
     pub fn empty() -> TokenKinds {
-        return TokenKinds { names: [], by_name: TreeMap::<String, i32>::new() };
+        return TokenKinds {
+            names: [],
+            by_name: TreeMap::<String, i32>::new(),
+            lit_names: TreeMap::<String, String>::new(),
+        };
     }
 
     /// Fallback id assignment for a name not already present — only reached for
@@ -64,6 +70,10 @@ impl TokenKinds {
         let slots = token_slot_order(&grammar.lexer_rules, &lit_tokens);
         let mut names: List<String> = [];
         let mut by_name = TreeMap::<String, i32>::new();
+        let mut lit_names = TreeMap::<String, String>::new();
+        for let lit of &lit_tokens {
+            lit_names[lit.text] = lit.const_name;
+        }
         for let mut idx = 0; idx < slots.len(); idx += 1 {
             let name = match slots[idx] {
                 Rule(ri) => `TK_${grammar.lexer_rules[ri].name}`,
@@ -74,7 +84,7 @@ impl TokenKinds {
             by_name[name] = idx;
             names.push(name);
         }
-        return TokenKinds { names, by_name };
+        return TokenKinds { names, by_name, lit_names };
     }
 
     /// Kind id for a `TK_*` name, or -1 if the name is not a token kind.
@@ -151,35 +161,31 @@ pub fn append_ids(result: &mut List<i32>, seen: &mut List<u64>, src: &List<i32>)
 /// Runs on the `generate()` path after `token_slot_order`'s inputs are final;
 /// pure rebuild (mirrors `ir::stamp_element`).
 pub fn resolve_kind_ids(grammar: &mut Grammar, kinds: &TokenKinds) {
-    let mut lit_names = TreeMap::<String, String>::new();
-    for let lit of collect_literal_tokens(&grammar.parser_rules) {
-        lit_names[lit.text] = lit.const_name;
-    }
     for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
-        grammar.parser_rules[ri].alternatives = resolve_alts(&grammar.parser_rules[ri].alternatives, kinds, &lit_names);
+        grammar.parser_rules[ri].alternatives = resolve_alts(&grammar.parser_rules[ri].alternatives, kinds);
     }
 }
 
-fn resolve_alts(alts: &List<Alternative>, kinds: &TokenKinds, lit_names: &TreeMap<String, String>) -> List<Alternative> {
-    return alts.iter_ref().map(|a: &Alternative| Alternative { ..*a, elements: resolve_elements(&a.elements, kinds, lit_names) }).collect(
+fn resolve_alts(alts: &List<Alternative>, kinds: &TokenKinds) -> List<Alternative> {
+    return alts.iter_ref().map(|a: &Alternative| Alternative { ..*a, elements: resolve_elements(&a.elements, kinds) }).collect(
     );
 }
 
-fn resolve_elements(elements: &List<Element>, kinds: &TokenKinds, lit_names: &TreeMap<String, String>) -> List<Element> {
-    return elements.iter_ref().map(|e: &Element| resolve_element(e, kinds, lit_names)).collect();
+fn resolve_elements(elements: &List<Element>, kinds: &TokenKinds) -> List<Element> {
+    return elements.iter_ref().map(|e: &Element| resolve_element(e, kinds)).collect();
 }
 
-fn resolve_element(elem: &Element, kinds: &TokenKinds, lit_names: &TreeMap<String, String>) -> Element {
+fn resolve_element(elem: &Element, kinds: &TokenKinds) -> Element {
     return match *elem {
         TokenRef(t) => Element::TokenRef(TokenRefElement { ..t, kind_id: kinds.id_of(`TK_${t.name}`) }),
         Literal(l) => {
-            let const_name = lit_names[l.text];
-            Element::Literal(LiteralElement { ..l, const_name, kind_id: kinds.id_of(&const_name) })
+            let const_name = kinds.lit_names[l.text];
+            Element::Literal(LiteralElement { ..l, const_name, kind_id: kinds.id_of(&const_name) });
         },
-        Repeat(rep) => Element::Repeat(RepeatElement { ..rep, element: resolve_element(&rep.element, kinds, lit_names) }),
-        Group(g) => Element::Group(GroupElement { ..g, alternatives: resolve_alts(&g.alternatives, kinds, lit_names) }),
-        Label(lab) => Element::Label(LabelElement { ..lab, element: resolve_element(&lab.element, kinds, lit_names) }),
-        Not(n) => Element::Not(NotElement { ..n, element: resolve_element(&n.element, kinds, lit_names) }),
+        Repeat(rep) => Element::Repeat(RepeatElement { ..rep, element: resolve_element(&rep.element, kinds) }),
+        Group(g) => Element::Group(GroupElement { ..g, alternatives: resolve_alts(&g.alternatives, kinds) }),
+        Label(lab) => Element::Label(LabelElement { ..lab, element: resolve_element(&lab.element, kinds) }),
+        Not(n) => Element::Not(NotElement { ..n, element: resolve_element(&n.element, kinds) }),
         _ => *elem,
     };
 }

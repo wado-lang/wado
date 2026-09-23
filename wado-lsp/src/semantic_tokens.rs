@@ -556,10 +556,8 @@ fn classify_token(
         Some(category) => classify_keyword(category),
 
         None => match &token.kind {
-            // `self` and `Self` are the contextual keywords the language
-            // reserves — `Wado.g4`'s `identifier` rule accepts every other one
-            // as a name — so they need no AST position to be recognised. Without
-            // this they colour as the binding and the type they resolve to.
+            // The only contextual keywords never read as names, so no AST
+            // position is needed; otherwise they colour as what they resolve to.
             TokenKind::Ident(name) if name == "self" => CONSTANT,
             TokenKind::Ident(name) if name == "Self" => KEYWORD,
 

@@ -139,6 +139,8 @@ pub fn char_hex_name(c: char) -> String {
     return result;
 }
 
+/// A literal's base `TK_LIT_*` name. It folds case, so it is not unique:
+/// `collect_literal_tokens` suffixes the collisions.
 pub fn literal_const_name<S: AsStrSlice>(text: S) -> String {
     let mut result = String::with_capacity(text.len() + 8);
     result.push_str("TK_LIT_");
@@ -150,9 +152,6 @@ pub fn literal_const_name<S: AsStrSlice>(text: S) -> String {
         } else if let Some(names) = symbol_char_names(c) {
             result.push_str(&names.1);
         } else {
-            // Unknown character: encode the Unicode scalar as hex so distinct
-            // characters never collapse to the same name (e.g. `?`, `@`, `#`
-            // all used to degenerate to a single `_`).
             result.push_str("U");
             result.push_str(&char_hex_name(c));
         }
