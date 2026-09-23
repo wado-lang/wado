@@ -388,6 +388,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
         // must get there first — a `select` is past the reach of
         // `try_eliminate_const_if`.
         changed |= rewrite_everywhere(instrs, &mut |instr| try_select_pure_if(instr, null));
+        changed |= rewrite_everywhere(instrs, &mut |instr| try_fold_boolean_select(instr, null));
         changed |= fuse_local_tees(instrs);
         if !changed {
             break;
@@ -820,6 +821,41 @@ fn try_select_pure_if(instr: &mut WirInstr, null: &Nullability) -> bool {
     true
 }
 
+/// Fold a `select` over 0/1 values into the connective it computes:
+/// `select(c, x, 0)` is `c & x`, `select(c, 1, x)` is `c | x`. Cranelift lowers
+/// a `select` to a conditional move and the bitwise form to one instruction.
+/// The connective evaluates `x` after `c` where the `select` evaluated it
+/// before, so `x` must be observation-free and unable to trap.
+fn try_fold_boolean_select(instr: &mut WirInstr, null: &Nullability) -> bool {
+    let WirInstr::Select {
+        condition,
+        if_true,
+        if_false,
+        ty: Some(WirType::I32),
+    } = instr
+    else {
+        return false;
+    };
+    let (build, other): (fn(Box<WirInstr>, Box<WirInstr>) -> WirInstr, &WirInstr) =
+        match (if_true.as_ref(), if_false.as_ref()) {
+            (x, WirInstr::I32Const(0)) => (WirInstr::I32And, x),
+            (WirInstr::I32Const(1), x) => (WirInstr::I32Or, x),
+            _ => return false,
+        };
+    if !is_boolean_valued(condition.peel_hint())
+        || !is_boolean_valued(other)
+        || !is_side_effect_free(other)
+        || may_trap_in(other, null)
+    {
+        return false;
+    }
+    let other = Box::new(other.clone());
+    let mut cond = std::mem::replace(condition, Box::new(WirInstr::Nop));
+    cond.take_branch_hint();
+    *instr = build(cond, other);
+    true
+}
+
 /// Returns the upper bound (exclusive) of values this instruction can produce,
 /// when that bound is a power of two. Used to drop redundant bitmasks that do
 /// not change the value.
@@ -1082,6 +1118,9 @@ fn writes_local(instr: &WirInstr, target_name: &str) -> bool {
 
 /// Returns true if the instruction is guaranteed to produce 0 or 1.
 fn is_boolean_valued(instr: &WirInstr) -> bool {
+    if let WirInstr::I32And(l, r) | WirInstr::I32Or(l, r) | WirInstr::I32Xor(l, r) = instr {
+        return is_boolean_valued(l) && is_boolean_valued(r);
+    }
     matches!(
         instr,
         // Integer comparisons
@@ -1118,6 +1157,7 @@ fn is_boolean_valued(instr: &WirInstr) -> bool {
             | WirInstr::F64Gt(..)
             | WirInstr::F64Le(..)
             | WirInstr::F64Ge(..)
+            | WirInstr::I32Const(0 | 1)
             // Eqz / null checks
             | WirInstr::I32Eqz(..)
             | WirInstr::I64Eqz(..)
