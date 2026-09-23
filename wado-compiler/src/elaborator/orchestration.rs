@@ -22,6 +22,7 @@ use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable, positional_substitu
 use crate::world_registry::WorldRegistry;
 
 use super::Elaborator;
+use super::method_lookup::ImplParamSlots;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ParamList, ParamSlot,
     RealTypeParams, ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData,
@@ -1063,26 +1064,74 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // An `impl` method whose parameter list differs from the trait's is
-        // never rejected downstream: the call is built to the trait's shape and
-        // only fails Wasm validation. Compare the two here, where every
-        // declaration and impl is in hand. The receiver counts as much as the
-        // rest, since no call site writes one the trait did not declare.
+        // Nothing downstream rejects an impl that disagrees with its trait: an
+        // unbound associated type reaches codegen unsubstituted, a wrong arity
+        // only fails Wasm validation.
         //
-        // The impl's trait is the one its header resolved to, so a module
-        // implementing its own `Encode` is never checked against another
-        // module's declaration of that name.
+        // The trait is the one the impl's header resolved to, so a module
+        // implementing its own `Encode` is never checked against another's.
         for header in trait_env.impl_headers.values() {
             if !is_user_local(&header.module) {
                 continue;
             }
-            let Some(decl) = header
-                .trait_key()
-                .and_then(|key| trait_env.trait_decl_header(key))
-            else {
+            let Some(ImplTargetKey::Decl(decl_key)) = header.trait_key() else {
                 continue;
             };
+            let Some(decl) = trait_env.decl_header_of(decl_key) else {
+                continue;
+            };
+            // A derivation request asks for an impl rather than writing one, so
+            // it has no members to compare.
+            if header.is_synthesize_request {
+                debug_assert!(header.associated_types.is_empty() && header.methods.is_empty());
+                continue;
+            }
+            for declared in &decl.assoc_types {
+                if header
+                    .associated_types
+                    .iter()
+                    .all(|bound| bound.name != declared.name)
+                {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::ImplMissingAssocType {
+                            trait_name: decl.name.clone(),
+                            assoc_name: declared.name.clone(),
+                            span: header.span,
+                        },
+                    );
+                }
+            }
+            // A supertrait's associated type belongs to the impl answering
+            // `T: Super`, so binding it here would record it where no
+            // projection reads it (WEP 2026-07-27).
+            for binding in &header.associated_types {
+                if !trait_env.declares_assoc_type(decl_key, &binding.name) {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::ImplAssocTypeNotInTrait {
+                            trait_name: decl.name.clone(),
+                            assoc_name: binding.name.clone(),
+                            span: binding.span,
+                        },
+                    );
+                }
+            }
+            for required in decl.methods.iter().filter(|m| !m.has_body) {
+                if header.methods.iter().all(|m| m.name != required.name) {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::ImplMissingMethod {
+                            trait_name: decl.name.clone(),
+                            method_name: required.name.clone(),
+                            span: header.span,
+                        },
+                    );
+                }
+            }
             for method in &header.methods {
+                // An impl may declare a method the trait does not: a helper its
+                // own bodies call on `self` (WEP 2026-09-01).
                 let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
                     continue;
                 };
@@ -1110,6 +1159,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         );
                     }
                 }
+                // The receiver counts as much as the parameters, since no call
+                // site writes one the trait did not declare.
                 if declared.has_receiver != method.has_receiver {
                     let _ = logger.error_in(
                         &header.module,
@@ -3608,8 +3659,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if param_slots.is_empty() {
                     continue;
                 }
-                let param_at =
-                    |name: &str| param_slots.iter().enumerate().find(|(_, p)| p.name == name);
+                let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
+                let param_at = |name: &str| {
+                    let param = param_slots.iter().find(|p| p.name == name)?;
+                    Some((slots.of_name(name)?, param))
+                };
 
                 for binding in &impl_block.associated_types {
                     let type_param_id = match &binding.ty {
@@ -3620,7 +3674,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             };
                             type_table
                                 .borrow_mut()
-                                .make_type_param(named.name.clone(), idx as u32)
+                                .make_type_param(named.name.clone(), idx)
                         }
                         // Chained case: `type Item = I::InnerName` — I is a type param
                         Type::NamespacedGeneric(ns) if ns.args.is_empty() => {
@@ -3636,7 +3690,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             };
                             let inner_param_id = type_table
                                 .borrow_mut()
-                                .make_type_param(ns.namespace.clone(), idx as u32);
+                                .make_type_param(ns.namespace.clone(), idx);
                             type_table.borrow_mut().make_assoc_type_projection(
                                 inner_param_id,
                                 owning_trait,

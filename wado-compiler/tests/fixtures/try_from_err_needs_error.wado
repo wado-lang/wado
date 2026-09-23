@@ -1,0 +1,27 @@
+// `TryFrom::Err` is bounded by `Error`, so a caller through the trait can
+// always report why a conversion failed. An `Err` without one is rejected here.
+
+struct Bare {
+}
+
+struct Even {
+    n: i32,
+}
+
+impl TryFrom<i32> for Even {
+    type Err = Bare;
+
+    fn try_from(value: i32) -> Result<Even, Bare> {
+        return Result::Err(Bare {});
+    }
+}
+
+export fn run() {
+    let _ = Even::try_from(4);
+}
+
+__DATA__
+{
+    "compile_error": "type 'Bare' does not implement trait 'Error' required by bound on 'Err'",
+    "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

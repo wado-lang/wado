@@ -4,6 +4,7 @@
 //! helpers in this file — every entry has exactly one panic-safe restore
 //! path (WEP 2026-05-26).
 
+use std::borrow::Borrow;
 use std::cell::{Cell, RefCell};
 use std::ops::{Deref, DerefMut};
 
@@ -16,9 +17,11 @@ use crate::tir::TypeId;
 use super::Elaborator;
 use super::trait_env::{InheritedBound, ViaClause};
 use super::trait_query::SelfBinding;
+use super::types::TypeError;
 use crate::ast::AstId;
 use crate::defs::DefId;
 use crate::name::{FqTraitName, FqTypeName};
+use crate::token::Span;
 
 /// A name bound in a type-parameter scope: its slot, the type it stands for,
 /// and the node that declares it.
@@ -65,6 +68,140 @@ impl BinderInScope {
 pub(super) struct ElaboratedBound {
     pub(super) bound: ast::TraitBound,
     pub(super) inherited: Option<(DefId, Vec<ViaClause>)>,
+    /// Whose `Self` this bound's written types mean.
+    pub(super) self_type: BoundSelf,
+}
+
+/// Whose `Self` a bound's written types mean. The two cases are not the same
+/// type, so a reader that supplies one for the other resolves a projection off
+/// the wrong receiver (#2112).
+#[derive(Clone, Copy, Debug)]
+pub(super) enum BoundSelf {
+    /// The frame that wrote the bound; `None` where that frame binds no `Self`.
+    Frame(Option<SelfBinding>),
+    /// The type being bounded. A supertrait clause and a declared parameter
+    /// default are both written in the trait's own space, where `Self` is
+    /// whichever type the bound is standing on.
+    Bounded,
+}
+
+impl BoundSelf {
+    /// The `Self` to resolve under, for a bound standing on `bounded` that
+    /// `declaring` wrote.
+    pub(super) fn at(self, bounded: TypeId, declaring: DefId) -> Option<SelfBinding> {
+        match self {
+            Self::Frame(binding) => binding,
+            Self::Bounded => Some(SelfBinding {
+                type_id: bounded,
+                declaring_trait: Some(declaring),
+            }),
+        }
+    }
+}
+
+/// A bound together with what `Self` means where it was written, which is not
+/// the frame of whatever later reads it (#2112).
+#[derive(Clone, Debug)]
+pub(super) struct ScopedBound {
+    pub(super) bound: ast::TraitBound,
+    /// What `Self` meant where the bound was written. `None` in a frame that
+    /// binds none, where a `Self`-rooted spelling is rejected at the declaration.
+    pub(super) self_binding: Option<SelfBinding>,
+}
+
+impl ScopedBound {
+    pub(super) fn new(bound: ast::TraitBound, self_binding: Option<SelfBinding>) -> Self {
+        Self {
+            bound,
+            self_binding,
+        }
+    }
+
+    /// What `param` declares, pinned to one frame's `Self`. An `fn` bound is left
+    /// out: it is realised in the parameter's own type, so nothing reaches it
+    /// through a trait name, which is the only way `type_param_bounds` is read.
+    pub(super) fn pin_declared(
+        param: &ast::GenericParam,
+        self_binding: Option<SelfBinding>,
+    ) -> Vec<Self> {
+        Self::pin_all(&param.real_bounds(), self_binding)
+    }
+
+    /// Pin every bound in `bounds` to one frame's `Self`.
+    pub(super) fn pin_all(
+        bounds: &[ast::TraitBound],
+        self_binding: Option<SelfBinding>,
+    ) -> Vec<Self> {
+        bounds
+            .iter()
+            .cloned()
+            .map(|bound| Self::new(bound, self_binding))
+            .collect()
+    }
+
+    /// Whose `Self` this bound's written types mean. A bound written at a frame
+    /// means that frame, never the type it is standing on.
+    pub(super) fn scope(&self) -> BoundSelf {
+        BoundSelf::Frame(self.self_binding)
+    }
+}
+
+impl Borrow<ast::TraitBound> for ScopedBound {
+    fn borrow(&self) -> &ast::TraitBound {
+        &self.bound
+    }
+}
+
+impl Deref for ScopedBound {
+    type Target = ast::TraitBound;
+
+    fn deref(&self) -> &ast::TraitBound {
+        &self.bound
+    }
+}
+
+/// A trait declaration's own parameter, as the site supplying its argument
+/// sees it.
+pub(super) struct TraitParamFromImpl<'p, 'a, A> {
+    pub(super) param: &'p ast::GenericParam,
+    /// What the site wrote at this parameter's argument position, `None` where
+    /// it wrote none. What a missing argument means is the caller's: a default
+    /// to expand, or a parameter to leave alone.
+    pub(super) arg: Option<&'a A>,
+    /// The slot the parameter occupies in the trait's own numbering, counted
+    /// from 1 since slot 0 is the trait's `Self`.
+    pub(super) slot: u32,
+    /// Whether the parameter occupies `slot` at all. An `fn`-bound one is
+    /// realised in its own type, so it takes an argument position and no slot.
+    pub(super) takes_a_slot: bool,
+    pub(super) bounds: Vec<ScopedBound>,
+}
+
+/// Each parameter of a trait declaration with the argument a site wrote for
+/// it, both its numberings, and its bounds pinned to `implementing`.
+pub(super) fn trait_params_from_impl<'p, 'a, A>(
+    params: &'p [ast::GenericParam],
+    args: &'a [A],
+    implementing: Option<SelfBinding>,
+) -> Vec<TraitParamFromImpl<'p, 'a, A>> {
+    let mut slot = 1;
+    params
+        .iter()
+        .filter(|param| param.fills_impl_slot())
+        .enumerate()
+        .map(|(at, param)| {
+            let takes_a_slot = param.is_real_type_param();
+            let this = TraitParamFromImpl {
+                param,
+                arg: args.get(at),
+                slot,
+                takes_a_slot,
+                bounds: ScopedBound::pin_declared(param, implementing),
+            };
+            slot += u32::from(takes_a_slot);
+            this
+        })
+        .collect()
 }
 
 /// The node in `params` that declares `name`, when one does. The caller picks
@@ -84,9 +221,10 @@ pub(super) struct TraitContext {
     /// Type parameters currently in scope. Set when resolving generic structs,
     /// functions, or impl blocks.
     pub(super) type_params: IndexMap<String, BinderInScope>,
-    /// Trait bounds on type parameters in scope (name → full bounds with assoc types).
-    /// Used for resolving trait methods on type params (e.g., `T.cmp()` when T: Ord).
-    pub(super) type_param_bounds: IndexMap<String, Vec<ast::TraitBound>>,
+    /// Trait bounds on type parameters in scope (name → full bounds with assoc
+    /// types), each paired with the `Self` its written types mean. Used for
+    /// resolving trait methods on type params (e.g., `T.cmp()` when T: Ord).
+    pub(super) type_param_bounds: IndexMap<String, Vec<ScopedBound>>,
     /// Associated type bindings in scope (`Self::Name` → resolved type).
     /// Set when resolving trait implementations.
     pub(super) assoc_type_bindings: IndexMap<String, TypeId>,
@@ -119,6 +257,14 @@ impl TraitContext {
             .map(|p| (p.name.clone(), p.id))
             .collect();
     }
+}
+
+/// Everything [`Elaborator::set_self_binding`] installs, so a scoped install
+/// takes and restores what `Self` means as one.
+pub(super) struct SelfFrame {
+    assoc_type_bindings: IndexMap<String, TypeId>,
+    self_type: Option<TypeId>,
+    self_trait: Option<DefId>,
 }
 
 /// One open `type_implements_trait` question.
@@ -160,6 +306,23 @@ pub(super) struct Scope {
     /// where the default's own binders do not answer, so a `|a| …` it opens
     /// still wins. Empty outside such a walk.
     pub(super) default_arg_types: IndexMap<String, TypeId>,
+}
+
+impl Scope {
+    /// Take what `Self` means here, leaving the frame bound to nothing.
+    fn take_self_frame(&mut self) -> SelfFrame {
+        SelfFrame {
+            assoc_type_bindings: std::mem::take(&mut self.trait_ctx.assoc_type_bindings),
+            self_type: self.trait_ctx.self_type.take(),
+            self_trait: self.trait_ctx.self_trait.take(),
+        }
+    }
+
+    fn restore_self_frame(&mut self, frame: SelfFrame) {
+        self.trait_ctx.assoc_type_bindings = frame.assoc_type_bindings;
+        self.trait_ctx.self_type = frame.self_type;
+        self.trait_ctx.self_trait = frame.self_trait;
+    }
 }
 
 /// RAII guard restoring `Elaborator::trait_ctx` on drop, panic-safe. Derefs to
@@ -309,43 +472,56 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         body(guard.elaborator)
     }
 
-    /// Run `body` with `Self` set to `self_type`.
-    pub(super) fn with_self_type<R>(
-        &mut self,
-        self_type: TypeId,
-        body: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        self.with_scope_field(
-            |scope| &mut scope.trait_ctx.self_type,
-            Some(self_type),
-            body,
-        )
+    /// Make `Self` stand for `binding` for the rest of this scope, every part
+    /// of it at once: installing one part is the frame that leaks (#2112).
+    pub(super) fn set_self_binding(&mut self, binding: SelfBinding) {
+        self.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
+        self.annotate_ctx.trait_ctx.self_trait = binding.declaring_trait;
+        self.annotate_ctx.trait_ctx.self_type = Some(binding.type_id);
     }
 
-    /// Run `body` with `Self` standing for `binding`'s receiver, and the
-    /// enclosing impl's own bindings out of reach so a `Self::Assoc` inside
-    /// projects off that receiver alone.
+    /// [`Self::set_self_binding`] for the duration of `body`, restoring the
+    /// frame it replaced on return (panic-safe).
     pub(super) fn with_self_binding<R>(
         &mut self,
         binding: SelfBinding,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        self.with_scope_field(
-            |scope| &mut scope.trait_ctx.assoc_type_bindings,
-            IndexMap::default(),
-            |elaborator| {
-                elaborator.with_scope_field(
-                    |scope| &mut scope.trait_ctx.self_trait,
-                    binding.declaring_trait,
-                    |elaborator| elaborator.with_self_type(binding.type_id, body),
-                )
-            },
-        )
+        struct Restore<'r, 'a, H: CompilerHost> {
+            elaborator: &'r mut Elaborator<'a, H>,
+            saved: Option<SelfFrame>,
+        }
+        impl<H: CompilerHost> Drop for Restore<'_, '_, H> {
+            fn drop(&mut self) {
+                let saved = self.saved.take().expect("saved self frame present");
+                self.elaborator.annotate_ctx.restore_self_frame(saved);
+            }
+        }
+        let saved = self.annotate_ctx.take_self_frame();
+        self.set_self_binding(binding);
+        let guard = Restore {
+            elaborator: self,
+            saved: Some(saved),
+        };
+        body(guard.elaborator)
+    }
+
+    /// [`Self::with_self_binding`] where there is a binding, and `body` as it
+    /// stands where there is none.
+    pub(super) fn under_self_binding<R>(
+        &mut self,
+        binding: Option<SelfBinding>,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        match binding {
+            Some(binding) => self.with_self_binding(binding, body),
+            None => body(self),
+        }
     }
 
     /// Run `body` with [`Scope::resolving_home`] replaced by `module`. Unlike
-    /// [`Self::with_self_type`], `None` here is a value: it returns the walk to
-    /// its own module.
+    /// [`Self::with_self_binding`], `None` here is a value: it returns the walk
+    /// to its own module.
     pub(super) fn with_resolving_home<R>(
         &mut self,
         module: Option<ModuleSource>,
@@ -374,7 +550,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let known = IndexMap::default();
         bounds
             .iter()
-            .filter(|bound| bound.fn_signature.is_none())
+            .filter(|bound| bound.names_a_trait())
             .filter_map(|bound| Some((bound, self.bound_decl(bound, &known)?)))
             .flat_map(|(bound, root)| {
                 self.supertraits_of_bound(bound, &known)
@@ -394,25 +570,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// back to the spelling and collapse two same-named traits.
     pub(super) fn elaborate_bounds_with(
         &self,
-        bounds: &[ast::TraitBound],
+        bounds: &[ScopedBound],
         known: &IndexMap<AstId, FqTraitName>,
     ) -> Vec<ElaboratedBound> {
         // Each entry carries the declaration it merged on, so a bound that has
         // none — a `fn(..)` bound — cannot shift the ones after it.
         let mut out: Vec<(ElaboratedBound, Option<DefId>)> = Vec::with_capacity(bounds.len());
-        for bound in bounds {
-            self.merge_bound(&mut out, bound, None, known);
-            if bound.fn_signature.is_some() {
+        for scoped in bounds {
+            let bound = &scoped.bound;
+            self.merge_bound(&mut out, bound, None, scoped.scope(), known);
+            if !bound.names_a_trait() {
                 continue;
             }
             let Some(root) = self.bound_decl(bound, known) else {
                 continue;
             };
             for inherited in self.supertraits_of_bound(bound, known) {
+                // A supertrait clause is written in the declaring trait's own
+                // space, not in the frame that wrote the bound reaching it.
                 self.merge_bound(
                     &mut out,
                     &inherited.bound,
                     Some((root, inherited.via)),
+                    BoundSelf::Bounded,
                     known,
                 );
             }
@@ -432,13 +612,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         out: &mut Vec<(ElaboratedBound, Option<DefId>)>,
         bound: &ast::TraitBound,
         inherited: Option<(DefId, Vec<ViaClause>)>,
+        self_type: BoundSelf,
         known: &IndexMap<AstId, FqTraitName>,
     ) {
         let entry = || ElaboratedBound {
             bound: bound.clone(),
             inherited: inherited.clone(),
+            self_type,
         };
-        if bound.fn_signature.is_some() {
+        if !bound.names_a_trait() {
             if !out
                 .iter()
                 .any(|(b, _)| b.bound.name == bound.name && b.bound.id == bound.id)
@@ -570,20 +752,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     true,
                 ),
             };
-            self.annotate_ctx.trait_ctx.type_params.insert(
-                tp.name.clone(),
+            let bounds = self.scoped_bounds(tp);
+            self.bind_param(
+                &tp.name,
                 BinderInScope::declared(idx, type_id, tp.id),
+                bounds,
             );
-            // Filter out `fn`/`fn mut` bounds before recording (they're already
-            // realised in the bound type itself); only "real" trait bounds need
-            // remembering for method lookup.
-            let real_bounds = tp.real_bounds();
-            if !real_bounds.is_empty() {
-                self.annotate_ctx
-                    .trait_ctx
-                    .type_param_bounds
-                    .insert(tp.name.clone(), real_bounds);
-            }
             if consumed_index {
                 idx += 1;
             }
@@ -591,53 +765,151 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         idx
     }
 
+    /// What `Self` means at this frame: the type it stands for and the trait
+    /// that declares the names projected off it. `None` in a frame binding none.
+    pub(super) fn self_binding(&self) -> Option<SelfBinding> {
+        Some(self.self_binding_on(self.annotate_ctx.trait_ctx.self_type?))
+    }
+
+    /// This frame's `Self`, standing on `type_id` instead. A method's
+    /// declaration projects `Self::Assoc` off its receiver, under the trait the
+    /// frame implements.
+    pub(super) fn self_binding_on(&self, type_id: TypeId) -> SelfBinding {
+        SelfBinding {
+            type_id,
+            declaring_trait: self.annotate_ctx.trait_ctx.self_trait,
+        }
+    }
+
+    /// What `Self` means inside an `impl` block: its target, under the trait
+    /// the block implements.
+    pub(super) fn impl_self_binding(
+        &mut self,
+        impl_type: &ast::Type,
+        trait_type: Option<&ast::Type>,
+    ) -> SelfBinding {
+        SelfBinding {
+            type_id: self.resolve_type(impl_type),
+            declaring_trait: trait_type.and_then(|t| {
+                let name = self.get_type_name(t);
+                self.trait_decl_at(t.id()?, &name)
+            }),
+        }
+    }
+
+    /// Bind `name` to `binder` and to what it is bounded by, in one step.
+    ///
+    /// The two are one fact: a binder without its bounds dispatches on nothing,
+    /// and bounds without a binder are a constraint no name reaches. A new
+    /// binder is a new meaning, so the old one's bounds go with it, and a
+    /// method parameter shadowing an impl's dispatches on its own traits alone.
+    pub(super) fn bind_param(
+        &mut self,
+        name: &str,
+        binder: BinderInScope,
+        bounds: Vec<ScopedBound>,
+    ) {
+        self.annotate_ctx
+            .trait_ctx
+            .type_params
+            .insert(name.to_string(), binder);
+        self.annotate_ctx
+            .trait_ctx
+            .type_param_bounds
+            .shift_remove(name);
+        self.add_param_bounds(name, bounds);
+    }
+
+    /// File `bounds` under `name`, keeping what is already there. For a name
+    /// with no binder to pair them with, and for the second half of a binding
+    /// whose bounds are read after the name is bound.
+    pub(super) fn add_param_bounds(&mut self, name: &str, bounds: Vec<ScopedBound>) {
+        if bounds.is_empty() {
+            return;
+        }
+        self.annotate_ctx
+            .trait_ctx
+            .type_param_bounds
+            .entry(name.to_string())
+            .or_default()
+            .extend(bounds);
+    }
+
+    /// What `param` declares, pinned to the `Self` this frame binds — what the
+    /// bounds' written types mean, whatever frame later reads them.
+    pub(super) fn scoped_bounds(&mut self, param: &ast::GenericParam) -> Vec<ScopedBound> {
+        let self_binding = self.self_binding();
+        if self_binding.is_none() {
+            // Every bound the parameter declares, not the trait-named ones
+            // below: an `fn` bound writes types rooted at `Self` too.
+            self.reject_self_in_bounds(&param.name, &param.bounds);
+        }
+        ScopedBound::pin_declared(param, self_binding)
+    }
+
+    /// Reject a bound writing `Self` where the frame binds none. `Self::Assoc`
+    /// on a free function's parameter would go unchecked rather than mean what
+    /// the parameter's own name already says.
+    fn reject_self_in_bounds(&mut self, param: &str, bounds: &[ast::TraitBound]) {
+        let written: Vec<Span> = bounds
+            .iter()
+            .filter(|bound| bound.writes_self())
+            .map(|bound| bound.span)
+            .collect();
+        for span in written {
+            let _ = self.emit(TypeError::SelfInUnboundedBound {
+                param: param.to_string(),
+                span,
+            });
+        }
+    }
+
     /// Bind a trait's declared type parameters to the impl's concrete trait
     /// arguments: `trait Foo<T, U>` against `Foo<i32, String>` registers
     /// `T → i32` and `U → String` with their bounds. Impl-level type params must
     /// already be registered, the trait args being able to name them
     /// (`impl<X> Foo<Container<X>>`). Existing entries are left untouched.
-    pub(super) fn bind_trait_type_params_from_impl(&mut self, trait_type: &ast::Type) {
+    ///
+    /// `implementing` is what the trait declared these bounds' `Self` to mean.
+    /// The caller passes it rather than leaving this to read ambient state it
+    /// may not have set yet.
+    pub(super) fn bind_trait_type_params_from_impl(
+        &mut self,
+        trait_type: &ast::Type,
+        implementing: SelfBinding,
+    ) {
         let trait_name = self.get_type_name(trait_type);
         let Some(trait_decl_type_params) = self.find_trait_decl_type_params(&trait_name) else {
             return;
         };
-        let trait_args: Vec<&ast::Type> = match trait_type {
-            ast::Type::Generic(g) => g.args.iter().collect(),
-            _ => Vec::new(),
+        let trait_args: &[ast::Type] = match trait_type {
+            ast::Type::Generic(g) => &g.args,
+            _ => &[],
         };
-        for (i, tp) in trait_decl_type_params
-            .iter()
-            .filter(|p| !p.is_effect)
-            .enumerate()
+        let supplied =
+            trait_params_from_impl(&trait_decl_type_params, trait_args, Some(implementing));
+        for TraitParamFromImpl {
+            param, arg, bounds, ..
+        } in supplied
         {
+            let Some(arg) = arg else {
+                continue;
+            };
             if self
                 .annotate_ctx
                 .trait_ctx
                 .type_params
-                .contains_key(&tp.name)
+                .contains_key(&param.name)
             {
                 continue;
             }
-            let Some(arg_ast) = trait_args.get(i) else {
-                continue;
-            };
-            let resolved_arg = self.resolve_type(arg_ast);
+            let resolved_arg = self.resolve_type(arg);
             let idx = self.annotate_ctx.trait_ctx.type_params.len() as u32;
-            self.annotate_ctx.trait_ctx.type_params.insert(
-                tp.name.clone(),
-                BinderInScope::declared(idx, resolved_arg, tp.id),
+            self.bind_param(
+                &param.name,
+                BinderInScope::declared(idx, resolved_arg, param.id),
+                bounds,
             );
-            // An `fn` bound is realised in the argument itself and names no
-            // trait, as `register_generic_params` reads it.
-            let bounds = tp.real_bounds();
-            if !bounds.is_empty() {
-                self.annotate_ctx
-                    .trait_ctx
-                    .type_param_bounds
-                    .entry(tp.name.clone())
-                    .or_default()
-                    .extend(bounds);
-            }
         }
     }
 }

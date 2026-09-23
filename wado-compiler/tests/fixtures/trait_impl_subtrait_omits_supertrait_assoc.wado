@@ -1,0 +1,46 @@
+// `impl Sub for T` owes its own associated types and no more: the obligation
+// it carries is `T: Super`, and that impl is where `Super`'s members are bound.
+// `impl AsSlice for List<T>` in the prelude is this shape.
+
+trait Base with () {
+    type Load;
+
+    fn load() -> Self::Load;
+}
+
+trait Stacked: Base with () {
+    fn depth() -> i32;
+}
+
+struct Box {
+    weight: i32,
+}
+
+struct Crate {
+}
+
+impl Base for Crate {
+    type Load = Box;
+
+    fn load() -> Box {
+        return Box { weight: 7 };
+    }
+}
+
+impl Stacked for Crate {
+    fn depth() -> i32 {
+        return 1;
+    }
+}
+
+fn haul<T: Stacked<Load = Box>>() -> i32 {
+    return T::load().weight + T::depth();
+}
+
+export fn run() {
+    assert haul::<Crate>() == 8;
+}
+
+__DATA__
+{
+}

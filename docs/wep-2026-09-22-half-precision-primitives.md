@@ -114,8 +114,8 @@ impl f16 {
 
 impl From<f16> for f32 { }
 impl From<f16> for f64 { }
-impl TryFrom<f32> for f16 { type Error = ConvertError; }
-impl TryFrom<f64> for f16 { type Error = ConvertError; }
+impl TryFrom<f32> for f16 { type Err = ConvertError; }
+impl TryFrom<f64> for f16 { type Err = ConvertError; }
 ```
 
 `bf16` carries the same set.

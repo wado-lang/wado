@@ -18,7 +18,7 @@ use super::expr::BareCase;
 use super::infer::InferCtx;
 use super::instantiate::{Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
-use super::scope::{BinderInScope, Scope, TraitContext};
+use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext};
 use super::sem::types::{CalleeParams, IndirectCallee, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
 use super::static_call::StaticQuery;
@@ -104,8 +104,19 @@ pub(super) struct DefaultTypeBinding {
     pub(super) name: String,
     /// What a default dispatching on the parameter has to go on where the
     /// argument is itself a parameter.
-    pub(super) bounds: Vec<ast::TraitBound>,
+    pub(super) bounds: Vec<ScopedBound>,
     pub(super) settled: SettledAs,
+}
+
+/// Add each of `nearer` to `bindings`, replacing a same-named entry: several
+/// declarations reach one default's scope, and they may share a spelling.
+pub(super) fn bind_nearer(bindings: &mut Vec<DefaultTypeBinding>, nearer: Vec<DefaultTypeBinding>) {
+    for binding in nearer {
+        match bindings.iter_mut().find(|held| held.name == binding.name) {
+            Some(held) => *held = binding,
+            None => bindings.push(binding),
+        }
+    }
 }
 
 /// What a site settled one type parameter to. A pack carries no type here:
@@ -132,17 +143,22 @@ impl SettledAs {
     }
 }
 
-/// What `enclosing` declares `type_id` is bound by, found through the name it
-/// knows the type under. Empty where it knows of no such name, which is every
-/// argument that is not one of its own parameters.
-fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ast::TraitBound> {
+/// What `enclosing` declares `type_id` is bound by, through every name it knows
+/// the type under. Empty where it knows of no such name, which is every argument
+/// that is not one of its own parameters.
+///
+/// One type reaches a frame under several names whenever an `impl` binds two of
+/// a trait's parameters to one type, and each name's bounds hold of it, so they
+/// are taken together rather than one of them picked.
+fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ScopedBound> {
     enclosing
         .type_params
         .iter()
-        .find(|(_, binder)| binder.type_id == type_id)
-        .and_then(|(name, _)| enclosing.type_param_bounds.get(name))
+        .filter(|(_, binder)| binder.type_id == type_id)
+        .filter_map(|(name, _)| enclosing.type_param_bounds.get(name))
+        .flatten()
         .cloned()
-        .unwrap_or_default()
+        .collect()
 }
 
 /// Whether a call supplying `args_len` arguments leaves a defaulted parameter
@@ -839,6 +855,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: effective_name,
                     span: call.span,
                     type_args: &type_args,
+                    self_binding: None,
                 },
             )
         });
@@ -2444,8 +2461,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     SettledAs::Type(type_id)
                 },
+                // A free function's declaration binds no `Self`, so a bound of
+                // its own writes none.
+                bounds: ScopedBound::pin_declared(&param, None),
                 name: param.name,
-                bounds: param.bounds,
             })
             .collect()
     }
@@ -2475,7 +2494,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // stands for a parameter of the enclosing scope, that parameter's are
         // the ones in force: `T` *is* the caller's `X` here, so it is bound by
         // whatever `X` is bound by.
-        let installed: Vec<Option<Vec<ast::TraitBound>>> = {
+        let installed: Vec<Option<Vec<ScopedBound>>> = {
             let table = scope.tysys.type_table.borrow();
             bindings
                 .iter()
@@ -2510,22 +2529,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
             })
             .collect();
-        let trait_ctx = &mut scope.annotate_ctx.trait_ctx;
-        trait_ctx.type_params.clear();
-        trait_ctx.type_param_bounds.clear();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
         for (i, binding) in bindings.iter().enumerate() {
             let Some(bounds) = &installed[i] else {
                 continue;
             };
-            trait_ctx.type_params.insert(
-                binding.name.clone(),
+            scope.bind_param(
+                &binding.name,
                 BinderInScope::undeclared(i as u32, in_scope[i]),
+                bounds.clone(),
             );
-            if !bounds.is_empty() {
-                trait_ctx
-                    .type_param_bounds
-                    .insert(binding.name.clone(), bounds.clone());
-            }
         }
         body(&mut scope)
     }
@@ -2644,6 +2658,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span,
                     // A builtin has no turbofish to read.
                     type_args: &[],
+                    self_binding: None,
                 },
             );
             let resolved_param_types = self.instantiate_types(&decl_param_types, &inst);
@@ -2725,6 +2740,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The inference pass itself: its caller merges the turbofish in
                 // afterwards, so every slot is open here.
                 type_args: &[],
+                self_binding: None,
             },
         );
         let resolved_param_types = self.instantiate_types(&resolved_param_types, &inst);
@@ -3053,7 +3069,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 new_args.push(type_args[i]);
                 continue;
             }
-            let bounds = self.declared_bounds(p);
+            let bounds = self.declared_bounds(p, None);
             // `infer_fn_type_args` already instantiated this slot, so the
             // variable standing in for it is the one to blame — minting a
             // second would orphan the first, which the sweep would then pin to

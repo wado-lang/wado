@@ -172,6 +172,16 @@ impl NirPackage {
         self.func_index.get(&func_ref.function_id()).copied()
     }
 
+    /// The callee descriptor of every function from store position `start` on.
+    /// A call site's identity is read by its stamped `func_id`, which indexes
+    /// this table, rather than off the call node.
+    pub fn callee_descriptors_from(&self, start: usize) -> impl Iterator<Item = FunctionRef> + '_ {
+        self.functions[start..].iter().map(|func_rc| {
+            let func = func_rc.borrow();
+            FunctionRef::from_resolved(&func, func.module_source.clone())
+        })
+    }
+
     /// The [`FuncId`]s of pure builtin / monomorphized-builtin intrinsics
     /// (`array_get_value`, `array_len`, `select`, every `core:builtin` / wasm-asset
     /// function, …). The value-graph builder reads this to know a call writes no

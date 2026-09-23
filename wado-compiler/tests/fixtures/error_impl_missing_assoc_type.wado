@@ -1,0 +1,32 @@
+// An impl that leaves one of its trait's associated types unbound was accepted.
+// The projection stayed unsubstituted, and reaching WIR through a bound it
+// named `Result<i32, Crate::Load#Carry>`, an instance registered as neither a
+// struct nor a variant, which panicked the build.
+
+trait Carry with () {
+    type Load;
+
+    fn make() -> Result<i32, Self::Load>;
+}
+
+struct Wrong {
+}
+
+struct Crate {
+}
+
+impl Carry for Crate {
+    fn make() -> Result<i32, Wrong> {
+        return Result::Err(Wrong {});
+    }
+}
+
+export fn run() {
+    let _ = Crate::make();
+}
+
+__DATA__
+{
+    "compile_error": "impl of trait 'Carry' does not bind associated type 'Load'",
+    "compile_error_codes": ["TRAIT_DECL_INVALID"]
+}

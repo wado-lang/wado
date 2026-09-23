@@ -11,6 +11,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::infer::unify;
+use super::trait_query::SelfBinding;
 use super::types::TypeError;
 use crate::ast::{AstId, GenericParam};
 use crate::elaborator::sem::TypeAnnotations;
@@ -109,14 +110,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A bound whose site reaches no declaration is dropped: it is diagnosed
     /// where it was written, and there is nothing to enforce a solution
     /// against.
-    pub(super) fn declared_bounds(&self, param: &GenericParam) -> Vec<DeclaredBound> {
+    pub(super) fn declared_bounds(
+        &mut self,
+        param: &GenericParam,
+        self_binding: Option<SelfBinding>,
+    ) -> Vec<DeclaredBound> {
         param
-            .bounds
-            .iter()
-            .filter(|b| b.fn_signature.is_none())
+            .real_bounds()
+            .into_iter()
             .filter_map(|b| {
+                let trait_ = self.tysys.bound_written(&b)?;
                 Some(DeclaredBound {
-                    trait_: self.tysys.bound_written(b)?,
+                    trait_: self.bound_trait_at_args(trait_, &b, &[], &[], self_binding),
                     written: b.name.clone(),
                 })
             })

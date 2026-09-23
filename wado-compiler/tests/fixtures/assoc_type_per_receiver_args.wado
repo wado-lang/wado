@@ -1,0 +1,39 @@
+// An associated type belongs to the instantiated receiver. The impl registry is
+// keyed by the receiver's head, so both impls below answer for `List<_>`, and
+// the arguments are what choose between them.
+
+trait Kind with () {
+    type Out;
+
+    fn make(&self) -> Self::Out;
+}
+
+impl Kind for List<u8> {
+    type Out = i32;
+
+    fn make(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Kind for List<String> {
+    type Out = bool;
+
+    fn make(&self) -> bool {
+        return true;
+    }
+}
+
+fn kind_of<T: Kind>(t: &T) -> T::Out {
+    return t.make();
+}
+
+test "each head-sharing impl keeps its own associated type" {
+    let a: List<u8> = [1];
+    let b: List<String> = ["x"];
+    assert kind_of(&a) == 1;
+    assert kind_of(&b) == true;
+}
+
+__DATA__
+{"test": {}}

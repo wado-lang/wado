@@ -10,7 +10,8 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
-use super::scope::BinderInScope;
+use super::scope::{BinderInScope, ScopedBound};
+use super::trait_query::SelfBinding;
 use super::types::TypeError;
 use crate::ast;
 use crate::ast::{NamespacedGenericType, TraitBound};
@@ -27,7 +28,7 @@ pub(super) type ParamSpace = Vec<(String, TypeId)>;
 
 /// A bound reachable from a frame, paired with the space its written types are
 /// read in — empty for one the frame wrote itself.
-type FrameBound = (TraitBound, ParamSpace);
+type FrameBound = (ScopedBound, ParamSpace);
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_type(&mut self, ty: &Type) -> TypeId {
@@ -162,7 +163,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if bounds.len() < 2 {
             return false;
         }
-        let declaring: Vec<&TraitBound> = bounds
+        let declaring: Vec<&ScopedBound> = bounds
             .iter()
             .filter(|bound| {
                 self.trait_decl_at(bound.id, &bound.name)
@@ -969,21 +970,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resolved.iter().all(|t| *t == first).then_some(first)
     }
 
-    /// A bound's right-hand side, resolved in this frame. `Self` inside one is
-    /// the bounded type, which the frame files under `base_name`.
-    fn resolve_bound_binding(&mut self, base_name: &str, ty: &ast::Type) -> TypeId {
-        match self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .get(base_name)
-            .map(|b| b.type_id)
-        {
-            Some(id) => self.with_self_type(id, |s| s.resolve_type(ty)),
-            None => self.resolve_type(ty),
-        }
-    }
-
     /// Run `body` unless `key` is already on the walk, which means it is being
     /// asked for what it is computing. Scoped so no exit from `body` can leave
     /// the key behind and answer `None` for the rest of the module.
@@ -1034,7 +1020,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         out.push((bound, Vec::new()));
                         continue;
                     };
-                    let written = e.resolve_in_space(&ParamSpace::new(), &bound.type_args);
+                    let written: Vec<TypeId> = e.in_bound_frame(&bound, &ParamSpace::new(), |e| {
+                        bound
+                            .type_args
+                            .iter()
+                            .map(|ty| e.resolve_type(ty))
+                            .collect()
+                    });
                     let at_decl = e.param_space_of(decl, &written);
                     let args: Vec<TypeId> = at_decl.iter().map(|(_, id)| *id).collect();
                     let closure = e
@@ -1046,7 +1038,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     out.push((bound, at_decl));
                     for inherited in closure {
                         let space = e.inherited_space(decl, &args, &inherited.via);
-                        out.push((inherited.bound, space));
+                        // An inherited clause is written in `decl`'s own space,
+                        // where `Self` is the bounded type — `binder` here.
+                        let self_binding = SelfBinding {
+                            type_id: binder,
+                            declaring_trait: Some(decl),
+                        };
+                        out.push((ScopedBound::new(inherited.bound, Some(self_binding)), space));
                     }
                 }
                 Some(out)
@@ -1110,6 +1108,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.with_type_params_bound(&names, &args, body)
     }
 
+    /// Run `body` in the frame `scoped` was written in: its parameter space and
+    /// the `Self` it meant. Resolving a bound's own types needs both.
+    pub(super) fn in_bound_frame<R>(
+        &mut self,
+        scoped: &ScopedBound,
+        space: &ParamSpace,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let binding = scoped.self_binding;
+        self.in_space(space, |e| e.under_self_binding(binding, body))
+    }
+
     /// `types` resolved with `space` answering for the names it was written in.
     fn resolve_in_space(&mut self, space: &ParamSpace, types: &[ast::Type]) -> Vec<TypeId> {
         let types = types.to_vec();
@@ -1127,7 +1137,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (bound, space) in self.bound_closure_of(base_name).unwrap_or_default() {
             for binding in bound.assoc_types.iter().filter(|b| b.name == assoc) {
                 let ty = binding.ty.clone();
-                let resolved = self.in_space(&space, |e| e.resolve_bound_binding(base_name, &ty));
+                let resolved = self.in_bound_frame(&bound, &space, |e| e.resolve_type(&ty));
                 if resolved != TypeTable::UNKNOWN {
                     out.push(resolved);
                 }
@@ -1202,7 +1212,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_: DefId,
         assoc: &str,
     ) -> Option<TypeId> {
-        let (written, space) =
+        let (written, space, scoped) =
             self.bound_closure_of(base_name)?
                 .into_iter()
                 .find_map(|(bound, space)| {
@@ -1210,9 +1220,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
                         .then(|| bound.assoc_types.iter().find(|b| b.name == assoc).cloned())
                         .flatten()
-                        .map(|binding| (binding.ty, space))
+                        .map(|binding| (binding.ty, space, bound))
                 })?;
-        let resolved = self.in_space(&space, |e| e.resolve_bound_binding(base_name, &written));
+        let resolved = self.in_bound_frame(&scoped, &space, |e| e.resolve_type(&written));
         (resolved != TypeTable::UNKNOWN).then_some(resolved)
     }
 

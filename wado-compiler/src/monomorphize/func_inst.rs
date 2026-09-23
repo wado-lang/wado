@@ -1877,10 +1877,11 @@ impl Monomorphizer {
         // inherit, and peeling is how it is reached.
         if type_table.reflect_kind(tid) == Some(CompilerItem::ReflectNewtype) {
             let items = type_table.compiler_items();
-            if [CompilerItem::Reflect, CompilerItem::ReflectNewtype]
-                .into_iter()
-                .any(|item| items.trait_fq_opt(item).as_ref() == Some(trait_name))
-            {
+            if trait_name.canonical().is_some_and(|declared| {
+                [CompilerItem::Reflect, CompilerItem::ReflectNewtype]
+                    .into_iter()
+                    .any(|item| items.trait_def(item) == Some(declared))
+            }) {
                 return tid;
             }
         }
