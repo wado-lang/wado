@@ -1768,60 +1768,71 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '-' } {
-            end = try_D(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_D; }
-            end = try_H(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_H; }
-            end = try_J(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_J; }
-        } else if first_char matches { 'A' } {
-            end = try_G(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_G; }
-            end = try_H(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_H; }
-            end = try_J(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_J; }
-        } else if first_char matches { 'X' | 'x' } {
-            end = try_F(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_F; }
-            end = try_H(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_H; }
-        } else if first_char matches { 'a' } {
-            end = try_A(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_A; }
-            end = try_H(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_H; }
-            end = try_J(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_J; }
-        } else if first_char matches { 'c' } {
-            end = try_C(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_C; }
-            end = try_H(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_H; }
-            end = try_J(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_J; }
-        } else if first_char matches { 'm' } {
-            end = try_B(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_B; }
-            end = try_H(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_H; }
-            end = try_J(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_J; }
-        } else if first_char matches { 'e'..='h' } {
-            end = try_E(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_E; }
-            end = try_H(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_H; }
-            end = try_J(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_J; }
-        } else {
-            end = try_E(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_E; }
-            end = try_H(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_H; }
-            end = try_J(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_J; }
+        match first_char {
+            '-' => {
+                end = try_D(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_D; }
+                end = try_H(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_H; }
+                end = try_J(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_J; }
+            },
+            '.'..='@' | 'B'..='W' | 'Y'..='`' | 'b' | 'd' | 'i'..='l' | 'n'..='w' => {
+                end = try_H(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_H; }
+            },
+            'A' => {
+                end = try_G(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_G; }
+                end = try_H(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_H; }
+                end = try_J(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_J; }
+            },
+            'X' | 'x' => {
+                end = try_F(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_F; }
+                end = try_H(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_H; }
+            },
+            'a' => {
+                end = try_A(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_A; }
+                end = try_H(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_H; }
+                end = try_J(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_J; }
+            },
+            'c' => {
+                end = try_C(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_C; }
+                end = try_H(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_H; }
+                end = try_J(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_J; }
+            },
+            'e'..='h' => {
+                end = try_E(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_E; }
+                end = try_H(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_H; }
+                end = try_J(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_J; }
+            },
+            'm' => {
+                end = try_B(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_B; }
+                end = try_H(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_H; }
+                end = try_J(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_J; }
+            },
+            _ => {
+                end = try_H(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_H; }
+                end = try_J(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_J; }
+            },
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

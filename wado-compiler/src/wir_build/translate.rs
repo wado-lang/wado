@@ -2929,9 +2929,10 @@ impl FunctionTranslator<'_, '_> {
             ExprKind::Switch {
                 scrutinee,
                 min_value,
+                table,
                 arms,
                 default,
-            } => self.translate_switch(*scrutinee, *min_value, arms, *default, expr.type_id),
+            } => self.translate_switch(*scrutinee, *min_value, table, arms, *default, expr.type_id),
 
             ExprKind::VariantTag { expr: inner } => {
                 // Get discriminant field from variant base type

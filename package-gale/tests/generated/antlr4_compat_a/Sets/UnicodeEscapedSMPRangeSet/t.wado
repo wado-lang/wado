@@ -1103,22 +1103,21 @@ impl Lexer {
 fn try_LETTERS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
-    let mut alts_ok_0 = false;
-    alts_0_0: {
-        pos = alts_saved_0;
-        if pos >= chars.len() || chars[pos] != 'a' { break alts_0_0; }
-        pos += 1;
-        alts_ok_0 = true;
-    }
-    if !alts_ok_0 {
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= chars.len() || chars[pos] != 'a' { break alts_0_0; }
+            pos += 1;
+            break alts_done_0;
+        }
         alts_0_1: {
             pos = alts_saved_0;
             if pos >= chars.len() || !(chars[pos] matches { '😀'..='🥃' }) { break alts_0_1; }
             pos += 1;
-            alts_ok_0 = true;
+            break alts_done_0;
         }
+        return -1;
     }
-    if !alts_ok_0 { return -1; }
     return pos;
 }
 
@@ -1138,18 +1137,16 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { 'a' } {
-            end = try_LETTERS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LETTERS; }
-        } else if first_char matches { 'd' } {
-            end = try_lit_d(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_D; }
-        } else if first_char matches { '😀'..='🥃' } {
-            end = try_LETTERS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LETTERS; }
-        } else {
-            end = try_LETTERS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LETTERS; }
+        match first_char {
+            'a' | '😀'..='🥃' => {
+                end = try_LETTERS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LETTERS; }
+            },
+            'd' => {
+                end = try_lit_d(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_D; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

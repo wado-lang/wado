@@ -1145,18 +1145,20 @@ fn apply_T_actions(lx: &mut Lexer, start: i32, end: i32) {
     let mut pos = start;
     let sel_saved_0 = pos;
     let mut sel_alt_0 = -1;
-    sel_0_0: {
-        pos = sel_saved_0;
-        if pos >= chars.len() || chars[pos] != 'a' { break sel_0_0; }
-        pos += 1;
-        sel_alt_0 = 0;
-    }
-    if sel_alt_0 < 0 {
+    sel_done_0: {
+        sel_0_0: {
+            pos = sel_saved_0;
+            if pos >= chars.len() || chars[pos] != 'a' { break sel_0_0; }
+            pos += 1;
+            sel_alt_0 = 0;
+            break sel_done_0;
+        }
         sel_0_1: {
             pos = sel_saved_0;
             if pos >= chars.len() || chars[pos] != 'b' { break sel_0_1; }
             pos += 1;
             sel_alt_0 = 1;
+            break sel_done_0;
         }
     }
     if sel_alt_0 < 0 { return; }
@@ -1175,22 +1177,21 @@ fn apply_T_actions(lx: &mut Lexer, start: i32, end: i32) {
 fn try_T(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_1 = pos;
-    let mut alts_ok_1 = false;
-    alts_1_0: {
-        pos = alts_saved_1;
-        if pos >= chars.len() || chars[pos] != 'a' { break alts_1_0; }
-        pos += 1;
-        alts_ok_1 = true;
-    }
-    if !alts_ok_1 {
+    alts_done_1: {
+        alts_1_0: {
+            pos = alts_saved_1;
+            if pos >= chars.len() || chars[pos] != 'a' { break alts_1_0; }
+            pos += 1;
+            break alts_done_1;
+        }
         alts_1_1: {
             pos = alts_saved_1;
             if pos >= chars.len() || chars[pos] != 'b' { break alts_1_1; }
             pos += 1;
-            alts_ok_1 = true;
+            break alts_done_1;
         }
+        return -1;
     }
-    if !alts_ok_1 { return -1; }
     return pos;
 }
 
@@ -1216,12 +1217,16 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let first_char = lexer.chars[start];
         let mut best_more = false;
         let mut best_channel: i32 = 0;
-        if first_char matches { ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; best_more = false; best_channel = 0; best_act = -1; }
-        } else if first_char matches { 'a' | 'b' } {
-            end = try_T(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_T; best_more = false; best_channel = 0; best_act = 0; }
+        match first_char {
+            ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; best_more = false; best_channel = 0; best_act = -1; }
+            },
+            'a' | 'b' => {
+                end = try_T(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_T; best_more = false; best_channel = 0; best_act = 0; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

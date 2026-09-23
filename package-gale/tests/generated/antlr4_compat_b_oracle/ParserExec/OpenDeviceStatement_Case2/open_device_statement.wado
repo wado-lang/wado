@@ -1225,42 +1225,40 @@ fn try_OPT3(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_1 = pos;
-    let mut alts_ok_1 = false;
-    alts_1_0: {
-        pos = alts_saved_1;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_1_0; }
-        pos += 1;
-        alts_ok_1 = true;
-    }
-    if !alts_ok_1 {
+    alts_done_1: {
+        alts_1_0: {
+            pos = alts_saved_1;
+            if pos >= chars.len() || chars[pos] != ' ' { break alts_1_0; }
+            pos += 1;
+            break alts_done_1;
+        }
         alts_1_1: {
             pos = alts_saved_1;
             if pos >= chars.len() || chars[pos] != '\n' { break alts_1_1; }
             pos += 1;
-            alts_ok_1 = true;
+            break alts_done_1;
         }
+        return -1;
     }
-    if !alts_ok_1 { return -1; }
     loop {
         let rep_saved_0 = pos;
         rep_0: {
             let alts_saved_3 = pos;
-            let mut alts_ok_3 = false;
-            alts_3_0: {
-                pos = alts_saved_3;
-                if pos >= chars.len() || chars[pos] != ' ' { break alts_3_0; }
-                pos += 1;
-                alts_ok_3 = true;
-            }
-            if !alts_ok_3 {
+            alts_done_3: {
+                alts_3_0: {
+                    pos = alts_saved_3;
+                    if pos >= chars.len() || chars[pos] != ' ' { break alts_3_0; }
+                    pos += 1;
+                    break alts_done_3;
+                }
                 alts_3_1: {
                     pos = alts_saved_3;
                     if pos >= chars.len() || chars[pos] != '\n' { break alts_3_1; }
                     pos += 1;
-                    alts_ok_3 = true;
+                    break alts_done_3;
                 }
+                break rep_0;
             }
-            if !alts_ok_3 { break rep_0; }
             continue;
         }
         pos = rep_saved_0;
@@ -1306,24 +1304,30 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         let mut best_channel: i32 = 0;
-        if first_char matches { '\n' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; best_channel = 1; }
-        } else if first_char matches { '.' } {
-            end = try_lit_dot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_DOT; best_channel = 0; }
-        } else if first_char matches { 'D' } {
-            end = try_lit_device(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_DEVICE; best_channel = 0; }
-        } else if first_char matches { 'O' } {
-            end = try_lit_open(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_OPEN; best_channel = 0; }
-            end = try_OPT1(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OPT1; best_channel = 0; }
-            end = try_OPT2(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OPT2; best_channel = 0; }
-            end = try_OPT3(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OPT3; best_channel = 0; }
+        match first_char {
+            '\n' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; best_channel = 1; }
+            },
+            '.' => {
+                end = try_lit_dot(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_DOT; best_channel = 0; }
+            },
+            'D' => {
+                end = try_lit_device(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_DEVICE; best_channel = 0; }
+            },
+            'O' => {
+                end = try_lit_open(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_OPEN; best_channel = 0; }
+                end = try_OPT1(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OPT1; best_channel = 0; }
+                end = try_OPT2(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OPT2; best_channel = 0; }
+                end = try_OPT3(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OPT3; best_channel = 0; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
