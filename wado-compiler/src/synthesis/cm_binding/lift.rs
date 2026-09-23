@@ -643,7 +643,7 @@ impl CmBuffer {
         local_ref(self.count, "$count", TypeTable::I32)
     }
 
-    /// `if __i >= __count { break }`, the walk's bound.
+    /// `if $i >= $count { break }`, the walk's bound.
     fn break_when_done(&self, i_local: u32) -> TirStmt {
         if_stmt(
             binary(
@@ -657,7 +657,7 @@ impl CmBuffer {
         )
     }
 
-    /// Bind `__base + __i * elem_size` and return its local.
+    /// Bind `$base + $i * elem_size` and return its local.
     fn element_addr(
         &self,
         i_local: u32,
@@ -683,7 +683,7 @@ impl CmBuffer {
         addr
     }
 
-    /// `__i += 1`.
+    /// `$i += 1`.
     fn advance(i_local: u32) -> TirStmt {
         expr_stmt(assign(
             local_ref(i_local, "$i", TypeTable::I32),
