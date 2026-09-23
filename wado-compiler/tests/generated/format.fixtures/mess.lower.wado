@@ -5489,6 +5489,22 @@ fn "f32^core:prelude/traits.wado/From<bf16>::from"(value: bf16) -> f32 {
     return "core::prelude/primitive.wado::f32::from_bits"((Box<bf16> { value: value }.bf16::to_bits() as u32 << 16));
 }
 
+pub fn "f16^core:prelude/traits.wado/Eq::eq"(self: Box<f16>, other: Box<f16>) -> bool {
+    return ("core::prelude/half.wado::f32^core:prelude/traits.wado/From<f16>::from"(self.value) == "core::prelude/half.wado::f32^core:prelude/traits.wado/From<f16>::from"(other.value));
+}
+
+pub fn "bf16^core:prelude/traits.wado/Eq::eq"(self: Box<bf16>, other: Box<bf16>) -> bool {
+    return ("core::prelude/half.wado::f32^core:prelude/traits.wado/From<bf16>::from"(self.value) == "core::prelude/half.wado::f32^core:prelude/traits.wado/From<bf16>::from"(other.value));
+}
+
+pub fn "f16^core:prelude/traits.wado/Ord::cmp"(self: Box<f16>, other: Box<f16>) -> Ordering {
+    return Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<f16>::from"(self.value) }."f32^core:prelude/traits.wado/Ord::cmp"(Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<f16>::from"(other.value) });
+}
+
+pub fn "bf16^core:prelude/traits.wado/Ord::cmp"(self: Box<bf16>, other: Box<bf16>) -> Ordering {
+    return Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<bf16>::from"(self.value) }."f32^core:prelude/traits.wado/Ord::cmp"(Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<bf16>::from"(other.value) });
+}
+
 pub fn "f16^core:prelude/traits.wado/Display::fmt"(self: Box<f16>, f: &mut Formatter) {
     Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<f16>::from"(self.value) }."f32^core:prelude/traits.wado/Display::fmt"(f);
 }
@@ -7497,6 +7513,10 @@ pub fn "()^core:prelude/traits.wado/Ord::cmp"(self: &(), other: &()) -> Ordering
     return Ordering::Equal;
 }
 
+pub fn "v128^core:prelude/traits.wado/Eq::eq"(self: Box<v128>, other: Box<v128>) -> bool {
+    return core::builtin::i8x16_all_true(core::builtin::i8x16_eq(self.value, other.value));
+}
+
 pub fn "v128^core:prelude/traits.wado/Inspect::inspect"(self: Box<v128>, f: &mut Formatter) {
     f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"v128(0x", used: 7 });
     let mut i: i32 = 0;
@@ -7947,24 +7967,26 @@ pub fn "u64^core:prelude/traits.wado/Ord::cmp"(self: Box<u64>, other: Box<u64>) 
     return Ordering::Equal;
 }
 
+fn total_order_key_32(bits: u32) -> u32 {
+    if ((bits & 2147483648) != 0) {
+        return ~bits;
+    }
+    return (bits | 2147483648);
+}
+
+fn total_order_key_64(bits: u64) -> u64 {
+    if ((bits & 9223372036854775808) != 0) {
+        return ~bits;
+    }
+    return (bits | 9223372036854775808);
+}
+
 pub fn "f32^core:prelude/traits.wado/Ord::cmp"(self: Box<f32>, other: Box<f32>) -> Ordering {
-    if (self.value < other.value) {
-        return Ordering::Less;
-    }
-    if (self.value > other.value) {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
+    return Box<u32> { value: "core::prelude/primitive.wado::total_order_key_32"(self.f32::to_bits()) }."u32^core:prelude/traits.wado/Ord::cmp"(Box<u32> { value: "core::prelude/primitive.wado::total_order_key_32"(other.f32::to_bits()) });
 }
 
 pub fn "f64^core:prelude/traits.wado/Ord::cmp"(self: Box<f64>, other: Box<f64>) -> Ordering {
-    if (self.value < other.value) {
-        return Ordering::Less;
-    }
-    if (self.value > other.value) {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
+    return Box<u64> { value: "core::prelude/primitive.wado::total_order_key_64"(self.f64::to_bits()) }."u64^core:prelude/traits.wado/Ord::cmp"(Box<u64> { value: "core::prelude/primitive.wado::total_order_key_64"(other.f64::to_bits()) });
 }
 
 pub fn "char^core:prelude/traits.wado/Ord::cmp"(self: Box<char>, other: Box<char>) -> Ordering {
