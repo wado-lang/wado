@@ -993,12 +993,16 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::{CmBoundary, Item};
+    use crate::lexer::lex;
     use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
     use crate::nir_arena::{
         ArenaCallArg, ArenaStructField, ArmData, BlockNode, BlockRole, Body, ExprNode, PatNode,
         StmtNode,
     };
     use crate::nir_value_graph::ValueKind;
+    use crate::parser::Parser;
+    use crate::stdlib::get_stdlib_module;
     use crate::tir::{TypeId, TypeTable};
     use crate::token::Span;
 
@@ -2001,18 +2005,26 @@ mod tests {
 
     #[test]
     fn builtin_trap_taxonomy_names_real_instruction_builtins() {
-        let registry =
-            BuiltinRegistry::build_from_stdlib(&std::cell::RefCell::new(TypeTable::new()));
+        let source = get_stdlib_module("core:builtin").unwrap();
+        let module = Parser::new(lex(source).tokens).parse_strict().unwrap();
         let listed = ARRAY_BUILTINS
             .iter()
             .map(|(n, _)| *n)
             .chain(TOTAL_BUILTINS.iter().copied());
         for name in listed {
-            let info = registry
-                .get(name)
+            let func = module
+                .items
+                .iter()
+                .find_map(|item| match item {
+                    Item::Function(f) if f.name == name => Some(f),
+                    _ => None,
+                })
                 .unwrap_or_else(|| panic!("{name} is not in core:builtin"));
             assert!(
-                info.canonical_name.is_none(),
+                !func
+                    .attrs
+                    .iter()
+                    .any(|a| matches!(a.cm_boundary, Some(CmBoundary::Canonical { .. }))),
                 "{name} is a canonical import"
             );
         }
