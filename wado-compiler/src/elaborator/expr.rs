@@ -503,11 +503,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let expected_type = self.settled_result_expectation(expected_type);
         let tail_type = self.labeled_block_tail_type(lb);
-        let branch_types: Vec<TypeId> = break_types
+        let mut branch_types: Vec<TypeId> = break_types
             .iter()
             .copied()
             .chain(std::iter::once(tail_type))
             .collect();
+        self.settle_branch_holes(&mut branch_types, expected_type);
         let result_type =
             expected_type.unwrap_or_else(|| self.representative_branch_type(&branch_types));
 
@@ -2590,7 +2591,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Solve the inference holes `branches` carry against the expected type, or
     /// else a settled sibling, and apply them.
-    fn settle_branch_holes(&mut self, branches: &mut [TypeId], expected_type: Option<TypeId>) {
+    pub(super) fn settle_branch_holes(
+        &mut self,
+        branches: &mut [TypeId],
+        expected_type: Option<TypeId>,
+    ) {
         if !branches.iter().any(|&t| self.type_has_infer_hole(t)) {
             return;
         }

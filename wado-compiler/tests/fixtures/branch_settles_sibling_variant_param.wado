@@ -1,6 +1,6 @@
 // A branch whose variant leaves its type parameter open (`Option::None`) takes
 // it from a sibling branch that settles it, whichever construct holds them:
-// `if`, `if let`, or `match`.
+// `if`, `if let`, `match`, a labeled block's breaks, or a closure's returns.
 
 use { println, Stdout } from "core:cli";
 
@@ -15,10 +15,29 @@ export fn run() with Stdout {
         true => Option::None,
         false => Option::Some(3),
     };
+    let g = found: {
+        if c {
+            break found: Option::None;
+        }
+        Option::Some(4)
+    };
+    let h = found: {
+        if c {
+            break found: Option::Some("h");
+        }
+        Option::None
+    };
+    let k = || {
+        if c {
+            return Option::None;
+        }
+        return Option::Some(5);
+    };
     println(`${a:?} ${b:?} ${d:?} ${e:?} ${f:?}`);
+    println(`${g:?} ${h:?} ${k():?}`);
 }
 
 __DATA__
 {
-    "stdout": "Option::None Option::Some(2) Option::Some(8) Option::None Option::None\n"
+    "stdout": "Option::None Option::Some(2) Option::Some(8) Option::None Option::None\nOption::None Option::Some(\"h\") Option::None\n"
 }

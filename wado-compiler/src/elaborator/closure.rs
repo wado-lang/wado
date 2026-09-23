@@ -297,7 +297,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let return_type = if let Some(dt) = declared_return {
             dt
         } else if let ast::Expr::Block(ref block) = closure.body {
-            match self.ast_find_return_type_in_block(block) {
+            let mut return_types = self.ast_return_types_in_block(block);
+            self.settle_branch_holes(&mut return_types, None);
+            match return_types.first().copied() {
                 Some(t) => {
                     if !self.ast_block_always_exits(block)
                         && body_type != t
