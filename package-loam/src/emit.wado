@@ -334,7 +334,7 @@ fn emit_weights(
     names: &Names,
     held: &TreeMap<String, String>,
 ) {
-    out.push_str("\n/// The graph's initializers. Roadmap step 3 fills these from a checkpoint.\n");
+    out.push_str("\n/// The graph's initializers. The caller fills these.\n");
     out.push_str("pub struct Weights {\n");
     for let vi of &graph.initializers {
         out.push_str(`    pub ${names.get(&vi.name)}: ${tensor_type(shapes, held, &vi.name)},\n`);
