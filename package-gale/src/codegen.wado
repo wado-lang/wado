@@ -61,7 +61,8 @@ use { CodeWriter } from "lib:wadopoet";
 use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
+use { collect_referenced_names } from "./gen_util.wado";
 use {
     LoweredGrammar,
     Diagnostic,
@@ -321,12 +322,12 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
         }
     }
-    // The scan emission may intern kind-set helpers (`_kind_set_N`);
-    // emit whatever was interned (a no-op when none).
-    gen_kind_set_helpers(&mut w, &lowered, &ctx);
-    gen_sync_set_globals(&mut w, &ctx);
+    let mut named = TreeSet::<String>::new();
+    collect_referenced_names(&w.to_string(), &mut named);
+    gen_kind_set_helpers(&mut w, &lowered, &ctx, &named);
+    gen_sync_set_globals(&mut w, &ctx, &named);
     if emit_follow {
-        gen_follow_mask_globals(&mut w, &ctx);
+        gen_follow_mask_globals(&mut w, &ctx, &named);
     }
     // Serialized ATN blob for the runtime simulator. Only emitted when
     // lowering saw a construct that needs it (a non-greedy `??` or an

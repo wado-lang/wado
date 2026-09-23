@@ -171,9 +171,6 @@ test "intern_follow_mask: same mask returns same id, empty returns null" {
     let empty_depths: List<List<String>> = [[], []];
     let id_empty = ctx.intern_follow_mask(&empty_depths);
     assert id_empty matches { None }, "all-empty mask interns to null";
-    assert ctx.follow_masks().is_empty(), "an unreferenced mask is not emitted";
-    ctx.follow_mask_ref(0);
-    ctx.follow_mask_ref(1);
     assert ctx.follow_masks().len() == 2, "only the two real masks are registered";
 }
 

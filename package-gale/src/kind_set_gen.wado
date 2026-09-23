@@ -7,7 +7,6 @@ use { LoweredGrammar } from "./gir.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
 use {
     join_kinds,
-    collect_called_names,
     FOLLOW_SLOT_BITS,
     FOLLOW_CONT_SLOTS,
     FOLLOW_MAX_POSITION_ID,
@@ -85,13 +84,11 @@ pub fn gen_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -
 }
 
 /// Emit the `_kind_set_<id>(k) -> bool` helper of each interned kind set the
-/// code already in `w` calls. Lower's pre-interned sets take the ids first.
-pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
+/// emitted code names. Lower's pre-interned sets take the ids first.
+pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext, named: &TreeSet<String>) {
     let entries = ctx.kind_sets();
-    let mut called = TreeSet::<String>::new();
-    collect_called_names(&w.to_string(), &mut called);
     for let mut idx = 0; idx < entries.len(); idx += 1 {
-        if !called.contains(`_kind_set_${entries[idx].id}`) {
+        if !named.contains(`_kind_set_${entries[idx].id}`) {
             continue;
         }
         if idx < lowered.kind_sets.len() {
@@ -109,17 +106,19 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &
 /// packs its positions into one `i64`. A continuation is therefore a scalar a
 /// call site composes with a shift, and a rule takes one parameter rather than
 /// a row of slots.
-pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
+pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext, named: &TreeSet<String>) {
     // No caller-FOLLOW gate anywhere ⇒ no call site names either table.
     // A grammar that gates on a forwarded `follow` alone interns no mask
     // and still reads `FOLLOW_SETS`, so only the masks are conditional.
     if !ctx.emit_follow() {
         return;
     }
-    let entries = ctx.follow_masks();
     let mut sets: List<List<i32>> = [];
     let mut masks: List<String> = [];
-    for let entry of &entries {
+    for let entry of ctx.follow_masks() {
+        if !named.contains(ctx.follow_mask_ref(entry.id)) {
+            continue;
+        }
         let mut packed: i64 = 0;
         let mut slot = 0;
         for let depth_set of &entry.mask {
@@ -175,15 +174,15 @@ fn intern_position_set(sets: &mut List<List<i32>>, set: &List<i32>) -> i32 {
 
 /// Emit the token-set globals: `EMPTY_SYNC`, then per interned set its
 /// `SYNC_<id>` bits and its `EXPECTED_<id>` kind list, each only where named.
-pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &GenContext) {
+pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &GenContext, named: &TreeSet<String>) {
     // Also the empty wanted-set `fail` takes, so a lexer-only grammar — whose
     // `Parser` runtime is still emitted — needs it too.
     w.line("global EMPTY_SYNC: List<i32> = [];");
-    for let [entry, bits, list] of ctx.sync_sets() {
-        if bits {
+    for let entry of ctx.sync_sets() {
+        if named.contains(`SYNC_${entry.id}`) {
             w.line(`global SYNC_${entry.id}: List<i32> = [${join_kinds(&kind_bitset_words(&entry.tokens))}];`);
         }
-        if list {
+        if named.contains(`EXPECTED_${entry.id}`) {
             w.line(`global EXPECTED_${entry.id}: List<i32> = [${join_kinds(&ctx.token_names_of(&entry.tokens))}];`);
         }
     }

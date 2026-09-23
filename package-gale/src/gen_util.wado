@@ -31,6 +31,15 @@ fn is_ident_byte(b: u8) -> bool {
 /// Every name generated `text` calls: an identifier followed by `(` that is
 /// not the one a `fn` defines.
 pub fn collect_called_names(text: &String, out: &mut TreeSet<String>) {
+    collect_names(text, out, true);
+}
+
+/// Every identifier generated `text` names.
+pub fn collect_referenced_names(text: &String, out: &mut TreeSet<String>) {
+    collect_names(text, out, false);
+}
+
+fn collect_names(text: &String, out: &mut TreeSet<String>, calls_only: bool) {
     let n = text.len();
     let mut i = 0;
     while i < n {
@@ -42,7 +51,7 @@ pub fn collect_called_names(text: &String, out: &mut TreeSet<String>) {
         while i < n && is_ident_byte(text.get_byte_unchecked(i)) {
             i += 1;
         }
-        if i < n && text.get_byte_unchecked(i) == b'(' && !follows_fn_keyword(text, start) {
+        if !calls_only || i < n && text.get_byte_unchecked(i) == b'(' && !follows_fn_keyword(text, start) {
             out.insert(text.as_str_slice().sub(start, i).to_string());
         }
     }

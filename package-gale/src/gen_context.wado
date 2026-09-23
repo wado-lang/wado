@@ -23,7 +23,7 @@ use { TokenKinds, append_ids } from "./token_kinds.wado";
 use { gate_body_of, SCAN_GATE_HANDLE, SCAN_GATE_FIELD } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
-use { TreeMap, TreeSet } from "core:collections";
+use { TreeMap } from "core:collections";
 
 /// A token-kind set interned during parser codegen. Multi-element
 /// `<expr> matches { TK_X | TK_Y | ... }` checks are emitted as
@@ -300,9 +300,6 @@ pub struct GenContext {
     /// By snake name, the kinds of each rule whose scan is one token test.
     one_token_rules: TreeMap<String, List<String>>,
     snake_index: TreeMap<String, i32>,
-    follow_mask_used: TreeSet<i32>,
-    sync_bits_used: TreeSet<i32>,
-    sync_list_used: TreeSet<i32>,
     /// The block a finished alternative leaves by, where the rule's `@after`
     /// follows it; a finished alternative returns where this is `null`.
     alt_exit_label: Option<String>,
@@ -402,9 +399,6 @@ impl GenContext {
             in_scan_fn: false,
             one_token_rules,
             snake_index,
-            follow_mask_used: TreeSet::new(),
-            sync_bits_used: TreeSet::new(),
-            sync_list_used: TreeSet::new(),
             alt_exit_label: null,
             forwarded_calls: TreeMap::new(),
         };
@@ -2306,7 +2300,6 @@ impl GenContext {
         let Some(id) = self.intern_sync_set(tokens) else {
             return String::from("EMPTY_SYNC");
         };
-        self.sync_bits_used.insert(id);
         return `SYNC_${id}`;
     }
 
@@ -2316,21 +2309,12 @@ impl GenContext {
         let Some(id) = self.intern_sync_set(tokens) else {
             return String::from("EMPTY_SYNC");
         };
-        self.sync_list_used.insert(id);
         return `EXPECTED_${id}`;
     }
 
-    /// The interned sync sets, in id order, with whether emitted code tests
-    /// each as bits and whether it names it as a list.
-    pub fn sync_sets(&self) -> List<[KindSetEntry, bool, bool]> {
-        let mut out: List<[KindSetEntry, bool, bool]> = [];
-        for let entry of self.sync_set_registry.values().iter_value() {
-            out.push([
-                entry, self.sync_bits_used.contains(entry.id),
-                self.sync_list_used.contains(entry.id),
-            ]);
-        }
-        return out;
+    /// The interned sync sets, in id order.
+    pub fn sync_sets(&self) -> List<KindSetEntry> {
+        return self.sync_set_registry.values().iter_value().collect();
     }
 
     /// Intern a runtime FOLLOW-continuation mask. The same canonical mask
@@ -2383,21 +2367,14 @@ impl GenContext {
         return self.follow_mask_depths[id] >= FOLLOW_MAX_DEPTH;
     }
 
-    /// The global naming FOLLOW mask `id`, which is emitted because of this.
-    pub fn follow_mask_ref(&mut self, id: i32) -> String {
-        self.follow_mask_used.insert(id);
+    /// The global naming FOLLOW mask `id`.
+    pub fn follow_mask_ref(&self, id: i32) -> String {
         return `FOLLOW_MASK_${id}`;
     }
 
-    /// The FOLLOW masks some emitted code names, in `FOLLOW_MASK_<id>` order.
+    /// The interned FOLLOW masks, in `FOLLOW_MASK_<id>` order.
     pub fn follow_masks(&self) -> List<FollowMaskEntry> {
-        let mut out: List<FollowMaskEntry> = [];
-        for let entry of self.follow_mask_registry.values().iter_value() {
-            if self.follow_mask_used.contains(entry.id) {
-                out.push(entry);
-            }
-        }
-        return out;
+        return self.follow_mask_registry.values().iter_value().collect();
     }
 
     /// Render a token-set membership check on `expr`.
