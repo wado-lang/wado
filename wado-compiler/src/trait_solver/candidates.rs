@@ -60,7 +60,10 @@ fn collect(
             let Some(trait_) = def.trait_ else {
                 continue;
             };
-            let own = program.impl_methods.get(&impl_).map_or(&[][..], Vec::as_slice);
+            let own = program
+                .impl_methods
+                .get(&impl_)
+                .map_or(&[][..], Vec::as_slice);
             if !declares(program.traits.get(&trait_), own) {
                 continue;
             }
