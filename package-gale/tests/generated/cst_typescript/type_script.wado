@@ -5598,7 +5598,6 @@ fn scan_type_parameter(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LessThan {
-            pos = start;
             try_2: {
                 pos = scan_type_parameters(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -5714,7 +5713,6 @@ fn scan_type_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_New {
-            pos = start;
             try_2: {
                 pos = scan_constructor_type(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -5758,7 +5756,6 @@ fn scan_union_or_intersection_or_primary_type(tokens: &Array<i32>, pos: i32, fol
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        let _lr_pos0 = pos;
         if suffix_kind == TK_BitOr {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
@@ -5776,9 +5773,6 @@ fn scan_union_or_intersection_or_primary_type(tokens: &Array<i32>, pos: i32, fol
                 break;
             }
         } else {
-            break;
-        }
-        if pos == _lr_pos0 {
             break;
         }
     }
@@ -5862,7 +5856,6 @@ fn scan_primary_type_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_OpenBrace {
-            pos = start;
             try_3: {
                 pos = scan_object_type(tokens, pos, follow);
                 if pos < 0 { break try_3; }
@@ -5880,7 +5873,6 @@ fn scan_primary_type_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             }
             return -1;
         } else if alt_kind == TK_Typeof {
-            pos = start;
             try_5: {
                 pos = scan_type_query(tokens, pos);
                 if pos < 0 { break try_5; }
@@ -5916,7 +5908,6 @@ fn scan_primary_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        let _lr_pos0 = pos;
         if suffix_kind == TK_OpenBracket {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
@@ -5926,9 +5917,6 @@ fn scan_primary_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i
                 break;
             }
         } else {
-            break;
-        }
-        if pos == _lr_pos0 {
             break;
         }
     }
@@ -5965,7 +5953,6 @@ fn scan_predefined_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos = start + 1;
             break scan_alts;
         } else if _kind_set_4(alt_kind) {
-            pos = start;
             try_8: {
                 if pos < tokens.len() && tokens[pos] == TK_Unique {
                     pos += 1;
@@ -6162,7 +6149,6 @@ fn scan_type_member(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _kind_set_39(alt_kind) {
-            pos = start;
             try_1: {
                 pos = scan_call_signature(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -6412,7 +6398,6 @@ fn scan_parameter_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_Ellipsis {
-            pos = start;
             try_0: {
                 pos = scan_rest_parameter(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -6420,7 +6405,6 @@ fn scan_parameter_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if _kind_set_9(alt_kind) {
-            pos = start;
             try_1: {
                 pos = scan_parameter(tokens, pos, (FOLLOW_MASK_12 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_1; }
@@ -6499,7 +6483,6 @@ fn scan_parameter(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     scan_alts: {
         if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_0: {
                 pos = scan_required_parameter(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -6622,7 +6605,6 @@ fn scan_identifier_or_pattern(tokens: &Array<i32>, pos: i32) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_8(alt_kind) {
-            pos = start;
             try_0: {
                 pos = scan_identifier_name(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -6630,7 +6612,6 @@ fn scan_identifier_or_pattern(tokens: &Array<i32>, pos: i32) -> i32 {
             }
             return -1;
         } else if _kind_set_13(alt_kind) {
-            pos = start;
             try_1: {
                 pos = scan_binding_pattern(tokens, pos);
                 if pos < 0 { break try_1; }
@@ -7028,7 +7009,6 @@ fn scan_decorator_member_expression(tokens: &Array<i32>, pos: i32, follow: i64 =
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        let _lr_pos0 = pos;
         if suffix_kind == TK_Dot {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
@@ -7038,9 +7018,6 @@ fn scan_decorator_member_expression(tokens: &Array<i32>, pos: i32, follow: i64 =
                 break;
             }
         } else {
-            break;
-        }
-        if pos == _lr_pos0 {
             break;
         }
     }
@@ -7159,7 +7136,6 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     scan_alts: {
         if alt_kind == TK_OpenBrace {
             let mut best: i32 = -1;
-            pos = start;
             try_0: {
                 pos = scan_block(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -7295,7 +7271,6 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_Import {
             let mut best: i32 = -1;
-            pos = start;
             try_2: {
                 pos = scan_import_statement(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -7626,7 +7601,6 @@ fn scan_import_from_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_21(alt_kind) {
-            pos = start;
             try_0: {
                 if pos < tokens.len() && _kind_set_8(tokens[pos]) {
                     let sp = pos;
@@ -7809,7 +7783,6 @@ fn scan_module_export_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_8(alt_kind) {
-            pos = start;
             try_0: {
                 pos = scan_identifier_name(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -7959,7 +7932,6 @@ fn scan_export_from_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_22(alt_kind) {
-            pos = start;
             try_0: {
                 pos = scan_import_namespace(tokens, pos, FOLLOW_MASK_28);
                 if pos < 0 { break try_0; }
@@ -7971,7 +7943,6 @@ fn scan_export_from_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             }
             return -1;
         } else if alt_kind == TK_OpenBrace {
-            pos = start;
             try_1: {
                 pos = scan_export_module_items(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -8972,7 +8943,6 @@ fn scan_class_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     scan_alts: {
         if _kind_set_54(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_0: {
                 pos = scan_constructor_declaration(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -8994,7 +8964,6 @@ fn scan_class_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_OpenBracket {
             let mut best: i32 = -1;
-            pos = start;
             try_2: {
                 pos = scan_index_member_declaration(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -9122,7 +9091,6 @@ fn scan_property_member_declaration(tokens: &Array<i32>, pos: i32, follow: i64 =
             return -1;
         } else if alt_kind == TK_Abstract {
             let mut best: i32 = -1;
-            pos = start;
             try_3: {
                 pos = scan_abstract_declaration(tokens, pos, follow);
                 if pos < 0 { break try_3; }
@@ -9366,7 +9334,6 @@ fn scan_class_element_name(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_16(alt_kind) {
-            pos = start;
             try_0: {
                 pos = scan_property_name(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -9374,7 +9341,6 @@ fn scan_class_element_name(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             }
             return -1;
         } else if alt_kind == TK_Hashtag {
-            pos = start;
             try_1: {
                 pos = scan_private_identifier(tokens, pos);
                 if pos < 0 { break try_1; }
@@ -9473,7 +9439,6 @@ fn scan_formal_parameter_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
             return -1;
         } else if alt_kind == TK_OpenBracket {
             let mut best: i32 = -1;
-            pos = start;
             try_2: {
                 pos = scan_array_literal(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -9509,7 +9474,6 @@ fn scan_formal_parameter_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Ellipsis {
-            pos = start;
             try_1: {
                 pos = scan_last_formal_parameter_arg(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -9851,7 +9815,6 @@ fn scan_property_assignment(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
     scan_alts: {
         if _kind_set_19(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_2: {
                 pos = scan_get_accessor(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -9923,7 +9886,6 @@ fn scan_property_assignment(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
             return -1;
         } else if alt_kind == TK_Ellipsis {
             let mut best: i32 = -1;
-            pos = start;
             try_7: {
                 pos = scan_rest_parameter(tokens, pos, follow);
                 if pos < 0 { break try_7; }
@@ -9994,7 +9956,6 @@ fn scan_property_name(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_8(alt_kind) {
-            pos = start;
             try_0: {
                 pos = scan_identifier_name(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -10429,7 +10390,6 @@ fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
             return -1;
         } else if alt_kind == TK_OpenBrace {
             let mut best: i32 = -1;
-            pos = start;
             try_14: {
                 pos = scan_iterator_block(tokens, pos, follow);
                 if pos < 0 { break try_14; }
@@ -10458,7 +10418,6 @@ fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_LessThan {
-            pos = start;
             try_25: {
                 pos = scan_type_arguments(tokens, pos, follow);
                 if pos < 0 { break try_25; }
@@ -10774,7 +10733,6 @@ fn scan_single_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_pr
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        let _lr_pos0 = pos;
         if _kind_set_73(suffix_kind) {
             if suffix_kind == TK_OpenBracket {
                 if 27 >= min_prec {
@@ -10788,9 +10746,7 @@ fn scan_single_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_pr
                 let _lr_scan_2 = scan_single_expression_lr_2(tokens, pos, follow);
                 if _lr_scan_2 >= 0 {
                     if 27 >= min_prec {
-                        let lr_saved_pos = pos;
                         pos = _lr_scan_2;
-                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
@@ -10809,9 +10765,7 @@ fn scan_single_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_pr
                 let _lr_scan_4 = scan_single_expression_lr_4(tokens, pos, follow);
                 if _lr_scan_4 >= 0 {
                     if 25 >= min_prec {
-                        let lr_saved_pos = pos;
                         pos = _lr_scan_4;
-                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
@@ -10828,9 +10782,7 @@ fn scan_single_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_pr
                 let _lr_scan_4 = scan_single_expression_lr_4(tokens, pos, follow);
                 if _lr_scan_4 >= 0 {
                     if 25 >= min_prec {
-                        let lr_saved_pos = pos;
                         pos = _lr_scan_4;
-                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
@@ -11071,9 +11023,6 @@ fn scan_single_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_pr
         } else {
             break;
         }
-        if pos == _lr_pos0 {
-            break;
-        }
     }
     return pos;
 }
@@ -11162,7 +11111,6 @@ fn scan_assignable(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_OpenBracket {
-            pos = start;
             try_2: {
                 pos = scan_array_literal(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -11170,7 +11118,6 @@ fn scan_assignable(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_OpenBrace {
-            pos = start;
             try_3: {
                 pos = scan_object_literal(tokens, pos, follow);
                 if pos < 0 { break try_3; }
@@ -11198,7 +11145,6 @@ fn scan_anonymous_function(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     scan_alts: {
         if _kind_set_63(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_1: {
                 if pos < tokens.len() && tokens[pos] == TK_Async {
                     pos += 1;
@@ -11276,7 +11222,6 @@ fn scan_arrow_function_parameters(tokens: &Array<i32>, pos: i32, follow: i64 = 0
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_16(alt_kind) {
-            pos = start;
             try_0: {
                 pos = scan_property_name(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -11355,7 +11300,6 @@ fn scan_literal(tokens: &Array<i32>, pos: i32) -> i32 {
             pos = start + 1;
             break scan_alts;
         } else if alt_kind == TK_BackTick {
-            pos = start;
             try_3: {
                 pos = scan_template_string_literal(tokens, pos);
                 if pos < 0 { break try_3; }
@@ -11563,7 +11507,6 @@ fn scan_eos(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_EOF {
             let mut best: i32 = -1;
-            pos = start;
             try_1: {
                 if pos >= tokens.len() || tokens[pos] != TK_EOF { break try_1; }
                 pos += 1;
@@ -19914,9 +19857,6 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                 let _lr_scan_2 = scan_single_expression_lr_2(&p.kinds, p.pos, follow);
                 if _lr_scan_2 >= 0 {
                     if 27 >= min_prec {
-                        if _lr_scan_2 < 0 {
-                            break;
-                        }
                         p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                         p.b.set_alt(2);
                         if p.peek_kind() == TK_QuestionMarkDot {
@@ -19949,9 +19889,6 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                 let _lr_scan_4 = scan_single_expression_lr_4(&p.kinds, p.pos, follow);
                 if _lr_scan_4 >= 0 {
                     if 25 >= min_prec {
-                        if _lr_scan_4 < 0 {
-                            break;
-                        }
                         p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                         p.b.set_alt(4);
                         if p.peek_kind() == TK_Not {
@@ -19994,9 +19931,6 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                 let _lr_scan_4 = scan_single_expression_lr_4(&p.kinds, p.pos, follow);
                 if _lr_scan_4 >= 0 {
                     if 25 >= min_prec {
-                        if _lr_scan_4 < 0 {
-                            break;
-                        }
                         p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                         p.b.set_alt(4);
                         if p.peek_kind() == TK_Not {

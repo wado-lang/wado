@@ -818,6 +818,20 @@ K2 : 'J' ;
     assert !str_contains(&n, "scan_start"), `scan_a never matches empty\n${n}`;
 }
 
+test "a scan candidate that runs first does not rewind to where it is" {
+    let input = "grammar T;
+s : (a | a Z)* EOF ;
+a : X | m ;
+m : Y Y ;
+X : 'x' ; Y : 'y' ; Z : 'z' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    let a = extract_fn_body(&output, "fn scan_a(");
+    assert str_contains(&a, "scan_m("), a;
+    assert !str_contains(&a, "pos = start;"), a;
+}
+
 test "a scan function nothing calls is not emitted" {
     let input = "grammar T;
 s : a b EOF ;

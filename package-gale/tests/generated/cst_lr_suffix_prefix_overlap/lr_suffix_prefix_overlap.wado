@@ -1324,14 +1324,11 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        let _lr_pos0 = pos;
         if suffix_kind == TK_DOT {
             let _lr_scan_0 = scan_e_lr_0(tokens, pos);
             if _lr_scan_0 >= 0 {
                 if 2 >= min_prec {
-                    let lr_saved_pos = pos;
                     pos = _lr_scan_0;
-                    if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
                     break;
                 }
@@ -1345,9 +1342,6 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
                 }
             }
         } else {
-            break;
-        }
-        if pos == _lr_pos0 {
             break;
         }
     }
@@ -1399,9 +1393,6 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
             let _lr_scan_0 = scan_e_lr_0(&p.kinds, p.pos);
             if _lr_scan_0 >= 0 {
                 if 2 >= min_prec {
-                    if _lr_scan_0 < 0 {
-                        break;
-                    }
                     p.b.start_node_at(_cp, RK_E, _start);
                     p.b.set_alt(0);
                     p.expect(TK_DOT, &EMPTY_SYNC);

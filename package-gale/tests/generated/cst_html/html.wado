@@ -2164,7 +2164,6 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos = start + 1;
             break scan_alts;
         } else if alt_kind == TK_SCRIPT_OPEN {
-            pos = start;
             try_2: {
                 pos = scan_script(tokens, pos);
                 if pos < 0 { break try_2; }
@@ -2172,7 +2171,6 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_STYLE_OPEN {
-            pos = start;
             try_3: {
                 pos = scan_style(tokens, pos);
                 if pos < 0 { break try_3; }

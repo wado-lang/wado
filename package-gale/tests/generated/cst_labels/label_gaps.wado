@@ -1360,7 +1360,6 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
-            pos = start;
             try_0: {
                 pos = scan_assign_stmt(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -1368,7 +1367,6 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_PAIR {
-            pos = start;
             try_1: {
                 pos = scan_pair_stmt(tokens, pos);
                 if pos < 0 { break try_1; }
@@ -1376,7 +1374,6 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_LIST {
-            pos = start;
             try_2: {
                 pos = scan_mix_stmt(tokens, pos);
                 if pos < 0 { break try_2; }

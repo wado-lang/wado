@@ -25792,7 +25792,6 @@ fn scan_media_query(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_5(alt_kind) {
-            pos = start;
             try_0: {
                 if pos < tokens.len() && _kind_set_6(tokens[pos]) {
                     let sp = pos;
@@ -25825,7 +25824,6 @@ fn scan_media_query(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_OpenParen {
-            pos = start;
             try_1: {
                 pos = scan_media_expression(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -26059,7 +26057,6 @@ fn scan_simple_selector_sequence(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_9(alt_kind) {
-            pos = start;
             try_0: {
                 let gp_20 = pos;
                 let sgk_20 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -26124,7 +26121,6 @@ fn scan_simple_selector_sequence(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
             }
             return -1;
         } else if _kind_set_10(alt_kind) {
-            pos = start;
             try_1: {
                 sg_22_done: {
                     let sgk_22 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -26439,7 +26435,6 @@ fn scan_negation_arg(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     scan_alts: {
         if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_0: {
                 pos = scan_type_selector(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -26457,7 +26452,6 @@ fn scan_negation_arg(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos = start + 1;
             break scan_alts;
         } else if alt_kind == TK_Dot {
-            pos = start;
             try_3: {
                 pos = scan_class_name(tokens, pos);
                 if pos < 0 { break try_3; }
@@ -26465,7 +26459,6 @@ fn scan_negation_arg(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_OpenBracket {
-            pos = start;
             try_4: {
                 pos = scan_attrib(tokens, pos, follow);
                 if pos < 0 { break try_4; }
@@ -26473,7 +26466,6 @@ fn scan_negation_arg(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_Colon {
-            pos = start;
             try_5: {
                 pos = scan_pseudo(tokens, pos, follow);
                 if pos < 0 { break try_5; }
@@ -26696,7 +26688,6 @@ fn scan_declaration(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     scan_alts: {
         if _kind_set_7(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_0: {
                 pos = scan_property_(tokens, pos, FOLLOW_MASK_17);
                 if pos < 0 { break try_0; }
@@ -26916,7 +26907,6 @@ fn scan_term(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_Var {
-            pos = start;
             try_6: {
                 pos = scan_var_(tokens, pos, follow);
                 if pos < 0 { break try_6; }
@@ -26924,7 +26914,6 @@ fn scan_term(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if _kind_set_2(alt_kind) {
-            pos = start;
             try_7: {
                 pos = scan_url(tokens, pos, follow);
                 if pos < 0 { break try_7; }
@@ -26934,7 +26923,6 @@ fn scan_term(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_Hash {
-            pos = start;
             try_8: {
                 pos = scan_hexcolor(tokens, pos, follow);
                 if pos < 0 { break try_8; }
@@ -26942,7 +26930,6 @@ fn scan_term(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_Calc {
-            pos = start;
             try_9: {
                 pos = scan_calc(tokens, pos, follow);
                 if pos < 0 { break try_9; }
@@ -26950,7 +26937,6 @@ fn scan_term(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_Function_ {
-            pos = start;
             try_10: {
                 pos = scan_function_(tokens, pos, follow);
                 if pos < 0 { break try_10; }
@@ -26962,7 +26948,6 @@ fn scan_term(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_DxImageTransform {
-            pos = start;
             try_12: {
                 pos = scan_dx_image_transform(tokens, pos, follow);
                 if pos < 0 { break try_12; }
@@ -27149,7 +27134,6 @@ fn scan_any_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if _kind_set_2(alt_kind) {
-            pos = start;
             try_6: {
                 pos = scan_url(tokens, pos, follow);
                 if pos < 0 { break try_6; }
@@ -27346,7 +27330,6 @@ fn scan_unused(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_OpenBrace {
-            pos = start;
             try_0: {
                 pos = scan_block(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -27466,7 +27449,6 @@ fn scan_nested_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_25(alt_kind) {
-            pos = start;
             try_0: {
                 pos = scan_ruleset(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -27474,7 +27456,6 @@ fn scan_nested_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             }
             return -1;
         } else if alt_kind == TK_Media {
-            pos = start;
             try_1: {
                 pos = scan_media(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -27482,7 +27463,6 @@ fn scan_nested_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             }
             return -1;
         } else if alt_kind == TK_Page {
-            pos = start;
             try_2: {
                 pos = scan_page(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -27490,7 +27470,6 @@ fn scan_nested_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             }
             return -1;
         } else if alt_kind == TK_FontFace {
-            pos = start;
             try_3: {
                 pos = scan_font_face_rule(tokens, pos, follow);
                 if pos < 0 { break try_3; }
@@ -27498,7 +27477,6 @@ fn scan_nested_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             }
             return -1;
         } else if alt_kind == TK_Keyframes {
-            pos = start;
             try_4: {
                 pos = scan_keyframes_rule(tokens, pos, follow);
                 if pos < 0 { break try_4; }
@@ -27506,7 +27484,6 @@ fn scan_nested_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             }
             return -1;
         } else if alt_kind == TK_Supports {
-            pos = start;
             try_5: {
                 pos = scan_supports_rule(tokens, pos, follow);
                 if pos < 0 { break try_5; }
@@ -27514,7 +27491,6 @@ fn scan_nested_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             }
             return -1;
         } else if alt_kind == TK_Viewport {
-            pos = start;
             try_6: {
                 pos = scan_viewport(tokens, pos, follow);
                 if pos < 0 { break try_6; }
@@ -27522,7 +27498,6 @@ fn scan_nested_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             }
             return -1;
         } else if alt_kind == TK_CounterStyle {
-            pos = start;
             try_7: {
                 pos = scan_counter_style(tokens, pos, follow);
                 if pos < 0 { break try_7; }
@@ -27530,7 +27505,6 @@ fn scan_nested_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             }
             return -1;
         } else if alt_kind == TK_FontFeatureValues {
-            pos = start;
             try_8: {
                 pos = scan_font_feature_values_rule(tokens, pos, follow);
                 if pos < 0 { break try_8; }
@@ -27538,7 +27512,6 @@ fn scan_nested_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             }
             return -1;
         } else if alt_kind == TK_AtKeyword {
-            pos = start;
             try_9: {
                 pos = scan_at_rule(tokens, pos, follow);
                 if pos < 0 { break try_9; }
@@ -27592,7 +27565,6 @@ fn scan_supports_condition(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_Not {
-            pos = start;
             try_0: {
                 pos = scan_supports_negation(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -27601,7 +27573,6 @@ fn scan_supports_condition(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             return -1;
         } else if _kind_set_37(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_1: {
                 pos = scan_supports_conjunction(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -28113,7 +28084,6 @@ fn scan_font_face_declaration(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
     scan_alts: {
         if _kind_set_7(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_0: {
                 pos = scan_property_(tokens, pos, FOLLOW_MASK_17);
                 if pos < 0 { break try_0; }

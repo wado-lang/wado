@@ -120,6 +120,35 @@ WS : [ \\t\\r\\n]+ -> skip ;
     assert seeded == calls, `${calls - seeded} of ${calls} parse-launched LR scans start from a stale gate: ${out}`;
 }
 
+test "a prebound LR suffix scan is neither re-tested nor re-seeded" {
+    let out = gen_source("grammar L;
+@parser::members {
+    int noStruct = 0;
+}
+start : e EOF ;
+e : e OP a b
+  | e OP a c
+  | {noStruct == 0}? ID
+  | LB {noStruct = 1;} e RB
+  ;
+a : A ;
+b : B ;
+c : C ;
+OP : '+' ; A : 'a' ; B : 'b' ; C : 'c' ; ID : 'x' ; LB : '(' ; RB : ')' ;
+WS : [ \\t\\r\\n]+ -> skip ;
+");
+    assert out.contains("let _lr_scan_"), `the grammar must reach the pre-bound fallbacks: ${out}`;
+    assert !out.contains("_lr_pos0"), `every suffix opens on OP, so the loop always advances: ${out}`;
+    let mut prev = "";
+    for let line of out.split("\n") {
+        let l = line.trim().to_string();
+        assert !(l.starts_with("if _lr_scan_") && l.ends_with("< 0 {")), `a matched prebound scan is re-tested: ${out}`;
+        assert !(l.starts_with("let _lr_scan_") && l.contains("_gate = p.scan_gate")), `the parse keeps a gate it never reads: ${out}`;
+        assert !(prev.starts_with("let lr_pre") && l.starts_with("*gate = lr_pre")), `the gate is restored to itself: ${out}`;
+        prev = l;
+    }
+}
+
 test "a tournament leaves a simulable gate to the candidate's scan" {
     let out = gen_source("grammar L;
 @parser::members {

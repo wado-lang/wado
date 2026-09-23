@@ -1428,7 +1428,6 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIT_if {
-            pos = start;
             try_0: {
                 pos = scan_if_expr(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -1459,7 +1458,6 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        let _lr_pos0 = pos;
         if suffix_kind == TK_LIT_SLASH {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
@@ -1469,9 +1467,6 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32
                 break;
             }
         } else {
-            break;
-        }
-        if pos == _lr_pos0 {
             break;
         }
     }

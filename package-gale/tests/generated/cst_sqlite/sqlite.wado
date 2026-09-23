@@ -5682,7 +5682,6 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_K_RAISE {
             let mut best: i32 = -1;
-            pos = start;
             try_9: {
                 pos = scan_raise_function(tokens, pos);
                 if pos < 0 { break try_9; }
@@ -5973,7 +5972,6 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0, 
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        let _lr_pos0 = pos;
         if suffix_kind == TK_PIPE2 {
             if 14 >= min_prec {
                 let lr_saved_pos = pos;
@@ -6178,9 +6176,6 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0, 
                 break;
             }
         } else {
-            break;
-        }
-        if pos == _lr_pos0 {
             break;
         }
     }
@@ -6636,7 +6631,6 @@ fn scan_pragma_value(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_55(alt_kind) {
-            pos = start;
             try_0: {
                 pos = scan_signed_number(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -6733,7 +6727,6 @@ fn scan_result_column(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             break scan_alts;
         } else if _kind_set_4(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_1: {
                 pos = scan_table_name(tokens, pos);
                 if pos < 0 { break try_1; }
@@ -7037,7 +7030,6 @@ fn scan_join_operator(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos = start + 1;
             break scan_alts;
         } else if _kind_set_33(alt_kind) {
-            pos = start;
             try_1: {
                 if pos < tokens.len() && tokens[pos] == TK_K_NATURAL {
                     pos += 1;

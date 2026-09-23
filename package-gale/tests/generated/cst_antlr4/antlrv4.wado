@@ -3042,7 +3042,6 @@ fn scan_prequel_construct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_OPTIONS {
-            pos = start;
             try_0: {
                 pos = scan_options_spec(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -3050,7 +3049,6 @@ fn scan_prequel_construct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             }
             return -1;
         } else if alt_kind == TK_IMPORT {
-            pos = start;
             try_1: {
                 pos = scan_delegate_grammars(tokens, pos);
                 if pos < 0 { break try_1; }
@@ -3058,7 +3056,6 @@ fn scan_prequel_construct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             }
             return -1;
         } else if alt_kind == TK_TOKENS {
-            pos = start;
             try_2: {
                 pos = scan_tokens_spec(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -3066,7 +3063,6 @@ fn scan_prequel_construct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             }
             return -1;
         } else if alt_kind == TK_CHANNELS {
-            pos = start;
             try_3: {
                 pos = scan_channels_spec(tokens, pos, follow);
                 if pos < 0 { break try_3; }
@@ -3074,7 +3070,6 @@ fn scan_prequel_construct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             }
             return -1;
         } else if alt_kind == TK_AT {
-            pos = start;
             try_4: {
                 pos = scan_action_(tokens, pos, follow);
                 if pos < 0 { break try_4; }
@@ -3484,7 +3479,6 @@ fn scan_rule_prequel(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_OPTIONS {
-            pos = start;
             try_0: {
                 pos = scan_options_spec(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -3492,7 +3486,6 @@ fn scan_rule_prequel(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_AT {
-            pos = start;
             try_1: {
                 pos = scan_rule_action(tokens, pos);
                 if pos < 0 { break try_1; }
@@ -3674,7 +3667,6 @@ fn scan_lexer_alt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         let mut best: i32 = -1;
-        pos = start;
         try_0: {
             pos = scan_lexer_elements(tokens, pos, follow);
             if pos < 0 { break try_0; }
@@ -3705,7 +3697,6 @@ fn scan_lexer_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     scan_alts: {
         if _kind_set_8(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_0: {
                 pos = scan_lexer_element(tokens, pos, 0);
                 if pos < 0 { break try_0; }
@@ -3736,7 +3727,6 @@ fn scan_lexer_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_9(alt_kind) {
-            pos = start;
             try_0: {
                 pos = scan_lexer_atom(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -3749,7 +3739,6 @@ fn scan_lexer_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_LPAREN {
-            pos = start;
             try_1: {
                 pos = scan_lexer_block(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -3815,7 +3804,6 @@ fn scan_lexer_command(tokens: &Array<i32>, pos: i32) -> i32 {
     scan_alts: {
         if _kind_set_17(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_1: {
                 pos = scan_lexer_command_name(tokens, pos);
                 if pos < 0 { break try_1; }
@@ -3911,7 +3899,6 @@ fn scan_alternative(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     scan_alts: {
         if _kind_set_11(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_0: {
                 if pos < tokens.len() && tokens[pos] == TK_LT {
                     let sp = pos;
@@ -3960,7 +3947,6 @@ fn scan_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     scan_alts: {
         if _kind_set_1(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_0: {
                 pos = scan_labeled_element(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -3980,7 +3966,6 @@ fn scan_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_LPAREN {
-            pos = start;
             try_2: {
                 pos = scan_ebnf(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -4037,7 +4022,6 @@ fn scan_predicate_option(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     scan_alts: {
         if _kind_set_1(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_0: {
                 pos = scan_element_option(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -4149,7 +4133,6 @@ fn scan_lexer_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     scan_alts: {
         if alt_kind == TK_STRING_LITERAL {
             let mut best: i32 = -1;
-            pos = start;
             try_0: {
                 pos = scan_character_range(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -4164,7 +4147,6 @@ fn scan_lexer_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_NOT {
-            pos = start;
             try_2: {
                 pos = scan_not_set(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -4175,7 +4157,6 @@ fn scan_lexer_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos = start + 1;
             break scan_alts;
         } else if alt_kind == TK_DOT {
-            pos = start;
             try_4: {
                 pos = scan_wildcard(tokens, pos, follow);
                 if pos < 0 { break try_4; }
@@ -4195,7 +4176,6 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_14(alt_kind) {
-            pos = start;
             try_0: {
                 pos = scan_terminal_def(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -4203,7 +4183,6 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_RULE_REF {
-            pos = start;
             try_1: {
                 pos = scan_ruleref(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -4211,7 +4190,6 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_NOT {
-            pos = start;
             try_2: {
                 pos = scan_not_set(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -4219,7 +4197,6 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_DOT {
-            pos = start;
             try_3: {
                 pos = scan_wildcard(tokens, pos, follow);
                 if pos < 0 { break try_3; }
@@ -4460,7 +4437,6 @@ fn scan_element_option(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     scan_alts: {
         if _kind_set_1(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
             try_0: {
                 pos = scan_qualified_identifier(tokens, pos, follow);
                 if pos < 0 { break try_0; }

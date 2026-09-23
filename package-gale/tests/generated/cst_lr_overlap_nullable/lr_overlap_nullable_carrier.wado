@@ -1313,7 +1313,6 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        let _lr_pos0 = pos;
         if _kind_set_1(suffix_kind) {
             if suffix_kind == TK_LIT_EQ {
                 if 2 >= min_prec {
@@ -1335,9 +1334,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
                 let _lr_scan_0 = scan_e_lr_0(tokens, pos);
                 if _lr_scan_0 >= 0 {
                     if 2 >= min_prec {
-                        let lr_saved_pos = pos;
                         pos = _lr_scan_0;
-                        if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
                     }
@@ -1352,9 +1349,6 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
                 }
             }
         } else {
-            break;
-        }
-        if pos == _lr_pos0 {
             break;
         }
     }
@@ -1417,9 +1411,6 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 let _lr_scan_0 = scan_e_lr_0(&p.kinds, p.pos);
                 if _lr_scan_0 >= 0 {
                     if 2 >= min_prec {
-                        if _lr_scan_0 < 0 {
-                            break;
-                        }
                         p.b.start_node_at(_cp, RK_E, _start);
                         if p.peek_kind() == TK_LIT_GT && p.peek_at(1) == TK_LIT_GT {
                             p.expect(TK_LIT_GT, &EMPTY_SYNC);

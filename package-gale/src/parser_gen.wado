@@ -1052,19 +1052,28 @@ fn gen_lr_suffix_dispatch<S: AsStrSlice>(
 ) {
     w.begin("loop");
     w.line("let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
-    // No-progress guard, mirroring the ATN twins
-    // (`gen_lr_suffix_dispatch_atn` / `gen_lr_fn_atn`): every valid LR
-    // suffix begins with a mandatory operator token, so a committed
-    // iteration always advances. The guard makes that termination
-    // structural rather than relying on each suffix consuming input — a
-    // suffix that yielded an empty `valid_lr_alts` member would otherwise
-    // spin here.
-    w.line("let _lr_pos0 = pos;");
+    // No-progress guard, mirroring the ATN twins (`gen_lr_suffix_dispatch_atn`
+    // / `gen_lr_fn_atn`), where some suffix could match empty and spin here.
+    let guard = !lr_suffixes_consume(lr_alts, lr_dispatch, ctx);
+    if guard {
+        w.line("let _lr_pos0 = pos;");
+    }
     emit_lr_group_chain(w, &scan_lr_site(fn_name), rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
-    w.begin("if pos == _lr_pos0");
-    w.line("break;");
-    w.end();
+    if guard {
+        w.begin("if pos == _lr_pos0");
+        w.line("break;");
+        w.end();
+    }
     w.end();  // loop
+}
+
+fn lr_suffixes_consume(lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData, ctx: &mut GenContext) -> bool {
+    for let v of &lr_dispatch.valid_lr_alts {
+        if scan_body_can_match_empty(&lr_alts[*v].scan_suffix.elements, ctx) {
+            return false;
+        }
+    }
+    return true;
 }
 
 fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
@@ -1085,8 +1094,12 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
     // makes the same decision lazily after attempting the suffix.
     w.begin(`if ${prec} >= min_prec`);
     // A suffix scan runs the suffix's gate actions, so an abandoned climb has
-    // to put the gate back with the position.
-    gen_scan_mark(w, ctx, "lr_saved_pos");
+    // to put the gate back with the position. A prebound scan already matched,
+    // so only the continuation check can abandon it.
+    let can_abandon = mid_operand_gated || prebound matches { None };
+    if can_abandon {
+        gen_scan_mark(w, ctx, "lr_saved_pos");
+    }
     // The guard that selected this branch already ran the scan. Committing to
     // its end takes the gate it ended under: the chain rolled the global back to
     // the dispatch's entry before branching, and the live-call sibling below
@@ -1095,8 +1108,8 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
         gen_scan_rewind(w, ctx, local);
     } else {
         w.line(`pos = ${suffix_fn}(tokens, pos${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())});`);
+        gen_scan_rewind_break(w, ctx, "lr_saved_pos", "pos < 0");
     }
-    gen_scan_rewind_break(w, ctx, "lr_saved_pos", "pos < 0");
     if mid_operand_gated {
         // Lockstep with the parse loop: the tournament must measure the same
         // climb the parse will take.
@@ -1361,19 +1374,26 @@ fn emit_lr_overlap(
         // and starts from the dispatch's own gate, not the previous one's end.
         if plans.iter_ref().any(|p: &[i32, LrSubPlan]| p.1 matches { Prebound(_) }) {
             let origin = gen_lr_candidates_begin(w, ctx, lr_site_is_parse(site), &dedup_name("lr_pre", nc));
+            let mut first_candidate = true;
             for let p of &plans {
                 if let Prebound(local) = &p.1 {
                     let alt = lr_alts[lr_dispatch.valid_lr_alts[group[p.0]]].alt_index;
-                    gen_scan_gate_from(w, ctx, &origin);
+                    if !first_candidate || origin matches { Parser } {
+                        gen_scan_gate_from(w, ctx, &origin);
+                    }
+                    first_candidate = false;
                     w.line(
                         `let ${*local} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${ctx.scan_gate_arg()}${follow_sep(
                             ctx.current_rule_reads_follow(),
                         )});`,
                     );
-                    // A position the branch may commit to, so it keeps the gate
-                    // it was reached under — the run rolls the global back.
-                    for let line of scan_gate_snapshot(ctx, local) {
-                        w.line(`let ${line}`);
+                    // A position the scan branch may commit to, so it keeps the
+                    // gate it was reached under — the run rolls the global back.
+                    // The parse commits no scan gate.
+                    if !lr_site_is_parse(site) {
+                        for let line of scan_gate_snapshot(ctx, local) {
+                            w.line(`let ${line}`);
+                        }
                     }
                 }
             }
@@ -1692,7 +1712,7 @@ fn gen_scan_partition_body<S: AsStrSlice>(
         }
         let body = &scan_alts[i];
         let known = if guarded { known_at_start(guard_tokens) } else { NOTHING_KNOWN };
-        if gen_scan_alt_candidate(w, i, body, &known, ctx, "break scan_alts;") {
+        if gen_scan_alt_candidate(w, i, body, &known, ctx, "break scan_alts;", true) {
             w.line("return -1;");
         }
         return;
@@ -1718,7 +1738,9 @@ fn gen_scan_partition_body<S: AsStrSlice>(
             // The gate half of a rewind alone: a hoisted candidate takes `start`
             // as an argument rather than through `pos`, so the position is
             // already where it belongs and only the gate has to follow it.
-            gen_scan_gate_restore(w, ctx, "start");
+            if k > 0 {
+                gen_scan_gate_restore(w, ctx, "start");
+            }
             w.line(
                 `let try_${i}_end = ${scan_alt_helper_name(base_name, i)}(tokens, start${ctx.scan_gate_arg()}${follow_sep(
                     ctx.current_rule_reads_follow(),
@@ -1730,7 +1752,7 @@ fn gen_scan_partition_body<S: AsStrSlice>(
         let body = &scan_alts[i];
         let known = if k < guarded_count { known_at_start(guard_tokens) } else { NOTHING_KNOWN };
         let commit = scan_gate_best_commit(ctx, "best", "pos > best", "pos");
-        let _ = gen_scan_alt_candidate(w, i, body, &known, ctx, &commit);
+        let _ = gen_scan_alt_candidate(w, i, body, &known, ctx, &commit, k == 0);
     }
     gen_scan_rewind_break(w, ctx, "best", "best >= 0", "break scan_alts;");
     w.line("return -1;");
@@ -1825,10 +1847,15 @@ fn gen_scan_alt_candidate<S: AsStrSlice>(
     known: &List<List<String>>,
     ctx: &mut GenContext,
     commit_stmt: S,
+    at_start: bool = false,
 ) -> bool {
     let from = scan_skip_known_token(&body.elements, known, ctx);
     let rest_known = if from == 1 { known_after(&body.elements[0], known, ctx) } else { *known };
-    gen_scan_rewind(w, ctx, "start", from);
+    if !at_start {
+        gen_scan_rewind(w, ctx, "start", from);
+    } else if from > 0 {
+        w.line(`pos = start + ${from};`);
+    }
     let can_fail = !body.gate_cond.is_empty() || scan_elements_can_fail(&body.elements, from, &rest_known, ctx);
     let label = `try_${i}`;
     if can_fail {
@@ -4291,16 +4318,19 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
         `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())})`;
     };
+    let matched = prebound matches { Some(_) };
     if mid_operand_gated {
         // A caller that needs this operand to leave a delimiter behind hands
         // it down as `lr_cont`. Take the operator only while that
         // continuation is still there — climbing past it strands the caller.
         w.line(`let _lr_end = ${scan_call};`);
-        w.line("if _lr_end < 0 { break; }");
+        if !matched {
+            w.line("if _lr_end < 0 { break; }");
+        }
         w.line(
             `if !(lr_cont == 0 || ${follow_yields_call_of("&p.kinds", "_lr_end", "lr_cont")}) { break; }`,
         );
-    } else {
+    } else if !matched {
         w.begin(`if ${scan_call} < 0`);
         w.line("break;");
         w.end();

@@ -4160,7 +4160,6 @@ fn scan_delim_token_tree(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> 
     scan_alts: {
         if alt_kind == TK_LPAREN {
             pos = start + 1;
-            *gate = start_gate;
             try_0: {
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
@@ -4180,7 +4179,6 @@ fn scan_delim_token_tree(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> 
             return -1;
         } else if alt_kind == TK_LSQUAREBRACKET {
             pos = start + 1;
-            *gate = start_gate;
             try_1: {
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
@@ -4200,7 +4198,6 @@ fn scan_delim_token_tree(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> 
             return -1;
         } else if alt_kind == TK_LCURLYBRACE {
             pos = start + 1;
-            *gate = start_gate;
             try_2: {
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
@@ -4232,8 +4229,6 @@ fn scan_token_tree(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_2(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_token_tree_token(tokens, pos, gate);
                 if pos < 0 { break try_0; }
@@ -4252,8 +4247,6 @@ fn scan_token_tree(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i
             }
             return -1;
         } else if _kind_set_3(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_1: {
                 pos = scan_delim_token_tree(tokens, pos, gate);
                 if pos < 0 { break try_1; }
@@ -4294,7 +4287,6 @@ fn scan_token_tree_token(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> 
         } else if _kind_set_52(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_0_end = scan_token_tree_token_alt_0(tokens, start, gate);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             *gate = start_gate;
@@ -4312,15 +4304,12 @@ fn scan_token_tree_token(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> 
             return -1;
         } else if _kind_set_54(alt_kind) {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if _kind_set_55(alt_kind) {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_DOLLAR {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else {
             return -1;
@@ -4338,8 +4327,6 @@ fn scan_macro_invocation_semi(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
         if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_simple_path(tokens, pos, gate, FOLLOW_MASK_2);
                 if pos < 0 { break try_0; }
@@ -4448,7 +4435,6 @@ fn scan_macro_rules_def(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
     scan_alts: {
         if alt_kind == TK_LPAREN {
             pos = start + 1;
-            *gate = start_gate;
             try_0: {
                 pos = scan_macro_rules(tokens, pos, gate, (FOLLOW_MASK_6 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_0; }
@@ -4461,7 +4447,6 @@ fn scan_macro_rules_def(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             return -1;
         } else if alt_kind == TK_LSQUAREBRACKET {
             pos = start + 1;
-            *gate = start_gate;
             try_1: {
                 pos = scan_macro_rules(tokens, pos, gate, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_1; }
@@ -4474,7 +4459,6 @@ fn scan_macro_rules_def(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             return -1;
         } else if alt_kind == TK_LCURLYBRACE {
             pos = start + 1;
-            *gate = start_gate;
             try_2: {
                 pos = scan_macro_rules(tokens, pos, gate, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_2; }
@@ -4560,7 +4544,6 @@ fn scan_macro_matcher(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32
     scan_alts: {
         if alt_kind == TK_LPAREN {
             pos = start + 1;
-            *gate = start_gate;
             try_0: {
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
@@ -4580,7 +4563,6 @@ fn scan_macro_matcher(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32
             return -1;
         } else if alt_kind == TK_LSQUAREBRACKET {
             pos = start + 1;
-            *gate = start_gate;
             try_1: {
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
@@ -4600,7 +4582,6 @@ fn scan_macro_matcher(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32
             return -1;
         } else if alt_kind == TK_LCURLYBRACE {
             pos = start + 1;
-            *gate = start_gate;
             try_2: {
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
@@ -4632,8 +4613,6 @@ fn scan_macro_match(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_5(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_macro_match_token(tokens, pos, gate);
                 if pos < 0 { break try_0; }
@@ -4652,8 +4631,6 @@ fn scan_macro_match(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
             }
             return -1;
         } else if _kind_set_3(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_1: {
                 pos = scan_macro_matcher(tokens, pos, gate);
                 if pos < 0 { break try_1; }
@@ -4664,7 +4641,6 @@ fn scan_macro_match(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
             let mut best: i32 = -1;
             let mut best_gate = *gate;
             pos = start + 1;
-            *gate = start_gate;
             try_3: {
                 if pos >= tokens.len() || tokens[pos] != TK_LPAREN { break try_3; }
                 pos += 1;
@@ -4747,7 +4723,6 @@ fn scan_macro_match_token(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) ->
         } else if _kind_set_52(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_0_end = scan_macro_match_token_alt_0(tokens, start, gate);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             *gate = start_gate;
@@ -4765,11 +4740,9 @@ fn scan_macro_match_token(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) ->
             return -1;
         } else if _kind_set_54(alt_kind) {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if _kind_set_55(alt_kind) {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else {
             return -1;
@@ -4812,7 +4785,6 @@ fn scan_macro_rep_sep(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32
         } else if _kind_set_52(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_0_end = scan_macro_rep_sep_alt_0(tokens, start, gate);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             *gate = start_gate;
@@ -4830,11 +4802,9 @@ fn scan_macro_rep_sep(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32
             return -1;
         } else if _kind_set_54(alt_kind) {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_DOLLAR {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else {
             return -1;
@@ -5037,7 +5007,6 @@ fn scan_macro_item(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i
         } else if alt_kind == TK_KW_MACRORULES {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_0_end = scan_macro_item_alt_0(tokens, start, gate, follow);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             pos = start;
@@ -5171,11 +5140,9 @@ fn scan_crate_ref(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     scan_alts: {
         if _kind_set_4(alt_kind) {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_KW_SELFVALUE {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else {
             return -1;
@@ -5293,7 +5260,6 @@ fn scan_use_tree(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64
         if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_0_end = scan_use_tree_alt_0(tokens, start, gate, follow);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             pos = start;
@@ -5504,7 +5470,6 @@ fn scan_function_parameters(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
         if _kind_set_14(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_1_end = scan_function_parameters_alt_1(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             pos = start;
@@ -5746,8 +5711,6 @@ fn scan_struct_(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 
         if alt_kind == TK_KW_STRUCT {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_struct_struct(tokens, pos, gate, follow);
                 if pos < 0 { break try_0; }
@@ -6442,8 +6405,6 @@ fn scan_implementation(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
         if alt_kind == TK_KW_IMPL {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_inherent_impl(tokens, pos, gate, follow);
                 if pos < 0 { break try_0; }
@@ -7208,8 +7169,6 @@ fn scan_where_clause_item(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, fo
         if _kind_set_16(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_lifetime_where_clause_item(tokens, pos, gate, follow);
                 if pos < 0 { break try_0; }
@@ -7426,7 +7385,6 @@ fn scan_attr(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0
     scan_alts: {
         if alt_kind == TK_KW_UNSAFE {
             pos = start + 1;
-            *gate = start_gate;
             try_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_LPAREN { break try_0; }
                 pos += 1;
@@ -7438,8 +7396,6 @@ fn scan_attr(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0
             }
             return -1;
         } else if _kind_set_9(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_1: {
                 pos = scan_simple_path(tokens, pos, gate, follow);
                 if pos < 0 { break try_1; }
@@ -7469,8 +7425,6 @@ fn scan_attr_input(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_3(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_delim_token_tree(tokens, pos, gate);
                 if pos < 0 { break try_0; }
@@ -7479,7 +7433,6 @@ fn scan_attr_input(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
             return -1;
         } else if alt_kind == TK_EQ {
             pos = start + 1;
-            *gate = start_gate;
             try_1: {
                 if pos >= tokens.len() || !_kind_set_65(tokens[pos]) { break try_1; }
                 pos += 1;
@@ -7522,12 +7475,10 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i6
     scan_alts: {
         if alt_kind == TK_SEMI {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_POUND {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_1_end = scan_statement_alt_1(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             *gate = start_gate;
@@ -7549,7 +7500,6 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i6
         } else if _kind_set_67(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_1_end = scan_statement_alt_1(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             *gate = start_gate;
@@ -7564,7 +7514,6 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i6
         } else if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_1_end = scan_statement_alt_1(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             *gate = start_gate;
@@ -7685,7 +7634,6 @@ fn scan_expression_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,
         if _kind_set_69(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_0_end = scan_expression_statement_alt_0(tokens, start, gate, follow);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             pos = start;
@@ -7761,7 +7709,6 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
         if alt_kind == TK_POUND {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_18_end = scan_expression_atom_alt_18(tokens, start, gate, follow);
             if try_18_end > best { best = try_18_end; best_gate = *gate; }
             pos = start;
@@ -7810,12 +7757,10 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             return -1;
         } else if _kind_set_65(alt_kind) {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_2_end = scan_expression_atom_alt_2(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             *gate = start_gate;
@@ -7840,7 +7785,6 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
         } else if alt_kind == TK_KW_SELFTYPE {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_2_end = scan_expression_atom_alt_2(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             *gate = start_gate;
@@ -7862,8 +7806,6 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
         } else if _kind_set_71(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_3: {
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_KW_RAW { break try_3; }
@@ -7893,7 +7835,6 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             return -1;
         } else if alt_kind == TK_STAR {
             pos = start + 1;
-            *gate = start_gate;
             try_5: {
                 pos = scan_expression(tokens, pos, gate, follow, 15);
                 if pos < 0 { break try_5; }
@@ -7901,8 +7842,6 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             }
             return -1;
         } else if _kind_set_73(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_6: {
                 pos += 1;
                 pos = scan_expression(tokens, pos, gate, follow, 15);
@@ -7912,7 +7851,6 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             return -1;
         } else if alt_kind == TK_DOTDOT {
             pos = start + 1;
-            *gate = start_gate;
             if pos < tokens.len() && _kind_set_31(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                 let sp = pos;
                 let sp_gate = *gate;
@@ -7925,7 +7863,6 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             break scan_alts;
         } else if alt_kind == TK_DOTDOTEQ {
             pos = start + 1;
-            *gate = start_gate;
             try_8: {
                 pos = scan_expression(tokens, pos, gate, follow, 4);
                 if pos < 0 { break try_8; }
@@ -7934,7 +7871,6 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             return -1;
         } else if alt_kind == TK_KW_CONTINUE {
             pos = start + 1;
-            *gate = start_gate;
             if pos < tokens.len() && tokens[pos] == TK_LIFETIME_OR_LABEL && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                 pos += 1;
             }
@@ -7950,7 +7886,6 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             break scan_alts;
         } else if alt_kind == TK_KW_BREAK {
             pos = start + 1;
-            *gate = start_gate;
             if pos < tokens.len() && tokens[pos] == TK_LIFETIME_OR_LABEL && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                 pos += 1;
             }
@@ -7966,7 +7901,6 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             break scan_alts;
         } else if alt_kind == TK_KW_RETURN {
             pos = start + 1;
-            *gate = start_gate;
             if pos < tokens.len() && _kind_set_31(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                 let sp = pos;
                 let sp_gate = *gate;
@@ -7981,7 +7915,6 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             let mut best: i32 = -1;
             let mut best_gate = *gate;
             pos = start + 1;
-            *gate = start_gate;
             try_12: {
                 gate.no_struct = 0;
                 while pos < tokens.len() && tokens[pos] == TK_POUND {
@@ -8083,7 +8016,6 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             return -1;
         } else if alt_kind == TK_LSQUAREBRACKET {
             pos = start + 1;
-            *gate = start_gate;
             try_13: {
                 while pos < tokens.len() && tokens[pos] == TK_POUND {
                     let sp = pos;
@@ -8140,7 +8072,6 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
         } else if alt_kind == TK_KW_ASYNC {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_17_end = scan_expression_atom_alt_17(tokens, start, gate, follow);
             if try_17_end > best { best = try_17_end; best_gate = *gate; }
             *gate = start_gate;
@@ -8406,11 +8337,9 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        let _lr_pos0 = pos;
         if suffix_kind == TK_DOT {
             let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
             let lr_pre_gate = *gate;
-            *gate = lr_pre_gate;
             let _lr_scan_3 = scan_expression_lr_3(tokens, pos, gate, follow);
             let _lr_scan_3_gate = *gate;
             *gate = lr_pre_gate;
@@ -8419,29 +8348,15 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i
             *gate = lr_pre_gate;
             if _lr_scan_3 >= 0 {
                 if 21 >= min_prec {
-                    let lr_saved_pos = pos;
-                    let lr_saved_pos_gate = *gate;
                     pos = _lr_scan_3;
                     *gate = _lr_scan_3_gate;
-                    if pos < 0 {
-                        pos = lr_saved_pos;
-                        *gate = lr_saved_pos_gate;
-                        break;
-                    }
                 } else {
                     break;
                 }
             } else if _lr_scan_4 >= 0 {
                 if 20 >= min_prec {
-                    let lr_saved_pos = pos;
-                    let lr_saved_pos_gate = *gate;
                     pos = _lr_scan_4;
                     *gate = _lr_scan_4_gate;
-                    if pos < 0 {
-                        pos = lr_saved_pos;
-                        *gate = lr_saved_pos_gate;
-                        break;
-                    }
                 } else {
                     break;
                 }
@@ -8605,21 +8520,13 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i
                 }
             } else if suffix_kind == TK_LT {
                 let lr_pre_2_gate = *gate;
-                *gate = lr_pre_2_gate;
                 let _lr_scan_17 = scan_expression_lr_17(tokens, pos, gate, follow);
                 let _lr_scan_17_gate = *gate;
                 *gate = lr_pre_2_gate;
                 if _lr_scan_17 >= 0 {
                     if 11 >= min_prec {
-                        let lr_saved_pos = pos;
-                        let lr_saved_pos_gate = *gate;
                         pos = _lr_scan_17;
                         *gate = _lr_scan_17_gate;
-                        if pos < 0 {
-                            pos = lr_saved_pos;
-                            *gate = lr_saved_pos_gate;
-                            break;
-                        }
                     } else {
                         break;
                     }
@@ -8787,9 +8694,6 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i
         } else {
             break;
         }
-        if pos == _lr_pos0 {
-            break;
-        }
     }
     return pos;
 }
@@ -8801,8 +8705,6 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_POUND {
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_outer_attribute(tokens, pos, gate, 0);
                 if pos < 0 { break try_0; }
@@ -8841,8 +8743,6 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
             }
             return -1;
         } else if alt_kind == TK_LCURLYBRACE {
-            pos = start;
-            *gate = start_gate;
             try_1: {
                 pos = scan_block_expression(tokens, pos, gate, follow);
                 if pos < 0 { break try_1; }
@@ -8850,8 +8750,6 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
             }
             return -1;
         } else if alt_kind == TK_KW_ASYNC {
-            pos = start;
-            *gate = start_gate;
             try_2: {
                 pos = scan_async_block_expression(tokens, pos, gate, follow);
                 if pos < 0 { break try_2; }
@@ -8859,8 +8757,6 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
             }
             return -1;
         } else if alt_kind == TK_KW_UNSAFE {
-            pos = start;
-            *gate = start_gate;
             try_3: {
                 pos = scan_unsafe_block_expression(tokens, pos, gate, follow);
                 if pos < 0 { break try_3; }
@@ -8868,8 +8764,6 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
             }
             return -1;
         } else if _kind_set_80(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_4: {
                 pos = scan_loop_expression(tokens, pos, gate, follow);
                 if pos < 0 { break try_4; }
@@ -8879,8 +8773,6 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
         } else if alt_kind == TK_KW_IF {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_5: {
                 pos = scan_if_expression(tokens, pos, gate, follow);
                 if pos < 0 { break try_5; }
@@ -8900,8 +8792,6 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
             }
             return -1;
         } else if alt_kind == TK_KW_MATCH {
-            pos = start;
-            *gate = start_gate;
             try_7: {
                 pos = scan_match_expression(tokens, pos, gate, follow);
                 if pos < 0 { break try_7; }
@@ -8922,8 +8812,6 @@ fn scan_path_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_32(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_path_in_expression(tokens, pos, gate, follow);
                 if pos < 0 { break try_0; }
@@ -8931,8 +8819,6 @@ fn scan_path_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             }
             return -1;
         } else if alt_kind == TK_LT {
-            pos = start;
-            *gate = start_gate;
             try_1: {
                 pos = scan_qualified_path_in_expression(tokens, pos, gate, follow);
                 if pos < 0 { break try_1; }
@@ -9071,8 +8957,6 @@ fn scan_statements(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i
         } else if _kind_set_31(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_1: {
                 pos = scan_expression(tokens, pos, gate, follow, 0);
                 if pos < 0 { break try_1; }
@@ -9132,8 +9016,6 @@ fn scan_array_elements__scoped(tokens: &Array<i32>, pos: i32, gate: &mut ScanGat
         if _kind_set_31(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_expression(tokens, pos, gate, (FOLLOW_MASK_35 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
                 if pos < 0 { break try_0; }
@@ -9296,8 +9178,6 @@ fn scan_struct_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, fo
         if _kind_set_32(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_struct_expr_struct(tokens, pos, gate, follow);
                 if pos < 0 { break try_0; }
@@ -9711,8 +9591,6 @@ fn scan_enumeration_variant_expression(tokens: &Array<i32>, pos: i32, gate: &mut
         if _kind_set_32(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_enum_expr_struct(tokens, pos, gate, follow);
                 if pos < 0 { break try_0; }
@@ -9839,7 +9717,6 @@ fn scan_enum_expr_field(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             let mut best: i32 = -1;
             let mut best_gate = *gate;
             pos = start + 1;
-            *gate = start_gate;
             if pos > best { best = pos; best_gate = *gate; }
             *gate = start_gate;
             let try_1_end = scan_enum_expr_field_alt_1(tokens, start, gate, follow);
@@ -10601,7 +10478,6 @@ fn scan_match_arm_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,
         if _kind_set_69(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_0_end = scan_match_arm_expression_alt_0(tokens, start, gate, follow);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             pos = start;
@@ -10668,7 +10544,6 @@ fn scan_match_arm_guard(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
             let mut best: i32 = -1;
             let mut best_gate = *gate;
             pos = start + 1;
-            *gate = start_gate;
             try_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_KW_LET { break try_0; }
                 pos += 1;
@@ -10773,7 +10648,6 @@ fn scan_pattern_no_top_alt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, f
         } else if _kind_set_83(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_0_end = scan_pattern_no_top_alt_alt_0(tokens, start, gate, follow);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             pos = start;
@@ -10838,8 +10712,6 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_49(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_literal_pattern(tokens, pos, gate, follow);
                 if pos < 0 { break try_0; }
@@ -10853,7 +10725,6 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
         } else if _kind_set_4(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_1_end = scan_pattern_without_range_alt_1(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             *gate = start_gate;
@@ -10876,15 +10747,11 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
             return -1;
         } else if alt_kind == TK_UNDERSCORE {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_DOTDOT {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if _kind_set_71(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_4: {
                 pos = scan_reference_pattern(tokens, pos, gate, follow);
                 if pos < 0 { break try_4; }
@@ -10894,7 +10761,6 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
         } else if _kind_set_85(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_5_end = scan_pattern_without_range_alt_5(tokens, start, gate, follow);
             if try_5_end > best { best = try_5_end; best_gate = *gate; }
             *gate = start_gate;
@@ -10915,7 +10781,6 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
         } else if alt_kind == TK_KW_SELFTYPE {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_5_end = scan_pattern_without_range_alt_5(tokens, start, gate, follow);
             if try_5_end > best { best = try_5_end; best_gate = *gate; }
             *gate = start_gate;
@@ -10933,8 +10798,6 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
         } else if alt_kind == TK_LPAREN {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_7: {
                 pos = scan_tuple_pattern(tokens, pos, gate, follow);
                 if pos < 0 { break try_7; }
@@ -10954,8 +10817,6 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
             }
             return -1;
         } else if alt_kind == TK_LSQUAREBRACKET {
-            pos = start;
-            *gate = start_gate;
             try_9: {
                 pos = scan_slice_pattern(tokens, pos, gate, follow);
                 if pos < 0 { break try_9; }
@@ -11001,40 +10862,31 @@ fn scan_literal_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
     scan_alts: {
         if alt_kind == TK_KW_TRUE {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_KW_FALSE {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_CHAR_LITERAL {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_BYTE_LITERAL {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_STRING_LITERAL {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_RAW_STRING_LITERAL {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_BYTE_STRING_LITERAL {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_RAW_BYTE_STRING_LITERAL {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_MINUS {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_8_end = scan_literal_pattern_alt_8(tokens, start, gate, follow);
             if try_8_end > best { best = try_8_end; best_gate = *gate; }
             *gate = start_gate;
@@ -11100,8 +10952,6 @@ fn scan_range_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow
         if _kind_set_83(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_range_pattern_bound(tokens, pos, gate, FOLLOW_MASK_46);
                 if pos < 0 { break try_0; }
@@ -11172,16 +11022,13 @@ fn scan_range_pattern_bound(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
     scan_alts: {
         if alt_kind == TK_CHAR_LITERAL {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_BYTE_LITERAL {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_MINUS {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_2_end = scan_range_pattern_bound_alt_2(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             *gate = start_gate;
@@ -11202,8 +11049,6 @@ fn scan_range_pattern_bound(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if _kind_set_86(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_4: {
                 pos = scan_path_pattern(tokens, pos, gate, follow);
                 if pos < 0 { break try_4; }
@@ -11290,7 +11135,6 @@ fn scan_struct_pattern_elements(tokens: &Array<i32>, pos: i32, gate: &mut ScanGa
         if alt_kind == TK_POUND {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_1_end = scan_struct_pattern_elements_alt_1(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             *gate = start_gate;
@@ -11596,7 +11440,6 @@ fn scan_tuple_pattern_items(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
         if _kind_set_88(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_2_end = scan_tuple_pattern_items_alt_2(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             *gate = start_gate;
@@ -11612,7 +11455,6 @@ fn scan_tuple_pattern_items(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
             let mut best: i32 = -1;
             let mut best_gate = *gate;
             pos = start + 1;
-            *gate = start_gate;
             if pos > best { best = pos; best_gate = *gate; }
             *gate = start_gate;
             let try_2_end = scan_tuple_pattern_items_alt_2(tokens, start, gate, follow);
@@ -11720,8 +11562,6 @@ fn scan_path_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow:
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_32(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_path_in_expression(tokens, pos, gate, follow);
                 if pos < 0 { break try_0; }
@@ -11729,8 +11569,6 @@ fn scan_path_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow:
             }
             return -1;
         } else if alt_kind == TK_LT {
-            pos = start;
-            *gate = start_gate;
             try_1: {
                 pos = scan_qualified_path_in_expression(tokens, pos, gate, follow);
                 if pos < 0 { break try_1; }
@@ -11767,7 +11605,6 @@ fn scan_type_(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 
         if _kind_set_89(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_0_end = scan_type__alt_0(tokens, start, gate, follow);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             *gate = start_gate;
@@ -11782,7 +11619,6 @@ fn scan_type_(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 
         } else if alt_kind == TK_KW_IMPL {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_0_end = scan_type__alt_0(tokens, start, gate, follow);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             pos = start;
@@ -11843,8 +11679,6 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
         if alt_kind == TK_LPAREN {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_parenthesized_type(tokens, pos, gate, follow);
                 if pos < 0 { break try_0; }
@@ -11867,8 +11701,6 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
             }
             return -1;
         } else if alt_kind == TK_KW_IMPL {
-            pos = start;
-            *gate = start_gate;
             try_1: {
                 pos = scan_impl_trait_type_one_bound(tokens, pos, gate, follow);
                 if pos < 0 { break try_1; }
@@ -11882,7 +11714,6 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
         } else if alt_kind == TK_KW_FOR {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_2_end = scan_type_no_bounds_alt_2(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             *gate = start_gate;
@@ -11897,7 +11728,6 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
         } else if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_2_end = scan_type_no_bounds_alt_2(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             *gate = start_gate;
@@ -11919,7 +11749,6 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
         } else if alt_kind == TK_KW_SELFTYPE {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_2_end = scan_type_no_bounds_alt_2(tokens, start, gate, follow);
             if try_2_end > best { best = try_2_end; best_gate = *gate; }
             *gate = start_gate;
@@ -11933,11 +11762,8 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
             return -1;
         } else if alt_kind == TK_NOT {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_STAR {
-            pos = start;
-            *gate = start_gate;
             try_6: {
                 pos = scan_raw_pointer_type(tokens, pos, gate, follow);
                 if pos < 0 { break try_6; }
@@ -11945,8 +11771,6 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
             }
             return -1;
         } else if _kind_set_71(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_7: {
                 pos = scan_reference_type(tokens, pos, gate, follow);
                 if pos < 0 { break try_7; }
@@ -11956,8 +11780,6 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
         } else if alt_kind == TK_LSQUAREBRACKET {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_8: {
                 pos = scan_array_type(tokens, pos, gate, follow);
                 if pos < 0 { break try_8; }
@@ -11978,11 +11800,8 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
             return -1;
         } else if alt_kind == TK_UNDERSCORE {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_LT {
-            pos = start;
-            *gate = start_gate;
             try_11: {
                 pos = scan_qualified_path_in_type(tokens, pos, gate, follow);
                 if pos < 0 { break try_11; }
@@ -12207,8 +12026,6 @@ fn scan_function_parameters_maybe_named_variadic(tokens: &Array<i32>, pos: i32, 
         if _kind_set_44(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_maybe_named_function_parameters(tokens, pos, gate, follow);
                 if pos < 0 { break try_0; }
@@ -12496,11 +12313,8 @@ fn scan_type_param_bound(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, fol
     scan_alts: {
         if _kind_set_16(alt_kind) {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if _kind_set_46(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_1: {
                 pos = scan_trait_bound(tokens, pos, gate, follow);
                 if pos < 0 { break try_1; }
@@ -12521,8 +12335,6 @@ fn scan_trait_bound(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_47(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 if pos < tokens.len() && tokens[pos] == TK_QUESTION {
                     pos += 1;
@@ -12543,7 +12355,6 @@ fn scan_trait_bound(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
             return -1;
         } else if alt_kind == TK_LPAREN {
             pos = start + 1;
-            *gate = start_gate;
             try_1: {
                 if pos < tokens.len() && tokens[pos] == TK_QUESTION {
                     pos += 1;
@@ -12669,23 +12480,18 @@ fn scan_simple_path_segment(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) 
     scan_alts: {
         if _kind_set_4(alt_kind) {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_KW_SUPER {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_KW_SELFVALUE {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_KW_CRATE {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_KW_DOLLARCRATE {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else {
             return -1;
@@ -12755,27 +12561,21 @@ fn scan_path_ident_segment(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -
     scan_alts: {
         if _kind_set_4(alt_kind) {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_KW_SUPER {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_KW_SELFVALUE {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_KW_SELFTYPE {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_KW_CRATE {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_KW_DOLLARCRATE {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else {
             return -1;
@@ -12794,7 +12594,6 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow:
             let mut best: i32 = -1;
             let mut best_gate = *gate;
             pos = start + 1;
-            *gate = start_gate;
             try_1: {
                 pos = scan_generic_args_lifetimes(tokens, pos, gate, 0);
                 if pos < 0 { break try_1; }
@@ -12967,7 +12766,6 @@ fn scan_generic_arg(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
             let mut best: i32 = -1;
             let mut best_gate = *gate;
             pos = start + 1;
-            *gate = start_gate;
             if pos > best { best = pos; best_gate = *gate; }
             *gate = start_gate;
             let try_1_end = scan_generic_arg_alt_1(tokens, start, gate, follow);
@@ -12985,7 +12783,6 @@ fn scan_generic_arg(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
         } else if _kind_set_4(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_1_end = scan_generic_arg_alt_1(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             *gate = start_gate;
@@ -13007,7 +12804,6 @@ fn scan_generic_arg(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
         } else if _kind_set_96(alt_kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_1_end = scan_generic_arg_alt_1(tokens, start, gate, follow);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             *gate = start_gate;
@@ -13037,8 +12833,6 @@ fn scan_generic_args_const(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, f
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LCURLYBRACE {
-            pos = start;
-            *gate = start_gate;
             try_0: {
                 pos = scan_block_expression(tokens, pos, gate, follow);
                 if pos < 0 { break try_0; }
@@ -13046,8 +12840,6 @@ fn scan_generic_args_const(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, f
             }
             return -1;
         } else if _kind_set_49(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_1: {
                 if pos < tokens.len() && tokens[pos] == TK_MINUS {
                     pos += 1;
@@ -13058,8 +12850,6 @@ fn scan_generic_args_const(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, f
             }
             return -1;
         } else if _kind_set_10(alt_kind) {
-            pos = start;
-            *gate = start_gate;
             try_2: {
                 pos = scan_simple_path_segment(tokens, pos, gate);
                 if pos < 0 { break try_2; }
@@ -13484,7 +13274,6 @@ fn scan_macro_identifier_like_token(tokens: &Array<i32>, pos: i32, gate: &mut Sc
         } else if alt_kind == TK_KW_UNION {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_0_end = scan_macro_identifier_like_token_alt_0(tokens, start, gate);
             if try_0_end > best { best = try_0_end; best_gate = *gate; }
             *gate = start_gate;
@@ -13503,7 +13292,6 @@ fn scan_macro_identifier_like_token(tokens: &Array<i32>, pos: i32, gate: &mut Sc
         } else if alt_kind == TK_KW_MACRORULES {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
-            *gate = start_gate;
             let try_1_end = scan_macro_identifier_like_token_alt_1(tokens, start, gate);
             if try_1_end > best { best = try_1_end; best_gate = *gate; }
             pos = start + 1;
@@ -13517,15 +13305,12 @@ fn scan_macro_identifier_like_token(tokens: &Array<i32>, pos: i32, gate: &mut Sc
             return -1;
         } else if alt_kind == TK_KW_UNDERLINELIFETIME {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_KW_DOLLARCRATE {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else if alt_kind == TK_LIFETIME_OR_LABEL {
             pos = start + 1;
-            *gate = start_gate;
             break scan_alts;
         } else {
             return -1;
@@ -19112,15 +18897,10 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
         if _sk == TK_DOT {
             p.scan_gate.no_struct = p.no_struct;
             let _lr_scan_3 = scan_expression_lr_3(&p.kinds, p.pos, &mut p.scan_gate, follow);
-            let _lr_scan_3_gate = p.scan_gate;
             p.scan_gate.no_struct = p.no_struct;
             let _lr_scan_4 = scan_expression_lr_4(&p.kinds, p.pos, &mut p.scan_gate, follow);
-            let _lr_scan_4_gate = p.scan_gate;
             if _lr_scan_3 >= 0 {
                 if 21 >= min_prec {
-                    if _lr_scan_3 < 0 {
-                        break;
-                    }
                     p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                     p.b.set_alt(3);
                     p.expect(TK_DOT, &EMPTY_SYNC);
@@ -19145,9 +18925,6 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 }
             } else if _lr_scan_4 >= 0 {
                 if 20 >= min_prec {
-                    if _lr_scan_4 < 0 {
-                        break;
-                    }
                     p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                     p.b.set_alt(4);
                     p.expect(TK_DOT, &EMPTY_SYNC);
@@ -19344,12 +19121,8 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
             } else if _sk == TK_LT {
                 p.scan_gate.no_struct = p.no_struct;
                 let _lr_scan_17 = scan_expression_lr_17(&p.kinds, p.pos, &mut p.scan_gate, follow);
-                let _lr_scan_17_gate = p.scan_gate;
                 if _lr_scan_17 >= 0 {
                     if 11 >= min_prec {
-                        if _lr_scan_17 < 0 {
-                            break;
-                        }
                         p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                         p.b.set_alt(17);
                         let _gk = p.peek_kind();

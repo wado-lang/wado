@@ -1364,7 +1364,6 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) 
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        let _lr_pos0 = pos;
         if suffix_kind == TK_AT {
             let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
             if second_kind == TK_X {
@@ -1385,9 +1384,6 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) 
                 }
             }
         } else {
-            break;
-        }
-        if pos == _lr_pos0 {
             break;
         }
     }
