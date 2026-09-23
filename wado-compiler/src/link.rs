@@ -6,7 +6,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexMap;
+#[cfg(debug_assertions)]
+use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::tir::{
