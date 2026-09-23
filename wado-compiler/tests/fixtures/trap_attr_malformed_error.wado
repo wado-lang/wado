@@ -1,0 +1,58 @@
+// A malformed `#[trap(...)]` is reported, never read as a promise: silence
+// means "may trap", and a promise it did not mean would delete a trapping call.
+//
+// Every function here has a body, and the body check comes last, so each one
+// reports what it got wrong rather than only where it sits — the last is the
+// case where nothing else is wrong.
+
+#[trap(outside = nope)]
+fn first(arr: i32) -> i32 {
+    return arr;
+}
+
+#[trap(negative = n, outside = n)]
+fn second(n: i32) -> i32 {
+    return n;
+}
+
+#[trap(at = i)]
+fn third(i: i32) -> i32 {
+    return i;
+}
+
+#[trap(never)]
+#[trap(negative = n)]
+fn fourth(n: i32) -> i32 {
+    return n;
+}
+
+#[trap("never")]
+fn fifth(n: i32) -> i32 {
+    return n;
+}
+
+#[trap(never)]
+fn sixth(n: i32) -> i32 {
+    return n;
+}
+
+export fn run() {
+    first(1);
+    second(2);
+    third(3);
+    fourth(4);
+    fifth(5);
+    sixth(6);
+}
+
+__DATA__
+{
+    "compile_error": "#[trap(outside = nope)] names no parameter",
+    "compile_errors_contains": [
+        "#[trap] states one check; repeat the attribute for another",
+        "#[trap(at = ...)] belongs with `outside`",
+        "#[trap(never)] stands alone",
+        "#[trap] takes `never` or `key = param` pairs, not never",
+        "#[trap] belongs to a declaration with no body"
+    ]
+}

@@ -250,6 +250,7 @@ fn make_trait_method(
         effects: Vec::new(),
         retains: vec![],
         immediates: vec![],
+        trap: None,
         body: Some(body),
         span,
         local_count,

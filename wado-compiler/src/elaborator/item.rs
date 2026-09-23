@@ -86,6 +86,7 @@ fn placeholder_function(name: String, span: Span) -> TirFunction {
         effects: vec![],
         retains: vec![],
         immediates: vec![],
+        trap: None,
         body: None,
         span,
         local_count: 0,
@@ -2053,6 +2054,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 "immediate" => {
                     "cannot declare `#[immediate]`: it says how codegen lowers one call, and a \
                      requirement is dispatched to an impl that is called rather than lowered"
+                }
+                "trap" => {
+                    "cannot declare `#[trap]`: the impl it dispatches to has the body that \
+                     says when it traps, so stating it here binds every call site to a promise \
+                     no implementation makes"
                 }
                 _ => continue,
             };

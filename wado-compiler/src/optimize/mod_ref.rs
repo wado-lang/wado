@@ -16,9 +16,9 @@ use crate::nir_package::NirPackage;
 use crate::optimize::arena_query::{
     cast_truncates_a_float, expr_node_may_trap_typed, field_receiver_nonnull,
 };
-use crate::optimize::bounds::{self, ArrayOp};
+use crate::optimize::bounds::{self, Builtin};
 use crate::optimize::inline::recursive_scc_members;
-use crate::tir::TypeTable;
+use crate::tir::{BuiltinDeclarations, TypeTable};
 
 /// Read / write flags for a single state channel (e.g., GC heap or
 /// linear memory).
@@ -649,8 +649,8 @@ pub(super) struct FnEffect {
     /// see through (an indirect call, a bodyless non-builtin).
     pub opaque: bool,
     /// Some execution may trap: a body's own nodes
-    /// ([`super::arena_query::expr_node_may_trap_typed`]), a builtin
-    /// [`builtin_trap`] cannot clear, or a callee's.
+    /// ([`super::arena_query::expr_node_may_trap_typed`]), a builtin call
+    /// whose `#[trap(...)]` checks [`bounds`] cannot prove, or a callee's.
     pub may_trap: bool,
     /// Some execution may never return: a loop [`bounds`] cannot count out, or
     /// recursion.
@@ -737,111 +737,20 @@ fn memory_builtin_effect(name: &str) -> FnEffect {
     }
 }
 
-/// How a Wasm-instruction builtin can trap.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BuiltinTrap {
-    Never,
-    /// Only on an argument out of the range [`bounds`] checks per call.
-    Array(ArrayOp),
-    /// A trap nothing here rules out, and the answer for any builtin this
-    /// taxonomy does not name.
-    May,
-}
-
-/// The GC-array builtins, by the operands their bounds check reads.
-const ARRAY_BUILTINS: &[(&str, ArrayOp)] = &[
-    ("array_new", ArrayOp::New),
-    ("array_get_value", ArrayOp::Element),
-    ("array_get_value_u8", ArrayOp::Element),
-    ("array_get_ref", ArrayOp::Element),
-    ("array_get_ref_mut", ArrayOp::ElementWrite),
-    ("array_set", ArrayOp::ElementWrite),
-    ("array_set_u8", ArrayOp::ElementWrite),
-    ("array_fill", ArrayOp::Fill),
-    ("array_copy", ArrayOp::Copy),
-    ("array_clone_prefix", ArrayOp::ClonePrefix),
-];
-
-/// Scalar builtins that never trap. `array_len` reads through a reference,
-/// which is never null, and `array_clone` copies exactly its source's length.
-/// `cold_path` and `black_box` stay out: a call to either is there to be kept.
-const TOTAL_BUILTINS: &[&str] = &[
-    "array_len",
-    "array_clone",
-    "memory_size",
-    "memory_grow",
-    "i32_as_char",
-    "i32_and",
-    "i32_eqz",
-    "select",
-    "i64_add128",
-    "i64_sub128",
-    "i64_mul_wide_u",
-    "i64_mul_wide_s",
-    "i32_clz",
-    "i32_ctz",
-    "i32_popcnt",
-    "i64_clz",
-    "i64_ctz",
-    "i64_popcnt",
-    "i64_reinterpret_f64",
-    "f64_reinterpret_i64",
-    "i32_reinterpret_f32",
-    "f32_reinterpret_i32",
-    "u16_reinterpret_f16",
-    "f16_reinterpret_u16",
-    "u16_reinterpret_bf16",
-    "bf16_reinterpret_u16",
-    "f32_abs",
-    "f64_abs",
-    "f32_ceil",
-    "f64_ceil",
-    "f32_floor",
-    "f64_floor",
-    "f32_trunc",
-    "f64_trunc",
-    "f32_nearest",
-    "f64_nearest",
-    "f32_sqrt",
-    "f64_sqrt",
-    "f32_min",
-    "f64_min",
-    "f32_max",
-    "f64_max",
-    "f32_copysign",
-    "f64_copysign",
-];
-
-/// SIMD lane ops are total: lane indices are immediates, float division yields
-/// a NaN or an infinity, and conversions saturate. The linear-memory accesses
-/// are the exception.
-const SIMD_PREFIXES: &[&str] = &[
-    "v128_", "i8x16_", "i16x8_", "i32x4_", "i64x2_", "f32x4_", "f64x2_",
-];
-
-/// The trap taxonomy of the builtins in `core:builtin`. Unlisted is
-/// [`BuiltinTrap::May`], so a new builtin costs optimization, never correctness.
-fn builtin_trap(name: &str) -> BuiltinTrap {
-    if let Some(&(_, op)) = ARRAY_BUILTINS.iter().find(|(n, _)| *n == name) {
-        return BuiltinTrap::Array(op);
-    }
-    let simd = SIMD_PREFIXES.iter().any(|p| name.starts_with(p))
-        && !matches!(name, "v128_load" | "v128_store");
-    if simd || TOTAL_BUILTINS.contains(&name) {
-        BuiltinTrap::Never
-    } else {
-        BuiltinTrap::May
-    }
-}
-
-/// Leaf summary for a bodyless function, with the array builtin it is, if any.
+/// A bodyless function as a call to it is read: its summary, and what it
+/// declared if it is a builtin the body scan answers for at each call.
 ///
 /// A builtin carrying a `canonical_name` is a component-model operation
 /// (streams, futures, waitables, tasks, threads) — I/O, hence opaque. The rest
-/// are Wasm instructions: opaque only when they touch linear memory.
-/// Anything bodyless that is not a builtin at all (an extern declaration) is
-/// opaque, since there is no body to inspect.
-fn leaf_effect(f: &NirFunction, registry: &BuiltinRegistry) -> (FnEffect, Option<ArrayOp>) {
+/// are Wasm instructions: opaque only when they touch linear memory, trapping
+/// unless `#[trap(...)]` says when, and storing through their `&mut`
+/// parameters. Anything bodyless that is not a builtin at all (an extern
+/// declaration) is opaque, since there is no body to inspect.
+fn leaf_effect<'a>(
+    f: &NirFunction,
+    registry: &BuiltinRegistry,
+    declarations: &'a BuiltinDeclarations,
+) -> (FnEffect, Option<Builtin<'a>>) {
     let fref = nir::FunctionRef::from_resolved(f, f.module_source.clone());
     let Some(qualified) = fref
         .builtin_name()
@@ -856,20 +765,26 @@ fn leaf_effect(f: &NirFunction, registry: &BuiltinRegistry) -> (FnEffect, Option
     {
         return (FnEffect::opaque(), None);
     }
-    let trap = builtin_trap(bare);
-    let array_op = match trap {
-        BuiltinTrap::Array(op) => Some(op),
-        BuiltinTrap::Never | BuiltinTrap::May => None,
+    // One the compiler mints itself (`array_clone_shallow`) declares nothing.
+    let Some(mut_params) = declarations.mut_params(&fref) else {
+        let effect = FnEffect {
+            may_trap: true,
+            writes_shared_heap: true,
+            ..memory_builtin_effect(bare)
+        };
+        return (effect, None);
+    };
+    let builtin = Builtin {
+        trap: declarations.trap(&fref),
+        mut_params,
+        owned: declarations.returns_owned(&fref),
     };
     let effect = FnEffect {
-        may_trap: trap != BuiltinTrap::Never,
-        writes_shared_heap: matches!(
-            array_op,
-            Some(ArrayOp::ElementWrite | ArrayOp::Fill | ArrayOp::Copy)
-        ),
+        may_trap: builtin.trap.is_none_or(|spec| !spec.checks.is_empty()),
+        writes_shared_heap: !mut_params.is_empty(),
         ..memory_builtin_effect(bare)
     };
-    (effect, array_op)
+    (effect, Some(builtin))
 }
 
 /// Resolve [`FnEffect`] for every function, indexed by `func_id.index()`.
@@ -885,11 +800,12 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
     let funcs = &project.functions;
     let types = project.type_table.borrow();
     let mut effects = vec![FnEffect::default(); funcs.len()];
-    let mut array_ops: Vec<Option<ArrayOp>> = vec![None; funcs.len()];
+    let mut builtins: Vec<Option<Builtin<'_>>> = vec![None; funcs.len()];
     for (i, f) in funcs.iter().enumerate() {
         let f = f.borrow();
         if f.body.is_none() {
-            (effects[i], array_ops[i]) = leaf_effect(&f, &project.builtin_registry);
+            (effects[i], builtins[i]) =
+                leaf_effect(&f, &project.builtin_registry, &project.builtin_declarations);
         }
     }
     // Callee edges as one flat run per function rather than an `IndexSet` each:
@@ -904,7 +820,7 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
         let Some(body) = &f.body else {
             continue;
         };
-        let bounds = bounds::analyze(body, &types, |fid| array_ops[fid.index()]);
+        let bounds = bounds::analyze(body, &types, |fid| builtins[fid.index()]);
         let mut own = FnEffect {
             writes_shared_heap: bounds.writes_shared_heap,
             ..FnEffect::default()
@@ -927,9 +843,9 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
                     ExprKind::CmRawCall { .. } | ExprKind::IndirectCall { .. } => {
                         own.merge(FnEffect::opaque());
                     }
-                    // The body scan answers for an array builtin at its call
-                    // site: its bounds, and whose memory it writes.
-                    ExprKind::Call { func_id, .. } if array_ops[func_id.index()].is_some() => {
+                    // The body scan answers for a builtin at its call site: its
+                    // `#[trap(...)]` checks, and whose memory it writes.
+                    ExprKind::Call { func_id, .. } if builtins[func_id.index()].is_some() => {
                         own.merge(FnEffect {
                             may_trap: !bounds.in_bounds.contains(&id),
                             writes_shared_heap: false,
@@ -993,16 +909,12 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{CmBoundary, Item};
-    use crate::lexer::lex;
     use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
     use crate::nir_arena::{
         ArenaCallArg, ArenaStructField, ArmData, BlockNode, BlockRole, Body, ExprNode, PatNode,
         StmtNode,
     };
     use crate::nir_value_graph::ValueKind;
-    use crate::parser::Parser;
-    use crate::stdlib::get_stdlib_module;
     use crate::tir::{TypeId, TypeTable};
     use crate::token::Span;
 
@@ -2001,35 +1913,5 @@ mod tests {
         );
         assert!(mr_expr(|b| call(b, vec![])).calls);
         assert_eq!(mr_stmt(ret_none).control, Control::NonLocal);
-    }
-
-    #[test]
-    fn builtin_trap_taxonomy_names_real_instruction_builtins() {
-        let source = get_stdlib_module("core:builtin").unwrap();
-        let module = Parser::new(lex(source).tokens).parse_strict().unwrap();
-        let listed = ARRAY_BUILTINS
-            .iter()
-            .map(|(n, _)| *n)
-            .chain(TOTAL_BUILTINS.iter().copied());
-        for name in listed {
-            let func = module
-                .items
-                .iter()
-                .find_map(|item| match item {
-                    Item::Function(f) if f.name == name => Some(f),
-                    _ => None,
-                })
-                .unwrap_or_else(|| panic!("{name} is not in core:builtin"));
-            assert!(
-                !func
-                    .attrs
-                    .iter()
-                    .any(|a| matches!(a.cm_boundary, Some(CmBoundary::Canonical { .. }))),
-                "{name} is a canonical import"
-            );
-        }
-        assert_eq!(builtin_trap("unreachable"), BuiltinTrap::May);
-        assert_eq!(builtin_trap("v128_store"), BuiltinTrap::May);
-        assert_eq!(builtin_trap("f64x2_div"), BuiltinTrap::Never);
     }
 }

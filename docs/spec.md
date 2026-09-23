@@ -6095,6 +6095,40 @@ codegen lowers the call, and a body is called rather than lowered. A `trait` or
 `interface` method requirement is an error for the same reason — it reaches an
 impl, which is called.
 
+#### `#[trap(...)]`
+
+When a call to a declaration with no body traps. Silence means it may trap, so
+the optimizer keeps every call whose result nothing reads. `#[trap(never)]` says
+it never traps, and a check names the one condition it traps on:
+
+```wado
+#[trap(never)]
+pub fn f64_sqrt(x: f64) -> f64;
+
+#[trap(outside = arr, at = idx)]
+pub fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
+
+#[trap(outside = dst, at = dst_offset, len = len)]
+#[trap(outside = src, at = src_offset, len = len)]
+pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
+
+#[result(owned)]
+#[trap(negative = len, result_len = len)]
+pub fn array_new<T>(len: i32) -> Array<T>;
+```
+
+`negative = p` traps when `p` is below zero. `outside = a` traps unless the
+range from `at` (0 when absent) of `len` elements (1 when absent) lies within
+the array `a`, and says the call does not replace `a`. Each attribute states one
+check and repeats for another; the call traps where any fails. `result_len = p`
+is no check: it says the returned array holds `p` elements, so a later check
+against it can be proved. Running out of memory is not a trap any of these
+describe.
+
+It is an error on a function with a body, which states when it traps itself,
+and on a `trait` or `interface` method requirement, for the reason `#[retain]`
+is.
+
 ### The "mem" Core Module
 
 The Component Model requires each component to provide a linear memory and a `realloc` function. The CM runtime calls `realloc` whenever it needs guest-side linear memory — for example, `stream.read` copies bytes from the host into a guest buffer, and string lifting/lowering also goes through it.

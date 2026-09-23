@@ -6167,6 +6167,8 @@ pub struct TirFunction {
     /// `#[immediate(...)]` — parameters lowered to a Wasm immediate, whose
     /// argument must still be a literal when codegen reads it.
     pub immediates: Vec<String>,
+    /// `#[trap(...)]` on a bodyless declaration — when the call can trap.
+    pub trap: Option<TrapSpec<String>>,
     pub body: Option<TirBlock>,
     pub span: Span,
     pub local_count: u32,
@@ -6335,6 +6337,49 @@ pub struct RetainSpec<Param> {
     pub into: Option<Param>,
 }
 
+/// One `#[trap(...)]` condition: the call traps exactly where one fails.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TrapCheck<Param> {
+    /// `negative = p` — traps when `p < 0`.
+    Negative(Param),
+    /// `outside = a, at = i, len = n` — traps unless `[i, i + n)` lies within
+    /// the array `a`. `at` defaults to 0, `len` to 1.
+    Outside {
+        array: Param,
+        at: Option<Param>,
+        len: Option<Param>,
+    },
+}
+
+/// What a bodyless declaration's `#[trap(...)]` attributes state. Silence is
+/// "may trap"; `#[trap(never)]` is a spec with no checks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrapSpec<Param> {
+    pub checks: Vec<TrapCheck<Param>>,
+    /// `result_len = p` — the returned array holds exactly `p` elements.
+    pub result_len: Option<Param>,
+}
+
+impl<P> TrapSpec<P> {
+    fn map<Q>(&self, mut f: impl FnMut(&P) -> Q) -> TrapSpec<Q> {
+        TrapSpec {
+            checks: self
+                .checks
+                .iter()
+                .map(|check| match check {
+                    TrapCheck::Negative(p) => TrapCheck::Negative(f(p)),
+                    TrapCheck::Outside { array, at, len } => TrapCheck::Outside {
+                        array: f(array),
+                        at: at.as_ref().map(&mut f),
+                        len: len.as_ref().map(&mut f),
+                    },
+                })
+                .collect(),
+            result_len: self.result_len.as_ref().map(f),
+        }
+    }
+}
+
 /// What a bodyless `core:builtin` declared about storage, by parameter position.
 /// Link snapshots it because monomorphization drops the generic declarations.
 #[derive(Debug, Clone, Default)]
@@ -6351,6 +6396,8 @@ pub struct BuiltinDeclaration {
     /// reads the argument's literal value, so nothing may rewrite it into a
     /// load.
     pub immediate_params: IndexSet<usize>,
+    /// `#[trap(...)]`, or `None` where the declaration states none.
+    pub trap: Option<TrapSpec<usize>>,
 }
 
 /// All a declaration lookup reads of a call. TIR and NIR each carry their own
@@ -6435,6 +6482,19 @@ impl BuiltinDeclarations {
         self.get(call.into())
             .map(|d| d.immediate_params.clone())
             .unwrap_or_default()
+    }
+
+    /// What `call` declared with `#[trap(...)]`; `None` is "may trap".
+    pub fn trap<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&TrapSpec<usize>> {
+        self.get(call.into())?.trap.as_ref()
+    }
+
+    /// The positions `call` takes by `&mut`, `None` where nothing was snapshot.
+    pub fn mut_params<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> Option<&IndexSet<usize>> {
+        self.get(call.into()).map(|d| &d.mut_params)
     }
 
     /// Whether the call declared `#[result(owned)]`: the object it hands back
@@ -6533,6 +6593,13 @@ impl TirFunction {
             .map(move |name| self.param_position(name))
     }
 
+    /// This declaration's `#[trap(...)]` by parameter position.
+    pub fn trap_by_position(&self) -> Option<TrapSpec<usize>> {
+        self.trap
+            .as_ref()
+            .map(|spec| spec.map(|name| self.param_position(name)))
+    }
+
     /// Take the body's frame, leaving an empty one. The counterpart of
     /// [`Self::set_frame`]: a caller moving a body elsewhere takes what
     /// describes its locals with it.
@@ -6589,6 +6656,7 @@ impl TirFunction {
             effects: Vec::new(),
             retains: Vec::new(),
             immediates: Vec::new(),
+            trap: None,
             body: Some(body),
             span,
             local_count: u32::try_from(locals.len()).expect("local count fits in u32"),

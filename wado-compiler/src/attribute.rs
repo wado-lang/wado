@@ -31,6 +31,7 @@ pub const STDLIB: &str = "stdlib";
 pub const SYNOPSIS: &str = "synopsis";
 pub const TIMEOUT_MS: &str = "timeout_ms";
 pub const TODO: &str = "TODO";
+pub const TRAP: &str = "trap";
 /// See [WEP: Declared Absence](../../docs/wep-2026-09-13-declared-absence.md).
 pub const UNAVAILABLE: &str = "unavailable";
 pub const WASM_MODULE: &str = "wasm_module";
@@ -390,6 +391,15 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: &[AttrTarget::Module, AttrTarget::Test],
         args: AttrArgs::None,
         summary: "the tests are expected to fail until the work lands",
+    },
+    AttributeSchema {
+        name: TRAP,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::Read(
+            "`never`, or `negative = p` / `outside = a` (with `at = i`, `len = n`), \
+             with an optional `result_len = p`",
+        ),
+        summary: "when a call to this declaration traps",
     },
     AttributeSchema {
         name: UNAVAILABLE,

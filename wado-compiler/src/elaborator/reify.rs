@@ -10,7 +10,8 @@ use std::rc::Rc;
 
 use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
 use crate::attribute::{
-    ALLOC, AMBIENT, BENIGN, EXPORT_NAME, IMMEDIATE, INLINE, PARAM, RESULT, RETAIN, SECRET, WIRE,
+    ALLOC, AMBIENT, BENIGN, EXPORT_NAME, IMMEDIATE, INLINE, PARAM, RESULT, RETAIN, SECRET, TRAP,
+    WIRE,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -38,6 +39,13 @@ use crate::ast::{
     AttrArg, Attribute, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
     WIRE_NUMBER_RESERVED, wire_number_of, wire_number_written,
 };
+
+/// What one `#[trap(...)]` attribute states; `never` states nothing.
+#[derive(Default)]
+struct TrapClause {
+    check: Option<tir::TrapCheck<String>>,
+    result_len: Option<String>,
+}
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
@@ -1415,6 +1423,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
         let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
         let immediates = self.reify_immediate_attrs(&func.attrs, &params, body.is_some());
+        let trap = self.reify_trap_attrs(&func.attrs, &params, body.is_some());
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1439,6 +1448,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
             retains,
             immediates,
+            trap,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1803,6 +1813,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
         let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
         let immediates = self.reify_immediate_attrs(&func.attrs, &params, body.is_some());
+        let trap = self.reify_trap_attrs(&func.attrs, &params, body.is_some());
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1827,6 +1838,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
             retains,
             immediates,
+            trap,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1897,6 +1909,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             effects: vec![],
             retains: vec![],
             immediates: vec![],
+            trap: None,
             body: Some(body),
             span: test_decl.span,
             local_count: ctx.local_count(),
@@ -2380,6 +2393,118 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
         Some(name.clone())
+    }
+
+    /// The `#[trap(...)]` attributes as one spec, `None` where there are none.
+    /// A malformed one is reported and the whole spec dropped: silence is "may
+    /// trap", the reading that deletes nothing.
+    fn reify_trap_attrs(
+        &self,
+        attrs: &[ast::Attribute],
+        params: &[tir::TirParam],
+        has_body: bool,
+    ) -> Option<tir::TrapSpec<String>> {
+        let written: Vec<&ast::Attribute> = attrs.iter().filter(|a| a.name == TRAP).collect();
+        let mut spec = tir::TrapSpec {
+            checks: Vec::new(),
+            result_len: None,
+        };
+        let mut sound = true;
+        for attr in &written {
+            let emit = |message: String| self.attr_error(Code::TrapAttr, attr, message);
+            match self.reify_trap_attr(attr, params, written.len()) {
+                Ok(clause) => {
+                    spec.checks.extend(clause.check);
+                    if let Some(len) = clause.result_len {
+                        if spec.result_len.is_some() {
+                            emit("#[trap] states `result_len` once".to_string());
+                            sound = false;
+                        }
+                        spec.result_len = Some(len);
+                    }
+                }
+                Err(message) => {
+                    emit(message);
+                    sound = false;
+                }
+            }
+        }
+        let first = written.first()?;
+        // After the arguments, so an attribute that is both malformed and
+        // misplaced reports what it got wrong rather than only where it sits.
+        if !sound {
+            return None;
+        }
+        if has_body {
+            self.attr_error(
+                Code::TrapAttr,
+                first,
+                "#[trap] belongs to a declaration with no body; a body states when it traps"
+                    .to_string(),
+            );
+            return None;
+        }
+        Some(spec)
+    }
+
+    fn reify_trap_attr(
+        &self,
+        attr: &ast::Attribute,
+        params: &[tir::TirParam],
+        attr_count: usize,
+    ) -> Result<TrapClause, String> {
+        if let [ast::AttrArg::Ident(word)] = attr.args.as_slice()
+            && word == "never"
+        {
+            if attr_count > 1 {
+                return Err("#[trap(never)] stands alone".to_string());
+            }
+            return Ok(TrapClause::default());
+        }
+        let mut named: IndexMap<&str, String> = IndexMap::default();
+        for arg in &attr.args {
+            let ast::AttrArg::KeyIdent(key, param) = arg else {
+                return Err(format!(
+                    "#[trap] takes `never` or `key = param` pairs, not {}",
+                    arg.name()
+                ));
+            };
+            if !matches!(
+                key.as_str(),
+                "negative" | "outside" | "at" | "len" | "result_len"
+            ) {
+                return Err(format!("unknown #[trap] key: {key}"));
+            }
+            if !params.iter().any(|p| &p.name == param) {
+                return Err(format!("#[trap({key} = {param})] names no parameter"));
+            }
+            if named.insert(key, param.clone()).is_some() {
+                return Err(format!("#[trap] names `{key}` twice"));
+            }
+        }
+        let mut take = |key: &str| named.shift_remove(key);
+        let check = match (take("negative"), take("outside")) {
+            (Some(_), Some(_)) => {
+                return Err(
+                    "#[trap] states one check; repeat the attribute for another".to_string()
+                );
+            }
+            (Some(p), None) => Some(tir::TrapCheck::Negative(p)),
+            (None, Some(array)) => Some(tir::TrapCheck::Outside {
+                array,
+                at: take("at"),
+                len: take("len"),
+            }),
+            (None, None) => None,
+        };
+        let result_len = take("result_len");
+        if let Some(key) = named.keys().next() {
+            return Err(format!("#[trap({key} = ...)] belongs with `outside`"));
+        }
+        if check.is_none() && result_len.is_none() {
+            return Err("#[trap] takes `never` or at least one `key = param`".to_string());
+        }
+        Ok(TrapClause { check, result_len })
     }
 
     // ─────────────────────────────────────────────────────────────────

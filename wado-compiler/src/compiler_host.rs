@@ -225,6 +225,9 @@ pub enum Code {
     /// An `#[immediate(...)]` attribute is malformed, names something that is
     /// not a parameter, or sits on a declaration with a body.
     ImmediateAttr,
+    /// A `#[trap(...)]` attribute is malformed, names something that is not a
+    /// parameter, or sits on a declaration with a body.
+    TrapAttr,
     /// A `#[wire(number = N)]` is out of range, reserved, repeated within one
     /// struct, or written on some of a struct's fields and not the rest.
     WireNumber,
@@ -313,6 +316,7 @@ impl std::fmt::Display for Code {
             Code::ResultAttr => "RESULT_ATTR",
             Code::RetainAttr => "RETAIN_ATTR",
             Code::ImmediateAttr => "IMMEDIATE_ATTR",
+            Code::TrapAttr => "TRAP_ATTR",
             Code::WireNumber => "WIRE_NUMBER",
             Code::ResourceExtends => "RESOURCE_EXTENDS",
             Code::ParamAttr => "PARAM_ATTR",

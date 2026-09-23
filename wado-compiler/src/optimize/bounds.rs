@@ -1,8 +1,8 @@
 //! Bounds a body establishes on its own, without a value graph: the range of an
 //! integer operand, the length of a GC array, and which loops count up to a
 //! constant. [`FnEffect`](super::mod_ref::FnEffect) reads them to clear the trap
-//! of a GC-array builtin that stays in range, and the divergence of a loop that
-//! runs out.
+//! of a builtin whose `#[trap(...)]` checks all hold, and the divergence of a
+//! loop that runs out.
 
 use crate::const_eval;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -13,30 +13,35 @@ use crate::nir_arena::{
 use crate::nir_value_graph::ValueKind;
 use crate::optimize::arena_query::{binary_parts, local_written_by, operand_local, storage_root};
 use crate::primitive::PrimitiveType;
-use crate::tir::TypeTable;
+use crate::tir::{TrapCheck, TrapSpec, TypeTable};
 
-/// A GC-array builtin, named by the operands its bounds check reads.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ArrayOp {
-    /// `array_new(len)`. Allocation failure is not a trap any deletion
-    /// preserves, as for every literal, so only a negative length traps.
-    New,
-    /// `(arr, idx)`: reads one element of `arr`.
-    Element,
-    /// `(arr, idx, ..)`: writes one element of `arr`, or hands it out to be.
-    ElementWrite,
-    /// `array_fill(arr, offset, value, len)`.
-    Fill,
-    /// `array_copy(dst, dst_offset, src, src_offset, len)`.
-    Copy,
-    /// `array_clone_prefix(src, len)`.
-    ClonePrefix,
+/// What a bodyless builtin declared, as a call to it is read here.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Builtin<'a> {
+    /// `#[trap(...)]`; `None` is "may trap".
+    pub trap: Option<&'a TrapSpec<usize>>,
+    /// The positions it takes by `&mut`.
+    pub mut_params: &'a IndexSet<usize>,
+    /// `#[result(owned)]`.
+    pub owned: bool,
+}
+
+impl Builtin<'_> {
+    /// Positions of arrays whose bounds the call checks, and so leaves in place.
+    fn checked_arrays(&self) -> impl Iterator<Item = usize> + '_ {
+        self.trap.into_iter().flat_map(|spec| {
+            spec.checks.iter().filter_map(|check| match check {
+                TrapCheck::Outside { array, .. } => Some(*array),
+                TrapCheck::Negative(_) => None,
+            })
+        })
+    }
 }
 
 /// What [`analyze`] proves about one body.
 #[derive(Debug, Default)]
 pub(super) struct Bounds {
-    /// Array-builtin calls whose every access is in range.
+    /// Builtin calls whose every `#[trap(...)]` check holds.
     pub in_bounds: IndexSet<ExprId>,
     /// `Loop` statements that count a local up to a constant, so they end.
     pub counted: IndexSet<StmtId>,
@@ -51,15 +56,15 @@ type Range = (i64, i64);
 /// makes a wrong one.
 const MAX_DEPTH: u32 = 16;
 
-pub(super) fn analyze(
+pub(super) fn analyze<'b>(
     body: &Body,
     types: &TypeTable,
-    array_op: impl Fn(FuncId) -> Option<ArrayOp>,
+    builtin: impl Fn(FuncId) -> Option<Builtin<'b>>,
 ) -> Bounds {
     let mut scan = Scan {
         body,
         types,
-        array_op,
+        builtin,
         lets: IndexMap::default(),
         writes: IndexMap::default(),
         counters: Vec::new(),
@@ -73,7 +78,7 @@ pub(super) fn analyze(
 struct Scan<'a, F> {
     body: &'a Body,
     types: &'a TypeTable,
-    array_op: F,
+    builtin: F,
     /// Every `let` of each local.
     lets: IndexMap<u32, Vec<(StmtId, Operand)>>,
     /// Every other write of each local: an assignment, a `&mut` escape, a
@@ -84,19 +89,22 @@ struct Scan<'a, F> {
     out: Bounds,
 }
 
-impl<F: Fn(FuncId) -> Option<ArrayOp>> Scan<'_, F> {
+impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
     fn count_writes(&mut self) {
         let body = self.body;
-        // An array builtin cannot rebind the array it is handed, so its `&mut`
-        // writes elements and leaves every length this scan reads intact.
+        // A builtin checking an array's bounds does not rebind that array, so
+        // its `&mut` writes elements and leaves every length read here intact.
         let mut element_writes: IndexSet<ExprId> = IndexSet::default();
         body.for_each_reachable_node(|n| {
             if let NodeRef::Expr(e) = n
                 && let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind
-                && (self.array_op)(*func_id).is_some()
-                && let Some(Operand::Expr(arr)) = args.first().map(|a| a.expr)
+                && let Some(builtin) = (self.builtin)(*func_id)
             {
-                element_writes.insert(arr);
+                for pos in builtin.checked_arrays() {
+                    if let Some(Operand::Expr(arr)) = args.get(pos).map(|a| a.expr) {
+                        element_writes.insert(arr);
+                    }
+                }
             }
         });
         let mut written = Vec::new();
@@ -322,37 +330,28 @@ impl<F: Fn(FuncId) -> Option<ArrayOp>> Scan<'_, F> {
         let ExprKind::Call { func_id, args, .. } = &self.body.exprs[e].kind else {
             return;
         };
-        let Some(op) = (self.array_op)(*func_id) else {
+        let Some(spec) = (self.builtin)(*func_id).and_then(|b| b.trap) else {
             return;
         };
-        let arg = |i: usize| args.get(i).map(|a| a.expr);
-        let nonneg = |i: usize| arg(i).and_then(|o| self.range(o, 0)).filter(|r| r.0 >= 0);
-        let len = |i: usize| arg(i).and_then(|o| self.array_len(o, 0));
-        let proven = match op {
-            ArrayOp::New => nonneg(0).is_some(),
-            ArrayOp::Element | ArrayOp::ElementWrite => {
-                matches!((len(0), nonneg(1)), (Some(l), Some((_, hi))) if hi < l)
-            }
-            ArrayOp::Fill => matches!(
-                (len(0), nonneg(1), nonneg(3)),
-                (Some(l), Some((_, off)), Some((_, n))) if off + n <= l
-            ),
-            ArrayOp::Copy => matches!(
-                (len(0), nonneg(1), len(2), nonneg(3), nonneg(4)),
-                (Some(dl), Some((_, doff)), Some(sl), Some((_, soff)), Some((_, n)))
-                    if doff + n <= dl && soff + n <= sl
-            ),
-            ArrayOp::ClonePrefix => {
-                matches!((len(0), nonneg(1)), (Some(l), Some((_, n))) if n <= l)
-            }
+        let arg = |pos: usize| args[pos].expr;
+        let nonneg = |pos: Option<usize>, absent: i64| match pos {
+            Some(pos) => self.range(arg(pos), 0).filter(|r| r.0 >= 0).map(|r| r.1),
+            None => Some(absent),
         };
-        if proven {
+        let holds = |check: &TrapCheck<usize>| match *check {
+            TrapCheck::Negative(pos) => nonneg(Some(pos), 0).is_some(),
+            TrapCheck::Outside { array, at, len } => matches!(
+                (self.array_len(arg(array), 0), nonneg(at, 0), nonneg(len, 1)),
+                (Some(l), Some(at), Some(n)) if at + n <= l
+            ),
+        };
+        if spec.checks.iter().all(holds) {
             self.out.in_bounds.insert(e);
         }
     }
 
     /// Whether `e` stores into an object this body did not allocate: through a
-    /// projection an assignment names, or through an array builtin's target.
+    /// projection an assignment names, or through a builtin's `&mut` argument.
     fn stores_to_shared(&self, e: ExprId) -> bool {
         match &self.body.exprs[e].kind {
             ExprKind::Assign { target, .. } => match &self.body.exprs[*target].kind {
@@ -362,12 +361,11 @@ impl<F: Fn(FuncId) -> Option<ArrayOp>> Scan<'_, F> {
                 | ExprKind::VariantPayload { expr, .. } => !self.fresh(*expr, 0),
                 _ => true,
             },
-            ExprKind::Call { func_id, args, .. } => match (self.array_op)(*func_id) {
-                Some(ArrayOp::ElementWrite | ArrayOp::Fill | ArrayOp::Copy) => {
-                    args.first().is_none_or(|dst| !self.fresh(dst.expr, 0))
-                }
-                Some(ArrayOp::New | ArrayOp::Element | ArrayOp::ClonePrefix) | None => false,
-            },
+            ExprKind::Call { func_id, args, .. } => (self.builtin)(*func_id).is_some_and(|b| {
+                b.mut_params
+                    .iter()
+                    .any(|&pos| !self.fresh(args[pos].expr, 0))
+            }),
             _ => false,
         }
     }
@@ -391,10 +389,7 @@ impl<F: Fn(FuncId) -> Option<ArrayOp>> Scan<'_, F> {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr,
             } => self.fresh(*expr, depth + 1),
-            ExprKind::Call { func_id, .. } => matches!(
-                (self.array_op)(*func_id),
-                Some(ArrayOp::New | ArrayOp::ClonePrefix)
-            ),
+            ExprKind::Call { func_id, .. } => (self.builtin)(*func_id).is_some_and(|b| b.owned),
             ExprKind::StructLiteral { .. }
             | ExprKind::TupleLiteral { .. }
             | ExprKind::ArrayLiteral { .. }
@@ -486,10 +481,9 @@ impl<F: Fn(FuncId) -> Option<ArrayOp>> Scan<'_, F> {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr,
             } => self.array_len(*expr, depth + 1),
-            ExprKind::Call { func_id, args, .. }
-                if (self.array_op)(*func_id) == Some(ArrayOp::New) =>
-            {
-                let (lo, _) = self.range(args.first()?.expr, depth + 1)?;
+            ExprKind::Call { func_id, args, .. } => {
+                let pos = (self.builtin)(*func_id)?.trap?.result_len?;
+                let (lo, _) = self.range(args[pos].expr, depth + 1)?;
                 (lo >= 0).then_some(lo)
             }
             ExprKind::ArrayLiteral { elements } => i64::try_from(elements.len()).ok(),
