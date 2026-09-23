@@ -50,8 +50,8 @@ pub trait Ord: Eq with () {
     fn cmp(&self, other: &Self) -> Ordering;
 }
 
-/// What `<`, `<=`, `>` and `>=` mean for a type whose operator order is not
-/// its total order. Only the half types have one; the rest read `Ord`.
+/// What `<`, `<=`, `>` and `>=` mean where the operator order is not the total
+/// order. A float's instructions already carry that split; a half has none.
 #[compiler_item("operator_ord")]
 internal trait OperatorOrd with () {
     fn lt(&self, other: &Self) -> bool;
