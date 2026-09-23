@@ -1148,9 +1148,9 @@ pub enum TokenKind {
 pub global TK_WS: i32 = 0;
 pub global TK_EOF: i32 = 1;
 pub global TK_ERROR: i32 = 2;
-pub global TK_LIT_X: i32 = 3;
-pub global TK_LIT_IF: i32 = 4;
-pub global TK_LIT_ELSE: i32 = 5;
+pub global TK_LIT_x: i32 = 3;
+pub global TK_LIT_if: i32 = 4;
+pub global TK_LIT_else: i32 = 5;
 
 struct Lexer {
     chars: List<char>,
@@ -1229,15 +1229,15 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             },
             'e' => {
                 end = try_lit_else(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_ELSE; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_else; }
             },
             'i' => {
                 end = try_lit_if(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_IF; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_if; }
             },
             'x' => {
                 end = try_lit_x(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_X; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_x; }
             },
             _ => {},
         }
@@ -1266,9 +1266,9 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_X => "'x'",
-        TK_LIT_IF => "'if'",
-        TK_LIT_ELSE => "'else'",
+        TK_LIT_x => "'x'",
+        TK_LIT_if => "'if'",
+        TK_LIT_else => "'else'",
         _ => "Unknown",
     };
 }
@@ -1528,7 +1528,7 @@ fn scan_stat(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if alt_kind == TK_LIT_IF {
+        if alt_kind == TK_LIT_if {
             pos = start;
             try_0: {
                 pos = scan_ifstat(tokens, pos, follow);
@@ -1536,7 +1536,7 @@ fn scan_stat(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_X {
+        } else if alt_kind == TK_LIT_x {
             pos = start + 1;
             break scan_alts;
         } else {
@@ -1548,15 +1548,15 @@ fn scan_stat(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_ifstat(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_if { return -1; }
     pos += 1;
     pos = scan_stat(tokens, pos, follow);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_LIT_ELSE && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_LIT_else && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         sg_0_done: {
             sg_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_ELSE { break sg_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_else { break sg_0; }
                 pos += 1;
                 pos = scan_stat(tokens, pos, follow);
                 if pos < 0 { break sg_0; }
@@ -1571,12 +1571,12 @@ fn scan_ifstat(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn _parse_stat__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
-    if kind == TK_LIT_IF {
+    if kind == TK_LIT_if {
         _parse_ifstat(p, follow);
         return;
     }
-    if kind == TK_LIT_X {
-        p.expect(TK_LIT_X, &EMPTY_SYNC);
+    if kind == TK_LIT_x {
+        p.expect(TK_LIT_x, &EMPTY_SYNC);
         return;
     }
     p.no_viable(
@@ -1599,10 +1599,10 @@ fn _parse_stat(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_ifstat__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_LIT_IF, &SYNC_0);
+    p.expect(TK_LIT_if, &SYNC_0);
     _parse_stat(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LIT_ELSE && _kind_set_0(p.peek_at(1))) {
-        p.expect(TK_LIT_ELSE, &SYNC_0);
+    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LIT_else && _kind_set_0(p.peek_at(1))) {
+        p.expect(TK_LIT_else, &SYNC_0);
         _parse_stat(p, follow);
     }
     return;
@@ -1677,11 +1677,11 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_IF | TK_LIT_X };
+    return k matches { TK_LIT_if | TK_LIT_x };
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_IF, TK_LIT_X];
+global SYNC_0: List<i32> = [TK_LIT_if, TK_LIT_x];
 
 global FOLLOW_KINDS: List<List<i32>> = [];
 global FOLLOW_SETS: List<List<i32>> = follow_bitsets(&FOLLOW_KINDS);

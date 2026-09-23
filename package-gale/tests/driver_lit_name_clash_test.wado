@@ -1,0 +1,13 @@
+//! Literals whose `TK_LIT_*` names collide are told apart by every site that
+//! names one, the parser's as well as the lexer's.
+
+use g from "./grammars/lit_name_clash.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/lit_name_clash" },
+    };
+
+test "each colliding literal parses as itself" {
+    let r = g::parse("self Self < LT");
+    assert r.ok(), `tree: '${g::to_string_tree(&r)}'`;
+    assert g::to_string_tree(&r) == "(prog (atom self) (atom Self) (atom <) (atom LT))";
+}

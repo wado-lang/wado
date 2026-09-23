@@ -1997,13 +1997,13 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_star(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_STAR(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '*' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_semi(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_SEMI(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ';' { return -1; }
     return pos + 1;
@@ -2025,7 +2025,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_WS; }
             },
             '*' => {
-                end = try_lit_star(&lexer.chars, start);
+                end = try_lit_STAR(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
             },
             '0'..='9' => {
@@ -2033,7 +2033,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_INT; }
             },
             ';' => {
-                end = try_lit_semi(&lexer.chars, start);
+                end = try_lit_SEMI(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; }
             },
             _ => {},

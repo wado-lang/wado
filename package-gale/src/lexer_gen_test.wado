@@ -15,8 +15,9 @@ use {
     LitToken,
     compute_elem_first_chars,
     resolve_ci,
+    lit_name,
 } from "./lexer_gen.wado";
-use { CodeWriter } from "./wadopoet.wado";
+use { CodeWriter } from "lib:wadopoet";
 use { MemberDecls, MemberField, MemberMethod } from "./java2wado/jmembers.wado";
 use { SuperOp } from "./superclass.wado";
 use { TreeMap } from "core:collections";
@@ -41,21 +42,14 @@ test "collect_literal_tokens: plain top-level literals" {
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
     assert names.len() == 2, `len=${names.len()}`;
-    assert names[0] == "TK_LIT_X", names[0];
-    assert names[1] == "TK_LIT_Y", names[1];
+    assert names[0] == "TK_LIT_x", names[0];
+    assert names[1] == "TK_LIT_y", names[1];
 }
 
-test "collect_literal_tokens: case-folding collision is disambiguated" {
-    // `'and'` and `'AND'` both fold to the base name `TK_LIT_AND`. Without
-    // disambiguation the generated module emits duplicate globals / fns /
-    // match arms and fails to compile. The second occurrence must get a
-    // distinct const name.
-    let g = parse_grammar("grammar T; a : 'and' 'AND' ;");
-    let lits = collect_literal_tokens(&g.parser_rules);
-    let names = const_names(&lits);
-    assert names.len() == 2, `len=${names.len()}`;
-    assert names[0] == "TK_LIT_AND", names[0];
-    assert names[1] != names[0], `collision: both named ${names[0]}`;
+test "collect_literal_tokens: a symbol word spelling a literal is disambiguated" {
+    let g = parse_grammar("grammar T; a : '<' 'LT' ;");
+    let names = const_names(&collect_literal_tokens(&g.parser_rules));
+    assert names == ["TK_LIT_LT", "TK_LIT_LT_2"] as List<String>, `${names:?}`;
 }
 
 test "collect_literal_tokens: literals inside Group alternatives" {
@@ -65,23 +59,23 @@ test "collect_literal_tokens: literals inside Group alternatives" {
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
     assert names.len() == 3, `len=${names.len()}`;
-    assert names[0] == "TK_LIT_X", names[0];
-    assert names[1] == "TK_LIT_Y", names[1];
-    assert names[2] == "TK_LIT_Z", names[2];
+    assert names[0] == "TK_LIT_x", names[0];
+    assert names[1] == "TK_LIT_y", names[1];
+    assert names[2] == "TK_LIT_z", names[2];
 }
 
 test "collect_literal_tokens: literal inside Not — single token" {
     // `~'x'` — the canonical complement-of-a-literal shape. Source:
     // ANTLR4 runtime-testsuite descriptor Sets/ParserNotToken.txt.
     // The literal `'x'` defines the *exclusion* token, so it still
-    // needs an anonymous TK_LIT_X token in the lexer for the runtime
-    // `match_not([TK_LIT_X])` call to reference.
+    // needs an anonymous TK_LIT_x token in the lexer for the runtime
+    // `match_not([TK_LIT_x])` call to reference.
     let g = parse_grammar("grammar T; a : ~'x' 'z' ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
-    assert names.len() == 2, `expected ['TK_LIT_X', 'TK_LIT_Z'], got len=${names.len()}`;
-    assert names[0] == "TK_LIT_X", names[0];
-    assert names[1] == "TK_LIT_Z", names[1];
+    assert names.len() == 2, `expected ['TK_LIT_x', 'TK_LIT_z'], got len=${names.len()}`;
+    assert names[0] == "TK_LIT_x", names[0];
+    assert names[1] == "TK_LIT_z", names[1];
 }
 
 test "collect_literal_tokens: literals inside Not(Group(...)) — multi-alt set" {
@@ -91,9 +85,9 @@ test "collect_literal_tokens: literals inside Not(Group(...)) — multi-alt set"
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
     assert names.len() == 3, `len=${names.len()}`;
-    assert names[0] == "TK_LIT_X", names[0];
-    assert names[1] == "TK_LIT_Y", names[1];
-    assert names[2] == "TK_LIT_Z", names[2];
+    assert names[0] == "TK_LIT_x", names[0];
+    assert names[1] == "TK_LIT_y", names[1];
+    assert names[2] == "TK_LIT_z", names[2];
 }
 
 test "collect_literal_tokens: literal inside Label(Not(Literal)) — labeled complement" {
@@ -103,8 +97,8 @@ test "collect_literal_tokens: literal inside Label(Not(Literal)) — labeled com
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
     assert names.len() == 2, `len=${names.len()}`;
-    assert names[0] == "TK_LIT_X", names[0];
-    assert names[1] == "TK_LIT_Z", names[1];
+    assert names[0] == "TK_LIT_x", names[0];
+    assert names[1] == "TK_LIT_z", names[1];
 }
 
 test "collect_literal_tokens: literal inside Wildcard is ignored" {
@@ -114,7 +108,7 @@ test "collect_literal_tokens: literal inside Wildcard is ignored" {
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
     assert names.len() == 1, `len=${names.len()}`;
-    assert names[0] == "TK_LIT_X", names[0];
+    assert names[0] == "TK_LIT_x", names[0];
 }
 
 fn token_globals_for<S: AsStrSlice>(input: S) -> String {
@@ -394,4 +388,25 @@ test "compute_elem_first_chars: a callee folding a different case stays wildcard
     );
     let [is_wildcard, _first] = rule_first_chars(&g, "OUTER");
     assert is_wildcard, "a case-insensitive callee must fall back to wildcard";
+}
+
+test "lit_name renders a grammar literal the way ANTLR4's vocabulary does" {
+    assert `${lit_name("+")}` == "'+'";
+    assert `${lit_name("and")}` == "'and'";
+    // Printable non-ASCII stays verbatim, as in any Wado literal Gale emits.
+    assert `${lit_name("あ")}` == "'あ'";
+    // `LitToken.text` has its escapes resolved, so a real newline goes back to
+    // `\n` — a readable rendering, not a round-trip.
+    let mut nl = String::new();
+    nl.push('\n');
+    assert `${lit_name(nl)}` == "'\\n'";
+    // The delimiter it escapes is `'`, not `"`.
+    let mut apos = String::new();
+    apos.push('i');
+    apos.push('\'');
+    apos.push('s');
+    assert `${lit_name(apos)}` == "'i\\'s'";
+    let mut quote = String::new();
+    quote.push('"');
+    assert `${lit_name(quote)}` == "'\"'";
 }
