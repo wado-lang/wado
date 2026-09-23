@@ -1427,7 +1427,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: 
                 if _lr_end < 0 { break; }
                 if !(lr_cont == 0 || follow_yields(&p.kinds, _lr_end, lr_cont, &FOLLOW_SETS, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_E, _start);
-                p.expect(TK_LIT_and, &EMPTY_SYNC);
+                p.take();
                 _parse_e(p, follow, 3);
                 p.b.finish_node(p.last_end());
             } else {
@@ -1439,7 +1439,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: 
                 if _lr_end < 0 { break; }
                 if !(lr_cont == 0 || follow_yields(&p.kinds, _lr_end, lr_cont, &FOLLOW_SETS, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_E, _start);
-                p.expect(TK_LIT_between, &EMPTY_SYNC);
+                p.take();
                 _parse_e(p, FOLLOW_MASK_1, 0, FOLLOW_MASK_1);
                 p.expect(TK_LIT_and, &EMPTY_SYNC);
                 _parse_e(p, follow, 3);

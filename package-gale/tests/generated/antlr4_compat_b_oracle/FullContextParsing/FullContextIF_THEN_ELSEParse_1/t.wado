@@ -1557,7 +1557,7 @@ fn _parse_stat__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_LIT_then, &SYNC_2);
         _parse_stat(p, follow);
         if (p.peek_kind() == TK_LIT_else && p.peek_at(1) == TK_ID) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-            p.expect(TK_LIT_else, &SYNC_3);
+            p.take();
             p.expect(TK_ID, &EMPTY_SYNC);
         }
         return;
@@ -1651,7 +1651,6 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_LIT_RBRACE, TK_LIT_if, TK_LIT_return];
 global SYNC_1: List<i32> = [TK_LIT_then];
 global SYNC_2: List<i32> = [TK_LIT_if, TK_LIT_return];
-global SYNC_3: List<i32> = [TK_ID];
 
 global FOLLOW_SETS: List<List<i32>> = [];
 

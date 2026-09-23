@@ -1518,7 +1518,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                let _ = p.expect_set(&SYNC_1);
+                p.take();
                 _parse_e(p, 3);
                 if !p.speculating {
                     
@@ -1539,7 +1539,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                let _ = p.expect_set(&SYNC_2);
+                p.take();
                 _parse_e(p, 2);
                 if !p.speculating {
                     
@@ -1637,6 +1637,4 @@ fn _kind_set_1(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_INT, TK_LIT_LPAREN];
-global SYNC_1: List<i32> = [TK_LIT_SLASH, TK_LIT_STAR];
-global SYNC_2: List<i32> = [TK_LIT_MINUS, TK_LIT_PLUS];
 

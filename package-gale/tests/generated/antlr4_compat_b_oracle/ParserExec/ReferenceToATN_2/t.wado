@@ -1417,7 +1417,7 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect_set(&SYNC_0);
     }
     if p.peek_kind() == TK_ATN && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.expect(TK_ATN, &EMPTY_SYNC);
+        p.take();
     }
     if !p.speculating {
         p.emit(`${p.rule_text(_rule_start_tok)}\n`);

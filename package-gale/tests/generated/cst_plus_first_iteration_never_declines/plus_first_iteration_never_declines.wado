@@ -1421,7 +1421,7 @@ fn _parse_body__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
     }
     if (p.peek_kind() == TK_A && p.peek_at(1) == TK_B && p.peek_at(2) == TK_E) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.expect(TK_A, &SYNC_1);
+        p.take();
         p.expect(TK_B, &SYNC_3);
         p.expect(TK_E, &EMPTY_SYNC);
     }

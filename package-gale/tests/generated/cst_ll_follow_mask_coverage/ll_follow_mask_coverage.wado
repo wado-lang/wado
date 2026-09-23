@@ -1361,7 +1361,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.take();
         _parse_a(p, 0);
         if p.peek_kind() == TK_Y && p.peek_at(1) == TK_LIT_SEMI {
-            p.expect(TK_Y, &SYNC_0);
+            p.take();
             p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
         }
         p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
@@ -1370,7 +1370,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of stmt matches",
         p.peek_span(),
-        &SYNC_1,
+        &SYNC_0,
     );
     return;
 }
@@ -1387,9 +1387,9 @@ fn _parse_stmt(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_X, &SYNC_2);
+    p.expect(TK_X, &SYNC_1);
     if p.peek_kind() == TK_Y && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.expect(TK_Y, &EMPTY_SYNC);
+        p.take();
     }
     return;
 }
@@ -1486,9 +1486,8 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_SEMI];
-global SYNC_1: List<i32> = [TK_LIT_free, TK_LIT_keep];
-global SYNC_2: List<i32> = [TK_Y];
+global SYNC_0: List<i32> = [TK_LIT_free, TK_LIT_keep];
+global SYNC_1: List<i32> = [TK_Y];
 
 global FOLLOW_SETS: List<List<i32>> = [[8], [2], [64]];
 global FOLLOW_MASK_0: i64 = 1;

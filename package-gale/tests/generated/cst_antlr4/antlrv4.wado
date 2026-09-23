@@ -4977,7 +4977,7 @@ fn _parse_id_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_identifier(p);
     }
     if p.peek_kind() == TK_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.expect(TK_COMMA, &EMPTY_SYNC);
+        p.take();
     }
     return;
 }
@@ -5649,7 +5649,7 @@ fn _parse_rule_alt_list(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_labeled_alt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_alternative(p, follow);
     if (p.peek_kind() == TK_POUND && _kind_set_1(p.peek_at(1))) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.expect(TK_POUND, &SYNC_4);
+        p.take();
         _parse_identifier(p);
     }
     return;
@@ -5668,7 +5668,7 @@ fn _parse_labeled_alt(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_lexer_rule_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if p.peek_kind() == TK_FRAGMENT {
-        p.expect(TK_FRAGMENT, &EMPTY_SYNC);
+        p.take();
     }
     p.expect(TK_TOKEN_REF, &SYNC_17);
     if p.peek_kind() == TK_OPTIONS {
@@ -5857,7 +5857,7 @@ fn _parse_lexer_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if kind == TK_ACTION {
         _parse_action_block(p);
         if p.peek_kind() == TK_QUESTION && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-            p.expect(TK_QUESTION, &EMPTY_SYNC);
+            p.take();
         }
         return;
     }
@@ -6251,7 +6251,7 @@ fn _parse_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if kind == TK_ACTION {
         _parse_action_block(p);
         if p.peek_kind() == TK_QUESTION && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-            p.expect(TK_QUESTION, &EMPTY_SYNC);
+            p.take();
         }
         if p.peek_kind() == TK_LT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_predicate_options(p, follow);
@@ -6463,21 +6463,21 @@ fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if kind == TK_QUESTION {
         p.take();
         if p.peek_kind() == TK_QUESTION && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-            p.expect(TK_QUESTION, &EMPTY_SYNC);
+            p.take();
         }
         return;
     }
     if kind == TK_STAR {
         p.take();
         if p.peek_kind() == TK_QUESTION && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-            p.expect(TK_QUESTION, &EMPTY_SYNC);
+            p.take();
         }
         return;
     }
     if kind == TK_PLUS {
         p.take();
         if p.peek_kind() == TK_QUESTION && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-            p.expect(TK_QUESTION, &EMPTY_SYNC);
+            p.take();
         }
         return;
     }

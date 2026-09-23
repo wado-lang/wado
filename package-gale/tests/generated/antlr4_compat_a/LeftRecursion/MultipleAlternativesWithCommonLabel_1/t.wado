@@ -1614,7 +1614,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 p.b.set_alt(0);
                 let e = _lr_acc;
                 let mut vals = EVals {};
-                let star = p.expect(TK_LIT_STAR, &EMPTY_SYNC);
+                let star = p.take();
                 let e_2 = _parse_e(p, 5);
                 if !p.speculating {
                     vals.v = _lr_acc.v * e_2.v;
@@ -1633,7 +1633,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 p.b.set_alt(1);
                 let e = _lr_acc;
                 let mut vals = EVals {};
-                let plus = p.expect(TK_LIT_PLUS, &EMPTY_SYNC);
+                let plus = p.take();
                 let e_2 = _parse_e(p, 4);
                 if !p.speculating {
                     vals.v = _lr_acc.v + e_2.v;
@@ -1652,7 +1652,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 p.b.set_alt(4);
                 let left = _lr_acc;
                 let mut vals = EVals {};
-                let inc = p.expect(TK_INC, &EMPTY_SYNC);
+                let inc = p.take();
                 if !p.speculating {
                     assert true; vals.v = left.v + 1;
                 }
@@ -1670,7 +1670,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 p.b.set_alt(5);
                 let left = _lr_acc;
                 let mut vals = EVals {};
-                let dec = p.expect(TK_DEC, &EMPTY_SYNC);
+                let dec = p.take();
                 if !p.speculating {
                     assert true; vals.v = left.v - 1;
                 }

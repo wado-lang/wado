@@ -1335,7 +1335,7 @@ impl Parser {
 
 fn _parse_stat__inner(p: &mut Parser) -> () {
     if p.peek_kind() == TK_LIT_LPAREN {
-        p.expect(TK_LIT_LPAREN, &SYNC_0);
+        p.take();
         if p.peek_kind() == TK_ID {
             _parse_expr(p);
         }
@@ -1357,8 +1357,8 @@ fn _parse_stat(p: &mut Parser) -> () {
 }
 
 fn _parse_expr__inner(p: &mut Parser) -> () {
-    p.expect(TK_ID, &SYNC_1);
-    p.expect(TK_LIT_EQ, &SYNC_2);
+    p.expect(TK_ID, &SYNC_0);
+    p.expect(TK_LIT_EQ, &SYNC_1);
     p.expect(TK_STR, &EMPTY_SYNC);
     return;
 }
@@ -1431,7 +1431,6 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_ID, TK_LIT_RPAREN];
-global SYNC_1: List<i32> = [TK_LIT_EQ];
-global SYNC_2: List<i32> = [TK_STR];
+global SYNC_0: List<i32> = [TK_LIT_EQ];
+global SYNC_1: List<i32> = [TK_STR];
 

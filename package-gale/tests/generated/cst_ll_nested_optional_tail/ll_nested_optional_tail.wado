@@ -1532,10 +1532,10 @@ fn _parse_stmt__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_let, &SYNC_0);
     p.expect(TK_ID, &SYNC_1);
     if p.peek_kind() == TK_LIT_EQ && _kind_set_0(p.peek_at(1)) {
-        p.expect(TK_LIT_EQ, &SYNC_2);
+        p.take();
         _parse_expr(p);
         if p.peek_kind() == TK_LIT_else && p.peek_at(1) == TK_LIT_LBRACE {
-            p.expect(TK_LIT_else, &SYNC_3);
+            p.take();
             _parse_block(p);
         }
     }
@@ -1555,9 +1555,9 @@ fn _parse_stmt(p: &mut Parser) -> () {
 }
 
 fn _parse_expr__inner_alt_1(p: &mut Parser) -> () {
-    p.expect(TK_ID, &SYNC_4);
+    p.expect(TK_ID, &SYNC_2);
     p.expect(TK_LIT_LPAREN, &SYNC_0);
-    p.expect(TK_ID, &SYNC_5);
+    p.expect(TK_ID, &SYNC_3);
     p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
     return;
 }
@@ -1616,7 +1616,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     p.no_viable(
         "no alternative of expr matches",
         p.peek_span(),
-        &SYNC_2,
+        &SYNC_4,
     );
     return;
 }
@@ -1636,7 +1636,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
-                p.expect(TK_LIT_PLUS, &EMPTY_SYNC);
+                p.take();
                 _parse_expr(p, 2);
                 p.b.finish_node(p.last_end());
             } else {
@@ -1658,7 +1658,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> () {
 }
 
 fn _parse_block__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_LBRACE, &SYNC_6);
+    p.expect(TK_LIT_LBRACE, &SYNC_5);
     p.expect(TK_LIT_RBRACE, &EMPTY_SYNC);
     return;
 }
@@ -1745,9 +1745,8 @@ fn _kind_set_0(k: i32) -> bool {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_ID];
 global SYNC_1: List<i32> = [TK_LIT_EQ, TK_LIT_SEMI];
-global SYNC_2: List<i32> = [TK_ID, TK_INT];
-global SYNC_3: List<i32> = [TK_LIT_LBRACE];
-global SYNC_4: List<i32> = [TK_LIT_LPAREN];
-global SYNC_5: List<i32> = [TK_LIT_RPAREN];
-global SYNC_6: List<i32> = [TK_LIT_RBRACE];
+global SYNC_2: List<i32> = [TK_LIT_LPAREN];
+global SYNC_3: List<i32> = [TK_LIT_RPAREN];
+global SYNC_4: List<i32> = [TK_ID, TK_INT];
+global SYNC_5: List<i32> = [TK_LIT_RBRACE];
 

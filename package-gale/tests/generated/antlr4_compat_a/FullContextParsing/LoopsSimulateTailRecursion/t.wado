@@ -2246,7 +2246,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.atn_ret_pending = 30;
     _parse_expr_primary(p);
     if (p.peek_kind() == TK_LIT_LTMINUS && p.peek_at(1) == TK_ID) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.expect(TK_LIT_LTMINUS, &SYNC_1);
+        p.take();
         p.expect(TK_ID, &EMPTY_SYNC);
     }
     return;
@@ -2268,8 +2268,8 @@ fn _parse_expr(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_expr_primary__inner_alt_1(p: &mut Parser) -> () {
-    p.expect(TK_ID, &SYNC_2);
-    p.expect(TK_LIT_LPAREN, &SYNC_1);
+    p.expect(TK_ID, &SYNC_1);
+    p.expect(TK_LIT_LPAREN, &SYNC_2);
     p.expect(TK_ID, &SYNC_3);
     p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
     return;
@@ -2410,8 +2410,8 @@ fn _kind_set_0(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_ID, TK_LIT_LPAREN];
-global SYNC_1: List<i32> = [TK_ID];
-global SYNC_2: List<i32> = [TK_LIT_LPAREN];
+global SYNC_1: List<i32> = [TK_LIT_LPAREN];
+global SYNC_2: List<i32> = [TK_ID];
 global SYNC_3: List<i32> = [TK_LIT_RPAREN];
 
 global FOLLOW_SETS: List<List<i32>> = [[8]];

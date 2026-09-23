@@ -1358,7 +1358,7 @@ fn _parse_arms__inner(p: &mut Parser, follow: i64 = 0) -> () {
     }
     _parse_arm(p);
     if p.peek_kind() == TK_SEMI && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.expect(TK_SEMI, &EMPTY_SYNC);
+        p.take();
     }
     return;
 }

@@ -1449,7 +1449,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 p.b.start_node_at(_cp, RK_E, _start);
                 let l = _lr_acc;
                 let mut vals = EVals {};
-                p.expect(TK_LIT_STAR, &EMPTY_SYNC);
+                p.take();
                 let r = _parse_e(p, 3);
                 if !p.speculating {
                      vals.v = l.v * r.v; 
@@ -1467,7 +1467,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 p.b.start_node_at(_cp, RK_E, _start);
                 let l = _lr_acc;
                 let mut vals = EVals {};
-                p.expect(TK_LIT_PLUS, &EMPTY_SYNC);
+                p.take();
                 let r = _parse_e(p, 2);
                 if !p.speculating {
                      vals.v = l.v + r.v; 

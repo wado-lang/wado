@@ -1402,7 +1402,7 @@ fn _parse_path(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_seg__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_ID, &SYNC_1);
     if (p.peek_kind() == TK_SEP && p.peek_at(1) == TK_LT) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.expect(TK_SEP, &SYNC_2);
+        p.take();
         _parse_args(p);
     }
     return;
@@ -1421,7 +1421,7 @@ fn _parse_seg(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_args__inner(p: &mut Parser) -> () {
     p.expect(TK_LT, &SYNC_0);
-    p.expect(TK_ID, &SYNC_3);
+    p.expect(TK_ID, &SYNC_2);
     p.expect(TK_GT, &EMPTY_SYNC);
     return;
 }
@@ -1500,8 +1500,7 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_ID];
 global SYNC_1: List<i32> = [TK_SEP];
-global SYNC_2: List<i32> = [TK_LT];
-global SYNC_3: List<i32> = [TK_GT];
+global SYNC_2: List<i32> = [TK_GT];
 
 global FOLLOW_SETS: List<List<i32>> = [[2], [1]];
 global FOLLOW_MASK_0: i64 = 513;

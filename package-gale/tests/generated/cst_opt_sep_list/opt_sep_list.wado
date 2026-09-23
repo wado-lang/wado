@@ -1396,7 +1396,7 @@ fn _parse_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _parse_arm(p);
         }
         if p.peek_kind() == TK_LIT_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-            p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
+            p.take();
         }
     }
     return;
@@ -1512,7 +1512,7 @@ fn _parse_braced__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _parse_arm(p);
         }
         if p.peek_kind() == TK_LIT_COMMA {
-            p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
+            p.take();
         }
     }
     p.expect(TK_LIT_RBRACE, &EMPTY_SYNC);

@@ -1531,7 +1531,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LIT_EQ, &SYNC_2);
     _parse_expression(p, 0);
     if p.peek_kind() == TK_LIT_else && p.peek_at(1) == TK_LIT_LBRACE {
-        p.expect(TK_LIT_else, &SYNC_3);
+        p.take();
         _parse_block(p);
     }
     p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
@@ -1582,7 +1582,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
-                p.expect(TK_LIT_SLASH, &EMPTY_SYNC);
+                p.take();
                 _parse_expression(p, follow, 2);
                 p.b.finish_node(p.last_end());
             } else {
@@ -1608,7 +1608,7 @@ fn _parse_if_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_ID, &SYNC_3);
     _parse_block(p);
     if (p.peek_kind() == TK_LIT_else && p.peek_at(1) == TK_LIT_LBRACE) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.expect(TK_LIT_else, &SYNC_3);
+        p.take();
         _parse_block(p);
     }
     return;

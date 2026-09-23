@@ -1179,6 +1179,7 @@ fn emit_lr_overlap_branch(
     nc: &mut List<[String, i32]>,
     mid_operand_gated: bool,
     prebound: &Option<String> = &NO_PREBOUND,
+    proven_first: &List<String> = &EMPTY_SYNC,
 ) {
     match &site.branch {
         ScanCall => {
@@ -1192,7 +1193,19 @@ fn emit_lr_overlap_branch(
             );
         },
         ParseBody(b) => {
-            emit_lr_branch(w, lr, rule, &b.rk, &site.scan_fn, b.labeled, ctx, nc, mid_operand_gated, prebound);
+            emit_lr_branch(
+                w,
+                lr,
+                rule,
+                &b.rk,
+                &site.scan_fn,
+                b.labeled,
+                ctx,
+                nc,
+                mid_operand_gated,
+                prebound,
+                proven_first,
+            );
         },
     }
 }
@@ -1245,7 +1258,7 @@ fn emit_lr_group_chain(
         }
         if group.len() == 1 {
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[0]]];
-            emit_lr_overlap_branch(w, site, lr, rule, ctx, &mut nc, mid_operand_gated);
+            emit_lr_overlap_branch(w, site, lr, rule, ctx, &mut nc, mid_operand_gated, &NO_PREBOUND, &union_first);
         } else {
             emit_lr_overlap(
                 w,
@@ -1309,7 +1322,7 @@ fn emit_lr_overlap(
                 }
                 chained = true;
                 let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
-                emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated);
+                emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated, &NO_PREBOUND, &[*tk]);
                 emitted.insert(*tk);
             }
         }
@@ -1405,12 +1418,13 @@ fn emit_lr_overlap(
                 continue;
             }
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
+            let arm_token: List<String> = [*shared_tk];
             if k == last_k {
                 if sub_first {
-                    emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated);
+                    emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated, &NO_PREBOUND, &arm_token);
                 } else {
                     w.else_begin("else");
-                    emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated);
+                    emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated, &NO_PREBOUND, &arm_token);
                     w.end();
                 }
             } else {
@@ -1422,7 +1436,17 @@ fn emit_lr_overlap(
                 } else {
                     w.else_begin(`else if ${cond}`);
                 }
-                emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated, &lr_sub_plan_prebound(plan));
+                emit_lr_overlap_branch(
+                    w,
+                    site,
+                    lr,
+                    rule,
+                    ctx,
+                    nc,
+                    mid_operand_gated,
+                    &lr_sub_plan_prebound(plan),
+                    &arm_token,
+                );
             }
         }
         emitted.insert(*shared_tk);
@@ -3656,14 +3680,13 @@ fn gen_alt_elements(
                 panic("gen_alt_elements: Repeat element / op mismatch");
             };
             gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
-        } else if i == 0 && !has_action_before(actions, 0) && leaf_is_proven(op, proven_first) {
-            gen_op_leaf_taken(w, op, ctx, &mut name_counts);
         } else if op_is_leaf(op) {
             // The rule's FIRST-of-rest at this position is the sync set `expect`
             // inserts a missing terminal against (a recovery-only edit; on valid
             // input the leaf matches and `sync` is never read).
             let sync = ctx.first_of_elements_from(elements, i + 1);
-            gen_op_leaf(w, op, ctx, &mut name_counts, &sync);
+            let proven: List<String> = if i == 0 && !has_action_before(actions, 0) { *proven_first } else { [] };
+            gen_op_leaf(w, op, ctx, &mut name_counts, &sync, &proven);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
@@ -3691,6 +3714,7 @@ fn gen_elements_with_non_greedy(
     name_counts: &mut List<[String, i32]>,
     outer_follow: &List<String>,
     actions: &List<AltAction> = &NO_ACTIONS,
+    proven_first: &List<String> = &EMPTY_SYNC,
 ) {
     assert ops.len() == elements.len(), "gen_elements_with_non_greedy: ops / elements length mismatch";
     // An inlined body's labels bind to its own ops. Restored on the way out so a
@@ -3717,7 +3741,8 @@ fn gen_elements_with_non_greedy(
             // only deleted-or-unwound (recovery quality is uniform with the
             // top-level sequence).
             let sync = ctx.first_of_elements_from(elements, i + 1);
-            gen_op_leaf(w, op, ctx, name_counts, &sync);
+            let proven: List<String> = if i == 0 && !has_action_before(actions, 0) { *proven_first } else { [] };
+            gen_op_leaf(w, op, ctx, name_counts, &sync, &proven);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
         } else if let Group(g_op) = op {
@@ -3901,7 +3926,12 @@ fn gen_op_leaf(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     sync: &List<String> = &EMPTY_SYNC,
+    proven: &List<String> = &EMPTY_SYNC,
 ) {
+    if leaf_is_proven(op, proven) {
+        gen_op_leaf_taken(w, op, ctx, name_counts);
+        return;
+    }
     // The Parser's `expect` / `match_*` append the matched token to the builder
     // and return the token index. `sync` is the rule's FIRST-of-rest at this
     // position — the set `expect` inserts a missing terminal against, passed by
@@ -3963,12 +3993,12 @@ fn gen_ops(w: &mut CodeWriter, ops: &List<Op>, ctx: &mut GenContext, nc: &mut Li
     }
 }
 
-fn gen_op(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+fn gen_op(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, nc: &mut List<[String, i32]>, proven: &List<String> = &EMPTY_SYNC) {
     match *op {
         Repeat(r) => gen_repeat_body(w, &r, ctx, nc),
-        Group(g) => gen_group_body(w, &g, ctx, nc),
-        ListLabel(ll) => gen_op(w, &ll.inner, ctx, nc),
-        _ => gen_op_leaf(w, op, ctx, nc),
+        Group(g) => gen_group_body(w, &g, ctx, nc, null, proven),
+        ListLabel(ll) => gen_op(w, &ll.inner, ctx, nc, proven),
+        _ => gen_op_leaf(w, op, ctx, nc, &EMPTY_SYNC, proven),
     }
 }
 
@@ -3996,9 +4026,14 @@ fn gen_group_body(
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
     decided: Option<String> = null,
+    proven: &List<String> = &EMPTY_SYNC,
 ) {
     if let Some(kinds) = group_token_only_kinds(&g.alts) {
-        w.line(`let _ = p.expect_set(${sync_set_ref(ctx, &kinds)});`);
+        if !proven.is_empty() && all_contained(proven, &kinds) {
+            w.line("p.take();");
+        } else {
+            w.line(`let _ = p.expect_set(${sync_set_ref(ctx, &kinds)});`);
+        }
         return;
     }
     if g.alts.len() == 1 {
@@ -4303,6 +4338,7 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
     nc: &mut List<[String, i32]>,
     mid_operand_gated: bool = false,
     prebound: &Option<String> = &NO_PREBOUND,
+    proven_first: &List<String> = &EMPTY_SYNC,
 ) {
     w.begin(`if ${lr.own_prec} >= min_prec`);
     // The guard that selected this branch already ran the scan.
@@ -4331,7 +4367,7 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
         w.line("break;");
         w.end();
     }
-    emit_lr_branch_body(w, lr, rule, rk, labeled, ctx, nc);
+    emit_lr_branch_body(w, lr, rule, rk, labeled, ctx, nc, proven_first);
     w.else_begin("else");
     w.line("break;");
     w.end();
@@ -4348,6 +4384,7 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     labeled: bool,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
+    proven_first: &List<String> = &EMPTY_SYNC,
 ) {
     w.line(`p.b.start_node_at(_cp, ${rk}, _start);`);
     // Stamp this continuation's labeled-alternative index on the wrap node
@@ -4381,7 +4418,8 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     }
     for let mut i = 0; i < ops.len(); i += 1 {
         gen_alt_actions_at(w, actions, i + 1, ctx);
-        gen_op(w, &ops[i], ctx, nc);
+        let proven: List<String> = if i == 0 && !has_action_before(actions, 1) { *proven_first } else { [] };
+        gen_op(w, &ops[i], ctx, nc, &proven);
     }
     gen_alt_actions_at(w, actions, ops.len() + 1, ctx, true);
     w.line("p.b.finish_node(p.last_end());");
@@ -4580,7 +4618,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
         Optional => gen_op_optional(w, r, ctx, nc, follow_gate),
         Star => {
             w.begin(`while !p.recovering && (${cond})`);
-            gen_op(w, &r.body, ctx, nc);
+            gen_op(w, &r.body, ctx, nc, &admits_kinds(&r.body_admits));
             w.end();
         },
         Plus => {
@@ -4588,7 +4626,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             gen_op(w, &r.body, ctx, nc);
             w.end();
             w.begin(`while !p.recovering && (${cond})`);
-            gen_op(w, &r.body, ctx, nc);
+            gen_op(w, &r.body, ctx, nc, &admits_kinds(&r.body_admits));
             w.end();
         },
     }
@@ -4632,7 +4670,7 @@ fn gen_op_optional(
     }
     let entry = gate_cond_with_caller_follow(&gen_op_optional_entry_cond(w, r, ctx, nc), follow_gate);
     w.begin(`if ${entry}`);
-    gen_op(w, &r.body, ctx, nc);
+    gen_op(w, &r.body, ctx, nc, &optional_proven_first(r));
     w.end();
 }
 
@@ -4768,12 +4806,14 @@ fn gen_op_inner_for_storable_repeat(
     outer_follow: &List<String>,
     entry: GroupEntry,
     decided: Option<String> = null,
+    proven: &List<String> = &EMPTY_SYNC,
 ) {
+    assert proven.is_empty() || entry matches { Guaranteed }, "only an entry that emits nothing keeps what its guard proved";
     let entry = open_group_entry(w, elem, ctx, entry);
     let op = &rep_op.body;
     let unwrapped_elem = peel_repeat_body_label(elem);
     return match rep_op.body_shape {
-        LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts),
+        LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts, &EMPTY_SYNC, proven),
         StorableGroup => gen_op_storable_group_inner(
             w,
             op,
@@ -4783,6 +4823,7 @@ fn gen_op_inner_for_storable_repeat(
             outer_follow,
             entry,
             decided,
+            proven,
         ),
         TransparentGroup => panic(
             "gen_op_inner_for_storable_repeat: TransparentGroup body is not storable here — caller must dispatch via the non-storable arm",
@@ -4803,6 +4844,7 @@ fn gen_op_storable_group_inner(
     outer_follow: &List<String>,
     entry: GroupEntry,
     decided: Option<String> = null,
+    proven: &List<String> = &EMPTY_SYNC,
 ) {
     let g_op = if let Group(g) = op {
         g;
@@ -4815,7 +4857,7 @@ fn gen_op_storable_group_inner(
         panic("gen_op_storable_group_inner: surface element is not Group");
     };
     return match &g_op.shape {
-        TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts),
+        TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts, proven),
         SingleAlt(_) => gen_consume_single_alt_group_op(
             w,
             &g_op.alts[0],
@@ -4823,6 +4865,7 @@ fn gen_op_storable_group_inner(
             ctx,
             name_counts,
             outer_follow,
+            proven,
         ),
         SimpleCst(_) => gen_rule_ref_group(
             w,
@@ -4862,9 +4905,17 @@ fn gen_op_dispatch_element(
     elem: &Element,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
+    proven: &List<String> = &EMPTY_SYNC,
 ) {
     match op {
-        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => gen_op_leaf(w, op, ctx, name_counts),
+        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => gen_op_leaf(
+            w,
+            op,
+            ctx,
+            name_counts,
+            &EMPTY_SYNC,
+            proven,
+        ),
         Repeat(rep_op) => {
             let rep = if let Repeat(r) = elem {
                 r;
@@ -4972,6 +5023,7 @@ fn gen_op_storable_optional(
             inner_elem,
             ctx,
             &gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &s.sig), rep_op.gate_caller_follow),
+            &optional_proven_first(rep_op),
         ),
         OptionalShapeLookahead(s) => gen_op_optional_with_shape_lookahead_storable(
             w,
@@ -5016,6 +5068,7 @@ fn gen_op_storable_optional(
                 &repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx),
                 rep_op.gate_caller_follow,
             ),
+            &optional_proven_first(rep_op),
         ),
         // `NonGreedy` is caught upstream by `gen_op_repeat_non_greedy`;
         // reaching here is a lower-side bug.
@@ -5079,9 +5132,10 @@ fn gen_op_storable_optional_with_first<S: AsStrSlice>(
     inner_elem: &Element,
     ctx: &mut GenContext,
     cond: S,
+    proven: &List<String> = &EMPTY_SYNC,
 ) {
     let entry = optional_entry_test(cond, inner_elem, ctx);
-    gen_op_storable_optional_body(w, rep_op, inner_elem, ctx, &entry, null);
+    gen_op_storable_optional_body(w, rep_op, inner_elem, ctx, &entry, null, proven);
 }
 
 /// The `if <entry> { … }` an Optional + storable body reduces to. `decided`
@@ -5094,6 +5148,7 @@ fn gen_op_storable_optional_body<S: AsStrSlice>(
     ctx: &mut GenContext,
     entry: S,
     decided: Option<String>,
+    proven: &List<String> = &EMPTY_SYNC,
 ) {
     // the inner body appends to the builder, so the
     // `Option<T>` wrapper collapses to a present/absent statement.
@@ -5108,6 +5163,7 @@ fn gen_op_storable_optional_body<S: AsStrSlice>(
         &([] as List<String>),
         GroupEntry::Guaranteed,
         decided,
+        proven,
     );
     w.end();
 }
@@ -5151,6 +5207,7 @@ fn gen_op_transparent_optional(
             &rep.element,
             ctx,
             &gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &s.sig), rep_op.gate_caller_follow),
+            &optional_proven_first(rep_op),
         ),
         OptionalScanGuard => {
             let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, ctx, name_counts);
@@ -5169,10 +5226,20 @@ fn gen_op_transparent_optional(
                 &repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx),
                 rep_op.gate_caller_follow,
             ),
+            &optional_proven_first(rep_op),
         ),
         NonGreedy(_) => panic(
             "gen_op_transparent_optional: NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
         ),
+    };
+}
+
+/// The kinds an optional's entry condition proves the next token is one of.
+fn optional_proven_first(rep_op: &RepeatOp) -> List<String> {
+    return match &rep_op.strategy {
+        Plain => admits_kinds(&rep_op.body_admits),
+        OptionalLookahead(s) => if s.sig.is_empty() { [] as List<String> } else { s.sig[0] },
+        _ => [] as List<String>,
     };
 }
 
@@ -5186,6 +5253,7 @@ fn gen_op_transparent_optional_with_cond<S: AsStrSlice>(
     inner: &Element,
     ctx: &mut GenContext,
     cond: S,
+    proven_first: &List<String> = &EMPTY_SYNC,
 ) {
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
@@ -5195,7 +5263,8 @@ fn gen_op_transparent_optional_with_cond<S: AsStrSlice>(
     let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         gen_alt_actions_at(w, &alt.actions, i, ctx);
-        gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc);
+        let proven: List<String> = if i == 0 && !has_action_before(&alt.actions, 0) { *proven_first } else { [] };
+        gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc, &proven);
     }
     gen_alt_actions_at(w, &alt.actions, alt.elements.len(), ctx, true);
     leave_group_alt_bindings(&outer, &alt.actions, ctx);
@@ -5741,10 +5810,15 @@ fn gen_consume_token_group_op(
     alts: &List<Alternative>,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
+    proven: &List<String> = &EMPTY_SYNC,
 ) {
     let base = token_group_field_name(alts);
     let _ = dedup_name(&base, name_counts);
     let kinds = collect_token_only_kinds(alts);
+    if !proven.is_empty() && all_contained(proven, &kinds) {
+        w.line(`${leaf_binding(ctx, &base, &to.field)}p.take();`);
+        return;
+    }
     w.line(`${leaf_binding(ctx, &base, &to.field)}p.expect_set(${sync_set_ref(ctx, &kinds)});`);
 }
 
@@ -5773,13 +5847,14 @@ fn gen_consume_single_alt_group_op(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     outer_follow: &List<String>,
+    proven: &List<String> = &EMPTY_SYNC,
 ) {
     let _ = dedup_name(&single_alt_group_field_name(alt), name_counts);
     // Nested General-group emitters consume `GeneralShape.variant_type`
     // / `alt_struct_names` baked by `lower_single_alt_group` under
     // the SingleAlt's owner rule, so no walker-field swap is needed here.
     let outer = ctx.enter_group_body(false);
-    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, outer_follow, &alt.actions);
+    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, outer_follow, &alt.actions, proven);
     ctx.leave_group_body(outer);
     // the inner elements already appended; no struct.
 }
@@ -6184,7 +6259,11 @@ fn gen_op_repeat_optional_rulecall(
     };
 
     let caller_follow_gate = if rep_op.gate_caller_follow { follow_yields_call("&p.kinds", "p.pos") } else { "" };
-    gen_optional_present(w, &rep_op.body, &caller_follow_gate, &entry, ctx);
+    let proven: List<String> = match &rep_op.body_admits {
+        Kinds(kinds) => subtract_sets(kinds, follow),
+        _ => [],
+    };
+    gen_optional_present(w, &rep_op.body, &caller_follow_gate, &entry, ctx, &proven);
 }
 
 fn optional_probe_decides(r: &RepeatOp, follow: &List<String>, ctx: &mut GenContext) -> bool {
@@ -6249,11 +6328,12 @@ fn gen_optional_present<S: AsStrSlice, S1: AsStrSlice>(
     gate_expr: S,
     cond: S1,
     ctx: &mut GenContext,
+    proven: &List<String>,
 ) {
     let guard = if gate_expr.is_empty() { cond.to_string() } else { `${cond} && !${gate_expr}` };
     w.begin(`if ${guard}`);
     let mut nc: List<[String, i32]> = [];
-    gen_op_leaf(w, body, ctx, &mut nc);
+    gen_op_leaf(w, body, ctx, &mut nc, &EMPTY_SYNC, proven);
     w.end();
 }
 
@@ -6279,7 +6359,7 @@ fn gen_op_repeat_optional_leaf(
         &NO_EXCLUSION,
         &PEEK_KIND,
         ctx,
-    ), ctx);
+    ), ctx, &admits_kinds(&rep_op.body_admits));
 }
 
 /// Runtime caller-FOLLOW yield gate at a tail-greedy Repeat's

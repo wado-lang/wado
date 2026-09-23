@@ -899,6 +899,34 @@ test "every emitted FOLLOW mask is named by a call" {
     assert masks > 0, "SQLite interns FOLLOW masks";
 }
 
+test "an optional takes the token its guard tested" {
+    let input = "grammar T;
+s : A B? (C D)? (E | F)? G EOF ;
+A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; E : 'e' ; F : 'f' ; G : 'g' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, "fn _parse_s__inner(");
+    assert !str_contains(&body, "p.expect(TK_B"), body;
+    assert !str_contains(&body, "p.expect(TK_C"), body;
+    assert !str_contains(&body, "p.expect_set("), body;
+    assert str_contains(&body, "p.expect(TK_D"), body;
+}
+
+test "an LR suffix takes the operator its arm tested" {
+    let input = "grammar T;
+s : e EOF ;
+e : e '+' e | e '.' ID | e '.' ID '(' ')' | ID ;
+ID : [a-z]+ ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, "fn _parse_e__inner(");
+    assert body.len() > 0, output;
+    assert !str_contains(&body, "p.expect(TK_LIT_PLUS"), body;
+    assert !str_contains(&body, "p.expect(TK_LIT_DOT"), body;
+}
+
 test "an element is bound only where an action reads it" {
     let input = "grammar T;
 options { language = Wado; }

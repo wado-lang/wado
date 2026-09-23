@@ -1565,7 +1565,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
-                    p.expect(TK_LIT_DOT, &EMPTY_SYNC);
+                    p.take();
                     p.expect(TK_ID, &EMPTY_SYNC);
                     p.b.finish_node(p.last_end());
                 } else {
@@ -1577,7 +1577,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
-                    p.expect(TK_LIT_DOT, &EMPTY_SYNC);
+                    p.take();
                     p.expect(TK_LIT_this, &EMPTY_SYNC);
                     p.b.finish_node(p.last_end());
                 } else {
@@ -1590,7 +1590,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                p.expect(TK_LIT_STAR, &EMPTY_SYNC);
+                p.take();
                 _parse_e(p, 3);
                 p.b.finish_node(p.last_end());
             } else {
@@ -1602,7 +1602,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                let _ = p.expect_set(&SYNC_1);
+                p.take();
                 _parse_e(p, 2);
                 p.b.finish_node(p.last_end());
             } else {
@@ -1687,5 +1687,4 @@ fn _kind_set_0(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_ID, TK_INT, TK_LIT_MINUS];
-global SYNC_1: List<i32> = [TK_LIT_MINUS, TK_LIT_PLUS];
 

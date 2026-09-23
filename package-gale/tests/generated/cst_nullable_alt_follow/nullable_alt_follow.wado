@@ -1331,7 +1331,7 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
         let grp_kind = p.peek_kind();
         if _kind_set_0(grp_kind) {
             if p.peek_kind() == TK_A {
-                p.expect(TK_A, &EMPTY_SYNC);
+                p.take();
             }
         } else if grp_kind == TK_B {
             p.expect(TK_B, &EMPTY_SYNC);
@@ -1377,7 +1377,7 @@ fn _parse_s(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_x__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if p.peek_kind() == TK_A && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.expect(TK_A, &EMPTY_SYNC);
+        p.take();
     }
     return;
 }

@@ -1555,7 +1555,7 @@ fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_DECLARATOR, _start);
-                    p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
+                    p.take();
                     _parse_e(p);
                     p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
                     p.b.finish_node(p.last_end());
@@ -1568,7 +1568,7 @@ fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_DECLARATOR, _start);
-                    p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
+                    p.take();
                     p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
                     p.b.finish_node(p.last_end());
                 } else {
@@ -1581,7 +1581,7 @@ fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_DECLARATOR, _start);
-                p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
+                p.take();
                 p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
             } else {

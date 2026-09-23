@@ -1467,7 +1467,7 @@ fn _parse_file___inner(p: &mut Parser, follow: i64 = 0) -> () {
         let item = _parse_item(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     }
     if p.peek_kind() == TK_SEMICOLON {
-        let semicolon = p.expect(TK_SEMICOLON, &EMPTY_SYNC);
+        let semicolon = p.take();
     }
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     if !p.speculating {
@@ -1490,7 +1490,7 @@ fn _parse_file_(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_A, &SYNC_1);
     if p.peek_kind() == TK_B && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.expect(TK_B, &EMPTY_SYNC);
+        p.take();
     }
     return;
 }

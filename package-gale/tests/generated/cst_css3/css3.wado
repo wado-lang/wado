@@ -29196,7 +29196,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if _kind_set_5(kind) {
         if _kind_set_6(p.peek_kind()) {
-            p.expect_set(&SYNC_12);
+            p.take();
         }
         _parse_ws(p, FOLLOW_MASK_5);
         _parse_media_type(p);
@@ -29224,7 +29224,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            p.expect(TK_And, &SYNC_13);
+            p.expect(TK_And, &SYNC_12);
             _parse_ws(p, FOLLOW_MASK_6);
             _parse_media_expression(p, follow);
         }
@@ -29255,7 +29255,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            p.expect(TK_And, &SYNC_13);
+            p.expect(TK_And, &SYNC_12);
             _parse_ws(p, FOLLOW_MASK_6);
             _parse_media_expression(p, follow);
         }
@@ -29297,11 +29297,11 @@ fn _parse_media_type(p: &mut Parser) -> () {
 }
 
 fn _parse_media_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_OpenParen, &SYNC_14);
+    p.expect(TK_OpenParen, &SYNC_13);
     _parse_ws(p, FOLLOW_MASK_5);
     _parse_media_feature(p, 0);
     if p.peek_kind() == TK_Colon {
-        p.expect(TK_Colon, &SYNC_15);
+        p.take();
         _parse_ws(p, FOLLOW_MASK_7);
         _parse_expr(p, FOLLOW_MASK_8);
     }
@@ -29339,12 +29339,12 @@ fn _parse_media_feature(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_page__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_Page, &SYNC_16);
+    p.expect(TK_Page, &SYNC_14);
     _parse_ws(p, 0);
     if p.peek_kind() == TK_Colon {
         _parse_pseudo_page(p, FOLLOW_MASK_3);
     }
-    p.expect(TK_OpenBrace, &SYNC_17);
+    p.expect(TK_OpenBrace, &SYNC_15);
     _parse_ws(p, 0);
     if _kind_set_7(p.peek_kind()) {
         _parse_declaration(p, 0);
@@ -29374,7 +29374,7 @@ fn _parse_page__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_SemiColon, &SYNC_18);
+        p.expect(TK_SemiColon, &SYNC_16);
         _parse_ws(p, follow);
         if _kind_set_7(p.peek_kind()) {
             _parse_declaration(p, follow);
@@ -29397,7 +29397,7 @@ fn _parse_page(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_pseudo_page__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_Colon, &SYNC_19);
+    p.expect(TK_Colon, &SYNC_17);
     _parse_ident(p);
     _parse_ws(p, follow);
     return;
@@ -29439,7 +29439,7 @@ fn _parse_selector_group__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_Comma, &SYNC_20);
+        p.expect(TK_Comma, &SYNC_18);
         _parse_ws(p, FOLLOW_MASK_9);
         _parse_selector(p, follow);
     }
@@ -29526,7 +29526,7 @@ fn _parse_combinator__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of combinator matches",
         p.peek_span(),
-        &SYNC_21,
+        &SYNC_19,
     );
     return;
 }
@@ -29579,7 +29579,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: i64 = 0) -> ()
                 _parse_universal(p, 0);
             }
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_22);
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_20);
         }
         loop {
             if p.recovering { break; }
@@ -29706,7 +29706,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: i64 = 0) -> ()
             }
             if !_plus_first && gd_best <= p.pos { break; }
             if gd_winner < 0 {
-                if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &SYNC_23); }
+                if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &SYNC_21); }
                 break;
             }
             _plus_first = false;
@@ -29727,7 +29727,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: i64 = 0) -> ()
     p.no_viable(
         "no alternative of simpleSelectorSequence matches",
         p.peek_span(),
-        &SYNC_24,
+        &SYNC_22,
     );
     return;
 }
@@ -29869,7 +29869,7 @@ fn _parse_universal(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_class_name__inner(p: &mut Parser) -> () {
-    p.expect(TK_Dot, &SYNC_19);
+    p.expect(TK_Dot, &SYNC_17);
     _parse_ident(p);
     return;
 }
@@ -29886,7 +29886,7 @@ fn _parse_class_name(p: &mut Parser) -> () {
 }
 
 fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_OpenBracket, &SYNC_25);
+    p.expect(TK_OpenBracket, &SYNC_23);
     _parse_ws(p, 0);
     let mut opt_enter: bool = false;
     if _kind_set_9(p.peek_kind()) {
@@ -29942,7 +29942,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        p.expect_set(&SYNC_26);
+        p.expect_set(&SYNC_24);
         _parse_ws(p, FOLLOW_MASK_12);
         let grp_kind = p.peek_kind();
         if _kind_set_3(grp_kind) {
@@ -29950,7 +29950,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
         } else if grp_kind == TK_String_ {
             p.expect(TK_String_, &EMPTY_SYNC);
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_27);
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_25);
         }
         _parse_ws(p, (FOLLOW_MASK_13 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
@@ -29970,9 +29970,9 @@ fn _parse_attrib(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_pseudo__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_Colon, &SYNC_28);
+    p.expect(TK_Colon, &SYNC_26);
     if p.peek_kind() == TK_Colon {
-        p.expect(TK_Colon, &EMPTY_SYNC);
+        p.take();
     }
     let grp_kind = p.peek_kind();
     if _kind_set_3(grp_kind) {
@@ -29980,7 +29980,7 @@ fn _parse_pseudo__inner(p: &mut Parser, follow: i64 = 0) -> () {
     } else if grp_kind == TK_Function_ {
         _parse_functional_pseudo(p, 0);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_29);
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_27);
     }
     return;
 }
@@ -29997,7 +29997,7 @@ fn _parse_pseudo(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_functional_pseudo__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_Function_, &SYNC_30);
+    p.expect(TK_Function_, &SYNC_28);
     _parse_ws(p, FOLLOW_MASK_14);
     _parse_expression(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_CloseParen, &EMPTY_SYNC);
@@ -30057,7 +30057,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
         } else if _kind_set_3(grp_kind) {
             _parse_ident(p);
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_31);
+            p.no_viable("no viable alternative", p.peek_span(), &SYNC_29);
         }
         _parse_ws(p, follow);
     }
@@ -30076,7 +30076,7 @@ fn _parse_expression(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_negation__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_PseudoNot, &SYNC_32);
+    p.expect(TK_PseudoNot, &SYNC_30);
     _parse_ws(p, FOLLOW_MASK_15);
     _parse_negation_arg(p, 0);
     _parse_ws(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -30189,7 +30189,7 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of negationArg matches",
         p.peek_span(),
-        &SYNC_33,
+        &SYNC_31,
     );
     return;
 }
@@ -30234,7 +30234,7 @@ fn _parse_operator___inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of operator_ matches",
         p.peek_span(),
-        &SYNC_34,
+        &SYNC_32,
     );
     return;
 }
@@ -30279,7 +30279,7 @@ fn _parse_property___inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of property_ matches",
         p.peek_span(),
-        &SYNC_35,
+        &SYNC_33,
     );
     return;
 }
@@ -30325,7 +30325,7 @@ fn _parse_ruleset__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
         }
         _parse_any_(p, 0);
     }
-    p.expect(TK_OpenBrace, &SYNC_17);
+    p.expect(TK_OpenBrace, &SYNC_15);
     _parse_ws(p, 0);
     if _kind_set_16(p.peek_kind()) {
         _parse_declaration_list(p, FOLLOW_MASK_16);
@@ -30338,7 +30338,7 @@ fn _parse_ruleset__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_ruleset__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     p.b.set_alt(0);
     _parse_selector_group(p, FOLLOW_MASK_3);
-    p.expect(TK_OpenBrace, &SYNC_17);
+    p.expect(TK_OpenBrace, &SYNC_15);
     _parse_ws(p, 0);
     if _kind_set_16(p.peek_kind()) {
         _parse_declaration_list(p, FOLLOW_MASK_16);
@@ -30379,7 +30379,7 @@ fn _parse_ruleset__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of ruleset matches",
         p.peek_span(),
-        &SYNC_36,
+        &SYNC_34,
     );
     return;
 }
@@ -30447,7 +30447,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos_2 = pos;
         }
         if rep_scan_pos_2 < 0 { break; }
-        p.expect(TK_SemiColon, &SYNC_18);
+        p.expect(TK_SemiColon, &SYNC_16);
         _parse_ws(p, follow);
         if _kind_set_7(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_declaration(p, follow);
@@ -30470,7 +30470,7 @@ fn _parse_declaration_list(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_declaration__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     p.b.set_alt(0);
     _parse_property_(p, FOLLOW_MASK_17);
-    p.expect(TK_Colon, &SYNC_15);
+    p.expect(TK_Colon, &SYNC_35);
     _parse_ws(p, FOLLOW_MASK_7);
     _parse_expr(p, follow);
     if p.peek_kind() == TK_Important && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -30500,7 +30500,7 @@ fn _parse_declaration__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 =
 fn _parse_declaration__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.b.set_alt(1);
     _parse_property_(p, FOLLOW_MASK_17);
-    p.expect(TK_Colon, &SYNC_37);
+    p.expect(TK_Colon, &SYNC_36);
     _parse_ws(p, FOLLOW_MASK_18);
     _parse_value(p, follow);
     return;
@@ -30544,7 +30544,7 @@ fn _parse_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of declaration matches",
         p.peek_span(),
-        &SYNC_35,
+        &SYNC_33,
     );
     return;
 }
@@ -30619,7 +30619,7 @@ fn _parse_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if !_plus_first && gd_best <= p.pos { break; }
         if gd_winner < 0 {
-            if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &SYNC_38); }
+            if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &SYNC_37); }
             break;
         }
         _plus_first = false;
@@ -30831,7 +30831,7 @@ fn _parse_term__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of term matches",
         p.peek_span(),
-        &SYNC_39,
+        &SYNC_38,
     );
     return;
 }
@@ -30848,7 +30848,7 @@ fn _parse_term(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_function___inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_Function_, &SYNC_15);
+    p.expect(TK_Function_, &SYNC_35);
     _parse_ws(p, FOLLOW_MASK_7);
     _parse_expr(p, FOLLOW_MASK_8);
     p.expect(TK_CloseParen, &SYNC_3);
@@ -30868,7 +30868,7 @@ fn _parse_function_(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_dx_image_transform__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_DxImageTransform, &SYNC_15);
+    p.expect(TK_DxImageTransform, &SYNC_35);
     _parse_ws(p, FOLLOW_MASK_7);
     _parse_expr(p, FOLLOW_MASK_8);
     p.expect(TK_CloseParen, &SYNC_3);
@@ -30906,7 +30906,7 @@ fn _parse_hexcolor(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_number__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if _kind_set_21(p.peek_kind()) {
-        p.expect_set(&SYNC_40);
+        p.take();
     }
     p.expect(TK_Number, &EMPTY_SYNC);
     return;
@@ -30925,7 +30925,7 @@ fn _parse_number(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_percentage__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if _kind_set_21(p.peek_kind()) {
-        p.expect_set(&SYNC_40);
+        p.take();
     }
     p.expect(TK_Percentage, &EMPTY_SYNC);
     return;
@@ -30944,7 +30944,7 @@ fn _parse_percentage(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_dimension__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if _kind_set_21(p.peek_kind()) {
-        p.expect_set(&SYNC_40);
+        p.take();
     }
     p.expect(TK_Dimension, &EMPTY_SYNC);
     return;
@@ -30963,7 +30963,7 @@ fn _parse_dimension(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_unknown_dimension__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if _kind_set_21(p.peek_kind()) {
-        p.expect_set(&SYNC_40);
+        p.take();
     }
     p.expect(TK_UnknownDimension, &EMPTY_SYNC);
     return;
@@ -31221,7 +31221,7 @@ fn _parse_any___inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of any_ matches",
         p.peek_span(),
-        &SYNC_41,
+        &SYNC_39,
     );
     return;
 }
@@ -31239,7 +31239,7 @@ fn _parse_any_(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_at_rule__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.b.set_alt(0);
-    p.expect(TK_AtKeyword, &SYNC_42);
+    p.expect(TK_AtKeyword, &SYNC_40);
     _parse_ws(p, 0);
     loop {
         if p.recovering { break; }
@@ -31276,7 +31276,7 @@ fn _parse_at_rule__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_SemiColon, &SYNC_3);
         _parse_ws(p, follow);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &SYNC_43);
+        p.no_viable("no viable alternative", p.peek_span(), &SYNC_41);
     }
     return;
 }
@@ -31321,7 +31321,7 @@ fn _parse_unused__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of unused matches",
         p.peek_span(),
-        &SYNC_44,
+        &SYNC_42,
     );
     return;
 }
@@ -31338,7 +31338,7 @@ fn _parse_unused(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_OpenBrace, &SYNC_45);
+    p.expect(TK_OpenBrace, &SYNC_43);
     _parse_ws(p, 0);
     loop {
         if p.recovering { break; }
@@ -31501,7 +31501,7 @@ fn _parse_nested_statement__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of nestedStatement matches",
         p.peek_span(),
-        &SYNC_46,
+        &SYNC_44,
     );
     return;
 }
@@ -31518,7 +31518,7 @@ fn _parse_nested_statement(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_group_rule_body__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_OpenBrace, &SYNC_47);
+    p.expect(TK_OpenBrace, &SYNC_45);
     _parse_ws(p, 0);
     loop {
         if p.recovering { break; }
@@ -31565,7 +31565,7 @@ fn _parse_group_rule_body(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_supports_rule__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_Supports, &SYNC_48);
+    p.expect(TK_Supports, &SYNC_46);
     _parse_ws(p, FOLLOW_MASK_19);
     _parse_supports_condition(p, 0);
     _parse_ws(p, FOLLOW_MASK_3);
@@ -31657,7 +31657,7 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of supportsCondition matches",
         p.peek_span(),
-        &SYNC_49,
+        &SYNC_47,
     );
     return;
 }
@@ -31674,7 +31674,7 @@ fn _parse_supports_condition(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_supports_condition_in_parens__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_OpenParen, &SYNC_48);
+    p.expect(TK_OpenParen, &SYNC_46);
     _parse_ws(p, FOLLOW_MASK_19);
     _parse_supports_condition(p, 0);
     _parse_ws(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -31751,7 +31751,7 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: i64 = 0) -
     p.no_viable(
         "no alternative of supportsConditionInParens matches",
         p.peek_span(),
-        &SYNC_50,
+        &SYNC_48,
     );
     return;
 }
@@ -31770,7 +31770,7 @@ fn _parse_supports_condition_in_parens(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_supports_negation__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_Not, &SYNC_3);
     _parse_ws(p, FOLLOW_MASK_20);
-    p.expect(TK_Space, &SYNC_51);
+    p.expect(TK_Space, &SYNC_49);
     _parse_ws(p, FOLLOW_MASK_21);
     _parse_supports_condition_in_parens(p, follow);
     return;
@@ -31827,11 +31827,11 @@ fn _parse_supports_conjunction__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         _plus_first = false;
         _parse_ws(p, FOLLOW_MASK_20);
-        p.expect(TK_Space, &SYNC_52);
+        p.expect(TK_Space, &SYNC_50);
         _parse_ws(p, FOLLOW_MASK_23);
         p.expect(TK_And, &SYNC_3);
         _parse_ws(p, FOLLOW_MASK_20);
-        p.expect(TK_Space, &SYNC_51);
+        p.expect(TK_Space, &SYNC_49);
         _parse_ws(p, FOLLOW_MASK_21);
         _parse_supports_condition_in_parens(p, follow);
     }
@@ -31889,11 +31889,11 @@ fn _parse_supports_disjunction__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         _plus_first = false;
         _parse_ws(p, FOLLOW_MASK_20);
-        p.expect(TK_Space, &SYNC_53);
+        p.expect(TK_Space, &SYNC_51);
         _parse_ws(p, FOLLOW_MASK_24);
         p.expect(TK_Or, &SYNC_3);
         _parse_ws(p, FOLLOW_MASK_20);
-        p.expect(TK_Space, &SYNC_51);
+        p.expect(TK_Space, &SYNC_49);
         _parse_ws(p, FOLLOW_MASK_21);
         _parse_supports_condition_in_parens(p, follow);
     }
@@ -31912,7 +31912,7 @@ fn _parse_supports_disjunction(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_supports_declaration_condition__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_OpenParen, &SYNC_18);
+    p.expect(TK_OpenParen, &SYNC_16);
     _parse_ws(p, FOLLOW_MASK_25);
     _parse_declaration(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_CloseParen, &EMPTY_SYNC);
@@ -31931,7 +31931,7 @@ fn _parse_supports_declaration_condition(p: &mut Parser, follow: i64 = 0) -> () 
 }
 
 fn _parse_general_enclosed__inner(p: &mut Parser) -> () {
-    p.expect_set(&SYNC_50);
+    p.expect_set(&SYNC_48);
     loop {
         if p.recovering { break; }
         let mut gd_winner: i32 = -1;
@@ -31983,7 +31983,7 @@ fn _parse_url__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if kind == TK_Url_ {
         p.take();
         _parse_ws(p, FOLLOW_MASK_0);
-        p.expect(TK_String_, &SYNC_54);
+        p.expect(TK_String_, &SYNC_52);
         _parse_ws(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_CloseParen, &EMPTY_SYNC);
         return;
@@ -31995,7 +31995,7 @@ fn _parse_url__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of url matches",
         p.peek_span(),
-        &SYNC_55,
+        &SYNC_53,
     );
     return;
 }
@@ -32012,9 +32012,9 @@ fn _parse_url(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_var___inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_Var, &SYNC_56);
+    p.expect(TK_Var, &SYNC_54);
     _parse_ws(p, FOLLOW_MASK_26);
-    p.expect(TK_Variable, &SYNC_54);
+    p.expect(TK_Variable, &SYNC_52);
     _parse_ws(p, FOLLOW_MASK_8);
     p.expect(TK_CloseParen, &SYNC_3);
     _parse_ws(p, follow);
@@ -32033,7 +32033,7 @@ fn _parse_var_(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_calc__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_Calc, &SYNC_57);
+    p.expect(TK_Calc, &SYNC_55);
     _parse_ws(p, FOLLOW_MASK_27);
     _parse_calc_sum(p, FOLLOW_MASK_8);
     p.expect(TK_CloseParen, &SYNC_3);
@@ -32085,11 +32085,11 @@ fn _parse_calc_sum__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_Space, &SYNC_58);
+        p.expect(TK_Space, &SYNC_56);
         _parse_ws(p, FOLLOW_MASK_28);
-        p.expect_set(&SYNC_40);
+        p.expect_set(&SYNC_57);
         _parse_ws(p, FOLLOW_MASK_20);
-        p.expect(TK_Space, &SYNC_57);
+        p.expect(TK_Space, &SYNC_55);
         _parse_ws(p, FOLLOW_MASK_27);
         _parse_calc_product(p, follow);
     }
@@ -32146,11 +32146,11 @@ fn _parse_calc_product__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if gd_best <= p.pos { break; }
         if gd_winner == 0 {
-            p.expect(TK_Multiply, &SYNC_57);
+            p.expect(TK_Multiply, &SYNC_55);
             _parse_ws(p, FOLLOW_MASK_27);
             _parse_calc_value(p, follow);
         } else {
-            p.expect(TK_Divide, &SYNC_59);
+            p.expect(TK_Divide, &SYNC_58);
             _parse_ws(p, FOLLOW_MASK_29);
             _parse_number(p, follow);
             _parse_ws(p, follow);
@@ -32265,7 +32265,7 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of calcValue matches",
         p.peek_span(),
-        &SYNC_60,
+        &SYNC_59,
     );
     return;
 }
@@ -32282,9 +32282,9 @@ fn _parse_calc_value(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_font_face_rule__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_FontFace, &SYNC_61);
+    p.expect(TK_FontFace, &SYNC_60);
     _parse_ws(p, FOLLOW_MASK_3);
-    p.expect(TK_OpenBrace, &SYNC_17);
+    p.expect(TK_OpenBrace, &SYNC_15);
     _parse_ws(p, 0);
     if _kind_set_7(p.peek_kind()) {
         _parse_font_face_declaration(p, 0);
@@ -32314,7 +32314,7 @@ fn _parse_font_face_rule__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_SemiColon, &SYNC_18);
+        p.expect(TK_SemiColon, &SYNC_16);
         _parse_ws(p, follow);
         if _kind_set_7(p.peek_kind()) {
             _parse_font_face_declaration(p, follow);
@@ -32339,7 +32339,7 @@ fn _parse_font_face_rule(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_font_face_declaration__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     p.b.set_alt(0);
     _parse_property_(p, FOLLOW_MASK_17);
-    p.expect(TK_Colon, &SYNC_15);
+    p.expect(TK_Colon, &SYNC_35);
     _parse_ws(p, FOLLOW_MASK_7);
     _parse_expr(p, follow);
     return;
@@ -32361,7 +32361,7 @@ fn _parse_font_face_declaration__inner_scan_0(tokens: &Array<i32>, pos: i32, fol
 fn _parse_font_face_declaration__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.b.set_alt(1);
     _parse_property_(p, FOLLOW_MASK_17);
-    p.expect(TK_Colon, &SYNC_37);
+    p.expect(TK_Colon, &SYNC_36);
     _parse_ws(p, FOLLOW_MASK_18);
     _parse_value(p, follow);
     return;
@@ -32405,7 +32405,7 @@ fn _parse_font_face_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of fontFaceDeclaration matches",
         p.peek_span(),
-        &SYNC_35,
+        &SYNC_33,
     );
     return;
 }
@@ -32424,11 +32424,11 @@ fn _parse_font_face_declaration(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_keyframes_rule__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_Keyframes, &SYNC_3);
     _parse_ws(p, FOLLOW_MASK_20);
-    p.expect(TK_Space, &SYNC_14);
+    p.expect(TK_Space, &SYNC_13);
     _parse_ws(p, FOLLOW_MASK_5);
     _parse_ident(p);
     _parse_ws(p, FOLLOW_MASK_3);
-    p.expect(TK_OpenBrace, &SYNC_62);
+    p.expect(TK_OpenBrace, &SYNC_61);
     _parse_ws(p, 0);
     loop {
         if p.recovering { break; }
@@ -32476,7 +32476,7 @@ fn _parse_keyframes_rule(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_keyframe_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_keyframe_selector(p, FOLLOW_MASK_3);
-    p.expect(TK_OpenBrace, &SYNC_17);
+    p.expect(TK_OpenBrace, &SYNC_15);
     _parse_ws(p, 0);
     if _kind_set_16(p.peek_kind()) {
         _parse_declaration_list(p, FOLLOW_MASK_16);
@@ -32498,7 +32498,7 @@ fn _parse_keyframe_block(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_keyframe_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect_set(&SYNC_63);
+    p.expect_set(&SYNC_62);
     _parse_ws(p, follow);
     loop {
         if p.recovering { break; }
@@ -32525,9 +32525,9 @@ fn _parse_keyframe_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_Comma, &SYNC_64);
+        p.expect(TK_Comma, &SYNC_63);
         _parse_ws(p, FOLLOW_MASK_30);
-        p.expect_set(&SYNC_63);
+        p.expect_set(&SYNC_62);
         _parse_ws(p, follow);
     }
     return;
@@ -32545,9 +32545,9 @@ fn _parse_keyframe_selector(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_viewport__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_Viewport, &SYNC_61);
+    p.expect(TK_Viewport, &SYNC_60);
     _parse_ws(p, FOLLOW_MASK_3);
-    p.expect(TK_OpenBrace, &SYNC_17);
+    p.expect(TK_OpenBrace, &SYNC_15);
     _parse_ws(p, 0);
     if _kind_set_16(p.peek_kind()) {
         _parse_declaration_list(p, FOLLOW_MASK_16);
@@ -32569,11 +32569,11 @@ fn _parse_viewport(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_counter_style__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_CounterStyle, &SYNC_14);
+    p.expect(TK_CounterStyle, &SYNC_13);
     _parse_ws(p, FOLLOW_MASK_5);
     _parse_ident(p);
     _parse_ws(p, FOLLOW_MASK_3);
-    p.expect(TK_OpenBrace, &SYNC_17);
+    p.expect(TK_OpenBrace, &SYNC_15);
     _parse_ws(p, 0);
     if _kind_set_16(p.peek_kind()) {
         _parse_declaration_list(p, FOLLOW_MASK_16);
@@ -32595,11 +32595,11 @@ fn _parse_counter_style(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_font_feature_values_rule__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_FontFeatureValues, &SYNC_65);
+    p.expect(TK_FontFeatureValues, &SYNC_64);
     _parse_ws(p, FOLLOW_MASK_12);
     _parse_font_family_name_list(p, 0);
     _parse_ws(p, FOLLOW_MASK_3);
-    p.expect(TK_OpenBrace, &SYNC_66);
+    p.expect(TK_OpenBrace, &SYNC_65);
     _parse_ws(p, 0);
     loop {
         if p.recovering { break; }
@@ -32673,7 +32673,7 @@ fn _parse_font_family_name_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos < 0 { break; }
         _parse_ws(p, FOLLOW_MASK_31);
-        p.expect(TK_Comma, &SYNC_65);
+        p.expect(TK_Comma, &SYNC_64);
         _parse_ws(p, FOLLOW_MASK_12);
         _parse_font_family_name(p, follow);
     }
@@ -32728,7 +32728,7 @@ fn _parse_font_family_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of fontFamilyName matches",
         p.peek_span(),
-        &SYNC_27,
+        &SYNC_25,
     );
     return;
 }
@@ -32747,7 +32747,7 @@ fn _parse_font_family_name(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_feature_value_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_feature_type(p);
     _parse_ws(p, FOLLOW_MASK_3);
-    p.expect(TK_OpenBrace, &SYNC_67);
+    p.expect(TK_OpenBrace, &SYNC_66);
     _parse_ws(p, 0);
     if _kind_set_3(p.peek_kind()) {
         _parse_feature_value_definition(p, 0);
@@ -32780,7 +32780,7 @@ fn _parse_feature_value_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos < 0 { break; }
         _parse_ws(p, FOLLOW_MASK_1);
-        p.expect(TK_SemiColon, &SYNC_14);
+        p.expect(TK_SemiColon, &SYNC_13);
         _parse_ws(p, follow);
         if _kind_set_3(p.peek_kind()) {
             _parse_feature_value_definition(p, follow);
@@ -32821,7 +32821,7 @@ fn _parse_feature_type(p: &mut Parser) -> () {
 fn _parse_feature_value_definition__inner(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_ident(p);
     _parse_ws(p, FOLLOW_MASK_17);
-    p.expect(TK_Colon, &SYNC_59);
+    p.expect(TK_Colon, &SYNC_58);
     _parse_ws(p, FOLLOW_MASK_29);
     _parse_number(p, follow);
     loop {
@@ -32871,7 +32871,7 @@ fn _parse_ident__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of ident matches",
         p.peek_span(),
-        &SYNC_19,
+        &SYNC_17,
     );
     return;
 }
@@ -33442,62 +33442,61 @@ global SYNC_8: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly,
 global SYNC_9: List<i32> = [TK_Namespace];
 global SYNC_10: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_OpenBrace, TK_OpenParen, TK_Or, TK_Space, TK_To];
 global SYNC_11: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_OpenParen, TK_Or, TK_Space, TK_To];
-global SYNC_12: List<i32> = [TK_MediaOnly, TK_Not];
-global SYNC_13: List<i32> = [TK_Comment, TK_OpenParen, TK_Space];
-global SYNC_14: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_To];
-global SYNC_15: List<i32> = [TK_And, TK_Calc, TK_Comment, TK_Dimension, TK_DxImageTransform, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Var];
-global SYNC_16: List<i32> = [TK_Colon, TK_Comment, TK_OpenBrace, TK_Space];
-global SYNC_17: List<i32> = [TK_And, TK_CloseBrace, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_SemiColon, TK_Space, TK_To, TK_Underscore, TK_Variable];
-global SYNC_18: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Space, TK_To, TK_Underscore, TK_Variable];
-global SYNC_19: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
-global SYNC_20: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_PseudoNot, TK_Space, TK_To];
-global SYNC_21: List<i32> = [TK_Greater, TK_Plus, TK_Space, TK_Tilde];
-global SYNC_22: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Pipe, TK_To];
-global SYNC_23: List<i32> = [TK_Colon, TK_Dot, TK_Hash, TK_OpenBracket, TK_PseudoNot];
-global SYNC_24: List<i32> = [TK_And, TK_Colon, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_PseudoNot, TK_To];
-global SYNC_25: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Pipe, TK_Space, TK_To];
-global SYNC_26: List<i32> = [TK_DashMatch, TK_Equal, TK_Includes, TK_PrefixMatch, TK_SubstringMatch, TK_SuffixMatch];
-global SYNC_27: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_String_, TK_To];
-global SYNC_28: List<i32> = [TK_And, TK_Colon, TK_From, TK_Function_, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
-global SYNC_29: List<i32> = [TK_And, TK_From, TK_Function_, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
-global SYNC_30: List<i32> = [TK_And, TK_Comment, TK_Dimension, TK_From, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnknownDimension];
-global SYNC_31: List<i32> = [TK_And, TK_Dimension, TK_From, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Plus, TK_String_, TK_To, TK_UnknownDimension];
-global SYNC_32: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_Space, TK_To];
-global SYNC_33: List<i32> = [TK_And, TK_Colon, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_To];
-global SYNC_34: List<i32> = [TK_Comma, TK_Divide, TK_Equal, TK_Space];
-global SYNC_35: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_To, TK_Underscore, TK_Variable];
-global SYNC_36: List<i32> = [TK_And, TK_Colon, TK_DashMatch, TK_Dimension, TK_Dot, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
-global SYNC_37: List<i32> = [TK_And, TK_AtKeyword, TK_Colon, TK_Comment, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
-global SYNC_38: List<i32> = [TK_And, TK_AtKeyword, TK_Colon, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
-global SYNC_39: List<i32> = [TK_And, TK_Calc, TK_Dimension, TK_DxImageTransform, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Var];
-global SYNC_40: List<i32> = [TK_Minus, TK_Plus];
-global SYNC_41: List<i32> = [TK_And, TK_Colon, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
-global SYNC_42: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_SemiColon, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
-global SYNC_43: List<i32> = [TK_OpenBrace, TK_SemiColon];
-global SYNC_44: List<i32> = [TK_AtKeyword, TK_Cdc, TK_Cdo, TK_OpenBrace, TK_SemiColon];
-global SYNC_45: List<i32> = [TK_And, TK_AtKeyword, TK_CloseBrace, TK_Colon, TK_Comment, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_SemiColon, TK_Space, TK_String_, TK_Supports, TK_To, TK_Underscore, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Variable, TK_Viewport];
-global SYNC_46: List<i32> = [TK_And, TK_AtKeyword, TK_Colon, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Viewport];
-global SYNC_47: List<i32> = [TK_And, TK_AtKeyword, TK_CloseBrace, TK_Colon, TK_Comment, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_Space, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Viewport];
-global SYNC_48: List<i32> = [TK_Comment, TK_Function_, TK_Not, TK_OpenParen, TK_Space];
-global SYNC_49: List<i32> = [TK_Function_, TK_Not, TK_OpenParen];
-global SYNC_50: List<i32> = [TK_Function_, TK_OpenParen];
-global SYNC_51: List<i32> = [TK_Comment, TK_Function_, TK_OpenParen, TK_Space];
-global SYNC_52: List<i32> = [TK_And, TK_Comment, TK_Space];
-global SYNC_53: List<i32> = [TK_Comment, TK_Or, TK_Space];
-global SYNC_54: List<i32> = [TK_CloseParen, TK_Comment, TK_Space];
-global SYNC_55: List<i32> = [TK_Url, TK_Url_];
-global SYNC_56: List<i32> = [TK_Comment, TK_Space, TK_Variable];
-global SYNC_57: List<i32> = [TK_Comment, TK_Dimension, TK_Minus, TK_Number, TK_OpenParen, TK_Percentage, TK_Plus, TK_Space, TK_UnknownDimension];
-global SYNC_58: List<i32> = [TK_Comment, TK_Minus, TK_Plus, TK_Space];
-global SYNC_59: List<i32> = [TK_Comment, TK_Minus, TK_Number, TK_Plus, TK_Space];
-global SYNC_60: List<i32> = [TK_Dimension, TK_Minus, TK_Number, TK_OpenParen, TK_Percentage, TK_Plus, TK_UnknownDimension];
-global SYNC_61: List<i32> = [TK_Comment, TK_OpenBrace, TK_Space];
-global SYNC_62: List<i32> = [TK_CloseBrace, TK_Comment, TK_From, TK_Percentage, TK_Space, TK_To];
-global SYNC_63: List<i32> = [TK_From, TK_Percentage, TK_To];
-global SYNC_64: List<i32> = [TK_Comment, TK_From, TK_Percentage, TK_Space, TK_To];
-global SYNC_65: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_String_, TK_To];
-global SYNC_66: List<i32> = [TK_AtKeyword, TK_CloseBrace, TK_Comment, TK_Space];
-global SYNC_67: List<i32> = [TK_And, TK_CloseBrace, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_SemiColon, TK_Space, TK_To];
+global SYNC_12: List<i32> = [TK_Comment, TK_OpenParen, TK_Space];
+global SYNC_13: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_To];
+global SYNC_14: List<i32> = [TK_Colon, TK_Comment, TK_OpenBrace, TK_Space];
+global SYNC_15: List<i32> = [TK_And, TK_CloseBrace, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_SemiColon, TK_Space, TK_To, TK_Underscore, TK_Variable];
+global SYNC_16: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Space, TK_To, TK_Underscore, TK_Variable];
+global SYNC_17: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
+global SYNC_18: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_PseudoNot, TK_Space, TK_To];
+global SYNC_19: List<i32> = [TK_Greater, TK_Plus, TK_Space, TK_Tilde];
+global SYNC_20: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Pipe, TK_To];
+global SYNC_21: List<i32> = [TK_Colon, TK_Dot, TK_Hash, TK_OpenBracket, TK_PseudoNot];
+global SYNC_22: List<i32> = [TK_And, TK_Colon, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_PseudoNot, TK_To];
+global SYNC_23: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Pipe, TK_Space, TK_To];
+global SYNC_24: List<i32> = [TK_DashMatch, TK_Equal, TK_Includes, TK_PrefixMatch, TK_SubstringMatch, TK_SuffixMatch];
+global SYNC_25: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_String_, TK_To];
+global SYNC_26: List<i32> = [TK_And, TK_Colon, TK_From, TK_Function_, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
+global SYNC_27: List<i32> = [TK_And, TK_From, TK_Function_, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
+global SYNC_28: List<i32> = [TK_And, TK_Comment, TK_Dimension, TK_From, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnknownDimension];
+global SYNC_29: List<i32> = [TK_And, TK_Dimension, TK_From, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Plus, TK_String_, TK_To, TK_UnknownDimension];
+global SYNC_30: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_Space, TK_To];
+global SYNC_31: List<i32> = [TK_And, TK_Colon, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_To];
+global SYNC_32: List<i32> = [TK_Comma, TK_Divide, TK_Equal, TK_Space];
+global SYNC_33: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_To, TK_Underscore, TK_Variable];
+global SYNC_34: List<i32> = [TK_And, TK_Colon, TK_DashMatch, TK_Dimension, TK_Dot, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
+global SYNC_35: List<i32> = [TK_And, TK_Calc, TK_Comment, TK_Dimension, TK_DxImageTransform, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Var];
+global SYNC_36: List<i32> = [TK_And, TK_AtKeyword, TK_Colon, TK_Comment, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
+global SYNC_37: List<i32> = [TK_And, TK_AtKeyword, TK_Colon, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
+global SYNC_38: List<i32> = [TK_And, TK_Calc, TK_Dimension, TK_DxImageTransform, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Var];
+global SYNC_39: List<i32> = [TK_And, TK_Colon, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
+global SYNC_40: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_SemiColon, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
+global SYNC_41: List<i32> = [TK_OpenBrace, TK_SemiColon];
+global SYNC_42: List<i32> = [TK_AtKeyword, TK_Cdc, TK_Cdo, TK_OpenBrace, TK_SemiColon];
+global SYNC_43: List<i32> = [TK_And, TK_AtKeyword, TK_CloseBrace, TK_Colon, TK_Comment, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_SemiColon, TK_Space, TK_String_, TK_Supports, TK_To, TK_Underscore, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Variable, TK_Viewport];
+global SYNC_44: List<i32> = [TK_And, TK_AtKeyword, TK_Colon, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Viewport];
+global SYNC_45: List<i32> = [TK_And, TK_AtKeyword, TK_CloseBrace, TK_Colon, TK_Comment, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_Space, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Viewport];
+global SYNC_46: List<i32> = [TK_Comment, TK_Function_, TK_Not, TK_OpenParen, TK_Space];
+global SYNC_47: List<i32> = [TK_Function_, TK_Not, TK_OpenParen];
+global SYNC_48: List<i32> = [TK_Function_, TK_OpenParen];
+global SYNC_49: List<i32> = [TK_Comment, TK_Function_, TK_OpenParen, TK_Space];
+global SYNC_50: List<i32> = [TK_And, TK_Comment, TK_Space];
+global SYNC_51: List<i32> = [TK_Comment, TK_Or, TK_Space];
+global SYNC_52: List<i32> = [TK_CloseParen, TK_Comment, TK_Space];
+global SYNC_53: List<i32> = [TK_Url, TK_Url_];
+global SYNC_54: List<i32> = [TK_Comment, TK_Space, TK_Variable];
+global SYNC_55: List<i32> = [TK_Comment, TK_Dimension, TK_Minus, TK_Number, TK_OpenParen, TK_Percentage, TK_Plus, TK_Space, TK_UnknownDimension];
+global SYNC_56: List<i32> = [TK_Comment, TK_Minus, TK_Plus, TK_Space];
+global SYNC_57: List<i32> = [TK_Minus, TK_Plus];
+global SYNC_58: List<i32> = [TK_Comment, TK_Minus, TK_Number, TK_Plus, TK_Space];
+global SYNC_59: List<i32> = [TK_Dimension, TK_Minus, TK_Number, TK_OpenParen, TK_Percentage, TK_Plus, TK_UnknownDimension];
+global SYNC_60: List<i32> = [TK_Comment, TK_OpenBrace, TK_Space];
+global SYNC_61: List<i32> = [TK_CloseBrace, TK_Comment, TK_From, TK_Percentage, TK_Space, TK_To];
+global SYNC_62: List<i32> = [TK_From, TK_Percentage, TK_To];
+global SYNC_63: List<i32> = [TK_Comment, TK_From, TK_Percentage, TK_Space, TK_To];
+global SYNC_64: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_String_, TK_To];
+global SYNC_65: List<i32> = [TK_AtKeyword, TK_CloseBrace, TK_Comment, TK_Space];
+global SYNC_66: List<i32> = [TK_And, TK_CloseBrace, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_SemiColon, TK_Space, TK_To];
 
 global FOLLOW_SETS: List<List<i32>> = [[0, 2048], [64], [536903680, 2048], [16], [-2147401724, 538574851], [i32::MIN, 538574851], [4], [-266305536, 1916406847], [8], [-2145380607, 538575363], [1024], [i32::MIN, 538576899], [2], [i32::MIN, 538577983], [-2145380607, 538574851], [32], [256], [-264732395, 1679428671], [4, 1073741825], [65536], [4, 1073741824], [81920], [0, 2], [0, 131072], [-2147474432, 672792579], [0, 134217728], [268435460, 1084], [0, 48], [0, 1072], [268435456, 1572864], [0, 128]];
 global FOLLOW_MASK_0: i64 = 1;

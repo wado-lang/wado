@@ -1422,13 +1422,13 @@ fn _parse_body__inner(p: &mut Parser) -> () {
     let grp_kind = p.peek_kind();
     if grp_kind == TK_ID && (p.on == 1) {
         if p.peek_kind() == TK_ID {
-            p.expect(TK_ID, &EMPTY_SYNC);
+            p.take();
         }
     } else if grp_kind == TK_LP {
         p.expect(TK_LP, &EMPTY_SYNC);
     } else if (p.on == 1) {
         if p.peek_kind() == TK_ID {
-            p.expect(TK_ID, &EMPTY_SYNC);
+            p.take();
         }
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &SYNC_2);

@@ -1551,7 +1551,7 @@ fn _parse_if_statement__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LIT_y, &SYNC_0);
     _parse_statement(p, follow);
     if (p.peek_kind() == TK_LIT_else && _kind_set_0(p.peek_at(1))) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.expect(TK_LIT_else, &SYNC_0);
+        p.take();
         _parse_statement(p, follow);
     }
     if !p.speculating {

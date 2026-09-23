@@ -1332,11 +1332,11 @@ fn _parse_stmt__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_let, &SYNC_0);
     p.expect(TK_ID, &SYNC_1);
     if p.peek_kind() == TK_LIT_EQ {
-        p.expect(TK_LIT_EQ, &SYNC_2);
+        p.take();
         if p.peek_kind() == TK_LIT_AT {
             _parse_m(p);
         }
-        p.expect(TK_LIT_AT, &SYNC_3);
+        p.expect(TK_LIT_AT, &SYNC_2);
         p.expect(TK_LIT_HASH, &EMPTY_SYNC);
     }
     p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
@@ -1355,7 +1355,7 @@ fn _parse_stmt(p: &mut Parser) -> () {
 }
 
 fn _parse_m__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_AT, &SYNC_4);
+    p.expect(TK_LIT_AT, &SYNC_3);
     p.expect(TK_LIT_BANG, &EMPTY_SYNC);
     return;
 }
@@ -1434,7 +1434,6 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_ID];
 global SYNC_1: List<i32> = [TK_LIT_EQ, TK_LIT_SEMI];
-global SYNC_2: List<i32> = [TK_LIT_AT];
-global SYNC_3: List<i32> = [TK_LIT_HASH];
-global SYNC_4: List<i32> = [TK_LIT_BANG];
+global SYNC_2: List<i32> = [TK_LIT_HASH];
+global SYNC_3: List<i32> = [TK_LIT_BANG];
 

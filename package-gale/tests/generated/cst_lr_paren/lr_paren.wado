@@ -1371,7 +1371,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                p.expect(TK_LIT_STAR, &EMPTY_SYNC);
+                p.take();
                 _parse_e(p, 3);
                 p.b.finish_node(p.last_end());
             } else {
@@ -1383,7 +1383,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
+                p.take();
                 _parse_e(p, 0);
                 p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());

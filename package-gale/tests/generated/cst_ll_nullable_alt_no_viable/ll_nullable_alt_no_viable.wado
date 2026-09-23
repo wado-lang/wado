@@ -1507,12 +1507,12 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _parse_base(p);
         } else {
             if p.peek_kind() == TK_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-                p.expect(TK_COMMA, &EMPTY_SYNC);
+                p.take();
             }
         }
     } else {
         if p.peek_kind() == TK_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-            p.expect(TK_COMMA, &EMPTY_SYNC);
+            p.take();
         }
     }
     return;

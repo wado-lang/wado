@@ -1885,7 +1885,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         } else if _atn_alt == 1 {
             p.b.start_node_at(_cp, RK_EXPR, _start);
             if p.peek_kind() == TK_LIT_not {
-                p.expect(TK_LIT_not, &EMPTY_SYNC);
+                p.take();
             }
             p.expect(TK_LIT_in, &EMPTY_SYNC);
             p.atn_ret_pending = 41;
@@ -1894,7 +1894,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         } else if _atn_alt == 2 {
             p.b.start_node_at(_cp, RK_EXPR, _start);
             if p.peek_kind() == TK_LIT_not {
-                p.expect(TK_LIT_not, &EMPTY_SYNC);
+                p.take();
             }
             p.expect(TK_LIT_like, &EMPTY_SYNC);
             p.atn_ret_pending = 50;
