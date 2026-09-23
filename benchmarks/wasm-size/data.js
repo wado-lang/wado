@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790147964813,
+  "lastUpdate": 1790153051259,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58797,6 +58797,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1f83cd2925edf5a351b085fbb724dc0d65456dc3"
         },
         "date": 1790147964291,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19544,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300579,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c1069955604fd33bb7b99be62ff11bc27e4f58b9",
+          "message": "Merge pull request #2133 from wado-lang/claude/issue-2058-investigation-10xles\n\ntest: pin #2058, a closure capturing a destructured binding of a loop over `?`",
+          "timestamp": "2026-09-23T17:27:44+09:00",
+          "tree_id": "fec0be0c2314703b3a0be009747e1031ab556f57",
+          "url": "https://github.com/wado-lang/wado/commit/c1069955604fd33bb7b99be62ff11bc27e4f58b9"
+        },
+        "date": 1790153050587,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
