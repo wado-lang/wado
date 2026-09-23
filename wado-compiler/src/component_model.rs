@@ -24,7 +24,7 @@ use crate::cm_abi::{
 };
 use crate::defs::DefId;
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::{DeclName, DeclPath, to_kebab};
+use crate::name::{DeclName, DeclPath, IDENTITY_TEST_METHOD, NARROWING_TEST_METHOD, to_kebab};
 use crate::primitive::PrimitiveType;
 use crate::synthesis::cm_binding::types::cm_interface_module;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -2155,7 +2155,63 @@ impl CmInterfaceRegistry {
                         );
                     }
                 }
+                if declares_unrestricted(&resource.attrs) {
+                    self.register_lang_predicates(resource, &resource_source);
+                }
             }
+        }
+    }
+
+    /// Register the `lang` predicates over `resource`'s handles: `R::$is`
+    /// (`is-r`) for a type pattern, and on a chain root `R::$same` (`is-same`)
+    /// for `==`. Only a called one is imported.
+    fn register_lang_predicates(&mut self, resource: &ast::ResourceDecl, resource_source: &str) {
+        let own = cm_import_of(&resource.attrs)
+            .expect("an unrestricted resource names its interface in `#[cm]`");
+        let cm_name = own.function.as_deref().unwrap_or(&own.interface);
+        let lang = |function: String| CmImport {
+            interface: "lang".to_string(),
+            function: Some(function),
+            ..own.clone()
+        };
+        let self_type = substitute_self_in_type(
+            &self.source_interfaces,
+            &Type::Named(NamedType::new(
+                AstId::fresh(),
+                "Self".to_string(),
+                resource.span,
+            )),
+            &resource.name,
+            resource_source,
+        );
+        let handle = self.cm_param_type(&self_type);
+        let bool_type = || {
+            Type::Named(NamedType::new(
+                AstId::fresh(),
+                "bool".to_string(),
+                resource.span,
+            ))
+        };
+        self.register(
+            &resource.name,
+            NARROWING_TEST_METHOD,
+            &lang(format!("is-{cm_name}")),
+            false,
+            vec![("self".to_string(), "r".to_string(), handle.clone())],
+            Some(bool_type()),
+        );
+        if resource.parent.is_none() {
+            self.register(
+                &resource.name,
+                IDENTITY_TEST_METHOD,
+                &lang("is-same".to_string()),
+                false,
+                vec![
+                    ("self".to_string(), "a".to_string(), handle.clone()),
+                    ("other".to_string(), "b".to_string(), handle),
+                ],
+                Some(bool_type()),
+            );
         }
     }
 
@@ -3295,6 +3351,19 @@ impl CmInterfaceRegistry {
             .function
             .clone()
             .unwrap_or_else(|| method_name.replace('_', "-"));
+        let qualified_name = format!("{interface_name}::{method_name}");
+
+        // A second binding of one import (each chain root's `is-same`) reaches
+        // the first, so the interface exports the function once.
+        if let Some(bound) = self.interfaces.get(&interface_path).and_then(|functions| {
+            functions
+                .iter()
+                .find(|f| f.wasi_func_name == wasi_func_name)
+        }) {
+            let bound = bound.clone();
+            self.effect_to_func.insert(qualified_name, bound);
+            return;
+        }
 
         // Params carry their value types: newtypes peeled, extern handles kept,
         // so a binding's GC-level types match the caller's.
@@ -3321,7 +3390,6 @@ impl CmInterfaceRegistry {
         self.used_names.insert(local_name.clone());
 
         // Register in effect -> func map
-        let qualified_name = format!("{interface_name}::{method_name}");
         self.effect_to_func
             .insert(qualified_name, func_info.clone());
 

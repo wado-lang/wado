@@ -533,6 +533,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         sub_map(tt, &mut facts.expression_types, subst);
         sub_map(tt, &mut facts.local_types, subst);
         sub_map(tt, &mut facts.let_annotated_types, subst);
+        sub_map(tt, &mut facts.pattern_ascriptions, subst);
         sub_vec_map(tt, &mut facts.call_param_types, subst);
         for gi in facts.generic_instantiations.values_mut() {
             sub_generic_instantiation(tt, gi, subst);

@@ -301,6 +301,8 @@ enum ExhPattern {
     /// Inclusive integer range `[lo, hi]`.
     Range(i128, i128),
     IntLit(i128),
+    /// A type pattern the host decides, naming the resource it narrows to.
+    Narrow(TypeId),
     Other,
     Or(Vec<ExhPattern>),
 }
@@ -2804,6 +2806,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Always check for overlapping range patterns first.
         self.check_range_overlaps(&classified, span);
+        self.check_shadowed_narrowings(arms, &classified);
 
         // If any arm has a wildcard or binding pattern (without a guard), the match is exhaustive
         if classified
@@ -2875,6 +2878,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.check_integer_range_exhaustiveness(&classified, type_min, type_max, span);
                 }
             }
+            // The host may hand back a type the program never names, so no set
+            // of type patterns covers a resource.
+            ResolvedType::Resource { .. } => {
+                let _ = self.emit(TypeError::InvalidPattern {
+                    message: "non-exhaustive match: type patterns cannot cover every type \
+                              the host may hand back; add a final `_` arm"
+                        .to_string(),
+                    span,
+                });
+            }
             _ => {
                 // For other types (strings, structs, etc.) we don't check exhaustiveness.
             }
@@ -2941,6 +2954,66 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 start, end, kind, ..
             } => self.exh_range(start, end, *kind, scrutinee_type),
             ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => ExhPattern::Other,
+            ast::Pattern::Typed {
+                id, pattern: inner, ..
+            } => {
+                let target = *self.sem.types.pattern_ascriptions.get(id).expect(
+                    "a match arm's type pattern is resolved before its exhaustiveness is checked",
+                );
+                if self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_resource_narrowing(scrutinee_type, target)
+                {
+                    ExhPattern::Narrow(target)
+                } else {
+                    self.exh_pattern(inner, target)
+                }
+            }
+        }
+    }
+
+    /// Report a type-pattern arm an earlier guardless one always takes first:
+    /// every value of its type is already a value of the earlier arm's.
+    fn check_shadowed_narrowings(&self, arms: &[MatchArm], classified: &[(bool, ExhPattern)]) {
+        let mut shadowed = Vec::new();
+        {
+            let tt = self.tysys.type_table.borrow();
+            let is_resource_subtype = |sub: TypeId, sup: TypeId| match (tt.get(sub), tt.get(sup)) {
+                (ResolvedType::Resource { def: sub }, ResolvedType::Resource { def: sup }) => {
+                    tt.is_resource_subtype(*sub, *sup)
+                }
+                _ => false,
+            };
+            for (later, (_, pattern)) in classified.iter().enumerate() {
+                let ExhPattern::Narrow(target) = pattern else {
+                    continue;
+                };
+                let earlier =
+                    classified[..later]
+                        .iter()
+                        .find_map(|(guardless, earlier)| match earlier {
+                            ExhPattern::Narrow(earlier) if *guardless => {
+                                is_resource_subtype(*target, *earlier).then_some(*earlier)
+                            }
+                            _ => None,
+                        });
+                if let Some(earlier) = earlier {
+                    shadowed.push((
+                        arms[later].span,
+                        format!(
+                            "unreachable arm: every `{}` is `{}`, which an earlier arm \
+                             already takes",
+                            tt.type_name(*target),
+                            tt.type_name(earlier)
+                        ),
+                    ));
+                }
+            }
+        }
+        for (span, message) in shadowed {
+            let _ = self.emit(TypeError::InvalidPattern { message, span });
         }
     }
 

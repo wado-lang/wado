@@ -115,7 +115,8 @@ pub(super) fn build_if_chain(
             | TirPattern::Variant { .. }
             | TirPattern::Enum { .. }
             | TirPattern::Struct { .. }
-            | TirPattern::ConstantValue { .. } => {
+            | TirPattern::ConstantValue { .. }
+            | TirPattern::Narrow { .. } => {
                 unreachable!("a wide-int arm is a value test, a binding or `_`")
             }
         }

@@ -2463,14 +2463,10 @@ impl Parser {
         };
 
         let pattern_start_span = self.peek().span;
-        let pattern = self.parse_pattern()?;
         let name_span = pattern_start_span;
-
-        let ty = if self.check(&TokenKind::Colon) {
-            self.advance();
-            Some(self.parse_type()?)
-        } else {
-            None
+        let (pattern, ty) = match self.parse_pattern()? {
+            Pattern::Typed { pattern, ty, .. } => (*pattern, Some(ty)),
+            pattern => (pattern, None),
         };
 
         let (value, end_span) = if self.check(&TokenKind::Eq) {
@@ -2996,8 +2992,26 @@ impl Parser {
         }
     }
 
-    /// Parse an atom, optionally extended into a range (`a..=b` / `a..<b`).
+    /// Parse an atom or range, optionally ascribed a type (`input: HtmlInputElement`).
     fn parse_pattern_atom_or_range(&mut self) -> ParseResult<Pattern> {
+        let start_span = self.peek().span;
+        let pattern = self.parse_pattern_atom_or_range_unascribed()?;
+        if !self.check(&TokenKind::Colon) {
+            return Ok(pattern);
+        }
+        self.advance();
+        let ty = self.parse_type()?;
+        let span = start_span.merge(&ty.span());
+        Ok(Pattern::Typed {
+            id: self.alloc_ast_id(),
+            pattern: Box::new(pattern),
+            ty,
+            span,
+        })
+    }
+
+    /// Parse an atom, optionally extended into a range (`a..=b` / `a..<b`).
+    fn parse_pattern_atom_or_range_unascribed(&mut self) -> ParseResult<Pattern> {
         let start_span = self.peek().span;
         let first = self.parse_pattern_atom()?;
 

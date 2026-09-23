@@ -1,0 +1,13 @@
+// An upcast always holds, so a `let ... else` over one can never take its else.
+use { Element, HtmlInputElement } from "web:dom";
+
+fn take(input: HtmlInputElement) {
+    let el: Element = input else {
+        return;
+    };
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "irrefutable pattern in `let ... else`"}

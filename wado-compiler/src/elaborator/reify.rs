@@ -17,7 +17,10 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
+use crate::name::{
+    FqTypeName, IDENTITY_TEST_METHOD, INTERNAL_PREFIX, NARROWING_TEST_METHOD, Receiver,
+    global_init_function, global_name,
+};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
@@ -2578,7 +2581,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let else_type = tir::block_result_type(&self.tysys.type_table.borrow(), &else_block);
         let else_span = else_block.span;
 
-        let tir_pattern = self.reify_pattern(&l.pattern, scrutinee_type, ctx);
+        let tir_pattern = self.reify_pattern(&l.else_pattern(), scrutinee_type, ctx);
 
         let cont_stmts =
             self.reify_positioned_stmts(rest, block_span, ctx, expected_type, tail_value);
@@ -2905,7 +2908,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let_stmt.span,
                 )
             }
-            ast::Pattern::Literal(_) | ast::Pattern::Or(_) | ast::Pattern::Range { .. } => {
+            ast::Pattern::Literal(_)
+            | ast::Pattern::Or(_)
+            | ast::Pattern::Range { .. }
+            | ast::Pattern::Typed { .. } => {
                 let _ = type_id;
                 let _ = TypeTable::UNKNOWN;
                 // `let 42 = expr;` etc. are refutable patterns and the
@@ -5338,6 +5344,34 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         op,
                         left: Box::new(left),
                         right: Box::new(right),
+                    },
+                    TypeTable::BOOL,
+                    binary.span,
+                );
+            }
+            let identity_root = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .identity_root(left.type_id, right.type_id);
+            if let Some(root) = identity_root {
+                let same = TirExpr::new(
+                    TirExprKind::method_call(
+                        Box::new(left),
+                        self.lang_predicate_ref(root, IDENTITY_TEST_METHOD),
+                        vec![],
+                        vec![CallArg::new(right, false)],
+                    ),
+                    TypeTable::BOOL,
+                    binary.span,
+                );
+                if binary.op == ast::BinaryOp::Eq {
+                    return same;
+                }
+                return TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Not,
+                        expr: Box::new(same),
                     },
                     TypeTable::BOOL,
                     binary.span,
@@ -10656,11 +10690,114 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Pattern::Struct {
                 fields, has_rest, ..
             } => self.reify_struct_pattern(fields, *has_rest, scrutinee_type, ctx),
+            ast::Pattern::Typed {
+                id,
+                pattern: inner,
+                span,
+                ..
+            } => {
+                let target = self
+                    .ann_pattern_ascription(*id)
+                    .expect("annotate records every type pattern's target");
+                let narrows = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_resource_narrowing(scrutinee_type, target);
+                if narrows {
+                    self.reify_narrowing(inner, target, *span, ctx)
+                } else {
+                    let binding_ty = self.ascribed_binding_type(scrutinee_type, target);
+                    self.reify_pattern(inner, binding_ty, ctx)
+                }
+            }
             // `build_tir_from_state` skips reify for modules with syntax
             // errors, so reify never walks an `Error` placeholder.
             ast::Pattern::Error(_) => {
                 unreachable!("reify does not run on modules with syntax errors")
             }
+        }
+    }
+
+    /// A type pattern that does not narrow keeps the scrutinee's reference kind
+    /// on a target that drops it.
+    fn ascribed_binding_type(&self, scrutinee_type: TypeId, target: TypeId) -> TypeId {
+        let tt = self.tysys.type_table.borrow();
+        if tt.type_key(scrutinee_type) == tt.type_key(target) || tt.peel_refs(target) != target {
+            return target;
+        }
+        drop(tt);
+        self.apply_scrutinee_ref_kind(scrutinee_type, target)
+    }
+
+    /// `name: R` over a supertype of `R`: the value binds at `R`, and the pattern
+    /// holds only when the handle's `is-r` import answers true.
+    fn reify_narrowing(
+        &mut self,
+        inner: &ast::Pattern,
+        target: TypeId,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirPattern {
+        let (name, local_index) = match inner {
+            ast::Pattern::Ident { id, name, span } | ast::Pattern::MutIdent { id, name, span } => {
+                let is_mut = matches!(inner, ast::Pattern::MutIdent { .. });
+                let local_index = ctx.add_local_at(name.clone(), target, is_mut, Some(*id), *span);
+                (Some(name.clone()), local_index)
+            }
+            ast::Pattern::Wildcard => (
+                None,
+                ctx.add_local(format!("{INTERNAL_PREFIX}narrowed"), target, false, None),
+            ),
+            other => panic!("annotate rejects a narrowing over {other:?}"),
+        };
+        let receiver = TirExpr::new(
+            TirExprKind::Local {
+                index: local_index,
+                name: name
+                    .clone()
+                    .unwrap_or_else(|| format!("{INTERNAL_PREFIX}narrowed")),
+            },
+            target,
+            span,
+        );
+        let test = TirExpr::new(
+            TirExprKind::method_call(
+                Box::new(receiver),
+                self.lang_predicate_ref(target, NARROWING_TEST_METHOD),
+                vec![],
+                vec![],
+            ),
+            TypeTable::BOOL,
+            span,
+        );
+        TirPattern::Narrow {
+            name,
+            local_index,
+            type_id: target,
+            test: Box::new(test),
+        }
+    }
+
+    /// `R::method`, one of the host's `lang` predicates over `resource`'s handles.
+    fn lang_predicate_ref(&self, resource: TypeId, method: &str) -> tir::FunctionRef {
+        let method_info = LocalMethodName::new(
+            self.tysys.fq_receiver_of_impl(resource, false),
+            None,
+            method.to_string(),
+        );
+        let module_source = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_head(resource)
+            .map(|(_, m)| m)
+            .expect("a `lang` predicate's receiver is a declared resource");
+        tir::FunctionRef {
+            module_source,
+            name: method_info.to_mangled_name(),
+            monomorph_info: None,
+            method_info: Some(method_info),
         }
     }
 

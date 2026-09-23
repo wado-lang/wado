@@ -61,6 +61,68 @@ export fn run() with (Dom, Event, EventTarget) {
 }
 "#;
 
+/// Type patterns narrow a handle to whatever the host's `is-T` says it is.
+const NARROWING_PROGRAM: &str = r#"
+use { Dom, Element, HtmlInputElement, Node } from "web:dom";
+
+fn describe(n: Node) -> String {
+    return match n {
+        input: HtmlInputElement => `input:${input.value()}`,
+        el: Element => `element:${el.tag_name()}`,
+        _ => "node",
+    };
+}
+
+fn input_value(el: Element) -> String {
+    let input: HtmlInputElement = el else {
+        return "none";
+    };
+    return input.value();
+}
+
+export fn run() with Dom {
+    let doc = Dom::document();
+    let div = doc.create_element("div", null);
+    div.set_id("d");
+    let input = doc.create_element("input", null);
+    input.set_id("i");
+
+    assert describe(div) == "element:div";
+    assert describe(input) == "input:typed";
+    assert describe(doc) == "node";
+
+    if let _: HtmlInputElement = div {
+        panic("a div is not an input");
+    }
+    assert input_value(input) == "typed";
+    assert input_value(div) == "none";
+
+    assert doc.get_element_by_id("i") matches { Some(_: HtmlInputElement) };
+    assert !(doc.get_element_by_id("d") matches { Some(_: HtmlInputElement) });
+}
+"#;
+
+/// `==` on handles asks the host's `is-same`, across an upcast and on two roots.
+const IDENTITY_PROGRAM: &str = r#"
+use { Dom, Event, Node } from "web:dom";
+
+export fn run() with (Dom, Event) {
+    let doc = Dom::document();
+    let div = doc.create_element("div", null);
+    div.set_id("d");
+    let as_node: Node = div;
+
+    assert div == div;
+    assert as_node == div;
+    assert div != doc.create_element("div", null);
+    assert doc.get_element_by_id("d") matches { Some(found) && found == div };
+
+    let ev = Event::new("click");
+    assert ev == ev;
+    assert ev != Event::new("click");
+}
+"#;
+
 /// One host object per handle. The table is the whole host model: a handle is
 /// an index into it, so the guest passing the same index twice reaches the
 /// same object — which is what an upcast has to preserve.
@@ -190,13 +252,33 @@ fn add_dom_to_linker(
             (true,)
         }),
     )?;
+
+    linker
+        .instance("web:dom/html-input-element")?
+        .func_wrap("value", |_, (_handle,): (u32,)| Ok(("typed".to_string(),)))?;
+
+    // The document is the one object with no tag, so it is no element.
+    let mut lang = linker.instance("web:dom/lang")?;
+    lang.func_wrap(
+        "is-element",
+        over_dom(dom, |dom, (handle,): (u32,)| {
+            (!dom.at(handle).tag.is_empty(),)
+        }),
+    )?;
+    lang.func_wrap(
+        "is-html-input-element",
+        over_dom(dom, |dom, (handle,): (u32,)| {
+            (dom.at(handle).tag == "input",)
+        }),
+    )?;
+    lang.func_wrap("is-same", |_, (a, b): (u32, u32)| Ok((a == b,)))?;
     Ok(())
 }
 
-#[test]
-fn a_two_level_extends_program_runs_against_a_host_stub() {
+/// Compile `program`, run it against the stub, and hand back the host's table.
+fn run_against_stub(program: &str) -> DomObjects {
     common::install_rustls_provider_for_tests();
-    let wasm = compile_source(PROGRAM)
+    let wasm = compile_source(program)
         .unwrap_or_else(|e| panic!("the web:dom program should compile, got {e}"))
         .wasm;
 
@@ -239,7 +321,15 @@ fn a_two_level_extends_program_runs_against_a_host_stub() {
             panic!("the program should run: {e:#}\n{log}");
         });
 
-    let dom = dom.lock().unwrap();
+    Arc::into_inner(dom)
+        .expect("the store is gone, so the table has one owner")
+        .into_inner()
+        .unwrap()
+}
+
+#[test]
+fn a_two_level_extends_program_runs_against_a_host_stub() {
+    let dom = run_against_stub(PROGRAM);
     // `document`, the element, the event, and the child.
     assert_eq!(dom.objects.len(), 4);
     assert_eq!(dom.objects[1].tag, "div");
@@ -247,4 +337,14 @@ fn a_two_level_extends_program_runs_against_a_host_stub() {
     assert_eq!(dom.objects[1].text, "hello");
     // The event reached the element's own handle, not a re-minted one.
     assert_eq!(dom.dispatched, vec![(1, "click".to_string())]);
+}
+
+#[test]
+fn type_patterns_narrow_through_the_hosts_is_t() {
+    run_against_stub(NARROWING_PROGRAM);
+}
+
+#[test]
+fn handles_compare_through_the_hosts_is_same() {
+    run_against_stub(IDENTITY_PROGRAM);
 }

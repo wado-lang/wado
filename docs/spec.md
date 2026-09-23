@@ -5772,7 +5772,8 @@ fn use_it(n: Node) {
 Rules:
 
 - The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet. `&mut T`, container elements (`List<T>`, `Option<T>`, …) and function types are invariant.
-- Narrowing back to a child is never implicit. It is written as a type pattern (below, not yet implemented), which asks the host whether the handle really is one.
+- Narrowing back to a child is never implicit. It is written as a type pattern (below), which asks the host whether the handle really is one.
+- `==` and `!=` compare two handles when one type extends the other, and ask the host whether both name one object. There is no ordering.
 - A child may not redeclare a method it inherits, and a name reachable through both the chain and a trait impl is ambiguous — write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
 - Static methods (no `&self`) are not inherited, and `Self` in an inherited method names the resource that declares it.
 - Generic resources take no part in `extends` yet.
@@ -5780,8 +5781,6 @@ Rules:
 See [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md) for the design and what is not built yet.
 
 ### Type Patterns
-
-Note: not yet implemented. The `let` annotation is still its own grammar slot, and no pattern position accepts an ascription. See [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md).
 
 A pattern may ascribe a type: `p: T` matches when the subject is a `T`, and `p` binds it. The ascription on a `let` is this pattern, so one rule covers both spellings.
 
@@ -5810,6 +5809,8 @@ match e {
 ```
 
 A type match over resources always needs a final `_` arm, because the host may hand back a type the program does not name. An arm whose type is a supertype of a later arm's makes that later arm dead, which is reported.
+
+A refutable ascription tests a handle, so it binds a name or `_` and nothing deeper, and its subject is the value rather than a reference to it. `T` must be a concrete type: a type parameter says nothing about whether it narrows.
 
 This is not [`match type`](./wep-2026-09-05-total-reflection.md), which narrows a type parameter at compile time, is exhaustive, and takes no `_`.
 

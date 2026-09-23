@@ -8,6 +8,7 @@ use crate::ast::{
 use crate::compiler_host::CompilerHost;
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 
 use super::Elaborator;
@@ -631,13 +632,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (value_type, value_type)
         };
 
-        if let_stmt.ty.is_some() {
-            self.typecheck(value_type, type_id, ast_value.span());
-        }
-
+        // A `let … else` checks its annotation as the type pattern it is.
         if let Some(else_block) = &let_stmt.else_block {
             self.resolve_let_else(let_stmt, value_type, else_block, ctx);
             return;
+        }
+
+        if let_stmt.ty.is_some() {
+            if self
+                .tysys
+                .type_table
+                .borrow()
+                .is_resource_narrowing(value_type, type_id)
+            {
+                self.reject_refutable_narrowing(value_type, type_id, let_stmt.name_span);
+            } else {
+                self.typecheck(value_type, type_id, ast_value.span());
+            }
         }
 
         // Reify rebuilds the `Let` / `LetDestructure`
@@ -714,7 +725,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: else_block.span,
             });
         }
-        if self.let_else_pattern_is_irrefutable(&let_stmt.pattern, scrutinee_type) {
+        let pattern = let_stmt.else_pattern();
+        if self.let_else_pattern_is_irrefutable(&pattern, scrutinee_type) {
             let _ = self.emit(TypeError::InvalidPattern {
                 message: "irrefutable pattern in `let ... else`: the else block can never run; \
                           use a plain `let` instead"
@@ -722,7 +734,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: let_stmt.name_span,
             });
         }
-        self.resolve_if_pattern(&let_stmt.pattern, scrutinee_type, ctx, let_stmt.span);
+        self.resolve_if_pattern(&pattern, scrutinee_type, ctx, let_stmt.span);
     }
 
     /// Whether a `let ... else` pattern is definitely irrefutable (always
@@ -739,6 +751,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Pattern::Ident { name, .. } => {
                 !self.is_known_case_of_type(scrutinee_type, name, None)
                     && !self.is_immutable_global(name)
+            }
+            Pattern::Typed { pattern, ty, .. } => {
+                let target = self.resolve_type(ty);
+                !self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_resource_narrowing(scrutinee_type, target)
+                    && self.let_else_pattern_is_irrefutable(pattern, target)
             }
             // Destructuring may hold refutable sub-patterns; the rest are
             // refutable outright (or a parser-recovery placeholder). Never flag.
@@ -813,6 +834,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Pattern::Struct { fields, .. } => fields
                 .iter()
                 .all(|f| self.check_irrefutable_pattern(&f.pattern, span)),
+            // Whether the ascription narrows is a question of types, which
+            // `resolve_let_pattern` answers.
+            Pattern::Typed { pattern, .. } => self.check_irrefutable_pattern(pattern, span),
             Pattern::Literal(_) => {
                 let _ = self.emit(TypeError::InvalidPattern {
                     message: "refutable pattern in `let` binding: literal patterns may not match; use `if let` instead".to_string(),
@@ -1302,6 +1326,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 let _ = has_rest;
+            }
+            ast::Pattern::Typed {
+                id,
+                pattern: inner,
+                ty,
+                span: typed_span,
+            } => {
+                let target = self.resolve_ascription(*id, ty);
+                if self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_resource_narrowing(type_id, target)
+                {
+                    self.reject_refutable_narrowing(type_id, target, *typed_span);
+                } else {
+                    self.check_ascription(type_id, target, *typed_span);
+                }
+                self.resolve_let_pattern_inner(inner, target, is_mut, span, ctx, ref_binding);
             }
             // Wildcard binds nothing. Refutable patterns (literal / variant /
             // or / range) in let position already had an error emitted by
@@ -2067,9 +2110,91 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_range_pattern(start, end, *kind, scrutinee_type, *range_span);
                 Vec::new()
             }
+            Pattern::Typed {
+                id,
+                pattern: inner,
+                ty,
+                span: typed_span,
+            } => {
+                let target = self.resolve_ascription(*id, ty);
+                if self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_resource_narrowing(scrutinee_type, target)
+                {
+                    self.check_narrowing_shape(inner, ref_binding, *typed_span);
+                } else {
+                    self.check_ascription(scrutinee_type, target, *typed_span);
+                }
+                self.resolve_if_pattern_inner(inner, target, ctx, span, ref_binding)
+            }
             // Parser error-recovery placeholder; inert.
             Pattern::Error(_) => Vec::new(),
         }
+    }
+
+    /// Resolve the type a type pattern ascribes, and record it for reify.
+    fn resolve_ascription(&mut self, id: AstId, ty: &Type) -> TypeId {
+        let target = self.resolve_type(ty);
+        self.reject_unresolved_annotation(ty);
+        self.sem.types.pattern_ascriptions.insert(id, target);
+        target
+    }
+
+    /// Check an ascription no host test decides: the scrutinee must be a
+    /// `target` already, and a type parameter names no type to narrow to.
+    fn check_ascription(&mut self, scrutinee: TypeId, target: TypeId, span: Span) {
+        let is_type_param = matches!(
+            self.tysys.type_table.borrow().get(target),
+            ResolvedType::TypeParam { .. }
+        );
+        if is_type_param && scrutinee != target {
+            let name = self.tysys.type_table.borrow().type_name(target);
+            let _ = self.emit(TypeError::InvalidPattern {
+                message: format!(
+                    "a type pattern needs a concrete type: `{name}` is a type parameter, \
+                     so nothing states whether it narrows"
+                ),
+                span,
+            });
+            return;
+        }
+        self.typecheck(scrutinee, target, span);
+    }
+
+    /// A narrowing is the host's answer about the value itself: it binds that
+    /// value whole, and not through a reference.
+    fn check_narrowing_shape(&mut self, inner: &Pattern, ref_binding: RefBinding, span: Span) {
+        let message = if ref_binding != RefBinding::None {
+            "a type pattern narrows a resource value, not a reference to one"
+        } else if !matches!(
+            inner,
+            Pattern::Ident { .. } | Pattern::MutIdent { .. } | Pattern::Wildcard
+        ) {
+            "a narrowing type pattern binds a name or `_`"
+        } else {
+            return;
+        };
+        let _ = self.emit(TypeError::InvalidPattern {
+            message: message.to_string(),
+            span,
+        });
+    }
+
+    /// A narrowing where the pattern cannot fail over to anything.
+    fn reject_refutable_narrowing(&mut self, value: TypeId, target: TypeId, span: Span) {
+        let (value, target) = {
+            let tt = self.tysys.type_table.borrow();
+            (tt.type_name(value), tt.type_name(target))
+        };
+        let _ = self.emit(TypeError::InvalidPattern {
+            message: format!(
+                "refutable pattern in `let` binding: not every `{value}` is `{target}`; \
+                 use `let ... else` or `if let` instead"
+            ),
+            span,
+        });
     }
 
     /// True when the scrutinee is a variant type that has a `None` case, so a
@@ -3178,6 +3303,17 @@ fn mut_bindings_of(pattern: &Pattern) -> Pattern {
         Pattern::Or(alternatives) => {
             Pattern::Or(alternatives.iter().map(mut_bindings_of).collect())
         }
+        Pattern::Typed {
+            id,
+            pattern,
+            ty,
+            span,
+        } => Pattern::Typed {
+            id: *id,
+            pattern: Box::new(mut_bindings_of(pattern)),
+            ty: ty.clone(),
+            span: *span,
+        },
         other => other.clone(),
     }
 }
@@ -3214,6 +3350,7 @@ pub(super) fn collect_ast_pattern_binding_ids(
                 collect_ast_pattern_binding_ids(first, out);
             }
         }
+        Pattern::Typed { pattern, .. } => collect_ast_pattern_binding_ids(pattern, out),
         Pattern::Wildcard | Pattern::Literal(_) | Pattern::Range { .. } | Pattern::Error(_) => {}
     }
 }
@@ -3237,6 +3374,12 @@ fn collect_pattern_bindings_with_index_inner(
             name,
             local_index,
             type_id,
+        }
+        | TirPattern::Narrow {
+            name: Some(name),
+            local_index,
+            type_id,
+            ..
         } => {
             out.push((name.clone(), *local_index, *type_id));
         }
@@ -3264,7 +3407,8 @@ fn collect_pattern_bindings_with_index_inner(
         | TirPattern::Literal(_)
         | TirPattern::Enum { .. }
         | TirPattern::ConstantValue { .. }
-        | TirPattern::Range { .. } => {}
+        | TirPattern::Range { .. }
+        | TirPattern::Narrow { name: None, .. } => {}
     }
 }
 
@@ -3274,6 +3418,14 @@ pub(super) fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) 
         TirPattern::Binding { local_index, .. } => {
             if *local_index == from {
                 *local_index = to;
+            }
+        }
+        TirPattern::Narrow {
+            local_index, test, ..
+        } => {
+            if *local_index == from {
+                *local_index = to;
+                remap_local_reads(test, from, to);
             }
         }
         TirPattern::Tuple(patterns, _) => {

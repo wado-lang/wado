@@ -1,0 +1,22 @@
+// A type pattern over a non-resource value only states the type it has.
+use { println, Stdout } from "core:cli";
+
+fn double(opt: Option<i32>) -> i32 {
+    let Some(x: i32) = opt else {
+        return -1;
+    };
+    return x * 2;
+}
+
+export fn run() with Stdout {
+    let [a: i32, b: String] = [1, "one"];
+    println(`${a} ${b}`);
+    println(`${double(Option::Some(21))} ${double(null)}`);
+    match Option::Some(5) {
+        Some(n: i32) && n > 3 => println("big"),
+        _ => println("small"),
+    }
+}
+
+__DATA__
+{"stdout": "1 one\n42 -1\nbig\n"}

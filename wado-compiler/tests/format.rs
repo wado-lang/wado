@@ -3474,6 +3474,16 @@ fn test_format_let_else_roundtrips() {
     assert_eq!(formatted, reformatted, "format should be idempotent");
 }
 
+/// A type pattern keeps its ascription wherever a pattern stands: a `match`
+/// arm, an `if let`, nested in a payload, and as a `let ... else` annotation.
+#[test]
+fn test_format_type_pattern_roundtrips() {
+    let source = "fn run() {\n    let kind = match n {\n        input: HtmlInputElement => 1,\n        _: Element => 2,\n        _ => 0,\n    };\n    if let Some(el: Element) = found {\n        use_it(el);\n    }\n    let input: HtmlInputElement = el else {\n        return;\n    };\n}\n";
+    assert_format_preserves_ast(source);
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+}
+
 /// `;` separates statements, so a block's last one may drop it and a stray `;`
 /// is an empty statement. Neither carries meaning, so the formatter normalises
 /// both to the canonical one-`;`-per-statement form.

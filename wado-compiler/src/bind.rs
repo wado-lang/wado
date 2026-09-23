@@ -647,6 +647,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                     self.bind_pattern_as(first, kind, span)?;
                 }
             }
+            Pattern::Typed { pattern, .. } => self.bind_pattern_as(pattern, kind, span)?,
             Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {
             }
         }
