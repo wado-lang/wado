@@ -1366,12 +1366,6 @@ impl StrSlice {
         return StrSlice { repr: self.repr, start: self.start + start, end: self.start + end };
     }
 
-    #[unavailable("renamed to `slice`, as `Slice<T>` spells it")]
-    pub fn sub(&self);
-
-    #[unavailable("renamed to `slice_unchecked`, as `Slice<T>` spells it")]
-    pub fn sub_unchecked(&self);
-
     /// The backing array and this view's offset into it (stdlib use only):
     /// what a byte-at-a-time reader needs to index without a bounds check.
     internal fn internal_raw_bytes(&self) -> &Array<u8> {
@@ -1792,12 +1786,6 @@ pub trait AsStrSlice: Eq<String> with () {
     fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice {
         return self.as_str_slice().slice_unchecked(start, end);
     }
-
-    #[unavailable("renamed to `slice`, as `Slice<T>` spells it")]
-    fn sub(&self);
-
-    #[unavailable("renamed to `slice_unchecked`, as `Slice<T>` spells it")]
-    fn sub_unchecked(&self);
 
     fn as_bytes(&self) -> ByteSlice {
         return self.as_str_slice().as_bytes();

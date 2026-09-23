@@ -69,7 +69,7 @@ What follows:
   caller that wants an owned string asks for one.
 - A byte range is cut with `slice(start, end)` and `slice_unchecked`, the names
   `Slice<T>` uses for the same cut. `sub` would read as the `Sub` operator's
-  method, so it is declared unavailable and names `slice` instead.
+  method.
 
 ## Known gaps
 
