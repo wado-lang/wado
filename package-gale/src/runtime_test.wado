@@ -13,7 +13,7 @@ use { kind_bitset_words } from "./kind_set_gen.wado";
 use { to_lexer_string } from "./runtime/tools.wado";
 use {
     HighlightMapping,
-    HighlightOverride,
+    RuleCapture,
     HighlightCapture,
     HighlightVisitor,
     highlight_html,
@@ -193,84 +193,63 @@ test "highlight_html emits plain text for gaps" {
     assert html == `a <span class="operator">+</span> b`;
 }
 
-test "HighlightVisitor converts dot-separated captures to CSS classes" {
-    let mapping = HighlightMapping {
-        defaults: ["punctuation.bracket"],
-        rule_names: ["root"],
-        overrides: [],
+fn mapping_of(capture_names: List<String>, default_ids: List<i32>) -> HighlightMapping {
+    return HighlightMapping {
+        capture_names,
+        capture_classes: capture_names,
+        default_ids,
+        overrides_by_kind: [],
+        rule_captures: [],
     };
-    let visitor = HighlightVisitor::new(mapping);
-    assert visitor.capture_names[0] == "punctuation.bracket";
-    assert visitor.capture_classes[0] == "punctuation bracket";
-
-    let source = "{";
-    let captures: List<HighlightCapture> = [
-        HighlightCapture { capture_id: 0, start: 0, end: 1 },
-    ];
-    let html = highlight_html(&source, &captures, &visitor.capture_classes);
-    assert html == `<span class="punctuation bracket">{</span>`;
 }
 
 test "HighlightVisitor collects captures from tokens" {
-    let mapping = HighlightMapping {
-        defaults: ["string", "number", ""],
-        rule_names: ["root"],
-        overrides: [],
-    };
+    let mapping = mapping_of(["string", "number"], [0, 1, -1]);
     let ts = stream_of("01234567", [
         [0, 0, 4],
         [1, 5, 7],
         [2, 7, 8],
     ]);
-    let mut visitor = HighlightVisitor::new(mapping);
+    let mut visitor = HighlightVisitor::new(&mapping);
     visitor.hl_enter(0);
     visitor.hl_visit_token(&ts, 0);
     visitor.hl_visit_token(&ts, 1);
     visitor.hl_visit_token(&ts, 2);
     visitor.hl_exit();
     assert visitor.captures.len() == 2;
-    assert visitor.capture_names[visitor.captures[0].capture_id] == "string";
+    assert mapping.capture_names[visitor.captures[0].capture_id] == "string";
     assert visitor.captures[0].start == 0;
     assert visitor.captures[0].end == 4;
-    assert visitor.capture_names[visitor.captures[1].capture_id] == "number";
+    assert mapping.capture_names[visitor.captures[1].capture_id] == "number";
     assert visitor.captures[1].start == 5;
     assert visitor.captures[1].end == 7;
 }
 
 test "HighlightVisitor applies context overrides" {
-    let mapping = HighlightMapping {
-        defaults: ["string"],
-        rule_names: ["root", "pair"],
-        overrides: [
-            HighlightOverride { rule_name: "pair", token_kind: 0, capture: "string.special.key" },
-        ],
-    };
+    let mut mapping = mapping_of(["string", "string.special.key"], [0]);
+    mapping.overrides_by_kind = [[RuleCapture { rule_id: 1, capture_id: 1, order: 0 }]];
     let ts = stream_of("0123456789012345", [
         [0, 0, 5],
         [0, 11, 16],
     ]);
-    let mut visitor = HighlightVisitor::new(mapping);
+    let mut visitor = HighlightVisitor::new(&mapping);
     visitor.hl_enter(0);
     visitor.hl_enter(1);
     visitor.hl_visit_token(&ts, 0);
     visitor.hl_exit();
     visitor.hl_visit_token(&ts, 1);
     visitor.hl_exit();
-    assert visitor.capture_names[visitor.captures[0].capture_id] == "string.special.key";
-    assert visitor.capture_names[visitor.captures[1].capture_id] == "string";
+    assert mapping.capture_names[visitor.captures[0].capture_id] == "string.special.key";
+    assert mapping.capture_names[visitor.captures[1].capture_id] == "string";
 }
 
 test "hl_cover_unvisited sweeps every token, and only once" {
-    let mapping = HighlightMapping {
-        defaults: ["string", "number"],
-        rule_names: ["root"],
-        overrides: [],
-    };
+    let mapping = mapping_of(["string", "number"], [0, 1]);
     let ts = stream_of("01234567", [
         [0, 0, 3],
         [1, 4, 7],
     ]);
-    let mut visitor = HighlightVisitor::new(mapping);
+    let mut visitor = HighlightVisitor::new(&mapping);
     visitor.hl_cover_unvisited(&ts);
     assert visitor.captures.len() == 2;
     // It is a finishing pass: running it again must add nothing.
@@ -279,16 +258,12 @@ test "hl_cover_unvisited sweeps every token, and only once" {
 }
 
 test "hl_cover_unvisited keeps what the walk took and sorts the merge" {
-    let mapping = HighlightMapping {
-        defaults: ["string", "number"],
-        rule_names: ["root"],
-        overrides: [],
-    };
+    let mapping = mapping_of(["string", "number"], [0, 1]);
     let ts = stream_of("01234567", [
         [0, 0, 3],
         [1, 4, 7],
     ]);
-    let mut visitor = HighlightVisitor::new(mapping);
+    let mut visitor = HighlightVisitor::new(&mapping);
     // The walk reaches the later token first, so the sweep's capture for the
     // earlier one lands out of order and the merge has to be sorted.
     visitor.hl_visit_token(&ts, 1);
@@ -299,23 +274,19 @@ test "hl_cover_unvisited keeps what the walk took and sorts the merge" {
 }
 
 test "HighlightVisitor handles trivia" {
-    let mapping = HighlightMapping {
-        defaults: ["comment", "keyword"],
-        rule_names: ["root"],
-        overrides: [],
-    };
+    let mapping = mapping_of(["comment", "keyword"], [0, 1]);
     let chars: List<char> = "0123456789a".chars().collect();
     let mut ts = TokenStream::new(&chars);
     let lo = ts.trivia_mark();
     ts.push_trivia(0, 0, 8, 0);  // "/* hi */" comment trivia
     ts.push_token(1, 9, 11, lo, ts.trivia_mark());  // "if" keyword
-    let mut visitor = HighlightVisitor::new(mapping);
+    let mut visitor = HighlightVisitor::new(&mapping);
     visitor.hl_enter(0);
     visitor.hl_visit_token(&ts, 0);
     visitor.hl_exit();
     assert visitor.captures.len() == 2;
-    assert visitor.capture_names[visitor.captures[0].capture_id] == "comment";
+    assert mapping.capture_names[visitor.captures[0].capture_id] == "comment";
     assert visitor.captures[0].start == 0;
-    assert visitor.capture_names[visitor.captures[1].capture_id] == "keyword";
+    assert mapping.capture_names[visitor.captures[1].capture_id] == "keyword";
     assert visitor.captures[1].start == 9;
 }
