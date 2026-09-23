@@ -577,23 +577,15 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             // `let x = x + 1` and `let Some(x) = x else { … x … }` shadow a
             // binding both the initializer and the else block may read, so it
             // leaves scope only here, before `define` would call it a duplicate.
-            let mut bound: Vec<String> = Vec::new();
             for_each_pattern_name(&let_stmt.pattern, &mut |name, _| {
-                bound.push(name.to_string());
-            });
-            for name in bound {
-                let is_duplicate_in_scope = self
+                let shadowed = self
                     .scopes
                     .last()
-                    .is_some_and(|scope| scope.bindings.contains_key(&name));
-                if is_duplicate_in_scope && expr_references_var(value, &name) {
-                    self.scopes
-                        .last_mut()
-                        .unwrap()
-                        .bindings
-                        .shift_remove(name.as_str());
+                    .is_some_and(|scope| scope.bindings.contains_key(name));
+                if shadowed && expr_references_var(value, name) {
+                    self.scopes.last_mut().unwrap().bindings.shift_remove(name);
                 }
-            }
+            });
 
             self.bind_pattern_as(
                 &let_stmt.pattern,

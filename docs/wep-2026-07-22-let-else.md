@@ -83,6 +83,11 @@ are walked in the same order in the records-only resolve pass and the
 TIR-building reify pass, keeping the monotonic local-index allocation identical
 between the two.
 
+A pattern name that shadows an outer binding is therefore the outer one
+throughout the else block, which the desugaring above already gives: the `_`
+arm binds nothing the pattern names. `let Some(x) = x else { … }` reads the
+shadowed `x` in both the scrutinee and the else block.
+
 Divergence is checked with the existing AST control-flow analysis
 (`control_flow::block_always_exits`), extended to treat a `break`/`continue`
 statement as exiting (it already counted them as `Never` in
