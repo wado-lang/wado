@@ -438,7 +438,7 @@ pub enum TypeError {
     },
 
     /// An attribute describing a declaration with no body, written on a trait
-    /// or interface requirement; `reason` is its schema's `requirement_error`.
+    /// or interface requirement; `reason` is its schema's `on_requirement`.
     AttributeOnRequirement {
         owner: String,
         operation: String,

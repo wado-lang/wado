@@ -1,9 +1,8 @@
 // A malformed `#[trap(...)]` is reported, never read as a promise: silence
 // means "may trap", and a promise it did not mean would delete a trapping call.
 //
-// Every function here has a body, and the body check comes last, so each one
-// reports what it got wrong rather than only where it sits — the last is the
-// case where nothing else is wrong.
+// Every function here has a body, which each one reports as well as what its
+// arguments got wrong — the last is the case where nothing else is wrong.
 
 #[trap(outside = nope)]
 fn first(arr: i32) -> i32 {

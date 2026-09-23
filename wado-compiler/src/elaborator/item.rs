@@ -2044,14 +2044,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let Some(schema) = attribute::lookup(&attr.name) else {
                 continue;
             };
-            let Some(reason) = schema.requirement_error else {
+            let Some(bodyless) = schema.bodyless else {
                 continue;
             };
             let _ = self.emit(TypeError::AttributeOnRequirement {
                 owner: owner.to_string(),
                 operation: method.name.clone(),
                 attribute: schema.name,
-                reason,
+                reason: bodyless.on_requirement,
                 span: attr.span,
             });
         }

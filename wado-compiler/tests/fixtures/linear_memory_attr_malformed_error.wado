@@ -1,9 +1,8 @@
 // A malformed `#[linear_memory(...)]` is reported. Silence means the call
 // touches no linear memory, so a misspelled access must not read as silence.
 //
-// Every function here has a body, and the body check comes last, so each one
-// reports what it got wrong rather than only where it sits — the last is the
-// case where nothing else is wrong.
+// Every function here has a body, which each one reports as well as what its
+// arguments got wrong — the last is the case where nothing else is wrong.
 
 #[linear_memory(modify)]
 fn first(addr: i32) -> i32 {

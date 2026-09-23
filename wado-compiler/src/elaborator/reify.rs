@@ -10,8 +10,8 @@ use std::rc::Rc;
 
 use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
 use crate::attribute::{
-    ALLOC, AMBIENT, BENIGN, EXPORT_NAME, IMMEDIATE, INLINE, LINEAR_MEMORY, PARAM, RESULT, RETAIN,
-    SECRET, TRAP, WIRE,
+    self, ALLOC, AMBIENT, BENIGN, EXPORT_NAME, IMMEDIATE, INLINE, LINEAR_MEMORY, PARAM, RESULT,
+    RETAIN, SECRET, TRAP, WIRE,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -1419,12 +1419,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &params,
             return_type,
             body.is_some(),
-            self.reify_return_convention_attr(&func.attrs, &params, body.is_some()),
+            self.reify_return_convention_attr(&func.attrs, &params),
         );
-        let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
-        let immediates = self.reify_immediate_attrs(&func.attrs, &params, body.is_some());
-        let trap = self.reify_trap_attrs(&func.attrs, &params, body.is_some());
-        let linear_memory = self.reify_linear_memory_attr(&func.attrs, body.is_some());
+        let retains = self.reify_retain_attrs(&func.attrs, &params);
+        let immediates = self.reify_immediate_attrs(&func.attrs, &params);
+        let trap = self.reify_trap_attrs(&func.attrs, &params);
+        let linear_memory = self.reify_linear_memory_attr(&func.attrs);
+        if body.is_some() {
+            self.reject_bodyless_attrs_on_body(&func.attrs);
+        }
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1811,12 +1814,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &params,
             return_type,
             body.is_some(),
-            self.reify_return_convention_attr(&func.attrs, &params, body.is_some()),
+            self.reify_return_convention_attr(&func.attrs, &params),
         );
-        let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
-        let immediates = self.reify_immediate_attrs(&func.attrs, &params, body.is_some());
-        let trap = self.reify_trap_attrs(&func.attrs, &params, body.is_some());
-        let linear_memory = self.reify_linear_memory_attr(&func.attrs, body.is_some());
+        let retains = self.reify_retain_attrs(&func.attrs, &params);
+        let immediates = self.reify_immediate_attrs(&func.attrs, &params);
+        let trap = self.reify_trap_attrs(&func.attrs, &params);
+        let linear_memory = self.reify_linear_memory_attr(&func.attrs);
+        if body.is_some() {
+            self.reject_bodyless_attrs_on_body(&func.attrs);
+        }
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -2043,6 +2049,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
     }
 
+    /// Report each attribute that describes a declaration with no body, written
+    /// on a function that has one. Its arguments were read already, so a
+    /// malformed one reports that too.
+    fn reject_bodyless_attrs_on_body(&self, attrs: &[ast::Attribute]) {
+        for attr in attrs {
+            let Some(schema) = attribute::lookup(&attr.name) else {
+                continue;
+            };
+            let Some(bodyless) = schema.bodyless else {
+                continue;
+            };
+            self.attr_error(
+                Code::AttrMisuse,
+                attr,
+                format!(
+                    "#[{}] belongs to a declaration with no body: {}",
+                    schema.name, bodyless.on_body
+                ),
+            );
+        }
+    }
+
     /// Report a malformed `#[wire(number = …)]` at the field it was written on.
     fn wire_number_error(&self, span: &Span, message: String) {
         let _ = self.logger.error_in(
@@ -2229,7 +2257,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attrs: &[ast::Attribute],
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Option<tir::ReturnConvention> {
         let attr = attrs.iter().find(|a| a.name == RESULT)?;
         let emit = |message: String| {
@@ -2241,22 +2268,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 "#[result] takes one convention: `owned` or `part_of = param`".to_string(),
             );
         };
-        // After the argument, so an attribute that is both malformed and
-        // misplaced reports what it got wrong rather than only where it sits.
-        let placed = |convention| {
-            if has_body {
-                return emit(
-                    "#[result] belongs to a declaration with no body; a body states what it returns"
-                        .to_string(),
-                );
-            }
-            Some(convention)
-        };
         match arg {
-            ast::AttrArg::Ident(name) if name == "owned" => placed(tir::ReturnConvention::Owned),
+            ast::AttrArg::Ident(name) if name == "owned" => Some(tir::ReturnConvention::Owned),
             ast::AttrArg::KeyIdent(key, named) if key == "part_of" => {
                 match params.iter().position(|p| &p.name == named) {
-                    Some(index) => placed(tir::ReturnConvention::PartOf(index)),
+                    Some(index) => Some(tir::ReturnConvention::PartOf(index)),
                     None => emit(format!("#[result(part_of = {named})] names no parameter")),
                 }
             }
@@ -2270,19 +2286,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// The `#[retain(...)]` clauses, one per attribute. A function with a body
-    /// states what it retains in that body, so an attribute there is reported
-    /// and dropped rather than read.
+    /// The `#[retain(...)]` clauses, one per attribute.
     fn reify_retain_attrs(
         &self,
         attrs: &[ast::Attribute],
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Vec<tir::RetainSpec<String>> {
         attrs
             .iter()
             .filter(|a| a.name == RETAIN)
-            .filter_map(|attr| self.reify_retain_attr(attr, params, has_body))
+            .filter_map(|attr| self.reify_retain_attr(attr, params))
             .collect()
     }
 
@@ -2290,7 +2303,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attr: &ast::Attribute,
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Option<tir::RetainSpec<String>> {
         let emit = |message: String| {
             self.attr_error(Code::RetainAttr, attr, message);
@@ -2338,15 +2350,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 "#[retain] names one retained thing; repeat the attribute for another".to_string(),
             );
         }
-
-        // After the arguments, so an attribute that is both malformed and
-        // misplaced reports what it got wrong rather than only where it sits.
-        if has_body {
-            return emit(
-                "#[retain] belongs to a declaration with no body; a body states what it retains"
-                    .to_string(),
-            );
-        }
         Some(tir::RetainSpec {
             source,
             elements,
@@ -2360,12 +2363,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attrs: &[ast::Attribute],
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Vec<String> {
         attrs
             .iter()
             .filter(|a| a.name == IMMEDIATE)
-            .filter_map(|attr| self.reify_immediate_attr(attr, params, has_body))
+            .filter_map(|attr| self.reify_immediate_attr(attr, params))
             .collect()
     }
 
@@ -2373,7 +2375,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attr: &ast::Attribute,
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Option<String> {
         let emit = |message: String| {
             self.attr_error(Code::ImmediateAttr, attr, message);
@@ -2390,13 +2391,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 "#[immediate] names one parameter; repeat the attribute for another".to_string(),
             );
         }
-        if has_body {
-            return emit(
-                "#[immediate] belongs to a declaration with no body: it describes how codegen \
-                 lowers the call, and a body is called rather than lowered"
-                    .to_string(),
-            );
-        }
         Some(name.clone())
     }
 
@@ -2407,7 +2401,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attrs: &[ast::Attribute],
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Option<tir::TrapSpec<String>> {
         let written: Vec<&ast::Attribute> = attrs.iter().filter(|a| a.name == TRAP).collect();
         let mut spec = tir::TrapSpec {
@@ -2434,31 +2427,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             }
         }
-        let first = written.first()?;
-        // After the arguments, so an attribute that is both malformed and
-        // misplaced reports what it got wrong rather than only where it sits.
-        if !sound {
-            return None;
-        }
-        if has_body {
-            self.attr_error(
-                Code::TrapAttr,
-                first,
-                "#[trap] belongs to a declaration with no body; a body states when it traps"
-                    .to_string(),
-            );
-            return None;
-        }
-        Some(spec)
+        (sound && !written.is_empty()).then_some(spec)
     }
 
     /// The `#[linear_memory(...)]` access, `None` where there is none. A
     /// malformed one is reported and read as a write, which reorders nothing.
-    fn reify_linear_memory_attr(
-        &self,
-        attrs: &[ast::Attribute],
-        has_body: bool,
-    ) -> Option<tir::LinearMemory> {
+    fn reify_linear_memory_attr(&self, attrs: &[ast::Attribute]) -> Option<tir::LinearMemory> {
         let mut written = attrs.iter().filter(|a| a.name == LINEAR_MEMORY);
         let attr = written.next()?;
         let emit = |message: &str| {
@@ -2468,18 +2442,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if written.next().is_some() {
             return emit("#[linear_memory] is written once");
         }
-        let access = match attr.args.as_slice() {
-            [ast::AttrArg::Ident(word)] if word == "read" => tir::LinearMemory::Read,
-            [ast::AttrArg::Ident(word)] if word == "write" => tir::LinearMemory::Write,
-            _ => return emit("#[linear_memory] takes `read` or `write`"),
-        };
-        if has_body {
-            return emit(
-                "#[linear_memory] belongs to a declaration with no body; a body states what it \
-                 touches",
-            );
+        match attr.args.as_slice() {
+            [ast::AttrArg::Ident(word)] if word == "read" => Some(tir::LinearMemory::Read),
+            [ast::AttrArg::Ident(word)] if word == "write" => Some(tir::LinearMemory::Write),
+            _ => emit("#[linear_memory] takes `read` or `write`"),
         }
-        Some(access)
     }
 
     fn reify_trap_attr(
