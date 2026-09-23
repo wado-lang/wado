@@ -544,12 +544,10 @@ pub fn report_fuel_used<T>(store: &mut Store<T>, label: &str, timeout_ms: u64) {
 fn base_config() -> Config {
     let mut config = Config::new();
     config.wasm_component_model_gc(true);
-    config.wasm_component_model_async(true);
     config.wasm_component_model_more_async_builtins(true);
     config.wasm_component_model_async_stackful(true);
     config.wasm_component_model_error_context(true);
     config.wasm_component_model_map(true);
-    config.wasm_wide_arithmetic(true);
     // Match the wado CLI's default collector so the suite exercises the
     // collector users actually get (see `runtime::DEFAULT_COLLECTOR`).
     config.collector(wasmtime::Collector::Copying);
