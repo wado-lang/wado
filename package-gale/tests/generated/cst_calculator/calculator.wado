@@ -1728,13 +1728,7 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if alt_kind == TK_SCIENTIFIC_NUMBER {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_VARIABLE {
-            pos = start + 1;
-            break scan_alts;
-        } else if _kind_set_4(alt_kind) {
+        if _kind_set_6(alt_kind) {
             pos = start + 1;
             break scan_alts;
         } else if alt_kind == TK_LPAREN {
@@ -2265,6 +2259,10 @@ fn _kind_set_4(k: i32) -> bool {
 
 fn _kind_set_5(k: i32) -> bool {
     return k matches { TK_EQ | TK_GT | TK_LT };
+}
+
+fn _kind_set_6(k: i32) -> bool {
+    return k matches { TK_EULER | TK_I | TK_PI | TK_SCIENTIFIC_NUMBER | TK_VARIABLE };
 }
 
 global EMPTY_SYNC: List<i32> = [];

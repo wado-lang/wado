@@ -2195,22 +2195,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_K_TRUE {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_K_FALSE {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_NUMBER {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_DATE {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_SQ_STRING {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_K_NULL {
+        } else if _kind_set_0(alt_kind) {
             pos = start + 1;
             break scan_alts;
         } else {
@@ -2357,7 +2342,7 @@ fn scan_expression_lr_17(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_expression_lr_18(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 3);
     if pos < 0 { return -1; }
@@ -2366,7 +2351,7 @@ fn scan_expression_lr_18(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_expression_lr_19(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_2(tokens[pos]) { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 2);
     if pos < 0 { return -1; }
@@ -2482,7 +2467,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
             } else {
                 break;
             }
-        } else if _kind_set_0(suffix_kind) {
+        } else if _kind_set_1(suffix_kind) {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_expression_lr_18(tokens, pos);
@@ -2490,7 +2475,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
             } else {
                 break;
             }
-        } else if _kind_set_1(suffix_kind) {
+        } else if _kind_set_2(suffix_kind) {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_expression_lr_19(tokens, pos);
@@ -2893,7 +2878,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
             } else {
                 break;
             }
-        } else if _kind_set_0(_sk) {
+        } else if _kind_set_1(_sk) {
             if 2 >= min_prec {
                 if scan_expression_lr_18(&p.kinds, p.pos) < 0 {
                     break;
@@ -2906,7 +2891,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
             } else {
                 break;
             }
-        } else if _kind_set_1(_sk) {
+        } else if _kind_set_2(_sk) {
             if 1 >= min_prec {
                 if scan_expression_lr_19(&p.kinds, p.pos) < 0 {
                     break;
@@ -2991,10 +2976,14 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_K_AND | TK_LIT_AMP };
+    return k matches { TK_DATE | TK_K_FALSE | TK_K_NULL | TK_K_TRUE | TK_NUMBER | TK_SQ_STRING };
 }
 
 fn _kind_set_1(k: i32) -> bool {
+    return k matches { TK_K_AND | TK_LIT_AMP };
+}
+
+fn _kind_set_2(k: i32) -> bool {
     return k matches { TK_K_OR | TK_LIT_PIPE };
 }
 

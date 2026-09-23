@@ -1216,12 +1216,14 @@ fn emit_lr_overlap_branch(
 /// nothing ahead of the chain for it.
 global NO_PREBOUND: Option<String> = null;
 
-/// Open the arm for one leading token, chaining onto any arm already open.
-fn begin_lr_arm<S: AsStrSlice>(w: &mut CodeWriter, site: &LrOverlapSite, tk: S, chained: bool) {
+/// Open the arm for the leading tokens `kinds`, chaining onto any arm already
+/// open.
+fn begin_lr_arm(w: &mut CodeWriter, site: &LrOverlapSite, kinds: &List<String>, chained: bool, ctx: &mut GenContext) {
+    let cond = ctx.kind_check_str(kinds, &site.kind_expr);
     if chained {
-        w.else_begin(`else if ${site.kind_expr} == ${tk}`);
+        w.else_begin(`else if ${cond}`);
     } else {
-        w.begin(`if ${site.kind_expr} == ${tk}`);
+        w.begin(`if ${cond}`);
     }
 }
 
@@ -1306,27 +1308,29 @@ fn emit_lr_overlap(
     let mut chained = false;
 
     for let mut k = 0; k < group.len(); k += 1 {
-        let this_first = &suffix_first_sets[group[k]];
-        for let mut t = 0; t < this_first.len(); t += 1 {
-            let tk = &this_first[t];
-            if emitted.contains(*tk) {
-                continue;
-            }
+        let mut unshared: List<String> = [];
+        for let tk of &suffix_first_sets[group[k]] {
             let mut shared = false;
             for let mut j = 0; j < group.len(); j += 1 {
                 if j != k && suffix_first_sets[group[j]].contains(tk) {
                     shared = true;
                 }
             }
-            if !shared {
-                if !token_proven {
-                    begin_lr_arm(w, site, tk, chained);
-                }
-                chained = true;
-                let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
-                emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated, &NO_PREBOUND, &[*tk]);
-                emitted.insert(*tk);
+            if !shared && !unshared.contains(tk) {
+                unshared.push(*tk);
             }
+        }
+        if unshared.is_empty() {
+            continue;
+        }
+        if !token_proven {
+            begin_lr_arm(w, site, &unshared, chained, ctx);
+        }
+        chained = true;
+        let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
+        emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated, &NO_PREBOUND, &unshared);
+        for let tk of &unshared {
+            emitted.insert(*tk);
         }
     }
 
@@ -1341,7 +1345,7 @@ fn emit_lr_overlap(
     }
     for let shared_tk of &shared_tokens {
         if !token_proven {
-            begin_lr_arm(w, site, shared_tk, chained);
+            begin_lr_arm(w, site, &[*shared_tk], chained, ctx);
         }
         chained = true;
         let mut last_k = -1;
@@ -1653,17 +1657,12 @@ fn gen_scan_multi_alt<S: AsStrSlice>(
 
     w.begin("scan_alts:");
 
-    let mut first_branch = true;
+    let mut arms: List<DecisionBranch> = [];
+    let mut bodies: List<String> = [];
     for let mut g = 0; g < groups_alts.len(); g += 1 {
-        let cond = ctx.admits_check_str(&admits_or_everything(&groups_tokens[g]), "alt_kind");
-        if first_branch {
-            w.begin(`if ${cond}`);
-            first_branch = false;
-        } else {
-            w.else_begin(`else if ${cond}`);
-        }
+        let mut body = CodeWriter::with_capacity(256);
         gen_scan_partition_body(
-            w,
+            &mut body,
             &groups_alts[g],
             unguarded_idx,
             scan_alts,
@@ -1672,6 +1671,19 @@ fn gen_scan_multi_alt<S: AsStrSlice>(
             base_name,
             &groups_tokens[g],
         );
+        arms.push(DecisionBranch { test: admits_or_everything(&groups_tokens[g]), gate: "", alts: groups_alts[g] });
+        bodies.push(body.to_string());
+    }
+    let first_branch = arms.is_empty();
+    let [arms, bodies] = merge_identical_branches(&arms, &bodies);
+    for let mut g = 0; g < arms.len(); g += 1 {
+        let cond = ctx.admits_check_str(&arms[g].test, "alt_kind");
+        if g == 0 {
+            w.begin(`if ${cond}`);
+        } else {
+            w.else_begin(`else if ${cond}`);
+        }
+        w.write(&bodies[g]);
     }
 
     if unguarded_idx.len() > 0 {
@@ -1694,6 +1706,51 @@ fn gen_scan_multi_alt<S: AsStrSlice>(
 
     w.end();
     w.line("return pos;");
+}
+
+/// Adjacent branches whose rendered bodies are the same, joined under the
+/// union of their tests. A gated branch, or one testing no token set, stays alone.
+fn merge_identical_branches(branches: &List<DecisionBranch>, bodies: &List<String>) -> [List<DecisionBranch>, List<String>] {
+    assert branches.len() == bodies.len(), "one rendered body per branch";
+    let mut out: List<DecisionBranch> = [];
+    let mut out_bodies: List<String> = [];
+    for let mut i = 0; i < branches.len(); i += 1 {
+        let n = out.len();
+        if n > 0 && branch_tests_tokens_only(&branches[i]) && branch_tests_tokens_only(&out[n - 1]) && out_bodies[n - 1] == bodies[i] {
+            let mut kinds = admits_kinds(&out[n - 1].test);
+            dedup_append_arr(&mut kinds, &admits_kinds(&branches[i].test));
+            out[n - 1].test = admits_kinds_of(&kinds);
+            for let a of &branches[i].alts {
+                out[n - 1].alts.push(*a);
+            }
+            continue;
+        }
+        out.push(branches[i]);
+        out_bodies.push(bodies[i]);
+    }
+    return [out, out_bodies];
+}
+
+fn branch_tests_tokens_only(b: &DecisionBranch) -> bool {
+    return b.test matches { Kinds(_) } && b.gate.is_empty();
+}
+
+/// The arms of a decision chain over `branches`, each writing its rendered
+/// body, with the arms that write the same body merged. Returns the branches
+/// emitted, which `close_decision_chain` closes.
+fn emit_decision_arms<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    branches: &List<DecisionBranch>,
+    bodies: &List<String>,
+    kind_expr: S,
+    ctx: &mut GenContext,
+) -> List<DecisionBranch> {
+    let [merged, merged_bodies] = merge_identical_branches(branches, bodies);
+    for let mut i = 0; i < merged.len(); i += 1 {
+        open_decision_branch(w, &merged, i, &kind_expr, ctx);
+        w.write(&merged_bodies[i]);
+    }
+    return merged;
 }
 
 /// Emit the body of a single partition branch. The partition's alts were
@@ -2475,19 +2532,20 @@ fn gen_scan_op_group<S: AsStrSlice>(
     // the global holds the last arm's value hands the enclosing walk a gate from
     // a reading it did not take.
     gen_scan_gate_save(w, ctx, &best_var, /*mutable=*/ true);
+    let mut bodies: List<String> = [];
     for let mut i = 0; i < branches.len(); i += 1 {
-        open_decision_branch(w, &branches, i, &kind_var, ctx);
+        let mut body = CodeWriter::with_capacity(256);
         let branch_known = branch_proves(&branches, i);
         for let ai of &branches[i].alts {
             let inner = `sg_${gc}_${*ai}`;
             let elements = &ge.alts[*ai].elements;
             let can_fail = scan_elements_can_fail(elements, 0, &branch_known, ctx);
-            gen_scan_rewind(w, ctx, &gp_var);
+            gen_scan_rewind(&mut body, ctx, &gp_var);
             if can_fail {
-                w.begin(`${inner}:`);
+                body.begin(`${inner}:`);
             }
             gen_scan_op_elements_in_block(
-                w,
+                &mut body,
                 elements,
                 0,
                 elements.len(),
@@ -2497,13 +2555,14 @@ fn gen_scan_op_group<S: AsStrSlice>(
                 &NO_SCAN_GATE_COND,
                 &branch_known,
             );
-            w.line(&scan_gate_best_commit(ctx, &best_var, `pos > ${best_var}`, "pos"));
+            body.line(&scan_gate_best_commit(ctx, &best_var, `pos > ${best_var}`, "pos"));
             if can_fail {
-                w.end();
+                body.end();
             }
         }
+        bodies.push(body.to_string());
     }
-    close_decision_chain(w, &branches);
+    close_decision_chain(w, &emit_decision_arms(w, &branches, &bodies, &kind_var, ctx));
     w.begin(`if ${best_var} >= 0`);
     gen_scan_rewind(w, ctx, &best_var);
     w.else_begin("else");
@@ -2544,18 +2603,19 @@ fn gen_scan_group_decided<S: AsStrSlice>(
     if decision_reads_lookahead(branches) {
         gen_kind_read(w, &kind_var, "tokens", "pos");
     }
+    let mut bodies: List<String> = [];
     for let mut i = 0; i < branches.len(); i += 1 {
-        open_decision_branch(w, branches, i, &kind_var, ctx);
+        let mut body = CodeWriter::with_capacity(256);
         let ai = branches[i].alts[0];
         let inner = `sg_${gc}_${ai}`;
         let elements = &ge.alts[ai].elements;
         let known = branch_proves(branches, i);
         let can_fail = scan_elements_can_fail(elements, 0, &known, ctx);
         if can_fail {
-            w.begin(`${inner}:`);
+            body.begin(`${inner}:`);
         }
         gen_scan_op_elements_in_block(
-            w,
+            &mut body,
             elements,
             0,
             elements.len(),
@@ -2565,12 +2625,13 @@ fn gen_scan_group_decided<S: AsStrSlice>(
             &NO_SCAN_GATE_COND,
             &known,
         );
-        w.line(`break ${done};`);
+        body.line(`break ${done};`);
         if can_fail {
-            w.end();
+            body.end();
         }
+        bodies.push(body.to_string());
     }
-    close_decision_chain(w, branches);
+    close_decision_chain(w, &emit_decision_arms(w, branches, &bodies, &kind_var, ctx));
     if lenient {
         gen_scan_rewind(w, ctx, &gp_var);
     } else {
@@ -4090,24 +4151,27 @@ fn gen_alt_dispatch(
     if decision_reads_lookahead(&branches) {
         w.line("let _gk = p.peek_kind();");
     }
+    let mut bodies: List<String> = [];
     for let mut i = 0; i < branches.len(); i += 1 {
-        open_decision_branch(w, &branches, i, "_gk", ctx);
+        let mut body = CodeWriter::with_capacity(256);
         let picked = &branches[i].alts;
         if picked.len() == 1 {
             let proven = if decision_is_unconditional(&branches) { [] as List<String> } else { admits_kinds(&branches[i].test) };
-            gen_ops(w, &alt_by_index(alts, picked[0]).ops, ctx, nc, &proven);
+            gen_ops(&mut body, &alt_by_index(alts, picked[0]).ops, ctx, nc, &proven);
         } else {
-            let winner = gen_scan_winner_tournament(w, picked, scan_alts, ctx, nc);
-            gen_alt_commit(w, alts, picked, &winner, ctx, nc);
+            let winner = gen_scan_winner_tournament(&mut body, picked, scan_alts, ctx, nc);
+            gen_alt_commit(&mut body, alts, picked, &winner, ctx, nc);
         }
+        bodies.push(body.to_string());
     }
-    let last = &branches[branches.len() - 1];
+    let emitted = emit_decision_arms(w, &branches, &bodies, "_gk", ctx);
+    let last = &emitted[emitted.len() - 1];
     assert !admits_tests_nothing(&last.test) || is_decision_fallback(last), "a Direct chain's last branch admits everything, so no `if` was emitted for the `else` to follow";
     if !is_decision_fallback(last) {
         w.else_begin("else");
         w.line(`let _ = ${expect_set_call(ctx, &all_first)};`);
     }
-    close_decision_chain(w, &branches);
+    close_decision_chain(w, &emitted);
 }
 
 /// The alternatives a baked dispatch decides between, in emission order.
@@ -7829,19 +7893,35 @@ fn gen_group_dispatch(
     let grp_var = dedup_name("grp_kind", name_counts);
     w.line(`let ${grp_var} = p.peek_kind();`);
 
+    // Only a branch that has one before it can drop its condition: the first is
+    // what decides whether the group is entered at all.
+    let last_takes_rest = !must_answer && branches.len() > 1;
+    let tested = if last_takes_rest { branches.len() - 1 } else { branches.len() };
+    let mut tested_branches: List<DecisionBranch> = [];
+    let mut bodies: List<String> = [];
     for let mut g = 0; g < branches.len(); g += 1 {
-        // Only a branch that has one before it can drop its condition: the
-        // first is what decides whether the group is entered at all.
-        let last_takes_rest = !must_answer && g > 0 && g == branches.len() - 1;
-        if g == 0 {
-            w.begin(`if ${render_branch_cond(&branches[g], &grp_var, ctx)}`);
-        } else if last_takes_rest {
-            w.else_begin("else");
-        } else {
-            w.else_begin(`else if ${render_branch_cond(&branches[g], &grp_var, ctx)}`);
+        let proven = if g < tested { admits_kinds(&branches[g].test) } else { [] as List<String> };
+        let mut body = CodeWriter::with_capacity(256);
+        gen_group_branch_body(&mut body, &branches[g].alts, alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts, &proven);
+        bodies.push(body.to_string());
+        if g < tested {
+            tested_branches.push(branches[g]);
         }
-        let proven = if last_takes_rest { [] as List<String> } else { admits_kinds(&branches[g].test) };
-        gen_group_branch_body(w, &branches[g].alts, alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts, &proven);
+    }
+    let rest_body = if last_takes_rest { bodies.pop().unwrap() } else { String::new() };
+    let [merged, merged_bodies] = merge_identical_branches(&tested_branches, &bodies);
+    for let mut g = 0; g < merged.len(); g += 1 {
+        let cond = render_branch_cond(&merged[g], &grp_var, ctx);
+        if g == 0 {
+            w.begin(`if ${cond}`);
+        } else {
+            w.else_begin(`else if ${cond}`);
+        }
+        w.write(&merged_bodies[g]);
+    }
+    if last_takes_rest {
+        w.else_begin("else");
+        w.write(&rest_body);
     }
     if let Some(slot) = nullable_else {
         // Its own arm above still runs it for the tokens it selects; this one
@@ -8623,16 +8703,12 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                 gen_prediction_code_inner(w, &d.branches[0].child, fn_name, alts, lowered_rule, type_name, ctx, skip, rule_display);
                 return;
             }
-            for let mut i = 0; i < d.branches.len(); i += 1 {
-                let branch = &d.branches[i];
-                let cond = ctx.admits_check_str(&admits_or_everything(&branch.tokens), &check_var);
-                if i == 0 {
-                    w.begin(`if ${cond}`);
-                } else {
-                    w.else_begin(`else if ${cond}`);
-                }
+            let mut arms: List<DecisionBranch> = [];
+            let mut bodies: List<String> = [];
+            for let branch of &d.branches {
+                let mut body = CodeWriter::with_capacity(256);
                 gen_prediction_code_inner(
-                    w,
+                    &mut body,
                     &branch.child,
                     fn_name,
                     alts,
@@ -8642,6 +8718,18 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                     skip,
                     rule_display,
                 );
+                arms.push(DecisionBranch { test: admits_or_everything(&branch.tokens), gate: "", alts: [] });
+                bodies.push(body.to_string());
+            }
+            let [arms, bodies] = merge_identical_branches(&arms, &bodies);
+            for let mut i = 0; i < arms.len(); i += 1 {
+                let cond = ctx.admits_check_str(&arms[i].test, &check_var);
+                if i == 0 {
+                    w.begin(`if ${cond}`);
+                } else {
+                    w.else_begin(`else if ${cond}`);
+                }
+                w.write(&bodies[i]);
             }
             // The cascade names only what the SLL walk enumerated, and that
             // walk approximates — a `Repeat` config is advanced past the repeat

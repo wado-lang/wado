@@ -2204,10 +2204,7 @@ fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                             if pos < 0 { break sg_6_0; }
                             break sg_6_done;
                         }
-                    } else if sgk_6 == TK_CDATA {
-                        pos += 1;
-                        break sg_6_done;
-                    } else if _kind_set_5(sgk_6) {
+                    } else if _kind_set_11(sgk_6) {
                         pos += 1;
                         break sg_6_done;
                     }
@@ -2253,10 +2250,7 @@ fn scan_html_misc(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_5(alt_kind) {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_SEA_WS {
+        if _kind_set_2(alt_kind) {
             pos = start + 1;
             break scan_alts;
         } else {
@@ -2270,7 +2264,7 @@ fn scan_script(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_OPEN { return -1; }
     pos += 1;
-    if pos >= tokens.len() || !_kind_set_11(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_12(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
@@ -2279,7 +2273,7 @@ fn scan_style(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_STYLE_OPEN { return -1; }
     pos += 1;
-    if pos >= tokens.len() || !_kind_set_12(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_13(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
@@ -2721,10 +2715,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
                                 if pos < 0 { break sg_9_0; }
                                 break sg_9_done;
                             }
-                        } else if sgk_9 == TK_CDATA {
-                            pos += 1;
-                            break sg_9_done;
-                        } else if _kind_set_5(sgk_9) {
+                        } else if _kind_set_11(sgk_9) {
                             pos += 1;
                             break sg_9_done;
                         }
@@ -3041,10 +3032,14 @@ fn _kind_set_10(k: i32) -> bool {
 }
 
 fn _kind_set_11(k: i32) -> bool {
-    return k matches { TK_SCRIPT_BODY | TK_SCRIPT_SHORT_BODY };
+    return k matches { TK_CDATA | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT };
 }
 
 fn _kind_set_12(k: i32) -> bool {
+    return k matches { TK_SCRIPT_BODY | TK_SCRIPT_SHORT_BODY };
+}
+
+fn _kind_set_13(k: i32) -> bool {
     return k matches { TK_STYLE_BODY | TK_STYLE_SHORT_BODY };
 }
 

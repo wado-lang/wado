@@ -1411,10 +1411,7 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_INT {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_ID {
+        } else if _kind_set_0(alt_kind) {
             pos = start + 1;
             break scan_alts;
         } else {
@@ -1453,7 +1450,7 @@ fn scan_e_lr_3(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_e_lr_4(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
     pos = scan_e(tokens, pos, 2);
     if pos < 0 { return -1; }
@@ -1492,7 +1489,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
             } else {
                 break;
             }
-        } else if _kind_set_0(suffix_kind) {
+        } else if _kind_set_1(suffix_kind) {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_e_lr_4(tokens, pos);
@@ -1597,7 +1594,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
             } else {
                 break;
             }
-        } else if _kind_set_0(_sk) {
+        } else if _kind_set_1(_sk) {
             if 1 >= min_prec {
                 if scan_e_lr_4(&p.kinds, p.pos) < 0 {
                     break;
@@ -1683,6 +1680,10 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 fn _kind_set_0(k: i32) -> bool {
+    return k matches { TK_ID | TK_INT };
+}
+
+fn _kind_set_1(k: i32) -> bool {
     return k matches { TK_LIT_MINUS | TK_LIT_PLUS };
 }
 

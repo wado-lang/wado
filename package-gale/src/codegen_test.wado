@@ -940,6 +940,22 @@ ID : [a-z]+ ;
     assert !str_contains(&body, "p.expect_set("), body;
 }
 
+test "arms that emit the same body are one arm" {
+    let input = "grammar T;
+s : (l | l X)* e EOF ;
+l : A | B | C D ;
+e : e NOT? (L | G) e | e NOT N | ID ;
+A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; X : 'x' ; L : 'l' ; G : 'g' ; N : 'n' ; NOT : '!' ;
+ID : [e-k]+ ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, "fn scan_l("), output;
+    for let arm of ["alt_kind == TK_A", "suffix_kind == TK_L", "_sk == TK_L"] {
+        assert !str_contains(&output, arm), output;
+    }
+}
+
 test "a group arm takes the token its branch tested" {
     let input = "grammar T;
 s : (A B | C D) e EOF ;
@@ -1063,6 +1079,24 @@ fn extract_fn_body<S: AsStrSlice, S1: AsStrSlice>(output: S, header: S1) -> Stri
     let next = find_substr_from(output, "\nfn ", after);
     let end = if next < 0 { output.len() } else { next };
     return output.substr_bytes(start, end);
+}
+
+/// Whether `body` tests `kind`, by name or through a `_kind_set_<id>` helper
+/// that `output` defines.
+fn body_tests_kind<S: AsStrSlice>(output: &String, body: &String, kind: S) -> bool {
+    if str_contains(body, &kind) {
+        return true;
+    }
+    let mut at = find_substr(body, "_kind_set_");
+    while at >= 0 {
+        let open = find_substr_from(body, "(", at);
+        let def = extract_fn_body(output, `fn ${body.substr_bytes(at, open)}(`);
+        if str_contains(&def, &kind) {
+            return true;
+        }
+        at = find_substr_from(body, "_kind_set_", open);
+    }
+    return false;
 }
 
 fn find_substr<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
@@ -1881,7 +1915,7 @@ test "an undecided dispatch keeps every alternative reachable" {
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_r__inner(");
     assert count_substr(&body, "else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
-    assert count_substr(&body, "TK_B") > 0, `alt B is unreachable: ${body}`;
+    assert body_tests_kind(&output, &body, "TK_B"), `alt B is unreachable: ${body}`;
 }
 
 test "an empty alternative keeps its fallback where the follow set is a prefix" {
@@ -1894,7 +1928,7 @@ test "an empty alternative keeps its fallback where the follow set is a prefix" 
     let body = extract_fn_body(&output, "fn _parse_r__inner(");
     assert count_substr(&body, "grp_kind == TK_C") == 0, `a prefix of the follow set became the whole test: ${body}`;
     assert count_substr(&body, "no_viable") == 0, `the group can match nothing, so it cannot report: ${body}`;
-    assert count_substr(&body, "TK_B") > 0, `alt B is unreachable: ${body}`;
+    assert body_tests_kind(&output, &body, "TK_B"), `alt B is unreachable: ${body}`;
 }
 
 test "the overlap rule dispatch orders its fallback last too" {
@@ -2041,7 +2075,7 @@ test "the op walker's undecided chain keeps every alternative reachable" {
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_e__inner(");
     assert count_substr(&body, "else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
-    assert count_substr(&body, "TK_B") > 0, `alt B is unreachable: ${body}`;
+    assert body_tests_kind(&output, &body, "TK_B"), `alt B is unreachable: ${body}`;
 }
 
 test "a wildcard puts every alternative in one branch, epsilon included" {

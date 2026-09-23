@@ -30043,17 +30043,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         _plus_first = false;
         let grp_kind = p.peek_kind();
-        if grp_kind == TK_Plus {
-            p.take();
-        } else if grp_kind == TK_Minus {
-            p.take();
-        } else if grp_kind == TK_Dimension {
-            p.take();
-        } else if grp_kind == TK_UnknownDimension {
-            p.take();
-        } else if grp_kind == TK_Number {
-            p.take();
-        } else if grp_kind == TK_String_ {
+        if _kind_set_38(grp_kind) {
             p.take();
         } else if _kind_set_3(grp_kind) {
             _parse_ident(p);
@@ -30722,7 +30712,7 @@ fn _parse_term__inner_alt_11(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_term__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
-    if _kind_set_38(kind) {
+    if _kind_set_39(kind) {
         if _kind_set_21(kind) {
             if p.peek_at(1) == TK_Number {
                 return _parse_term__inner_alt_0(p, follow);
@@ -31012,7 +31002,7 @@ fn _parse_any___inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_ws(p, follow);
         return;
     }
-    if _kind_set_38(kind) {
+    if _kind_set_39(kind) {
         if _kind_set_21(kind) {
             if p.peek_at(1) == TK_Number {
                 return _parse_any___inner_alt_1(p, follow);
@@ -32197,7 +32187,7 @@ fn _parse_calc_value__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_calc_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
-    if _kind_set_38(kind) {
+    if _kind_set_39(kind) {
         if _kind_set_21(kind) {
             if p.peek_at(1) == TK_Number {
                 return _parse_calc_value__inner_alt_0(p, follow);
@@ -33427,6 +33417,10 @@ fn _kind_set_37(k: i32) -> bool {
 }
 
 fn _kind_set_38(k: i32) -> bool {
+    return k matches { TK_Dimension | TK_Minus | TK_Number | TK_Plus | TK_String_ | TK_UnknownDimension };
+}
+
+fn _kind_set_39(k: i32) -> bool {
     return k matches { TK_Dimension | TK_Minus | TK_Number | TK_Percentage | TK_Plus | TK_UnknownDimension };
 }
 

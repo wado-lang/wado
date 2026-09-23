@@ -1337,10 +1337,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if alt_kind == TK_LIT_x {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_LIT_y {
+        if _kind_set_0(alt_kind) {
             pos = start + 1;
             break scan_alts;
         } else {

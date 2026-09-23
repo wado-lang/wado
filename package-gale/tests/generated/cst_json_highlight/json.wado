@@ -2037,10 +2037,7 @@ fn scan_value(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if alt_kind == TK_STRING {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_NUMBER {
+        if _kind_set_0(alt_kind) {
             pos = start + 1;
             break scan_alts;
         } else if alt_kind == TK_LIT_LBRACE {
@@ -2057,13 +2054,7 @@ fn scan_value(tokens: &Array<i32>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_true {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_LIT_false {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_LIT_null {
+        } else if _kind_set_1(alt_kind) {
             pos = start + 1;
             break scan_alts;
         } else {
@@ -2215,7 +2206,7 @@ fn _parse_arr__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACKET {
         p.pos += 1;
-        if _kind_set_0(p.peek_kind()) {
+        if _kind_set_2(p.peek_kind()) {
             p.pos -= 1;
             return _parse_arr__inner_alt_0(p);
         } else if p.peek_kind() == TK_LIT_RBRACKET {
@@ -2418,6 +2409,14 @@ pub fn highlight<S: AsStrSlice>(input: S) -> String {
 }
 
 fn _kind_set_0(k: i32) -> bool {
+    return k matches { TK_NUMBER | TK_STRING };
+}
+
+fn _kind_set_1(k: i32) -> bool {
+    return k matches { TK_LIT_false | TK_LIT_null | TK_LIT_true };
+}
+
+fn _kind_set_2(k: i32) -> bool {
     return k matches { TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_false | TK_LIT_null | TK_LIT_true | TK_NUMBER | TK_STRING };
 }
 
