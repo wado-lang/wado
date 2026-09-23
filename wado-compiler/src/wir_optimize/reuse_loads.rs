@@ -5,6 +5,8 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage, WirType, WirTypeId};
 
+use super::util::Footprint;
+
 /// A field chain read off a local: `root.f0.f1…`, outermost field last.
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Key {
@@ -40,60 +42,14 @@ impl Key {
     }
 }
 
-/// What a subtree may write that a chain reads.
-#[derive(Default)]
-struct Kills {
-    everything: bool,
-    locals: IndexSet<String>,
-    fields: IndexSet<String>,
-}
-
-impl Kills {
-    fn of_body(body: &[WirInstr]) -> Self {
-        let mut kills = Self::default();
-        for instr in body {
-            kills.add_tree(instr);
-        }
-        kills
-    }
-
-    fn add_tree(&mut self, instr: &WirInstr) {
-        self.add_node(instr);
-        instr.for_each_child(&mut |child| self.add_tree(child));
-    }
-
-    fn add_node(&mut self, instr: &WirInstr) {
-        match instr {
-            WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
-                self.locals.insert(name.clone());
-            }
-            WirInstr::MultiValueLocalBind { locals, .. } => {
-                self.locals.extend(locals.iter().flatten().cloned());
-            }
-            WirInstr::StructSet { field_name, .. } => {
-                self.fields.insert(field_name.clone());
-            }
-            WirInstr::Call { .. } | WirInstr::CallIndirect { .. } | WirInstr::CallRef { .. } => {
-                self.everything = true;
-            }
-            _ => {}
-        }
-    }
-
-    fn apply(&self, avail: &mut Avail) {
-        if self.everything {
-            avail.clear();
-            return;
-        }
-        avail.retain(|key, _| {
-            !self.locals.contains(&key.root)
-                && !key.fields.iter().any(|(_, f)| self.fields.contains(f))
-        });
-    }
-}
-
 /// Chains whose value a temp can supply here, each with its defining temp.
 type Avail = IndexMap<Key, usize>;
+
+fn forget_written(avail: &mut Avail, writes: &Footprint) {
+    avail.retain(|key, _| {
+        !writes.has_local(&key.root) && !key.fields.iter().any(|(_, f)| writes.may_have_field(f))
+    });
+}
 
 struct Temp {
     name: String,
@@ -135,10 +91,10 @@ impl Reuser {
                 let before = self.avail.clone();
                 self.visit_body(body);
                 self.avail = before;
-                Kills::of_body(body).apply(&mut self.avail);
+                forget_written(&mut self.avail, &Footprint::writes_all(body));
             }
             WirInstr::Loop { body, .. } => {
-                Kills::of_body(body).apply(&mut self.avail);
+                forget_written(&mut self.avail, &Footprint::writes_all(body));
                 let entry = self.avail.clone();
                 self.visit_body(body);
                 self.avail = entry;
@@ -177,9 +133,7 @@ impl Reuser {
             }
             _ => {
                 instr.for_each_boxed_child_mut(&mut |child| self.visit(child));
-                let mut kills = Kills::default();
-                kills.add_node(instr);
-                kills.apply(&mut self.avail);
+                forget_written(&mut self.avail, &Footprint::writes_of_node(instr));
             }
         }
     }

@@ -76,12 +76,16 @@ fn collect_ref_funcs_instr(instr: &WirInstr, pinned: &mut IndexSet<u32>) {
     instr.for_each_child(&mut |child| collect_ref_funcs_instr(child, pinned));
 }
 
-/// The state a subtree reads or writes: locals by name, and everything else
-/// (heap, globals, memory, tables) as one region.
+/// The state a subtree reads or writes: locals and struct fields by name,
+/// the rest of the heap as one region, and a call as any of it.
 #[derive(Default)]
 pub(super) struct Footprint {
     locals: IndexSet<String>,
-    shared: bool,
+    /// Struct fields of any type: aliasing is by name.
+    fields: IndexSet<String>,
+    /// Arrays, globals, linear memory and tables.
+    heap: bool,
+    call: bool,
 }
 
 impl Footprint {
@@ -92,13 +96,42 @@ impl Footprint {
     }
 
     pub(super) fn writes(instr: &WirInstr) -> Self {
+        Self::writes_all(std::slice::from_ref(instr))
+    }
+
+    pub(super) fn writes_all(body: &[WirInstr]) -> Self {
         let mut footprint = Self::default();
-        footprint.add_writes(instr);
+        for instr in body {
+            footprint.add_writes(instr);
+        }
+        footprint
+    }
+
+    /// What `instr` itself writes, its operands left out.
+    pub(super) fn writes_of_node(instr: &WirInstr) -> Self {
+        let mut footprint = Self::default();
+        footprint.add_node_writes(instr);
         footprint
     }
 
     pub(super) fn overlaps(&self, other: &Self) -> bool {
-        (self.shared && other.shared) || self.locals.iter().any(|l| other.locals.contains(l))
+        self.locals.iter().any(|l| other.locals.contains(l))
+            || self.fields.iter().any(|f| other.fields.contains(f))
+            || (self.heap && other.heap)
+            || (self.call && other.touches_heap())
+            || (other.call && self.touches_heap())
+    }
+
+    pub(super) fn has_local(&self, name: &str) -> bool {
+        self.locals.contains(name)
+    }
+
+    pub(super) fn may_have_field(&self, name: &str) -> bool {
+        self.call || self.fields.contains(name)
+    }
+
+    fn touches_heap(&self) -> bool {
+        self.heap || self.call || !self.fields.is_empty()
     }
 
     fn add_reads(&mut self, instr: &WirInstr) {
@@ -106,14 +139,15 @@ impl Footprint {
             WirInstr::LocalGet { name, .. } => {
                 self.locals.insert(name.clone());
             }
+            WirInstr::StructGet { field_name, .. } => {
+                self.fields.insert(field_name.clone());
+            }
             WirInstr::GlobalGet { .. }
-            | WirInstr::StructGet { .. }
             | WirInstr::ArrayGet { .. }
             | WirInstr::ArrayGetS { .. }
             | WirInstr::ArrayGetU { .. }
             | WirInstr::ArrayLen(_)
             | WirInstr::ArrayCopy { .. }
-            | WirInstr::ArrayClone { .. }
             | WirInstr::I32Load { .. }
             | WirInstr::I32Load8U { .. }
             | WirInstr::I32Load8S { .. }
@@ -122,17 +156,23 @@ impl Footprint {
             | WirInstr::I64Load { .. }
             | WirInstr::V128Load { .. }
             | WirInstr::TableGet { .. }
-            | WirInstr::MemorySize
-            | WirInstr::Call { .. }
+            | WirInstr::MemorySize => self.heap = true,
+            // `ArrayClone` reads each element through its copy helper.
+            WirInstr::Call { .. }
             | WirInstr::CallIndirect { .. }
             | WirInstr::CallRef { .. }
-            | WirInstr::BlackBox(_) => self.shared = true,
+            | WirInstr::ArrayClone { .. } => self.call = true,
             _ => {}
         }
         instr.for_each_child(&mut |child| self.add_reads(child));
     }
 
     fn add_writes(&mut self, instr: &WirInstr) {
+        self.add_node_writes(instr);
+        instr.for_each_child(&mut |child| self.add_writes(child));
+    }
+
+    fn add_node_writes(&mut self, instr: &WirInstr) {
         match instr {
             WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
                 self.locals.insert(name.clone());
@@ -140,8 +180,10 @@ impl Footprint {
             WirInstr::MultiValueLocalBind { locals, .. } => {
                 self.locals.extend(locals.iter().flatten().cloned());
             }
+            WirInstr::StructSet { field_name, .. } => {
+                self.fields.insert(field_name.clone());
+            }
             WirInstr::GlobalSet { .. }
-            | WirInstr::StructSet { .. }
             | WirInstr::ArraySet { .. }
             | WirInstr::ArrayCopy { .. }
             | WirInstr::ArrayFill { .. }
@@ -152,14 +194,12 @@ impl Footprint {
             | WirInstr::I64Store { .. }
             | WirInstr::V128Store { .. }
             | WirInstr::MemoryGrow(_)
-            | WirInstr::MemoryFill { .. }
-            | WirInstr::Call { .. }
-            | WirInstr::CallIndirect { .. }
-            | WirInstr::CallRef { .. }
-            | WirInstr::BlackBox(_) => self.shared = true,
+            | WirInstr::MemoryFill { .. } => self.heap = true,
+            WirInstr::Call { .. } | WirInstr::CallIndirect { .. } | WirInstr::CallRef { .. } => {
+                self.call = true;
+            }
             _ => {}
         }
-        instr.for_each_child(&mut |child| self.add_writes(child));
     }
 }
 
