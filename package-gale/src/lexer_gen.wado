@@ -38,6 +38,7 @@ use {
 } from "./superclass.wado";
 use { MemberDecls, members_present } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
+use { clip_to_scalars } from "./g4/unicode.wado";
 use {
     ModeAttrUse,
     body_mode_attr_use,
@@ -4374,23 +4375,8 @@ fn bound_char(chars: &List<char>, c: char, after: bool) -> i32 {
 /// The pattern of the arm every char no other arm claims falls to.
 global FALLBACK_PATTERN: String = "_";
 
-global SURROGATE_LO: i32 = 0xD800;
-global SURROGATE_HI: i32 = 0xDFFF;
-
-/// The code points `[lo, hi]` holds that are `char`s. A cut can land on a
-/// surrogate, which no `char` literal can name, so such an end is pulled back to
-/// the nearest scalar and an interval left empty is dropped.
-fn scalar_interval(lo: i32, hi: i32) -> Option<[char, char]> {
-    let start = if lo >= SURROGATE_LO && lo <= SURROGATE_HI { SURROGATE_HI + 1 } else { lo };
-    let end = if hi >= SURROGATE_LO && hi <= SURROGATE_HI { SURROGATE_LO - 1 } else { hi };
-    if start > end {
-        return Option::None;
-    }
-    return Option::Some([char::from_u32_unchecked(start as u32), char::from_u32_unchecked(end as u32)]);
-}
-
-/// One branch of the emitted first-char dispatch: a char pattern and the
-/// `try_` calls a char matching it must run, in grammar order.
+/// One arm of the emitted first-char dispatch: a char pattern and the `try_`
+/// calls a char matching it must run, in grammar order.
 struct DispatchGroup {
     pattern: String,
     calls: List<i32>,
@@ -4423,18 +4409,19 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     let mut groups: List<DispatchGroup> = [];
     let mut group_by_calls = TreeMap::<List<i32>, i32>::new();
     for let mut i = 0; i + 1 < points.len(); i += 1 {
-        let Some(span) = scalar_interval(points[i], points[i + 1] - 1) else {
+        let mut spans: List<CharRange> = [];
+        clip_to_scalars(&mut spans, points[i], points[i + 1] - 1);
+        if spans.is_empty() {
             continue;
-        };
-        let [lo, hi] = span;
+        }
         let mut members: List<i32> = [];
         for let mut j = 0; j < calls.len(); j += 1 {
             if calls[j].is_catch_all {
                 continue;
             }
-            // The interval lies wholly inside each range it meets, so its low
-            // end answers for all of it.
-            if calls[j].is_wildcard || range_index_matches(&range_indexes[j], lo) {
+            // The interval lies wholly inside each range it meets, so any char
+            // of it answers for all of it.
+            if calls[j].is_wildcard || range_index_matches(&range_indexes[j], spans[0].start) {
                 members.push(j);
             }
         }
@@ -4447,12 +4434,14 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         // Grammar order, so a same-length match goes to the first rule in the
         // grammar (ANTLR4's tie-break). Insertion order does not carry it.
         members.sort();
-        let pattern = `${char_range_pat(lo..=hi)}`;
-        if let Some(gi) = group_by_calls.get(members) {
-            groups[gi].pattern.push_str(` | ${pattern}`);
-        } else {
-            group_by_calls[members] = groups.len();
-            groups.push(DispatchGroup { pattern, calls: members });
+        for let span of &spans {
+            let pattern = `${char_range_pat(span.start..=span.end)}`;
+            if let Some(gi) = group_by_calls.get(members) {
+                groups[gi].pattern.push_str(` | ${pattern}`);
+            } else {
+                group_by_calls[members] = groups.len();
+                groups.push(DispatchGroup { pattern, calls: members });
+            }
         }
     }
 
@@ -4549,19 +4538,18 @@ fn gen_dispatch_groups(
         gen_group_calls(w, calls, &groups[0].calls, needs_extras, has_actions, has_members);
         return;
     }
-    // One `match` rather than an else-if chain: the arms are first-match-wins
-    // either way, and a chain puts the letter and digit ranges a real grammar
-    // spends its time on behind every punctuation branch.
+    // One `match` rather than an else-if chain: the arms are a partition, so a
+    // chain's ordering buys nothing and puts the letter and digit ranges a real
+    // grammar spends its time on behind every punctuation branch.
+    let has_wildcard_arm = groups.iter_ref().any(|g| g.pattern == FALLBACK_PATTERN);
     w.begin("match first_char");
-    let mut has_fallback = false;
     for let g of groups {
-        has_fallback = has_fallback || g.pattern == FALLBACK_PATTERN;
         w.begin(`${g.pattern} =>`);
         gen_group_calls(w, calls, &g.calls, needs_extras, has_actions, has_members);
         w.end_with(",");
     }
     // `char` has no finite case list, so the arms alone never exhaust it.
-    if !has_fallback {
+    if !has_wildcard_arm {
         w.line("_ => {},");
     }
     w.end();

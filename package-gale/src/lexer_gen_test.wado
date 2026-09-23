@@ -213,13 +213,23 @@ test "gen_lexer: tail alternation of equal length keeps the first-match emit" {
 
 test "gen_lexer: first-match arms are siblings, not a cascade" {
     // Nesting each arm inside the previous one's `if !ok` costs a level per
-    // alternative for a guard the flat form already carries.
-    let out = lexer_source("lexer grammar L; K : ('a' | 'b' | 'c' | 'd') 'z' ;");
-    assert !out.contains("alts_ok_"), out;
-    for let line of out.lines() {
+    // alternative for a guard the flat form already carries, so depth would
+    // grow with the arm count.
+    let two = lexer_source("lexer grammar L; K : ('a' | 'b') 'z' ;");
+    let five = lexer_source("lexer grammar L; K : ('a' | 'b' | 'c' | 'd' | 'e') 'z' ;");
+    assert !five.contains("alts_ok_"), five;
+    assert max_indent(&five) == max_indent(&two), five;
+}
+
+fn max_indent<S: AsStrSlice>(source: S) -> i32 {
+    let mut deepest = 0;
+    for let line of source.lines() {
         let indent = line.len() - line.trim_start().len();
-        assert indent < 24, line;
+        if indent > deepest {
+            deepest = indent;
+        }
     }
+    return deepest;
 }
 
 test "gen_lexer: alternation followed by a suffix keeps the first-match emit" {
