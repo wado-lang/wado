@@ -703,10 +703,9 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A supertrait clause naming something that is not a declared trait.
-    UnknownSupertrait {
-        trait_name: String,
-        supertrait: String,
+    /// A bound naming something that is not a declared trait.
+    UnknownBound {
+        name: String,
         span: Span,
     },
 
@@ -1781,15 +1780,9 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::UnknownSupertrait {
-                trait_name,
-                supertrait,
-                span,
-            } => (
-                Code::TraitDeclInvalid,
-                format!(
-                    "supertrait '{supertrait}' of trait '{trait_name}' is not a declared trait"
-                ),
+            TypeError::UnknownBound { name, span } => (
+                Code::UnknownType,
+                format!("'{name}' is not a declared trait"),
                 *span,
             ),
             TypeError::CircularSupertrait {
