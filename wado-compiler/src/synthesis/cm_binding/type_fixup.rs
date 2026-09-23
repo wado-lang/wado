@@ -18,7 +18,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
-use crate::synthesis::common::{cast, i32_const, option_none, synth_span};
+use crate::synthesis::common::{cast, option_none, synth_span};
 
 use super::import_adapter::is_gc_passthrough_param;
 use super::types::{CmStdlibNames, cm_type_to_type_id, flatten_param_type, is_wasm_flat_type};
@@ -117,30 +117,23 @@ fn replace_wasi_derived_type_recursive(
                 );
             }
         }
-        Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
-            let tt = type_table.borrow();
-            if let Some(new_args) = tt.generic_type_args(user_type)
+        Type::Generic(g)
+            if (g.name == names.result && g.args.len() == 2) || names.is_tree_map(g) =>
+        {
+            let new_args = type_table.borrow().generic_type_args(user_type);
+            if let Some(new_args) = new_args
                 && new_args.len() == 2
             {
-                let new_ok = new_args[0];
-                let new_err = new_args[1];
-                drop(tt);
-                replace_wasi_derived_type_recursive(
-                    adapter,
-                    &g.args[0],
-                    new_ok,
-                    cm_interface_registry,
-                    wasi_package,
-                    type_table,
-                );
-                replace_wasi_derived_type_recursive(
-                    adapter,
-                    &g.args[1],
-                    new_err,
-                    cm_interface_registry,
-                    wasi_package,
-                    type_table,
-                );
+                for (wasi_arg, &new_arg) in g.args.iter().zip(new_args.iter()) {
+                    replace_wasi_derived_type_recursive(
+                        adapter,
+                        wasi_arg,
+                        new_arg,
+                        cm_interface_registry,
+                        wasi_package,
+                        type_table,
+                    );
+                }
             }
         }
         _ => {}
@@ -496,71 +489,6 @@ fn fixup_expr_type(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) {
     }
 }
 
-/// Flatten a Wado-level arg into flat CM ABI args at the call site.
-///
-/// For multi-flat types like `Option<T>`, the Wado-level arg (e.g., `null`)
-/// is expanded into multiple i32 args (discriminant + payload).
-fn flatten_arg_for_call_site(
-    arg: &TirExpr,
-    flat_tys: &[TypeId],
-    flat_args: &mut Vec<TirExpr>,
-    names: &CmStdlibNames,
-) {
-    // Unwrap Cast nodes transparently
-    let inner = match &arg.kind {
-        TirExprKind::Cast { expr, .. } => expr.as_ref(),
-        _ => arg,
-    };
-    match &inner.kind {
-        // null literal → discriminant=0, payload=0 for each flat type
-        TirExprKind::Null => {
-            for _ in flat_tys {
-                flat_args.push(i32_const(0));
-            }
-        }
-        // VariantConstruct None → discriminant=0, payload=0 for each flat type
-        TirExprKind::VariantConstruct {
-            case_name,
-            payload: None,
-            ..
-        } if case_name == &names.none_name => {
-            for _ in flat_tys {
-                flat_args.push(i32_const(0));
-            }
-        }
-        // VariantConstruct Some(value) → discriminant=1, then flatten inner value
-        TirExprKind::VariantConstruct {
-            case_name,
-            payload: Some(value),
-            ..
-        } if case_name == &names.some_name => {
-            flat_args.push(i32_const(1));
-            let remaining = &flat_tys[1..];
-            if remaining.len() == 1 {
-                // Single-value payload: pass through (e.g., enum discriminant)
-                flatten_arg_for_call_site(value, remaining, flat_args, names);
-            } else {
-                // Multi-value payload (e.g., String → ptr+len): pass through as-is
-                // The binding will lower it internally
-                flat_args.push((**value).clone());
-                for _ in 2..flat_tys.len() {
-                    flat_args.push(i32_const(0));
-                }
-            }
-        }
-        // For any other expression, this is an arbitrary Option<T> value.
-        // Currently not supported — would need runtime null-check logic.
-        _ => {
-            panic!(
-                "StaticCall adapter: cannot flatten arg of kind {:?} into {} flat types at call site; \
-                 only null and VariantConstruct literals are supported",
-                inner.kind,
-                flat_tys.len()
-            );
-        }
-    }
-}
-
 /// Collect local type updates from Let stmts that were modified by the rewrite.
 /// This is needed because the lower phase pre-populates `locals`, and the streaming
 /// adapter rewrite changes Let binding types from Result<..> to i32.
@@ -799,11 +727,8 @@ fn cast_args_to_adapter_params(adapter: &TirFunction, args: &mut [CallArg], para
     }
 }
 
-/// Flatten call-site args to the binding's flat CM param shape. GC
-/// passthrough params (String / List / Option-of-GC) pass the GC ref through
-/// — a bare `null` becomes a typed `None` — while multi-flat aggregates
-/// expand via [`flatten_arg_for_call_site`]. `skip_self` offsets into the
-/// WASI param list for method calls, whose `args` exclude the receiver.
+/// Call-site args in the binding's param shape: a GC passthrough param passes
+/// through, a bare `null` typed as its `None`. `skip_self` skips the receiver.
 fn flatten_call_site_args(
     func_info: &CmFunctionInfo,
     args: &[TirExpr],
@@ -841,10 +766,12 @@ fn flatten_call_site_args(
             } else {
                 flat.push(arg.clone());
             }
-        } else if flat_tys.len() == 1 {
-            flat.push(arg.clone());
         } else {
-            flatten_arg_for_call_site(arg, &flat_tys, &mut flat, names);
+            assert!(
+                flat_tys.len() == 1,
+                "a direct CM import param takes one flat slot, got {param_type:?}"
+            );
+            flat.push(arg.clone());
         }
     }
     flat

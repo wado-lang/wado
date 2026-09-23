@@ -296,9 +296,8 @@ fn from_hyper_response_error(err: hyper::Error) -> HttpError {
     if err.is_timeout() {
         return HttpError::HttpResponseTimeout;
     }
-    // Anything else travels as the hyper error itself: `error_to_p3` unwraps a
-    // `wasi:http` error out of its source before rendering, so recovering one
-    // here would only duplicate that.
+    // `error_to_p3` already unwraps a `wasi:http` error from the hyper error's
+    // source, so it travels as is.
     HttpError::Hyper(err)
 }
 

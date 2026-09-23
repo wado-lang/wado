@@ -826,7 +826,7 @@ pub(super) fn synthesize_lift_list(
 }
 
 /// `(TreeMap<K, V>, K, V)` when `tid` is a `TreeMap<K, V>`, else `None`.
-fn tree_map_instance(tt: &TypeTable, tid: TypeId) -> Option<(TypeId, TypeId, TypeId)> {
+pub(super) fn tree_map_instance(tt: &TypeTable, tid: TypeId) -> Option<(TypeId, TypeId, TypeId)> {
     let ResolvedType::GenericInstance { def, type_args } = tt.get(tid) else {
         return None;
     };
@@ -837,11 +837,8 @@ fn tree_map_instance(tt: &TypeTable, tid: TypeId) -> Option<(TypeId, TypeId, Typ
     }
 }
 
-/// Lift a `map<K, V>` from linear memory at `addr`.
-///
-/// Each pair is inserted with `map[k] = v`, whose last-wins update is the rule
-/// the Component Model states for a repeated key. `override_map_ty` is the
-/// caller's own `TreeMap<K, V>`, so the lift yields the parameter's exact type.
+/// Lift a `map<K, V>` at `addr` into `override_map_ty`, or a fresh `TreeMap`.
+/// `map[k] = v` keeps the last pair for a repeated key, as the CM requires.
 pub(super) fn synthesize_lift_map(
     key_ty: &Type,
     value_ty: &Type,

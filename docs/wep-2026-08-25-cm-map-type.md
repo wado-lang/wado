@@ -10,7 +10,7 @@ and a component claiming 0.3.1 must lift and lower it.
 
 `map<K, V>` is a _specialized_ value type. The Component Model despecializes it
 to `list<tuple<K, V>>` (`Explainer.md`, "Specialized value types"), so it shares
-that type's canonical ABI exactly — only the type-constructor byte differs
+that type's canonical ABI exactly. Only the type-constructor byte differs
 (`0x63`). What the specialization buys is intent: a bindings generator is told
 to present an associative container rather than a list of pairs. The spec adds
 no key-uniqueness or ordering guarantee, and states that a generator _may_
@@ -20,8 +20,8 @@ Wado has the container this is asking for: `TreeMap<K, V>` (`core:collections`)
 iterates in insertion order and already answers `{ k: v, … }` literals through
 `From<Array<[String, V]>>`. What it does not do is cross the component boundary.
 
-The toolchain is ready — `wit-parser`, `wasmparser`, `wasm-encoder`, and
-wasmtime all carry `map` — so nothing here waits on a runtime upgrade.
+`wit-parser`, `wasmparser`, `wasm-encoder`, and wasmtime all carry `map`, so
+nothing here waits on a runtime upgrade.
 
 ## Decision
 
@@ -46,7 +46,7 @@ keytype ::= bool | s8 | u8 | s16 | u16 | s32 | u32 | s64 | u64 | char | string
 
 At a component boundary, `K` must be one of `bool`, `i8`–`i64`, `u8`–`u64`,
 `char`, `String`. A `TreeMap` with any other key is diagnosed at the boundary,
-naming the key type and the admissible set — not silently degraded to
+naming the key type and the admissible set. It is not degraded to
 `list<tuple<K, V>>`, which would make the emitted WIT disagree with the source.
 `TreeMap` itself is unchanged: any `K: Ord` remains legal away from the
 boundary.
@@ -73,12 +73,12 @@ second full copy of the map's contents on every crossing. The despecialization
 describes the _bytes_; reusing it as a Wado value in between is not the same
 thing.
 
-The binding also does not learn `TreeMap`'s representation — an AA-tree over two
-backing lists with a tombstone flag, which would break the moment the tree is
+The binding also does not learn `TreeMap`'s representation, an AA-tree over two
+backing lists with a tombstone flag. That would break the moment the tree is
 retuned. Everything it needs is public, and is what user code writes:
 
 - **Lift** (`map` → `TreeMap`): `TreeMap::new()`, then the list-lift loop with
-  its accumulator swapped — each iteration lifts `K` at the pair's offset and
+  its accumulator swapped. Each iteration lifts `K` at the pair's offset and
   `V` at the next, and calls `IndexAssign::index_assign` (`map[k] = v`). That
   is a last-wins, order-preserving insert, exactly the rule the spec states for
   a duplicate key.
@@ -86,7 +86,7 @@ retuned. Everything it needs is public, and is what user code writes:
   live pairs, not tombstones), then the loop walks `entries()` and writes each
   pair at `base + i * stride`. The iterator yields `[&K, &V]`, so the lower
   reads through the references and copies nothing.
-- **Free**: the list free, unchanged — the buffer is a list buffer.
+- **Free**: the list free, unchanged, since the buffer is a list buffer.
 
 `entries()` yields insertion order and skips tombstones, so a lowered `map`
 never carries a duplicate. Round-tripping a `TreeMap` is therefore the identity,
@@ -95,15 +95,15 @@ spec permits.
 
 The lower is the one place this costs new machinery. The existing loop is
 index-driven (`len` + `index_value`), and a `TreeMap` has no positional accessor
-over live pairs — a tombstone breaks the correspondence between position and
-index — so the CM binding gains an iterator-driven loop.
+over live pairs, because a tombstone parts position from index. So the CM
+binding gains an iterator-driven loop.
 
 ### Feature gating
 
 `map` is ungated inside Wado: a component Wado emits targets the WASI 0.3.1
 baseline, where 🗺️ is required. Wado's own validation already admits it
-(`WasmFeatures::all()`). The one switch to flip is the embedder's —
-`Config::wasm_component_model_map(true)` in `wado-cli`'s runtime — so `wado
+(`WasmFeatures::all()`). The one switch to flip is the embedder's:
+`Config::wasm_component_model_map(true)` in `wado-cli`'s runtime, so `wado
 run` / `test` / `serve` accept what the compiler emits.
 
 ## Consequences
@@ -111,18 +111,24 @@ run` / `test` / `serve` accept what the compiler emits.
 - `wado wit` emits `map<k, v>` for a `TreeMap<K, V>` in an exported signature,
   and `wado-from-idl` / `wit_consume` produce `TreeMap<K, V>` for `map<k, v>`,
   so the `wasi:*` stdlib regenerates cleanly when a 0.3.1 interface adopts one.
-- `package-cm-catalog` gains `map` rows. The catalog already carries
-  `id_assoc_array(List<[String, u32]>)` — the despecialized shape — so the new
-  rows pin the _specialization_: same bytes, different type constructor.
+- `package-cm-catalog` gains `map` rows. The catalog already carries the
+  despecialized shape, `id_assoc_array(List<[String, u32]>)`, so the new rows
+  pin the _specialization_: same bytes, different type constructor.
 - A `TreeMap` key outside `keytype` is a boundary diagnostic, not a silent
   fallback.
-- Every method the binding calls — `new`, `index_assign`, `len`, `entries`, and
-  the entry iterator's `next` — is a registered `CompilerItem`. That is not
-  bookkeeping: `liveness` prunes on the call graph, and a call the compiler
-  mints afterwards has no edge for that graph to follow, so an unregistered
-  method is simply absent by the time the binding names it. Registering it is
-  also what lets the binding ask the registry for the name instead of spelling
-  it.
+- Every method the binding calls is a registered `CompilerItem`: `new`,
+  `index_assign`, `len`, `entries`, and the entry iterator's `next`.
+  `liveness` prunes on the call graph, and a call the compiler mints afterwards
+  has no edge in it, so an unregistered method is gone by the time the binding
+  names it. The registry also gives the binding the name to call.
 - An imported component's `map` crosses in both directions too: its binding
   module imports `TreeMap` from `core:collections`, and the import adapter
   lowers a `TreeMap` argument through the same pair buffer.
+
+## Roadmap
+
+Nothing is left: export and import signatures both carry a `map`.
+
+## Known gaps
+
+None known.

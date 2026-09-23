@@ -460,11 +460,8 @@ pub fn generic_method_call(
     )
 }
 
-/// [`generic_method_call`] for a receiver whose impl the program may not
-/// otherwise instantiate. A synthesised call is the only reference to
-/// `TreeMap<String, u32>::entries` in a program that merely passes a map across
-/// the component boundary, so the call has to carry the impl arguments that
-/// ask monomorphization for it.
+/// [`generic_method_call`] carrying its impl arguments, for a method that only
+/// a synthesized call reaches, so monomorphization still instantiates it.
 pub fn generic_method_call_monomorphized(
     receiver: TirExpr,
     head: &FqTypeName,

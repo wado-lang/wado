@@ -2139,9 +2139,8 @@ impl CompilerItems {
         self.require_struct(item).1
     }
 
-    /// [`Self::struct_name`] for an item whose module may not be loaded —
-    /// `core:collections` is not auto-imported, so `TreeMap` is absent from a
-    /// program that never names it.
+    /// [`Self::struct_name`] for an item whose module may not be loaded, such as
+    /// `TreeMap`: `core:collections` is not auto-imported.
     pub fn struct_name_opt(&self, item: CompilerItem) -> Option<&str> {
         if let Resolved::Struct { name, .. } = self.get(item)? {
             return Some(name.as_str());

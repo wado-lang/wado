@@ -20,6 +20,7 @@ use crate::synthesis::common::{
     internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, split_packed_ptr_len, synth_span,
 };
 
+use super::lift::tree_map_instance;
 use super::types::{
     LowerContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size, cm_layout_i32,
     cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower, disc_store_op, field_access,
@@ -817,10 +818,6 @@ fn store_ptr_len(addr: TirExpr, base_local: u32, len_local: u32, stmts: &mut Vec
 }
 
 /// Lower a `TreeMap<K, V>` (GC value) to a CM `map` at `addr`.
-///
-/// The walk drives `entries()` rather than an index: a removal leaves a
-/// tombstone, so position and index part ways. Its `[&K, &V]` is read through,
-/// so no key or value is copied on the way to memory.
 pub(super) fn synthesize_lower_map_to_memory(
     key_type: &Type,
     value_type: &Type,
@@ -836,9 +833,8 @@ pub(super) fn synthesize_lower_map_to_memory(
     stmts
 }
 
-/// The pair buffer behind [`synthesize_lower_map_to_memory`], in the shape
-/// [`synthesize_lower_list_to_buffer`] has, so the flat path can take the two
-/// slots without going through linear memory first.
+/// The pair buffer of a `TreeMap<K, V>` as `(stmts, base, len)`, walked through
+/// `entries()` because a removal's tombstone parts position from index.
 pub(super) fn synthesize_lower_map_to_buffer(
     key_type: &Type,
     value_type: &Type,
@@ -855,16 +851,9 @@ pub(super) fn synthesize_lower_map_to_buffer(
     let pair_size = layout.size as i32;
     let pair_align = layout.align as i32;
 
-    let map_type_id = value.type_id;
-    let (key_tid, value_tid) = {
-        let tt = ctx.type_table.borrow();
-        match tt.get(map_type_id) {
-            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
-                (type_args[0], type_args[1])
-            }
-            other => panic!("a `map` lower needs a two-argument TreeMap, got {other:?}"),
-        }
-    };
+    let (map_type_id, key_tid, value_tid) =
+        tree_map_instance(&ctx.type_table.borrow(), value.type_id)
+            .expect("a `map` lower is handed a `TreeMap<K, V>`");
 
     let (
         map_head,
@@ -1402,9 +1391,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             flat_args.push(local_ref(base_local, "$list_base", TypeTable::I32));
             flat_args.push(local_ref(len_local, "$list_len", TypeTable::I32));
         }
-        Type::Generic(g)
-            if names.tree_map.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 =>
-        {
+        Type::Generic(g) if names.is_tree_map(g) => {
             let (map_stmts, base_local, len_local) = synthesize_lower_map_to_buffer(
                 &g.args[0], &g.args[1], value, next_local, locals, ctx,
             );
@@ -1997,13 +1984,9 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
         Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
             synthesize_lower_list_to_memory(&g.args[0], value, addr, next_local, locals, ctx)
         }
-        Type::Generic(g)
-            if names.tree_map.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 =>
-        {
-            synthesize_lower_map_to_memory(
-                &g.args[0], &g.args[1], value, addr, next_local, locals, ctx,
-            )
-        }
+        Type::Generic(g) if names.is_tree_map(g) => synthesize_lower_map_to_memory(
+            &g.args[0], &g.args[1], value, addr, next_local, locals, ctx,
+        ),
         Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
             let ok = ctx.cm_interface_registry.value_type(&g.args[0]);
             let err = ctx.cm_interface_registry.value_type(&g.args[1]);

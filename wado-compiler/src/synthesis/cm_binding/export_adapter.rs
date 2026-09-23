@@ -958,7 +958,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 free_ptr_len_temp(tmp_ptr_local, stmts);
                 (lifted, 2)
             }
-            n if names.tree_map.as_deref() == Some(n) && generic.args.len() == 2 => {
+            _ if names.is_tree_map(generic) => {
                 let tmp_ptr_local =
                     spill_ptr_len_to_temp(flat_param_locals, next_local, stmts, locals);
                 let lifted = synthesize_lift_map(

@@ -4837,10 +4837,8 @@ fn is_return_type_supported_with_types(
                         is_return_type_supported_with_types(arg, enums, resources, structs)
                     })
                 }
-                // A `TreeMap<K, V>` is `map<K, V>`; its key is narrowed to
-                // the CM `keytype` subset by the boundary representability
-                // check, which holds the resolved types this name-level pass
-                // does not.
+                // A `map` key's `keytype` restriction needs resolved types, so
+                // the boundary representability check enforces it, not this pass.
                 "List" | "Option" | "TreeMap" => {
                     // A list/option element is any supported value type (e.g.
                     // `list<list<u8>>`, `list<[field-name, field-value]>`).

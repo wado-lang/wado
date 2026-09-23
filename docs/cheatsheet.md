@@ -1694,9 +1694,8 @@ Streaming a file (rather than holding it) stays on `wasi:filesystem`; see
 [`core:collections`](./stdlib-core-collections.md).
 
 `TreeMap<K, V>` is also the Wado spelling of the Component Model `map<K, V>`, so
-it crosses a component boundary. There `K` is restricted to the CM key types —
-`bool`, `char`, `String`, or an integer — and a repeated key on the wire takes
-the last pair's value.
+it crosses a component boundary. There `K` must be `bool`, `char`, `String`, or
+an integer. A repeated key on the wire takes the last pair's value.
 
 ```wado
 use { TreeMap, TreeSet } from "core:collections";

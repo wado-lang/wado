@@ -586,9 +586,8 @@ async fn dispatch_request(
     let (parts, body) = req.into_parts();
     let body = body.map_err(HttpError::from);
     let http_req = http::Request::from_parts(parts, body);
-    // The conversion consults the hooks for header policy only; the Wado hooks
-    // customise the *outgoing* path (`send_request`) and nothing an incoming
-    // request is measured against, so the defaults answer identically here.
+    // The hooks decide header policy only, and the Wado hooks change nothing
+    // but outgoing requests, so the defaults give the same answer here.
     let (wasi_req, io) = WasiRequest::from_http(wasmtime_wasi_http::default_hooks(), http_req);
 
     let (resp_tx, resp_rx) = oneshot::channel::<HandlerOutcome>();

@@ -7,7 +7,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ast::{NamedType, Type};
+use crate::ast::Type;
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -26,11 +26,7 @@ use crate::synthesis::common::{
 use super::lift::{
     lift_variant_from_disc, materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum,
 };
-use super::lower::{
-    flatten_cm_record_fields, synthesize_flatten_option_to_flat_args,
-    synthesize_flatten_result_to_flat_args, synthesize_flatten_value_to_flat_args,
-    synthesize_lower_wasi_type_to_memory,
-};
+use super::lower::{synthesize_flatten_value_to_flat_args, synthesize_lower_wasi_type_to_memory};
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, cm_held_type_to_type_id, cm_layout_i32,
     cm_param_store_plan, cm_type_to_type_id, cm_val_type_to_type_id, flatten_param_type,
@@ -656,20 +652,9 @@ enum ParamLowering<'a> {
     /// General List<T>: single placeholder param; elements are lowered into a
     /// realloc'd linear-memory buffer passed as (ptr, len).
     ListBuffer { elem: &'a Type },
-    /// The aggregates below each take a single GC-ref param, flattened into
-    /// flat slots or, on a params-buffer call, lowered into the buffer.
-    /// WASI record.
-    RecordFlatten { named: &'a NamedType },
-    /// WASI variant.
-    Variant,
-    /// Option<T>.
-    OptionValue { payload: &'a Type },
-    /// Result<T, E>.
-    ResultValue { ok: &'a Type, err: &'a Type },
-    /// Non-empty tuple.
-    TupleFlatten,
-    /// `TreeMap<K, V>`, as a pair buffer's (ptr, count).
-    MapValue,
+    /// Record, variant, option, result, tuple, or map: a single GC-ref param,
+    /// flattened into flat slots or, on a params-buffer call, lowered there.
+    Aggregate,
     /// Scalars/handles: flat params matching the CM ABI, forwarded unchanged.
     Direct,
 }
@@ -718,38 +703,21 @@ fn classify_param<'t>(
             ParamLowering::ListBuffer { elem: &g.args[0] }
         }
         Type::Named(n)
-            if registry
-                .source_interface(n)
-                .as_deref()
-                .is_some_and(|s| registry.get_struct_fields_by_source(s, &n.name).is_some()) =>
+            if registry.source_interface(n).as_deref().is_some_and(|s| {
+                registry.get_struct_fields_by_source(s, &n.name).is_some()
+                    || registry.get_variant_cases_by_source(s, &n.name).is_some()
+            }) =>
         {
-            ParamLowering::RecordFlatten { named: n }
-        }
-        Type::Named(n)
-            if registry
-                .source_interface(n)
-                .as_deref()
-                .is_some_and(|s| registry.get_variant_cases_by_source(s, &n.name).is_some()) =>
-        {
-            ParamLowering::Variant
-        }
-        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
-            ParamLowering::OptionValue {
-                payload: &g.args[0],
-            }
-        }
-        Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
-            ParamLowering::ResultValue {
-                ok: &g.args[0],
-                err: &g.args[1],
-            }
+            ParamLowering::Aggregate
         }
         Type::Generic(g)
-            if names.tree_map.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 =>
+            if (g.name == names.option && g.args.len() == 1)
+                || (g.name == names.result && g.args.len() == 2)
+                || names.is_tree_map(g) =>
         {
-            ParamLowering::MapValue
+            ParamLowering::Aggregate
         }
-        Type::Tuple(elems) if !elems.is_empty() => ParamLowering::TupleFlatten,
+        Type::Tuple(elems) if !elems.is_empty() => ParamLowering::Aggregate,
         // Scalars, plain enums/flags, and resource handles are a single flat
         // param forwarded unchanged; likewise `&self`/`&mut self` receivers
         // and the async/handle generics, all i32 handles. A `Named` here has
@@ -871,12 +839,7 @@ impl<'a> AdapterBuilder<'a> {
                 ParamLowering::PackedPtrLen { .. } | ParamLowering::ListBuffer { .. } => {
                     self.push_param(param_name.clone(), TypeTable::I32);
                 }
-                ParamLowering::RecordFlatten { .. }
-                | ParamLowering::Variant
-                | ParamLowering::OptionValue { .. }
-                | ParamLowering::ResultValue { .. }
-                | ParamLowering::TupleFlatten
-                | ParamLowering::MapValue => {
+                ParamLowering::Aggregate => {
                     let type_id = self.cm_type_id(param_type);
                     self.push_param(param_name.clone(), type_id);
                 }
@@ -916,117 +879,23 @@ impl<'a> AdapterBuilder<'a> {
                     let param_local = self.params[plan.first_param].local_index;
                     self.emit_list_buffer(plan.name, param_local, elem);
                 }
-                ParamLowering::RecordFlatten { .. }
-                | ParamLowering::Variant
-                | ParamLowering::OptionValue { .. }
-                | ParamLowering::ResultValue { .. }
-                | ParamLowering::TupleFlatten
-                | ParamLowering::MapValue
-                    if self.params_in_buffer =>
-                {
-                    let param = &self.params[plan.first_param];
-                    self.flat_args
-                        .push(local_ref(param.local_index, plan.name, param.type_id));
-                }
-                ParamLowering::RecordFlatten { named } => {
-                    let source = self
-                        .lower_ctx
-                        .cm_interface_registry
-                        .source_interface(named)
-                        .expect("wasi struct source_interface present");
-                    let wado_fields = self
-                        .lower_ctx
-                        .cm_interface_registry
-                        .get_struct_fields_with_wado_names_by_source(&source, &named.name)
-                        .expect("struct fields_with_wado_names present when fields are");
-                    let param = &self.params[plan.first_param];
-                    let (param_local, struct_type_id) = (param.local_index, param.type_id);
-                    // Flatten each field through the shared helper so a String /
-                    // Option / nested-record / enum field expands to its own flat
-                    // slots, matching the import's flattened signature.
-                    flatten_cm_record_fields(
-                        wado_fields,
-                        param_local,
-                        plan.name,
-                        struct_type_id,
-                        &format!("${}", plan.name),
-                        &mut self.next_local,
-                        &mut self.body_stmts,
-                        &mut self.locals,
-                        &mut self.flat_args,
-                        &self.lower_ctx,
-                    );
-                }
-                ParamLowering::Variant => {
+                ParamLowering::Aggregate => {
                     let param = &self.params[plan.first_param];
                     let param_ref = local_ref(param.local_index, plan.name, param.type_id);
-                    synthesize_flatten_value_to_flat_args(
-                        plan.ty,
-                        param_ref,
-                        &format!("${}", plan.name),
-                        &mut self.next_local,
-                        &mut self.body_stmts,
-                        &mut self.locals,
-                        &mut self.flat_args,
-                        &self.lower_ctx,
-                    );
-                }
-                ParamLowering::OptionValue { payload } => {
-                    let param = &self.params[plan.first_param];
-                    let param_ref = local_ref(param.local_index, plan.name, param.type_id);
-                    synthesize_flatten_option_to_flat_args(
-                        payload,
-                        param_ref,
-                        &format!("${}", plan.name),
-                        &mut self.next_local,
-                        &mut self.body_stmts,
-                        &mut self.locals,
-                        &mut self.flat_args,
-                        &self.lower_ctx,
-                    );
-                }
-                ParamLowering::ResultValue { ok, err } => {
-                    let param = &self.params[plan.first_param];
-                    let param_ref = local_ref(param.local_index, plan.name, param.type_id);
-                    synthesize_flatten_result_to_flat_args(
-                        ok,
-                        err,
-                        param_ref,
-                        &format!("${}", plan.name),
-                        &mut self.next_local,
-                        &mut self.body_stmts,
-                        &mut self.locals,
-                        &mut self.flat_args,
-                        &self.lower_ctx,
-                    );
-                }
-                ParamLowering::TupleFlatten => {
-                    let param = &self.params[plan.first_param];
-                    let param_ref = local_ref(param.local_index, plan.name, param.type_id);
-                    synthesize_flatten_value_to_flat_args(
-                        plan.ty,
-                        param_ref,
-                        &format!("${}", plan.name),
-                        &mut self.next_local,
-                        &mut self.body_stmts,
-                        &mut self.locals,
-                        &mut self.flat_args,
-                        &self.lower_ctx,
-                    );
-                }
-                ParamLowering::MapValue => {
-                    let param = &self.params[plan.first_param];
-                    let param_ref = local_ref(param.local_index, plan.name, param.type_id);
-                    synthesize_flatten_value_to_flat_args(
-                        plan.ty,
-                        param_ref,
-                        &format!("${}", plan.name),
-                        &mut self.next_local,
-                        &mut self.body_stmts,
-                        &mut self.locals,
-                        &mut self.flat_args,
-                        &self.lower_ctx,
-                    );
+                    if self.params_in_buffer {
+                        self.flat_args.push(param_ref);
+                    } else {
+                        synthesize_flatten_value_to_flat_args(
+                            plan.ty,
+                            param_ref,
+                            &format!("${}", plan.name),
+                            &mut self.next_local,
+                            &mut self.body_stmts,
+                            &mut self.locals,
+                            &mut self.flat_args,
+                            &self.lower_ctx,
+                        );
+                    }
                 }
                 ParamLowering::Direct => {
                     let range = plan.first_param..plan.first_param + plan.param_count;
@@ -1308,12 +1177,7 @@ impl<'a> AdapterBuilder<'a> {
         let mut flat_idx = 0usize;
         for (plan, base_offset) in plans.iter().zip(param_offsets) {
             match plan.lowering {
-                ParamLowering::RecordFlatten { .. }
-                | ParamLowering::Variant
-                | ParamLowering::OptionValue { .. }
-                | ParamLowering::ResultValue { .. }
-                | ParamLowering::TupleFlatten
-                | ParamLowering::MapValue => {
+                ParamLowering::Aggregate => {
                     let value = self.flat_args[flat_idx].clone();
                     flat_idx += 1;
                     self.body_stmts.extend(synthesize_lower_wasi_type_to_memory(

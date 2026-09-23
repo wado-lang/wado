@@ -212,10 +212,8 @@ impl WasiState {
         // Hermetic test harnesses (compiler `tests/common.rs`) build their
         // own `WasiCtx` and are unaffected.
         builder.inherit_network();
-        // wasmtime denies socket *creation* by default, and
-        // `inherit_network` only relaxes the per-address check, so the two
-        // uses have to be granted explicitly for the address check to be
-        // reached at all.
+        // wasmtime denies creating a socket by default; `inherit_network`
+        // relaxes only the per-address check that comes after it.
         builder.allow_tcp(true);
         builder.allow_udp(true);
         builder.allow_ip_name_lookup(true);
