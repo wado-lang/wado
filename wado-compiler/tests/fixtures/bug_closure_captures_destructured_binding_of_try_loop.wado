@@ -1,0 +1,44 @@
+// Issue #2058: a closure capturing a tuple-destructured for-of binding, in a
+// loop over a `?` expression, read the capture through the wrong local.
+use { println, Stdout } from "core:cli";
+
+fn listing(fail: bool) -> Result<List<[String, String]>, String> {
+    if fail {
+        return Result::Err("no listing");
+    }
+    return Result::Ok([["a.md", "xy"], ["b.md", ""], ["c.md", "xyz"]]);
+}
+
+fn size(source: &String) -> Result<i32, String> {
+    if source.is_empty() {
+        return Result::Err("empty");
+    }
+    return Result::Ok(source.len());
+}
+
+fn collect(fail: bool, stop_on_empty: bool) -> Result<List<i32>, String> {
+    let mut out: List<i32> = [];
+    for let [name, source] of listing(fail)? {
+        if !stop_on_empty && source.is_empty() {
+            continue;
+        }
+        out.push(size(&source).map_err(|e: String| `${name}: ${e}`)?);
+    }
+    return Result::Ok(out);
+}
+
+fn show(r: Result<List<i32>, String>) with Stdout {
+    match r {
+        Ok(v) => println(`${v:?}`),
+        Err(e) => println(e),
+    }
+}
+
+export fn run() with Stdout {
+    show(collect(false, false));
+    show(collect(false, true));
+    show(collect(true, false));
+}
+
+__DATA__
+{"stdout": "[2, 3]\nb.md: empty\nno listing\n"}
