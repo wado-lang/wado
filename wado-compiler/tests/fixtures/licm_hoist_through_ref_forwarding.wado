@@ -1,0 +1,35 @@
+// A generic byte scan over `S: AsStrSlice`, instantiated at `&String`, reaches
+// `String`'s accessors through the blanket `impl AsStrSlice for &T`, whose
+// `(*self)` forwarding inlines to `let self = *&s`. That rebinding must not hide
+// `s.repr` from LICM: the per-byte field load is hoisted out of the scan.
+use { println, Stdout } from "core:cli";
+
+fn count_quotes<S: AsStrSlice>(buf: &mut String, s: S) -> i32 {
+    let n = s.len();
+    let mut i = 0;
+    while i < n {
+        if s.get_byte_unchecked(i) != 0x22 {
+            i += 1;
+            continue;
+        }
+        buf.push_str(&"[Q]");
+        return i;
+    }
+    return -1;
+}
+
+export fn run() with Stdout {
+    let mut out: String = "";
+    let src: String = builtin::black_box("ab\"c");
+    let at = count_quotes(&mut out, &src);
+    println(`${at} ${out}`);
+    let none: String = builtin::black_box("abc");
+    println(`${count_quotes(&mut out, &none)}`);
+}
+
+__DATA__
+{
+    "stdout": "2 [Q]\n-1\n",
+    "wir_expect:O2": ["array_get_value<u8>($licm_repr"],
+    "wir_not_expect:O2": ["array_get_value<u8>(s.repr"]
+}
