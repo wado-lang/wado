@@ -77,10 +77,12 @@ fn "opt_matches_set_wide_switch.wado/run"() with Stdout {
     b0: block {
         l1: loop {
             break_if b0 i >= 32;
+            let $switch_offset_0: i64;
+            $switch_offset_0 = builtin::i64_extend_i32_s(i) - 3_i64;
             if b3: block -> bool {
                 b4: block {
                     b5: block {
-                        br_table builtin::i32_wrap_i64(builtin::i64_extend_i32_s(i) - 3_i64) [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] default=0;
+                        br_table select i32($switch_offset_0 <u 13_i64, builtin::i32_wrap_i64($switch_offset_0), 13) [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] default=0;
                     };
                     0;
                     break b3;

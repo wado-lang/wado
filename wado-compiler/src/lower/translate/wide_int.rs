@@ -27,6 +27,7 @@ pub(super) fn should_rewrite(
             &arm.pattern,
             TirPattern::Literal(TirLiteralPattern::I128(_) | TirLiteralPattern::U128(_))
                 | TirPattern::Range { .. }
+                | TirPattern::Or(_)
         )
     })
 }
@@ -107,10 +108,15 @@ pub(super) fn build_if_chain(
                     span,
                 ));
             }
-            _ => {
-                // Other patterns (tuple, variant) shouldn't appear for i128/u128
-                // scrutinees; keep the body as the else for safety.
-                else_expr = Some(arm.body.clone());
+            TirPattern::Literal(_)
+            | TirPattern::Range { .. }
+            | TirPattern::Or(_)
+            | TirPattern::Tuple(..)
+            | TirPattern::Variant { .. }
+            | TirPattern::Enum { .. }
+            | TirPattern::Struct { .. }
+            | TirPattern::ConstantValue { .. } => {
+                unreachable!("a wide-int arm is a value test, a binding or `_`")
             }
         }
     }
@@ -151,12 +157,22 @@ fn arm_condition(
             } else {
                 TirBinaryOp::Lt
             };
-            Some(and(
+            Some(logical(
+                TirBinaryOp::And,
                 compare(scrutinee, TirBinaryOp::GtEq, *start, span, type_table),
                 compare(scrutinee, upper_op, *end, span, type_table),
                 span,
             ))
         }
+        // The match pre-pass keeps an or-pattern whole only when every
+        // alternative is a plain value, so each one has a condition.
+        TirPattern::Or(alternatives) => alternatives
+            .iter()
+            .map(|alt| {
+                arm_condition(alt, scrutinee, span, type_table)
+                    .expect("an unsplit or-pattern holds only value tests")
+            })
+            .reduce(|left, right| logical(TirBinaryOp::Or, left, right, span)),
         _ => None,
     }
 }
@@ -186,10 +202,10 @@ fn compare(
     )
 }
 
-fn and(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
+fn logical(op: TirBinaryOp, left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
     TirExpr::new(
         TirExprKind::Binary {
-            op: TirBinaryOp::And,
+            op,
             left: Box::new(left),
             right: Box::new(right),
         },
@@ -201,7 +217,7 @@ fn and(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
 fn with_guard(condition: TirExpr, guard: Option<&TirExpr>, span: Span) -> TirExpr {
     match guard {
         None => condition,
-        Some(guard) => and(condition, guard.clone(), span),
+        Some(guard) => logical(TirBinaryOp::And, condition, guard.clone(), span),
     }
 }
 
