@@ -280,6 +280,27 @@ re-measure before committing. Candidates read off the profile above:
   profile still shows `_kind_set_*` self-time (2.6–4.7% pre-landing) after
   the single-token cut.
 
+- **Scan time grows exponentially with nesting (measured, deferred 2026-09).**
+  On the dev profile, one parse takes these times:
+
+  | Rust input   | depth → ms                |
+  | ------------ | ------------------------- |
+  | `f(f(…))`    | 12 → 101, 20 → 35875      |
+  | `A { x: … }` | 10 → 77, 14 → 2056        |
+  | `((…))`      | 16 → 379, 20 → 6155       |
+
+  An identifier-led atom scans the whole argument twice. The first scan is
+  `enumerationVariantExpression`'s `Path(args)` in the tournament, and the
+  second is the winning path's call suffix in the LR loop. Each level doubles
+  the work, and the parse-side `_sd_p_*` tournaments multiply it again. SQLite
+  shows the same effect on nested parens and `CASE`, where it is n². Four
+  select alternatives also each scan a plain `SELECT` to its end.
+
+  A packrat memo would make both linear, because a scan decides nothing and is
+  a pure function of its inputs. It would be keyed per scan function on
+  (pos, min_prec, follow, gate), with a dense array per rule. It is deferred
+  because it adds a per-parse cost to every grammar the tournament reaches.
+
 ### Generation-time cost: the generator itself (2026-07)
 
 Distinct from the _generated parser_: how long `gale gen` takes to emit a large
