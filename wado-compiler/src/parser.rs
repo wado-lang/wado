@@ -2464,9 +2464,12 @@ impl Parser {
 
         let pattern_start_span = self.peek().span;
         let name_span = pattern_start_span;
-        let (pattern, ty) = match self.parse_pattern()? {
-            Pattern::Typed { pattern, ty, .. } => (*pattern, Some(ty)),
-            pattern => (pattern, None),
+        let pattern = self.parse_pattern_of(Self::parse_pattern_atom_or_range_unascribed)?;
+        let ty = if self.check(&TokenKind::Colon) {
+            self.advance();
+            Some(self.parse_type()?)
+        } else {
+            None
         };
 
         let (value, end_span) = if self.check(&TokenKind::Eq) {
@@ -2978,13 +2981,20 @@ impl Parser {
     }
 
     fn parse_pattern(&mut self) -> ParseResult<Pattern> {
-        let first = self.parse_pattern_atom_or_range()?;
+        self.parse_pattern_of(Self::parse_pattern_atom_or_range)
+    }
+
+    fn parse_pattern_of(
+        &mut self,
+        alternative: fn(&mut Self) -> ParseResult<Pattern>,
+    ) -> ParseResult<Pattern> {
+        let first = alternative(self)?;
 
         if self.check(&TokenKind::Pipe) {
             let mut alternatives = vec![first];
             while self.check(&TokenKind::Pipe) {
                 self.advance();
-                alternatives.push(self.parse_pattern_atom_or_range()?);
+                alternatives.push(alternative(self)?);
             }
             Ok(Pattern::Or(alternatives))
         } else {
