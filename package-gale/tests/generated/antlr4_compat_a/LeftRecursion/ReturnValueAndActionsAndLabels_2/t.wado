@@ -1583,9 +1583,9 @@ fn _parse_e__inner_atom(p: &mut Parser, vals: EVals = EVals {}, min_prec: i32 = 
     }
     if kind == TK_LIT_LPAREN {
         p.b.set_alt(3);
-        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
+        p.expect(TK_LIT_LPAREN, &SYNC_0);
         let x = _parse_e(p);
-        let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
+        p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
         if !p.speculating {
             vals.v = x.v;
         }
@@ -1593,7 +1593,7 @@ fn _parse_e__inner_atom(p: &mut Parser, vals: EVals = EVals {}, min_prec: i32 = 
     }
     if kind == TK_ID {
         p.b.set_alt(6);
-        let id = p.expect(TK_ID, &EMPTY_SYNC);
+        p.expect(TK_ID, &EMPTY_SYNC);
         if !p.speculating {
             vals.v = 3;
         }
@@ -1626,7 +1626,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 p.b.set_alt(0);
                 let a = _lr_acc;
                 let mut vals = EVals {};
-                let op = p.expect(TK_LIT_STAR, &EMPTY_SYNC);
+                p.expect(TK_LIT_STAR, &EMPTY_SYNC);
                 let b = _parse_e(p, 5);
                 if !p.speculating {
                     vals.v = a.v * b.v;
@@ -1645,7 +1645,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 p.b.set_alt(1);
                 let a = _lr_acc;
                 let mut vals = EVals {};
-                let plus = p.expect(TK_LIT_PLUS, &EMPTY_SYNC);
+                p.expect(TK_LIT_PLUS, &EMPTY_SYNC);
                 let b = _parse_e(p, 4);
                 if !p.speculating {
                     vals.v = a.v + b.v;
@@ -1664,7 +1664,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 p.b.set_alt(4);
                 let x = _lr_acc;
                 let mut vals = EVals {};
-                let lit_plusplus = p.expect(TK_LIT_PLUSPLUS, &EMPTY_SYNC);
+                p.expect(TK_LIT_PLUSPLUS, &EMPTY_SYNC);
                 if !p.speculating {
                     vals.v = x.v + 1;
                 }
@@ -1682,7 +1682,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 p.b.set_alt(5);
                 let e = _lr_acc;
                 let mut vals = EVals {};
-                let lit_minusminus = p.expect(TK_LIT_MINUSMINUS, &EMPTY_SYNC);
+                p.expect(TK_LIT_MINUSMINUS, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
                 _lr_acc = vals;
             } else {

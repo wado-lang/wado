@@ -1517,7 +1517,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_ID {
         p.b.set_alt(3);
-        let id = p.expect(TK_ID, &EMPTY_SYNC);
+        p.expect(TK_ID, &EMPTY_SYNC);
         return;
     }
     p.no_viable(
@@ -1544,8 +1544,8 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 p.b.set_alt(0);
-                let star = p.expect(TK_LIT_STAR, &EMPTY_SYNC);
-                let a_2 = _parse_expr(p, 4);
+                p.expect(TK_LIT_STAR, &EMPTY_SYNC);
+                _parse_expr(p, 4);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -1557,8 +1557,8 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 p.b.set_alt(1);
-                let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
-                let b_2_item = _parse_expr(p, 3);
+                p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
+                _parse_expr(p, 3);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -1570,8 +1570,8 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 p.b.set_alt(2);
-                let lit_gtgt = p.expect(TK_LIT_GTGT, &EMPTY_SYNC);
-                let c = _parse_expr(p, 2);
+                p.expect(TK_LIT_GTGT, &EMPTY_SYNC);
+                _parse_expr(p, 2);
                 p.b.finish_node(p.last_end());
             } else {
                 break;

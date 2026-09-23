@@ -212,6 +212,28 @@ pub fn rule_uses_rule_span(rule: &ParserRule, rules: &List<ParserRule>) -> bool 
     return rule_action_bodies(rule).iter_ref().any(|b: &String| body_uses_rule_span(b, rule, rules));
 }
 
+/// The binding bases `rule`'s actions read, or `null` where that cannot be
+/// told apart from reading them all: a body that does not resolve, or one
+/// reaching children through `$ctx`.
+pub fn rule_binding_reads(rule: &ParserRule, rules: &List<ParserRule>) -> Option<List<String>> {
+    let mut reads: List<String> = [];
+    for let body of &rule_action_bodies(rule) {
+        let Ok(resolved) = resolve_attrs(body, rule, rules) else {
+            return null;
+        };
+        for let r of &resolved {
+            if r.target matches { ParserSpecial } && r.name == "ctx" {
+                return null;
+            }
+            let base = binding_name(&r.name);
+            if !reads.contains(&base) {
+                reads.push(base);
+            }
+        }
+    }
+    return Option::Some(reads);
+}
+
 /// Every action and predicate body running in the rule's own frame: its
 /// prequels', its alternatives', and those of the groups nested in them.
 pub fn rule_action_bodies(rule: &ParserRule) -> List<String> {

@@ -754,6 +754,20 @@ Y : 'Y' ;
     assert !str_contains(&body, "_best"), `a single-token alternation is a set test, not a tournament\n${body}`;
 }
 
+test "an element is bound only where an action reads it" {
+    let input = "grammar T;
+options { language = Wado; }
+s : x=A B {let _ = $x;} ;
+A : 'A' ;
+B : 'B' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, "fn _parse_s__inner(");
+    assert str_contains(&body, "let x = p.expect(TK_A"), body;
+    assert str_contains(&body, "    p.expect(TK_B"), `nothing reads B\n${body}`;
+}
+
 test "trace option instruments the scan tournament and alt picks" {
     // A rule whose alts share an opaque rule-ref prefix (`b X` vs `b Y`)
     // lowers to the longest-match scan tournament (the disambiguating token

@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["grammars/wado_token_text.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/wado_token_text.g4"])]
 
 // Grammar metadata from source .g4 prequels:
 //   option language = Wado
@@ -609,6 +609,9 @@ impl TreeBuilder {
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
+        if self.last_finished >= checkpoint {
+            self.last_finished += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -618,6 +621,9 @@ impl TreeBuilder {
         self.alt.truncate(checkpoint);
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
+        }
+        if self.last_finished >= checkpoint {
+            self.last_finished = -1;
         }
     }
 
@@ -1319,7 +1325,7 @@ fn scan_r(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn _parse_r__inner(p: &mut Parser) -> () {
     let a = p.expect(TK_ID, &SYNC_0);
-    let plus = p.expect(TK_LIT_PLUS, &SYNC_1);
+    p.expect(TK_LIT_PLUS, &SYNC_1);
     let b = p.expect(TK_ID, &EMPTY_SYNC);
     if !p.speculating {
          p.emit(`${p.token_text(a)}-${p.token_text(b)}`); 

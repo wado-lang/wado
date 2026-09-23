@@ -1477,9 +1477,9 @@ fn _parse_e__inner_atom(p: &mut Parser, vals: EVals = EVals {}, min_prec: i32 = 
         return vals;
     }
     if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
+        p.expect(TK_LIT_LPAREN, &SYNC_0);
         let x = _parse_e(p);
-        let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
+        p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
         if !p.speculating {
             vals.v = x.v;
         }
@@ -1511,7 +1511,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 p.b.start_node_at(_cp, RK_E, _start);
                 let a = _lr_acc;
                 let mut vals = EVals {};
-                let star = p.expect(TK_LIT_STAR, &EMPTY_SYNC);
+                p.expect(TK_LIT_STAR, &EMPTY_SYNC);
                 let b = _parse_e(p, 3);
                 if !p.speculating {
                     vals.v = a.v * b.v;
@@ -1529,7 +1529,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 p.b.start_node_at(_cp, RK_E, _start);
                 let a = _lr_acc;
                 let mut vals = EVals {};
-                let plus = p.expect(TK_LIT_PLUS, &EMPTY_SYNC);
+                p.expect(TK_LIT_PLUS, &EMPTY_SYNC);
                 let b = _parse_e(p, 2);
                 if !p.speculating {
                     vals.v = a.v + b.v;

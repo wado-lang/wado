@@ -127,6 +127,7 @@ use {
     rule_node_ref,
     rule_span_lo_ref,
     rule_span_hi_ref,
+    rule_binding_reads,
 } from "./action_translate.wado";
 
 use {
@@ -234,6 +235,9 @@ pub fn gen_parser(
     // Before any value-channel decision: what a rule captures decides whether
     // it has a value struct at all.
     install_rule_captures(grammar, lowered, ctx);
+    if ctx.emit_actions() {
+        ctx.set_binding_reads(grammar.parser_rules.iter_ref().map(|r| rule_binding_reads(r, &grammar.parser_rules)).collect());
+    }
 
     if ctx.has_parser_superclass() {
         gen_parser_super_interface(w, ctx.parser_superclass_name(), ctx.parser_superclass_ops());
@@ -3718,9 +3722,10 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
     w.line(`p.atn_ret_pending = ${ret};`);
 }
 
-/// A label binding exists only for a semantic action to read.
-fn leaf_binding<S: AsStrSlice>(ctx: &GenContext, field: S) -> String {
-    if ctx.emit_actions() {
+/// A binding exists only for a semantic action to read. A reference reaches it
+/// by its base name, or by the local itself where no binding records it.
+fn leaf_binding<S: AsStrSlice, S1: AsStrSlice>(ctx: &GenContext, base: S, field: S1) -> String {
+    if ctx.emit_actions() && (ctx.reads_binding(base) || ctx.reads_binding(field)) {
         return `let ${field} = `;
     }
     return String::new();
@@ -3760,11 +3765,11 @@ fn gen_op_leaf(
     return match *op {
         Token(t) => {
             let sync_ref = sync_set_ref(ctx, sync);
-            w.line(`${leaf_binding(ctx, &t.field)}p.expect(${t.kind}, ${sync_ref});`);
+            w.line(`${leaf_binding(ctx, &t.dedup_base, &t.field)}p.expect(${t.kind}, ${sync_ref});`);
         },
         Literal(l) => {
             let sync_ref = sync_set_ref(ctx, sync);
-            w.line(`${leaf_binding(ctx, &l.field)}p.expect(${l.kind}, ${sync_ref});`);
+            w.line(`${leaf_binding(ctx, &l.dedup_base, &l.field)}p.expect(${l.kind}, ${sync_ref});`);
         },
         RuleCall(r) => {
             // One callee per rule; the caller's continuation is
@@ -3782,15 +3787,16 @@ fn gen_op_leaf(
             gen_atn_ret_pending(w, ctx, r.atn_call_site);
             let argsfx = call_arg_suffix(&r, ctx);
             let cont = if r.lr_cont_mask >= 0 { `, FOLLOW_MASK_${r.lr_cont_mask}` } else { "" };
+            let bind = leaf_binding(ctx, &r.dedup_base, &r.field);
             if let Some(min_prec) = r.min_prec_arg {
-                w.line(`${leaf_binding(ctx, &r.field)}${fn_name}(p${follow_arg_str}, ${min_prec}${cont}${argsfx});`);
+                w.line(`${bind}${fn_name}(p${follow_arg_str}, ${min_prec}${cont}${argsfx});`);
             } else {
-                w.line(`${leaf_binding(ctx, &r.field)}${fn_name}(p${follow_arg_str}${argsfx});`);
+                w.line(`${bind}${fn_name}(p${follow_arg_str}${argsfx});`);
             }
             close_call_capture(w, &span_field);
         },
-        Wildcard(wop) => w.line(`${leaf_binding(ctx, &wop.field)}p.any();`),
-        Excluded(eop) => w.line(`${leaf_binding(ctx, &eop.field)}${gen_op_excluded_call(&eop, ctx)};`),
+        Wildcard(wop) => w.line(`${leaf_binding(ctx, &wop.dedup_base, &wop.field)}p.any();`),
+        Excluded(eop) => w.line(`${leaf_binding(ctx, &eop.dedup_base, &eop.field)}${gen_op_excluded_call(&eop, ctx)};`),
         // Non-leaf ops (Repeat / Group / ListLabel) are routed to
         // their own dispatchers by the caller; reaching here means
         // the caller's `op_is_leaf` gate was bypassed.
@@ -5587,9 +5593,10 @@ fn gen_consume_token_group_op(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    let _ = dedup_name(&token_group_field_name(alts), name_counts);
+    let base = token_group_field_name(alts);
+    let _ = dedup_name(&base, name_counts);
     let kinds = collect_token_only_kinds(alts);
-    w.line(`${leaf_binding(ctx, &to.field)}p.expect_set(${sync_set_ref(ctx, &kinds)});`);
+    w.line(`${leaf_binding(ctx, &base, &to.field)}p.expect_set(${sync_set_ref(ctx, &kinds)});`);
 }
 
 fn collect_token_only_kinds(alts: &List<Alternative>) -> List<String> {
@@ -5679,12 +5686,13 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     match elem {
         TokenRef(t) => {
             let field_name = dedup_name(&t.field_name, name_counts);
-            w.line(`${leaf_binding(ctx, &field_name)}p.expect(TK_${t.name}, &EMPTY_SYNC);`);
+            w.line(`${leaf_binding(ctx, &t.field_name, &field_name)}p.expect(TK_${t.name}, &EMPTY_SYNC);`);
         },
         Literal(l) => {
             let const_name = l.const_name;
-            let field_name = dedup_name(&literal_field_name(&l.text), name_counts);
-            w.line(`${leaf_binding(ctx, &field_name)}p.expect(${const_name}, &EMPTY_SYNC);`);
+            let base = literal_field_name(&l.text);
+            let field_name = dedup_name(&base, name_counts);
+            w.line(`${leaf_binding(ctx, &base, &field_name)}p.expect(${const_name}, &EMPTY_SYNC);`);
         },
         // Per-call-site FOLLOW args are baked on `RuleCallOp.follow_arg`
         // by lower and consumed by the op-driven walkers; this surface arm
@@ -5696,16 +5704,17 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         RuleRef(r) => {
             let field_name = dedup_name(&r.field_name, name_counts);
             gen_atn_ret_pending(w, ctx, r.atn_call_site);
-            w.line(`${leaf_binding(ctx, &field_name)}_parse_${r.snake_name}(p);`);
+            w.line(`${leaf_binding(ctx, &r.field_name, &field_name)}_parse_${r.snake_name}(p);`);
         },
         Wildcard(_) => {
             let field_name = dedup_name("wildcard", name_counts);
-            w.line(`${leaf_binding(ctx, &field_name)}p.any();`);
+            w.line(`${leaf_binding(ctx, "wildcard", &field_name)}p.any();`);
         },
         Not(ne) => {
-            let field_name = dedup_name(&not_element_field_name(&ne.element), name_counts);
+            let base = not_element_field_name(&ne.element);
+            let field_name = dedup_name(&base, name_counts);
             let check = not_match_call(&ne.element, ctx);
-            w.line(`${leaf_binding(ctx, &field_name)}${check};`);
+            w.line(`${leaf_binding(ctx, &base, &field_name)}${check};`);
         },
         // After the Phase 2-G op-driven migration, only token-only groups
         // reach this surface walker — every other Group classification
@@ -7469,7 +7478,7 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut GenContex
     };
     let span_field = open_call_capture(w, op, ctx);
     gen_atn_ret_pending(w, ctx, rc.atn_call_site);
-    w.line(`${leaf_binding(ctx, &local_var)}${fn_name}(${call_args});`);
+    w.line(`${leaf_binding(ctx, &local_var, &local_var)}${fn_name}(${call_args});`);
     close_call_capture(w, &span_field);
 }
 
@@ -7723,9 +7732,10 @@ fn gen_consume_token_group(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    let var_name = dedup_name(&token_group_field_name(alts), name_counts);
+    let base = token_group_field_name(alts);
+    let var_name = dedup_name(&base, name_counts);
     let kinds = collect_token_only_kinds(alts);
-    w.line(`${leaf_binding(ctx, &var_name)}p.expect_set(${sync_set_ref(ctx, &kinds)});`);
+    w.line(`${leaf_binding(ctx, &base, &var_name)}p.expect_set(${sync_set_ref(ctx, &kinds)});`);
 }
 
 // Caller pre-dedups `acc_var`; its declaration is emitted here so the

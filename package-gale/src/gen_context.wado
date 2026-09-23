@@ -288,6 +288,8 @@ pub struct GenContext {
     /// The emitted scan function covering one alternative, by
     /// `[rule index, surface alt index]`: one function serves the scan and the parse.
     alt_scan_fns: TreeMap<[i32, i32], String>,
+    /// Per rule, the binding bases its actions read (`rule_binding_reads`).
+    binding_reads: List<Option<List<String>>>,
 }
 
 impl GenContext {
@@ -357,6 +359,23 @@ impl GenContext {
             rule_captures: TreeMap::new(),
             alt_bindings: [],
             alt_scan_fns: TreeMap::new(),
+            binding_reads: [],
+        };
+    }
+
+    pub fn set_binding_reads(&mut self, reads: List<Option<List<String>>>) {
+        self.binding_reads = reads;
+    }
+
+    /// Whether an action of the rule being emitted reads the binding `base`.
+    pub fn reads_binding<S: AsStrSlice>(&self, base: S) -> bool {
+        let r = self.current_rule_index;
+        if r < 0 || r >= self.binding_reads.len() {
+            return true;
+        }
+        return match &self.binding_reads[r] {
+            Some(reads) => reads.contains_str(base),
+            None => true,
         };
     }
 

@@ -1451,7 +1451,7 @@ fn _parse_s(p: &mut Parser) -> () {
 fn _parse_e__inner_alt_0(p: &mut Parser, vals: EVals = EVals {}) -> EVals {
     let mut vals = vals;
     let id = p.expect(TK_ID, &SYNC_0);
-    let eq = p.expect(TK_LIT_EQ, &SYNC_1);
+    p.expect(TK_LIT_EQ, &SYNC_1);
     let e1 = _parse_e(p, 2);
     if !p.speculating {
         vals.result = `(${p.token_text(id)}=${e1.result})`;
@@ -1535,7 +1535,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> EVals {
                 p.b.start_node_at(_cp, RK_E, _start);
                 let e1 = _lr_acc;
                 let mut vals = EVals {};
-                let plus = p.expect(TK_LIT_PLUS, &EMPTY_SYNC);
+                p.expect(TK_LIT_PLUS, &EMPTY_SYNC);
                 let e2 = _parse_e(p, 2);
                 if !p.speculating {
                     vals.result = `(${e1.result}+${e2.result})`;

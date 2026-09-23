@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["grammars/wado_lex_attrs.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/wado_lex_attrs.g4"])]
 
 // Grammar metadata from source .g4 prequels:
 //   option language = Wado
@@ -609,6 +609,9 @@ impl TreeBuilder {
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
+        if self.last_finished >= checkpoint {
+            self.last_finished += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -618,6 +621,9 @@ impl TreeBuilder {
         self.alt.truncate(checkpoint);
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
+        }
+        if self.last_finished >= checkpoint {
+            self.last_finished = -1;
         }
     }
 
@@ -1601,7 +1607,7 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
         }
         _plus_first = false;
-        let t = _parse_t(p);
+        _parse_t(p);
     }
     return;
 }
@@ -1620,35 +1626,35 @@ fn _parse_s(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_t__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_A {
-        let a = p.expect(TK_A, &EMPTY_SYNC);
+        p.expect(TK_A, &EMPTY_SYNC);
         if !p.speculating {
              p.emit("a") 
         }
         return;
     }
     if kind == TK_B {
-        let b = p.expect(TK_B, &EMPTY_SYNC);
+        p.expect(TK_B, &EMPTY_SYNC);
         if !p.speculating {
              p.emit("b") 
         }
         return;
     }
     if kind == TK_D {
-        let d = p.expect(TK_D, &EMPTY_SYNC);
+        p.expect(TK_D, &EMPTY_SYNC);
         if !p.speculating {
              p.emit("d") 
         }
         return;
     }
     if kind == TK_P {
-        let p_ = p.expect(TK_P, &EMPTY_SYNC);
+        p.expect(TK_P, &EMPTY_SYNC);
         if !p.speculating {
              p.emit("p") 
         }
         return;
     }
     if kind == TK_R {
-        let r = p.expect(TK_R, &EMPTY_SYNC);
+        p.expect(TK_R, &EMPTY_SYNC);
         if !p.speculating {
              p.emit("r") 
         }
