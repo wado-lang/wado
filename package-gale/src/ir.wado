@@ -1,5 +1,5 @@
 use { Span, ParseError } from "./runtime/lex.wado";
-use { escape_ident, to_snake_case, to_lower, to_pascal_case } from "./ident.wado";
+use { escape_ident, to_snake_case, to_lower, to_pascal_case, literal_const_name } from "./ident.wado";
 use { TreeMap } from "core:collections";
 
 /// OptionValue is the typed right-hand side of an ANTLR4 `key = value` option
@@ -968,15 +968,26 @@ impl TokenRefElement {
 pub struct LiteralElement {
     pub text: String,
     pub options: List<GrammarOption>,
-    /// Canonical token kind id for this literal's synthesized token
-    /// (`literal_const_name(text)`'s `TK_LIT_*` global value). Resolved once by
-    /// `resolve_kind_ids`; -1 until resolved. See `TokenRefElement::kind_id`.
+    /// The `TK_LIT_*` global naming this literal's token. Distinct literals can
+    /// share a base name, so `resolve_kind_ids` restamps the grammar-unique one.
+    pub const_name: String,
+    /// Canonical token kind id for this literal's synthesized token (the
+    /// `const_name` global's value). Resolved once by `resolve_kind_ids`; -1
+    /// until resolved. See `TokenRefElement::kind_id`.
     pub kind_id: i32 = -1,
 }
 
 impl LiteralElement {
     pub fn new<S: AsStrSlice>(text: S) -> LiteralElement {
-        return LiteralElement { text: text.to_string(), options: [] };
+        return LiteralElement::with_options(text, []);
+    }
+
+    pub fn with_options<S: AsStrSlice>(text: S, options: List<GrammarOption>) -> LiteralElement {
+        return LiteralElement {
+            text: text.to_string(),
+            options,
+            const_name: literal_const_name(&text),
+        };
     }
 }
 

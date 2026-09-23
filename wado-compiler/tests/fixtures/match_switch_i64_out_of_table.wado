@@ -1,0 +1,32 @@
+// A 64-bit value outside a `br_table`'s range reaches the default arm, even
+// one exactly 2^32 away from a table entry.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn f(n: i64) -> i32 {
+    return match n {
+        0 => 1, 1 => 2, 2 => 3, 3 => 4, 4 => 5, 5 => 15, 6 => 7,
+        7 => 8, 8 => 9, 9 => 10, 10 => 11, 11 => 12, 12 => 13,
+        _ => 0,
+    };
+}
+
+#[inline(never)]
+fn g(n: u64) -> i32 {
+    return match n {
+        0..=11 => 1,
+        12 => 2,
+        _ => 0,
+    };
+}
+
+export fn run() with Stdout {
+    println(`${f(builtin::black_box(4294967301))} ${f(builtin::black_box(-4294967291))} ${f(builtin::black_box(5))}`);
+    println(`${g(builtin::black_box(4294967308 as u64))} ${g(builtin::black_box(12 as u64))}`);
+}
+
+__DATA__
+{
+    "stdout": "0 0 15\n0 2\n",
+    "wir_expect:O2": ["br_table"]
+}

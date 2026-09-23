@@ -67,6 +67,7 @@ use crate::component_model::{CmInterfaceRegistry, declares_cm_binding, wado_prim
 use crate::name::entry_dir_of;
 use crate::wit_consume::module_host_leaf_imports;
 use crate::world_registry::WorldInfo;
+pub use stdlib_snapshot::prelude_names;
 pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
 pub mod niri;
 pub mod symbol;

@@ -1939,14 +1939,14 @@ pub global TK_EOF: i32 = 2;
 pub global TK_ERROR: i32 = 3;
 pub global TK_LIT_SEMI: i32 = 4;
 pub global TK_LIT_DOT: i32 = 5;
-pub global TK_LIT_NOT: i32 = 6;
-pub global TK_LIT_AND: i32 = 7;
-pub global TK_LIT_OR: i32 = 8;
+pub global TK_LIT_not: i32 = 6;
+pub global TK_LIT_and: i32 = 7;
+pub global TK_LIT_or: i32 = 8;
 pub global TK_LIT_LPAREN: i32 = 9;
 pub global TK_LIT_RPAREN: i32 = 10;
 pub global TK_LIT_QUESTION: i32 = 11;
 pub global TK_LIT_COLON: i32 = 12;
-pub global TK_LIT_BETWEEN: i32 = 13;
+pub global TK_LIT_between: i32 = 13;
 
 struct Lexer {
     chars: List<char>,
@@ -2005,13 +2005,13 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_semi(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_SEMI(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ';' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_dot(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_DOT(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '.' { return -1; }
     return pos + 1;
@@ -2040,25 +2040,25 @@ fn try_lit_or(chars: &List<char>, start: i32) -> i32 {
     return pos + 2;
 }
 
-fn try_lit_lparen(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_LPAREN(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '(' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_rparen(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_RPAREN(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ')' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_question(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_QUESTION(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '?' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_colon(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_COLON(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ':' { return -1; }
     return pos + 1;
@@ -2086,56 +2086,64 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '\t' | '\n' | '\u{c}' | '\r' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { '(' } {
-            end = try_lit_lparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
-        } else if first_char matches { ')' } {
-            end = try_lit_rparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
-        } else if first_char matches { '.' } {
-            end = try_lit_dot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_DOT; }
-        } else if first_char matches { ':' } {
-            end = try_lit_colon(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_COLON; }
-        } else if first_char matches { ';' } {
-            end = try_lit_semi(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; }
-        } else if first_char matches { '?' } {
-            end = try_lit_question(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_QUESTION; }
-        } else if first_char matches { '_' } {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 'a' } {
-            end = try_lit_and(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_AND; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 'b' } {
-            end = try_lit_between(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_BETWEEN; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 'n' } {
-            end = try_lit_not(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_NOT; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 'o' } {
-            end = try_lit_or(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_OR; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 'a'..='z' | 'A'..='Z' } {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
+        match first_char {
+            '\t' | '\n' | '\u{c}' | '\r' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            '(' => {
+                end = try_lit_LPAREN(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
+            },
+            ')' => {
+                end = try_lit_RPAREN(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
+            },
+            '.' => {
+                end = try_lit_DOT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_DOT; }
+            },
+            ':' => {
+                end = try_lit_COLON(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_COLON; }
+            },
+            ';' => {
+                end = try_lit_SEMI(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_SEMI; }
+            },
+            '?' => {
+                end = try_lit_QUESTION(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_QUESTION; }
+            },
+            'A'..='Z' | '_' | 'c'..='m' | 'p'..='z' => {
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            'a' => {
+                end = try_lit_and(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_and; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            'b' => {
+                end = try_lit_between(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_between; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            'n' => {
+                end = try_lit_not(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_not; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            'o' => {
+                end = try_lit_or(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_or; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -2165,14 +2173,14 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_ERROR => "Error",
         TK_LIT_SEMI => "';'",
         TK_LIT_DOT => "'.'",
-        TK_LIT_NOT => "'not'",
-        TK_LIT_AND => "'and'",
-        TK_LIT_OR => "'or'",
+        TK_LIT_not => "'not'",
+        TK_LIT_and => "'and'",
+        TK_LIT_or => "'or'",
         TK_LIT_LPAREN => "'('",
         TK_LIT_RPAREN => "')'",
         TK_LIT_QUESTION => "'?'",
         TK_LIT_COLON => "':'",
-        TK_LIT_BETWEEN => "'between'",
+        TK_LIT_between => "'between'",
         _ => "Unknown",
     };
 }
@@ -2473,7 +2481,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
         if alt_kind == TK_ID {
             pos = start + 1;
             break scan_alts;
-        } else if alt_kind == TK_LIT_NOT {
+        } else if alt_kind == TK_LIT_not {
             pos = start + 1;
             try_1: {
                 SCAN_STACK.push(25);
@@ -2497,14 +2505,14 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_BETWEEN {
+        } else if alt_kind == TK_LIT_between {
             pos = start + 1;
             try_3: {
                 SCAN_STACK.push(39);
                 pos = scan_expr(tokens, pos, 0);
                 SCAN_STACK.pop();
                 if pos < 0 { break try_3; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_AND { break try_3; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_and { break try_3; }
                 pos += 1;
                 SCAN_STACK.push(43);
                 pos = scan_expr(tokens, pos, 0);
@@ -2522,7 +2530,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_expr_lr_2(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_AND { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_and { return -1; }
     pos += 1;
     SCAN_STACK.push(51);
     pos = scan_expr(tokens, pos, 4);
@@ -2533,7 +2541,7 @@ fn scan_expr_lr_2(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_expr_lr_3(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_OR { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_or { return -1; }
     pos += 1;
     SCAN_STACK.push(56);
     pos = scan_expr(tokens, pos, 3);
@@ -2673,8 +2681,8 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
         p.expect(TK_ID, &EMPTY_SYNC);
         return;
     }
-    if kind == TK_LIT_NOT {
-        p.expect(TK_LIT_NOT, &SYNC_0);
+    if kind == TK_LIT_not {
+        p.expect(TK_LIT_not, &SYNC_0);
         p.atn_ret_pending = 25;
         _parse_expr(p, 4);
         return;
@@ -2687,11 +2695,11 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
         _parse_expr(p, 2);
         return;
     }
-    if kind == TK_LIT_BETWEEN {
-        p.expect(TK_LIT_BETWEEN, &SYNC_0);
+    if kind == TK_LIT_between {
+        p.expect(TK_LIT_between, &SYNC_0);
         p.atn_ret_pending = 39;
         _parse_expr(p);
-        p.expect(TK_LIT_AND, &SYNC_0);
+        p.expect(TK_LIT_and, &SYNC_0);
         p.atn_ret_pending = 43;
         _parse_expr(p, 1);
         return;
@@ -2716,13 +2724,13 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         let _lr_pos0 = p.pos;
         if _atn_alt == 0 {
             p.b.start_node_at(_cp, RK_EXPR, _start);
-            p.expect(TK_LIT_AND, &EMPTY_SYNC);
+            p.expect(TK_LIT_and, &EMPTY_SYNC);
             p.atn_ret_pending = 51;
             _parse_expr(p, 4);
             p.b.finish_node(p.last_end());
         } else if _atn_alt == 1 {
             p.b.start_node_at(_cp, RK_EXPR, _start);
-            p.expect(TK_LIT_OR, &EMPTY_SYNC);
+            p.expect(TK_LIT_or, &EMPTY_SYNC);
             p.atn_ret_pending = 56;
             _parse_expr(p, 3);
             p.b.finish_node(p.last_end());
@@ -2815,11 +2823,11 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_ID | TK_LIT_BETWEEN | TK_LIT_LPAREN | TK_LIT_NOT };
+    return k matches { TK_ID | TK_LIT_LPAREN | TK_LIT_between | TK_LIT_not };
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_ID, TK_LIT_BETWEEN, TK_LIT_LPAREN, TK_LIT_NOT];
+global SYNC_0: List<i32> = [TK_ID, TK_LIT_LPAREN, TK_LIT_between, TK_LIT_not];
 global SYNC_1: List<i32> = [TK_ID];
 global SYNC_2: List<i32> = [TK_LIT_RPAREN];
 

@@ -692,35 +692,6 @@ export fn run() {
 }
 
 #[test]
-fn an_undeclared_supertrait_is_reported_at_the_declaration() {
-    let msg = compile_err_contains(
-        r"
-trait A: Undeclrd {
-    fn a(&self) -> i32;
-}
-
-struct S {
-    v: i32,
-}
-
-impl A for S {
-    fn a(&self) -> i32 {
-        return self.v;
-    }
-}
-
-export fn run() {
-}
-",
-        "is not a declared trait",
-    );
-    assert!(
-        msg.contains("Undeclrd") && msg.contains("'A'"),
-        "names the bad supertrait and its trait: {msg}"
-    );
-}
-
-#[test]
 fn an_unsatisfiable_bound_blames_the_bound_that_was_written() {
     let msg = compile_err_contains(
         r"

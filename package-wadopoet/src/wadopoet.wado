@@ -12,8 +12,8 @@ pub struct CodeWriter {
 
 impl CodeWriter {
     pub fn new() -> CodeWriter {
-        // Pre-size to 64 KB: amortizes `String::grow` doublings over the
-        // codegen pass (Rust*.g4 output ≈ 1.3 MB), negligible for small grammars.
+        // Pre-size to 64 KB: amortizes `String::grow` doublings over a large
+        // emit (Gale's parser for Rust runs to ≈ 1.3 MB), negligible for a small one.
         return CodeWriter::with_capacity(65536);
     }
 
@@ -116,8 +116,7 @@ impl CodeWriter {
     pub fn raw<S: AsStrSlice>(&mut self, text: S) {
         self.buf.push_str(text);
         if text.len() > 0 {
-            let chars: List<char> = text.chars().collect();
-            self.fresh_line = chars[chars.len() - 1] == '\n';
+            self.fresh_line = text.as_str_slice().ends_with("\n");
         }
     }
 
@@ -307,23 +306,6 @@ pub fn wado<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
     return out;
 }
 
-/// A grammar literal rendered the way ANTLR4's vocabulary shows it: the source
-/// form, single-quoted.
-pub type LitName = String;
-
-/// Tag `text` as a grammar literal's display name: `lit_name("+")` formats to
-/// `'+'`. `LitToken.text` holds the literal with its escapes already resolved,
-/// so this puts them back — a readable rendering, not a round-trip.
-pub fn lit_name<S: AsStrSlice>(text: S) -> LitName {
-    return text as LitName;
-}
-
-impl Display for LitName {
-    pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str(wado`'${*self as String}'`);
-    }
-}
-
 pub type CharRangePat = RangeInclusive<char>;
 
 pub fn char_range_pat(range: RangeInclusive<char>) -> CharRangePat {
@@ -431,7 +413,12 @@ impl StructSpec {
     }
 
     pub fn emit(&self, w: &mut CodeWriter) {
-        w.begin(`${self.visibility.prefix()}struct ${self.name}`);
+        let head = `${self.visibility.prefix()}struct ${self.name}`;
+        if self.fields.is_empty() {
+            w.line(`${head} {}`);
+            return;
+        }
+        w.begin(head);
         for let field of &self.fields {
             let vis = if field.is_pub { "pub " } else { "" };
             match &field.default {

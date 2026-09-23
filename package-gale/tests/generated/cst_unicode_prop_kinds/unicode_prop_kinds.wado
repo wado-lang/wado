@@ -1221,195 +1221,65 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { ' ' | '' | ' ' | ' ' | ' ' | ' ' | '　' } {
-            end = try_WSP(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WSP; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '`' | '©' | '®' | '¶' | '»' | '¿' | '×' | '÷' } {
-            end = try_PATSYN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { 'Ϳ' | '΄' | 'Ά' | 'Ό' | 'ᶿ' | 'Ὑ' | 'Ὓ' | 'Ὕ' | 'Ω' | 'ꭥ' | '𐆠' } {
-            end = try_GREEK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEK; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { 'ֿ' | 'ׇ' | 'ٰ' | 'ܑ' | '߽' | 'ऺ' | '़' | '्' | 'ঁ' | '়' | '্' | '৾' | '਼' | 'ੑ' | 'ੵ' | '઼' | '્' | 'ଁ' | '଼' | 'ି' | '୍' | 'ஂ' | 'ீ' | '்' | 'ఀ' | 'ఄ' | '఼' | 'ಁ' | '಼' | 'ಿ' | 'ೆ' | '്' | 'ඁ' | '්' | 'ූ' | 'ั' | 'ັ' | '༵' | '༷' | '༹' | '࿆' | 'ႂ' | 'ႍ' | 'ႝ' | 'ំ' | '៝' | '᠏' | 'ᢩ' | 'ᤲ' | 'ᨛ' | 'ᩖ' | '᩠' | 'ᩢ' | '᩿' | '᬴' | 'ᬼ' | 'ᭂ' | '᯦' | 'ᯭ' | '᳭' | '᳴' | '⃡' | '⵿' | '꙯' | 'ꠂ' | '꠆' | 'ꠋ' | '꠬' | 'ꣿ' | '꦳' | 'ꧥ' | 'ꩃ' | 'ꩌ' | 'ꩼ' | 'ꪰ' | '꫁' | '꫶' | 'ꯥ' | 'ꯨ' | '꯭' | 'ﬞ' | '𐇽' | '𐋠' | '𐨿' | '𑀁' | '𑁰' | '𑃂' | '𑅳' | '𑇏' | '𑈴' | '𑈾' | '𑉁' | '𑋟' | '𑍀' | '𑏎' | '𑏐' | '𑏒' | '𑑆' | '𑑞' | '𑒺' | '𑘽' | '𑚫' | '𑚭' | '𑚷' | '𑜝' | '𑜟' | '𑤾' | '𑥃' | '𑧠' | '𑩇' | '𑭠' | '𑭦' | '𑰿' | '𑴺' | '𑵇' | '𑶕' | '𑶗' | '𑽀' | '𑽂' | '𑽚' | '𓑀' | '𖽏' | '𝩵' | '𝪄' | '𞂏' | '𞊮' | '𞛣' | '𞛦' | '𞛵' } {
-            end = try_GREEKMARK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEKMARK; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '⏰' | '⏳' | '♿' | '⚓' | '⚡' | '⛎' | '⛔' | '⛪' | '⛵' | '⛺' | '⛽' | '✅' | '✨' | '❌' | '❎' | '❗' | '➰' | '➿' | '⭐' | '⭕' | '〰' } {
-            end = try_PATSYN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '𖿤' } {
-            end = try_GREEKMARK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEKMARK; }
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '𛄲' | '𛅕' | '🀄' | '🃏' | '🆎' | '🏴' | '👀' | '🕺' | '🖤' | '🛌' | '🟰' | '🫈' } {
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { 'Ͱ'..='ͳ' | '͵'..='ͷ' | 'ͺ'..='ͽ' | 'Έ'..='Ί' | 'Ύ'..='Ρ' | 'Σ'..='ϡ' | 'ϰ'..='Ͽ' | 'ᴦ'..='ᴪ' | 'ᵝ'..='ᵡ' | 'ᵦ'..='ᵪ' | 'ἀ'..='ἕ' | 'Ἐ'..='Ἕ' | 'ἠ'..='ὅ' | 'Ὀ'..='Ὅ' | 'ὐ'..='ὗ' | 'Ὗ'..='ώ' | 'ᾀ'..='ᾴ' | 'ᾶ'..='ῄ' | 'ῆ'..='ΐ' | 'ῖ'..='Ί' | '῝'..='`' | 'ῲ'..='ῴ' | 'ῶ'..='῾' | '𐅀'..='𐆎' } {
-            end = try_GREEK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEK; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '𝈀'..='𝉅' } {
-            end = try_GREEK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEK; }
-            end = try_GREEKMARK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEKMARK; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '̀'..='ͯ' | '҃'..='҇' | '֑'..='ֽ' | 'ׁ'..='ׂ' | 'ׄ'..='ׅ' | 'ؐ'..='ؚ' | 'ً'..='ٟ' | 'ۖ'..='ۜ' | '۟'..='ۤ' | 'ۧ'..='ۨ' | '۪'..='ۭ' | 'ܰ'..='݊' | 'ަ'..='ް' | '߫'..='߳' | 'ࠖ'..='࠙' | 'ࠛ'..='ࠣ' | 'ࠥ'..='ࠧ' | 'ࠩ'..='࠭' | '࡙'..='࡛' | 'ࢗ'..='࢟' | '࣊'..='࣡' | 'ࣣ'..='ं' | 'ु'..='ै' | '॑'..='ॗ' | 'ॢ'..='ॣ' | 'ু'..='ৄ' | 'ৢ'..='ৣ' | 'ਁ'..='ਂ' | 'ੁ'..='ੂ' | 'ੇ'..='ੈ' | 'ੋ'..='੍' | 'ੰ'..='ੱ' | 'ઁ'..='ં' | 'ુ'..='ૅ' | 'ે'..='ૈ' | 'ૢ'..='ૣ' | 'ૺ'..='૿' | 'ୁ'..='ୄ' | '୕'..='ୖ' | 'ୢ'..='ୣ' | 'ా'..='ీ' | 'ె'..='ై' | 'ొ'..='్' | 'ౕ'..='ౖ' | 'ౢ'..='ౣ' | 'ೌ'..='್' | 'ೢ'..='ೣ' | 'ഀ'..='ഁ' | '഻'..='഼' | 'ു'..='ൄ' | 'ൢ'..='ൣ' | 'ි'..='ු' | 'ิ'..='ฺ' | '็'..='๎' | 'ິ'..='ຼ' | '່'..='໎' | '༘'..='༙' | 'ཱ'..='ཾ' | 'ྀ'..='྄' | '྆'..='྇' | 'ྍ'..='ྗ' | 'ྙ'..='ྼ' | 'ိ'..='ူ' | 'ဲ'..='့' | '္'..='်' | 'ွ'..='ှ' | 'ၘ'..='ၙ' | 'ၞ'..='ၠ' | 'ၱ'..='ၴ' | 'ႅ'..='ႆ' | '፝'..='፟' | 'ᜒ'..='᜔' | 'ᜲ'..='ᜳ' | 'ᝒ'..='ᝓ' | 'ᝲ'..='ᝳ' | '឴'..='឵' | 'ិ'..='ួ' | '៉'..='៓' | '᠋'..='᠍' | 'ᢅ'..='ᢆ' | 'ᤠ'..='ᤢ' | 'ᤧ'..='ᤨ' | '᤹'..='᤻' | 'ᨗ'..='ᨘ' | 'ᩘ'..='ᩞ' | 'ᩥ'..='ᩬ' | 'ᩳ'..='᩼' | '᪰'..='᪽' | 'ᪿ'..='᫝' | '᫠'..='᫫' | 'ᬀ'..='ᬃ' | 'ᬶ'..='ᬺ' | '᭫'..='᭳' | 'ᮀ'..='ᮁ' | 'ᮢ'..='ᮥ' | 'ᮨ'..='ᮩ' | '᮫'..='ᮭ' | 'ᯨ'..='ᯩ' | 'ᯯ'..='ᯱ' | 'ᰬ'..='ᰳ' | 'ᰶ'..='᰷' | '᳐'..='᳒' | '᳔'..='᳠' | '᳢'..='᳨' | '᳸'..='᳹' | '᷀'..='᷿' | '⃐'..='⃜' | '⃥'..='⃰' | '⳯'..='⳱' | 'ⷠ'..='ⷿ' } {
-            end = try_GREEKMARK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEKMARK; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '〪'..='〭' | '゙'..='゚' } {
-            end = try_GREEKMARK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEKMARK; }
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { 'ꙴ'..='꙽' | 'ꚞ'..='ꚟ' | '꛰'..='꛱' | 'ꠥ'..='ꠦ' | '꣄'..='ꣅ' | '꣠'..='꣱' | 'ꤦ'..='꤭' | 'ꥇ'..='ꥑ' | 'ꦀ'..='ꦂ' | 'ꦶ'..='ꦹ' | 'ꦼ'..='ꦽ' | 'ꨩ'..='ꨮ' | 'ꨱ'..='ꨲ' | 'ꨵ'..='ꨶ' | 'ꪲ'..='ꪴ' | 'ꪷ'..='ꪸ' | 'ꪾ'..='꪿' | 'ꫬ'..='ꫭ' | '︀'..='️' | '︠'..='︯' | '𐍶'..='𐍺' | '𐨁'..='𐨃' | '𐨅'..='𐨆' | '𐨌'..='𐨏' | '𐨸'..='𐨺' | '𐫥'..='𐫦' | '𐴤'..='𐴧' | '𐵩'..='𐵭' | '𐺫'..='𐺬' | '𐻺'..='𐻿' | '𐽆'..='𐽐' | '𐾂'..='𐾅' | '𑀸'..='𑁆' | '𑁳'..='𑁴' | '𑁿'..='𑂁' | '𑂳'..='𑂶' | '𑂹'..='𑂺' | '𑄀'..='𑄂' | '𑄧'..='𑄫' | '𑄭'..='𑄴' | '𑆀'..='𑆁' | '𑆶'..='𑆾' | '𑇉'..='𑇌' | '𑈯'..='𑈱' | '𑈶'..='𑈷' | '𑋣'..='𑋪' | '𑌀'..='𑌁' | '𑌻'..='𑌼' | '𑍦'..='𑍬' | '𑍰'..='𑍴' | '𑎻'..='𑏀' | '𑏡'..='𑏢' | '𑐸'..='𑐿' | '𑑂'..='𑑄' | '𑒳'..='𑒸' | '𑒿'..='𑓀' | '𑓂'..='𑓃' | '𑖲'..='𑖵' | '𑖼'..='𑖽' | '𑖿'..='𑗀' | '𑗜'..='𑗝' | '𑘳'..='𑘺' | '𑘿'..='𑙀' | '𑚰'..='𑚵' | '𑜢'..='𑜥' | '𑜧'..='𑜫' | '𑠯'..='𑠷' | '𑠹'..='𑠺' | '𑤻'..='𑤼' | '𑧔'..='𑧗' | '𑧚'..='𑧛' | '𑨁'..='𑨊' | '𑨳'..='𑨸' | '𑨻'..='𑨾' | '𑩑'..='𑩖' | '𑩙'..='𑩛' | '𑪊'..='𑪖' | '𑪘'..='𑪙' | '𑭢'..='𑭤' | '𑰰'..='𑰶' | '𑰸'..='𑰽' | '𑲒'..='𑲧' | '𑲪'..='𑲰' | '𑲲'..='𑲳' | '𑲵'..='𑲶' | '𑴱'..='𑴶' | '𑴼'..='𑴽' | '𑴿'..='𑵅' | '𑶐'..='𑶑' | '𑻳'..='𑻴' | '𑼀'..='𑼁' | '𑼶'..='𑼺' | '𓑇'..='𓑕' | '𖄞'..='𖄩' | '𖄭'..='𖄯' | '𖫰'..='𖫴' | '𖬰'..='𖬶' | '𖾏'..='𖾒' | '𛲝'..='𛲞' | '𜼀'..='𜼭' | '𜼰'..='𜽆' | '𝅧'..='𝅩' | '𝅻'..='𝆂' | '𝆅'..='𝆋' | '𝆪'..='𝆭' } {
-            end = try_GREEKMARK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEKMARK; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '𝉂'..='𝉄' } {
-            end = try_GREEK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEK; }
-            end = try_GREEKMARK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEKMARK; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '𝨀'..='𝨶' | '𝨻'..='𝩬' | '𝪛'..='𝪟' | '𝪡'..='𝪯' | '𞀀'..='𞀆' | '𞀈'..='𞀘' | '𞀛'..='𞀡' | '𞀣'..='𞀤' | '𞀦'..='𞀪' | '𞄰'..='𞄶' | '𞋬'..='𞋯' | '𞓬'..='𞓯' | '𞗮'..='𞗯' | '𞛮'..='𞛯' | '𞣐'..='𞣖' | '𞥄'..='𞥊' | '󠄀'..='󠇯' } {
-            end = try_GREEKMARK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEKMARK; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '!'..='/' | ':'..='@' | '['..='^' | '{'..='~' | '¡'..='§' | '«'..='¬' | '°'..='±' | '‐'..='‧' | '‰'..='‾' | '⁁'..='⁓' | '⁕'..='⁞' } {
-            end = try_PATSYN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '←'..='⑟' | '─'..='❵' | '➔'..='⯿' } {
-            end = try_PATSYN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '⸀'..='⹿' } {
-            end = try_PATSYN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '、'..='〃' | '〈'..='〠' } {
-            end = try_PATSYN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '﴾'..='﴿' } {
-            end = try_PATSYN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '﹅'..='﹆' } {
-            end = try_PATSYN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { 'ᄀ'..='ᅟ' } {
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '⌚'..='⌛' | '〈'..='〉' | '⏩'..='⏬' | '◽'..='◾' | '☔'..='☕' | '☰'..='☷' | '♈'..='♓' | '⚊'..='⚏' | '⚪'..='⚫' | '⚽'..='⚾' | '⛄'..='⛅' | '⛲'..='⛳' | '✊'..='✋' | '❓'..='❕' | '➕'..='➗' | '⬛'..='⬜' } {
-            end = try_PATSYN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '⺀'..='⺙' | '⺛'..='⻳' | '⼀'..='⿕' | '⿰'..='⿿' } {
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '、'..='〾' } {
-            end = try_GREEKMARK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEKMARK; }
-            end = try_PATSYN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { 'ぁ'..='ゖ' } {
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '゙'..='ヿ' } {
-            end = try_GREEKMARK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEKMARK; }
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | '㆐'..='㇥' | '㇯'..='㈞' | '㈠'..='㉇' | '㉐'..='ꒌ' | '꒐'..='꓆' | 'ꥠ'..='ꥼ' | '가'..='힣' | '豈'..='﫿' | '︐'..='︙' } {
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '︰'..='﹒' } {
-            end = try_PATSYN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '﹔'..='﹦' | '﹨'..='﹫' | '𖿠'..='𖿤' | '𖿰'..='𖿶' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛅐'..='𛅒' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𝌀'..='𝍖' | '𝍠'..='𝍶' | '🆑'..='🆚' | '🈀'..='🈂' | '🈐'..='🈻' | '🉀'..='🉈' | '🉐'..='🉑' | '🉠'..='🉥' | '🌀'..='🌠' | '🌭'..='🌵' | '🌷'..='🍼' | '🍾'..='🎓' | '🎠'..='🏊' | '🏏'..='🏓' | '🏠'..='🏰' | '🏸'..='🐾' | '👂'..='📼' | '📿'..='🔽' | '🕋'..='🕎' | '🕐'..='🕧' | '🖕'..='🖖' | '🗻'..='🙏' | '🚀'..='🛅' | '🛐'..='🛒' | '🛕'..='🛘' | '🛜'..='🛟' | '🛫'..='🛬' | '🛴'..='🛼' | '🟠'..='🟫' | '🤌'..='🤺' | '🤼'..='🥅' | '🥇'..='🧿' | '🩰'..='🩼' | '🪀'..='🪊' | '🪎'..='🫆' | '🫍'..='🫜' | '🫟'..='🫪' | '🫯'..='🫸' | '𠀀'..='𯿽' | '𰀀'..='𿿽' } {
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '\t'..='\r' | ' '..=' ' | ' '..=' ' } {
-            end = try_WSP(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WSP; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else {
-            end = try_GREEK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEK; }
-            end = try_GREEKMARK(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GREEKMARK; }
-            end = try_PATSYN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
-            end = try_WIDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WIDE; }
-            end = try_WSP(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WSP; }
-            end = try_OTHER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        match first_char {
+            '\t'..='\r' | ' ' | '' | ' ' | ' ' | ' '..=' ' | ' '..=' ' | ' ' | ' ' | '　' => {
+                end = try_WSP(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WSP; }
+                end = try_OTHER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OTHER; }
+            },
+            '!'..='/' | ':'..='@' | '['..='^' | '`' | '{'..='~' | '¡'..='§' | '©' | '«'..='¬' | '®' | '°'..='±' | '¶' | '»' | '¿' | '×' | '÷' | '‐'..='‧' | '‰'..='‾' | '⁁'..='⁓' | '⁕'..='⁞' | '←'..='⌙' | '⌜'..='⌨' | '⌫'..='⏨' | '⏭'..='⏯' | '⏱'..='⏲' | '⏴'..='⑟' | '─'..='◼' | '◿'..='☓' | '☖'..='☯' | '☸'..='♇' | '♔'..='♾' | '⚀'..='⚉' | '⚐'..='⚒' | '⚔'..='⚠' | '⚢'..='⚩' | '⚬'..='⚼' | '⚿'..='⛃' | '⛆'..='⛍' | '⛏'..='⛓' | '⛕'..='⛩' | '⛫'..='⛱' | '⛴' | '⛶'..='⛹' | '⛻'..='⛼' | '⛾'..='✄' | '✆'..='✉' | '✌'..='✧' | '✩'..='❋' | '❍' | '❏'..='❒' | '❖' | '❘'..='❵' | '➔' | '➘'..='➯' | '➱'..='➾' | '⟀'..='⬚' | '⬝'..='⭏' | '⭑'..='⭔' | '⭖'..='⯿' | '⸀'..='⹿' | '﴾'..='﴿' => {
+                end = try_PATSYN(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PATSYN; }
+                end = try_OTHER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OTHER; }
+            },
+            '̀'..='ͯ' | '҃'..='҇' | '֑'..='ֽ' | 'ֿ' | 'ׁ'..='ׂ' | 'ׄ'..='ׅ' | 'ׇ' | 'ؐ'..='ؚ' | 'ً'..='ٟ' | 'ٰ' | 'ۖ'..='ۜ' | '۟'..='ۤ' | 'ۧ'..='ۨ' | '۪'..='ۭ' | 'ܑ' | 'ܰ'..='݊' | 'ަ'..='ް' | '߫'..='߳' | '߽' | 'ࠖ'..='࠙' | 'ࠛ'..='ࠣ' | 'ࠥ'..='ࠧ' | 'ࠩ'..='࠭' | '࡙'..='࡛' | 'ࢗ'..='࢟' | '࣊'..='࣡' | 'ࣣ'..='ं' | 'ऺ' | '़' | 'ु'..='ै' | '्' | '॑'..='ॗ' | 'ॢ'..='ॣ' | 'ঁ' | '়' | 'ু'..='ৄ' | '্' | 'ৢ'..='ৣ' | '৾' | 'ਁ'..='ਂ' | '਼' | 'ੁ'..='ੂ' | 'ੇ'..='ੈ' | 'ੋ'..='੍' | 'ੑ' | 'ੰ'..='ੱ' | 'ੵ' | 'ઁ'..='ં' | '઼' | 'ુ'..='ૅ' | 'ે'..='ૈ' | '્' | 'ૢ'..='ૣ' | 'ૺ'..='૿' | 'ଁ' | '଼' | 'ି' | 'ୁ'..='ୄ' | '୍' | '୕'..='ୖ' | 'ୢ'..='ୣ' | 'ஂ' | 'ீ' | '்' | 'ఀ' | 'ఄ' | '఼' | 'ా'..='ీ' | 'ె'..='ై' | 'ొ'..='్' | 'ౕ'..='ౖ' | 'ౢ'..='ౣ' | 'ಁ' | '಼' | 'ಿ' | 'ೆ' | 'ೌ'..='್' | 'ೢ'..='ೣ' | 'ഀ'..='ഁ' | '഻'..='഼' | 'ു'..='ൄ' | '്' | 'ൢ'..='ൣ' | 'ඁ' | '්' | 'ි'..='ු' | 'ූ' | 'ั' | 'ิ'..='ฺ' | '็'..='๎' | 'ັ' | 'ິ'..='ຼ' | '່'..='໎' | '༘'..='༙' | '༵' | '༷' | '༹' | 'ཱ'..='ཾ' | 'ྀ'..='྄' | '྆'..='྇' | 'ྍ'..='ྗ' | 'ྙ'..='ྼ' | '࿆' | 'ိ'..='ူ' | 'ဲ'..='့' | '္'..='်' | 'ွ'..='ှ' | 'ၘ'..='ၙ' | 'ၞ'..='ၠ' | 'ၱ'..='ၴ' | 'ႂ' | 'ႅ'..='ႆ' | 'ႍ' | 'ႝ' | '፝'..='፟' | 'ᜒ'..='᜔' | 'ᜲ'..='ᜳ' | 'ᝒ'..='ᝓ' | 'ᝲ'..='ᝳ' | '឴'..='឵' | 'ិ'..='ួ' | 'ំ' | '៉'..='៓' | '៝' | '᠋'..='᠍' | '᠏' | 'ᢅ'..='ᢆ' | 'ᢩ' | 'ᤠ'..='ᤢ' | 'ᤧ'..='ᤨ' | 'ᤲ' | '᤹'..='᤻' | 'ᨗ'..='ᨘ' | 'ᨛ' | 'ᩖ' | 'ᩘ'..='ᩞ' | '᩠' | 'ᩢ' | 'ᩥ'..='ᩬ' | 'ᩳ'..='᩼' | '᩿' | '᪰'..='᪽' | 'ᪿ'..='᫝' | '᫠'..='᫫' | 'ᬀ'..='ᬃ' | '᬴' | 'ᬶ'..='ᬺ' | 'ᬼ' | 'ᭂ' | '᭫'..='᭳' | 'ᮀ'..='ᮁ' | 'ᮢ'..='ᮥ' | 'ᮨ'..='ᮩ' | '᮫'..='ᮭ' | '᯦' | 'ᯨ'..='ᯩ' | 'ᯭ' | 'ᯯ'..='ᯱ' | 'ᰬ'..='ᰳ' | 'ᰶ'..='᰷' | '᳐'..='᳒' | '᳔'..='᳠' | '᳢'..='᳨' | '᳭' | '᳴' | '᳸'..='᳹' | '᷀'..='᷿' | '⃐'..='⃜' | '⃡' | '⃥'..='⃰' | '⳯'..='⳱' | '⵿' | 'ⷠ'..='ⷿ' | '꙯' | 'ꙴ'..='꙽' | 'ꚞ'..='ꚟ' | '꛰'..='꛱' | 'ꠂ' | '꠆' | 'ꠋ' | 'ꠥ'..='ꠦ' | '꠬' | '꣄'..='ꣅ' | '꣠'..='꣱' | 'ꣿ' | 'ꤦ'..='꤭' | 'ꥇ'..='ꥑ' | 'ꦀ'..='ꦂ' | '꦳' | 'ꦶ'..='ꦹ' | 'ꦼ'..='ꦽ' | 'ꧥ' | 'ꨩ'..='ꨮ' | 'ꨱ'..='ꨲ' | 'ꨵ'..='ꨶ' | 'ꩃ' | 'ꩌ' | 'ꩼ' | 'ꪰ' | 'ꪲ'..='ꪴ' | 'ꪷ'..='ꪸ' | 'ꪾ'..='꪿' | '꫁' | 'ꫬ'..='ꫭ' | '꫶' | 'ꯥ' | 'ꯨ' | '꯭' | 'ﬞ' | '︀'..='️' | '︠'..='︯' | '𐇽' | '𐋠' | '𐍶'..='𐍺' | '𐨁'..='𐨃' | '𐨅'..='𐨆' | '𐨌'..='𐨏' | '𐨸'..='𐨺' | '𐨿' | '𐫥'..='𐫦' | '𐴤'..='𐴧' | '𐵩'..='𐵭' | '𐺫'..='𐺬' | '𐻺'..='𐻿' | '𐽆'..='𐽐' | '𐾂'..='𐾅' | '𑀁' | '𑀸'..='𑁆' | '𑁰' | '𑁳'..='𑁴' | '𑁿'..='𑂁' | '𑂳'..='𑂶' | '𑂹'..='𑂺' | '𑃂' | '𑄀'..='𑄂' | '𑄧'..='𑄫' | '𑄭'..='𑄴' | '𑅳' | '𑆀'..='𑆁' | '𑆶'..='𑆾' | '𑇉'..='𑇌' | '𑇏' | '𑈯'..='𑈱' | '𑈴' | '𑈶'..='𑈷' | '𑈾' | '𑉁' | '𑋟' | '𑋣'..='𑋪' | '𑌀'..='𑌁' | '𑌻'..='𑌼' | '𑍀' | '𑍦'..='𑍬' | '𑍰'..='𑍴' | '𑎻'..='𑏀' | '𑏎' | '𑏐' | '𑏒' | '𑏡'..='𑏢' | '𑐸'..='𑐿' | '𑑂'..='𑑄' | '𑑆' | '𑑞' | '𑒳'..='𑒸' | '𑒺' | '𑒿'..='𑓀' | '𑓂'..='𑓃' | '𑖲'..='𑖵' | '𑖼'..='𑖽' | '𑖿'..='𑗀' | '𑗜'..='𑗝' | '𑘳'..='𑘺' | '𑘽' | '𑘿'..='𑙀' | '𑚫' | '𑚭' | '𑚰'..='𑚵' | '𑚷' | '𑜝' | '𑜟' | '𑜢'..='𑜥' | '𑜧'..='𑜫' | '𑠯'..='𑠷' | '𑠹'..='𑠺' | '𑤻'..='𑤼' | '𑤾' | '𑥃' | '𑧔'..='𑧗' | '𑧚'..='𑧛' | '𑧠' | '𑨁'..='𑨊' | '𑨳'..='𑨸' | '𑨻'..='𑨾' | '𑩇' | '𑩑'..='𑩖' | '𑩙'..='𑩛' | '𑪊'..='𑪖' | '𑪘'..='𑪙' | '𑭠' | '𑭢'..='𑭤' | '𑭦' | '𑰰'..='𑰶' | '𑰸'..='𑰽' | '𑰿' | '𑲒'..='𑲧' | '𑲪'..='𑲰' | '𑲲'..='𑲳' | '𑲵'..='𑲶' | '𑴱'..='𑴶' | '𑴺' | '𑴼'..='𑴽' | '𑴿'..='𑵅' | '𑵇' | '𑶐'..='𑶑' | '𑶕' | '𑶗' | '𑻳'..='𑻴' | '𑼀'..='𑼁' | '𑼶'..='𑼺' | '𑽀' | '𑽂' | '𑽚' | '𓑀' | '𓑇'..='𓑕' | '𖄞'..='𖄩' | '𖄭'..='𖄯' | '𖫰'..='𖫴' | '𖬰'..='𖬶' | '𖽏' | '𖾏'..='𖾒' | '𛲝'..='𛲞' | '𜼀'..='𜼭' | '𜼰'..='𜽆' | '𝅧'..='𝅩' | '𝅻'..='𝆂' | '𝆅'..='𝆋' | '𝆪'..='𝆭' | '𝨀'..='𝨶' | '𝨻'..='𝩬' | '𝩵' | '𝪄' | '𝪛'..='𝪟' | '𝪡'..='𝪯' | '𞀀'..='𞀆' | '𞀈'..='𞀘' | '𞀛'..='𞀡' | '𞀣'..='𞀤' | '𞀦'..='𞀪' | '𞂏' | '𞄰'..='𞄶' | '𞊮' | '𞋬'..='𞋯' | '𞓬'..='𞓯' | '𞗮'..='𞗯' | '𞛣' | '𞛦' | '𞛮'..='𞛯' | '𞛵' | '𞣐'..='𞣖' | '𞥄'..='𞥊' | '󠄀'..='󠇯' => {
+                end = try_GREEKMARK(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_GREEKMARK; }
+                end = try_OTHER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OTHER; }
+            },
+            'Ͱ'..='ͳ' | '͵'..='ͷ' | 'ͺ'..='ͽ' | 'Ϳ' | '΄' | 'Ά' | 'Έ'..='Ί' | 'Ό' | 'Ύ'..='Ρ' | 'Σ'..='ϡ' | 'ϰ'..='Ͽ' | 'ᴦ'..='ᴪ' | 'ᵝ'..='ᵡ' | 'ᵦ'..='ᵪ' | 'ᶿ' | 'ἀ'..='ἕ' | 'Ἐ'..='Ἕ' | 'ἠ'..='ὅ' | 'Ὀ'..='Ὅ' | 'ὐ'..='ὗ' | 'Ὑ' | 'Ὓ' | 'Ὕ' | 'Ὗ'..='ώ' | 'ᾀ'..='ᾴ' | 'ᾶ'..='ῄ' | 'ῆ'..='ΐ' | 'ῖ'..='Ί' | '῝'..='`' | 'ῲ'..='ῴ' | 'ῶ'..='῾' | 'Ω' | 'ꭥ' | '𐅀'..='𐆎' | '𐆠' | '𝈀'..='𝉁' | '𝉅' => {
+                end = try_GREEK(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_GREEK; }
+                end = try_OTHER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OTHER; }
+            },
+            'ᄀ'..='ᅟ' | '⺀'..='⺙' | '⺛'..='⻳' | '⼀'..='⿕' | '⿰'..='⿿' | '〄'..='〇' | '〡'..='〩' | '〮'..='〯' | '〱'..='〾' | 'ぁ'..='ゖ' | '゛'..='ヿ' | 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | '㆐'..='㇥' | '㇯'..='㈞' | '㈠'..='㉇' | '㉐'..='ꒌ' | '꒐'..='꓆' | 'ꥠ'..='ꥼ' | '가'..='힣' | '豈'..='﫿' | '︐'..='︙' | '︰'..='﹄' | '﹇'..='﹒' | '﹔'..='﹦' | '﹨'..='﹫' | '𖿠'..='𖿣' | '𖿰'..='𖿶' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛄲' | '𛅐'..='𛅒' | '𛅕' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𝌀'..='𝍖' | '𝍠'..='𝍶' | '🀄' | '🃏' | '🆎' | '🆑'..='🆚' | '🈀'..='🈂' | '🈐'..='🈻' | '🉀'..='🉈' | '🉐'..='🉑' | '🉠'..='🉥' | '🌀'..='🌠' | '🌭'..='🌵' | '🌷'..='🍼' | '🍾'..='🎓' | '🎠'..='🏊' | '🏏'..='🏓' | '🏠'..='🏰' | '🏴' | '🏸'..='🐾' | '👀' | '👂'..='📼' | '📿'..='🔽' | '🕋'..='🕎' | '🕐'..='🕧' | '🕺' | '🖕'..='🖖' | '🖤' | '🗻'..='🙏' | '🚀'..='🛅' | '🛌' | '🛐'..='🛒' | '🛕'..='🛘' | '🛜'..='🛟' | '🛫'..='🛬' | '🛴'..='🛼' | '🟠'..='🟫' | '🟰' | '🤌'..='🤺' | '🤼'..='🥅' | '🥇'..='🧿' | '🩰'..='🩼' | '🪀'..='🪊' | '🪎'..='🫆' | '🫈' | '🫍'..='🫜' | '🫟'..='🫪' | '🫯'..='🫸' | '𠀀'..='𯿽' | '𰀀'..='𿿽' => {
+                end = try_WIDE(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WIDE; }
+                end = try_OTHER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OTHER; }
+            },
+            '⌚'..='⌛' | '〈'..='〉' | '⏩'..='⏬' | '⏰' | '⏳' | '◽'..='◾' | '☔'..='☕' | '☰'..='☷' | '♈'..='♓' | '♿' | '⚊'..='⚏' | '⚓' | '⚡' | '⚪'..='⚫' | '⚽'..='⚾' | '⛄'..='⛅' | '⛎' | '⛔' | '⛪' | '⛲'..='⛳' | '⛵' | '⛺' | '⛽' | '✅' | '✊'..='✋' | '✨' | '❌' | '❎' | '❓'..='❕' | '❗' | '➕'..='➗' | '➰' | '➿' | '⬛'..='⬜' | '⭐' | '⭕' | '、'..='〃' | '〈'..='〠' | '〰' | '﹅'..='﹆' => {
+                end = try_PATSYN(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PATSYN; }
+                end = try_WIDE(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WIDE; }
+                end = try_OTHER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OTHER; }
+            },
+            '〪'..='〭' | '゙'..='゚' | '𖿤' => {
+                end = try_GREEKMARK(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_GREEKMARK; }
+                end = try_WIDE(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WIDE; }
+                end = try_OTHER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OTHER; }
+            },
+            '𝉂'..='𝉄' => {
+                end = try_GREEK(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_GREEK; }
+                end = try_GREEKMARK(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_GREEKMARK; }
+                end = try_OTHER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OTHER; }
+            },
+            _ => {
+                end = try_OTHER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OTHER; }
+            },
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

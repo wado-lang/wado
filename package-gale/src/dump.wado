@@ -44,7 +44,6 @@ use {
     group_prediction_order,
 } from "./prediction.wado";
 use { rule_overlap_groups } from "./parser_gen.wado";
-use { literal_const_name } from "./gen_util.wado";
 use { build_atn_with, dump_atn } from "./atn.wado";
 
 /// The `--atn` report: the surface-IR ATN the runtime simulator walks, built
@@ -323,7 +322,7 @@ fn render_prediction_node(out: &mut String, node: &PredictionNode, indent: i32) 
 fn prediction_element_label(elem: &Element) -> String {
     return match elem {
         TokenRef(t) => `TK_${t.name}`,
-        Literal(l) => literal_const_name(&l.text),
+        Literal(l) => l.const_name,
         _ => "?",
     };
 }

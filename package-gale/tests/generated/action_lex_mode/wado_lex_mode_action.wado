@@ -1297,34 +1297,38 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_more = false;
         let mut best_channel: i32 = 0;
         if current_mode == 0 {
-            if first_char matches { ' ' } {
-                end = try_WS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { '<' } {
-                end = try_LT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 0; }
-            } else if first_char matches { 'm' } {
-                end = try_M(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_M; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 1; }
-                end = try_W(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_W; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else if first_char matches { 'a'..='z' } {
-                end = try_W(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_W; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else {
-                end = try_W(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_W; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            match first_char {
+                ' ' => {
+                    end = try_WS(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '<' => {
+                    end = try_LT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_LT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 0; }
+                },
+                'a'..='l' | 'n'..='z' => {
+                    end = try_W(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_W; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                'm' => {
+                    end = try_M(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_M; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 1; }
+                    end = try_W(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_W; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                _ => {},
             }
         } else if current_mode == 1 {
-            if first_char matches { '>' } {
-                end = try_GT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_GT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 2; }
-            } else if first_char matches { '0'..='9' } {
-                end = try_N(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_N; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            } else {
-                end = try_N(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_N; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            match first_char {
+                '0'..='9' => {
+                    end = try_N(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_N; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                },
+                '>' => {
+                    end = try_GT(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_GT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 2; }
+                },
+                _ => {},
             }
         }
         if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode && best_set_mode < 0) {

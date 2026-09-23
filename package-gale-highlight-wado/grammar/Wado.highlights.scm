@@ -63,13 +63,10 @@
 (formatSpec (IDENTIFIER) @comment)
 (typeRef (IDENTIFIER) @type)
 (genericParam (IDENTIFIER) @type)
-; `.method()`, and `.field` with a struct literal's and a pattern's field name.
-; A member name is a name whichever word it is, and `memberName` accepts ~47 of
-; them, keywords included. The whole rule carries the capture: the compiler
-; reads every one of those words through its ordinary name path. `self` is the
-; exception it reads lexically, wherever it stands.
-(fieldName "self" @constant.builtin)
-(methodName "self" @constant.builtin)
+; `.method()`, and `.field` with a field's name wherever it is declared or
+; written. A member name is a name whichever word it is, `self` and `Self`
+; included, and `memberName` accepts ~47 of them. The whole rule carries the
+; capture: the compiler reads every one of those words through its name path.
 (methodName) @function.method
 (fieldName) @property
 ; A `::` segment's IDENTIFIER stays uncoloured: `Option::None` and `Foo::new`
@@ -166,6 +163,7 @@
 "..=" @operator
 
 ; Keywords (inline literals)
+"Self" @keyword
 "as" @keyword
 "assert" @keyword
 "async" @keyword

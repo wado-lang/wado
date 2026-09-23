@@ -1,4 +1,4 @@
-use { EmitError, emit } from "./emit.wado";
+use { EmitError, GRAPH_BANNER, emit } from "./emit.wado";
 use { Attr, ConstTensor, Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
@@ -14,9 +14,20 @@ fn generate(source: String, layout: List<LayoutRule>) -> Result<String, EmitErro
     return emit(&graph, &shapes);
 }
 
-global MLP: String = `
-mlp (float[N, 4] X) => (float[N, 2] Y)
-<float[4, 3] W1, float[3] B1, float[3, 2] W2, float[2] B2>
+/// The part of the module generated from the graph, with the inlined runtime
+/// cut away. Asserting that a kernel is *absent* has to say where, since the
+/// runtime names every kernel.
+fn emitted(out: &String) -> String {
+    let start = out.find(&GRAPH_BANNER).unwrap() + GRAPH_BANNER.len();
+    return out.as_str_slice().sub(start, out.len()).to_string();
+}
+
+/// The same two-layer graph at any boundary element type, which is the one
+/// thing that changes between the f32 tests and the half precision ones.
+fn mlp(dtype: String) -> String {
+    return `
+mlp (${dtype}[N, 4] X) => (${dtype}[N, 2] Y)
+<${dtype}[4, 3] W1, ${dtype}[3] B1, ${dtype}[3, 2] W2, ${dtype}[2] B2>
 {
     H = MatMul(X, W1)
     HB = Add(H, B1)
@@ -25,6 +36,9 @@ mlp (float[N, 4] X) => (float[N, 2] Y)
     Y = Add(T, B2)
 }
 `;
+}
+
+global MLP: String = mlp("float");
 
 fn mlp_layout() -> List<LayoutRule> {
     return [
@@ -34,6 +48,19 @@ fn mlp_layout() -> List<LayoutRule> {
         rule("W2", ["Hidden", "Out"]),
         rule("B2", ["Out"]),
     ];
+}
+
+test "a banner separates the inlined runtime from the graph's own code" {
+    let out = generate(MLP, mlp_layout()).unwrap();
+
+    // The runtime is above the banner and this graph's code below it, which is
+    // what lets a test say where a kernel call would have to appear.
+    let body = emitted(&out);
+    assert !body.contains("pub fn matmul");
+    assert !body.contains("pub fn map");
+    assert body.contains("pub struct Weights {");
+    assert body.contains("pub fn forward(");
+    assert out.contains("pub fn matmul");
 }
 
 test "the forward pass is one kernel call per operator" {
@@ -179,8 +206,8 @@ g (float[2, 3] A, float[3, 4] B) => (float[2, 4] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains("matmul(");
-    assert !out.contains("map(");
-    assert !out.contains("transpose2(");
+    assert !emitted(&out).contains("map(");
+    assert !emitted(&out).contains("transpose2(");
 }
 
 test "a rank-2 Transpose lowers to the kernel" {
@@ -206,7 +233,7 @@ g (float[2, 3] X) => (float[2, 3] Y)
 `;
     let out = generate(source, [rule("*", ["A", "B"])]).unwrap();
 
-    assert !out.contains("transpose2(");
+    assert !emitted(&out).contains("transpose2(");
     // Every node result is bound as a value, so the operand is read as one.
     assert out.contains("let Y = *X;");
 }
@@ -264,6 +291,12 @@ g (float[N, 2] X) => (float[N, 2] Y)
     let e = generate(source, [rule("*", ["Batch", "Tensor"])]).unwrap_err();
 
     assert `${e}` == "Tensor: an axis cannot be named as the generated module names something";
+
+    // Every declaration keyword reserves what it names, not `fn` and `struct`
+    // alone: `Held` is the runtime's trait.
+    let t = generate(source, [rule("*", ["Batch", "Held"])]).unwrap_err();
+
+    assert `${t}` == "Held: an axis cannot be named as the generated module names something";
 }
 
 test "a broadcast that stretches an extent of one names both operands" {
@@ -310,10 +343,32 @@ test "an element type the kernels cannot compute in names itself" {
     assert refused_dtype("uint8") == "X: the kernels compute in f32 and this tensor is uint8";
 }
 
-// Half precision has Wado primitives and no kernel, which roadmap step 2 closes.
-test "a half precision boundary tensor is refused" {
-    assert refused_dtype("float16") == "X: the kernels compute in f32 and this tensor is float16";
-    assert refused_dtype("bfloat16") == "X: the kernels compute in f32 and this tensor is bfloat16";
+test "a half precision boundary states its own element type" {
+    let out = generate(mlp("float16"), mlp_layout()).unwrap();
+
+    assert out.contains(
+        "pub fn forward(X: &Tensor<f16, [Batch, In]>, weights: &Weights) -> Tensor<f16, [Batch, Out]> {",
+    );
+    assert out.contains("pub W1: Tensor<f16, [In, Hidden]>,");
+}
+
+// The kernels compute in f32 and half precision has no arithmetic, so every
+// half operand is widened on the way in and the result narrowed on the way out.
+test "a half precision boundary is widened into the f32 the kernels compute in" {
+    let out = generate(mlp("float16"), mlp_layout()).unwrap();
+
+    assert out.contains("let X = widen(X);");
+    assert out.contains("let W1 = widen(&weights.W1);");
+    assert out.contains("let H = matmul(&X, &W1);");
+    assert out.contains("return narrow(&Y);");
+}
+
+test "bfloat16 is the same boundary with the other primitive" {
+    let out = generate(mlp("bfloat16"), mlp_layout()).unwrap();
+
+    assert out.contains("pub fn forward(X: &Tensor<bf16, [Batch, In]>");
+    assert out.contains("let X = widen(X);");
+    assert out.contains("return narrow(&Y);");
 }
 
 // The textual format carries no tensor attribute, so a `Constant` graph is

@@ -1213,31 +1213,31 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_comma(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_COMMA(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ',' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_lbracket(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_LBRACKET(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '[' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_rbracket(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_RBRACKET(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ']' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_lt(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_LT(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '<' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_gt(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_GT(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '>' { return -1; }
     return pos + 1;
@@ -1253,30 +1253,36 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { ',' } {
-            end = try_lit_comma(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
-        } else if first_char matches { '<' } {
-            end = try_lit_lt(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
-        } else if first_char matches { '>' } {
-            end = try_lit_gt(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
-        } else if first_char matches { '[' } {
-            end = try_lit_lbracket(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
-        } else if first_char matches { ']' } {
-            end = try_lit_rbracket(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
-        } else if first_char matches { 'a'..='z' } {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
+        match first_char {
+            '\t' | '\n' | '\r' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            ',' => {
+                end = try_lit_COMMA(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
+            },
+            '<' => {
+                end = try_lit_LT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
+            },
+            '>' => {
+                end = try_lit_GT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
+            },
+            '[' => {
+                end = try_lit_LBRACKET(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
+            },
+            ']' => {
+                end = try_lit_RBRACKET(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
+            },
+            'a'..='z' => {
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

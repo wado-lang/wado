@@ -1163,20 +1163,24 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_push_mode: i32 = -1;
         let mut best_pop_mode = false;
         if current_mode == 0 {
-            if first_char matches { '\t' | '\n' | '\r' | ' ' } {
-                end = try_WS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; }
-            } else if first_char matches { '{' } {
-                end = try_LBRACE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LBRACE; best_push_mode = 1; best_pop_mode = false; }
+            match first_char {
+                '\t' | '\n' | '\r' | ' ' => {
+                    end = try_WS(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; }
+                },
+                '{' => {
+                    end = try_LBRACE(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_LBRACE; best_push_mode = 1; best_pop_mode = false; }
+                },
+                _ => {},
             }
         } else if current_mode == 1 {
-            if first_char matches { 'a'..='z' } {
-                end = try_WORD(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_WORD; best_push_mode = -1; best_pop_mode = false; }
-            } else {
-                end = try_WORD(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_WORD; best_push_mode = -1; best_pop_mode = false; }
+            match first_char {
+                'a'..='z' => {
+                    end = try_WORD(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_WORD; best_push_mode = -1; best_pop_mode = false; }
+                },
+                _ => {},
             }
         }
         if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode) {
