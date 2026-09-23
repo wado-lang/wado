@@ -97,6 +97,10 @@ and receives the reason rather than falling through to "no method named". It
 is excluded from everything else. It never satisfies a trait requirement, and
 it never reaches codegen.
 
+On a trait, it is not a requirement either: no impl owes it. Every type that
+implements the trait answers to the name, whether a call names the type or
+reaches it through a bound, and whether the method takes a receiver or not.
+
 ### Placement
 
 Module-level `fn`, `impl` method, and trait method. Writing it anywhere else is

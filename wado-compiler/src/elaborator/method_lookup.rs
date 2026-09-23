@@ -2402,9 +2402,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let trait_module = declaring.map(|sig| sig.module.clone());
             if let Some(default_method) = declaring
                 .and_then(|sig| sig.method(method_name))
-                .filter(|m| {
-                    m.default_body.is_some() || scope.tysys.unavailable.contains_key(&m.sig.def)
-                })
+                .filter(|m| m.is_inherited())
                 .cloned()
             {
                 let mut declaring_args = vec![receiver_type_id.unwrap_or(TypeTable::UNKNOWN)];

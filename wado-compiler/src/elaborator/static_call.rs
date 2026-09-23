@@ -822,7 +822,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .signatures
             .trait_sig(trait_decl)?
             .method(method_name)?;
-        declared.default_body.as_ref()?;
+        if !declared.is_inherited() {
+            return None;
+        }
         let frame: Vec<TypeId> = std::iter::once(receiver_type.unwrap_or(TypeTable::UNKNOWN))
             .chain(self.trait_args_of_impl(impl_def))
             .collect();

@@ -396,8 +396,18 @@ pub(crate) struct TraitMethod {
     /// leading slots, the method's own follow.
     pub(crate) sig: MethodSig,
     /// Irreducibly AST: walked once per implementing block and reified per
-    /// instantiation. `None` marks a required method.
+    /// instantiation. `None` marks a required or reserved method.
     pub(crate) default_body: Option<Rc<ast::Function>>,
+    /// Declared `#[unavailable]`: a reserved name, owed by no impl.
+    pub(crate) is_reserved: bool,
+}
+
+impl TraitMethod {
+    /// Whether an impl that writes no such method still answers to it: with the
+    /// trait's default, or with the reason a reserved name carries.
+    pub(crate) fn is_inherited(&self) -> bool {
+        self.default_body.is_some() || self.is_reserved
+    }
 }
 
 impl TraitSig {

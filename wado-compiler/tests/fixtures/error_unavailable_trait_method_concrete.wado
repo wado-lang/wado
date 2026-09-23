@@ -1,11 +1,14 @@
-// A trait's unavailable method is owed by no impl, and a call on an
-// implementing type reaches it just as a call through a bound does.
+// A trait's unavailable method is owed by no impl. A call on an implementing
+// type, or through a bound, reaches it: instance and static alike.
 
 trait Named with () {
     fn name(&self) -> i32;
 
     #[unavailable("use `name`")]
     fn old_name(&self);
+
+    #[unavailable("use `A { v }`")]
+    fn create();
 }
 
 struct A {
@@ -18,10 +21,24 @@ impl Named for A {
     }
 }
 
+fn via_bound<T: Named>() {
+    T::create();
+}
+
 export fn run() {
     let a = A { v: 1 };
     a.old_name();
+    A::create();
+    via_bound::<A>();
 }
 
 __DATA__
-{"compile_error": "`Named::old_name` is unavailable: use `name`"}
+{
+    "compile_error": "`Named::create` is unavailable: use `A { v }`",
+    "compile_errors_contains": [
+        ":25:5: error: `Named::create` is unavailable",
+        ":30:5: error: `Named::old_name` is unavailable: use `name`",
+        ":31:8: error: `Named::create` is unavailable"
+    ],
+    "compile_errors_not_contains": ["does not implement", "does not define", "no method"]
+}

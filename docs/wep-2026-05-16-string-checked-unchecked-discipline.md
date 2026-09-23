@@ -129,7 +129,7 @@ impl String {
 
 `is_char_boundary` validates an index before an `_unchecked` call, mirroring `str::is_char_boundary` in Rust. `floor_char_boundary` turns a byte budget into an index the checked methods accept: `s.substr_bytes(0, s.floor_char_boundary(200))` never panics, where `s.substr_bytes(0, 200)` does on the first input that puts a multibyte character across byte 200. `StrSlice` and every `AsStrSlice` carry all three.
 
-An index past `len()` clamps to `len()`: a budget longer than the text is the common case, and the bytes past `len()` are spare capacity, so the range check is needed anyway. A negative index panics, as `truncate` does, rather than clamping a caller's bug to 0. Both are one unsigned compare, the panic outlined behind it, so no `_unchecked` sibling is added.
+An index past `len()` clamps to `len()`: a budget longer than the text is the common case, and the bytes past `len()` are spare capacity, so the range check is needed anyway. A negative index panics, as `truncate` does, rather than clamping a caller's bug to 0. One unsigned compare decides both, so an `_unchecked` sibling would save nothing and none is added.
 
 ### `internal_*` Inventory
 

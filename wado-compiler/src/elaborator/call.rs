@@ -3626,8 +3626,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter_map(|impl_def| trait_env.impl_headers.get(impl_def)?.trait_def())
             .find_map(|trait_decl| {
                 let method = self.trait_sig_of(&trait_decl)?.method(method_name)?;
-                method.default_body.as_ref()?;
-                Some(method.sig.clone())
+                method.is_inherited().then(|| method.sig.clone())
             })?;
         let split = sig.declaring_split();
         sig.decl.type_params.drain(..split);
@@ -3904,6 +3903,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             }
         {
+            if let Some(def) = method_info_result.method_def
+                && self.report_unavailable(def, call.span)
+            {
+                return TypeTable::ERROR;
+            }
             let return_type = method_info_result.return_type;
 
             // Resolve method-level type args (e.g., T::deserialize::<JsonDeserializer>)

@@ -347,7 +347,7 @@ reference to one, or a view of one — Wado's answer to Rust's `AsRef<str>`. See
 
 ```wado
 let v = "banana".as_str_slice();
-let part = v.slice(1, 4);          // "ana"; panics off a character boundary
+let part = v.slice(1, 4);        // "ana"; panics off a character boundary
 part.len();                      // 3, in bytes
 part.to_string();                // copies out, here and only here
 for let c of part.chars() { ... }
