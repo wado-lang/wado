@@ -3351,20 +3351,6 @@ impl CmInterfaceRegistry {
             .function
             .clone()
             .unwrap_or_else(|| method_name.replace('_', "-"));
-        let qualified_name = format!("{interface_name}::{method_name}");
-
-        // A second binding of one import (each chain root's `is-same`) reaches
-        // the first, so the interface exports the function once.
-        if let Some(bound) = self.interfaces.get(&interface_path).and_then(|functions| {
-            functions
-                .iter()
-                .find(|f| f.wasi_func_name == wasi_func_name)
-        }) {
-            let bound = bound.clone();
-            self.effect_to_func.insert(qualified_name, bound);
-            return;
-        }
-
         // Params carry their value types: newtypes peeled, extern handles kept,
         // so a binding's GC-level types match the caller's.
         let resolved_params: Vec<(String, String, Type)> = params
@@ -3390,6 +3376,7 @@ impl CmInterfaceRegistry {
         self.used_names.insert(local_name.clone());
 
         // Register in effect -> func map
+        let qualified_name = format!("{interface_name}::{method_name}");
         self.effect_to_func
             .insert(qualified_name, func_info.clone());
 

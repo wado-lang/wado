@@ -532,15 +532,9 @@ fn generate_import_adapters(project: &mut Package) {
     // call-site rewriting, but added to the entry module so they
     // participate in monomorphize / lower / DCE like normal functions.
     let mut auxiliary_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
-    // Two names bound to one import share its adapter.
-    let mut by_import: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
     for qualified_name in &seen_effects {
         if let Some(func_info) = project.cm_interface_registry.get_function(qualified_name) {
             let func_info = func_info.clone();
-            if let Some(shared) = by_import.get(&func_info.local_alias_name()) {
-                adapters.insert(qualified_name.clone(), Rc::clone(shared));
-                continue;
-            }
             let owner_module = lookup_effect_owner(
                 &owner_sources,
                 &func_info.interface_name,
@@ -575,7 +569,6 @@ fn generate_import_adapters(project: &mut Package) {
                 produced.adapter.borrow_mut().effects.clear();
             }
             auxiliary_functions.extend(produced.auxiliary);
-            by_import.insert(func_info.local_alias_name(), Rc::clone(&produced.adapter));
             adapters.insert(qualified_name.clone(), produced.adapter);
         }
     }
@@ -584,7 +577,7 @@ fn generate_import_adapters(project: &mut Package) {
         .tir_modules
         .get_mut(&entry_source)
         .expect("entry module should exist");
-    for adapter_rc in by_import.values() {
+    for adapter_rc in adapters.values() {
         entry_module.functions.push(adapter_rc.clone());
     }
     for aux in auxiliary_functions {
