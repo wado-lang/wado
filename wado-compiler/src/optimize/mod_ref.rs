@@ -715,8 +715,8 @@ fn linear_memory_effect(access: Option<LinearMemory>) -> FnEffect {
 /// (streams, futures, waitables, tasks, threads) — I/O, hence opaque. The rest
 /// are Wasm instructions: touching linear memory where `#[linear_memory]`
 /// says so, trapping unless `#[trap(...)]` says when, and storing through
-/// their `&mut` parameters. Anything bodyless that is not a builtin at all (an extern
-/// declaration) is opaque, since there is no body to inspect.
+/// their `&mut` parameters. Anything bodyless that is not a builtin at all
+/// (an extern declaration) is opaque, since there is no body to inspect.
 fn leaf_effect<'a>(
     f: &NirFunction,
     registry: &BuiltinRegistry,

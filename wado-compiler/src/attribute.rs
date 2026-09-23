@@ -500,6 +500,14 @@ pub fn lookup(name: &str) -> Option<&'static AttributeSchema> {
     ATTRIBUTES.iter().find(|schema| schema.name == name)
 }
 
+/// The attributes among `attrs` that describe a declaration with no body.
+pub fn bodyless(attrs: &[Attribute]) -> impl Iterator<Item = (&Attribute, &'static str, Bodyless)> {
+    attrs.iter().filter_map(|attr| {
+        let schema = lookup(&attr.name)?;
+        Some((attr, schema.name, schema.bodyless?))
+    })
+}
+
 /// Why an attribute as written is not the one the schema describes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AttributeFault {

@@ -41,7 +41,7 @@ fn record_declaration(
                 && func.immediates.is_empty()
                 && func.trap.is_none()
                 && func.linear_memory.is_none(),
-            "`{}` declares storage or an immediate as a method; key the snapshot by `DefId` first",
+            "`{}` is a method with a bodyless attribute; key the snapshot by `DefId` first",
             func.name
         );
         return;

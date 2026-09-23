@@ -2053,19 +2053,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// on a function that has one. Its arguments were read already, so a
     /// malformed one reports that too.
     fn reject_bodyless_attrs_on_body(&self, attrs: &[ast::Attribute]) {
-        for attr in attrs {
-            let Some(schema) = attribute::lookup(&attr.name) else {
-                continue;
-            };
-            let Some(bodyless) = schema.bodyless else {
-                continue;
-            };
+        for (attr, name, bodyless) in attribute::bodyless(attrs) {
             self.attr_error(
                 Code::AttrMisuse,
                 attr,
                 format!(
-                    "#[{}] belongs to a declaration with no body: {}",
-                    schema.name, bodyless.on_body
+                    "#[{name}] belongs to a declaration with no body: {}",
+                    bodyless.on_body
                 ),
             );
         }

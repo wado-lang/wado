@@ -2040,17 +2040,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         owner: &str,
         method: &ast::Function,
     ) {
-        for attr in &method.attrs {
-            let Some(schema) = attribute::lookup(&attr.name) else {
-                continue;
-            };
-            let Some(bodyless) = schema.bodyless else {
-                continue;
-            };
+        for (attr, name, bodyless) in attribute::bodyless(&method.attrs) {
             let _ = self.emit(TypeError::AttributeOnRequirement {
                 owner: owner.to_string(),
                 operation: method.name.clone(),
-                attribute: schema.name,
+                attribute: name,
                 reason: bodyless.on_requirement,
                 span: attr.span,
             });
