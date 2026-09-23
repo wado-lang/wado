@@ -1079,7 +1079,7 @@ pub enum TokenKind {
 pub global TK_LETTERS: i32 = 0;
 pub global TK_EOF: i32 = 1;
 pub global TK_ERROR: i32 = 2;
-pub global TK_LIT_D: i32 = 3;
+pub global TK_LIT_d: i32 = 3;
 
 struct Lexer {
     chars: List<char>,
@@ -1103,22 +1103,21 @@ impl Lexer {
 fn try_LETTERS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
-    let mut alts_ok_0 = false;
-    alts_0_0: {
-        pos = alts_saved_0;
-        if pos >= chars.len() || chars[pos] != 'a' { break alts_0_0; }
-        pos += 1;
-        alts_ok_0 = true;
-    }
-    if !alts_ok_0 {
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= chars.len() || chars[pos] != 'a' { break alts_0_0; }
+            pos += 1;
+            break alts_done_0;
+        }
         alts_0_1: {
             pos = alts_saved_0;
             if pos >= chars.len() || !(chars[pos] matches { '😀'..='🥃' }) { break alts_0_1; }
             pos += 1;
-            alts_ok_0 = true;
+            break alts_done_0;
         }
+        return -1;
     }
-    if !alts_ok_0 { return -1; }
     return pos;
 }
 
@@ -1138,18 +1137,16 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { 'a' } {
-            end = try_LETTERS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LETTERS; }
-        } else if first_char matches { 'd' } {
-            end = try_lit_d(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_D; }
-        } else if first_char matches { '😀'..='🥃' } {
-            end = try_LETTERS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LETTERS; }
-        } else {
-            end = try_LETTERS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LETTERS; }
+        match first_char {
+            'a' | '😀'..='🥃' => {
+                end = try_LETTERS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LETTERS; }
+            },
+            'd' => {
+                end = try_lit_d(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_d; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1171,7 +1168,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_LETTERS => "LETTERS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_D => "'d'",
+        TK_LIT_d => "'d'",
         _ => "Unknown",
     };
 }
@@ -1522,7 +1519,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
     while pos < tokens.len() && tokens[pos] == TK_LETTERS {
         pos += 1;
     }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_D { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_d { return -1; }
     pos += 1;
     return pos;
 }
@@ -1542,7 +1539,7 @@ fn _parse_a__inner(p: &mut Parser) -> () {
         if rep_scan_pos < 0 { break; }
         let letters = p.expect(TK_LETTERS, &EMPTY_SYNC);
     }
-    let lit_d = p.expect(TK_LIT_D, &EMPTY_SYNC);
+    let lit_d = p.expect(TK_LIT_d, &EMPTY_SYNC);
     if !p.speculating {
         p.emit(`${p.input_text()}\n`);
     }

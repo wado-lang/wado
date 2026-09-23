@@ -14,18 +14,9 @@ use {
     find_lexer_rule,
     lexer_alias_text,
 } from "./ir.wado";
-use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
-use {
-    CodeWriter,
-    StructSpec,
-    ImplSpec,
-    FnSpec,
-    GlobalSpec,
-    Vis,
-    char_range_pat,
-    lit_name,
-    wado,
-} from "./wadopoet.wado";
+use { gen_visibility_comment } from "./gen_util.wado";
+use { literal_const_name } from "./ident.wado";
+use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_range_pat, wado } from "lib:wadopoet";
 use {
     SuperOp,
     gen_super_interface,
@@ -38,6 +29,7 @@ use {
 } from "./superclass.wado";
 use { MemberDecls, members_present } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
+use { clip_to_scalars } from "./g4/unicode.wado";
 use {
     ModeAttrUse,
     body_mode_attr_use,
@@ -46,6 +38,23 @@ use {
     LEXER_SET_MODE_FIELD,
 } from "./action_translate.wado";
 use { TreeMap, TreeSet } from "core:collections";
+
+/// A grammar literal rendered the way ANTLR4's vocabulary shows it: the source
+/// form, single-quoted.
+pub type LitName = String;
+
+/// Tag `text` as a grammar literal's display name: `lit_name("+")` formats to
+/// `'+'`. `LitToken.text` holds the literal with its escapes already resolved,
+/// so this puts them back — a readable rendering, not a round-trip.
+pub fn lit_name<S: AsStrSlice>(text: S) -> LitName {
+    return text as LitName;
+}
+
+impl Display for LitName {
+    pub fn fmt(&self, f: &mut Formatter) {
+        f.write_str(wado`'${*self as String}'`);
+    }
+}
 
 pub struct LitToken {
     pub text: String,
@@ -121,11 +130,9 @@ pub fn collect_literal_tokens(parser_rules: &List<ParserRule>) -> List<LitToken>
     return result;
 }
 
-/// Case-folding in `literal_const_name` (lowercase → uppercase) can map two
-/// distinct literals (`'and'`, `'AND'`) onto the same base const name. That
-/// would emit duplicate globals / `try_lit_*` fns / `token_kind_name` arms and
-/// break compilation, so the second and later occurrences get a numeric
-/// suffix (`TK_LIT_AND`, `TK_LIT_AND_2`, …). Deterministic in source order.
+/// `literal_const_name` spells symbols as words, so distinct literals (`'<'` /
+/// `'LT'`) can share a base name. Later ones get a suffix (`TK_LIT_LT_2`), which
+/// `resolve_kind_ids` stamps on the IR.
 fn disambiguate_const_name<S: AsStrSlice>(base: S, result: &List<LitToken>) -> String {
     let mut candidate = base.to_string();
     let mut n = 2;
@@ -165,9 +172,9 @@ fn collect_lits_from_element(elem: &Element, seen: &mut List<String>, result: &m
         Label(lab) => collect_lits_from_element(&lab.element, seen, result),
         // `~ X` is a set-complement transformer. The literal `'x'` inside
         // still needs to be hoisted to an anonymous lexer token so the
-        // runtime `match_not([TK_LIT_X])` call resolves. Without this arm
+        // runtime `match_not([TK_LIT_x])` call resolves. Without this arm
         // any parser-rule `~'x'` / `~('x'|'y')` emits a reference to an
-        // undefined TK_LIT_X (Sets/ParserNotToken, Sets/ParserNotSet, …).
+        // undefined TK_LIT_x (Sets/ParserNotToken, Sets/ParserNotSet, …).
         Not(n) => collect_lits_from_element(&n.element, seen, result),
         _ => (),
     }
@@ -1473,24 +1480,21 @@ fn gen_lexer_alts<S: AsStrSlice>(
         gen_lexer_alts_longest(w, alts, plan, all_rules, fail_action, ci, ea, hm);
         return;
     }
+    // Sibling arms leaving one block: a cascade of `if !ok` nests a level per
+    // alternative, eleven deep for a css3 unit fragment.
     let id = w.next_id();
     w.line(`let alts_saved_${id} = pos;`);
-    w.line(`let mut alts_ok_${id} = false;`);
+    w.begin(`alts_done_${id}:`);
     for let mut i = 0; i < alts.len(); i += 1 {
-        if i > 0 {
-            w.begin(`if !alts_ok_${id}`);
-        }
         let label = `alts_${id}_${i}`;
         w.begin(`${label}:`);
         w.line(`pos = alts_saved_${id};`);
         gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, `break ${label}`, ci, ea, hm, replay);
-        w.line(`alts_ok_${id} = true;`);
+        w.line(`break alts_done_${id};`);
         w.end();
     }
-    for let mut i = 1; i < alts.len(); i += 1 {
-        w.end();
-    }
-    w.line(`if !alts_ok_${id} { ${fail_action}; }`);
+    w.line(`${fail_action};`);
+    w.end();
 }
 
 /// Maximal-munch emit for an alternation in tail position: every alternative is
@@ -1545,11 +1549,10 @@ fn gen_lexer_alts_replay<S: AsStrSlice>(
     w.line(`let mut sel_alt_${id} = -1;`);
     if longest {
         w.line(`let mut sel_best_${id} = -1;`);
+    } else {
+        w.begin(`sel_done_${id}:`);
     }
     for let mut i = 0; i < alts.len(); i += 1 {
-        if !longest && i > 0 {
-            w.begin(`if sel_alt_${id} < 0`);
-        }
         let label = `sel_${id}_${i}`;
         w.begin(`${label}:`);
         w.line(`pos = sel_saved_${id};`);
@@ -1558,13 +1561,12 @@ fn gen_lexer_alts_replay<S: AsStrSlice>(
             w.line(`if pos > sel_best_${id} { sel_best_${id} = pos; sel_alt_${id} = ${i}; }`);
         } else {
             w.line(`sel_alt_${id} = ${i};`);
+            w.line(`break sel_done_${id};`);
         }
         w.end();
     }
     if !longest {
-        for let mut i = 1; i < alts.len(); i += 1 {
-            w.end();
-        }
+        w.end();
     }
     w.line(`if sel_alt_${id} < 0 { ${fail_action}; }`);
     w.line(`pos = sel_saved_${id};`);
@@ -3935,14 +3937,11 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bo
     }
 }
 
-fn lit_try_fn_name<S: AsStrSlice>(const_name: S) -> String {
-    let mut result = String::with_capacity(const_name.len() + 4);
-    result.push_str("try_lit_");
-    let chars: List<char> = const_name.chars().collect();
-    for let mut i = 7; i < chars.len(); i += 1 {
-        result.push(chars[i].to_ascii_lowercase());
-    }
-    return result;
+fn lit_try_fn_name(const_name: &String) -> String {
+    let Some(suffix) = const_name.strip_prefix("TK_LIT_") else {
+        panic(`lit_try_fn_name: \`${const_name}\` is not a literal's token name`);
+    };
+    return `try_lit_${suffix}`;
 }
 
 fn has_modes(mode_names: &List<String>) -> bool {
@@ -4349,21 +4348,20 @@ fn build_range_index(ranges: &List<[char, char]>) -> RangeIndex {
 }
 
 fn range_index_matches(idx: &RangeIndex, c: char) -> bool {
-    let i = bound_char(&idx.starts, c, true) - 1;
+    let i = upper_bound(&idx.starts, c) - 1;
     if i < 0 {
         return false;
     }
     return idx.max_end[i] >= c;
 }
 
-/// First index whose element is > `c` (`after` true) or >= `c` (`after`
-/// false) in a sorted list.
-fn bound_char(chars: &List<char>, c: char, after: bool) -> i32 {
+/// First index of sorted `chars` whose element is greater than `c`.
+fn upper_bound(chars: &List<char>, c: char) -> i32 {
     let mut lo = 0;
     let mut hi = chars.len();
     while lo < hi {
         let mid = (lo + hi) / 2;
-        if chars[mid] < c || after && chars[mid] == c {
+        if chars[mid] <= c {
             lo = mid + 1;
         } else {
             hi = mid;
@@ -4372,85 +4370,32 @@ fn bound_char(chars: &List<char>, c: char, after: bool) -> i32 {
     return lo;
 }
 
-/// Count of sorted `chars` inside `[lo, hi]`.
-fn count_in_sorted(chars: &List<char>, lo: char, hi: char) -> i32 {
-    return bound_char(chars, hi, true) - bound_char(chars, lo, false);
-}
-
-/// True when `ranges` shares a char with `probe` that no single-char branch
-/// already claims. Those branches come first, so a rule whose first set inside
-/// `probe` is entirely `claimed` chars is unreachable from the range branch.
-/// `claimed` must be sorted.
-fn ranges_meet_unclaimed(ranges: &List<[char, char]>, probe: [char, char], claimed: &List<char>) -> bool {
-    for let mut i = 0; i < ranges.len(); i += 1 {
-        let r = ranges[i];
-        let lo = if r[0] > probe[0] { r[0] } else { probe[0] };
-        let hi = if r[1] < probe[1] { r[1] } else { probe[1] };
-        if lo > hi {
-            continue;
-        }
-        // A `\p{...}` set runs to hundreds of ranges each wider than the whole
-        // single-char branch set, so answer those by width alone.
-        let width = hi as i32 - lo as i32 + 1;
-        if width > claimed.len() {
-            return true;
-        }
-        if count_in_sorted(claimed, lo, hi) < width {
-            return true;
-        }
-    }
-    return false;
-}
-
-/// The pattern of the branch every other branch falls through to; emitted as
-/// a bare `else` rather than a match arm.
+/// The pattern of the arm every char no other arm claims falls to.
 global FALLBACK_PATTERN: String = "_";
 
-/// One branch of the emitted first-char dispatch: a char pattern and the
-/// `try_` calls a char matching it must run, in grammar order.
+/// One arm of the emitted first-char dispatch: a char pattern and the `try_`
+/// calls a char matching it must run, in grammar order.
 struct DispatchGroup {
     pattern: String,
     calls: List<i32>,
 }
 
-/// Fold each branch into its immediate predecessor when the two have the same
-/// call list — `[\p{L}]` is ~700 ranges that all route to the same rules.
-///
-/// Adjacency is the safety argument: the chain is first-match-wins, so folding
-/// into a *non*-adjacent earlier branch would let a char skip the branch
-/// between them, which usually has a different call list.
-fn coalesce_equal_groups(groups: &mut List<DispatchGroup>) {
-    let mut merged: List<DispatchGroup> = [];
-    for let g of groups {
-        let last = merged.len() - 1;
-        if last >= 0 && merged[last].calls == g.calls {
-            merged[last].pattern.push_str(` | ${g.pattern}`);
-        } else {
-            merged.push(*g);
-        }
-    }
-    *groups = merged;
-}
-
+/// The arms of the emitted first-char dispatch: a partition of the character
+/// space at every first-set boundary, one arm per distinct call list.
 fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
-    let mut single_chars: List<char> = [];
+    let mut cuts = TreeSet::<i32>::new();
     for let call of calls {
         if call.is_wildcard {
             continue;
         }
         for let r of &call.first_chars {
-            if r[0] == r[1] {
-                single_chars.push(r[0]);
-            }
+            cuts.insert(r[0] as i32);
+            cuts.insert(r[1] as i32 + 1);
         }
     }
-    single_chars.sort();
-    let mut all_chars: List<char> = [];
-    for let mut i = 0; i < single_chars.len(); i += 1 {
-        if i == 0 || single_chars[i] != single_chars[i - 1] {
-            all_chars.push(single_chars[i]);
-        }
-    }
+    // A TreeSet iterates in insertion order.
+    let mut points: List<i32> = cuts.into_iter().collect();
+    points.sort();
 
     let mut range_indexes: List<RangeIndex> = [];
     for let call of calls {
@@ -4458,97 +4403,52 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     }
 
     let mut groups: List<DispatchGroup> = [];
-
-    // For each unique single char, find all matching calls (excluding catch-all rules)
     let mut group_by_calls = TreeMap::<List<i32>, i32>::new();
-    for let c of &all_chars {
-        let mut matching: List<i32> = [];
-        for let mut i = 0; i < calls.len(); i += 1 {
-            if calls[i].is_catch_all {
-                continue;
-            }
-            if calls[i].is_wildcard || range_index_matches(&range_indexes[i], *c) {
-                matching.push(i);
-            }
-        }
-        for let ci of &branch_catch_all_calls(calls, &matching) {
-            matching.push(*ci);
-        }
-        // Check if this group already exists
-        if let Some(gi) = group_by_calls.get(matching) {
-            groups[gi].pattern.push_str(wado` | '${*c}'`);
-        } else {
-            group_by_calls[matching] = groups.len();
-            groups.push(DispatchGroup {
-                pattern: wado`'${*c}'`,
-                calls: matching,
-            });
-        }
-    }
-
-    // One group per distinct range. The chain is first-match-wins, so a char in
-    // two rules' overlapping ranges only reaches the first group covering it —
-    // that group therefore carries every rule the range meets, not just the one
-    // the range came from. A rule that cannot match simply fails its `try_`.
-    let mut distinct_ranges: List<[char, char]> = [];
-    let mut range_seen = TreeSet::<i64>::new();
-    for let mut i = 0; i < calls.len(); i += 1 {
-        if calls[i].is_wildcard {
+    for let mut i = 0; i + 1 < points.len(); i += 1 {
+        let mut spans: List<CharRange> = [];
+        clip_to_scalars(&mut spans, points[i], points[i + 1] - 1);
+        if spans.is_empty() {
             continue;
         }
-        for let r of &calls[i].first_chars {
-            if r[0] != r[1] && range_seen.insert(range_key(r[0], r[1])) {
-                distinct_ranges.push(*r);
-            }
-        }
-    }
-    for let r of &distinct_ranges {
-        let mut cs: List<i32> = [];
+        let mut members: List<i32> = [];
         for let mut j = 0; j < calls.len(); j += 1 {
             if calls[j].is_catch_all {
                 continue;
             }
-            if calls[j].is_wildcard || ranges_meet_unclaimed(&calls[j].first_chars, *r, &all_chars) {
-                cs.push(j);
+            // The interval lies wholly inside each range it meets, so any char
+            // of it answers for all of it.
+            if calls[j].is_wildcard || range_index_matches(&range_indexes[j], spans[0].start) {
+                members.push(j);
             }
         }
-        for let ci of &branch_catch_all_calls(calls, &cs) {
-            cs.push(*ci);
+        if members.is_empty() {
+            continue;
         }
-        groups.push(DispatchGroup {
-            pattern: wado`'${r[0]}'..='${r[1]}'`,
-            calls: cs,
-        });
+        for let ci of &branch_catch_all_calls(calls, &members) {
+            members.push(*ci);
+        }
+        // Grammar order, so a same-length match goes to the first rule in the
+        // grammar (ANTLR4's tie-break). Insertion order does not carry it.
+        members.sort();
+        let pattern = spans.iter_ref().map(|s| `${char_range_pat(s.start..=s.end)}`).collect().join(" | ");
+        if let Some(gi) = group_by_calls.get(members) {
+            groups[gi].pattern.push_str(` | ${pattern}`);
+        } else {
+            group_by_calls[members] = groups.len();
+            groups.push(DispatchGroup { pattern, calls: members });
+        }
     }
 
-    coalesce_equal_groups(&mut groups);
-
-    // The fallback branch. A single-char-only call is fully covered by its own
-    // branch above; a range-based one can still admit a char no branch claims.
+    // A char no interval claims is outside every bounded first set, so only a
+    // rule with an unbounded one can match it.
     let mut wildcard_calls: List<i32> = [];
     for let mut i = 0; i < calls.len(); i += 1 {
         if calls[i].is_wildcard {
-            wildcard_calls.push(i);
-            continue;
-        }
-        let mut has_range = false;
-        for let r of &calls[i].first_chars {
-            if r[0] != r[1] {
-                has_range = true;
-            }
-        }
-        if has_range {
             wildcard_calls.push(i);
         }
     }
     if !wildcard_calls.is_empty() {
         groups.push(DispatchGroup { pattern: String::from(FALLBACK_PATTERN), calls: wildcard_calls });
-    }
-
-    // Grammar order, so a same-length match goes to the first rule in the
-    // grammar (ANTLR4's tie-break). Insertion order does not carry it.
-    for let mut gi = 0; gi < groups.len(); gi += 1 {
-        groups[gi].calls.sort();
     }
 
     return groups;
@@ -4627,31 +4527,24 @@ fn gen_dispatch_groups(
     has_actions: bool,
     has_members: bool,
 ) {
-    // If only a wildcard group exists, emit calls directly without dispatch
     if groups.len() == 1 && groups[0].pattern == FALLBACK_PATTERN {
         gen_group_calls(w, calls, &groups[0].calls, needs_extras, has_actions, has_members);
         return;
     }
-    let mut first_group = true;
+    // The arms are a partition, so an else-if chain's order buys nothing and
+    // would put the letters and digits behind every punctuation branch.
+    let has_wildcard_arm = groups.iter_ref().any(|g| g.pattern == FALLBACK_PATTERN);
+    w.begin("match first_char");
     for let g of groups {
-        let is_wc = g.pattern == FALLBACK_PATTERN;
-        if is_wc {
-            if first_group {
-                gen_group_calls(w, calls, &g.calls, needs_extras, has_actions, has_members);
-                continue;
-            }
-            w.else_begin("else");
-        } else if first_group {
-            w.begin(`if first_char matches { ${g.pattern} }`);
-        } else {
-            w.else_begin(`else if first_char matches { ${g.pattern} }`);
-        }
-        first_group = false;
+        w.begin(`${g.pattern} =>`);
         gen_group_calls(w, calls, &g.calls, needs_extras, has_actions, has_members);
+        w.end_with(",");
     }
-    if !first_group {
-        w.end();
+    // `char` has no finite case list, so the arms alone never exhaust it.
+    if !has_wildcard_arm {
+        w.line("_ => {},");
     }
+    w.end();
 }
 
 fn gen_group_calls(

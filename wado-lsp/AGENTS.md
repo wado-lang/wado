@@ -61,10 +61,11 @@ rather than being refined by it: the shorthand `{ state }` resolves to the
 binding it reads, so deferring to the symbol would colour it `variable`
 wherever a snapshot exists and `property` wherever one does not.
 
-`self` is the exception: the language reserves it (it is absent from
-`Wado.g4`'s `identifier` rule), so `classify_token` recognises it lexically and
-gives it the `Constant` class its `CONTEXTUAL_KEYWORDS` entry asks for. Without
-that it resolves to its parameter binding and colours as a parameter.
+`self` and `Self` lex as identifiers and are keywords everywhere but a member's
+name (`self.self`, `fn Self()`), so `classify_token` recognises them lexically
+unless the span is a field or method name. `self` then takes the `Constant`
+class its `CONTEXTUAL_KEYWORDS` entry asks for; otherwise it would resolve to
+its parameter binding and colour as a parameter.
 
 ### Engine
 

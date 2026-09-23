@@ -1,8 +1,5 @@
-// A dense, in-range `match` whose arm body is large stays a comparison
-// cascade: expanding a 256-value range would clone the big body once per
-// value, exploding the IR. The clone-cost budget in `match_to_switch` rejects
-// the `br_table` rewrite here (the same shape with a tiny arm body still
-// lowers to a `Switch`).
+// A dense, in-range `match` whose arm body is large still lowers to a
+// `br_table`: all 256 offsets of the range reach one copy of the body.
 use { println, Stdout } from "core:cli";
 
 #[inline(never)]
@@ -23,5 +20,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "230\n1\n0\n",
-    "wir_not_expect:O2": ["br_table"]
+    "wir_expect:O2": ["br_table"]
 }

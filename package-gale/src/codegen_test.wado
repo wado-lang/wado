@@ -154,13 +154,14 @@ WS : [ \\t\\r\\n]+ -> skip ;
 test "reserved-word alt labels are escaped to valid identifiers" {
     // A `# Label` may be a Wado reserved word (ANTLR4's `ReservedWordsEscaping`
     // uses `# else`). The `<Rule>Alt` enum variant and accessor arm must escape
-    // it (append `_`) or the generated code does not compile. Non-reserved
-    // labels are left unchanged.
+    // it (append `_`) or the generated code does not compile. A case lives in
+    // its enum, so a label the prelude also names (`# Add`) is left unchanged.
     let input = "grammar Test;
-r : A # else | B # loop | C # Keep ;
+r : A # else | B # loop | C # Keep | D # Add ;
 A : 'a' ;
 B : 'b' ;
 C : 'c' ;
+D : 'd' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
@@ -173,6 +174,7 @@ C : 'c' ;
     assert str_contains(&output, "0 => Option::Some(RAlt::else_),");
     assert str_contains(&output, "1 => Option::Some(RAlt::loop_),");
     assert str_contains(&output, "2 => Option::Some(RAlt::Keep),");
+    assert str_contains(&output, "3 => Option::Some(RAlt::Add),");
 }
 
 test "generate wildcard element" {
@@ -252,8 +254,8 @@ test "generate scalar-labeled group `t=(a | b)`" {
     // and the surface field name survives via the rebound op.
     let mut grammar = parse_grammar("grammar T; a : t=('x' | 'y') ;", "(test)");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, "TK_LIT_X");
-    assert str_contains(&output, "TK_LIT_Y");
+    assert str_contains(&output, "TK_LIT_x");
+    assert str_contains(&output, "TK_LIT_y");
     assert str_contains(&output, "p.expect_set(&SYNC_");
     // A peel regression panics in `gen_op_group`; transparency is what is left.
     let mut bare = parse_grammar("grammar T; a : ('x' | 'y') ;", "(test)");
@@ -539,7 +541,7 @@ fn parse_grammar<S: AsStrSlice, S1: AsStrSlice>(input: S, path: S1) -> Grammar {
 
 test "LR scan loop saves pos and backs off on a suffix failure" {
     // statement: letterA | statement letterA 'b' ;
-    // Both alts start with TK_LIT_A (letterA = 'a'), so the LR suffix's
+    // Both alts start with TK_LIT_a (letterA = 'a'), so the LR suffix's
     // first-token check alone cannot decide whether the suffix will complete.
     // When `scan_statement_lr_1` returns -1 (e.g. the trailing 'b' is missing),
     // the LR loop must restore `pos` to the prior atom-end and `break` —
@@ -1091,8 +1093,8 @@ WS : [ \\t\\n\\r]+ -> skip ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, "fn try_A(");
     assert str_contains(&output, "fn try_B(");
-    assert str_contains(&output, "first_char matches { 'A' }");
-    assert str_contains(&output, "first_char matches { 'B' }");
+    assert str_contains(&output, "'A' => {");
+    assert str_contains(&output, "'B' => {");
 }
 
 test "set list-label `name+=(A | B)*` emits List<Token> + expect_set" {
@@ -1128,8 +1130,8 @@ ifStmt : 'if' 'y' statement ('else' statement)?? ;
     assert str_contains(&body, "if atn_predict_with_stack(&ATN_SIM,");
     assert str_contains(&body, ") == 1");
     assert !str_contains(&body, "atn_ng_optional_enter(");
-    assert !str_contains(&body, "if p.peek_kind() == TK_LIT_ELSE");
-    assert !str_contains(&body, "while p.peek_kind() == TK_LIT_ELSE");
+    assert !str_contains(&body, "if p.peek_kind() == TK_LIT_else");
+    assert !str_contains(&body, "while p.peek_kind() == TK_LIT_else");
 }
 
 test "single-char literal with an ID carrier stays a keyword (no try_ matcher)" {

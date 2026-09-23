@@ -1,51 +1,7 @@
-/// Pure identifier-name transforms used by both the IR (to populate
-/// per-element name caches at construction time) and the codegen layer.
-/// This module deliberately has no IR dependencies — `ir.wado` imports it.
-///
-/// Length-first dispatch: the outer switch on `name.len()` short-circuits
-/// most identifiers without any string comparison.
-///
-/// Inclusion policy: a deliberate **superset** of the Wado lexer keyword set
-/// (`wado-compiler/src/syntax.rs`), plus builtin type names and intrinsics
-/// (`panic` / `unreachable`), so a grammar rule/token cannot shadow them in
-/// the generated module. Over-inclusion is harmless (a spurious `_`);
-/// under-inclusion emits code that fails to compile — when in doubt, escape.
-fn is_wado_reserved<S: AsStrSlice>(name: S) -> bool {
-    let name = name.as_str_slice();
-    return match name.len() {
-        2 => match name {
-            "Fn" | "as" | "fn" | "i8" | "if" | "in" | "of" | "u8" => true,
-            _ => false,
-        },
-        3 => match name {
-            "f32" | "f64" | "for" | "i16" | "i32" | "i64" | "let" | "mut" | "pub" | "u16" | "u32" | "u64" | "use" => true,
-            _ => false,
-        },
-        4 => match name {
-            "bool" | "char" | "else" | "enum" | "from" | "impl" | "loop" | "move" | "null" | "self" | "task" | "test" | "true" | "type" | "with" => true,
-            _ => false,
-        },
-        5 => match name {
-            "List" | "async" | "break" | "const" | "false" | "flags" | "match" | "panic" | "scope" | "trait" | "while" | "world" => true,
-            _ => false,
-        },
-        6 => match name {
-            "Option" | "Result" | "String" | "assert" | "effect" | "export" | "global" | "import" | "return" | "stores" | "struct" | "unique" => true,
-            _ => false,
-        },
-        7 => match name {
-            "handler" | "matches" | "variant" => true,
-            _ => false,
-        },
-        8 => match name {
-            "continue" | "reactive" | "resource" => true,
-            _ => false,
-        },
-        9 => name == "interface",
-        11 => name == "unreachable",
-        _ => false,
-    };
-}
+//! Identifier-name transforms shared by the IR (which caches the names at
+//! construction) and the codegen layer. No IR dependencies: `ir.wado` imports it.
+
+use { is_keyword, is_reserved } from "lib:wadopoet";
 
 /// The recognizer handle in emitted context-API calls (`p.token_text(...)`):
 /// `p` in a parse / predicate body, `self` in a `@members` method body.
@@ -78,10 +34,19 @@ global GENERATED_LOCALS: List<String> = [
     PARSER_HANDLE, LEXER_HANDLE, VALS_LOCAL, MIN_PREC_LOCAL, DISPATCH_KIND_LOCAL, FOLLOW_PARAM,
 ];
 
-/// Escape an identifier that would collide with a Wado reserved word or a
+/// Escape an identifier that would collide with the Wado vocabulary or a
 /// generated local by appending '_'.
 pub fn escape_ident<S: AsStrSlice>(name: S) -> String {
-    if is_wado_reserved(name) || GENERATED_LOCALS.contains_str(name) {
+    if is_reserved(name) || GENERATED_LOCALS.contains_str(name) {
+        return `${name}_`;
+    }
+    return name.to_string();
+}
+
+/// Escape an enum case name that is a keyword by appending '_'. A case lives in
+/// its enum, so it cannot collide with anything else.
+pub fn escape_case<S: AsStrSlice>(name: S) -> String {
+    if is_keyword(name) {
         return `${name}_`;
     }
     return name.to_string();
@@ -123,4 +88,79 @@ pub fn to_snake_case<S: AsStrSlice>(name: S) -> String {
 
 pub fn to_lower<S: AsStrSlice>(name: S) -> String {
     return name.to_ascii_lowercase();
+}
+
+pub fn symbol_char_names(c: char) -> Option<[String, String]> {
+    return match c {
+        '+' => Option::Some(["plus", "PLUS"]),
+        '-' => Option::Some(["minus", "MINUS"]),
+        '*' => Option::Some(["star", "STAR"]),
+        '/' => Option::Some(["slash", "SLASH"]),
+        '%' => Option::Some(["percent", "PERCENT"]),
+        '=' => Option::Some(["eq", "EQ"]),
+        '!' => Option::Some(["bang", "BANG"]),
+        '<' => Option::Some(["lt", "LT"]),
+        '>' => Option::Some(["gt", "GT"]),
+        '&' => Option::Some(["amp", "AMP"]),
+        '|' => Option::Some(["pipe", "PIPE"]),
+        '^' => Option::Some(["caret", "CARET"]),
+        '~' => Option::Some(["tilde", "TILDE"]),
+        '.' => Option::Some(["dot", "DOT"]),
+        ',' => Option::Some(["comma", "COMMA"]),
+        ':' => Option::Some(["colon", "COLON"]),
+        ';' => Option::Some(["semicolon", "SEMI"]),
+        '(' => Option::Some(["lparen", "LPAREN"]),
+        ')' => Option::Some(["rparen", "RPAREN"]),
+        '{' => Option::Some(["lbrace", "LBRACE"]),
+        '}' => Option::Some(["rbrace", "RBRACE"]),
+        '[' => Option::Some(["lbracket", "LBRACKET"]),
+        ']' => Option::Some(["rbracket", "RBRACKET"]),
+        '?' => Option::Some(["question", "QUESTION"]),
+        '@' => Option::Some(["at", "AT"]),
+        '#' => Option::Some(["hash", "HASH"]),
+        '$' => Option::Some(["dollar", "DOLLAR"]),
+        '\\' => Option::Some(["backslash", "BSLASH"]),
+        '`' => Option::Some(["backtick", "BTICK"]),
+        '"' => Option::Some(["dquote", "DQUOTE"]),
+        '\'' => Option::Some(["squote", "SQUOTE"]),
+        _ => null,
+    };
+}
+
+/// `c`'s Unicode scalar value in lowercase hex, naming a character
+/// `symbol_char_names` has no word for.
+pub fn char_hex_name(c: char) -> String {
+    let code = c as i32;
+    let mut result = String::with_capacity(6);
+    let mut started = false;
+    for let mut shift = 28; shift >= 0; shift -= 4 {
+        let nibble = code >> shift & 0xf;
+        if nibble != 0 || started || shift == 0 {
+            started = true;
+            if nibble < 10 {
+                result.push(char::from_u32_unchecked(('0' as i32 + nibble) as u32));
+            } else {
+                result.push(char::from_u32_unchecked(('a' as i32 + nibble - 10) as u32));
+            }
+        }
+    }
+    return result;
+}
+
+/// A literal's base `TK_LIT_*` name. A symbol's word can spell a letter
+/// literal (`'<'`, `'LT'`), so `collect_literal_tokens` suffixes the collisions.
+pub fn literal_const_name<S: AsStrSlice>(text: S) -> String {
+    let mut result = String::with_capacity(text.len() + 8);
+    result.push_str("TK_LIT_");
+    for let c of text.chars() {
+        if c.is_ascii_alphanumeric() {
+            result.push(c);
+        } else if let Some(names) = symbol_char_names(c) {
+            result.push_str(&names.1);
+        } else {
+            result.push_str("U");
+            result.push_str(&char_hex_name(c));
+        }
+    }
+    return result;
 }

@@ -1937,8 +1937,8 @@ pub global TK_ID: i32 = 0;
 pub global TK_WS: i32 = 1;
 pub global TK_EOF: i32 = 2;
 pub global TK_ERROR: i32 = 3;
-pub global TK_LIT_ELSE: i32 = 4;
-pub global TK_LIT_IF: i32 = 5;
+pub global TK_LIT_else: i32 = 4;
+pub global TK_LIT_if: i32 = 5;
 
 struct Lexer {
     chars: List<char>,
@@ -2023,25 +2023,28 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { 'e' } {
-            end = try_lit_else(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_ELSE; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 'i' } {
-            end = try_lit_if(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_IF; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 'a'..='z' } {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
+        match first_char {
+            '\t' | '\n' | '\r' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            'a'..='d' | 'f'..='h' | 'j'..='z' => {
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            'e' => {
+                end = try_lit_else(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_else; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            'i' => {
+                end = try_lit_if(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_if; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -2069,8 +2072,8 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_ELSE => "'else'",
-        TK_LIT_IF => "'if'",
+        TK_LIT_else => "'else'",
+        TK_LIT_if => "'if'",
         _ => "Unknown",
     };
 }
@@ -2331,7 +2334,7 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_e(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_ELSE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_else { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
@@ -2349,15 +2352,15 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_e_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_if { return -1; }
     pos += 1;
     pos = scan_e(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_LIT_ELSE {
+    if pos < tokens.len() && tokens[pos] == TK_LIT_else {
         let sp = pos;
         sg_0_done: {
             sg_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_ELSE { break sg_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_else { break sg_0; }
                 pos += 1;
                 pos = scan_e(tokens, pos, 2);
                 if pos < 0 { break sg_0; }
@@ -2376,7 +2379,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         let _lr_pos0 = pos;
-        if suffix_kind == TK_LIT_IF {
+        if suffix_kind == TK_LIT_if {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_e_lr_1(tokens, pos);
@@ -2397,7 +2400,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn _parse_s__inner(p: &mut Parser) -> () {
     p.atn_ret_pending = 8;
     _parse_e(p);
-    p.expect(TK_LIT_ELSE, &SYNC_0);
+    p.expect(TK_LIT_else, &SYNC_0);
     p.expect(TK_ID, &SYNC_1);
     p.expect(TK_EOF, &EMPTY_SYNC);
     return;
@@ -2441,17 +2444,17 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     loop {
         if p.recovering { break; }
         let _sk = p.peek_kind();
-        if _sk == TK_LIT_IF {
+        if _sk == TK_LIT_if {
             if 1 >= min_prec {
                 if scan_e_lr_1(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                p.expect(TK_LIT_IF, &EMPTY_SYNC);
+                p.expect(TK_LIT_if, &EMPTY_SYNC);
                 p.atn_ret_pending = 27;
                 _parse_e(p, 0);
                 if atn_predict_with_stack(&ATN_SIM, 1, &p.atn_stack, &p.kinds, p.pos, TK_EOF, min_prec) == 1 {
-                    p.expect(TK_LIT_ELSE, &EMPTY_SYNC);
+                    p.expect(TK_LIT_else, &EMPTY_SYNC);
                     p.atn_ret_pending = 36;
                     _parse_e(p, 2);
                 }

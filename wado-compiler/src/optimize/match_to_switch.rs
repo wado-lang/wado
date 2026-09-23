@@ -1,14 +1,14 @@
 //! Match → Switch: a dense-int or dense-enum guardless `Match` becomes a
 //! `Switch`, lowering to a Wasm `br_table` rather than the generic if-chain.
 //! Kept in the optimizer rather than lowering (WEP 2026-05-11), so
-//! `lower::translate` emits one canonical `Match` shape. Arm bodies are
-//! deep-cloned, one arm being reachable at several `br_table` offsets.
+//! `lower::translate` emits one canonical `Match` shape. The `br_table` sends
+//! many offsets to one arm body.
 
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirGlobal, NirLiteralPattern, NirLocal};
 use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind,
+    ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind,
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -26,13 +26,6 @@ const SWITCH_DENSITY_THRESHOLD: f64 = 0.75;
 
 /// Maximum range size for `br_table` (to avoid huge jump tables).
 const SWITCH_MAX_RANGE: i64 = 1024;
-
-/// Maximum total cloned expression count the rewrite may materialise. Each of
-/// the `range` `br_table` offsets clones the arm body mapped to it (a range
-/// spec repeats its arm across every value, a hole repeats the default), so a
-/// wide range over a large arm body would blow up the IR. Past this budget the
-/// generic match if-chain — which evaluates each arm body once — is cheaper.
-const SWITCH_MAX_CLONE_COST: usize = 8192;
 
 /// Ungated: lower every function (and global). Used at `-O0`, where the loop
 /// (and thus the gate) is skipped — avoids building a throwaway `FunctionGate`
@@ -185,30 +178,26 @@ impl Rule for MatchToSwitchRule<'_> {
 /// Analysis result for converting `Match` to `Switch`.
 struct SwitchAnalysis {
     min_value: i64,
-    max_value: i64,
-    /// `(value, original_arm_index)` for each literal/enum case.
-    value_to_arm: Vec<(i64, usize)>,
+    /// Per value from `min_value`, the first arm naming it.
+    offset_arm: Vec<Option<usize>>,
     /// Index of the wildcard arm, if any.
     default_arm: Option<usize>,
 }
 
 /// The values one arm's pattern names, as `i64` keys.
 enum CaseKey {
-    /// Inclusive at both ends, `lo <= hi`. A literal is the one-value span.
-    Span {
-        lo: i64,
-        hi: i64,
-    },
+    /// Each inclusive at both ends, `lo <= hi`. A literal is the one-value span.
+    Spans(Vec<(i64, i64)>),
     Wildcard,
 }
 
 /// `pat` as a [`CaseKey`], or `None` for one no key dispatch takes: a binding,
 /// which would need an arm-local `let` of the scrutinee; a bound past `i64`,
 /// where a wrapping cast would corrupt the range; or any destructuring
-/// pattern.
-fn case_key(pat: &PatKind) -> Option<CaseKey> {
-    let one = |v| CaseKey::Span { lo: v, hi: v };
-    Some(match pat {
+/// pattern. An or-pattern names the union of its alternatives.
+fn case_key(body: &Body, pat: PatId) -> Option<CaseKey> {
+    let one = |v| CaseKey::Spans(vec![(v, v)]);
+    Some(match &body.pats[pat].kind {
         PatKind::Literal(NirLiteralPattern::I128(v)) => one(i64::try_from(*v).ok()?),
         PatKind::Literal(NirLiteralPattern::U128(v)) => one(i64::try_from(*v).ok()?),
         PatKind::Literal(NirLiteralPattern::Char(c)) => one(i64::from(u32::from(*c))),
@@ -226,12 +215,19 @@ fn case_key(pat: &PatKind) -> Option<CaseKey> {
                 "the elaborator rejects a reversed or empty range, so {lo}..{hi} \
                  (inclusive: {inclusive}) cannot reach here"
             );
-            CaseKey::Span {
-                lo,
-                hi: if *inclusive { hi } else { hi - 1 },
-            }
+            CaseKey::Spans(vec![(lo, if *inclusive { hi } else { hi - 1 })])
         }
         PatKind::Wildcard => CaseKey::Wildcard,
+        PatKind::Or(alternatives) => {
+            let mut spans = Vec::new();
+            for &alt in alternatives {
+                match case_key(body, alt)? {
+                    CaseKey::Spans(alt_spans) => spans.extend(alt_spans),
+                    CaseKey::Wildcard => return Some(CaseKey::Wildcard),
+                }
+            }
+            CaseKey::Spans(spans)
+        }
         PatKind::Literal(
             NirLiteralPattern::Bool(_) | NirLiteralPattern::String(_) | NirLiteralPattern::Null,
         )
@@ -239,7 +235,6 @@ fn case_key(pat: &PatKind) -> Option<CaseKey> {
         | PatKind::Tuple(..)
         | PatKind::Variant { .. }
         | PatKind::Struct { .. }
-        | PatKind::Or(_)
         | PatKind::ConstantValue { .. } => return None,
     })
 }
@@ -269,18 +264,18 @@ pub(super) fn arm_spans(arms: &[ArmData], body: &Body) -> Option<(Vec<ArmSpan>, 
         if arm.guard.is_some() {
             return None;
         }
-        match case_key(&body.pats[arm.pattern].kind)? {
-            CaseKey::Span { lo, hi } => spans.push((i, lo, hi)),
+        match case_key(body, arm.pattern)? {
+            CaseKey::Spans(arm_spans) => {
+                spans.extend(arm_spans.into_iter().map(|(lo, hi)| (i, lo, hi)));
+            }
             CaseKey::Wildcard => return Some((spans, Some(i))),
         }
     }
     Some((spans, None))
 }
 
-/// Analyze whether a `Match` can be rewritten into a `Switch`. Accepts
-/// integer / `char` / enum scrutinees with guard-less arms whose patterns
-/// are integer or `char` literals, enum cases, integer/`char` ranges, or
-/// wildcard (the default).
+/// Analyze whether a `Match` can be rewritten into a `Switch`: an integer,
+/// `char` or enum scrutinee with guard-less arms keyed as [`case_key`] allows.
 fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Option<SwitchAnalysis> {
     scrutinee_bits(scrutinee_type)?;
 
@@ -325,39 +320,16 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
         return None;
     }
 
-    // Cost model: every offset (case or hole) clones the arm body it maps to.
-    // A wide range over a large arm body — or many default holes cloning a
-    // large first arm — would explode the IR, so bail past the budget.
-    let arm_sizes: Vec<usize> = arms.iter().map(|a| arm_body_size(body, a.body)).collect();
-    let fallback_arm = default_arm.unwrap_or(0);
-    let clone_cost: usize = offset_arm
-        .iter()
-        .map(|a| arm_sizes[a.unwrap_or(fallback_arm)])
-        .sum::<usize>()
-        + default_arm.map_or(0, |d| arm_sizes[d]);
-    if clone_cost > SWITCH_MAX_CLONE_COST {
-        return None;
-    }
-
-    let mut value_to_arm: Vec<(i64, usize)> = Vec::new();
-    for (offset, arm) in offset_arm.iter().enumerate() {
-        if let Some(arm_idx) = arm {
-            value_to_arm.push((min_value + offset as i64, *arm_idx));
-        }
-    }
-
     Some(SwitchAnalysis {
         min_value,
-        max_value,
-        value_to_arm,
+        offset_arm,
         default_arm,
     })
 }
 
 /// Build a `Switch` expression kind from the analysis. The scrutinee id is
-/// reused directly (it appears once); arm bodies are deep-cloned because the
-/// same arm can appear at multiple offsets (when there is no default arm,
-/// holes fall back to arm 0, which is unreachable for those values).
+/// reused directly (it appears once); each reachable arm body is cloned once,
+/// however many offsets dispatch to it.
 fn build_switch(
     engine: &mut Engine,
     scrutinee: Operand,
@@ -367,21 +339,21 @@ fn build_switch(
     cold_path_id: FuncId,
     unreachable_id: FuncId,
 ) -> ExprKind {
-    let range = (analysis.max_value - analysis.min_value + 1) as usize;
-
-    let mut offset_to_arm: Vec<Option<usize>> = vec![None; range];
-    for (value, arm_idx) in &analysis.value_to_arm {
-        let offset = (*value - analysis.min_value) as usize;
-        if offset_to_arm[offset].is_none() {
-            offset_to_arm[offset] = Some(*arm_idx);
-        }
-    }
-
-    let switch_arms: Vec<BlockId> = offset_to_arm
+    let mut switch_arm_of: Vec<Option<usize>> = vec![None; arms.len()];
+    let mut switch_arms: Vec<BlockId> = Vec::new();
+    let table: Vec<Option<usize>> = analysis
+        .offset_arm
         .iter()
         .map(|maybe_arm_idx| {
-            let arm_idx = maybe_arm_idx.unwrap_or_else(|| analysis.default_arm.unwrap_or(0));
-            arm_body_block(engine, arms[arm_idx].body, arms[arm_idx].span)
+            let arm_idx = (*maybe_arm_idx)?;
+            Some(*switch_arm_of[arm_idx].get_or_insert_with(|| {
+                switch_arms.push(arm_body_block(
+                    engine,
+                    arms[arm_idx].body,
+                    arms[arm_idx].span,
+                ));
+                switch_arms.len() - 1
+            }))
         })
         .collect();
 
@@ -425,30 +397,15 @@ fn build_switch(
     ExprKind::Switch {
         scrutinee,
         min_value: analysis.min_value,
+        table,
         arms: switch_arms,
         default: default_block,
     }
 }
 
-/// Node count of an arm body operand, the per-clone cost the [`build_switch`]
-/// budget sums over every offset. A promoted `Operand::Value` is one node.
-fn arm_body_size(body: &Body, op: Operand) -> usize {
-    op.as_expr()
-        .map_or(1, |e| node_count(body, NodeRef::Expr(e)))
-}
-
-/// Total nodes in the subtree at `node` (the node itself plus every arena
-/// descendant), via the shared child-visit query.
-fn node_count(body: &Body, node: NodeRef) -> usize {
-    let mut total = 1;
-    body.for_each_child(node, |c| total += node_count(body, c));
-    total
-}
-
 /// Wrap an arm body in a fresh block holding a single `Expr` statement. A
-/// skeleton body is deep-cloned (each arm needs its own copy); a promoted
-/// constant operand is immutable and shareable, so it flows straight into the
-/// statement slot.
+/// skeleton body is deep-cloned; a promoted constant operand is immutable and
+/// shareable, so it flows straight into the statement slot.
 fn arm_body_block(engine: &mut Engine, body: Operand, arm_span: Span) -> BlockId {
     let (op, span) = match body {
         Operand::Expr(e) => (

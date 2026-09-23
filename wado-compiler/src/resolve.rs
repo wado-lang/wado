@@ -311,6 +311,15 @@ impl Resolutions {
         self.scopes.prelude.get(name).copied()
     }
 
+    /// Every name the prelude puts in scope in every module, cases included.
+    pub fn prelude_names(&self) -> impl Iterator<Item = (&str, DefId)> {
+        self.scopes
+            .prelude
+            .iter()
+            .chain(&self.scopes.prelude_cases)
+            .map(|(name, def)| (name.as_str(), *def))
+    }
+
     /// The declaration `module` explicitly `use`d under the local name `name`.
     ///
     /// The import tier alone, so an alias answers with what it aliases and a

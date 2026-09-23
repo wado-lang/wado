@@ -1087,7 +1087,7 @@ pub global TK_B: i32 = 3;  // virtual
 pub global TK_C: i32 = 4;  // virtual
 pub global TK_EOF: i32 = 5;
 pub global TK_ERROR: i32 = 6;
-pub global TK_LIT_X: i32 = 7;
+pub global TK_LIT_x: i32 = 7;
 
 struct Lexer {
     chars: List<char>,
@@ -1128,22 +1128,21 @@ fn try_INT(chars: &List<char>, start: i32) -> i32 {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_2 = pos;
-    let mut alts_ok_2 = false;
-    alts_2_0: {
-        pos = alts_saved_2;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_2_0; }
-        pos += 1;
-        alts_ok_2 = true;
-    }
-    if !alts_ok_2 {
+    alts_done_2: {
+        alts_2_0: {
+            pos = alts_saved_2;
+            if pos >= chars.len() || chars[pos] != ' ' { break alts_2_0; }
+            pos += 1;
+            break alts_done_2;
+        }
         alts_2_1: {
             pos = alts_saved_2;
             if pos >= chars.len() || chars[pos] != '\n' { break alts_2_1; }
             pos += 1;
-            alts_ok_2 = true;
+            break alts_done_2;
         }
+        return -1;
     }
-    if !alts_ok_2 { return -1; }
     return pos;
 }
 
@@ -1163,18 +1162,20 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '\n' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { 'x' } {
-            end = try_lit_x(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_X; }
-        } else if first_char matches { '0'..='9' } {
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
-        } else {
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
+        match first_char {
+            '\n' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            '0'..='9' => {
+                end = try_INT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_INT; }
+            },
+            'x' => {
+                end = try_lit_x(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_x; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1205,7 +1206,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_C => "C",  // virtual
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_X => "'x'",
+        TK_LIT_x => "'x'",
         _ => "Unknown",
     };
 }
@@ -1563,7 +1564,7 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_x(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_X { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_x { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_INT { return -1; }
     pos += 1;
@@ -1588,7 +1589,7 @@ fn _parse_s(p: &mut Parser) -> () {
 }
 
 fn _parse_x__inner(p: &mut Parser) -> () {
-    let lit_x = p.expect(TK_LIT_X, &SYNC_0);
+    let lit_x = p.expect(TK_LIT_x, &SYNC_0);
     let int = p.expect(TK_INT, &EMPTY_SYNC);
     if !p.speculating {
         p.emit(`S.x\n`);

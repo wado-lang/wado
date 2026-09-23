@@ -242,6 +242,7 @@ pub const CONTEXTUAL_KEYWORDS: &[(&str, KeywordCategory)] = &[
     ("forward", KeywordCategory::Control),
     ("test", KeywordCategory::Other),
     ("self", KeywordCategory::Constant),
+    ("Self", KeywordCategory::StorageType),
 ];
 
 /// Keywords the parser also accepts as a name (`let type = 1`), which

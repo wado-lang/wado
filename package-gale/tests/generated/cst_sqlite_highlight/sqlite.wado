@@ -1914,52 +1914,50 @@ fn try_NOT_EQ2(chars: &List<char>, start: i32) -> i32 {
 fn try_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
-    let mut alts_ok_0 = false;
-    alts_0_0: {
-        pos = alts_saved_0;
-        if pos >= chars.len() || chars[pos] != '"' { break alts_0_0; }
-        pos += 1;
-        loop {
-            let rep_saved_1 = pos;
-            rep_1: {
-                let alts_saved_2 = pos;
-                let mut alts_ok_2 = false;
-                alts_2_0: {
-                    pos = alts_saved_2;
-                    if pos >= chars.len() { break alts_2_0; }
-                    let not_saved_3 = pos;
-                    let mut not_matched_3 = false;
-                    not_3: {
-                        if pos >= chars.len() || chars[pos] != '"' { break not_3; }
-                        pos += 1;
-                        not_matched_3 = true;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= chars.len() || chars[pos] != '"' { break alts_0_0; }
+            pos += 1;
+            loop {
+                let rep_saved_1 = pos;
+                rep_1: {
+                    let alts_saved_2 = pos;
+                    alts_done_2: {
+                        alts_2_0: {
+                            pos = alts_saved_2;
+                            if pos >= chars.len() { break alts_2_0; }
+                            let not_saved_3 = pos;
+                            let mut not_matched_3 = false;
+                            not_3: {
+                                if pos >= chars.len() || chars[pos] != '"' { break not_3; }
+                                pos += 1;
+                                not_matched_3 = true;
+                            }
+                            pos = not_saved_3;
+                            if not_matched_3 { break alts_2_0; }
+                            pos += 1;
+                            break alts_done_2;
+                        }
+                        alts_2_1: {
+                            pos = alts_saved_2;
+                            if pos >= chars.len() || chars[pos] != '"' { break alts_2_1; }
+                            pos += 1;
+                            if pos >= chars.len() || chars[pos] != '"' { break alts_2_1; }
+                            pos += 1;
+                            break alts_done_2;
+                        }
+                        break rep_1;
                     }
-                    pos = not_saved_3;
-                    if not_matched_3 { break alts_2_0; }
-                    pos += 1;
-                    alts_ok_2 = true;
+                    continue;
                 }
-                if !alts_ok_2 {
-                    alts_2_1: {
-                        pos = alts_saved_2;
-                        if pos >= chars.len() || chars[pos] != '"' { break alts_2_1; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '"' { break alts_2_1; }
-                        pos += 1;
-                        alts_ok_2 = true;
-                    }
-                }
-                if !alts_ok_2 { break rep_1; }
-                continue;
+                pos = rep_saved_1;
+                break;
             }
-            pos = rep_saved_1;
-            break;
+            if pos >= chars.len() || chars[pos] != '"' { break alts_0_0; }
+            pos += 1;
+            break alts_done_0;
         }
-        if pos >= chars.len() || chars[pos] != '"' { break alts_0_0; }
-        pos += 1;
-        alts_ok_0 = true;
-    }
-    if !alts_ok_0 {
         alts_0_1: {
             pos = alts_saved_0;
             if pos >= chars.len() || chars[pos] != '`' { break alts_0_1; }
@@ -1968,33 +1966,32 @@ fn try_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                 let rep_saved_4 = pos;
                 rep_4: {
                     let alts_saved_5 = pos;
-                    let mut alts_ok_5 = false;
-                    alts_5_0: {
-                        pos = alts_saved_5;
-                        if pos >= chars.len() { break alts_5_0; }
-                        let not_saved_6 = pos;
-                        let mut not_matched_6 = false;
-                        not_6: {
-                            if pos >= chars.len() || chars[pos] != '`' { break not_6; }
+                    alts_done_5: {
+                        alts_5_0: {
+                            pos = alts_saved_5;
+                            if pos >= chars.len() { break alts_5_0; }
+                            let not_saved_6 = pos;
+                            let mut not_matched_6 = false;
+                            not_6: {
+                                if pos >= chars.len() || chars[pos] != '`' { break not_6; }
+                                pos += 1;
+                                not_matched_6 = true;
+                            }
+                            pos = not_saved_6;
+                            if not_matched_6 { break alts_5_0; }
                             pos += 1;
-                            not_matched_6 = true;
+                            break alts_done_5;
                         }
-                        pos = not_saved_6;
-                        if not_matched_6 { break alts_5_0; }
-                        pos += 1;
-                        alts_ok_5 = true;
-                    }
-                    if !alts_ok_5 {
                         alts_5_1: {
                             pos = alts_saved_5;
                             if pos >= chars.len() || chars[pos] != '`' { break alts_5_1; }
                             pos += 1;
                             if pos >= chars.len() || chars[pos] != '`' { break alts_5_1; }
                             pos += 1;
-                            alts_ok_5 = true;
+                            break alts_done_5;
                         }
+                        break rep_4;
                     }
-                    if !alts_ok_5 { break rep_4; }
                     continue;
                 }
                 pos = rep_saved_4;
@@ -2002,59 +1999,55 @@ fn try_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
             }
             if pos >= chars.len() || chars[pos] != '`' { break alts_0_1; }
             pos += 1;
-            alts_ok_0 = true;
+            break alts_done_0;
         }
-        if !alts_ok_0 {
-            alts_0_2: {
-                pos = alts_saved_0;
-                if pos >= chars.len() || chars[pos] != '[' { break alts_0_2; }
-                pos += 1;
-                loop {
-                    let rep_saved_7 = pos;
-                    rep_7: {
-                        if pos >= chars.len() { break rep_7; }
-                        let not_saved_8 = pos;
-                        let mut not_matched_8 = false;
-                        not_8: {
-                            if pos >= chars.len() || chars[pos] != ']' { break not_8; }
-                            pos += 1;
-                            not_matched_8 = true;
-                        }
-                        pos = not_saved_8;
-                        if not_matched_8 { break rep_7; }
+        alts_0_2: {
+            pos = alts_saved_0;
+            if pos >= chars.len() || chars[pos] != '[' { break alts_0_2; }
+            pos += 1;
+            loop {
+                let rep_saved_7 = pos;
+                rep_7: {
+                    if pos >= chars.len() { break rep_7; }
+                    let not_saved_8 = pos;
+                    let mut not_matched_8 = false;
+                    not_8: {
+                        if pos >= chars.len() || chars[pos] != ']' { break not_8; }
                         pos += 1;
-                        continue;
+                        not_matched_8 = true;
                     }
-                    pos = rep_saved_7;
-                    break;
-                }
-                if pos >= chars.len() || chars[pos] != ']' { break alts_0_2; }
-                pos += 1;
-                alts_ok_0 = true;
-            }
-            if !alts_ok_0 {
-                alts_0_3: {
-                    pos = alts_saved_0;
-                    if pos >= chars.len() { break alts_0_3; }
-                    if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' | '_' })) { break alts_0_3; }
+                    pos = not_saved_8;
+                    if not_matched_8 { break rep_7; }
                     pos += 1;
-                    loop {
-                        let rep_saved_9 = pos;
-                        rep_9: {
-                            if pos >= chars.len() { break rep_9; }
-                            if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' | '_' | '0'..='9' })) { break rep_9; }
-                            pos += 1;
-                            continue;
-                        }
-                        pos = rep_saved_9;
-                        break;
-                    }
-                    alts_ok_0 = true;
+                    continue;
                 }
+                pos = rep_saved_7;
+                break;
             }
+            if pos >= chars.len() || chars[pos] != ']' { break alts_0_2; }
+            pos += 1;
+            break alts_done_0;
         }
+        alts_0_3: {
+            pos = alts_saved_0;
+            if pos >= chars.len() { break alts_0_3; }
+            if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' | '_' })) { break alts_0_3; }
+            pos += 1;
+            loop {
+                let rep_saved_9 = pos;
+                rep_9: {
+                    if pos >= chars.len() { break rep_9; }
+                    if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' | '_' | '0'..='9' })) { break rep_9; }
+                    pos += 1;
+                    continue;
+                }
+                pos = rep_saved_9;
+                break;
+            }
+            break alts_done_0;
+        }
+        return -1;
     }
-    if !alts_ok_0 { return -1; }
     return pos;
 }
 
@@ -2231,33 +2224,32 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
         let rep_saved_27 = pos;
         rep_27: {
             let alts_saved_28 = pos;
-            let mut alts_ok_28 = false;
-            alts_28_0: {
-                pos = alts_saved_28;
-                if pos >= chars.len() { break alts_28_0; }
-                let not_saved_29 = pos;
-                let mut not_matched_29 = false;
-                not_29: {
-                    if pos >= chars.len() || chars[pos] != '\'' { break not_29; }
+            alts_done_28: {
+                alts_28_0: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() { break alts_28_0; }
+                    let not_saved_29 = pos;
+                    let mut not_matched_29 = false;
+                    not_29: {
+                        if pos >= chars.len() || chars[pos] != '\'' { break not_29; }
+                        pos += 1;
+                        not_matched_29 = true;
+                    }
+                    pos = not_saved_29;
+                    if not_matched_29 { break alts_28_0; }
                     pos += 1;
-                    not_matched_29 = true;
+                    break alts_done_28;
                 }
-                pos = not_saved_29;
-                if not_matched_29 { break alts_28_0; }
-                pos += 1;
-                alts_ok_28 = true;
-            }
-            if !alts_ok_28 {
                 alts_28_1: {
                     pos = alts_saved_28;
                     if pos >= chars.len() || chars[pos] != '\'' { break alts_28_1; }
                     pos += 1;
                     if pos >= chars.len() || chars[pos] != '\'' { break alts_28_1; }
                     pos += 1;
-                    alts_ok_28 = true;
+                    break alts_done_28;
                 }
+                break rep_27;
             }
-            if !alts_ok_28 { break rep_27; }
             continue;
         }
         pos = rep_saved_27;
@@ -2309,23 +2301,22 @@ fn try_MULTILINE_COMMENT(chars: &List<char>, start: i32) -> i32 {
         let mut ng_exit_31 = false;
         ng_31: {
             let alts_saved_32 = pos;
-            let mut alts_ok_32 = false;
-            alts_32_0: {
-                pos = alts_saved_32;
-                if pos >= chars.len() || chars[pos] != '*' { break alts_32_0; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != '/' { break alts_32_0; }
-                pos += 1;
-                alts_ok_32 = true;
-            }
-            if !alts_ok_32 {
+            alts_done_32: {
+                alts_32_0: {
+                    pos = alts_saved_32;
+                    if pos >= chars.len() || chars[pos] != '*' { break alts_32_0; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '/' { break alts_32_0; }
+                    pos += 1;
+                    break alts_done_32;
+                }
                 alts_32_1: {
                     pos = alts_saved_32;
                     if pos < chars.len() { break alts_32_1; }
-                    alts_ok_32 = true;
+                    break alts_done_32;
                 }
+                break ng_31;
             }
-            if !alts_ok_32 { break ng_31; }
             ng_exit_31 = true;
         }
         if ng_exit_31 {
@@ -2592,135 +2583,151 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
         let mut best_channel: i32 = 0;
-        if first_char matches { '\t' | '\n' | '\u{b}' | '\r' | ' ' } {
-            end = try_SPACES(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SPACES; best_channel = 1; }
-        } else if first_char matches { '!' } {
-            end = try_NOT_EQ1(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NOT_EQ1; best_channel = 0; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-        } else if first_char matches { '"' | '[' | '_' | '`' } {
-            end = try_IDENTIFIER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-        } else if first_char matches { '$' | ':' | '?' | '@' } {
-            end = try_BIND_PARAMETER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BIND_PARAMETER; best_channel = 0; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-        } else if first_char matches { '%' } {
-            end = try_MOD(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MOD; best_channel = 0; }
-        } else if first_char matches { '&' } {
-            end = try_AMP(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_AMP; best_channel = 0; }
-        } else if first_char matches { '\'' } {
-            end = try_STRING_LITERAL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; best_channel = 0; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-        } else if first_char matches { '(' } {
-            end = try_OPEN_PAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OPEN_PAR; best_channel = 0; }
-        } else if first_char matches { ')' } {
-            end = try_CLOSE_PAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CLOSE_PAR; best_channel = 0; }
-        } else if first_char matches { '*' } {
-            end = try_STAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_STAR; best_channel = 0; }
-        } else if first_char matches { '+' } {
-            end = try_PLUS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PLUS; best_channel = 0; }
-        } else if first_char matches { ',' } {
-            end = try_COMMA(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_COMMA; best_channel = 0; }
-        } else if first_char matches { '-' } {
-            end = try_MINUS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MINUS; best_channel = 0; }
-            end = try_SINGLE_LINE_COMMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SINGLE_LINE_COMMENT; best_channel = 1; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-        } else if first_char matches { '.' } {
-            end = try_DOT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOT; best_channel = 0; }
-            end = try_NUMERIC_LITERAL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-        } else if first_char matches { '/' } {
-            end = try_DIV(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DIV; best_channel = 0; }
-            end = try_MULTILINE_COMMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MULTILINE_COMMENT; best_channel = 1; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-        } else if first_char matches { ';' } {
-            end = try_SCOL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SCOL; best_channel = 0; }
-        } else if first_char matches { '<' } {
-            end = try_LT2(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LT2; best_channel = 0; }
-            end = try_LT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LT; best_channel = 0; }
-            end = try_LT_EQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LT_EQ; best_channel = 0; }
-            end = try_NOT_EQ2(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NOT_EQ2; best_channel = 0; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-        } else if first_char matches { '=' } {
-            end = try_ASSIGN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ASSIGN; best_channel = 0; }
-            end = try_EQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_EQ; best_channel = 0; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-        } else if first_char matches { '>' } {
-            end = try_GT2(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GT2; best_channel = 0; }
-            end = try_GT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GT; best_channel = 0; }
-            end = try_GT_EQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GT_EQ; best_channel = 0; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-        } else if first_char matches { 'X' | 'x' } {
-            end = try_IDENTIFIER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
-            end = try_BLOB_LITERAL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BLOB_LITERAL; best_channel = 0; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-        } else if first_char matches { '|' } {
-            end = try_PIPE2(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PIPE2; best_channel = 0; }
-            end = try_PIPE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PIPE; best_channel = 0; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-        } else if first_char matches { '~' } {
-            end = try_TILDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_TILDE; best_channel = 0; }
-        } else if first_char matches { 'a'..='z' | 'A'..='Z' } {
-            end = try_IDENTIFIER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-        } else if first_char matches { '0'..='9' } {
-            end = try_NUMERIC_LITERAL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-        } else {
-            end = try_IDENTIFIER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
-            end = try_NUMERIC_LITERAL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }
-            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+        match first_char {
+            '\t' | '\n' | '\u{b}' | '\r' | ' ' => {
+                end = try_SPACES(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_SPACES; best_channel = 1; }
+            },
+            '!' => {
+                end = try_NOT_EQ1(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_NOT_EQ1; best_channel = 0; }
+                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+            },
+            '"' | 'A'..='W' | 'Y'..='Z' | '[' | '_' | '`' | 'a'..='w' | 'y'..='z' => {
+                end = try_IDENTIFIER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
+                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+            },
+            '$' | ':' | '?' | '@' => {
+                end = try_BIND_PARAMETER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_BIND_PARAMETER; best_channel = 0; }
+                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+            },
+            '%' => {
+                end = try_MOD(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_MOD; best_channel = 0; }
+            },
+            '&' => {
+                end = try_AMP(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_AMP; best_channel = 0; }
+            },
+            '\'' => {
+                end = try_STRING_LITERAL(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; best_channel = 0; }
+                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+            },
+            '(' => {
+                end = try_OPEN_PAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OPEN_PAR; best_channel = 0; }
+            },
+            ')' => {
+                end = try_CLOSE_PAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_CLOSE_PAR; best_channel = 0; }
+            },
+            '*' => {
+                end = try_STAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_STAR; best_channel = 0; }
+            },
+            '+' => {
+                end = try_PLUS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PLUS; best_channel = 0; }
+            },
+            ',' => {
+                end = try_COMMA(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_COMMA; best_channel = 0; }
+            },
+            '-' => {
+                end = try_MINUS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_MINUS; best_channel = 0; }
+                end = try_SINGLE_LINE_COMMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_SINGLE_LINE_COMMENT; best_channel = 1; }
+                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+            },
+            '.' => {
+                end = try_DOT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_DOT; best_channel = 0; }
+                end = try_NUMERIC_LITERAL(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }
+                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+            },
+            '/' => {
+                end = try_DIV(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_DIV; best_channel = 0; }
+                end = try_MULTILINE_COMMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_MULTILINE_COMMENT; best_channel = 1; }
+                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+            },
+            '0'..='9' => {
+                end = try_NUMERIC_LITERAL(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }
+                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+            },
+            ';' => {
+                end = try_SCOL(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_SCOL; best_channel = 0; }
+            },
+            '<' => {
+                end = try_LT2(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LT2; best_channel = 0; }
+                end = try_LT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LT; best_channel = 0; }
+                end = try_LT_EQ(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LT_EQ; best_channel = 0; }
+                end = try_NOT_EQ2(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_NOT_EQ2; best_channel = 0; }
+                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+            },
+            '=' => {
+                end = try_ASSIGN(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ASSIGN; best_channel = 0; }
+                end = try_EQ(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_EQ; best_channel = 0; }
+                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+            },
+            '>' => {
+                end = try_GT2(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_GT2; best_channel = 0; }
+                end = try_GT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_GT; best_channel = 0; }
+                end = try_GT_EQ(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_GT_EQ; best_channel = 0; }
+                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+            },
+            'X' | 'x' => {
+                end = try_IDENTIFIER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
+                end = try_BLOB_LITERAL(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_BLOB_LITERAL; best_channel = 0; }
+                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+            },
+            '|' => {
+                end = try_PIPE2(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PIPE2; best_channel = 0; }
+                end = try_PIPE(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PIPE; best_channel = 0; }
+                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+            },
+            '~' => {
+                end = try_TILDE(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_TILDE; best_channel = 0; }
+            },
+            _ => {
+                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
+            },
         }
         if best_end > start {
             let kw_kind = classify_keyword(&lexer.chars, start, best_end);
