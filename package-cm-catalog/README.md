@@ -72,9 +72,9 @@ Full intended scope; checked items are implemented.
 
 ### Calling conventions
 
-- [x] Narrow scalars in the indirect params buffer. An `option` param puts every
-      param in one buffer, each at its tuple-layout offset, so a scalar stored
-      wider than its CM size writes past its slot
+- [x] Narrow scalars in the indirect params buffer. Past four flat params an
+      async call puts every param in one buffer, each at its tuple-layout
+      offset, so a scalar stored wider than its CM size writes past its slot
 
 ### Test oracle
 

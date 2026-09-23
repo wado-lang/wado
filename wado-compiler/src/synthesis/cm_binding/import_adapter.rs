@@ -1098,7 +1098,7 @@ impl<'a> AdapterBuilder<'a> {
     /// Async canon lower argument setup: allocate the results buffer (only
     /// when the import returns a value — per CM `flatten_functype` the
     /// `results_ptr` exists only then) and switch to a single indirect params
-    /// buffer when the flat params exceed the limit or need memory lowering.
+    /// buffer when the flat params exceed the limit.
     fn prepare_async_args(&mut self, plans: &[ParamPlan<'a>]) -> Option<OutptrBuffer> {
         let async_outptr = self.alloc_async_outptr();
         if self.params_in_buffer {

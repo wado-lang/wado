@@ -623,8 +623,8 @@ export fn id_record_future(v: FutureCell) -> FutureCell {
 }
 
 // --- Narrow scalars in the indirect params buffer ---
-// An `Option` param forces an async call onto the one-buffer path. There a
-// scalar stored wider than its CM size writes past its slot, and past the end.
+// Five flat params put the call on the one-buffer path. There a scalar stored
+// wider than its CM size writes past its slot, and past the end.
 export async fn narrow_scalars_in_params_buffer(c: Color, o: Option<u8>, p: Perms, s: Status) -> u32 {
     let tag: u32 = match c {
         Red => 1,
