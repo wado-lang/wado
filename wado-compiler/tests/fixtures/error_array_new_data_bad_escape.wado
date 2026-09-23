@@ -1,0 +1,9 @@
+// A malformed byte string is reported once, for its escape: it is still the
+// literal the builtin asks for.
+
+export fn run() {
+    let _a = builtin::array_new_data::<f32>(b"\xZZ\x00\x00\x00");
+}
+
+__DATA__
+{"compile_error_count": 1}

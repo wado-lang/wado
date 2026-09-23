@@ -294,9 +294,9 @@ impl Interpreter<'_> {
             ExprKind::ArrayLiteral { elements } => {
                 self.array_literal_lattice(body, node.type_id, elements)
             }
-            ExprKind::PackedArray(bytes) => {
-                Value::seq(node.type_id, bytes.values()).map_or(Lattice::NonConst, Lattice::Const)
-            }
+            ExprKind::PackedArray(data) => data
+                .to_value(node.type_id)
+                .map_or(Lattice::NonConst, Lattice::Const),
             // A plain enum case is its discriminant, which is the whole value:
             // an enum carries no payload, so nothing else distinguishes two
             // values of one case.

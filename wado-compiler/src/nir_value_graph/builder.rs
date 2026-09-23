@@ -13,7 +13,6 @@ use crate::nir_arena::{
 use crate::tir::TypeTable;
 
 use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
-use crate::const_eval::Value;
 use crate::nir_value_graph::value_kind_to_const;
 use crate::niri::{CtfeBuiltin, CtfeBuiltinMap};
 use crate::primitive::PrimitiveType;
@@ -1372,9 +1371,9 @@ impl<'a> Builder<'a> {
             // can name, so a literal keeps its identity through a binding
             // instead of going opaque at the first `let`. `Value::seq` declines
             // one too long for any fold to repay the walk.
-            ExprKind::PackedArray(bytes) => {
+            ExprKind::PackedArray(data) => {
                 let ty = self.body.exprs[expr].type_id;
-                Value::seq(ty, bytes.values()).map(|seq| self.pool.constant(&seq, ty))
+                data.to_value(ty).map(|seq| self.pool.constant(&seq, ty))
             }
             ExprKind::GlobalVarGet { .. } => None,
         }

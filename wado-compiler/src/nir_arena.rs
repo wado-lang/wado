@@ -9,7 +9,7 @@ use std::ops::ControlFlow;
 use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
 use crate::canonical::CmCallTarget;
-use crate::const_eval::Value;
+use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, non_nan_float};
 use crate::hashmap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -230,49 +230,43 @@ impl PackedData {
         self.elem.data_width().expect("checked at construction")
     }
 
-    /// Each element as a compile-time value.
-    pub fn values(&self) -> impl ExactSizeIterator<Item = Value> + '_ {
-        let elem = self.elem;
-        self.bytes.chunks_exact(self.width()).map(move |chunk| {
-            let mut raw = [0u8; 8];
-            raw[..chunk.len()].copy_from_slice(chunk);
-            let bits = u64::from_le_bytes(raw);
-            match elem {
-                PrimitiveType::F32 => Value::Float {
-                    value: f64::from(f32::from_bits(bits as u32)),
-                    prim: elem,
-                },
-                PrimitiveType::F64 => Value::Float {
-                    value: f64::from_bits(bits),
-                    prim: elem,
-                },
-                PrimitiveType::I8 => Value::Int {
-                    value: i64::from(bits as u8 as i8).cast_unsigned(),
-                    prim: elem,
-                },
-                PrimitiveType::I16 => Value::Int {
-                    value: i64::from(bits as u16 as i16).cast_unsigned(),
-                    prim: elem,
-                },
-                PrimitiveType::I32 => Value::Int {
-                    value: i64::from(bits as u32 as i32).cast_unsigned(),
-                    prim: elem,
-                },
-                PrimitiveType::I64
-                | PrimitiveType::U8
-                | PrimitiveType::U16
-                | PrimitiveType::U32
-                | PrimitiveType::U64
-                | PrimitiveType::F16
-                | PrimitiveType::Bf16 => Value::Int {
-                    value: bits,
-                    prim: elem,
-                },
-                PrimitiveType::Bool | PrimitiveType::Char | PrimitiveType::V128 => {
-                    unreachable!("checked at construction")
-                }
+    /// The array as a compile-time sequence of `type_id`. `None` past
+    /// [`MAX_SEQ_ELEMENTS`], and where an element is a NaN a `Value` cannot carry.
+    pub fn to_value(&self, type_id: TypeId) -> Option<Value> {
+        if self.len() > MAX_SEQ_ELEMENTS {
+            return None;
+        }
+        let elements = self
+            .bytes
+            .chunks_exact(self.width())
+            .map(|chunk| self.element(chunk))
+            .collect::<Option<Vec<_>>>()?;
+        Value::seq(type_id, elements)
+    }
+
+    fn element(&self, chunk: &[u8]) -> Option<Value> {
+        let mut raw = [0u8; 8];
+        raw[..chunk.len()].copy_from_slice(chunk);
+        let bits = u64::from_le_bytes(raw);
+        let prim = self.elem;
+        let int = |value: u64| Some(Value::Int { value, prim });
+        match prim {
+            PrimitiveType::F32 => non_nan_float(f64::from(f32::from_bits(bits as u32)), prim),
+            PrimitiveType::F64 => non_nan_float(f64::from_bits(bits), prim),
+            PrimitiveType::I8 => int(i64::from(bits as u8 as i8).cast_unsigned()),
+            PrimitiveType::I16 => int(i64::from(bits as u16 as i16).cast_unsigned()),
+            PrimitiveType::I32 => int(i64::from(bits as u32 as i32).cast_unsigned()),
+            PrimitiveType::I64
+            | PrimitiveType::U8
+            | PrimitiveType::U16
+            | PrimitiveType::U32
+            | PrimitiveType::U64
+            | PrimitiveType::F16
+            | PrimitiveType::Bf16 => int(bits),
+            PrimitiveType::Bool | PrimitiveType::Char | PrimitiveType::V128 => {
+                unreachable!("checked at construction")
             }
-        })
+        }
     }
 }
 

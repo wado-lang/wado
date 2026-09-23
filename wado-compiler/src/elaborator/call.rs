@@ -42,6 +42,14 @@ use crate::{Span, token};
 /// The builtin that reads an `Array<T>` out of a byte literal.
 pub(crate) const ARRAY_NEW_DATA: &str = "array_new_data";
 
+/// An expression as a byte literal.
+enum ByteLiteral {
+    Not,
+    /// A literal whose bytes are unknown, which its own error reports.
+    Unknown,
+    Len(usize),
+}
+
 /// The parameter an associated-type equality binds: a bare parameter
 /// (`Builder<Output = T>`) or a pack spelt as the whole tuple
 /// (`ReflectFlags<Members = [..M]>`). A pack binds to the projected tuple,
@@ -612,14 +620,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (_, None) => format!(
                 "`builtin::{ARRAY_NEW_DATA}` needs a numeric primitive element type, written as `builtin::{ARRAY_NEW_DATA}::<T>`"
             ),
-            ([arg], Some(width)) => match self.byte_literal_len(arg) {
-                None => format!(
+            ([arg], Some(width)) => match self.byte_literal(arg) {
+                ByteLiteral::Not => format!(
                     "`builtin::{ARRAY_NEW_DATA}` needs a byte string literal or `#include_bytes`"
                 ),
-                Some(len) if len % width != 0 => format!(
+                ByteLiteral::Len(len) if len % width != 0 => format!(
                     "`builtin::{ARRAY_NEW_DATA}` reads {width}-byte elements, but has {len} bytes"
                 ),
-                Some(_) => return,
+                ByteLiteral::Len(_) | ByteLiteral::Unknown => return,
             },
             // A miscounted call is the arity error's to report.
             _ => return,
@@ -627,20 +635,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _ = self.emit(TypeError::InvalidLiteral { message, span });
     }
 
-    /// The length of a byte literal known at compile time, `None` for any
-    /// other expression.
-    fn byte_literal_len(&self, expr: &Expr) -> Option<usize> {
+    /// What `expr` is as a byte literal.
+    fn byte_literal(&self, expr: &Expr) -> ByteLiteral {
         let Expr::Literal(lit) = expr else {
-            return None;
+            return ByteLiteral::Not;
         };
-        match &lit.value {
+        let len = match &lit.value {
             ast::Literal::Bytes(raw) => unescape_bytes(raw).ok().map(|b| b.len()),
             ast::Literal::IncludeBytes(raw_path) => {
                 let key = [self.home_module(lit.id).to_string(), raw_path.clone()];
                 self.tysys.included_files.get(&key).map(Vec::len)
             }
-            _ => None,
-        }
+            _ => return ByteLiteral::Not,
+        };
+        len.map_or(ByteLiteral::Unknown, ByteLiteral::Len)
     }
 
     pub(super) fn resolve_call(
