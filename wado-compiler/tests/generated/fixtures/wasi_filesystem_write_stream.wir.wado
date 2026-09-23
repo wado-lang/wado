@@ -1452,15 +1452,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                 break $inline_cm_copy_result_8: 2;
             } };
             drop("mem/realloc"(ptr_9, len_10, 1, 0));
-            if (if (if local.tee $load_3(written_11.result) != 0 -> i32 {
-                1;
-            } else {
-                written_11.count <= 0;
-            }) -> i32 {
-                1;
-            } else {
-                written_11.count >= rest.used;
-            }) {
+            if ((local.tee $load_3(written_11.result) != 0) | (written_11.count <= 0)) | (written_11.count >= rest.used) {
                 return $load_3;
             }
             elements = array.new_fixed<u8>();
@@ -1585,14 +1577,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b206: block {
-        l207: loop {
-            break_if b206 i >= digit_count_4;
+    b204: block {
+        l205: loop {
+            break_if b204 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l207;
+            continue l205;
         };
     };
 }

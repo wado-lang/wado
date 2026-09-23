@@ -142,16 +142,12 @@ fn "int128_pattern.wado/$test_6_wide_int_literal_pattern_nested_in_a_tuple"() {
     pair = struct.new "tuple//[core:prelude/int128.wado/u128, core:prelude/int128.wado/u128]" { 0: struct.new "core:prelude/int128.wado//u128" { low: 3_i64, high: 0_i64 }, 1: ref.as_non_null(multivalue_bind [lo, hi] = i64.add128(3_i64, 0_i64, 1_i64, 0_i64); struct.new "core:prelude/int128.wado//u128" { low: lo, high: hi }) };
     tag = (if $local_6 = local.tee $load_0(pair.0); ($local_6.low == 1_i64) & ($local_6.high == 0_i64) -> i32 {
         1;
-    $local_7 = $load_0;
-    $local_8 = pair.1;
-    } else if (if ($local_7.low == 3_i64) & ($local_7.high == 0_i64) -> i32 {
-        ($local_8.low == 4_i64) & ($local_8.high == 0_i64);
     } else {
-        0;
-    }) -> i32 {
-        2;
-    } else {
-        3;
+        select i32($local_7 = $load_0; $local_8 = pair.1; (if ($local_7.low == 3_i64) & ($local_7.high == 0_i64) -> i32 {
+            ($local_8.low == 4_i64) & ($local_8.high == 0_i64);
+        } else {
+            0;
+        }), 2, 3);
     });
     if @unlikely(tag != 2) {
         cold_path;
@@ -209,43 +205,40 @@ fn "int128_pattern.wado/$test_7_wide_int_range_pattern_nested_in_a_tuple"() {
         0;
     }) -> i32 {
         1;
-    $local_7 = $load_0;
-    } else if (if $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_8: block -> "core:prelude/traits.wado//enum:Ordering" {
-        if local.tee $load_5($local_7.high) < struct.new "core:prelude/int128.wado//i128" { low: -10_i64, high: -1_i64 }.high {
-            break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_8: 0;
-        }
-        if $load_5 > struct.new "core:prelude/int128.wado//i128" { low: -10_i64, high: -1_i64 }.high {
-            break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_8: 2;
-        }
-        if local.tee $load_6($local_7.low) <u struct.new "core:prelude/int128.wado//i128" { low: -10_i64, high: -1_i64 }.low {
-            break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_8: 0;
-        }
-        if $load_6 >u struct.new "core:prelude/int128.wado//i128" { low: -10_i64, high: -1_i64 }.low {
-            break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_8: 2;
-        }
-        break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_8: 1;
-    } != 0 -> i32 {
-        $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_10: block -> "core:prelude/traits.wado//enum:Ordering" {
-            if local.tee $load_7($local_7.high) < struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: -1_i64 }.high {
-                break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_10: 0;
-            }
-            if $load_7 > struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: -1_i64 }.high {
-                break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_10: 2;
-            }
-            if local.tee $load_8($local_7.low) <u struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: -1_i64 }.low {
-                break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_10: 0;
-            }
-            if $load_8 >u struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: -1_i64 }.low {
-                break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_10: 2;
-            }
-            break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_10: 1;
-        } != 2;
     } else {
-        0;
-    }) -> i32 {
-        2;
-    } else {
-        3;
+        select i32($local_7 = $load_0; (if $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_8: block -> "core:prelude/traits.wado//enum:Ordering" {
+            if local.tee $load_5($local_7.high) < struct.new "core:prelude/int128.wado//i128" { low: -10_i64, high: -1_i64 }.high {
+                break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_8: 0;
+            }
+            if $load_5 > struct.new "core:prelude/int128.wado//i128" { low: -10_i64, high: -1_i64 }.high {
+                break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_8: 2;
+            }
+            if local.tee $load_6($local_7.low) <u struct.new "core:prelude/int128.wado//i128" { low: -10_i64, high: -1_i64 }.low {
+                break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_8: 0;
+            }
+            if $load_6 >u struct.new "core:prelude/int128.wado//i128" { low: -10_i64, high: -1_i64 }.low {
+                break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_8: 2;
+            }
+            break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_8: 1;
+        } != 0 -> i32 {
+            $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_10: block -> "core:prelude/traits.wado//enum:Ordering" {
+                if local.tee $load_7($local_7.high) < struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: -1_i64 }.high {
+                    break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_10: 0;
+                }
+                if $load_7 > struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: -1_i64 }.high {
+                    break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_10: 2;
+                }
+                if local.tee $load_8($local_7.low) <u struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: -1_i64 }.low {
+                    break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_10: 0;
+                }
+                if $load_8 >u struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: -1_i64 }.low {
+                    break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_10: 2;
+                }
+                break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Ord__cmp_10: 1;
+            } != 2;
+        } else {
+            0;
+        }), 2, 3);
     });
     if @unlikely(tag != 2) {
         cold_path;
@@ -544,14 +537,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = $mv$data$start + ($mv$data$end - $mv$data$start);
     offset = $mv$data$start;
     block {
-        l51: loop {
+        l49: loop {
             $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b52: block {
-                l53: loop {
-                    break_if b52 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b50: block {
+                l51: loop {
+                    break_if b50 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
                     i = i + 1;
-                    continue l53;
+                    continue l51;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -584,7 +577,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
-            continue l51;
+            continue l49;
         };
     };
 }
@@ -629,14 +622,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b61: block {
-        l62: loop {
-            break_if b61 i >= digit_count_4;
+    b59: block {
+        l60: loop {
+            break_if b59 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l62;
+            continue l60;
         };
     };
 }
