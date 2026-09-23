@@ -285,6 +285,9 @@ pub struct GenContext {
     /// re-deriving `binding_name`, which diverges when a token / rule field-name
     /// collision deduped the reference.
     alt_bindings: List<AltBinding>,
+    /// The emitted scan function covering one alternative, by
+    /// `[rule index, surface alt index]`: one function serves the scan and the parse.
+    alt_scan_fns: TreeMap<[i32, i32], String>,
 }
 
 impl GenContext {
@@ -353,7 +356,18 @@ impl GenContext {
             rule_follow_exact: false,
             rule_captures: TreeMap::new(),
             alt_bindings: [],
+            alt_scan_fns: TreeMap::new(),
         };
+    }
+
+    pub fn record_alt_scan_fn<S: AsStrSlice>(&mut self, alt: i32, name: S) {
+        let key = [self.current_rule_index, alt];
+        assert !self.alt_scan_fns.contains_key(key),`alt ${alt} of rule ${self.current_rule_index} already has a scan function`;
+        self.alt_scan_fns[key] = name.to_string();
+    }
+
+    pub fn alt_scan_fn(&self, alt: i32) -> Option<String> {
+        return self.alt_scan_fns.get([self.current_rule_index, alt]);
     }
 
     /// Return the next scan-group id and advance the counter. Replaces the

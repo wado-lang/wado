@@ -2,10 +2,10 @@
 //! through the public `generate()` API today but guard latent codegen
 //! hazards.
 
-use { gen_alt_scan_op_elements } from "./parser_gen.wado";
+use { gen_alt_scan_fn } from "./parser_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { CodeWriter } from "lib:wadopoet";
-use { ScanElement, ScanTokenElement, ScanRuleCallElement, FollowArg } from "./gir.wado";
+use { ScanBody, ScanElement, ScanTokenElement, ScanRuleCallElement, FollowArg } from "./gir.wado";
 
 /// `r` is registered left-recursive: only then does `scan_r` take `min_prec`.
 fn empty_ctx() -> GenContext {
@@ -28,12 +28,12 @@ fn self_ref_call(min_prec_arg: Option<i32>) -> ScanElement {
 test "alt-scan passes a self-ref's stamped min_prec verbatim" {
     let mut ctx = empty_ctx();
     let mut w = CodeWriter::new();
-    let elems: List<ScanElement> = [
+    let elements: List<ScanElement> = [
         ScanElement::Token(ScanTokenElement { kind: "TK_X" }),
         self_ref_call(null),
         self_ref_call(Option::Some(15)),
     ];
-    gen_alt_scan_op_elements(&mut w, &elems, 3, &mut ctx);
+    gen_alt_scan_fn(&mut w, "scan_r_alt_0", &ScanBody { elements }, 0, &mut ctx);
     let out = w.to_string();
 
     assert out.contains("scan_r(tokens, pos, 0)"), `an unstamped self-ref climbs from 0: ${out}`;
