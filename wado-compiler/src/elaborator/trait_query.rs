@@ -22,7 +22,7 @@ use super::scope::{
 };
 use super::sig::Param;
 use super::static_call::prefer;
-use super::trait_env::{InheritedBound, ViaClause};
+use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
 use super::types::{
     MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
@@ -2197,22 +2197,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.decl_key_or_local(written)
     }
 
-    /// Whether the trait `key` names declares `method_name`. The cheap form of
+    /// The header of `method_name` on the trait `key` names. The cheap form of
     /// [`Self::trait_method_of`], for counting candidates without cloning each
     /// one's declaration.
-    fn trait_declares_method_of(&self, key: &DefId, method_name: &str) -> bool {
-        self.trait_decl_header_of(key)
-            .is_some_and(|header| header.methods.iter().any(|m| m.name == method_name))
-    }
-
-    /// Whether the trait `key` names reserves `method_name` `#[unavailable]`.
-    fn trait_reserves_method_of(&self, key: &DefId, method_name: &str) -> bool {
-        self.trait_decl_header_of(key).is_some_and(|header| {
-            header
-                .methods
-                .iter()
-                .any(|m| m.name == method_name && m.is_reserved)
-        })
+    fn trait_method_header_of(&self, key: &DefId, method_name: &str) -> Option<&ImplMethodHeader> {
+        self.trait_decl_header_of(key)?
+            .methods
+            .iter()
+            .find(|m| m.name == method_name)
     }
 
     /// The recorded signature of `method_name` on the trait `trait_name` names
@@ -2541,7 +2533,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // amounted to.
                     Resolution::Def(def) => def == *key,
                     _ => false,
-                }) && self.trait_declares_method_of(key, method_name)
+                }) && self.trait_method_header_of(key, method_name).is_some()
             })
             .collect();
         // The space each bound's written types are read in, settled once here:
@@ -2558,7 +2550,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let mut candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, args);
         prefer(&mut candidates, |c| {
-            !self.trait_reserves_method_of(&c.decl, method_name)
+            self.trait_method_header_of(&c.decl, method_name)
+                .is_some_and(|m| !m.is_reserved)
         });
         let resolved = candidates.first().and_then(|candidate| {
             self.trait_method_of(&candidate.decl, method_name)

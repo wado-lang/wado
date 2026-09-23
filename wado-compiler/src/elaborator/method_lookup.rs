@@ -2392,8 +2392,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_found = true;
         }
 
-        // Not in the impl block: the trait's default, or a name the trait
-        // reserves, which the call site reports as unavailable.
         if !method_found {
             // The block's own trait, by declaration: a second trait of that
             // spelling in this frame would otherwise supply the default body,

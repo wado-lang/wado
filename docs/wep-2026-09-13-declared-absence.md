@@ -100,6 +100,8 @@ it never reaches codegen.
 On a trait, it is not a requirement either: no impl owes it. Every type that
 implements the trait answers to the name, whether a call names the type or
 reaches it through a bound, and whether the method takes a receiver or not.
+Where another of its traits has a method by that name, the call reaches that
+method: a reserved name answers only where no method does.
 
 ### Placement
 
