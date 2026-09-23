@@ -568,8 +568,15 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             // Initialized let: bind the initializer first (uses outer scope vars)
             self.bind_expr(value)?;
 
-            // `let x = x + 1` and `let Some(x) = x else …` shadow the binding the
-            // initializer read, so it leaves scope before `define` calls it a duplicate.
+            // Bind the else block before the pattern bindings, so it cannot
+            // see them — they escape to the enclosing scope, not the else block.
+            if let Some(else_block) = &let_stmt.else_block {
+                self.bind_block(else_block)?;
+            }
+
+            // `let x = x + 1` and `let Some(x) = x else { … x … }` shadow a
+            // binding both the initializer and the else block may read, so it
+            // leaves scope only here, before `define` would call it a duplicate.
             let mut bound: Vec<String> = Vec::new();
             for_each_pattern_name(&let_stmt.pattern, &mut |name, _| {
                 bound.push(name.to_string());
@@ -586,12 +593,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                         .bindings
                         .shift_remove(name.as_str());
                 }
-            }
-
-            // Bind the else block before the pattern bindings, so it cannot
-            // see them — they escape to the enclosing scope, not the else block.
-            if let Some(else_block) = &let_stmt.else_block {
-                self.bind_block(else_block)?;
             }
 
             self.bind_pattern_as(
