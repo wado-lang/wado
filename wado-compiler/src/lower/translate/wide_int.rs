@@ -164,13 +164,11 @@ fn arm_condition(
                 span,
             ))
         }
-        // The match pre-pass keeps an or-pattern whole only when every
-        // alternative is a plain value, so each one has a condition.
         TirPattern::Or(alternatives) => alternatives
             .iter()
             .map(|alt| {
                 arm_condition(alt, scrutinee, span, type_table)
-                    .expect("an unsplit or-pattern holds only value tests")
+                    .expect("the match pre-pass keeps an or-pattern whole only over value tests")
             })
             .reduce(|left, right| logical(TirBinaryOp::Or, left, right, span)),
         _ => None,
