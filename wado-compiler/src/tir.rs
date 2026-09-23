@@ -1521,6 +1521,13 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id` is stored as `i128` or `u128`, newtypes of them included.
+    #[must_use]
+    pub fn is_wide_int(&self, id: TypeId) -> bool {
+        matches!(self.get(self.representation_head(id)), ResolvedType::Struct { def, .. }
+            if matches!(self.struct_head_name(*def).as_str(), "i128" | "u128"))
+    }
+
     /// A struct head as a mangled name embeds it: the declaration when it names
     /// one, the interned shape otherwise.
     #[must_use]

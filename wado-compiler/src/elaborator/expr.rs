@@ -3544,15 +3544,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // between aggregates is only ever a newtype step, which shares a base.
         let unrelated_aggregate = {
             let tt = self.tysys.type_table.borrow();
-            // `i128` / `u128` are structs here; their rules below cover a
-            // wide-int source only, so such a target never exempts an aggregate.
-            let wide_int = |id| {
-                matches!(tt.get(tt.representation_head(id)), ResolvedType::Struct { def, .. }
-                    if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128")
-            };
+            // `i128` / `u128` are stored as structs but are scalars to `as`;
+            // the wide-int rules below judge them.
             // A tuple is a `GenericInstance` of a tuple head, so no arm of its own.
             let is_aggregate = |id| {
-                !wide_int(id)
+                !tt.is_wide_int(id)
                     && matches!(
                         tt.get(tt.representation_head(id)),
                         ResolvedType::Struct { .. }
@@ -3606,31 +3602,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             use crate::primitive::PrimitiveType;
             let tt = self.tysys.type_table.borrow();
-            let source_is_wide_int = matches!(
-                tt.get(tt.representation_head(source_type)),
-                ResolvedType::Struct { def, .. }
-                    if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128"
-            );
-            let target_supported = !source_is_wide_int
-                || match tt.get(tt.representation_head(target_type)) {
+            let target_supported = !tt.is_wide_int(source_type)
+                || tt.is_wide_int(target_type)
+                || matches!(
+                    tt.get(tt.representation_head(target_type)),
                     ResolvedType::Primitive(
                         PrimitiveType::F64
-                        | PrimitiveType::F32
-                        | PrimitiveType::I64
-                        | PrimitiveType::U64
-                        | PrimitiveType::I32
-                        | PrimitiveType::U32
-                        | PrimitiveType::I16
-                        | PrimitiveType::U16
-                        | PrimitiveType::I8
-                        | PrimitiveType::U8
-                        | PrimitiveType::Char,
-                    ) => true,
-                    ResolvedType::Struct { def, .. } => {
-                        tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128"
-                    }
-                    _ => false,
-                };
+                            | PrimitiveType::F32
+                            | PrimitiveType::I64
+                            | PrimitiveType::U64
+                            | PrimitiveType::I32
+                            | PrimitiveType::U32
+                            | PrimitiveType::I16
+                            | PrimitiveType::U16
+                            | PrimitiveType::I8
+                            | PrimitiveType::U8
+                            | PrimitiveType::Char,
+                    )
+                );
             if !target_supported {
                 let from_name = tt.type_name(source_type);
                 let to_name = tt.type_name(target_type);
