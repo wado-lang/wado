@@ -710,3 +710,11 @@ test "from_str reads a view without copying out of it" {
     assert bool::from_str(view.sub(9, 13)) matches { Ok(v) && v == true };
     assert char::from_str(view.sub(16, 17)) matches { Ok(v) && v == 'x' };
 }
+
+test "BITS is the width in bits" {
+    assert i8::BITS == 8 && u8::BITS == 8;
+    assert i16::BITS == 16 && u16::BITS == 16 && f16::BITS == 16 && bf16::BITS == 16;
+    assert i32::BITS == 32 && u32::BITS == 32 && f32::BITS == 32;
+    assert i64::BITS == 64 && u64::BITS == 64 && f64::BITS == 64;
+    assert i128::BITS == 128 && u128::BITS == 128;
+}

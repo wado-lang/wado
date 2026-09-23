@@ -317,7 +317,7 @@ impl<T: FromLeBytes> List<T> {
     #[compiler_item("list_from_le_bytes")]
     pub fn from_le_bytes<B: AsByteSlice>(bytes: B) -> List<T> {
         let view = bytes.as_byte_slice();
-        let width = T::le_width();
+        let width = T::bits() / 8;
         if view.len() % width != 0 {
             panic(`from_le_bytes: ${view.len()} bytes is not a whole number of ${width}-byte elements`);
         }
