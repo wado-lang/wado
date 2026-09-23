@@ -3451,15 +3451,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     util::parse_i128_literal(repr)
                 };
 
-                match parse_result {
-                    Ok(_) => return target_type,
-                    Err(_) => {
-                        let _ = self.emit(TypeError::InvalidLiteral {
-                            message: format!("invalid {name} literal: {repr}"),
-                            span: lit.span,
-                        });
-                    }
+                if parse_result.is_err() {
+                    let _ = self.emit(TypeError::InvalidLiteral {
+                        message: format!("invalid {name} literal: {repr}"),
+                        span: lit.span,
+                    });
                 }
+                return target_type;
             }
 
             // Handle negated number literal cast: -170... as i128
@@ -3472,13 +3470,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 // Parse the negated value directly using Rust's i128
                 let negated_repr = format!("-{repr}");
-                if util::parse_i128_literal(&negated_repr).is_ok() {
-                    return target_type;
+                if util::parse_i128_literal(&negated_repr).is_err() {
+                    let _ = self.emit(TypeError::InvalidLiteral {
+                        message: format!("invalid i128 literal: -{repr}"),
+                        span: unary.span,
+                    });
                 }
-                let _ = self.emit(TypeError::InvalidLiteral {
-                    message: format!("invalid i128 literal: -{repr}"),
-                    span: unary.span,
-                });
+                return target_type;
             }
 
             // General expression cast (not a literal)
