@@ -3437,28 +3437,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .representation_head(target_type);
-        let struct_name = match self.tysys.type_table.borrow().get(repr_target).clone() {
-            ResolvedType::Struct { .. } => {
-                let tt = self.tysys.type_table.borrow();
-                tt.nominal_def(repr_target).map(|def| {
-                    (
-                        FqTypeName::declared(tt.defs(), def),
-                        tt.def_name(def).to_string(),
-                    )
-                })
-            }
-            _ => None,
-        };
-
-        if let Some((ref name, ref simple)) = struct_name
-            && (simple == "u128" || simple == "i128")
-        {
+        let wide_target = self.tysys.type_table.borrow().wide_int_item(repr_target);
+        if let Some(item) = wide_target {
+            let name = item.attr_name();
             // Handle number literal cast specially to support values > u64
             if let ast::Expr::Literal(lit) = &cast.expr
                 && let Literal::Number(repr) = &lit.value
                 && !util::is_float_only_literal(repr)
             {
-                let parse_result = if simple == "u128" {
+                let parse_result = if item == CompilerItem::U128 {
                     util::parse_u128_literal(repr).map(|v| v as i128)
                 } else {
                     util::parse_i128_literal(repr)
@@ -3481,7 +3468,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let ast::Expr::Literal(lit) = &unary.expr
                 && let Literal::Number(repr) = &lit.value
                 && !util::is_float_only_literal(repr)
-                && simple == "i128"
+                && item == CompilerItem::I128
             {
                 // Parse the negated value directly using Rust's i128
                 let negated_repr = format!("-{repr}");
