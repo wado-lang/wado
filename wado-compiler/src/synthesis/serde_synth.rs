@@ -426,12 +426,12 @@ fn byte_slice_method_call(
     )
 }
 
-/// Build `left && right` expression.
-fn and_expr(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
+/// Build `left op right` over two `bool` operands.
+fn bool_expr(left: TirExpr, op: TirBinaryOp, right: TirExpr, span: Span) -> TirExpr {
     TirExpr::new(
         TirExprKind::Binary {
             left: Box::new(left),
-            op: TirBinaryOp::And,
+            op,
             right: Box::new(right),
         },
         TypeTable::BOOL,
@@ -570,16 +570,25 @@ impl LookupTree<'_> {
 
     /// The condition testing that `positions` hold `key`'s own bytes. `None`
     /// when `positions` is empty.
+    ///
+    /// Each run of four tests is joined by `&`, not `&&`: wasmtime shares an
+    /// `array.get`'s null, length and address checks only across the gets in one
+    /// block, and four is where that sharing stops.
     fn byte_tests(&self, key: &Key, positions: impl Iterator<Item = usize>) -> Option<TirExpr> {
-        positions
-            .map(|pos| {
-                i32_eq(
-                    self.byte_at(pos),
-                    i32_const(i32::from(key.bytes[pos])),
-                    self.span,
-                )
-            })
-            .reduce(|acc, eq| and_expr(acc, eq, self.span))
+        let mut tests = positions.map(|pos| {
+            i32_eq(
+                self.byte_at(pos),
+                i32_const(i32::from(key.bytes[pos])),
+                self.span,
+            )
+        });
+        std::iter::from_fn(|| {
+            tests
+                .by_ref()
+                .take(4)
+                .reduce(|acc, eq| bool_expr(acc, TirBinaryOp::BitAnd, eq, self.span))
+        })
+        .reduce(|acc, block| bool_expr(acc, TirBinaryOp::And, block, self.span))
     }
 
     /// Statements that return whichever of `keys` the wire key names, or fall
