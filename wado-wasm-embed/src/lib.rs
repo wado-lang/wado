@@ -151,6 +151,8 @@ pub fn embed_component(component: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Er
                 // A module nested inside another module or component is that
                 // one's business; only the top level's are the asset's.
                 if nesting == 0 {
+                    let unchecked_range =
+                        unchecked_range.start as usize..unchecked_range.end as usize;
                     out.extend_from_slice(&component[copied..unchecked_range.start]);
                     // The length already written ahead of the range describes
                     // the module that was there, so it goes with it. `Encode`

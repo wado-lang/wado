@@ -247,8 +247,8 @@ pub fn resolve(wasm: &[u8]) -> Result<DataRefs, Error> {
     let mut data_section = None;
     let mut code_range = 0..0;
     let mut data_range = 0..0;
-    let mut bodies: Vec<std::ops::Range<usize>> = Vec::new();
-    let mut segments: Vec<std::ops::Range<usize>> = Vec::new();
+    let mut bodies: Vec<std::ops::Range<u64>> = Vec::new();
+    let mut segments: Vec<std::ops::Range<u64>> = Vec::new();
     let mut imported_funcs = 0;
     let mut linking = None;
     let mut relocs = Vec::new();
@@ -283,7 +283,7 @@ pub fn resolve(wasm: &[u8]) -> Result<DataRefs, Error> {
                     let data = data?;
                     // The payload's own bytes, which is what an offset into the
                     // section lands in.
-                    segments.push(data.range.end - data.data.len()..data.range.end);
+                    segments.push(data.range.end - data.data.len() as u64..data.range.end);
                 }
             }
             Payload::CustomSection(reader) if reader.name() == "linking" => {
@@ -329,7 +329,7 @@ pub fn resolve(wasm: &[u8]) -> Result<DataRefs, Error> {
                 continue;
             };
             if section == data_section {
-                let position = data_range.start + entry.offset as usize;
+                let position = data_range.start + u64::from(entry.offset);
                 let (segment, payload) = segments
                     .iter()
                     .enumerate()
@@ -352,7 +352,7 @@ pub fn resolve(wasm: &[u8]) -> Result<DataRefs, Error> {
             let Target::Data(range) = target else {
                 continue;
             };
-            let position = code_range.start + entry.offset as usize;
+            let position = code_range.start + u64::from(entry.offset);
             let body = bodies
                 .iter()
                 .position(|body| body.contains(&position))
@@ -384,7 +384,7 @@ pub fn resolve(wasm: &[u8]) -> Result<DataRefs, Error> {
 /// one of these.
 fn symbol_targets(
     data: &[u8],
-    offset: usize,
+    offset: u64,
     names: &BTreeMap<u32, &str>,
 ) -> Result<BTreeMap<u32, Target>, Error> {
     use wasmparser::{Linking, LinkingSectionReader, SymbolInfo};

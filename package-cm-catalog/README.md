@@ -39,6 +39,9 @@ Full intended scope; checked items are implemented.
 - [x] A `variant` with no payload-bearing case, bare and inside
       `option` / `list` / `tuple` — it lays out as its bare discriminant, and
       the same stride-or-offset reads are what show that width
+- [x] `map<k, v>` — the same bytes as `list<tuple<k, v>>`, under its own type
+      constructor. One row per key shape that lowers differently (`string`,
+      a scalar), plus a repeated-key round trip for the last-wins rule
 
 ### `future<T>` (consume/produce)
 
