@@ -505,15 +505,19 @@ impl GenContext {
         if self.in_scan_fn {
             return `*${SCAN_GATE_HANDLE}`;
         }
+        return self.scan_gate_path();
+    }
+
+    fn scan_gate_path(&self) -> String {
+        if self.in_scan_fn {
+            return SCAN_GATE_HANDLE;
+        }
         return `${PARSER_HANDLE}.${SCAN_GATE_FIELD}`;
     }
 
     /// `place.field` of the scan gate.
     pub fn scan_gate_member<S: AsStrSlice>(&self, field: S) -> String {
-        if self.in_scan_fn {
-            return `${SCAN_GATE_HANDLE}.${field}`;
-        }
-        return `${PARSER_HANDLE}.${SCAN_GATE_FIELD}.${field}`;
+        return `${self.scan_gate_path()}.${field}`;
     }
 
     /// The trailing gate argument of a scan call, empty without a gate.
@@ -524,16 +528,13 @@ impl GenContext {
         if self.in_scan_fn {
             return `, ${SCAN_GATE_HANDLE}`;
         }
-        return `, &mut ${PARSER_HANDLE}.${SCAN_GATE_FIELD}`;
+        return `, &mut ${self.scan_gate_path()}`;
     }
 
     /// A condition rendered against the parameter (`scan_gate_condition`),
     /// pointed at the gate as this code reaches it.
     pub fn scan_gate_cond<S: AsStrSlice>(&self, cond: S) -> String {
-        if self.in_scan_fn {
-            return cond.to_string();
-        }
-        return cond.replace(`${SCAN_GATE_HANDLE}.`, `${PARSER_HANDLE}.${SCAN_GATE_FIELD}.`);
+        return cond.replace(`${SCAN_GATE_HANDLE}.`, `${self.scan_gate_path()}.`);
     }
 
     pub fn set_binding_reads(&mut self, reads: List<Option<List<String>>>) {

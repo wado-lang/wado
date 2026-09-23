@@ -24,7 +24,6 @@ use {
     token_group_field_name,
     general_group_field_name,
     gen_visibility_comment,
-    to_snake_case,
     first_contains,
     dedup_append_arr,
     subtract_sets,
@@ -41,7 +40,6 @@ use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
 use { GateScope, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from "./scan_gate.wado";
 use { DiagnosticKind, DiagnosticOwner, DiagnosticSite } from "./gir.wado";
 use {
-    join_kinds,
     follow_composed,
     follow_forward_args,
     follow_yields_call,
@@ -1770,9 +1768,8 @@ fn emit_tested_arms<S: AsStrSlice>(
     }
 }
 
-/// The arms of a decision chain over `branches`, each writing its rendered
-/// body, with the arms that write the same body merged. Returns the branches
-/// emitted, which `close_decision_chain` closes.
+/// The arms of a decision chain, those writing the same body merged. Returns
+/// the merged branches, which `close_decision_chain` closes.
 fn emit_decision_arms<S: AsStrSlice>(
     w: &mut CodeWriter,
     branches: &List<DecisionBranch>,
@@ -1910,9 +1907,8 @@ fn known_after(se: &ScanElement, known: &List<List<String>>, ctx: &GenContext) -
     return rest;
 }
 
-/// Whether walking `se` under `known` can run the failure statement it was
-/// handed, so a label that failure breaks to has a reader. A label nothing
-/// breaks to does not compile.
+/// Whether walking `se` under `known` can run its failure statement. A label
+/// nothing breaks to does not compile.
 fn scan_element_can_fail(se: &ScanElement, known: &List<List<String>>, ctx: &GenContext) -> bool {
     return match se {
         Token(_) | RuleCall(_) => !scan_element_is_proven(se, known, ctx),
@@ -1943,15 +1939,8 @@ fn scan_skip_known_token(elements: &List<ScanElement>, known: &List<List<String>
     return 0;
 }
 
-/// Emits one alt as a scan candidate, ending in `commit_stmt`. A single-alt
-/// partition calls this once; a longest-match tournament calls it once per
-/// candidate. `pos` is scratch state every candidate overwrites before its own
-/// attempt, including one that loses, so a candidate that cannot fail commits
-/// unconditionally.
-///
-/// Returns whether the candidate can fail. A caller with its own fallthrough
-/// statement (the single-alt path's `return -1;`) must skip it when this
-/// returns false — the candidate already committed, making it unreachable.
+/// Emit one alt as a scan candidate ending in `commit_stmt`, and return whether
+/// it can fail. One that cannot has committed, so a caller's fallthrough is dead.
 fn gen_scan_alt_candidate<S: AsStrSlice>(
     w: &mut CodeWriter,
     i: i32,
@@ -1959,7 +1948,7 @@ fn gen_scan_alt_candidate<S: AsStrSlice>(
     known: &List<List<String>>,
     ctx: &mut GenContext,
     commit_stmt: S,
-    at_start: bool = false,
+    at_start: bool,
 ) -> bool {
     let from = scan_skip_known_token(&body.elements, known, ctx);
     let rest_known = if from == 1 { known_after(&body.elements[0], known, ctx) } else { *known };
@@ -2080,12 +2069,7 @@ fn gen_scan_op_element<S: AsStrSlice>(
 /// Op-driven scan emitter where failure sets `pos = -1` rather than
 /// running `fail_stmt`. Used inside Optional/Repeat loops where a
 /// failed iteration means "skip", not abort.
-fn gen_scan_op_element_assign(
-    w: &mut CodeWriter,
-    se: &ScanElement,
-    ctx: &mut GenContext,
-    known: &List<List<String>> = &NOTHING_KNOWN,
-) {
+fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext, known: &List<List<String>>) {
     match se {
         Token(t) => gen_scan_token_set_assign(w, &[t.kind], ctx, known),
         RuleCall(rc) => {
@@ -3804,7 +3788,7 @@ fn gen_alt_elements(
     ops: &List<Op>,
     actions: &List<AltAction>,
     ctx: &mut GenContext,
-    proven_first: &List<String> = &EMPTY_SYNC,
+    proven_first: &List<String>,
 ) {
     // gen_alt_elements requires 1:1 correspondence between
     // `elements` and `ops` — full-alt bodies (Simple / MultiAlt /
@@ -5989,7 +5973,7 @@ fn gen_consume_token_group_op(
     alts: &List<Alternative>,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
-    proven: &List<String> = &EMPTY_SYNC,
+    proven: &List<String>,
 ) {
     let base = token_group_field_name(alts);
     let _ = dedup_name(&base, name_counts);
@@ -6026,7 +6010,7 @@ fn gen_consume_single_alt_group_op(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     outer_follow: &List<String>,
-    proven: &List<String> = &EMPTY_SYNC,
+    proven: &List<String>,
 ) {
     let _ = dedup_name(&single_alt_group_field_name(alt), name_counts);
     // Nested General-group emitters consume `GeneralShape.variant_type`
@@ -7188,9 +7172,7 @@ fn decline_continue_check<S: AsStrSlice>(
     let mut kinds = *loop_first;
     dedup_append_arr(&mut kinds, &duties.decline_cont_first);
     dedup_append_arr(&mut kinds, &duties.decline_viable);
-    if kinds.is_empty() {
-        return String::from("false");
-    }
+    assert !kinds.is_empty(), "a decline is stamped only where the loop's first set overlaps the suffix's";
     return ctx.kind_check_str(&kinds, subject);
 }
 
@@ -7366,13 +7348,8 @@ fn gen_reserve_probe<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     gen_scan_rewind(w, ctx, slot);
 }
 
-/// Open the block that runs only when the reserve decides: a failed reserve
-/// starves the alternative's mandatory suffix only when the loop cannot
-/// iterate again. `(A | B)* A` on `b b a` is the case — after the first `b` the
-/// tail cannot start, and breaking there loses the input.
-///
-/// Reads the lookahead at `at`, the iteration's end, before any probe walks,
-/// so an iteration the loop continues past never pays for the reserve's scan.
+/// Open the block that runs only where the loop cannot iterate again, reading
+/// the lookahead at `at` before any probe walks. `(A | B)* A` on `b b a` needs it.
 fn open_reserve_decides<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     w: &mut CodeWriter,
     kind: S,
@@ -7381,12 +7358,7 @@ fn open_reserve_decides<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     body_admits: &List<String>,
     ctx: &mut GenContext,
 ) {
-    // A reserve is stamped only where the loop's own first set overlaps the
-    // suffix's, so that set is never empty here. Asserted rather than handled:
-    // reading an empty set as "nothing can follow" is exactly the condition
-    // that broke `(A | B)* A`, and a silent fallback to it is a regression
-    // nobody would see.
-    assert !body_admits.is_empty(), "open_reserve_decides: a reserve whose loop admits nothing would starve every iteration";
+    assert !body_admits.is_empty(), "a reserve is stamped only where the loop's first set overlaps the suffix's";
     gen_kind_read(w, kind, stream, at);
     w.begin(`if !(${ctx.kind_check_str(body_admits, kind)})`);
 }
@@ -8463,7 +8435,7 @@ fn gen_prediction_code<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     type_name: S1,
     ctx: &mut GenContext,
     rule_display: S2,
-    proven_first: &List<String> = &EMPTY_SYNC,
+    proven_first: &List<String>,
 ) {
     gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, rule_display, proven_first);
 }

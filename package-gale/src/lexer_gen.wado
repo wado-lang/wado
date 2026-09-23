@@ -2281,11 +2281,11 @@ fn plan_seq(alt: &LexerAlternative, all_rules: &List<LexerRule>, ci: bool, tail:
             steps.push(LexerStepPlan::Repeat(LexerRepeatPlan { emit, inner }));
             continue;
         }
-        if let Some(set) = lexer_composite_char_set(elem, all_rules, ci) {
-            steps.push(LexerStepPlan::Elem(LexerElemPlan::CharSet(set)));
-            continue;
-        }
         if let Group(g_alts) = elem {
+            if let Some(set) = lexer_composite_char_set(elem, all_rules, ci) {
+                steps.push(LexerStepPlan::Elem(LexerElemPlan::CharSet(set)));
+                continue;
+            }
             let emit = lexer_group_emit(alt, i, all_rules, ci);
             let shape = if emit matches { ArmScoring } {
                 // Each arm is scanned match-only, outside tail position.
@@ -2354,7 +2354,7 @@ fn lexer_elem_char_set(elem: &LexerElement, all_rules: &List<LexerRule>, ci: boo
             Option::Some(folded_class(c, c, ci));
         },
         CharRange(pair) => Option::Some(folded_class(pair.0, pair.1, ci)),
-        CharClass(cc) => Option::Some(if ci { expand_char_class_ci(cc) } else { *cc }),
+        CharClass(cc) => Option::Some(folded_char_class(cc, ci)),
         Not(n) => match lexer_elem_char_set(&n.element, all_rules, ci) {
             Some(inner) => Option::Some(CharClass { ranges: inner.ranges, negated: !inner.negated }),
             None => null,
@@ -3340,10 +3340,7 @@ fn gen_lexer_leaf<S: AsStrSlice>(w: &mut CodeWriter, elem: &LexerElement, fail_a
         },
         CharRange(pair) => {
             if ci {
-                let mut ranges: List<CharRange> = [];
-                fold_range_ci(pair.0, pair.1, &mut ranges);
-                let cc = CharClass { ranges, negated: false };
-                gen_char_class(w, &cc, fail_action);
+                gen_char_class(w, &folded_class(pair.0, pair.1, ci), fail_action);
             } else {
                 w.line(
                     `if pos >= chars.len() || !(chars[pos] matches { ${char_pat(pair.0, pair.1)} }) { ${fail_action}; }`,
@@ -3352,8 +3349,7 @@ fn gen_lexer_leaf<S: AsStrSlice>(w: &mut CodeWriter, elem: &LexerElement, fail_a
             }
         },
         CharClass(cc) => {
-            let expanded = if ci { expand_char_class_ci(&cc) } else { cc };
-            gen_char_class(w, &expanded, fail_action);
+            gen_char_class(w, &folded_char_class(&cc, ci), fail_action);
         },
         AnyChar => {
             w.line(`if pos >= chars.len() { ${fail_action}; }`);
@@ -3372,7 +3368,10 @@ fn gen_lexer_leaf<S: AsStrSlice>(w: &mut CodeWriter, elem: &LexerElement, fail_a
     }
 }
 
-fn expand_char_class_ci(cc: &CharClass) -> CharClass {
+fn folded_char_class(cc: &CharClass, ci: bool) -> CharClass {
+    if !ci {
+        return *cc;
+    }
     let mut expanded: List<CharRange> = [];
     for let r of &cc.ranges {
         fold_range_ci(r.start, r.end, &mut expanded);
@@ -3633,8 +3632,7 @@ fn try_extract_ci_char(cc: &CharClass) -> Option<char> {
 }
 
 /// Appends the chars `elem` matches one per position, or returns false when it
-/// matches anything else. `rule_ci` folds each letter to both cases, as
-/// ANTLR4's `caseInsensitive` does.
+/// matches anything else. `rule_ci` folds each letter to both cases.
 fn push_keyword_chars(
     elem: &LexerElement,
     all_rules: &List<LexerRule>,
@@ -3775,13 +3773,8 @@ pub fn collect_keyword_rules(lexer_rules: &List<LexerRule>, grammar_opts: &List<
             candidate_indices.push(i);
         }
     }
-    // Precompute the first-char set (and declaration index) of each potential
-    // carrier rule. A carrier is any non-keyword token rule the classifier can
-    // run behind; the keyword classifier only fires once a carrier has matched
-    // the same characters. Indices are needed
-    // because ANTLR4 awards a same-length match to the earliest rule, so a
-    // keyword may only shortcut through carriers that follow it (see
-    // `keyword_carrier_admits`).
+    // Indices: ANTLR4 gives a same-length match to the earliest rule, so a
+    // keyword shortcuts only through a carrier after it (`keyword_carrier_admits`).
     let mut carrier_indices: List<i32> = [];
     let mut carrier_first_chars: List<List<[char, char]>> = [];
     let mut carrier_is_wildcard: List<bool> = [];
@@ -4153,12 +4146,12 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
 /// A match arm settling `group` — keywords of one length, in declaration order
 /// — from `pos` on, testing each position once however many keywords share it.
 fn gen_keyword_arm<S: AsStrSlice>(w: &mut CodeWriter, pattern: S, group: &List<KeywordInfo>, pos: i32) {
-    if let Some(leaf) = keyword_trie_leaf(group, pos) {
-        w.line(`${pattern} => { ${leaf} },`);
-        return;
-    }
     let shared = keyword_shared_tests(group, pos);
     let at = pos + shared.len();
+    if at == group[0].text.len() {
+        w.line(`${pattern} => { ${keyword_trie_leaf(group, &shared)} },`);
+        return;
+    }
     w.begin(`${pattern} =>`);
     if !shared.is_empty() {
         w.begin(`if ${shared.join(" && ")}`);
@@ -4187,15 +4180,11 @@ fn keyword_shared_tests(group: &List<KeywordInfo>, pos: i32) -> List<String> {
     return shared;
 }
 
-/// The one statement that settles `group` from `pos` on, when its keywords no
-/// longer diverge. A duplicate text goes to the first declared.
-fn keyword_trie_leaf(group: &List<KeywordInfo>, pos: i32) -> Option<String> {
-    let shared = keyword_shared_tests(group, pos);
-    if pos + shared.len() < group[0].text.len() {
-        return null;
-    }
+/// The one statement that settles `group` once its keywords no longer diverge.
+/// A duplicate text goes to the first declared.
+fn keyword_trie_leaf(group: &List<KeywordInfo>, shared: &List<String>) -> String {
     let ret = `return TK_${group[0].rule_name};`;
-    return Option::Some(if shared.is_empty() { ret } else { `if ${shared.join(" && ")} { ${ret} }` });
+    return if shared.is_empty() { ret } else { `if ${shared.join(" && ")} { ${ret} }` };
 }
 
 /// One arm of a keyword match: the chars it takes and the keywords that
@@ -4359,9 +4348,8 @@ fn lexer_rule_total_on_first_char(rule: &LexerRule, all_rules: &List<LexerRule>)
     return true;
 }
 
-/// The catch-all calls a dispatch branch has to carry: none when every rule in
-/// the branch matches on its first character, all but the last-resort ones
-/// otherwise.
+/// The catch-alls a dispatch branch carries: none when every member matches on
+/// its first character, else all but the last-resort ones.
 fn branch_catch_all_calls(calls: &List<TryCall>, members: &List<i32>) -> List<i32> {
     if members.iter_ref().all(|i| calls[*i].total_on_first_char) {
         return [];

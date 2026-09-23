@@ -12,12 +12,12 @@ use { atn_decode, AtnSim, ATN_BLOCK_START, ATN_BLOCK_END, ATN_STAR_LOOP_ENTRY } 
 use { atn_predict_with_stack } from "./runtime/atn_predict.wado";
 use { atn_lr_loop_decision, atn_with_lr_tables } from "./runtime/atn_lr.wado";
 use { Span } from "./runtime/lex.wado";
-use { Token, LexerSlice } from "./g4/token.wado";
+use { Token } from "./g4/token.wado";
 use { parse } from "./g4/parser.wado";
 use { assign_atn_call_sites } from "./ir.wado";
 
 fn mk(kind: i32) -> Token {
-    return Token::new(kind, LexerSlice::from_string(""), Span::new(0, 0));
+    return Token::new(kind, "", Span::new(0, 0));
 }
 
 fn decode(atn: &Atn) -> AtnSim {

@@ -268,16 +268,16 @@ original tokens always round-trip:
 
 | Edit                       | Store                             | Diagnostic code   |
 | -------------------------- | --------------------------------- | ----------------- |
-| delete a spurious terminal | `<skip x>` (`E_SKIP` row)         | `ExtraToken`      |
-| insert a missing terminal  | `<missing X>` (`E_MISS` row)      | `MissingToken`    |
+| delete a spurious terminal | `<skip x>` (`Skip` row)           | `ExtraToken`      |
+| insert a missing terminal  | `<missing X>` (`Miss` row)        | `MissingToken`    |
 | skip an unrecoverable run  | `<error>` region (`K_ERROR` node) | `UnexpectedToken` |
 
 A token that doesn't start any alternative produces a `NoViableAlternative`
-diagnostic; the parser then folds the open nodes closed and carries on. The
-`parse(input, max_errors)` overload caps how many diagnostics are collected
-before recovery stops and folds the rest (`max_errors` defaults to unbounded
-and must be `>= 1`); `<= 1` is effectively fail-fast while still returning a
-partial tree.
+diagnostic; the parser then folds the open nodes closed and carries on.
+`parse(input, max_errors)` caps how many diagnostics are collected before
+recovery stops and folds the rest. `max_errors` defaults to unbounded and must
+be `>= 1`; `1` is fail-fast that still returns a partial tree. The diagnostics
+come back in source order, and the cap keeps the earliest.
 
 ### Parsing a fragment
 

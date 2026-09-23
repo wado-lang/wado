@@ -1,5 +1,5 @@
-use { Span } from "../runtime/lex.wado";
-use { G4Token, Token, LexerSlice } from "./token.wado";
+use { Span, chars_text } from "../runtime/lex.wado";
+use { G4Token, Token } from "./token.wado";
 use {
     scan_line_comment,
     scan_block_comment,
@@ -18,17 +18,9 @@ impl G4Lexer {
         return G4Lexer { chars, pos: 0 };
     }
 
-    /// Mint a token whose text is a verbatim copy of the source span
-    /// `[start, end)`. The owned char buffer is built in a single pass with
-    /// exact capacity. Used for every token whose text equals its raw source
-    /// span (char classes, operators, EOF); identifiers and ints build their
-    /// buffer inline while scanning.
+    /// A token whose text is a copy of the source span `[start, end)`.
     fn owned_token(&self, kind: G4Token, start: i32, end: i32) -> Token {
-        let mut buf: List<char> = List::with_capacity(end - start);
-        for let mut i = start; i < end; i += 1 {
-            buf.push(self.chars[i]);
-        }
-        return Token::new(kind as i32, LexerSlice::from_chars(buf), Span::new(start, end));
+        return Token::new(kind as i32, chars_text(self.chars, start, end), Span::new(start, end));
     }
 
     fn at_end(&self) -> bool {
@@ -84,11 +76,8 @@ impl G4Lexer {
     fn read_string_literal(&mut self) -> Token {
         let start = self.pos;
         self.pos += 1;
-        // String literals are the one token kind whose text is transformed
-        // (escapes resolved), so it cannot alias the raw source. Build the
-        // owned char buffer directly instead of going through an intermediate
-        // String + re-collect.
-        let mut text: List<char> = [];
+        // The one token whose text is not its source span: escapes are resolved.
+        let mut text = String::new();
         // The literal is scanned to its closing quote either way, so the next
         // token starts where it would have; only the kind and the span change.
         let mut bad: Option<Span> = null;
@@ -102,7 +91,7 @@ impl G4Lexer {
                 if let Some(esc) = bad {
                     return self.owned_token(G4Token::InvalidEscape, esc.start, esc.end);
                 }
-                return Token::new(G4Token::StringLit as i32, LexerSlice::from_chars(text), Span::new(start, self.pos));
+                return Token::new(G4Token::StringLit as i32, text, Span::new(start, self.pos));
             } else if c == '\\' && !self.at_end() {
                 self.read_string_escape(&mut text, &mut bad);
             } else {
@@ -111,7 +100,7 @@ impl G4Lexer {
         }
     }
 
-    fn read_string_escape(&mut self, text: &mut List<char>, bad: &mut Option<Span>) {
+    fn read_string_escape(&mut self, text: &mut String, bad: &mut Option<Span>) {
         let esc_start = self.pos - 1;
         let mut p = self.pos;
         let cp = decode_string_escape(self.chars, &mut p);
@@ -143,46 +132,31 @@ impl G4Lexer {
 
     fn read_int_literal(&mut self) -> Token {
         let start = self.pos;
-        let mut buf: List<char> = List::with_capacity(4);
-        while !self.at_end() {
-            let c = self.chars[self.pos];
-            if '0' <= c <= '9' {
-                buf.push(c);
-                self.pos += 1;
-            } else {
-                break;
-            }
+        while !self.at_end() && '0' <= self.chars[self.pos] <= '9' {
+            self.pos += 1;
         }
-        return Token::new(G4Token::IntLit as i32, LexerSlice::from_chars(buf), Span::new(start, self.pos));
+        return self.owned_token(G4Token::IntLit, start, self.pos);
     }
 
     fn read_identifier(&mut self) -> Token {
         let start = self.pos;
-        let mut buf: List<char> = List::with_capacity(16);
-        while !self.at_end() {
-            let c = self.chars[self.pos];
-            if is_id_continue_char(c) {
-                buf.push(c);
-                self.pos += 1;
-            } else {
-                break;
-            }
+        while !self.at_end() && is_id_continue_char(self.chars[self.pos]) {
+            self.pos += 1;
         }
+        let text = chars_text(self.chars, start, self.pos);
         // Hard keywords only: `grammar` and `fragment` introduce structural
         // constructs that the parser disambiguates by token kind. Lexer command
         // names like `skip`, `channel`, `mode`, `more`, `pushMode`, `popMode`,
         // `type`, and the rule prequel keywords (`returns`, `throws`, `locals`,
         // `catch`, `finally`, `import`, `options`, `tokens`, `channels`,
         // `parser`, `lexer`) remain plain identifiers — they are matched by
-        // text in the parser when their context demands it. The length gate
-        // skips the char comparison for the overwhelming majority of
-        // identifiers, which are neither 7 nor 8 chars long.
-        let kind = match buf.len() {
-            7 => if buf_eq(&buf, "grammar") { G4Token::Grammar } else { G4Token::Identifier },
-            8 => if buf_eq(&buf, "fragment") { G4Token::Fragment } else { G4Token::Identifier },
+        // text in the parser when their context demands it.
+        let kind = match text {
+            "grammar" => G4Token::Grammar,
+            "fragment" => G4Token::Fragment,
             _ => G4Token::Identifier,
         };
-        return Token::new(kind as i32, LexerSlice::from_chars(buf), Span::new(start, self.pos));
+        return Token::new(kind as i32, text, Span::new(start, self.pos));
     }
 
     pub fn next_token(&mut self) -> Token {
@@ -259,19 +233,6 @@ pub fn tokenize_chars(chars: &List<char>) -> List<Token> {
         }
     }
     return tokens;
-}
-
-/// Compare an owned char buffer against a keyword literal. Callers gate on
-/// `buf.len()` first, so this only runs for length-matched candidates.
-fn buf_eq<S: AsStrSlice>(buf: &List<char>, lit: S) -> bool {
-    let mut i = 0;
-    for let c of lit.chars() {
-        if i >= buf.len() || buf[i] != c {
-            return false;
-        }
-        i += 1;
-    }
-    return i == buf.len();
 }
 
 /// What a decoder returns for an escape ANTLR4 does not define. No code point

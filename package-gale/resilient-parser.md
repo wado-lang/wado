@@ -98,8 +98,10 @@ Diagnostic { severity, code, message, span, line, col,
 - `MissingToken`, `ExtraToken`, `UnexpectedToken`, `NoViableAlternative`.
 - `UnterminatedConstruct`: the input ended inside a construct.
 - `LexError`: no lexer rule matched a character. It reads `token recognition
-  error at: 'x'`, one per `LexError` token, merged into the parse diagnostics in
-  source order and within the `max_errors` cap.
+  error at: 'x'`, one per `LexError` token.
+
+`diagnostics` is in source order, lex errors included. The `max_errors` cap
+applies after sorting, so it keeps the earliest errors.
 
 `recovery` names the edit applied: `Inserted`, `Deleted`, `SkippedTo`,
 `FilledMissing` (an insertion at end of input), or `None` for a failure that
@@ -117,7 +119,8 @@ ParseResult { cst: CstStore, tokens: TokenStream, diagnostics: List<Diagnostic> 
 
 One entry point, behaviour tuned by a number: `max_errors` caps how many
 diagnostics the parser collects before it stops recovering and folds the tree
-closed (`<= 1` is effectively fail-fast, still returning a partial tree).
+closed. It must be `>= 1`, and `1` is fail-fast that still returns a partial
+tree.
 Defaulted, so the common call is just `parse(input)`. There is no generator
 option for recovery on/off — recovery is always built in.
 
