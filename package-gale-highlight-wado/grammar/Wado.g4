@@ -139,7 +139,7 @@ fieldList
     ;
 
 fieldDecl
-    : attribute* ('pub' | 'internal')? identifier ':' typeRef ('=' expression)?
+    : attribute* ('pub' | 'internal')? fieldName ':' typeRef ('=' expression)?
     ;
 
 enumDecl
@@ -283,7 +283,8 @@ methodName
     : memberName
     ;
 
-// The name in `.name`, a struct literal's `name:`, and a pattern's `name:`.
+// The name in `.name`, a field declaration's, a struct literal's and a
+// pattern's `name:`.
 fieldName
     : memberName
     ;
