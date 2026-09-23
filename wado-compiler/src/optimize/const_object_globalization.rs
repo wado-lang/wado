@@ -2551,7 +2551,7 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
 /// pack, and a non-constant element leaves the literal on the fixed path.
 fn array_literal_promotes_to_data(body: &Body, elements: &[Operand], gate: &Gate<'_>) -> bool {
     use crate::nir_value_graph::ValueKind;
-    use crate::wir_optimize::array::{ConstOperand, data_promotion_pays, primitive_byte_width};
+    use crate::wir_optimize::array::{ConstOperand, data_promotion_pays};
 
     let type_table = gate.type_table.borrow();
     let mut width = None;
@@ -2565,7 +2565,7 @@ fn array_literal_promotes_to_data(body: &Body, elements: &[Operand], gate: &Gate
             ValueKind::Char(c) => (4, ConstOperand::I32(*c as i32)),
             ValueKind::Int(value, ty) => {
                 let width = match type_table.get(*ty) {
-                    ResolvedType::Primitive(p) => primitive_byte_width(*p),
+                    ResolvedType::Primitive(p) => p.data_width(),
                     // An enum or flags case lowers to the `u32` discriminant.
                     ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => Some(4),
                     _ => None,
