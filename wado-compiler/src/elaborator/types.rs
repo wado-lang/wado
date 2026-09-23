@@ -437,6 +437,16 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An attribute describing a declaration with no body, written on a trait
+    /// or interface requirement; `reason` is its schema's `requirement_error`.
+    AttributeOnRequirement {
+        owner: String,
+        operation: String,
+        attribute: &'static str,
+        reason: &'static str,
+        span: Span,
+    },
+
     /// Invalid numeric literal
     InvalidLiteral {
         message: String,
@@ -1443,6 +1453,17 @@ impl TypeError {
             } => (
                 Code::InvalidSyntax,
                 format!("`{owner}::{operation}` {detail}"),
+                *span,
+            ),
+            TypeError::AttributeOnRequirement {
+                owner,
+                operation,
+                attribute,
+                reason,
+                span,
+            } => (
+                Code::InvalidSyntax,
+                format!("`{owner}::{operation}` cannot declare `#[{attribute}]`: {reason}"),
                 *span,
             ),
             TypeError::InvalidLiteral { message, span } => {

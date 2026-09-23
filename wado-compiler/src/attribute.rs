@@ -188,6 +188,9 @@ pub struct AttributeSchema {
     pub args: AttrArgs,
     /// What the attribute declares, as a diagnostic spells it.
     pub summary: &'static str,
+    /// Why a `trait` or `interface` method requirement cannot carry it, for
+    /// an attribute that describes a declaration with no body.
+    pub requirement_error: Option<&'static str>,
 }
 
 /// Every place an attribute can be written, which `#[allow(…)]` reaches. The
@@ -254,150 +257,190 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::OneString,
         summary: "the allocator this entry point installs",
+        requirement_error: None,
     },
     AttributeSchema {
         name: ALLOW,
         targets: EVERY_TARGET,
         args: AttrArgs::Idents,
         summary: "waive a lint here",
+        requirement_error: None,
     },
     AttributeSchema {
         name: AMBIENT,
         targets: FUNCTION_TARGET,
         args: AttrArgs::None,
         summary: "perform this declaration's effects without declaring them",
+        requirement_error: None,
     },
     AttributeSchema {
         name: BENIGN,
         targets: FUNCTION_TARGET,
         args: AttrArgs::Words,
         summary: "effects a caller need not declare onward",
+        requirement_error: None,
     },
     AttributeSchema {
         name: CANONICAL,
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read("a namespace and a name, as two strings"),
         summary: "the Component Model canonical built-in this lowers to",
+        requirement_error: None,
     },
     AttributeSchema {
         name: CM,
         targets: CM_TARGET,
         args: AttrArgs::Read("the CM-side identifier, with an optional `linearity = \"…\"`"),
         summary: "this declaration's identity at the Component Model boundary",
+        requirement_error: None,
     },
     AttributeSchema {
         name: CM_HOST_IMPORTS,
         targets: MODULE_TARGET,
         args: AttrArgs::Strings,
         summary: "the host capabilities an imported component itself imports",
+        requirement_error: None,
     },
     AttributeSchema {
         name: CM_PARAMS,
         targets: FUNCTION_TARGET,
         args: AttrArgs::OptionalStrings,
         summary: "the CM-side parameter names",
+        requirement_error: None,
     },
     AttributeSchema {
         name: COMPILER_ITEM,
         targets: COMPILER_ITEM_TARGET,
         args: AttrArgs::OneString,
         summary: "bind this stdlib declaration to the compiler item of that name",
+        requirement_error: None,
     },
     AttributeSchema {
         name: EXPECT_TRAP,
         targets: TEST_TARGET,
         args: AttrArgs::None,
         summary: "the test passes when its body traps",
+        requirement_error: None,
     },
     AttributeSchema {
         name: EXPORT,
         targets: FUNCTION_TARGET,
         args: AttrArgs::None,
         summary: "a raw Wasm export, and so an export-boundary root",
+        requirement_error: None,
     },
     AttributeSchema {
         name: EXPORT_NAME,
         targets: FUNCTION_TARGET,
         args: AttrArgs::OneString,
         summary: "the name this function is exported under",
+        requirement_error: None,
     },
     AttributeSchema {
         name: GENERATED,
         targets: MODULE_TARGET,
         args: AttrArgs::Read("`by = \"…\"` and `sources = [\"…\"]` metadata"),
         summary: "the file is machine-generated",
+        requirement_error: None,
     },
     AttributeSchema {
         name: IMMEDIATE,
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read("one parameter name, unquoted"),
         summary: "the parameter lowers to a Wasm immediate",
+        requirement_error: Some(
+            "it says how codegen lowers one call, and a requirement is dispatched \
+             to an impl that is called rather than lowered",
+        ),
     },
     AttributeSchema {
         name: INLINE,
         targets: FUNCTION_TARGET,
         args: AttrArgs::OptionalWords,
         summary: "how the inliner should treat this function",
+        requirement_error: None,
     },
     AttributeSchema {
         name: LINEAR_MEMORY,
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read("`read` or `write`"),
         summary: "how a call to this declaration touches linear memory",
+        requirement_error: Some(
+            "the impl it dispatches to has the body that says what it touches, so \
+             stating it here binds every call site to a promise no implementation \
+             makes",
+        ),
     },
     AttributeSchema {
         name: NO_PRELUDE,
         targets: MODULE_TARGET,
         args: AttrArgs::None,
         summary: "the file imports no prelude",
+        requirement_error: None,
     },
     AttributeSchema {
         name: PARAM,
         targets: &[AttrTarget::Global],
         args: AttrArgs::Read("`name = \"…\"` and `from_env = \"…\"`"),
         summary: "the global is a build input",
+        requirement_error: None,
     },
     AttributeSchema {
         name: RESULT,
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read("`owned`, or `part_of = param`"),
         summary: "what the returned storage belongs to",
+        requirement_error: Some(
+            "the impl it dispatches to has the body that says what its result is \
+             made of, so stating it here binds every call site to a promise no \
+             implementation makes",
+        ),
     },
     AttributeSchema {
         name: RETAIN,
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read("a parameter name, with an optional `into = param`"),
         summary: "what this declaration retains a reference to",
+        requirement_error: Some(
+            "the impl it dispatches to has the body that says what it keeps, so \
+             stating it here binds every call site to a promise no implementation \
+             makes",
+        ),
     },
     AttributeSchema {
         name: SECRET,
         targets: &[AttrTarget::StructField],
         args: AttrArgs::None,
         summary: "the field's value stays out of debug output",
+        requirement_error: None,
     },
     AttributeSchema {
         name: STDLIB,
         targets: MODULE_TARGET,
         args: AttrArgs::OneString,
         summary: "the bundled stdlib path this file is",
+        requirement_error: None,
     },
     AttributeSchema {
         name: SYNOPSIS,
         targets: TEST_TARGET,
         args: AttrArgs::None,
         summary: "`wado doc` renders this test as the module's synopsis",
+        requirement_error: None,
     },
     AttributeSchema {
         name: TIMEOUT_MS,
         targets: TEST_TARGET,
         args: AttrArgs::OneNumber,
         summary: "how long the test may run",
+        requirement_error: None,
     },
     AttributeSchema {
         name: TODO,
         targets: &[AttrTarget::Module, AttrTarget::Test],
         args: AttrArgs::None,
         summary: "the tests are expected to fail until the work lands",
+        requirement_error: None,
     },
     AttributeSchema {
         name: TRAP,
@@ -407,18 +450,25 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
              with an optional `result_len = p`",
         ),
         summary: "when a call to this declaration traps",
+        requirement_error: Some(
+            "the impl it dispatches to has the body that says when it traps, so \
+             stating it here binds every call site to a promise no implementation \
+             makes",
+        ),
     },
     AttributeSchema {
         name: UNAVAILABLE,
         targets: FUNCTION_TARGET,
         args: AttrArgs::OneString,
         summary: "the name is reserved, and why a call cannot have it",
+        requirement_error: None,
     },
     AttributeSchema {
         name: WASM_MODULE,
         targets: MODULE_TARGET,
         args: AttrArgs::OneString,
         summary: "the core wasm module name this file imports memory from",
+        requirement_error: None,
     },
     AttributeSchema {
         name: WIRE,
@@ -427,6 +477,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
             "`name = \"…\"`, `name_policy = \"…\"`, `number = N`, `positional`, or `default`",
         ),
         summary: "how serialization spells this declaration",
+        requirement_error: None,
     },
 ];
 
@@ -708,6 +759,17 @@ mod tests {
         }
         for target in [AttrTarget::Impl, AttrTarget::Use, AttrTarget::Module] {
             assert!(check(ALLOW, &[AttrArg::Ident("dead_code".to_string())], target).is_none());
+        }
+    }
+
+    /// A requirement is a function, so only a function attribute can be
+    /// refused on one.
+    #[test]
+    fn only_function_attributes_name_a_requirement_error() {
+        for schema in ATTRIBUTES {
+            if schema.requirement_error.is_some() {
+                assert_eq!(schema.targets, FUNCTION_TARGET, "`{}`", schema.name);
+            }
         }
     }
 

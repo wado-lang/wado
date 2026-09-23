@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use crate::ast::{self, Function, GlobalDecl, SelfKind, Type};
-use crate::attribute::WIRE;
+use crate::attribute::{self, WIRE};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::{
     CompilerItem, CompilerItemKind, RegisterError, Resolved, parse_compiler_item_attrs,
@@ -2041,37 +2041,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         method: &ast::Function,
     ) {
         for attr in &method.attrs {
-            let detail = match attr.name.as_str() {
-                "retain" => {
-                    "cannot declare `#[retain]`: the impl it dispatches to has the body that \
-                     says what it keeps, so stating it here binds every call site to a promise \
-                     no implementation makes"
-                }
-                "result" => {
-                    "cannot declare `#[result]`: the impl it dispatches to has the body that \
-                     says what its result is made of, so stating it here binds every call site \
-                     to a promise no implementation makes"
-                }
-                "immediate" => {
-                    "cannot declare `#[immediate]`: it says how codegen lowers one call, and a \
-                     requirement is dispatched to an impl that is called rather than lowered"
-                }
-                "linear_memory" => {
-                    "cannot declare `#[linear_memory]`: the impl it dispatches to has the body \
-                     that says what it touches, so stating it here binds every call site to a \
-                     promise no implementation makes"
-                }
-                "trap" => {
-                    "cannot declare `#[trap]`: the impl it dispatches to has the body that \
-                     says when it traps, so stating it here binds every call site to a promise \
-                     no implementation makes"
-                }
-                _ => continue,
+            let Some(schema) = attribute::lookup(&attr.name) else {
+                continue;
             };
-            let _ = self.emit(TypeError::OperationClauseNotAllowed {
+            let Some(reason) = schema.requirement_error else {
+                continue;
+            };
+            let _ = self.emit(TypeError::AttributeOnRequirement {
                 owner: owner.to_string(),
                 operation: method.name.clone(),
-                detail,
+                attribute: schema.name,
+                reason,
                 span: attr.span,
             });
         }
