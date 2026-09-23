@@ -2432,6 +2432,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 then_type = t;
             }
         }
+        let mut branches = [then_type, else_type];
+        self.settle_branch_holes(&mut branches, None);
+        let [then_type, else_type] = branches;
         (then_type, else_type)
     }
 
@@ -2586,6 +2589,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         agreed
     }
 
+    /// Solve the inference holes `branches` carry against the expected type, or
+    /// else a settled sibling, and apply them.
+    fn settle_branch_holes(&mut self, branches: &mut [TypeId], expected_type: Option<TypeId>) {
+        if !branches.iter().any(|&t| self.type_has_infer_hole(t)) {
+            return;
+        }
+        let target = expected_type
+            .filter(|&t| t != TypeTable::UNKNOWN)
+            .or_else(|| {
+                branches.iter().copied().find(|&t| {
+                    t != TypeTable::NEVER
+                        && !self.type_has_infer_hole(t)
+                        && !self.tysys.type_table.borrow().is_indefinite(t)
+                })
+            });
+        if let Some(target) = target {
+            for &branch in &*branches {
+                self.solve_infer_holes_against(branch, target);
+            }
+        }
+        for branch in branches {
+            *branch = self.apply_infer_holes(*branch);
+        }
+    }
+
     fn agree_two_branches(&self, a: TypeId, b: TypeId) -> Option<TypeId> {
         if a == b {
             return Some(a);
@@ -2624,32 +2652,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         let expected_type = self.settled_result_expectation(expected_type);
 
-        // A hole from a generic scrutinee (`match gen() { … }`) flows through
-        // the bindings into the arm bodies (same `TypeId`). Solve it against the
-        // expected type or a concrete sibling arm and concretise before the
-        // result-type selection below.
-        if arm_bodies.iter().any(|&(t, _)| self.type_has_infer_hole(t))
-            || self.type_has_infer_hole(scrutinee_type)
-        {
-            let target = expected_type
-                .filter(|&t| t != TypeTable::UNKNOWN)
-                .or_else(|| {
-                    arm_bodies.iter().map(|(t, _)| *t).find(|&t| {
-                        t != TypeTable::NEVER
-                            && !self.type_has_infer_hole(t)
-                            && !self.tysys.type_table.borrow().is_indefinite(t)
-                    })
-                });
-            if let Some(target) = target {
-                for &(arm_type, _) in &arm_bodies {
-                    self.solve_infer_holes_against(arm_type, target);
-                }
-            }
-            for (t, _) in &mut arm_bodies {
-                *t = self.apply_infer_holes(*t);
-            }
-            scrutinee_type = self.apply_infer_holes(scrutinee_type);
+        let mut arm_types: Vec<TypeId> = arm_bodies.iter().map(|&(t, _)| t).collect();
+        self.settle_branch_holes(&mut arm_types, expected_type);
+        for ((t, _), settled) in arm_bodies.iter_mut().zip(arm_types) {
+            *t = settled;
         }
+        // A hole from a generic scrutinee (`match gen() { … }`) flows through
+        // the bindings into the arm bodies (same `TypeId`).
+        scrutinee_type = self.apply_infer_holes(scrutinee_type);
 
         self.check_match_exhaustiveness(&match_expr.arms, scrutinee_type, match_expr.span);
 
