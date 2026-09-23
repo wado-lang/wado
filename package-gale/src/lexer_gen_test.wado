@@ -195,6 +195,17 @@ test "gen_lexer: a dispatch with no wildcard rule still covers every char" {
     assert out.contains("_ => {},"), out;
 }
 
+test "gen_lexer: a catch-all declared last runs once, after the dispatch" {
+    let out = lexer_source("lexer grammar L; A : [a-f] '1' ; D : [h] [0-9] ; ANY : . ;");
+    assert count_occurrences(&out, "= try_ANY(") == 1, out;
+    assert out.find("if best_end <= start {").unwrap() < out.find("= try_ANY(").unwrap(), out;
+}
+
+test "gen_lexer: a catch-all declared first stays in the arms it ties in" {
+    let out = lexer_source("lexer grammar L; ANY : . ; A : [a-f] '1' ; D : [h] [0-9] ;");
+    assert count_occurrences(&out, "= try_ANY(") == 3, out;
+}
+
 test "gen_lexer: tail alternation of unequal length uses the longest-match emit" {
     // ANTLR4's lexer takes the longest arm (`I` matches `ab`, not `a`).
     let out = lexer_source("lexer grammar L; I : ('a' | 'ab') ; J : . ;");

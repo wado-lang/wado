@@ -2483,20 +2483,14 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '!' => {
                 end = try_NOT_EQ1(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_NOT_EQ1; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '"' | 'A'..='W' | 'Y'..='Z' | '[' | '_' | '`' | 'a'..='w' | 'y'..='z' => {
                 end = try_IDENTIFIER(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '$' | ':' | '?' | '@' => {
                 end = try_BIND_PARAMETER(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_BIND_PARAMETER; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '%' => {
                 end = try_MOD(&lexer.chars, start);
@@ -2509,8 +2503,6 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '\'' => {
                 end = try_STRING_LITERAL(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '(' => {
                 end = try_OPEN_PAR(&lexer.chars, start);
@@ -2537,30 +2529,22 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_MINUS; best_channel = 0; }
                 end = try_SINGLE_LINE_COMMENT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_SINGLE_LINE_COMMENT; best_channel = 1; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '.' => {
                 end = try_DOT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_DOT; best_channel = 0; }
                 end = try_NUMERIC_LITERAL(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '/' => {
                 end = try_DIV(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_DIV; best_channel = 0; }
                 end = try_MULTILINE_COMMENT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_MULTILINE_COMMENT; best_channel = 1; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '0'..='9' => {
                 end = try_NUMERIC_LITERAL(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             ';' => {
                 end = try_SCOL(&lexer.chars, start);
@@ -2575,16 +2559,12 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_LT_EQ; best_channel = 0; }
                 end = try_NOT_EQ2(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_NOT_EQ2; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '=' => {
                 end = try_ASSIGN(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ASSIGN; best_channel = 0; }
                 end = try_EQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_EQ; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '>' => {
                 end = try_GT2(&lexer.chars, start);
@@ -2593,33 +2573,28 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_GT; best_channel = 0; }
                 end = try_GT_EQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_GT_EQ; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             'X' | 'x' => {
                 end = try_IDENTIFIER(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
                 end = try_BLOB_LITERAL(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_BLOB_LITERAL; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '|' => {
                 end = try_PIPE2(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_PIPE2; best_channel = 0; }
                 end = try_PIPE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_PIPE; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '~' => {
                 end = try_TILDE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_TILDE; best_channel = 0; }
             },
-            _ => {
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-            },
+            _ => {},
+        }
+        if best_end <= start {
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

@@ -1213,43 +1213,34 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             'a'..='f' => {
                 end = try_A(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_A; }
-                end = try_C(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_C; }
             },
             'g' => {
                 end = try_E(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_E; }
                 end = try_MULTI(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_MULTI; }
-                end = try_C(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_C; }
             },
             'h' => {
                 end = try_D(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_D; }
                 end = try_MULTI(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_MULTI; }
-                end = try_C(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_C; }
             },
             'i'..='p' | 'r'..='z' => {
                 end = try_WORD(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_WORD; }
-                end = try_C(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_C; }
             },
             'q' => {
                 end = try_WORD(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_WORD; }
                 end = try_MULTI(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_MULTI; }
-                end = try_C(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_C; }
             },
-            _ => {
-                end = try_C(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_C; }
-            },
+            _ => {},
+        }
+        if best_end <= start {
+            end = try_C(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_C; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

@@ -292,6 +292,65 @@ X : 'x' ;");
     assert !str_contains(&report, "shared literal matcher"), report;
 }
 
+test "lexer dump reports a rule made of earlier rules as subsumed" {
+    // Every match of `EITHER` is a match of `A` or `B` at the same length, and
+    // both are declared first, so `EITHER` never wins and is not dispatched.
+    let report = lexer_dump("grammar T;
+r : A B EITHER ;
+A : 'a' [0-9]* ;
+B : 'b' ;
+EITHER : (A | B) -> channel(HIDDEN) ;");
+
+    assert str_contains(&report, "rule EITHER — subsumed by A, B: never the longest match"), report;
+    assert str_contains(&report, "subsumed 1"), report;
+}
+
+test "lexer dump reports a rule an earlier rule offers whole as subsumed" {
+    let report = lexer_dump("grammar T;
+r : NUM ;
+NUM : (DEC | HEX) 'u'? ;
+DEC : [0-9]+ ;
+HEX : '0x' [0-9a-f]+ ;
+USE : NUM ;");
+
+    assert str_contains(
+        &report,
+        "rule DEC — subsumed by NUM: never the longest match + matcher try_DEC (another rule calls it)",
+    ), report;
+    assert str_contains(&report, "rule HEX — subsumed by NUM"), report;
+    assert str_contains(&report, "rule USE — subsumed by NUM"), report;
+}
+
+test "lexer dump keeps a rule an earlier rule offers only with a suffix" {
+    // `NUM` needs its `'u'`, so a bare `DEC` match is not one of its matches.
+    let report = lexer_dump("grammar T;
+r : NUM ;
+NUM : (DEC | HEX) 'u' ;
+DEC : [0-9]+ ;
+HEX : '0x' [0-9a-f]+ ;");
+
+    assert str_contains(&report, "rule DEC — matcher try_DEC"), report;
+}
+
+test "lexer dump keeps a rule whose subsumer carries a predicate" {
+    let report = lexer_dump("grammar T;
+r : NUM ;
+NUM : {true}? DEC ;
+DEC : [0-9]+ ;");
+
+    assert str_contains(&report, "rule DEC — matcher try_DEC"), report;
+}
+
+test "lexer dump keeps a rule made of later rules" {
+    let report = lexer_dump("grammar T;
+r : EITHER ;
+EITHER : A | B ;
+A : 'a' ;
+B : 'b' ;");
+
+    assert str_contains(&report, "rule EITHER — matcher try_EITHER"), report;
+}
+
 test "lexer dump separates inlined from recursive fragments" {
     // `NEST` references itself, so it keeps a matcher; `D` is inlined at the
     // use site and its constructs are reported there, under the `D › ` prefix.

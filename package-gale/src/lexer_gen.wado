@@ -707,6 +707,14 @@ pub variant LexerRuleRoute {
     /// Same fixed text as a parser literal, so the shared literal matcher
     /// covers it.
     SharedLiteral(LexerLiteralRoute),
+    /// Earlier rules take every match it could make, so it never wins.
+    Subsumed(LexerSubsumedRoute),
+}
+
+pub struct LexerSubsumedRoute {
+    pub by: List<String>,
+    /// As `LexerKeywordRoute::also_matcher`.
+    pub also_matcher: bool,
 }
 
 pub struct LexerKeywordRoute {
@@ -749,7 +757,130 @@ pub fn lexer_rule_route(
     if let Some(const_name) = literal_duplicate_const(rule, lexer_rules, lit_tokens, grammar_opts, grammar_ci) {
         return LexerRuleRoute::SharedLiteral(LexerLiteralRoute { const_name, also_matcher: called });
     }
+    let by = lexer_rule_subsumers(rule, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
+    if !by.is_empty() {
+        return LexerRuleRoute::Subsumed(LexerSubsumedRoute { by, also_matcher: called });
+    }
     return LexerRuleRoute::Matcher;
+}
+
+/// The earlier rules that make every match `rule` could make, so it never wins:
+/// a tie goes to the earlier rule. Read off the grammar's shape, so empty unless
+/// `rule` is only references to earlier rules, or an earlier rule offers `rule`
+/// whole with nothing but optional elements after it.
+fn lexer_rule_subsumers(
+    rule: &LexerRule,
+    lexer_rules: &List<LexerRule>,
+    keywords: &List<KeywordInfo>,
+    lit_tokens: &List<LitToken>,
+    grammar_opts: &List<GrammarOption>,
+    grammar_ci: bool,
+) -> List<String> {
+    let index = lexer_rules.iter_ref().position(|r| r.name == rule.name).unwrap();
+    let mut refs: List<String> = [];
+    if lexer_alts_are_rule_refs(&rule.body, &mut refs) {
+        let mut by: List<String> = [];
+        for let name of &refs {
+            if !lexer_rule_outranks(
+                name,
+                index,
+                rule.mode,
+                lexer_rules,
+                keywords,
+                lit_tokens,
+                grammar_opts,
+                grammar_ci,
+            ) {
+                return [];
+            }
+            if !by.contains(name) {
+                by.push(*name);
+            }
+        }
+        return by;
+    }
+    for let mut i = 0; i < index; i += 1 {
+        let earlier = &lexer_rules[i];
+        if earlier.body.iter_ref().any(|alt| lexer_alt_offers_whole(alt, &rule.name))
+            && lexer_rule_outranks(
+                &earlier.name,
+                index,
+                rule.mode,
+                lexer_rules,
+                keywords,
+                lit_tokens,
+                grammar_opts,
+                grammar_ci,
+            ) {
+            return [earlier.name];
+        }
+    }
+    return [];
+}
+
+/// Whether every alternative is one rule reference, reading through a group
+/// that is an alternative's only element.
+fn lexer_alts_are_rule_refs(alts: &List<LexerAlternative>, out: &mut List<String>) -> bool {
+    for let alt of alts {
+        if alt.elements.len() != 1 {
+            return false;
+        }
+        match &alt.elements[0] {
+            RuleRef(name) => out.push(*name),
+            Group(inner) => {
+                if !lexer_alts_are_rule_refs(inner, out) {
+                    return false;
+                }
+            },
+            _ => {
+                return false;
+            },
+        }
+    }
+    return !alts.is_empty();
+}
+
+/// Whether `alt` can match exactly what rule `name` matches: it opens with
+/// `name` or a group offering it as an arm, and everything after is optional.
+fn lexer_alt_offers_whole(alt: &LexerAlternative, name: &String) -> bool {
+    if alt.elements.is_empty() {
+        return false;
+    }
+    let offers = match &alt.elements[0] {
+        RuleRef(n) => n == name,
+        Group(arms) => arms.iter_ref().any(|a| a.elements.len() == 1
+            && a.elements[0] matches { RuleRef(n) && n == *name }),
+        _ => false,
+    };
+    let rest_optional = (1..<alt.elements.len()).all(
+        |i| alt.elements[i] matches { Repeat(r) && r.kind matches { Optional | Star } },
+    );
+    return offers && rest_optional;
+}
+
+/// Whether token rule `name` is dispatched ahead of the rule at `index` in the
+/// same mode, and matches whatever its body does: no predicate can refuse it.
+fn lexer_rule_outranks(
+    name: &String,
+    index: i32,
+    mode: i32,
+    lexer_rules: &List<LexerRule>,
+    keywords: &List<KeywordInfo>,
+    lit_tokens: &List<LitToken>,
+    grammar_opts: &List<GrammarOption>,
+    grammar_ci: bool,
+) -> bool {
+    let Some(at) = lexer_rules.iter_ref().position(|r| r.name == *name) else {
+        return false;
+    };
+    let earlier = &lexer_rules[at];
+    if at >= index || earlier.mode != mode || earlier.is_fragment {
+        return false;
+    }
+    let mut preds: List<i32> = [];
+    collect_lexer_predicate_ids(earlier, lexer_rules, &mut preds);
+    return preds.is_empty()
+        && lexer_rule_is_dispatched(earlier, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
 }
 
 /// Whether the first-char dispatch calls `rule`'s own matcher.
@@ -757,7 +888,7 @@ pub fn lexer_rule_route(
 /// Exactly the rules the route leaves to their own matcher: everything else is
 /// reached another way — a keyword through its carrier's reclassification, a
 /// fixed literal through the shared matcher, a fragment inlined or called by
-/// name — and dispatching it a second time would run it twice or, where the
+/// name — or, subsumed, never wins; dispatching it would run it twice or, where the
 /// shortcut records no `best_act`, drop what the rule carries. Derived from the
 /// route rather than re-deciding it, so a shortcut added there is one the
 /// dispatch already knows about.
@@ -786,6 +917,7 @@ fn lexer_rule_has_match_fn(
         Virtual | InlinedFragment => false,
         Keyword(k) => k.also_matcher,
         SharedLiteral(l) => l.also_matcher,
+        Subsumed(s) => s.also_matcher,
     };
 }
 
@@ -4105,24 +4237,25 @@ fn lexer_rule_total_on_first_char(rule: &LexerRule, all_rules: &List<LexerRule>)
 }
 
 /// The catch-all calls a dispatch branch has to carry: none when every rule in
-/// the branch matches on its first character, all of them otherwise.
+/// the branch matches on its first character, all but the last-resort ones
+/// otherwise.
 fn branch_catch_all_calls(calls: &List<TryCall>, members: &List<i32>) -> List<i32> {
-    let mut needed = false;
-    for let i of members {
-        if !calls[*i].total_on_first_char {
-            needed = true;
-            break;
-        }
-    }
-    if !needed {
+    if members.iter_ref().all(|i| calls[*i].total_on_first_char) {
         return [];
     }
+    let last_resort = last_resort_calls(calls);
+    return (0..<calls.len()).filter(|i| calls[i].is_catch_all && !last_resort.contains(&i)).collect();
+}
+
+/// The catch-alls declared after every other candidate. A one-char match
+/// from any other rule ties and wins, so one of these wins only where
+/// nothing matched, and runs once after the dispatch rather than in each arm.
+fn last_resort_calls(calls: &List<TryCall>) -> List<i32> {
     let mut out: List<i32> = [];
-    for let mut i = 0; i < calls.len(); i += 1 {
-        if calls[i].is_catch_all {
-            out.push(i);
-        }
+    for let mut i = calls.len() - 1; i >= 0 && calls[i].is_catch_all; i -= 1 {
+        out.push(i);
     }
+    out.reverse();
     return out;
 }
 
@@ -4562,9 +4695,10 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
 
     // A char no interval claims is outside every bounded first set, so only a
     // rule with an unbounded one can match it.
+    let last_resort = last_resort_calls(calls);
     let mut wildcard_calls: List<i32> = [];
     for let mut i = 0; i < calls.len(); i += 1 {
-        if calls[i].is_wildcard {
+        if calls[i].is_wildcard && !last_resort.contains(&i) {
             wildcard_calls.push(i);
         }
     }
@@ -4650,22 +4784,28 @@ fn gen_dispatch_groups(
 ) {
     if groups.len() == 1 && groups[0].pattern == FALLBACK_PATTERN {
         gen_group_calls(w, calls, &groups[0].calls, needs_extras, has_actions, has_members);
-        return;
+    } else if !groups.is_empty() {
+        // The arms are a partition, so an else-if chain's order buys nothing and
+        // would put the letters and digits behind every punctuation branch.
+        let has_wildcard_arm = groups.iter_ref().any(|g| g.pattern == FALLBACK_PATTERN);
+        w.begin("match first_char");
+        for let g of groups {
+            w.begin(`${g.pattern} =>`);
+            gen_group_calls(w, calls, &g.calls, needs_extras, has_actions, has_members);
+            w.end_with(",");
+        }
+        // `char` has no finite case list, so the arms alone never exhaust it.
+        if !has_wildcard_arm {
+            w.line("_ => {},");
+        }
+        w.end();
     }
-    // The arms are a partition, so an else-if chain's order buys nothing and
-    // would put the letters and digits behind every punctuation branch.
-    let has_wildcard_arm = groups.iter_ref().any(|g| g.pattern == FALLBACK_PATTERN);
-    w.begin("match first_char");
-    for let g of groups {
-        w.begin(`${g.pattern} =>`);
-        gen_group_calls(w, calls, &g.calls, needs_extras, has_actions, has_members);
-        w.end_with(",");
+    let last_resort = last_resort_calls(calls);
+    if !last_resort.is_empty() {
+        w.begin("if best_end <= start");
+        gen_group_calls(w, calls, &last_resort, needs_extras, has_actions, has_members);
+        w.end();
     }
-    // `char` has no finite case list, so the arms alone never exhaust it.
-    if !has_wildcard_arm {
-        w.line("_ => {},");
-    }
-    w.end();
 }
 
 fn gen_group_calls(

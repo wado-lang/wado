@@ -5161,32 +5161,14 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 if end > best_end { best_end = end; best_kind = TK_OUTER_LINE_DOC; best_channel = 1; }
                 end = try_OUTER_BLOCK_DOC(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_OUTER_BLOCK_DOC; best_channel = 1; }
-                end = try_BLOCK_COMMENT_OR_DOC(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT_OR_DOC; best_channel = 1; }
                 end = try_SLASH(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_SLASH; best_channel = 0; }
                 end = try_SLASHEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_SLASHEQ; best_channel = 0; }
             },
-            '0' => {
+            '0' | '1'..='9' => {
                 end = try_INTEGER_LITERAL(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; best_channel = 0; }
-                end = try_DEC_LITERAL(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_DEC_LITERAL; best_channel = 0; }
-                end = try_HEX_LITERAL(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_HEX_LITERAL; best_channel = 0; }
-                end = try_OCT_LITERAL(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_OCT_LITERAL; best_channel = 0; }
-                end = try_BIN_LITERAL(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_BIN_LITERAL; best_channel = 0; }
-                end = try_FLOAT_LITERAL(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; best_channel = 0; }
-            },
-            '1'..='9' => {
-                end = try_INTEGER_LITERAL(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; best_channel = 0; }
-                end = try_DEC_LITERAL(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_DEC_LITERAL; best_channel = 0; }
                 end = try_FLOAT_LITERAL(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; best_channel = 0; }
             },
