@@ -14,7 +14,8 @@ use {
     find_lexer_rule,
     lexer_alias_text,
 } from "./ir.wado";
-use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
+use { gen_visibility_comment } from "./gen_util.wado";
+use { literal_const_name } from "./ident.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_range_pat, wado } from "lib:wadopoet";
 use {
     SuperOp,
@@ -128,11 +129,9 @@ pub fn collect_literal_tokens(parser_rules: &List<ParserRule>) -> List<LitToken>
     return result;
 }
 
-/// Case-folding in `literal_const_name` (lowercase → uppercase) can map two
-/// distinct literals (`'and'`, `'AND'`) onto the same base const name. That
-/// would emit duplicate globals / `try_lit_*` fns / `token_kind_name` arms and
-/// break compilation, so the second and later occurrences get a numeric
-/// suffix (`TK_LIT_AND`, `TK_LIT_AND_2`, …). Deterministic in source order.
+/// `literal_const_name` folds case and spells symbols as words, so distinct
+/// literals (`'and'` / `'AND'`, `'<'` / `'lt'`) can share a base name. Later ones
+/// get a suffix (`TK_LIT_AND_2`), which `resolve_kind_ids` stamps on the IR.
 fn disambiguate_const_name<S: AsStrSlice>(base: S, result: &List<LitToken>) -> String {
     let mut candidate = base.to_string();
     let mut n = 2;

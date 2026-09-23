@@ -18,7 +18,6 @@ use {
     Alternative,
 } from "./ir.wado";
 use { token_slot_order, collect_literal_tokens } from "./lexer_gen.wado";
-use { literal_const_name } from "./gen_util.wado";
 use { TreeMap } from "core:collections";
 
 /// Bidirectional token-kind table: `id <-> "TK_*" name`. Built once from
@@ -147,32 +146,40 @@ pub fn append_ids(result: &mut List<i32>, seen: &mut List<u64>, src: &List<i32>)
     }
 }
 
-/// Stamp every terminal element in the parser rules with its canonical kind id.
+/// Stamp every terminal element in the parser rules with its canonical kind id,
+/// and every literal with the grammar-unique name the lexer declares for it.
 /// Runs on the `generate()` path after `token_slot_order`'s inputs are final;
 /// pure rebuild (mirrors `ir::stamp_element`).
 pub fn resolve_kind_ids(grammar: &mut Grammar, kinds: &TokenKinds) {
+    let mut lit_names = TreeMap::<String, String>::new();
+    for let lit of collect_literal_tokens(&grammar.parser_rules) {
+        lit_names[lit.text] = lit.const_name;
+    }
     for let mut ri = 0; ri < grammar.parser_rules.len(); ri += 1 {
-        grammar.parser_rules[ri].alternatives = resolve_alts(&grammar.parser_rules[ri].alternatives, kinds);
+        grammar.parser_rules[ri].alternatives = resolve_alts(&grammar.parser_rules[ri].alternatives, kinds, &lit_names);
     }
 }
 
-fn resolve_alts(alts: &List<Alternative>, kinds: &TokenKinds) -> List<Alternative> {
-    return alts.iter_ref().map(|a: &Alternative| Alternative { ..*a, elements: resolve_elements(&a.elements, kinds) }).collect(
+fn resolve_alts(alts: &List<Alternative>, kinds: &TokenKinds, lit_names: &TreeMap<String, String>) -> List<Alternative> {
+    return alts.iter_ref().map(|a: &Alternative| Alternative { ..*a, elements: resolve_elements(&a.elements, kinds, lit_names) }).collect(
     );
 }
 
-fn resolve_elements(elements: &List<Element>, kinds: &TokenKinds) -> List<Element> {
-    return elements.iter_ref().map(|e: &Element| resolve_element(e, kinds)).collect();
+fn resolve_elements(elements: &List<Element>, kinds: &TokenKinds, lit_names: &TreeMap<String, String>) -> List<Element> {
+    return elements.iter_ref().map(|e: &Element| resolve_element(e, kinds, lit_names)).collect();
 }
 
-fn resolve_element(elem: &Element, kinds: &TokenKinds) -> Element {
+fn resolve_element(elem: &Element, kinds: &TokenKinds, lit_names: &TreeMap<String, String>) -> Element {
     return match *elem {
         TokenRef(t) => Element::TokenRef(TokenRefElement { ..t, kind_id: kinds.id_of(`TK_${t.name}`) }),
-        Literal(l) => Element::Literal(LiteralElement { ..l, kind_id: kinds.id_of(&literal_const_name(&l.text)) }),
-        Repeat(rep) => Element::Repeat(RepeatElement { ..rep, element: resolve_element(&rep.element, kinds) }),
-        Group(g) => Element::Group(GroupElement { ..g, alternatives: resolve_alts(&g.alternatives, kinds) }),
-        Label(lab) => Element::Label(LabelElement { ..lab, element: resolve_element(&lab.element, kinds) }),
-        Not(n) => Element::Not(NotElement { ..n, element: resolve_element(&n.element, kinds) }),
+        Literal(l) => {
+            let const_name = lit_names[l.text];
+            Element::Literal(LiteralElement { ..l, const_name, kind_id: kinds.id_of(&const_name) })
+        },
+        Repeat(rep) => Element::Repeat(RepeatElement { ..rep, element: resolve_element(&rep.element, kinds, lit_names) }),
+        Group(g) => Element::Group(GroupElement { ..g, alternatives: resolve_alts(&g.alternatives, kinds, lit_names) }),
+        Label(lab) => Element::Label(LabelElement { ..lab, element: resolve_element(&lab.element, kinds, lit_names) }),
+        Not(n) => Element::Not(NotElement { ..n, element: resolve_element(&n.element, kinds, lit_names) }),
         _ => *elem,
     };
 }

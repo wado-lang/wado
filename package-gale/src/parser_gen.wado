@@ -17,7 +17,6 @@ use {
 use {
     literal_field_name,
     not_element_field_name,
-    literal_const_name,
     is_token_only_group,
     group_field_base_name,
     single_alt_group_type_name,
@@ -5440,7 +5439,7 @@ fn collect_token_only_kinds(alts: &List<Alternative>) -> List<String> {
         if let TokenRef(t) = elem {
             out.push(`TK_${t.name}`);
         } else if let Literal(l) = elem {
-            out.push(literal_const_name(&l.text));
+            out.push(l.const_name);
         } else {
             panic("collect_token_only_kinds: token-only group alt is not TokenRef or Literal");
         }
@@ -5523,7 +5522,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
             w.line(`${leaf_binding(ctx, &field_name)}p.expect(TK_${t.name}, &EMPTY_SYNC);`);
         },
         Literal(l) => {
-            let const_name = literal_const_name(&l.text);
+            let const_name = l.const_name;
             let field_name = dedup_name(&literal_field_name(&l.text), name_counts);
             w.line(`${leaf_binding(ctx, &field_name)}p.expect(${const_name}, &EMPTY_SYNC);`);
         },
@@ -6885,7 +6884,7 @@ fn not_match_call(inner: &Element, ctx: &mut GenContext) -> String {
     let unsupported = "not_match_call: unsupported inner element for parser-side ~";
     let kinds = match inner {
         TokenRef(t) => [`TK_${t.name}`] as List<String>,
-        Literal(l) => [literal_const_name(&l.text)] as List<String>,
+        Literal(l) => [l.const_name] as List<String>,
         Group(g) => {
             let mut ks: List<String> = [];
             if !collect_not_set_tokens(&g.alternatives, &mut ks) {
@@ -6909,7 +6908,7 @@ fn collect_not_set_tokens(alts: &List<Alternative>, out: &mut List<String>) -> b
         if let TokenRef(t) = e {
             out.push(`TK_${t.name}`);
         } else if let Literal(l) = e {
-            out.push(literal_const_name(&l.text));
+            out.push(l.const_name);
         } else {
             return false;
         }
