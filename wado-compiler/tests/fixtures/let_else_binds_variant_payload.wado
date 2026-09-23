@@ -1,0 +1,67 @@
+// A `let ... else` binds its payload into the enclosing scope. The binder
+// dropped a variant pattern on the floor, and `bind_expr` hid it: an unknown
+// name is only reported where that name is a local somewhere in the function,
+// so the `if let` below is what makes the later `rest` visible as one.
+
+fn prefix_len(s: String) -> i32 {
+    let view = s.as_str_slice();
+    if let Some(rest) = view.strip_prefix("xx") {
+        return rest.len();
+    }
+    let Some(rest) = view.strip_prefix("fn ") else {
+        return -1;
+    };
+    return rest.len();
+}
+
+export fn run() {
+    assert prefix_len("fn foo") == 3;
+    assert prefix_len("xxab") == 2;
+    assert prefix_len("nope") == -1;
+
+    // The same shape with a tuple payload, and with the binding used after a
+    // second statement rather than immediately.
+    let pair: Option<[i32, i32]> = Option::Some([2, 5]);
+    if let Some(inner) = pair {
+        assert inner.0 == 2;
+    }
+    let Some(inner) = pair else {
+        unreachable();
+    };
+    let doubled = inner.1 * 2;
+    assert doubled == 10;
+
+    // `mut` on the payload, which takes the other arm of the binder.
+    let Some(mut n) = Option::<i32>::Some(1) else {
+        unreachable();
+    };
+    n += 41;
+    assert n == 42;
+
+    assert unwrapped(Option::<i32>::Some(7)) == 7;
+    assert unwrapped(null) == -1;
+    assert reported(Option::<i32>::Some(7)) == 7;
+    assert reported(null) == -1;
+}
+
+/// A payload shadowing the name it derives from, which is `let x = x + 1`'s
+/// rule reaching into a pattern.
+fn unwrapped(found: Option<i32>) -> i32 {
+    let Some(found) = found else {
+        return -1;
+    };
+    return found;
+}
+
+/// The else block belongs to the statement that shadows `found`, and runs
+/// where the pattern did not match, so it reads the old binding.
+fn reported(found: Option<i32>) -> i32 {
+    let Some(found) = found else {
+        assert found matches { None };
+        return -1;
+    };
+    return found;
+}
+
+__DATA__
+{}

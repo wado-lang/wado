@@ -1,4 +1,15 @@
-use { Tensor, map, matmul, sigmoid_f32, transpose2, zip, zip_suffix, zip_suffix_lhs } from "./runtime/tensor.wado";
+use {
+    Tensor,
+    map,
+    matmul,
+    narrow,
+    sigmoid_f32,
+    transpose2,
+    widen,
+    zip,
+    zip_suffix,
+    zip_suffix_lhs,
+} from "./runtime/tensor.wado";
 
 struct Batch {
 }
@@ -89,4 +100,39 @@ test "sigmoid_f32 is stable on both signs" {
     assert sigmoid_f32(0.0) == 0.5;
     assert f32::abs(sigmoid_f32(-100.0)) < 1.0e-30;
     assert f32::abs(sigmoid_f32(100.0) - 1.0) < 1.0e-30;
+}
+
+test "widening and narrowing keep a value f16 holds exactly" {
+    let half: Tensor<f16, [Row, Col]> = Tensor {
+        data: [
+            f16::from_f32(0.5),
+            f16::from_f32(-2.0),
+            f16::from_f32(3.0),
+        ],
+        extents: [1, 3],
+    };
+
+    let wide = widen(&half);
+    assert wide.data == [0.5, -2.0, 3.0] as List<f32>;
+    assert wide.extents == half.extents;
+
+    let back: Tensor<f16, [Row, Col]> = narrow(&wide);
+    assert back.data == half.data;
+}
+
+test "bf16 widens and narrows over the same axes" {
+    let half: Tensor<bf16, [Row, Col]> = Tensor {
+        data: [
+            bf16::from_f32(0.5),
+            bf16::from_f32(-2.0),
+            bf16::from_f32(3.0),
+        ],
+        extents: [1, 3],
+    };
+
+    let wide = widen(&half);
+    assert wide.data == [0.5, -2.0, 3.0] as List<f32>;
+
+    let back: Tensor<bf16, [Row, Col]> = narrow(&wide);
+    assert back.data == half.data;
 }
