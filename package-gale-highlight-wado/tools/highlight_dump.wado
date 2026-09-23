@@ -17,7 +17,7 @@
 //! A file that cannot be read reports a diagnostic count of `-1`.
 
 use { collect_paths } from "lib:gale";
-use { parse, highlight_mapping, HighlightVisitor, highlight_walk } from "../grammar/Wado.g4"
+use { parse, HIGHLIGHT_MAPPING, HighlightVisitor, highlight_walk } from "../grammar/Wado.g4"
     with {
         generator: {
             module: "lib:gale",
@@ -34,9 +34,8 @@ use { Preopens } from "core:fs";
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
     let paths = collect_paths(&args(), ".wado");
 
-    let mapping = highlight_mapping();
     let mut header = "V";
-    for let name of &HighlightVisitor::new(mapping).capture_names {
+    for let name of &HIGHLIGHT_MAPPING.capture_names {
         header.push_str(`\t${*name}`);
     }
     println(header);
@@ -55,7 +54,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
         if result.diagnostics.len() != 0 {
             unparsable += 1;
         }
-        let mut visitor = HighlightVisitor::new(mapping);
+        let mut visitor = HighlightVisitor::new(&HIGHLIGHT_MAPPING);
         highlight_walk(&mut visitor, &result.tokens, &result.cst);
         visitor.hl_cover_unvisited(&result.tokens);
 
