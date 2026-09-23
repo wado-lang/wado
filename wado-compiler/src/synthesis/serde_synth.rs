@@ -501,6 +501,7 @@ fn field_schema_method_fn(
         retains: vec![],
         immediates: vec![],
         trap: None,
+        linear_memory: None,
         body: Some(block(body)),
         span,
         local_count,

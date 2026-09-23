@@ -251,6 +251,7 @@ fn make_trait_method(
         retains: vec![],
         immediates: vec![],
         trap: None,
+        linear_memory: None,
         body: Some(body),
         span,
         local_count,

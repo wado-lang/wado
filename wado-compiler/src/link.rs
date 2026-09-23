@@ -39,7 +39,8 @@ fn record_declaration(
             func.declared_return_convention.is_none()
                 && retains.is_empty()
                 && func.immediates.is_empty()
-                && func.trap.is_none(),
+                && func.trap.is_none()
+                && func.linear_memory.is_none(),
             "`{}` declares storage or an immediate as a method; key the snapshot by `DefId` first",
             func.name
         );
@@ -65,6 +66,7 @@ fn record_declaration(
                 .collect(),
             immediate_params: func.immediates_by_position().collect(),
             trap: func.trap_by_position(),
+            linear_memory: func.linear_memory,
         },
     );
 }

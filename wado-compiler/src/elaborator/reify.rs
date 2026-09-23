@@ -10,8 +10,8 @@ use std::rc::Rc;
 
 use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
 use crate::attribute::{
-    ALLOC, AMBIENT, BENIGN, EXPORT_NAME, IMMEDIATE, INLINE, PARAM, RESULT, RETAIN, SECRET, TRAP,
-    WIRE,
+    ALLOC, AMBIENT, BENIGN, EXPORT_NAME, IMMEDIATE, INLINE, LINEAR_MEMORY, PARAM, RESULT, RETAIN,
+    SECRET, TRAP, WIRE,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -1424,6 +1424,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
         let immediates = self.reify_immediate_attrs(&func.attrs, &params, body.is_some());
         let trap = self.reify_trap_attrs(&func.attrs, &params, body.is_some());
+        let linear_memory = self.reify_linear_memory_attr(&func.attrs, body.is_some());
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1449,6 +1450,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             retains,
             immediates,
             trap,
+            linear_memory,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1814,6 +1816,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
         let immediates = self.reify_immediate_attrs(&func.attrs, &params, body.is_some());
         let trap = self.reify_trap_attrs(&func.attrs, &params, body.is_some());
+        let linear_memory = self.reify_linear_memory_attr(&func.attrs, body.is_some());
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1839,6 +1842,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             retains,
             immediates,
             trap,
+            linear_memory,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1910,6 +1914,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             retains: vec![],
             immediates: vec![],
             trap: None,
+            linear_memory: None,
             body: Some(body),
             span: test_decl.span,
             local_count: ctx.local_count(),
@@ -2445,6 +2450,36 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return None;
         }
         Some(spec)
+    }
+
+    /// The `#[linear_memory(...)]` access, `None` where there is none. A
+    /// malformed one is reported and read as a write, which reorders nothing.
+    fn reify_linear_memory_attr(
+        &self,
+        attrs: &[ast::Attribute],
+        has_body: bool,
+    ) -> Option<tir::LinearMemory> {
+        let mut written = attrs.iter().filter(|a| a.name == LINEAR_MEMORY);
+        let attr = written.next()?;
+        let emit = |message: &str| {
+            self.attr_error(Code::LinearMemoryAttr, attr, message.to_string());
+            Some(tir::LinearMemory::Write)
+        };
+        if written.next().is_some() {
+            return emit("#[linear_memory] is written once");
+        }
+        let access = match attr.args.as_slice() {
+            [ast::AttrArg::Ident(word)] if word == "read" => tir::LinearMemory::Read,
+            [ast::AttrArg::Ident(word)] if word == "write" => tir::LinearMemory::Write,
+            _ => return emit("#[linear_memory] takes `read` or `write`"),
+        };
+        if has_body {
+            return emit(
+                "#[linear_memory] belongs to a declaration with no body; a body states what it \
+                 touches",
+            );
+        }
+        Some(access)
     }
 
     fn reify_trap_attr(

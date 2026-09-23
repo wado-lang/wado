@@ -158,45 +158,59 @@ pub fn array_clone_prefix<T>(src: &Array<T>, len: i32) -> Array<T>;
 pub fn array_fill<T>(arr: &mut Array<T>, offset: i32, value: T, len: i32);
 
 /// Loads an i32 from linear memory (Wasm i32.load).
+#[linear_memory(read)]
 pub fn i32_load(addr: i32) -> i32;
 
 /// Stores an i32 to linear memory (Wasm i32.store).
+#[linear_memory(write)]
 pub fn i32_store(addr: i32, value: i32);
 
 /// Loads an i64 from linear memory (Wasm i64.load).
+#[linear_memory(read)]
 pub fn i64_load(addr: i32) -> i64;
 
 /// Stores an i64 to linear memory (Wasm i64.store).
+#[linear_memory(write)]
 pub fn i64_store(addr: i32, value: i64);
 
 /// Loads an f32 from linear memory (Wasm f32.load).
+#[linear_memory(read)]
 pub fn f32_load(addr: i32) -> f32;
 
 /// Stores an f32 to linear memory (Wasm f32.store).
+#[linear_memory(write)]
 pub fn f32_store(addr: i32, value: f32);
 
 /// Loads an f64 from linear memory (Wasm f64.load).
+#[linear_memory(read)]
 pub fn f64_load(addr: i32) -> f64;
 
 /// Stores an f64 to linear memory (Wasm f64.store).
+#[linear_memory(write)]
 pub fn f64_store(addr: i32, value: f64);
 
 /// Loads a byte from linear memory (Wasm i32.load8_u).
+#[linear_memory(read)]
 pub fn i32_load8_u(addr: i32) -> u8;
 
 /// Loads a sign-extended byte from linear memory (Wasm i32.load8_s).
+#[linear_memory(read)]
 pub fn i32_load8_s(addr: i32) -> i8;
 
 /// Loads a u16 from linear memory (Wasm i32.load16_u).
+#[linear_memory(read)]
 pub fn i32_load16_u(addr: i32) -> u16;
 
 /// Loads a sign-extended 16-bit value from linear memory (Wasm i32.load16_s).
+#[linear_memory(read)]
 pub fn i32_load16_s(addr: i32) -> i16;
 
 /// Stores a byte to linear memory (Wasm i32.store8).
+#[linear_memory(write)]
 pub fn i32_store8(addr: i32, value: u8);
 
 /// Stores a u16 to linear memory (Wasm i32.store16).
+#[linear_memory(write)]
 pub fn i32_store16(addr: i32, value: u16);
 
 /// Allocates or reallocates memory in linear memory.
@@ -208,15 +222,18 @@ pub fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 /// Grows linear memory by delta pages, returns previous page count or -1 on failure.
 /// Maps to Wasm memory.grow instruction.
 #[trap(never)]
+#[linear_memory(write)]
 pub fn memory_grow(delta: i32) -> i32;
 
 /// Returns the current linear memory size in pages.
 /// Maps to Wasm memory.size instruction.
 #[trap(never)]
+#[linear_memory(read)]
 pub fn memory_size() -> i32;
 
 /// Fills a region of linear memory with a byte value.
 /// Maps to Wasm memory.fill instruction.
+#[linear_memory(write)]
 pub fn memory_fill(dst: i32, value: u8, len: i32);
 /// Performs 128-bit addition: (a_lo, a_hi) + (b_lo, b_hi) = (result_lo, result_hi).
 /// Maps to Wasm i64.add128 instruction.
@@ -593,9 +610,11 @@ pub fn f32_copysign(magnitude: f32, sign: f32) -> f32;
 pub fn f64_copysign(magnitude: f64, sign: f64) -> f64;
 
 /// Loads a v128 from linear memory (Wasm v128.load).
+#[linear_memory(read)]
 pub fn v128_load(addr: i32) -> v128;
 
 /// Stores a v128 to linear memory (Wasm v128.store).
+#[linear_memory(write)]
 pub fn v128_store(addr: i32, value: v128);
 
 /// Creates a v128 constant from an i128 bit pattern.

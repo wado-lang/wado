@@ -714,6 +714,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         retains: vec![],
         immediates: vec![],
         trap: None,
+        linear_memory: None,
         body: Some(TirBlock {
             stmts,
             span: synth_span(),
@@ -947,6 +948,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         retains: vec![],
         immediates: vec![],
         trap: None,
+        linear_memory: None,
         body: Some(TirBlock {
             stmts,
             span: synth_span(),
@@ -1170,6 +1172,7 @@ fn synthesize_future_read_func(
         retains: vec![],
         immediates: vec![],
         trap: None,
+        linear_memory: None,
         body: Some(TirBlock {
             stmts,
             span: synth_span(),
@@ -1569,6 +1572,7 @@ fn synthesize_stream_read_func(
         retains: vec![],
         immediates: vec![],
         trap: None,
+        linear_memory: None,
         body: Some(TirBlock {
             stmts,
             span: synth_span(),

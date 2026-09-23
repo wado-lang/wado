@@ -6129,6 +6129,24 @@ It is an error on a function with a body, which states when it traps itself,
 and on a `trait` or `interface` method requirement, for the reason `#[retain]`
 is.
 
+#### `#[linear_memory(...)]`
+
+How a call to a declaration with no body touches linear memory: `read` or
+`write`. Silence means it touches none. A linear-memory address is a plain
+`i32`, so no parameter type says this, and the attribute is the only source.
+A `read` call is not moved across a `write`, and neither is deleted as if it
+touched nothing.
+
+```wado
+#[linear_memory(read)]
+pub fn i32_load(addr: i32) -> i32;
+
+#[linear_memory(write)]
+pub fn i32_store(addr: i32, value: i32);
+```
+
+It is written once, and is an error where `#[trap]` is.
+
 ### The "mem" Core Module
 
 The Component Model requires each component to provide a linear memory and a `realloc` function. The CM runtime calls `realloc` whenever it needs guest-side linear memory — for example, `stream.read` copies bytes from the host into a guest buffer, and string lifting/lowering also goes through it.

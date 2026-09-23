@@ -1,0 +1,37 @@
+// A malformed `#[linear_memory(...)]` is reported. Silence means the call
+// touches no linear memory, so a misspelled access must not read as silence.
+//
+// Every function here has a body, and the body check comes last, so each one
+// reports what it got wrong rather than only where it sits — the last is the
+// case where nothing else is wrong.
+
+#[linear_memory(modify)]
+fn first(addr: i32) -> i32 {
+    return addr;
+}
+
+#[linear_memory(read)]
+#[linear_memory(write)]
+fn second(addr: i32) -> i32 {
+    return addr;
+}
+
+#[linear_memory(read)]
+fn third(addr: i32) -> i32 {
+    return addr;
+}
+
+export fn run() {
+    first(1);
+    second(2);
+    third(3);
+}
+
+__DATA__
+{
+    "compile_error": "#[linear_memory] takes `read` or `write`",
+    "compile_errors_contains": [
+        "#[linear_memory] is written once",
+        "#[linear_memory] belongs to a declaration with no body"
+    ]
+}

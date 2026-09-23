@@ -22,6 +22,7 @@ pub const EXPORT_NAME: &str = "export_name";
 pub const GENERATED: &str = "generated";
 pub const IMMEDIATE: &str = "immediate";
 pub const INLINE: &str = "inline";
+pub const LINEAR_MEMORY: &str = "linear_memory";
 pub const NO_PRELUDE: &str = "no_prelude";
 pub const PARAM: &str = "param";
 pub const RESULT: &str = "result";
@@ -337,6 +338,12 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::OptionalWords,
         summary: "how the inliner should treat this function",
+    },
+    AttributeSchema {
+        name: LINEAR_MEMORY,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::Read("`read` or `write`"),
+        summary: "how a call to this declaration touches linear memory",
     },
     AttributeSchema {
         name: NO_PRELUDE,

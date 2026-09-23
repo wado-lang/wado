@@ -18,7 +18,7 @@ use crate::optimize::arena_query::{
 };
 use crate::optimize::bounds::{self, Builtin};
 use crate::optimize::inline::recursive_scc_members;
-use crate::tir::{BuiltinDeclarations, TypeTable};
+use crate::tir::{BuiltinDeclarations, LinearMemory, TypeTable};
 
 /// Read / write flags for a single state channel (e.g., GC heap or
 /// linear memory).
@@ -697,42 +697,13 @@ impl FnEffect {
     }
 }
 
-/// Linear-memory primitives. Every other non-canonical builtin is arithmetic,
-/// a lane / bit operation, or a GC-array access — none of which touch a
-/// channel that survives the call boundary.
-///
-/// Wado spells a linear-memory address as a plain `i32`, so these carry no
-/// `&mut` to give them away: the list is the ground truth.
-fn memory_builtin_effect(name: &str) -> FnEffect {
-    let reads = matches!(
-        name,
-        "i32_load"
-            | "i64_load"
-            | "f32_load"
-            | "f64_load"
-            | "i32_load8_u"
-            | "i32_load8_s"
-            | "i32_load16_u"
-            | "i32_load16_s"
-            | "v128_load"
-            | "memory_size"
-    );
-    let writes = matches!(
-        name,
-        "i32_store"
-            | "i64_store"
-            | "f32_store"
-            | "f64_store"
-            | "i32_store8"
-            | "i32_store16"
-            | "v128_store"
-            | "memory_fill"
-            | "memory_grow"
-            | "realloc"
-    );
+/// What a `#[linear_memory(...)]` access does to state a caller can observe.
+/// Wado spells a linear-memory address as a plain `i32`, so no `&mut` gives
+/// one away: the declaration is the ground truth.
+fn linear_memory_effect(access: Option<LinearMemory>) -> FnEffect {
     FnEffect {
-        reads_mutable_state: reads || writes,
-        writes_state: writes,
+        reads_mutable_state: access.is_some(),
+        writes_state: access == Some(LinearMemory::Write),
         ..FnEffect::default()
     }
 }
@@ -742,9 +713,9 @@ fn memory_builtin_effect(name: &str) -> FnEffect {
 ///
 /// A builtin carrying a `canonical_name` is a component-model operation
 /// (streams, futures, waitables, tasks, threads) — I/O, hence opaque. The rest
-/// are Wasm instructions: opaque only when they touch linear memory, trapping
-/// unless `#[trap(...)]` says when, and storing through their `&mut`
-/// parameters. Anything bodyless that is not a builtin at all (an extern
+/// are Wasm instructions: touching linear memory where `#[linear_memory]`
+/// says so, trapping unless `#[trap(...)]` says when, and storing through
+/// their `&mut` parameters. Anything bodyless that is not a builtin at all (an extern
 /// declaration) is opaque, since there is no body to inspect.
 fn leaf_effect<'a>(
     f: &NirFunction,
@@ -770,7 +741,7 @@ fn leaf_effect<'a>(
         let effect = FnEffect {
             may_trap: true,
             writes_shared_heap: true,
-            ..memory_builtin_effect(bare)
+            ..FnEffect::default()
         };
         return (effect, None);
     };
@@ -782,7 +753,7 @@ fn leaf_effect<'a>(
     let effect = FnEffect {
         may_trap: builtin.trap.is_none_or(|spec| !spec.checks.is_empty()),
         writes_shared_heap: !mut_params.is_empty(),
-        ..memory_builtin_effect(bare)
+        ..linear_memory_effect(declarations.linear_memory(&fref))
     };
     (effect, Some(builtin))
 }

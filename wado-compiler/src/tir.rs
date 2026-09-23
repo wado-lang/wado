@@ -6169,6 +6169,8 @@ pub struct TirFunction {
     pub immediates: Vec<String>,
     /// `#[trap(...)]` on a bodyless declaration — when the call can trap.
     pub trap: Option<TrapSpec<String>>,
+    /// `#[linear_memory(...)]` on a bodyless declaration.
+    pub linear_memory: Option<LinearMemory>,
     pub body: Option<TirBlock>,
     pub span: Span,
     pub local_count: u32,
@@ -6380,6 +6382,14 @@ impl<P> TrapSpec<P> {
     }
 }
 
+/// `#[linear_memory(...)]`: how a bodyless declaration touches linear memory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinearMemory {
+    Read,
+    /// Writes, and reads too: a store is ordered against every other access.
+    Write,
+}
+
 /// What a bodyless `core:builtin` declared about storage, by parameter position.
 /// Link snapshots it because monomorphization drops the generic declarations.
 #[derive(Debug, Clone, Default)]
@@ -6398,6 +6408,8 @@ pub struct BuiltinDeclaration {
     pub immediate_params: IndexSet<usize>,
     /// `#[trap(...)]`, or `None` where the declaration states none.
     pub trap: Option<TrapSpec<usize>>,
+    /// `#[linear_memory(...)]`, or `None` where it touches none.
+    pub linear_memory: Option<LinearMemory>,
 }
 
 /// All a declaration lookup reads of a call. TIR and NIR each carry their own
@@ -6487,6 +6499,14 @@ impl BuiltinDeclarations {
     /// What `call` declared with `#[trap(...)]`; `None` is "may trap".
     pub fn trap<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&TrapSpec<usize>> {
         self.get(call.into())?.trap.as_ref()
+    }
+
+    /// What `call` declared with `#[linear_memory(...)]`.
+    pub fn linear_memory<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> Option<LinearMemory> {
+        self.get(call.into())?.linear_memory
     }
 
     /// The positions `call` takes by `&mut`, `None` where nothing was snapshot.
@@ -6657,6 +6677,7 @@ impl TirFunction {
             retains: Vec::new(),
             immediates: Vec::new(),
             trap: None,
+            linear_memory: None,
             body: Some(body),
             span,
             local_count: u32::try_from(locals.len()).expect("local count fits in u32"),
