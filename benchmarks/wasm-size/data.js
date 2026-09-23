@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790135978536,
+  "lastUpdate": 1790140842258,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58641,6 +58641,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c795ffa9dddb02f1e698b52f4d144ce1ceb45517",
+          "message": "Merge pull request #2129 from wado-lang/claude/worktree-gale-codegen-size-ietrak\n\nperf(gale,compiler): emit each match arm body once in a br_table switch — gale output up to 2 KB smaller",
+          "timestamp": "2026-09-23T14:04:29+09:00",
+          "tree_id": "13b62c71b8adf8a235ac7f592daeb06e4ecc3edd",
+          "url": "https://github.com/wado-lang/wado/commit/c795ffa9dddb02f1e698b52f4d144ce1ceb45517"
+        },
+        "date": 1790140842106,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19544,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300579,
             "unit": "bytes"
           }
         ]
