@@ -458,7 +458,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         name: TRAP,
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read(
-            "`never`, or `negative = p` / `outside = a` (with `at = i`, `len = n`), \
+            "`never`, or `negative = p` / `outside = a` (with `at = i`, `len = n`) / `unset = a`, \
              with an optional `result_len = p`",
         ),
         summary: "when a call to this declaration traps",

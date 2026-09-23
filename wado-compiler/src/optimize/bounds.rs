@@ -13,7 +13,7 @@ use crate::nir_arena::{
 use crate::nir_value_graph::ValueKind;
 use crate::optimize::arena_query::{binary_parts, local_written_by, operand_local, storage_root};
 use crate::primitive::PrimitiveType;
-use crate::tir::{TrapCheck, TrapSpec, TypeTable};
+use crate::tir::{ResolvedType, TrapCheck, TrapSpec, TypeTable};
 
 /// What a bodyless builtin declared, as a call to it is read here.
 #[derive(Debug, Clone, Copy)]
@@ -32,7 +32,7 @@ impl Builtin<'_> {
         self.trap.into_iter().flat_map(|spec| {
             spec.checks.iter().filter_map(|check| match check {
                 TrapCheck::Outside { array, .. } => Some(*array),
-                TrapCheck::Negative(_) => None,
+                TrapCheck::Negative(_) | TrapCheck::Unset(_) => None,
             })
         })
     }
@@ -344,10 +344,21 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
                 (self.array_len(arg(array), 0), nonneg(at, 0), nonneg(len, 1)),
                 (Some(l), Some(at), Some(n)) if at + n <= l
             ),
+            TrapCheck::Unset(array) => self.elements_never_unset(arg(array)),
         };
         if spec.checks.iter().all(holds) {
             self.out.in_bounds.insert(e);
         }
+    }
+
+    /// Whether every slot of the array `op` holds a value: a primitive element
+    /// is a Wasm value type, while any other is stored nullable.
+    fn elements_never_unset(&self, op: Operand) -> bool {
+        let array = self.types.peel_refs(self.body.operand_type(op));
+        let Some(ResolvedType::BuiltinArray(element)) = self.types.get_pruned(array) else {
+            panic!("`#[trap(unset = ...)]` names a parameter that is not an `Array<T>`");
+        };
+        self.types.is_primitive_like(*element)
     }
 
     /// Whether `e` stores into an object this body did not allocate: through a

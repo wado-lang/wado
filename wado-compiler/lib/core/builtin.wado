@@ -106,6 +106,7 @@ pub fn array_new<T>(len: i32) -> Array<T>;
 /// Returns an element from a Array<T> at the given index.
 #[result(part_of = arr)]
 #[trap(outside = arr, at = idx)]
+#[trap(unset = arr)]
 pub fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
 
 /// Returns a reference to the element at `idx`. A `Ref` element is aliased in
@@ -113,6 +114,7 @@ pub fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
 /// this is sound to read for every `T` — hence no `Ref` bound.
 #[result(part_of = arr)]
 #[trap(outside = arr, at = idx)]
+#[trap(unset = arr)]
 pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 
 /// Returns a mutable reference to the element at `idx`, for in-place mutation.
@@ -120,6 +122,7 @@ pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 /// so only in-place-mutable elements can be handed out mutably.
 #[result(part_of = arr)]
 #[trap(outside = arr, at = idx)]
+#[trap(unset = arr)]
 pub fn array_get_ref_mut<T: RefMut>(arr: &mut Array<T>, idx: i32) -> &mut T;
 
 /// Sets an element in a Array<T> at the given index.
@@ -330,6 +333,7 @@ pub fn unreachable() -> !;
 /// `std::hint::black_box`; use it to keep a test or benchmark measuring the
 /// work it names.
 #[result(part_of = value)]
+#[trap(never)]
 pub fn black_box<T>(value: T) -> T;
 
 /// True while a lazy-initialized global still holds its `null` placeholder.
@@ -337,6 +341,7 @@ pub fn black_box<T>(value: T) -> T;
 /// Meaningful only on a global whose slot starts `null` and is written once
 /// before use: the read is typed nullable, so it observes the placeholder
 /// instead of asserting it away. Any other reference reads as initialized.
+#[trap(never)]
 pub fn is_uninitialized<T>(value: &T) -> bool;
 
 /// Marks the enclosing code path as cold (rarely executed). `cold_path()` is a
@@ -356,6 +361,7 @@ pub fn is_uninitialized<T>(value: &T) -> bool;
 /// cold_path();
 /// return error
 /// ```
+#[trap(never)]
 pub fn cold_path();
 
 // =========================================================================

@@ -2467,7 +2467,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             };
             if !matches!(
                 key.as_str(),
-                "negative" | "outside" | "at" | "len" | "result_len"
+                "negative" | "outside" | "unset" | "at" | "len" | "result_len"
             ) {
                 return Err(format!("unknown #[trap] key: {key}"));
             }
@@ -2479,19 +2479,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
         let mut take = |key: &str| named.shift_remove(key);
-        let check = match (take("negative"), take("outside")) {
-            (Some(_), Some(_)) => {
-                return Err(
-                    "#[trap] states one check; repeat the attribute for another".to_string()
-                );
-            }
-            (Some(p), None) => Some(tir::TrapCheck::Negative(p)),
-            (None, Some(array)) => Some(tir::TrapCheck::Outside {
+        let check = match (take("negative"), take("outside"), take("unset")) {
+            (None, None, None) => None,
+            (Some(p), None, None) => Some(tir::TrapCheck::Negative(p)),
+            (None, Some(array), None) => Some(tir::TrapCheck::Outside {
                 array,
                 at: take("at"),
                 len: take("len"),
             }),
-            (None, None) => None,
+            (None, None, Some(array)) => Some(tir::TrapCheck::Unset(array)),
+            _ => {
+                return Err(
+                    "#[trap] states one check; repeat the attribute for another".to_string()
+                );
+            }
         };
         let result_len = take("result_len");
         if let Some(key) = named.keys().next() {

@@ -6351,6 +6351,9 @@ pub enum TrapCheck<Param> {
         at: Option<Param>,
         len: Option<Param>,
     },
+    /// `unset = a` — traps when the element read is a slot of `a` that holds no
+    /// value, as a reference element `array_new` left at its default does.
+    Unset(Param),
 }
 
 /// What a bodyless declaration's `#[trap(...)]` attributes state. Silence is
@@ -6375,6 +6378,7 @@ impl<P> TrapSpec<P> {
                         at: at.as_ref().map(&mut f),
                         len: len.as_ref().map(&mut f),
                     },
+                    TrapCheck::Unset(array) => TrapCheck::Unset(f(array)),
                 })
                 .collect(),
             result_len: self.result_len.as_ref().map(f),

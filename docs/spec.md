@@ -6106,6 +6106,7 @@ it never traps, and a check names the one condition it traps on:
 pub fn f64_sqrt(x: f64) -> f64;
 
 #[trap(outside = arr, at = idx)]
+#[trap(unset = arr)]
 pub fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
 
 #[trap(outside = dst, at = dst_offset, len = len)]
@@ -6119,7 +6120,9 @@ pub fn array_new<T>(len: i32) -> Array<T>;
 
 `negative = p` traps when `p` is below zero. `outside = a` traps unless the
 range from `at` (0 when absent) of `len` elements (1 when absent) lies within
-the array `a`, and says the call does not replace `a`. Each attribute states one
+the array `a`, and says the call does not replace `a`. `unset = a` traps when
+the element read holds no value: `array_new` leaves a reference element empty,
+while a primitive element always holds one. Each attribute states one
 check and repeats for another; the call traps where any fails. `result_len = p`
 is no check: it says the returned array holds `p` elements, so a later check
 against it can be proved. Running out of memory is not a trap any of these
