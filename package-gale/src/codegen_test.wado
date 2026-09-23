@@ -154,13 +154,14 @@ WS : [ \\t\\r\\n]+ -> skip ;
 test "reserved-word alt labels are escaped to valid identifiers" {
     // A `# Label` may be a Wado reserved word (ANTLR4's `ReservedWordsEscaping`
     // uses `# else`). The `<Rule>Alt` enum variant and accessor arm must escape
-    // it (append `_`) or the generated code does not compile. Non-reserved
-    // labels are left unchanged.
+    // it (append `_`) or the generated code does not compile. A case lives in
+    // its enum, so a label the prelude also names (`# Add`) is left unchanged.
     let input = "grammar Test;
-r : A # else | B # loop | C # Keep ;
+r : A # else | B # loop | C # Keep | D # Add ;
 A : 'a' ;
 B : 'b' ;
 C : 'c' ;
+D : 'd' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
@@ -173,6 +174,7 @@ C : 'c' ;
     assert str_contains(&output, "0 => Option::Some(RAlt::else_),");
     assert str_contains(&output, "1 => Option::Some(RAlt::loop_),");
     assert str_contains(&output, "2 => Option::Some(RAlt::Keep),");
+    assert str_contains(&output, "3 => Option::Some(RAlt::Add),");
 }
 
 test "generate wildcard element" {

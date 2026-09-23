@@ -1,7 +1,7 @@
 //! Identifier-name transforms shared by the IR (which caches the names at
 //! construction) and the codegen layer. No IR dependencies: `ir.wado` imports it.
 
-use { is_reserved } from "lib:wadopoet";
+use { is_keyword, is_reserved } from "lib:wadopoet";
 
 /// The recognizer handle in emitted context-API calls (`p.token_text(...)`):
 /// `p` in a parse / predicate body, `self` in a `@members` method body.
@@ -38,6 +38,15 @@ global GENERATED_LOCALS: List<String> = [
 /// generated local by appending '_'.
 pub fn escape_ident<S: AsStrSlice>(name: S) -> String {
     if is_reserved(name) || GENERATED_LOCALS.contains_str(name) {
+        return `${name}_`;
+    }
+    return name.to_string();
+}
+
+/// Escape an enum case name that is a keyword by appending '_'. A case lives in
+/// its enum, so it cannot collide with anything else.
+pub fn escape_case<S: AsStrSlice>(name: S) -> String {
+    if is_keyword(name) {
         return `${name}_`;
     }
     return name.to_string();
