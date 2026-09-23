@@ -116,8 +116,7 @@ impl CodeWriter {
     pub fn raw<S: AsStrSlice>(&mut self, text: S) {
         self.buf.push_str(text);
         if text.len() > 0 {
-            let chars: List<char> = text.chars().collect();
-            self.fresh_line = chars[chars.len() - 1] == '\n';
+            self.fresh_line = text.as_str_slice().ends_with("\n");
         }
     }
 
@@ -414,7 +413,12 @@ impl StructSpec {
     }
 
     pub fn emit(&self, w: &mut CodeWriter) {
-        w.begin(`${self.visibility.prefix()}struct ${self.name}`);
+        let head = `${self.visibility.prefix()}struct ${self.name}`;
+        if self.fields.is_empty() {
+            w.line(`${head} {}`);
+            return;
+        }
+        w.begin(head);
         for let field of &self.fields {
             let vis = if field.is_pub { "pub " } else { "" };
             match &field.default {

@@ -136,6 +136,12 @@ test "StructSpec basic" {
     assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
+test "StructSpec without fields closes on its own line" {
+    let mut w = CodeWriter::new();
+    StructSpec::new("Marker", Vis::Pub).emit(&mut w);
+    assert w.to_string() == "pub struct Marker {}\n", `got: ${w.to_string()}`;
+}
+
 test "StructSpec pub with pub fields" {
     let mut s = StructSpec::new("Token", Vis::Pub);
     s.add_pub_field("kind", "i32");
