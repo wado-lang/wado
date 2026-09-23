@@ -98,12 +98,11 @@ impl FunctionTranslator<'_, '_> {
             .iter()
             .map(|arm| arm.map_or(0, |i| i as u32 + 1))
             .collect();
-        let default_target = 0u32;
 
         let br_table = WirInstr::BrTable {
             index: Box::new(adjusted),
             targets,
-            default: default_target,
+            default: 0,
         };
 
         // The br_table switch generates wrapper blocks around each arm body.

@@ -274,10 +274,8 @@ pub(super) fn arm_spans(arms: &[ArmData], body: &Body) -> Option<(Vec<ArmSpan>, 
     Some((spans, None))
 }
 
-/// Analyze whether a `Match` can be rewritten into a `Switch`. Accepts
-/// integer / `char` / enum scrutinees with guard-less arms whose patterns
-/// are integer or `char` literals, enum cases, integer/`char` ranges, or
-/// wildcard (the default).
+/// Analyze whether a `Match` can be rewritten into a `Switch`: an integer,
+/// `char` or enum scrutinee with guard-less arms keyed as [`case_key`] allows.
 fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Option<SwitchAnalysis> {
     scrutinee_bits(scrutinee_type)?;
 

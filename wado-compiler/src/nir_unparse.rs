@@ -989,23 +989,17 @@ fn nir_unary_op_str(op: NirUnaryOp) -> &'static str {
 /// The values a `Switch` table sends to `arm`, as `a | b..=c` runs.
 fn switch_arm_cases(table: &[Option<usize>], arm: usize, min_value: i64) -> String {
     let mut runs: Vec<String> = Vec::new();
-    let mut offset = 0;
-    while offset < table.len() {
-        if table[offset] != Some(arm) {
-            offset += 1;
-            continue;
+    let mut lo = min_value;
+    for run in table.chunk_by(|a, b| a == b) {
+        let hi = lo + run.len() as i64 - 1;
+        if run[0] == Some(arm) {
+            runs.push(if lo == hi {
+                format!("{lo}")
+            } else {
+                format!("{lo}..={hi}")
+            });
         }
-        let start = offset;
-        while offset < table.len() && table[offset] == Some(arm) {
-            offset += 1;
-        }
-        let lo = min_value + start as i64;
-        let hi = min_value + offset as i64 - 1;
-        runs.push(if lo == hi {
-            format!("{lo}")
-        } else {
-            format!("{lo}..={hi}")
-        });
+        lo = hi + 1;
     }
     runs.join(" | ")
 }
