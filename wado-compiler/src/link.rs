@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::tir::{
@@ -191,6 +191,8 @@ pub fn link(package: Package) -> FlatPackage {
         wasm_assets: package.wasm_assets,
         trait_env: package.trait_env,
         moved_local_spans: package.moved_local_spans,
+        #[cfg(debug_assertions)]
+        pruned: IndexSet::default(),
     }
 }
 

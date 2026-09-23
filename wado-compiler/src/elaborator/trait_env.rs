@@ -4,6 +4,7 @@
 //! It provides O(1) lookup of trait implementations by type name and trait name,
 //! replacing linear scans across all modules.
 
+use std::borrow::Borrow;
 use std::sync::Arc;
 
 use crate::ast::{self, Item, Module, Type};
@@ -407,6 +408,9 @@ pub(super) struct ImplMethodHeader {
     pub(super) has_receiver: bool,
     /// The member's declared rung; consulted only on an inherent impl.
     pub(super) visibility: ast::Visibility,
+    /// Whether the method is written with a body. On a trait declaration that
+    /// is what separates a default from a method every impl owes.
+    pub(super) has_body: bool,
 }
 
 /// Digest each method a `trait` or `impl` block declares. One producer, so the
@@ -427,6 +431,7 @@ fn method_headers(defs: &DefTable, methods: &[ast::Function]) -> Vec<ImplMethodH
                 .count(),
             has_receiver: m.params.iter().any(|p| p.self_kind != ast::SelfKind::None),
             visibility: m.visibility,
+            has_body: m.body.is_some(),
         })
         .collect()
 }
@@ -1816,15 +1821,6 @@ impl TraitEnv {
             .map(|def| ImplTargetKey::Decl(*def))
     }
 
-    /// The digested declaration an `impl` header's [`ImplHeader::trait_key`]
-    /// names, or `None` when the key names no trait declaration.
-    pub(super) fn trait_decl_header(&self, key: &ImplTargetKey) -> Option<&TraitDeclHeader> {
-        let ImplTargetKey::Decl(decl_key) = key else {
-            return None;
-        };
-        self.decl_header_of(decl_key)
-    }
-
     /// The digested declaration `key` identifies, or `None` when it names no
     /// trait.
     pub(super) fn decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {
@@ -1910,21 +1906,21 @@ impl TraitEnv {
     /// `<T as ThatTrait>::assoc_name`.
     // `resolve` says which declaration each bound names: only its reader knows
     // the scope it was written in.
-    pub(super) fn bound_declaring_assoc_type(
+    pub(super) fn bound_declaring_assoc_type<B: Borrow<ast::TraitBound>>(
         &self,
-        bounds: &[ast::TraitBound],
+        bounds: &[B],
         assoc_name: &str,
         resolve: impl Fn(&ast::TraitBound) -> Option<DefId>,
     ) -> Option<DefId> {
         bounds
             .iter()
-            .filter_map(&resolve)
+            .filter_map(|bound| resolve(bound.borrow()))
             .find(|decl| self.declares_assoc_type(decl, assoc_name))
             // Searched after every direct bound, so a trait redeclaring the
             // name still wins for itself.
             .or_else(|| {
                 bounds.iter().find_map(|bound| {
-                    self.supertrait_declaring_assoc_type(&resolve(bound)?, assoc_name)
+                    self.supertrait_declaring_assoc_type(&resolve(bound.borrow())?, assoc_name)
                 })
             })
     }

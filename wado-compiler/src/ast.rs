@@ -3794,6 +3794,26 @@ pub struct TraitBound {
     pub resolved: Option<DefId>,
 }
 
+impl TraitBound {
+    /// Whether the bound names a trait to check against. An `fn(…)` bound names
+    /// none: it is already realised in the bounded parameter's own type.
+    pub fn names_a_trait(&self) -> bool {
+        self.fn_signature.is_none()
+    }
+
+    /// Whether any type the bound writes is rooted at `Self`, so reading it
+    /// needs the frame that wrote it. Every position a bound writes a type in,
+    /// an `fn` bound's own signature included.
+    pub fn writes_self(&self) -> bool {
+        let in_signature = self.fn_signature.as_ref().is_some_and(|sig| {
+            sig.return_type.mentions("Self") || sig.params.iter().any(|ty| ty.mentions("Self"))
+        });
+        in_signature
+            || self.type_args.iter().any(|ty| ty.mentions("Self"))
+            || self.assoc_types.iter().any(|c| c.ty.mentions("Self"))
+    }
+}
+
 /// Generic type parameter declaration: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Builder<Output = T>>`
 /// Effect parameter declaration: `<effect E>` — represents a set of effects
 #[derive(Debug, Clone)]
@@ -3822,7 +3842,7 @@ impl GenericParam {
     pub fn real_bounds(&self) -> Vec<TraitBound> {
         self.bounds
             .iter()
-            .filter(|b| b.fn_signature.is_none())
+            .filter(|b| b.names_a_trait())
             .cloned()
             .collect()
     }
@@ -3837,7 +3857,7 @@ impl GenericParam {
     /// Such params are erased before codegen, so they occupy no positional
     /// monomorphization slot.
     pub fn has_fn_bound(&self) -> bool {
-        self.bounds.iter().any(|b| b.fn_signature.is_some())
+        self.bounds.iter().any(|b| !b.names_a_trait())
     }
 
     /// Whether this param occupies a dense, positional slot — the "real" type

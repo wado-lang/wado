@@ -304,6 +304,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A bound writing `Self` where no declaration binds one.
+    SelfInUnboundedBound {
+        param: String,
+        span: Span,
+    },
+
     /// Expanding a type parameter's `= Default` reaches the declaration it
     /// belongs to again, so filling the slot has no fixpoint.
     RecursiveTypeParamDefault {
@@ -905,6 +911,30 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl` leaves one of its trait's associated types unbound. None
+    /// declares a default, so the projection reaches codegen unsubstituted.
+    ImplMissingAssocType {
+        trait_name: String,
+        assoc_name: String,
+        span: Span,
+    },
+
+    /// An `impl` binds a name its trait does not declare — a typo for one it
+    /// does, which leaves the real associated type unbound.
+    ImplAssocTypeNotInTrait {
+        trait_name: String,
+        assoc_name: String,
+        span: Span,
+    },
+
+    /// An `impl` leaves a method its trait requires undefined. A trait method
+    /// written with a body is a default and is not required.
+    ImplMissingMethod {
+        trait_name: String,
+        method_name: String,
+        span: Span,
+    },
+
     /// `impl X for T` where `X` resolves to no trait, effect or resource in
     /// the impl's frame.
     UnknownTraitImpl {
@@ -1249,6 +1279,13 @@ impl TypeError {
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
+            TypeError::SelfInUnboundedBound { param, span } => (
+                Code::UnknownType,
+                format!(
+                    "`Self` in a bound on `{param}` names no implementing type here; write `{param}`"
+                ),
+                *span,
+            ),
             TypeError::RecursiveTypeParamDefault { name, span } => (
                 Code::UnknownType,
                 format!(
@@ -1986,6 +2023,33 @@ impl TypeError {
                         receiver(*expected)
                     )
                 },
+                *span,
+            ),
+            TypeError::ImplMissingAssocType {
+                trait_name,
+                assoc_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("impl of trait '{trait_name}' does not bind associated type '{assoc_name}'"),
+                *span,
+            ),
+            TypeError::ImplAssocTypeNotInTrait {
+                trait_name,
+                assoc_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("trait '{trait_name}' declares no associated type '{assoc_name}'"),
+                *span,
+            ),
+            TypeError::ImplMissingMethod {
+                trait_name,
+                method_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("impl of trait '{trait_name}' does not define method '{method_name}'"),
                 *span,
             ),
             TypeError::UnknownTraitImpl { name, span } => (
@@ -3147,9 +3211,8 @@ impl ParamSlot {
             .collect()
     }
 
-    /// An `impl` head's parameters as slots, which
-    /// [`ast::GenericParam::fills_impl_slot`] numbers by argument position
-    /// rather than by the dense space a data declaration uses.
+    /// An `impl` head's parameters as slots, [`Self::list`] minus the effect
+    /// parameters, which are no type. The target says where each one sits.
     pub(super) fn impl_list(params: &[ast::GenericParam]) -> Vec<Self> {
         params
             .iter()

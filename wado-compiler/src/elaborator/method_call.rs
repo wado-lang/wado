@@ -12,7 +12,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::{SigChoice, merge_turbofish_type_args, turbofish_leaves_slot};
+use super::call::{SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot};
 use super::callee::StaticMethodRef;
 use super::coercion::is_numeric_literal_arg;
 use super::expr::IndexAccess;
@@ -20,10 +20,12 @@ use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
+use super::scope::ScopedBound;
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
+use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
@@ -316,36 +318,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
         };
 
-        // Extract receiver type args for generic types (used for resolving associated types)
-        let type_args_source_id = {
-            let tt = self.tysys.type_table.borrow();
-            if matches!(tt.get(base_type_id), ResolvedType::Newtype { .. }) {
-                tt.representation_head(base_type_id)
-            } else {
-                base_type_id
-            }
-        };
-        let receiver_type_args_for_trait: Option<Vec<TypeId>> = match self
-            .tysys
-            .type_table
-            .borrow()
-            .get(type_args_source_id)
-            .clone()
-        {
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. }
-                if !type_args.is_empty() =>
-            {
-                Some(type_args)
-            }
-            // The raw GC array `Array<T>` carries its element as a single
-            // type arg, so a trait method's associated types (e.g.
-            // `IntoIterator::Iter` / `Item` for `impl IntoIterator for
-            // Array<T>`) resolve against `[elem]` just like a generic
-            // container's.
-            ResolvedType::BuiltinArray(elem) => Some(vec![elem]),
-            _ => None,
-        };
+        let receiver_type_args_for_trait = self.tysys.impl_position_args(base_type_id);
 
         let mut method_info: Option<MethodInfo> = None;
         let mut trait_name: Option<FqTraitName> = None;
@@ -532,23 +505,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // would collapse them back into one.
                     let mut resolved: hashmap::IndexMap<AstId, FqTraitName> =
                         hashmap::IndexMap::default();
-                    let bounds: Vec<ast::TraitBound> = named
+                    // Each carries no written argument, so no frame answers for
+                    // one: `None` is the whole truth here, not a default.
+                    let bounds: Vec<ScopedBound> = named
                         .iter()
                         .map(|b| {
                             let id = AstId::fresh();
                             resolved.insert(id, b.clone());
-                            ast::TraitBound {
-                                id,
-                                name: b.base_name().to_string(),
-                                type_args: Vec::new(),
-                                assoc_types: Vec::new(),
-                                span,
-                                fn_signature: None,
-                                // The referent this bound was rebuilt from.
-                                // Recorded on the bound, so nothing has to
-                                // resolve `name` at an id the walk never saw.
-                                resolved: b.canonical(),
-                            }
+                            ScopedBound::new(
+                                ast::TraitBound {
+                                    id,
+                                    name: b.base_name().to_string(),
+                                    type_args: Vec::new(),
+                                    assoc_types: Vec::new(),
+                                    span,
+                                    fn_signature: None,
+                                    // Recorded on the bound, so nothing has to
+                                    // resolve `name` at an id the walk never saw.
+                                    resolved: b.canonical(),
+                                },
+                                None,
+                            )
                         })
                         .collect();
                     self.find_method_in_trait_bounds_with(
@@ -729,6 +706,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name: method_name,
                 span,
                 type_args: &type_args,
+                self_binding: Some(SelfBinding {
+                    type_id: self.tysys.get_base_type(receiver),
+                    declaring_trait: trait_name.as_ref().and_then(FqTraitName::canonical),
+                }),
             },
         );
 
@@ -775,13 +756,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // argument reached it, which makes it the solve's failure.
             let reached = self.packs_args_reach(&expected_param_types, args.len());
             self.settle_unreached_packs(&method_own_params, &mut known, &reached);
-            default_type_bindings.extend(self.value_default_slot_bindings(
+            let own = self.value_default_slot_bindings(
                 &method_own_params,
                 &method_type_param_ids,
                 base_type_id,
+                trait_name.as_ref().and_then(FqTraitName::canonical),
                 known,
                 defaults_module.clone(),
-            ));
+            );
+            bind_nearer(&mut default_type_bindings, own);
         }
         self.fill_trailing_defaults(
             &mut args,
@@ -1767,6 +1750,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut arg_spans: Vec<Span> = static_call.args.iter().map(Expr::span).collect();
 
         let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
+        let declaring_trait = callee_sig
+            .as_ref()
+            .and_then(|sig| self.tysys.signatures.declaring_trait(sig));
         let own_type_param_ids = callee_sig
             .as_ref()
             .map(MethodSig::own_type_param_ids)
@@ -1875,21 +1861,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // last source is the one the block above cannot reach: it runs only
         // where the declaring block has slots of its own, and a block with none
         // leaves the method's unbound rather than wrong.
-        if static_method_defaults.iter().any(|(_, d)| d.is_some()) {
-            static_type_bindings.extend(self.value_default_slot_bindings(
+        let own = if static_method_defaults.iter().any(|(_, d)| d.is_some()) {
+            self.value_default_slot_bindings(
                 &own_params,
                 &own_type_param_ids,
                 target_type_id,
+                declaring_trait,
                 method_type_args.clone(),
                 static_method_module.clone(),
-            ));
+            )
         } else {
-            static_type_bindings.extend(slot_type_bindings(
+            slot_type_bindings(
                 &self.tysys.type_table,
                 &own_type_param_ids,
                 &method_type_args,
-            ));
-        }
+            )
+        };
+        bind_nearer(&mut static_type_bindings, own);
         self.fill_trailing_defaults(
             &mut args,
             &param_types,
@@ -3292,28 +3280,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> StaticArgSurvey {
         let mut survey = StaticArgSurvey::default();
         for impl_def in self.trait_impls_for_receiver(recv.name, recv.key) {
+            let Some(trait_decl) = self.tysys.signatures.impl_trait(impl_def) else {
+                continue;
+            };
             // A qualified spelling names a trait, so another trait's impl is
-            // not a candidate to weigh against — the same rule the resolution
+            // not a candidate to weigh against: the same rule the resolution
             // applies, asked where the arguments are surveyed.
-            if let Some(required) = recv.required_trait
-                && self
-                    .tysys
-                    .signatures
-                    .impl_sig(impl_def)
-                    .and_then(|sig| sig.trait_decl)
-                    != Some(required)
+            if recv
+                .required_trait
+                .is_some_and(|required| required != trait_decl)
             {
                 continue;
             }
             let header = &self.tysys.trait_env.impl_headers[&impl_def];
-            let Some(trait_decl) = self
-                .tysys
-                .signatures
-                .impl_sig(impl_def)
-                .and_then(|sig| sig.trait_decl)
-            else {
-                continue;
-            };
             // The same walk the rules read, so a body the block inherits is a
             // candidate here too.
             let Some(offer) =
@@ -3741,11 +3720,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(sig) => {
                 let own_ids = sig.own_type_param_ids();
                 let own_params = sig.own_params.clone();
+                let declaring_trait = self.tysys.signatures.declaring_trait(sig);
                 let receiver = self.resolve_unsited_type_name(&actual_struct_name, span);
                 self.value_default_slot_bindings(
                     &own_params,
                     &own_ids,
                     receiver,
+                    declaring_trait,
                     method_type_args.to_vec(),
                     callee_params.defaults_module.clone(),
                 )

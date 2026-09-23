@@ -1,13 +1,6 @@
-#![TODO]
-
-// `Self` in a bound on `T` should name `T` wherever in the bound it stands. It
-// does as an associated-type constraint (assoc_type_constraint_fn_over_self.wado)
-// and does not as a trait argument, where this reports `unknown type
-// 'Self::Item'`. Module-level because the file does not compile yet.
-//
-// The same position spelled `Uses<T::Item>` overflows the stack, so that case
-// has no fixture: the abort takes the whole runner down rather than failing one
-// test.
+// `Self` in a bound names the implementing type, and a free function binds
+// none. The parameter the bound is on is the name to write, so `Self::Item`
+// here is rejected rather than resolved to what `T::Item` already says.
 
 trait Src with () {
     type Item;
@@ -35,9 +28,9 @@ fn drive<T: Src + Uses<Self::Item>>(t: &T, a: T::Item) -> i32 {
     return t.go(a);
 }
 
-test "Self in a bound's trait argument names the bounded type" {
+test "Self in a free function's bound is rejected" {
     assert drive(&Holder { n: 1 }, 2) == 3;
 }
 
 __DATA__
-{"test": {}}
+{"test": {}, "compile_error": "names no implementing type here"}

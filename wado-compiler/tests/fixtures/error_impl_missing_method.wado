@@ -1,0 +1,36 @@
+// An impl that leaves a required trait method undefined was accepted, and the
+// call resolved to nothing. A trait method with a body declares a default, so
+// only a bodyless one is required.
+
+trait Carry with () {
+    type Load;
+
+    fn make() -> Self::Load;
+
+    fn other() -> i32;
+
+    fn counted() -> i32 {
+        return 0;
+    }
+}
+
+struct Crate {
+}
+
+impl Carry for Crate {
+    type Load = i32;
+
+    fn make() -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    let _ = Crate::make();
+}
+
+__DATA__
+{
+    "compile_error": "impl of trait 'Carry' does not define method 'other'",
+    "compile_error_codes": ["TRAIT_DECL_INVALID"]
+}

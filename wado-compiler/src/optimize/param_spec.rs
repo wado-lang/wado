@@ -16,7 +16,7 @@ use crate::nir_value_graph::ValueKind;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::dae::is_dae_sroa_eligible;
-use super::dce::reachable_function_positions;
+use super::dce::{DescriptorCache, reachable_function_positions};
 use super::extract::is_place_read;
 use super::gate::FunctionGate;
 use super::inline::find_recursive_functions;
@@ -961,8 +961,9 @@ pub(super) fn specialize_const_params(
     project: &mut NirPackage,
     state: &mut ParamSpecState,
     gate: &mut FunctionGate,
+    descriptors: &mut DescriptorCache,
 ) -> bool {
-    let constants = collect_call_constants(project, state);
+    let constants = collect_call_constants(project, state, descriptors);
     let propagated = propagate_scalar_constants(project, state, &constants, gate);
     let signatures = {
         let types = project.type_table.borrow();
@@ -990,14 +991,18 @@ pub(super) fn specialize_const_params(
 /// at — which is what tells `select_sites` a clone is the only way to reach it.
 type CallConsts = IndexMap<FuncId, Vec<Option<FieldConst>>>;
 
-fn collect_call_constants(project: &mut NirPackage, state: &ParamSpecState) -> CallConsts {
+fn collect_call_constants(
+    project: &mut NirPackage,
+    state: &ParamSpecState,
+    descriptors: &mut DescriptorCache,
+) -> CallConsts {
     let cached: Vec<_> = state
         .clones
         .values()
         .chain(project.sroa_param_clones.iter())
         .copied()
         .collect();
-    let reachable = reachable_function_positions(project, cached);
+    let reachable = reachable_function_positions(project, descriptors, cached);
     let mut constants: CallConsts = IndexMap::default();
     let mut collect = |body: &Body| {
         body.for_each_reachable_node(|node| {

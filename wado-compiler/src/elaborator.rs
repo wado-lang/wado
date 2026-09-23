@@ -51,9 +51,11 @@ use crate::ast::{self, AstId, Block, Expr, IdentExpr, ImplBlock, Item, Module, V
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::item::OperationOwner;
+use crate::elaborator::method_lookup::ImplParamSlots;
 use crate::elaborator::reify::default_impl_methods;
 use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
+use crate::elaborator::trait_query::SelfBinding;
 use crate::elaborator::types::FunctionContext;
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
@@ -196,38 +198,39 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     /// against. The decl pass and the body walk share it, so both see one
     /// numbering.
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
-        // `fills_impl_slot` is the numbering the associated-type registration
-        // reads back (`ParamSlot::impl_list`); the two drifting apart gives one
-        // parameter two indices.
-        let mut slot = 0;
+        let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
         for param in &impl_block.type_params {
-            if param.fills_impl_slot() {
-                if !self
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .contains_key(&param.name)
-                {
-                    let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
-                        param.name.clone(),
-                        slot,
-                        param.is_pack,
-                    );
-                    self.annotate_ctx.trait_ctx.type_params.insert(
-                        param.name.clone(),
-                        scope::BinderInScope::declared(slot, type_id, param.id),
-                    );
-                }
-                slot += 1;
+            let Some(slot) = slots.of_name(&param.name) else {
+                continue;
+            };
+            // A name the enclosing frame already numbered keeps that number;
+            // renumbering it here would give one parameter two indices.
+            if self
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .contains_key(&param.name)
+            {
+                continue;
             }
-            if !param.bounds.is_empty() {
-                self.annotate_ctx
-                    .trait_ctx
-                    .type_param_bounds
-                    .entry(param.name.clone())
-                    .or_default()
-                    .extend(param.bounds.clone());
-            }
+            let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
+                param.name.clone(),
+                slot,
+                param.is_pack,
+            );
+            self.bind_param(
+                &param.name,
+                scope::BinderInScope::declared(slot, type_id, param.id),
+                Vec::new(),
+            );
+        }
+        // Between the names and their bounds: the target is resolved from the
+        // names, and a bound's `Self::Assoc` projects off the target.
+        let implementing = self.impl_self_binding(&impl_block.ty, impl_block.trait_type.as_ref());
+        self.set_self_binding(implementing);
+        for param in &impl_block.type_params {
+            let bounds = self.scoped_bounds(param);
+            self.add_param_bounds(&param.name, bounds);
         }
     }
 }
@@ -2261,7 +2264,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         trait_name: Option<&FqTraitName>,
     ) {
         let target_type_id = self.resolve_type(&impl_block.ty);
-        self.annotate_ctx.trait_ctx.self_type = Some(target_type_id);
+        let declaring_trait = trait_name.and_then(|fq| self.tysys.trait_env.trait_def_of_fq(fq));
+        self.set_self_binding(SelfBinding {
+            type_id: target_type_id,
+            declaring_trait,
+        });
         let is_concrete = !self
             .tysys
             .type_table

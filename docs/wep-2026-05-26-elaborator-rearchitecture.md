@@ -534,6 +534,48 @@ historically, so dropping a dead function silently suppressed its error.
 monomorph clones, synthesised CM bindings, effect-dispatch helpers — that
 never passes through `Semantics`; it retires only from diagnostic emission.
 
+### The prune before `lower`
+
+`liveness` answers source-level reachability. `prelower_reach` asks the same
+question again over the monomorphized TIR, which holds a different population.
+It walks from the roots and drops every function no root reaches, so `lower`
+never translates it and `optimize` never walks it. Compiling the Gale generator
+at `-O1`, that is 11825 of 23267 functions: `lower` falls from 3.76s to 2.89s
+and `optimize` from 19.75s to 18.27s.
+
+A root is a CM export, a `.wasm` asset's export, a compiler item, a per-type
+bridge, a global initializer, or an impl of `Eq`, `Ord` or `ReflectVariant`.
+Those three traits are the ones `lower` dispatches to from a node that names no
+callee: a match pattern, a wide-int literal comparison, a `builtin::variant_tag`
+marker. Every other call `lower` writes is spelled through a `CompilerItem`,
+which is a root already.
+
+An impl is matched by the trait's declaration identity, not by its spelling,
+because an impl writes the trait with its own type arguments — `StrSlice`
+implements `Eq<String>`, which no spelling of `Eq` matches.
+
+The root set has to be this narrow to be worth anything. Rooting every impl of
+every compiler-item trait leaves 693 functions pruned instead of 11825, because
+`Inspect` alone is derived for every type and reaches 8837 of them.
+
+Enumerating the minters is not a fix for the class, since the next one added
+breaks it again. The net goes in `Interner::resolve`, where every minted call
+lands: a debug build asserts there that it never stubs a name the prune dropped, and
+the panic names the callee and what `is_root` owes it. A new minter then fails
+in CI on the first fixture that exercises it, rather than surfacing as an
+unresolved call at WIR build. `WADO_NO_PRELOWER_PRUNE` holds the prune back, so
+a missing root is a flag to flip rather than a compiler to rebuild.
+
+The two checks answer different questions and both are needed.
+`WADO_TRACE=prelower_reach` reports per compile how much of the TIR the walk
+reached, which is how to size a root set. Comparing the output bytes of every
+fixture compiled both ways is the correctness check: 1996 are byte-identical,
+none differ, and none fail in one arm alone. Around 840 fail to compile under
+`--world test` either way, so compare the arms rather than count failures. A
+larger program can still differ in the serial of a `$Closure_N` name. `lower`
+hands those out in translation order, so a smaller population renumbers them;
+the code around them is the same.
+
 ### Naming
 
 `elaborate` survives as the umbrella term and physical directory name;
@@ -722,8 +764,9 @@ extern stub instead. `CompilerItem` records some of these and nothing records
 the rest.
 
 Finishing it means that list, one entry per entity named after `liveness` runs,
-with the pass that names it stating its trigger. Read the item below first: it
-tried that on the `lower` side, and says what the list does not settle.
+with the pass that names it stating its trigger. "The prune before `lower`"
+above answers the same question on the `lower` side, and says what a list alone
+does not settle.
 
 Two things bound the work. The rest of the closure is held by real edges from
 the format and parse impls that `CompilerItem::dispatched_by_synthesis` roots,
@@ -736,63 +779,6 @@ defect until it compares identities.
 from its exports and global initializers. Count them with `grep '^fn '` over
 `wado dump` and it reads 196 instead, because the dump writes `pub fn` for most
 of them.
-
-### A prune before `lower` is guessing
-
-A program's bodies are what `lower` translates and `optimize` then walks. A
-trivial program carries 1213 of them to reach 23, so dropping the unreachable
-ones before `lower` is worth having. Measured over 450 fixtures, with the arms
-interleaved and each taken at its best of two:
-
-| Measurement     | Base    | Pruned  | Change |
-| --------------- | ------- | ------- | ------ |
-| 450 fixtures    | 175.94s | 155.14s | −11.8% |
-| `lower` span    | 0.070s  | 0.039s  | −44%   |
-| `optimize` span | 0.694s  | 0.612s  | −12%   |
-
-Precision in the root set is not where that time is. Rooting strictly rather
-than over-approximating prunes 1950 of the 1973 instead of 1251, and gains
-0.02s.
-
-`prelower_reach` implements the prune behind `WADO_PRELOWER_PRUNE`, off by
-default because it is unsound. `lower` names callees from nodes that are not
-calls, and a reachability walk over TIR expressions cannot see them:
-
-- a match pattern mints `T^Eq::eq` (`lower/translate/pattern.rs`)
-- a wide-int literal mints `Eq::eq` and the `I128From*` constructors
-  (`lower/wide_int_literal.rs`)
-- a `builtin::variant_tag` marker mints `V^ReflectVariant::discriminant`
-  (`lower/translate.rs`), a method on the user's own type, so it carries neither
-  a compiler-item tag nor a `$` prefix
-- a synthesized closure-functor body mints `Formatter::write_str`
-  (`lower/plan/closure.rs`), inside `LowerPlan` and so before translation
-
-Compiling every fixture with and without the flag and comparing the output bytes
-found all four: 1765 fixtures are byte-identical, 1 differs, and 43 fail. The
-audit finds none of them, because it reports only functions that survive
-`optimize`, and a prune that drops a minter's target panics in `wir_build` long
-before. A clean audit is not a clean bill.
-
-Enumerating the four is not a fix for the class, since the next minter added
-breaks it again. Every one of them lands in `Interner::resolve`, which mints
-each call's id whatever node produced it, so that is where a sound prune has to
-be answered. Two ways to answer it there:
-
-- Lower on demand: pruned functions go to a side table, `resolve` revives on a
-  miss, and a worklist runs to fixpoint. No minter list exists, so none can be
-  incomplete. `LowerPlan` is the obstacle. It is computed whole-program before
-  translation, so a revived function has no plan data.
-- Complete the roots, and have `resolve` assert in debug builds that it never
-  stubs a name the prune dropped. The roots stay enumerated, but a new minter
-  then fails in CI on the first fixture that exercises it.
-
-Either way, two checks answer different questions and both are needed.
-`WADO_TRACE=prelower_reach` reports per compile how much of the TIR the walk
-reached, and which survivors it did not, which is how to size a root set. The
-corpus comparison above is the correctness check: a fixture that fails only
-under `WADO_PRELOWER_PRUNE` names a minting site, and one whose bytes differ
-names a subtler one. Around 680 fixtures fail to compile under `--world test`
-either way, so compare the arms rather than count failures.
 
 ### A call to an operation with nothing to reach panics at WIR
 

@@ -1,0 +1,46 @@
+// `TryFrom::Err: Error` is what lets generic code state why a conversion
+// failed: through the bound there is no impl to read, only `Display`.
+use { println } from "core:cli";
+
+struct TooBig {
+    limit: i32,
+}
+
+impl Display for TooBig {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`over ${self.limit}`);
+    }
+}
+
+impl Error for TooBig {
+}
+
+struct Small {
+    n: i32,
+}
+
+impl TryFrom<i32> for Small {
+    type Err = TooBig;
+
+    fn try_from(value: i32) -> Result<Small, TooBig> {
+        if value > 10 {
+            return Result::Err(TooBig { limit: 10 });
+        }
+        return Result::Ok(Small { n: value });
+    }
+}
+
+fn reason<T: TryFrom<i32>>(value: i32) -> String {
+    return match T::try_from(value) {
+        Ok(_) => "converted",
+        Err(e) => `${e}`,
+    };
+}
+
+export fn run() with Stdout {
+    println(reason::<Small>(4));
+    println(reason::<Small>(40));
+}
+
+__DATA__
+{"stdout": "converted\nover 10\n"}

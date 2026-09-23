@@ -143,7 +143,7 @@ struct EvenNumber {
 }
 
 impl TryFrom<i32> for EvenNumber {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     fn try_from(value: i32) -> Result<EvenNumber, ConvertError> {
         if value % 2 != 0 {
@@ -301,7 +301,7 @@ enum Direction {
 }
 
 impl TryFrom<i32> for Direction {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     fn try_from(value: i32) -> Result<Direction, ConvertError> {
         return match value {
@@ -358,7 +358,7 @@ impl From<AccessFlags> for u32 {
 }
 
 impl TryFrom<u32> for AccessFlags {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     fn try_from(value: u32) -> Result<AccessFlags, ConvertError> {
         if value > 7 as u32 {

@@ -10,6 +10,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
+use super::trait_query::SelfBinding;
 use super::types::FunctionContext;
 use crate::ast::{self, GenericParam};
 
@@ -25,6 +26,9 @@ pub(super) struct Instantiation<'a> {
     /// What the use site's turbofish names, in slot order: [`TypeTable::UNKNOWN`]
     /// where it wrote `_` or stopped short, empty where it wrote none.
     pub(super) type_args: &'a [TypeId],
+    /// The receiver a bound's `Self::Assoc` projects off, where the site has
+    /// one. A free function has none, and `Self` names nothing there.
+    pub(super) self_binding: Option<SelfBinding>,
 }
 
 /// A declaration's slots rewritten into one use site's variables.
@@ -151,7 +155,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.resolve_args_against_params(args_ast, ctx, param_types, None);
         }
         let inst = self.instantiate(slots, of);
-        self.record_slot_bounds(&inst, own_params, of.span);
+        self.record_slot_bounds(&inst, own_params, of.self_binding, of.span);
         let param_types = self.instantiate_types(param_types, &inst);
         let mut args = self.resolve_args_against_params(args_ast, ctx, &param_types, Some(&inst));
         self.settle_onto_slots(&inst, slots, &mut args);
@@ -186,6 +190,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         inst: &Instantiated,
         params: &[GenericParam],
+        self_binding: Option<SelfBinding>,
         span: Span,
     ) {
         for ((&var, param), diag) in inst.vars.iter().zip(params.iter()).zip(inst.diags.iter()) {
@@ -195,7 +200,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if diag.is_none() {
                 continue;
             }
-            let bounds = self.declared_bounds(param);
+            let bounds = self.declared_bounds(param, self_binding);
             self.attach_infer_var_bounds(var, param.name.clone(), bounds, span);
         }
     }
