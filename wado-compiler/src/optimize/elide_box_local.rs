@@ -16,11 +16,8 @@ use crate::nir_arena::PatId;
 use crate::nir_value_graph::ValueKind;
 use crate::optimize::arena_query::expr_node_may_trap;
 
-/// Adjacent-use single-field struct local elimination, as a rule on the unified
-/// post-inline peephole session. `build_elide_box_local` computes the
-/// whole-function read/def `stats` and the escape-safety `blacklist` once per
-/// function; a rewrite can only remove a read, so a stale entry only ever
-/// refuses a valid elision. Each `apply_block` performs at most one.
+/// Adjacent-use single-field struct local elimination on the post-inline
+/// peephole session, at most one per `apply_block`.
 pub(super) struct ElideBoxLocalRule {
     stats: IndexMap<u32, LocalStats>,
     blacklist: IndexSet<u32>,
@@ -149,6 +146,16 @@ struct LocalStats {
     /// Number of `Let { local_index } | LetDestructure-binding |
     /// Assign target Local`.
     defs: u32,
+}
+
+impl LocalStats {
+    /// Defined once and read once, through one field.
+    fn read_once(&self) -> bool {
+        self.defs == 1
+            && self.fieldaccess_reads == 1
+            && self.total_reads == 1
+            && self.field_names.len() == 1
+    }
 }
 
 fn collect_local_stats(body: &Body) -> IndexMap<u32, LocalStats> {
@@ -290,11 +297,7 @@ fn describe_candidate(
     if blacklist.contains(&local_index) {
         return None;
     }
-    let s = stats.get(&local_index)?;
-    if s.defs != 1 || s.fieldaccess_reads != 1 || s.total_reads != 1 {
-        return None;
-    }
-    if s.field_names.len() != 1 {
+    if !stats.get(&local_index).is_some_and(LocalStats::read_once) {
         return None;
     }
     let ExprKind::StructLiteral { fields, .. } = &body.exprs[value.as_expr()?].kind else {
@@ -303,6 +306,10 @@ fn describe_candidate(
     if fields.len() != 1 {
         return None;
     }
+    // The pristine `stats` only prefilter: `ref_elim` substitutes a referent at
+    // each use of its alias, so a read can appear after the snapshot.
+    let live = collect_local_stats(body);
+    let s = live.get(&local_index).filter(|s| s.read_once())?;
     let inner_value = fields[0].value;
     let field_name = s.field_names.iter().next().unwrap().clone();
     // A promoted-constant inner mods / refs nothing.
