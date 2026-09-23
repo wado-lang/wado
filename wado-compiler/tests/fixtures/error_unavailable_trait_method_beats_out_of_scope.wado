@@ -1,0 +1,15 @@
+// A method whose trait is not imported answers no call here, so the reserved
+// name that is imported does.
+
+use { Old, Y } from "./sub/unavailable_trait_method_scope_lib.wado";
+
+export fn run() {
+    let y = Y { v: 0 };
+    y.foo();
+}
+
+__DATA__
+{
+    "compile_error": "`Old::foo` is unavailable: use `New`",
+    "compile_errors_not_contains": ["is not imported here"]
+}

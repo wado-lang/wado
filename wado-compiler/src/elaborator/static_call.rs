@@ -202,7 +202,7 @@ struct Candidate {
 
 /// Narrow to the candidates the rule prefers, where any of them qualifies.
 /// A rule that no candidate satisfies decides nothing and leaves the field.
-pub(super) fn prefer<C>(candidates: &mut Vec<C>, preferred: impl Fn(&C) -> bool) {
+fn prefer<C>(candidates: &mut Vec<C>, preferred: impl Fn(&C) -> bool) {
     if candidates.iter().any(&preferred) {
         candidates.retain(&preferred);
     }
@@ -569,10 +569,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The rules, applied once to every candidate whatever rung produced it.
     /// Their order is the design, not an implementation detail.
     fn select_candidate(&self, mut candidates: Vec<Candidate>, arg_types: &[TypeId]) -> Selection {
-        // A reserved name answers only where no method does.
-        prefer(&mut candidates, |c| {
-            !self.tysys.unavailable.contains_key(&c.method_id)
-        });
         // The receiver's own declaration shadows an inherited one of the same
         // kind: a receiver-less declaration beside an instance one is no
         // alternative, since different argument lists reach them.
@@ -585,6 +581,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A receiver-less declaration answers before a receiver-taking one, so
         // `Type::method(x)` is a static's call before it is a UFCS receiver.
         prefer(&mut candidates, |c| c.kind == CandidateKind::Static);
+        // A reserved name answers only where no method of its kind does, so
+        // this runs once the kinds are settled.
+        prefer(&mut candidates, |c| {
+            !self.tysys.unavailable.contains_key(&c.method_id)
+        });
         // A block naming the receiver answers before a blanket covering it
         // through a bound, so a blanket is no alternative to report against.
         // Before the ambiguity rule, or the trait a blanket names would be

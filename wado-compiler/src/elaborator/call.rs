@@ -3908,6 +3908,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 return TypeTable::ERROR;
             }
+            let receiver = usize::from(method_info_result.self_kind != ast::SelfKind::None);
+            let expected = receiver + method_info_result.param_types.len();
+            let omitted_have_defaults = args
+                .len()
+                .checked_sub(receiver)
+                .and_then(|given| method_info_result.param_defaults.get(given..))
+                .is_some_and(|omitted| omitted.iter().all(Option::is_some));
+            if args.len() > expected || !omitted_have_defaults {
+                let _ = self.emit(TypeError::ArgumentCountMismatch {
+                    expected,
+                    found: args.len(),
+                    span: call.span,
+                });
+                return TypeTable::ERROR;
+            }
             let return_type = method_info_result.return_type;
 
             // Resolve method-level type args (e.g., T::deserialize::<JsonDeserializer>)

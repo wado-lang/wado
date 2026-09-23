@@ -1,0 +1,38 @@
+// A reserved static name and another trait's instance method of the same name
+// are different names, so `X::make()` reaches the reservation. Through a bound
+// the call cannot tell the kinds apart, so neither is preferred.
+
+trait Old with () {
+    #[unavailable("use `X { v }`")]
+    fn make();
+}
+
+trait New with () {
+    fn make(&self) -> i32 {
+        return 1;
+    }
+}
+
+struct X {
+    v: i32,
+}
+
+impl Old for X {}
+
+impl New for X {}
+
+fn via<T: Old + New>() {
+    T::make();
+}
+
+export fn run() {
+    X::make();
+    via::<X>();
+}
+
+__DATA__
+{
+    "compile_error": ":25:5: analysis error: ambiguous method 'make': declared by 'Old' and 'New'",
+    "compile_errors_contains": ["`Old::make` is unavailable: use `X { v }`"],
+    "compile_errors_not_contains": ["arguments, found"]
+}

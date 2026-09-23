@@ -21,7 +21,6 @@ use super::scope::{
     trait_params_from_impl,
 };
 use super::sig::Param;
-use super::static_call::prefer;
 use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
 use super::types::{
@@ -2549,9 +2548,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let mut candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, args);
-        prefer(&mut candidates, |c| {
-            self.trait_method_header_of(&c.decl, method_name)
-                .is_some_and(|m| !m.is_reserved)
+        // A reserved name answers only where no method of its kind does.
+        let header = |c: &BoundCandidate| self.trait_method_header_of(&c.decl, method_name);
+        let answers = |receiver: bool| {
+            candidates
+                .iter()
+                .any(|c| header(c).is_some_and(|m| !m.is_reserved && m.has_receiver == receiver))
+        };
+        let answered = [answers(false), answers(true)];
+        candidates.retain(|c| {
+            header(c).is_none_or(|m| !m.is_reserved || !answered[usize::from(m.has_receiver)])
         });
         let resolved = candidates.first().and_then(|candidate| {
             self.trait_method_of(&candidate.decl, method_name)

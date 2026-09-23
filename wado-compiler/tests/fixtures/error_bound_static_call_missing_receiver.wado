@@ -1,0 +1,27 @@
+// `T::name(...)` through a bound is counted against the receiver the method
+// takes, as the same call on a concrete type is.
+
+trait New with () {
+    fn make(&self) -> i32 {
+        return 1;
+    }
+}
+
+struct X {
+    v: i32,
+}
+
+impl New for X {}
+
+fn via<T: New>() -> i32 {
+    return T::make();
+}
+
+export fn run() {
+    assert via::<X>() == 1;
+}
+
+__DATA__
+{
+    "compile_error": ":17:12: analysis error: expected 1 arguments, found 0"
+}

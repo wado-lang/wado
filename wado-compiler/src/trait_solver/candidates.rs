@@ -36,12 +36,18 @@ pub fn candidates(
     let answered = collect(program, env, receiver, scope, in_scope, |decl, own| {
         decl.is_some_and(|d| d.methods.contains(&method)) || own.contains(&method)
     });
-    if !answered.in_scope.is_empty() || !answered.out_of_scope.is_empty() {
+    if !answered.in_scope.is_empty() {
         return answered;
     }
-    collect(program, env, receiver, scope, in_scope, |decl, _| {
+    // A method the call site cannot name answers nothing, so an imported
+    // reservation speaks before the "not imported" hint does.
+    let reserved = collect(program, env, receiver, scope, in_scope, |decl, _| {
         decl.is_some_and(|d| d.reserved.contains(&method))
-    })
+    });
+    if !reserved.in_scope.is_empty() || answered.out_of_scope.is_empty() {
+        return reserved;
+    }
+    answered
 }
 
 /// The impls whose trait or own body `declares` the method.
