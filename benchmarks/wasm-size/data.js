@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790165539765,
+  "lastUpdate": 1790166766686,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58885,6 +58885,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6fc03307fe9148c84854831f0dfa0c1a938eed05"
         },
         "date": 1790165538859,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19245,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 290706,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "375eb07581c150c668e60e68a7bb8a11bcd676e9",
+          "message": "Merge pull request #2136 from wado-lang/claude/wado-issue-2048-js510y\n\nfix(elaborator): diagnose a scalar `as` cast into a struct, list or variant instead of crashing",
+          "timestamp": "2026-09-23T20:57:52+09:00",
+          "tree_id": "f5df58c428ee2ec6cbc6e0115b1b5c9061018eac",
+          "url": "https://github.com/wado-lang/wado/commit/375eb07581c150c668e60e68a7bb8a11bcd676e9"
+        },
+        "date": 1790166766233,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
