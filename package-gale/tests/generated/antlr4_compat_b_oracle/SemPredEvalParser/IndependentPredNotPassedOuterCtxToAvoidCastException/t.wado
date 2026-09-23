@@ -1357,13 +1357,6 @@ impl Parser {
     }
 }
 
-fn scan_b(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_s__inner_alt_0(p: &mut Parser) -> () {
     _parse_b(p);
     p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
@@ -1372,8 +1365,8 @@ fn _parse_s__inner_alt_0(p: &mut Parser) -> () {
 
 fn _parse_s__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_b(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
     pos += 1;
     return pos;
@@ -1387,8 +1380,8 @@ fn _parse_s__inner_alt_1(p: &mut Parser) -> () {
 
 fn _parse_s__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_b(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
     return pos;

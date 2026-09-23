@@ -2976,7 +2976,7 @@ fn scan_alter_table_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
         let sp = pos;
         sg_7_done: {
             sg_7: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_7; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_7; }
                 pos += 1;
@@ -2986,7 +2986,7 @@ fn scan_alter_table_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     let gp_8 = pos;
     sg_8_done: {
@@ -2996,7 +2996,7 @@ fn scan_alter_table_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_K_TO { break sg_8_0; }
                 pos += 1;
-                pos = scan_new_table_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_8_0; }
                 break sg_8_done;
             }
@@ -3028,23 +3028,23 @@ fn scan_analyze_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if _kind_set_4(sgk_9) {
             pos = gp_9;
             sg_9_0: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_9_0; }
                 if pos > sg_9_best { sg_9_best = pos; }
             }
             pos = gp_9;
             sg_9_1: {
-                pos = scan_table_or_index_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_9_1; }
                 if pos > sg_9_best { sg_9_best = pos; }
             }
             pos = gp_9;
             sg_9_2: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_9_2; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_9_2; }
                 pos += 1;
-                pos = scan_table_or_index_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_9_2; }
                 if pos > sg_9_best { sg_9_best = pos; }
             }
@@ -3070,7 +3070,7 @@ fn scan_attach_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_K_AS { return -1; }
     pos += 1;
-    pos = scan_database_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -3089,7 +3089,7 @@ fn scan_begin_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let sol_11_save = pos;
             sol_11: {
                 pos += 1;
-                pos = scan_transaction_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sol_11; }
                 break osl_10_done;
             }
@@ -3112,7 +3112,7 @@ fn scan_commit_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let sol_14_save = pos;
             sol_14: {
                 pos += 1;
-                pos = scan_transaction_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sol_14; }
                 break osl_13_done;
             }
@@ -3278,7 +3278,7 @@ fn scan_create_index_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         let sp = pos;
         sg_26_done: {
             sg_26: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_26; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_26; }
                 pos += 1;
@@ -3288,11 +3288,11 @@ fn scan_create_index_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_index_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_K_ON { return -1; }
     pos += 1;
-    pos = scan_table_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { return -1; }
     pos += 1;
@@ -3360,7 +3360,7 @@ fn scan_create_table_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         let sp = pos;
         sg_30_done: {
             sg_30: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_30; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_30; }
                 pos += 1;
@@ -3370,7 +3370,7 @@ fn scan_create_table_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     let gp_31 = pos;
     sg_31_done: {
@@ -3468,7 +3468,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
         let sp = pos;
         sg_36_done: {
             sg_36: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_36; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_36; }
                 pos += 1;
@@ -3478,7 +3478,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_trigger_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_10(tokens[pos]) {
         let sp = pos;
@@ -3518,14 +3518,14 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
                 sg_39_done: {
                     sg_39: {
                         pos += 1;
-                        pos = scan_column_name(tokens, pos);
+                        pos = scan_any_name(tokens, pos);
                         if pos < 0 { break sg_39; }
                         while pos < tokens.len() && tokens[pos] == TK_COMMA {
                             let sp = pos;
                             sg_40_done: {
                                 sg_40: {
                                     pos += 1;
-                                    pos = scan_column_name(tokens, pos);
+                                    pos = scan_any_name(tokens, pos);
                                     if pos < 0 { break sg_40; }
                                     break sg_40_done;
                                 }
@@ -3550,7 +3550,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
         let sp = pos;
         sg_41_done: {
             sg_41: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_41; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_41; }
                 pos += 1;
@@ -3560,7 +3560,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_K_FOR {
         let sp = pos;
@@ -3716,7 +3716,7 @@ fn scan_create_view_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
         let sp = pos;
         sg_49_done: {
             sg_49: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_49; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_49; }
                 pos += 1;
@@ -3726,7 +3726,7 @@ fn scan_create_view_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_view_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_K_AS { return -1; }
     pos += 1;
@@ -3762,7 +3762,7 @@ fn scan_create_virtual_table_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0
         let sp = pos;
         sg_51_done: {
             sg_51: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_51; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_51; }
                 pos += 1;
@@ -3772,11 +3772,11 @@ fn scan_create_virtual_table_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_K_USING { return -1; }
     pos += 1;
-    pos = scan_module_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_OPEN_PAR && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -3931,7 +3931,7 @@ fn scan_detach_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < tokens.len() && tokens[pos] == TK_K_DATABASE {
         pos += 1;
     }
-    pos = scan_database_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -3959,7 +3959,7 @@ fn scan_drop_index_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         let sp = pos;
         sg_61_done: {
             sg_61: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_61; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_61; }
                 pos += 1;
@@ -3969,7 +3969,7 @@ fn scan_drop_index_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_index_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -3997,7 +3997,7 @@ fn scan_drop_table_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         let sp = pos;
         sg_63_done: {
             sg_63: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_63; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_63; }
                 pos += 1;
@@ -4007,7 +4007,7 @@ fn scan_drop_table_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -4035,7 +4035,7 @@ fn scan_drop_trigger_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         let sp = pos;
         sg_65_done: {
             sg_65: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_65; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_65; }
                 pos += 1;
@@ -4045,7 +4045,7 @@ fn scan_drop_trigger_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_trigger_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -4073,7 +4073,7 @@ fn scan_drop_view_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         let sp = pos;
         sg_67_done: {
             sg_67: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_67; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_67; }
                 pos += 1;
@@ -4083,7 +4083,7 @@ fn scan_drop_view_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_view_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -4245,7 +4245,7 @@ fn scan_insert_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         let sp = pos;
         sg_75_done: {
             sg_75: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_75; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_75; }
                 pos += 1;
@@ -4255,21 +4255,21 @@ fn scan_insert_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_OPEN_PAR {
         let sp = pos;
         sg_76_done: {
             sg_76: {
                 pos += 1;
-                pos = scan_column_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_76; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
                     sg_77_done: {
                         sg_77: {
                             pos += 1;
-                            pos = scan_column_name(tokens, pos);
+                            pos = scan_any_name(tokens, pos);
                             if pos < 0 { break sg_77; }
                             break sg_77_done;
                         }
@@ -4379,7 +4379,7 @@ fn scan_pragma_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         let sp = pos;
         sg_82_done: {
             sg_82: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_82; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_82; }
                 pos += 1;
@@ -4389,7 +4389,7 @@ fn scan_pragma_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_pragma_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_13(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -4431,7 +4431,7 @@ fn scan_reindex_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if _kind_set_4(sgk_84) {
             pos = gp_84;
             sg_84_0: {
-                pos = scan_collation_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_84_0; }
                 if pos > sg_84_best { sg_84_best = pos; }
             }
@@ -4441,7 +4441,7 @@ fn scan_reindex_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     let sp = pos;
                     sg_85_done: {
                         sg_85: {
-                            pos = scan_database_name(tokens, pos);
+                            pos = scan_any_name(tokens, pos);
                             if pos < 0 { break sg_85; }
                             if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_85; }
                             pos += 1;
@@ -4457,13 +4457,13 @@ fn scan_reindex_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if _kind_set_4(sgk_86) {
                     pos = gp_86;
                     sg_86_0: {
-                        pos = scan_table_name(tokens, pos);
+                        pos = scan_any_name(tokens, pos);
                         if pos < 0 { break sg_86_0; }
                         if pos > sg_86_best { sg_86_best = pos; }
                     }
                     pos = gp_86;
                     sg_86_1: {
-                        pos = scan_index_name(tokens, pos);
+                        pos = scan_any_name(tokens, pos);
                         if pos < 0 { break sg_86_1; }
                         if pos > sg_86_best { sg_86_best = pos; }
                     }
@@ -4493,7 +4493,7 @@ fn scan_release_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < tokens.len() && tokens[pos] == TK_K_SAVEPOINT {
         pos += 1;
     }
-    pos = scan_savepoint_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -4507,7 +4507,7 @@ fn scan_rollback_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let sol_88_save = pos;
             sol_88: {
                 pos += 1;
-                pos = scan_transaction_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sol_88; }
                 break osl_87_done;
             }
@@ -4523,7 +4523,7 @@ fn scan_rollback_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let sol_91_save = pos;
             sol_91: {
                 pos += 2;
-                pos = scan_savepoint_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sol_91; }
                 break osl_90_done;
             }
@@ -4533,7 +4533,7 @@ fn scan_rollback_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let sol_92_save = pos;
             sol_92: {
                 pos += 1;
-                pos = scan_savepoint_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sol_92; }
                 break osl_90_done;
             }
@@ -4547,7 +4547,7 @@ fn scan_savepoint_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_SAVEPOINT { return -1; }
     pos += 1;
-    pos = scan_savepoint_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -4956,7 +4956,7 @@ fn scan_update_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_K_SET { return -1; }
     pos += 1;
-    pos = scan_column_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
@@ -4967,7 +4967,7 @@ fn scan_update_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         sg_115_done: {
             sg_115: {
                 pos += 1;
-                pos = scan_column_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_115; }
                 if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break sg_115; }
                 pos += 1;
@@ -5058,7 +5058,7 @@ fn scan_update_stmt_limited(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_K_SET { return -1; }
     pos += 1;
-    pos = scan_column_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
@@ -5069,7 +5069,7 @@ fn scan_update_stmt_limited(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
         sg_118_done: {
             sg_118: {
                 pos += 1;
-                pos = scan_column_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_118; }
                 if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break sg_118; }
                 pos += 1;
@@ -5156,7 +5156,7 @@ fn scan_update_stmt_limited(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
 
 fn scan_column_def(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_column_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_4(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -5190,7 +5190,7 @@ fn scan_column_def(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_type_name(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     loop {
         let ep = pos;
@@ -5239,7 +5239,7 @@ fn scan_type_name(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if ng_exit { break; }
         if !(pos < tokens.len() && _kind_set_4(tokens[pos])) { break; }
         let sp = pos;
-        pos = scan_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -5290,7 +5290,7 @@ fn scan_column_constraint(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         sg_126_done: {
             sg_126: {
                 pos += 1;
-                pos = scan_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_126; }
                 break sg_126_done;
             }
@@ -5387,7 +5387,7 @@ fn scan_column_constraint(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         } else if sgk_127 == TK_K_COLLATE {
             sg_127_5: {
                 pos += 1;
-                pos = scan_collation_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_127_5; }
                 break sg_127_done;
             }
@@ -5437,11 +5437,11 @@ fn scan_expr_atom_alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < tokens.len() && _kind_set_4(tokens[pos]) {
             let sol_131_save = pos;
             sol_131: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sol_131; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sol_131; }
                 pos += 1;
-                pos = scan_table_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sol_131; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sol_131; }
                 pos += 1;
@@ -5452,7 +5452,7 @@ fn scan_expr_atom_alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < tokens.len() && _kind_set_4(tokens[pos]) {
             let sol_132_save = pos;
             sol_132: {
-                pos = scan_table_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sol_132; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sol_132; }
                 pos += 1;
@@ -5461,7 +5461,7 @@ fn scan_expr_atom_alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos = sol_132_save;
         }
     }
-    pos = scan_column_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -5477,7 +5477,7 @@ fn scan_expr_atom_alt_3(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_expr_atom_alt_4(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_function_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { return -1; }
     pos += 1;
@@ -5841,7 +5841,7 @@ fn scan_expr_lr_10(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 let sp = pos;
                 sg_144_done: {
                     sg_144: {
-                        pos = scan_database_name(tokens, pos);
+                        pos = scan_any_name(tokens, pos);
                         if pos < 0 { break sg_144; }
                         if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_144; }
                         pos += 1;
@@ -5851,7 +5851,7 @@ fn scan_expr_lr_10(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 }
                 if pos < 0 { pos = sp; }
             }
-            pos = scan_table_name(tokens, pos);
+            pos = scan_any_name(tokens, pos);
             if pos < 0 { break sg_141_1; }
             if pos > sg_141_best { sg_141_best = pos; }
         }
@@ -5886,7 +5886,7 @@ fn scan_expr_lr_16(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_COLLATE { return -1; }
     pos += 1;
-    pos = scan_collation_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -6186,21 +6186,21 @@ fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_REFERENCES { return -1; }
     pos += 1;
-    pos = scan_foreign_table(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_OPEN_PAR && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         sg_147_done: {
             sg_147: {
                 pos += 1;
-                pos = scan_column_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_147; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
                     sg_148_done: {
                         sg_148: {
                             pos += 1;
-                            pos = scan_column_name(tokens, pos);
+                            pos = scan_any_name(tokens, pos);
                             if pos < 0 { break sg_148; }
                             break sg_148_done;
                         }
@@ -6271,7 +6271,7 @@ fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             } else if sgk_149 == TK_K_MATCH {
                 sg_149_1: {
                     pos += 1;
-                    pos = scan_name(tokens, pos);
+                    pos = scan_any_name(tokens, pos);
                     if pos < 0 { break sg_149_1; }
                     break sg_149_done;
                 }
@@ -6389,14 +6389,14 @@ fn scan_raise_function(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_indexed_column(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_column_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_K_COLLATE && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         sg_159_done: {
             sg_159: {
                 pos += 1;
-                pos = scan_collation_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_159; }
                 break sg_159_done;
             }
@@ -6420,7 +6420,7 @@ fn scan_table_constraint(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
         sg_160_done: {
             sg_160: {
                 pos += 1;
-                pos = scan_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_160; }
                 break sg_160_done;
             }
@@ -6490,14 +6490,14 @@ fn scan_table_constraint(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break sg_161_2; }
                 pos += 1;
-                pos = scan_column_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_161_2; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
                     sg_164_done: {
                         sg_164: {
                             pos += 1;
-                            pos = scan_column_name(tokens, pos);
+                            pos = scan_any_name(tokens, pos);
                             if pos < 0 { break sg_164; }
                             break sg_164_done;
                         }
@@ -6551,7 +6551,7 @@ fn scan_qualified_table_name(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
         let sp = pos;
         sg_166_done: {
             sg_166: {
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_166; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_166; }
                 pos += 1;
@@ -6561,7 +6561,7 @@ fn scan_qualified_table_name(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_27(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -6572,7 +6572,7 @@ fn scan_qualified_table_name(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
                     pos += 1;
                     if pos >= tokens.len() || tokens[pos] != TK_K_BY { break sg_167_0; }
                     pos += 1;
-                    pos = scan_index_name(tokens, pos);
+                    pos = scan_any_name(tokens, pos);
                     if pos < 0 { break sg_167_0; }
                     break sg_167_done;
                 }
@@ -6601,7 +6601,7 @@ fn scan_ordering_term(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         sg_168_done: {
             sg_168: {
                 pos += 1;
-                pos = scan_collation_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_168; }
                 break sg_168_done;
             }
@@ -6620,7 +6620,7 @@ fn scan_ordering_term(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_pragma_value_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -6658,21 +6658,21 @@ fn scan_pragma_value(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_common_table_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_table_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_OPEN_PAR {
         let sp = pos;
         sg_169_done: {
             sg_169: {
                 pos += 1;
-                pos = scan_column_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_169; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
                     sg_170_done: {
                         sg_170: {
                             pos += 1;
-                            pos = scan_column_name(tokens, pos);
+                            pos = scan_any_name(tokens, pos);
                             if pos < 0 { break sg_170; }
                             break sg_170_done;
                         }
@@ -6728,7 +6728,7 @@ fn scan_result_column(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         } else if _kind_set_4(alt_kind) {
             let mut best: i32 = -1;
             try_1: {
-                pos = scan_table_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break try_1; }
                 pos += 1;
@@ -6757,7 +6757,7 @@ fn scan_table_or_subquery_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) 
         let sp = pos;
         sg_174_done: {
             sg_174: {
-                pos = scan_schema_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_174; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_174; }
                 pos += 1;
@@ -6767,7 +6767,7 @@ fn scan_table_or_subquery_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) 
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     osl_175_done: {
         if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_31(tokens[pos + 1]) {
@@ -6801,7 +6801,7 @@ fn scan_table_or_subquery_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) 
                     pos += 1;
                     if pos >= tokens.len() || tokens[pos] != TK_K_BY { break sg_178_0; }
                     pos += 1;
-                    pos = scan_index_name(tokens, pos);
+                    pos = scan_any_name(tokens, pos);
                     if pos < 0 { break sg_178_0; }
                     break sg_178_done;
                 }
@@ -6826,7 +6826,7 @@ fn scan_table_or_subquery_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) 
         let sp = pos;
         sg_179_done: {
             sg_179: {
-                pos = scan_schema_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break sg_179; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_179; }
                 pos += 1;
@@ -6836,7 +6836,7 @@ fn scan_table_or_subquery_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) 
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_function_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { return -1; }
     pos += 1;
@@ -7085,14 +7085,14 @@ fn scan_join_constraint(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     pos += 1;
                     if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break sg_192_1; }
                     pos += 1;
-                    pos = scan_column_name(tokens, pos);
+                    pos = scan_any_name(tokens, pos);
                     if pos < 0 { break sg_192_1; }
                     while pos < tokens.len() && tokens[pos] == TK_COMMA {
                         let sp = pos;
                         sg_193_done: {
                             sg_193: {
                                 pos += 1;
-                                pos = scan_column_name(tokens, pos);
+                                pos = scan_any_name(tokens, pos);
                                 if pos < 0 { break sg_193; }
                                 break sg_193_done;
                             }
@@ -7383,125 +7383,6 @@ fn scan_module_argument(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_function_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_database_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_schema_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_table_function_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_table_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_table_or_index_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_new_table_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_column_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_collation_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_foreign_table(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_index_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_trigger_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_view_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_module_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_pragma_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_savepoint_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_table_alias(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -7527,13 +7408,6 @@ fn scan_table_alias(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         }
     }
-    return pos;
-}
-
-fn scan_transaction_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos);
-    if pos < 0 { return -1; }
     return pos;
 }
 
@@ -8057,7 +7931,7 @@ fn _parse_alter_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -8107,7 +7981,7 @@ fn _parse_analyze_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break gd_scan; }
                 gd_end = pos;
             }
@@ -8119,7 +7993,7 @@ fn _parse_analyze_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_2: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_table_or_index_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break gd_scan_2; }
                 gd_end_2 = pos;
             }
@@ -8131,11 +8005,11 @@ fn _parse_analyze_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_3: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break gd_scan_3; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break gd_scan_3; }
                 pos += 1;
-                pos = scan_table_or_index_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break gd_scan_3; }
                 gd_end_3 = pos;
             }
@@ -8376,7 +8250,7 @@ fn _parse_create_index_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -8448,7 +8322,7 @@ fn _parse_create_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -8530,7 +8404,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -8604,7 +8478,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         sg_210: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_210; }
                             pos += 1;
-                            pos = scan_column_name(tokens, pos);
+                            pos = scan_any_name(tokens, pos);
                             if pos < 0 { break sg_210; }
                             break sg_210_done;
                         }
@@ -8626,7 +8500,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan_2: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan_2; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan_2; }
         pos += 1;
@@ -8799,7 +8673,7 @@ fn _parse_create_view_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -8839,7 +8713,7 @@ fn _parse_create_virtual_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> (
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -9073,7 +8947,7 @@ fn _parse_drop_index_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -9109,7 +8983,7 @@ fn _parse_drop_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -9145,7 +9019,7 @@ fn _parse_drop_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -9181,7 +9055,7 @@ fn _parse_drop_view_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -9429,7 +9303,7 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -9453,7 +9327,7 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     sg_220: {
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_220; }
                         pos += 1;
-                        pos = scan_column_name(tokens, pos);
+                        pos = scan_any_name(tokens, pos);
                         if pos < 0 { break sg_220; }
                         break sg_220_done;
                     }
@@ -9672,7 +9546,7 @@ fn _parse_pragma_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -9748,7 +9622,7 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_collation_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break gd_scan; }
                 gd_end = pos;
             }
@@ -9764,7 +9638,7 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let sp = pos;
                     sg_228_done: {
                         sg_228: {
-                            pos = scan_database_name(tokens, pos);
+                            pos = scan_any_name(tokens, pos);
                             if pos < 0 { break sg_228; }
                             if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_228; }
                             pos += 1;
@@ -9780,13 +9654,13 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 if _kind_set_4(sgk_229) {
                     pos = gp_229;
                     sg_229_0: {
-                        pos = scan_table_name(tokens, pos);
+                        pos = scan_any_name(tokens, pos);
                         if pos < 0 { break sg_229_0; }
                         if pos > sg_229_best { sg_229_best = pos; }
                     }
                     pos = gp_229;
                     sg_229_1: {
-                        pos = scan_index_name(tokens, pos);
+                        pos = scan_any_name(tokens, pos);
                         if pos < 0 { break sg_229_1; }
                         if pos > sg_229_best { sg_229_best = pos; }
                     }
@@ -9812,7 +9686,7 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             opt_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_database_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break opt_scan; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
                 pos += 1;
@@ -9830,7 +9704,7 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 gd_scan: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    pos = scan_table_name(tokens, pos);
+                    pos = scan_any_name(tokens, pos);
                     if pos < 0 { break gd_scan; }
                     gd_end = pos;
                 }
@@ -9842,7 +9716,7 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 gd_scan_2: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    pos = scan_index_name(tokens, pos);
+                    pos = scan_any_name(tokens, pos);
                     if pos < 0 { break gd_scan_2; }
                     gd_end_2 = pos;
                 }
@@ -10474,7 +10348,7 @@ fn _parse_update_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 sg_241: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_241; }
                     pos += 1;
-                    pos = scan_column_name(tokens, pos);
+                    pos = scan_any_name(tokens, pos);
                     if pos < 0 { break sg_241; }
                     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break sg_241; }
                     pos += 1;
@@ -10625,7 +10499,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 sg_242: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_242; }
                     pos += 1;
-                    pos = scan_column_name(tokens, pos);
+                    pos = scan_any_name(tokens, pos);
                     if pos < 0 { break sg_242; }
                     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break sg_242; }
                     pos += 1;
@@ -11350,11 +11224,11 @@ fn _parse_expr__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
     shape_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break shape_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break shape_scan; }
         pos += 1;
-        pos = scan_table_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break shape_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break shape_scan; }
         pos += 1;
@@ -11364,7 +11238,7 @@ fn _parse_expr__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
     shape_scan_2: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_table_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break shape_scan_2; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break shape_scan_2; }
         pos += 1;
@@ -11375,7 +11249,7 @@ fn _parse_expr__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
         opt_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_database_name(tokens, pos);
+            pos = scan_any_name(tokens, pos);
             if pos < 0 { break opt_scan; }
             if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
             pos += 1;
@@ -11796,7 +11670,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                             let sp = pos;
                             sg_256_done: {
                                 sg_256: {
-                                    pos = scan_database_name(tokens, pos);
+                                    pos = scan_any_name(tokens, pos);
                                     if pos < 0 { break sg_256; }
                                     if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_256; }
                                     pos += 1;
@@ -11806,7 +11680,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                             }
                             if pos < 0 { pos = sp; }
                         }
-                        pos = scan_table_name(tokens, pos);
+                        pos = scan_any_name(tokens, pos);
                         if pos < 0 { break gd_scan_2; }
                         gd_end_2 = pos;
                     }
@@ -11875,7 +11749,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                             let mut pos: i32 = p.pos;
                             sg_258_done: {
                                 sg_258: {
-                                    pos = scan_database_name(tokens, pos);
+                                    pos = scan_any_name(tokens, pos);
                                     if pos < 0 { break sg_258; }
                                     if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_258; }
                                     pos += 1;
@@ -12105,7 +11979,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                                 let sp = pos;
                                 sg_261_done: {
                                     sg_261: {
-                                        pos = scan_database_name(tokens, pos);
+                                        pos = scan_any_name(tokens, pos);
                                         if pos < 0 { break sg_261; }
                                         if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_261; }
                                         pos += 1;
@@ -12115,7 +11989,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                                 }
                                 if pos < 0 { pos = sp; }
                             }
-                            pos = scan_table_name(tokens, pos);
+                            pos = scan_any_name(tokens, pos);
                             if pos < 0 { break gd_scan_6; }
                             gd_end_6 = pos;
                         }
@@ -12184,7 +12058,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                                 let mut pos: i32 = p.pos;
                                 sg_263_done: {
                                     sg_263: {
-                                        pos = scan_database_name(tokens, pos);
+                                        pos = scan_any_name(tokens, pos);
                                         if pos < 0 { break sg_263; }
                                         if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_263; }
                                         pos += 1;
@@ -12345,7 +12219,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     sg_264: {
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_264; }
                         pos += 1;
-                        pos = scan_column_name(tokens, pos);
+                        pos = scan_any_name(tokens, pos);
                         if pos < 0 { break sg_264; }
                         break sg_264_done;
                     }
@@ -12420,7 +12294,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 } else if sgk_265 == TK_K_MATCH {
                     sg_265_1: {
                         pos += 1;
-                        pos = scan_name(tokens, pos);
+                        pos = scan_any_name(tokens, pos);
                         if pos < 0 { break sg_265_1; }
                         break sg_265_done;
                     }
@@ -12806,7 +12680,7 @@ fn _parse_table_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     sg_270: {
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_270; }
                         pos += 1;
-                        pos = scan_column_name(tokens, pos);
+                        pos = scan_any_name(tokens, pos);
                         if pos < 0 { break sg_270; }
                         break sg_270_done;
                     }
@@ -12887,7 +12761,7 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -12911,7 +12785,7 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_K_BY { break gd_scan; }
                 pos += 1;
-                pos = scan_index_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
@@ -13056,7 +12930,7 @@ fn _parse_common_table_expression__inner(p: &mut Parser, follow: i64 = 0) -> () 
                     sg_272: {
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_272; }
                         pos += 1;
-                        pos = scan_column_name(tokens, pos);
+                        pos = scan_any_name(tokens, pos);
                         if pos < 0 { break sg_272; }
                         break sg_272_done;
                     }
@@ -13098,7 +12972,7 @@ fn _parse_result_column__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_result_column__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_table_name(tokens, pos);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_DOT { return -1; }
     pos += 1;
@@ -13347,7 +13221,7 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () 
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_schema_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -13424,7 +13298,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () 
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_schema_name(tokens, pos);
+        pos = scan_any_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
@@ -13456,7 +13330,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () 
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_K_BY { break gd_scan; }
                 pos += 1;
-                pos = scan_index_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
@@ -13710,14 +13584,14 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break gd_scan_2; }
                 pos += 1;
-                pos = scan_column_name(tokens, pos);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break gd_scan_2; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
                     sg_283_done: {
                         sg_283: {
                             pos += 1;
-                            pos = scan_column_name(tokens, pos);
+                            pos = scan_any_name(tokens, pos);
                             if pos < 0 { break sg_283; }
                             break sg_283_done;
                         }
@@ -13750,7 +13624,7 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         sg_284: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_284; }
                             pos += 1;
-                            pos = scan_column_name(tokens, pos);
+                            pos = scan_any_name(tokens, pos);
                             if pos < 0 { break sg_284; }
                             break sg_284_done;
                         }

@@ -801,7 +801,7 @@ ID : [a-w]+ ;
 test "a scan tests a one-token rule inline, and trusts a callee that consumes" {
     let input = "grammar T;
 s : (n | n K1)* EOF ;
-n : a ;
+n : a K2? ;
 a : ID | k | '(' a ')' ;
 k : K1 | K2 ;
 ID : [a-z]+ ;
@@ -830,6 +830,21 @@ X : 'x' ; Y : 'y' ; Z : 'z' ;
     let a = extract_fn_body(&output, "fn scan_a(");
     assert str_contains(&a, "scan_m("), a;
     assert !str_contains(&a, "pos = start;"), a;
+}
+
+test "a scan calls through a rule that only forwards to another" {
+    let input = "grammar T;
+s : (t | t Z)* EOF ;
+t : n X ;
+n : a ;
+a : Y Y | X Y ;
+X : 'x' ; Y : 'y' ; Z : 'z' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    let t = extract_fn_body(&output, "fn scan_t(");
+    assert str_contains(&t, "scan_a("), t;
+    assert !str_contains(&output, "fn scan_n("), output;
 }
 
 test "a scan function nothing calls is not emitted" {

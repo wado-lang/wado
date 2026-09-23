@@ -1289,13 +1289,6 @@ impl Parser {
     }
 }
 
-fn scan_expr(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_primary(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_primary(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -1335,7 +1328,7 @@ fn scan_closure(tokens: &Array<i32>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_expr(tokens, pos);
+    pos = scan_primary(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -1365,7 +1358,7 @@ fn _parse_item__inner_alt_0(p: &mut Parser) -> () {
 
 fn _parse_item__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_expr(tokens, pos);
+    pos = scan_primary(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
@@ -1380,7 +1373,7 @@ fn _parse_item__inner_alt_1(p: &mut Parser) -> () {
 
 fn _parse_item__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_expr(tokens, pos);
+    pos = scan_primary(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_BANG { return -1; }
     pos += 1;

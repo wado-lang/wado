@@ -25652,8 +25652,7 @@ fn scan_namespace_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     let sp = pos;
                     sg_8_done: {
                         sg_8: {
-                            pos = scan_namespace_prefix(tokens, pos);
-                            if pos < 0 { break sg_8; }
+                            pos += 1;
                             pos = scan_ws(tokens, pos, FOLLOW_MASK_2);
                             if pos < 0 { break sg_8; }
                             break sg_8_done;
@@ -25692,8 +25691,7 @@ fn scan_namespace_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     let sp = pos;
                     sg_10_done: {
                         sg_10: {
-                            pos = scan_namespace_prefix(tokens, pos);
-                            if pos < 0 { break sg_10; }
+                            pos += 1;
                             pos = scan_ws(tokens, pos, FOLLOW_MASK_2);
                             if pos < 0 { break sg_10; }
                             break sg_10_done;
@@ -25726,13 +25724,6 @@ fn scan_namespace_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         }
     }
-    return pos;
-}
-
-fn scan_namespace_prefix(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { return -1; }
-    pos += 1;
     return pos;
 }
 
@@ -25800,8 +25791,8 @@ fn scan_media_query(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 }
                 pos = scan_ws(tokens, pos, FOLLOW_MASK_5);
                 if pos < 0 { break try_0; }
-                pos = scan_media_type(tokens, pos);
-                if pos < 0 { break try_0; }
+                if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { break try_0; }
+                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && tokens[pos] == TK_And && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
@@ -25850,13 +25841,6 @@ fn scan_media_query(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         }
     }
-    return pos;
-}
-
-fn scan_media_type(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { return -1; }
-    pos += 1;
     return pos;
 }
 
@@ -26212,16 +26196,16 @@ fn scan_type_selector(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let bp = pos;
             let mut opt_ok: bool = false;
             opt_probe: {
-                pos = scan_element_name(tokens, pos);
-                if pos < 0 { break opt_probe; }
+                if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { break opt_probe; }
+                pos += 1;
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_32(probe_kind)) { opt_ok = true; }
             }
             pos = if opt_ok { bp } else { sp };
         }
     }
-    pos = scan_element_name(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -26233,13 +26217,6 @@ fn scan_type_namespace_prefix(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_Pipe { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_element_name(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
@@ -28934,8 +28911,8 @@ fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_namespace_prefix(tokens, pos);
-        if pos < 0 { break opt_scan; }
+        if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { break opt_scan; }
+        pos += 1;
         pos = scan_ws(tokens, pos, FOLLOW_MASK_2);
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
@@ -28968,8 +28945,7 @@ fn _parse_namespace___inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 
         let sp = pos;
         sg_61_done: {
             sg_61: {
-                pos = scan_namespace_prefix(tokens, pos);
-                if pos < 0 { break sg_61; }
+                pos += 1;
                 pos = scan_ws(tokens, pos, FOLLOW_MASK_2);
                 if pos < 0 { break sg_61; }
                 break sg_61_done;
@@ -29009,8 +28985,8 @@ fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_namespace_prefix(tokens, pos);
-        if pos < 0 { break opt_scan; }
+        if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { break opt_scan; }
+        pos += 1;
         pos = scan_ws(tokens, pos, FOLLOW_MASK_2);
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
@@ -29041,8 +29017,7 @@ fn _parse_namespace___inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 
         let sp = pos;
         sg_63_done: {
             sg_63: {
-                pos = scan_namespace_prefix(tokens, pos);
-                if pos < 0 { break sg_63; }
+                pos += 1;
                 pos = scan_ws(tokens, pos, FOLLOW_MASK_2);
                 if pos < 0 { break sg_63; }
                 break sg_63_done;
@@ -29776,8 +29751,8 @@ fn _parse_type_selector__inner(p: &mut Parser, follow: i64 = 0) -> () {
             let mut pos: i32 = p.pos;
             pos = scan_type_namespace_prefix(tokens, pos, FOLLOW_MASK_5);
             if pos < 0 { break opt_enter_scan; }
-            pos = scan_element_name(tokens, pos);
-            if pos < 0 { break opt_enter_scan; }
+            if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { break opt_enter_scan; }
+            pos += 1;
             let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
             if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_32(probe_kind)) { opt_enter = true; }
         }

@@ -1900,7 +1900,7 @@ fn gen_scan_op_element<S: AsStrSlice>(
                 return;
             }
             // Single scan callee + runtime FOLLOW arg.
-            let fn_name = `scan_${rc.target_snake}`;
+            let fn_name = `scan_${ctx.scan_alias(&rc.target_snake)}`;
             let follow_arg_str = follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg);
             let min_prec_arg = if ctx.rule_takes_min_prec_arg(&rc.target_snake) {
                 `, ${rc.min_prec_arg.unwrap_or(0)}`;
@@ -1966,7 +1966,7 @@ fn gen_scan_op_element_assign(
                 gen_scan_token_set_assign(w, &kinds, ctx, known);
                 return;
             }
-            let fn_name = `scan_${rc.target_snake}`;
+            let fn_name = `scan_${ctx.scan_alias(&rc.target_snake)}`;
             let follow_arg_str = follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg);
             // `_assign` only fires inside Repeat bodies — never reachable
             // from alt-scan's trailing-self-ref site, so `min_prec` here

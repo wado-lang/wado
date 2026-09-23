@@ -401,6 +401,45 @@ impl GenContext {
         };
     }
 
+    /// The rule whose scan a scan call to `snake` can call instead: past every
+    /// rule that only forwards to another, with nothing a call site passes.
+    pub fn scan_alias<S: AsStrSlice>(&self, snake: S) -> String {
+        let mut cur = snake.to_string();
+        let mut seen: List<String> = [];
+        while !seen.contains(&cur) {
+            seen.push(cur);
+            let Some(next) = self.scan_forward_target(&cur) else {
+                break;
+            };
+            cur = next;
+        }
+        return cur;
+    }
+
+    fn scan_forward_target(&self, snake: &String) -> Option<String> {
+        if self.needs_scan_atn() || self.rule_reads_follow(snake) {
+            return null;
+        }
+        let Some(i) = self.snake_index.get_str(snake) else {
+            return null;
+        };
+        let rule = &self.parser_rules[i];
+        if rule.alternatives.len() != 1 || rule.init_action matches { Some(_) } || rule.after_action matches { Some(_) } {
+            return null;
+        }
+        let alt = &rule.alternatives[0];
+        if alt.elements.len() != 1 || !alt.actions.is_empty() {
+            return null;
+        }
+        let RuleRef(r) = &alt.elements[0] else {
+            return null;
+        };
+        if self.rule_reads_follow(&r.snake_name) || self.rule_takes_min_prec_arg(&r.snake_name) {
+            return null;
+        }
+        return Option::Some(r.snake_name);
+    }
+
     /// Whether the scan of the rule called by `snake` always consumes a token
     /// when it matches: a single-alt scan guards that itself, and a multi-alt
     /// one does where every alternative opens on an element that consumes.
@@ -448,7 +487,7 @@ impl GenContext {
 
     /// The kinds a rule matches when its scan is one token test, or `null`.
     pub fn one_token_rule<S: AsStrSlice>(&self, snake: S) -> Option<List<String>> {
-        return self.one_token_rules.get_str(snake);
+        return self.one_token_rules.get_str(&self.scan_alias(snake));
     }
 
     /// Enter or leave a scan function's body; returns the previous setting.
