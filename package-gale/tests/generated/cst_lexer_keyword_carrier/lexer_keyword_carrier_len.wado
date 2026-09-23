@@ -1192,9 +1192,9 @@ fn try_C(chars: &List<char>, start: i32) -> i32 {
 }
 
 fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
-    let len = end - start;
-    if len == 2 {
-        if chars[start + 0] == 'i' && chars[start + 1] == 'f' { return TK_IF; }
+    match end - start {
+        2 => { if chars[start] == 'i' && chars[start + 1] == 'f' { return TK_IF; } },
+        _ => {},
     }
     return -1;
 }
@@ -1251,15 +1251,15 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_C; }
             },
         }
-        if best_end > start {
-            let kw_kind = classify_keyword(&lexer.chars, start, best_end);
-            if kw_kind >= 0 { best_kind = kw_kind; }
-        }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
             triv_lo = ts.trivia_mark();
             lexer.pos = start + 1;
         } else {
+            if best_kind == TK_WORD {
+                let kw_kind = classify_keyword(&lexer.chars, start, best_end);
+                if kw_kind >= 0 { best_kind = kw_kind; }
+            }
             let tok_start = start;
             ts.push_token(best_kind, tok_start, best_end, triv_lo, ts.trivia_mark());
             triv_lo = ts.trivia_mark();

@@ -246,14 +246,32 @@ I : ('a' | 'bcd') 'z' ;");
 
 test "lexer dump reports the keyword classifier and its carrier" {
     // `IF` is a fixed per-char pattern, reclassified out of a match by the
-    // later, wider `ID`.
+    // later, wider `ID`, which matches it in either case.
+    let report = lexer_dump("grammar T;
+r : IF ID ;
+IF : [iI] [fF] ;
+ID : [a-zA-Z]+ ;");
+
+    assert str_contains(&report, "rule IF — keyword classifier (carrier ID)"), report;
+    assert str_contains(&report, "keyword classifier 1"), report;
+}
+
+test "lexer dump keeps a keyword its carrier cannot match in every case on its own matcher" {
     let report = lexer_dump("grammar T;
 r : IF ID ;
 IF : [iI] [fF] ;
 ID : [a-z]+ ;");
 
-    assert str_contains(&report, "rule IF — keyword classifier (carrier ID)"), report;
-    assert str_contains(&report, "keyword classifier 1"), report;
+    assert str_contains(&report, "rule IF — matcher try_IF"), report;
+}
+
+test "lexer dump reports a multi-char literal as a keyword" {
+    let report = lexer_dump("grammar T;
+r : AS ID ;
+AS : 'as' ;
+ID : [a-z]+ ;");
+
+    assert str_contains(&report, "rule AS — keyword classifier (carrier ID)"), report;
 }
 
 test "lexer dump reports a rule the shared literal matcher covers" {

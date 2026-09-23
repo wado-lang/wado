@@ -2477,747 +2477,6 @@ impl Lexer {
     }
 }
 
-fn try_KW_AS(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_BREAK(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'b' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'k' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_CONST(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_CONTINUE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_CRATE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_ELSE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_ENUM(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'm' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_EXTERN(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'x' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_FALSE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'f' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_FN(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'f' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_FOR(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'f' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_IF(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'f' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_IMPL(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'm' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'p' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_IN(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_LET(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_LOOP(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'p' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_MATCH(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'm' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'h' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_MOD(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'm' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'd' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_MOVE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'm' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'v' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_MUT(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'm' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_PUB(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'p' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'b' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_REF(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'f' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_RETURN(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_SELFVALUE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'f' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_SELFTYPE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'S' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'f' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_STATIC(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_STRUCT(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_SUPER(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'p' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_TRAIT(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_TRUE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_TYPE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'y' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'p' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_UNSAFE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'f' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_USE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_WHERE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'w' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'h' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_WHILE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'w' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'h' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_ASYNC(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'y' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_AWAIT(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'w' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_DYN(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'd' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'y' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_ABSTRACT(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'b' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_BECOME(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'b' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'm' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_BOX(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'b' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'x' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_DO(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'd' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_FINAL(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'f' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_MACRO(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'm' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_OVERRIDE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'v' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'd' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_PRIV(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'p' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'v' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_TYPEOF(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'y' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'p' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'f' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_UNSIZED(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'z' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'd' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_VIRTUAL(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'v' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_YIELD(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'y' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'd' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_TRY(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'y' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_RAW(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'w' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_UNION(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn try_KW_STATICLIFETIME(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
@@ -3233,33 +2492,6 @@ fn try_KW_STATICLIFETIME(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != 'i' { return -1; }
     pos += 1;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_KW_MACRORULES(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'm' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '_' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
     pos += 1;
     return pos;
 }
@@ -5651,6 +4883,163 @@ fn try_RPAREN(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
+    match end - start {
+        2 => {
+            match chars[start] {
+                'a' => { if chars[start + 1] == 's' { return TK_KW_AS; } },
+                'd' => { if chars[start + 1] == 'o' { return TK_KW_DO; } },
+                'f' => { if chars[start + 1] == 'n' { return TK_KW_FN; } },
+                'i' => {
+                    match chars[start + 1] {
+                        'f' => { return TK_KW_IF; },
+                        'n' => { return TK_KW_IN; },
+                        _ => {},
+                    }
+                },
+                _ => {},
+            }
+        },
+        3 => {
+            match chars[start] {
+                'b' => { if chars[start + 1] == 'o' && chars[start + 2] == 'x' { return TK_KW_BOX; } },
+                'd' => { if chars[start + 1] == 'y' && chars[start + 2] == 'n' { return TK_KW_DYN; } },
+                'f' => { if chars[start + 1] == 'o' && chars[start + 2] == 'r' { return TK_KW_FOR; } },
+                'l' => { if chars[start + 1] == 'e' && chars[start + 2] == 't' { return TK_KW_LET; } },
+                'm' => {
+                    match chars[start + 1] {
+                        'o' => { if chars[start + 2] == 'd' { return TK_KW_MOD; } },
+                        'u' => { if chars[start + 2] == 't' { return TK_KW_MUT; } },
+                        _ => {},
+                    }
+                },
+                'p' => { if chars[start + 1] == 'u' && chars[start + 2] == 'b' { return TK_KW_PUB; } },
+                'r' => {
+                    match chars[start + 1] {
+                        'a' => { if chars[start + 2] == 'w' { return TK_KW_RAW; } },
+                        'e' => { if chars[start + 2] == 'f' { return TK_KW_REF; } },
+                        _ => {},
+                    }
+                },
+                't' => { if chars[start + 1] == 'r' && chars[start + 2] == 'y' { return TK_KW_TRY; } },
+                'u' => { if chars[start + 1] == 's' && chars[start + 2] == 'e' { return TK_KW_USE; } },
+                _ => {},
+            }
+        },
+        4 => {
+            match chars[start] {
+                'S' => { if chars[start + 1] == 'e' && chars[start + 2] == 'l' && chars[start + 3] == 'f' { return TK_KW_SELFTYPE; } },
+                'e' => {
+                    match chars[start + 1] {
+                        'l' => { if chars[start + 2] == 's' && chars[start + 3] == 'e' { return TK_KW_ELSE; } },
+                        'n' => { if chars[start + 2] == 'u' && chars[start + 3] == 'm' { return TK_KW_ENUM; } },
+                        _ => {},
+                    }
+                },
+                'i' => { if chars[start + 1] == 'm' && chars[start + 2] == 'p' && chars[start + 3] == 'l' { return TK_KW_IMPL; } },
+                'l' => { if chars[start + 1] == 'o' && chars[start + 2] == 'o' && chars[start + 3] == 'p' { return TK_KW_LOOP; } },
+                'm' => { if chars[start + 1] == 'o' && chars[start + 2] == 'v' && chars[start + 3] == 'e' { return TK_KW_MOVE; } },
+                'p' => { if chars[start + 1] == 'r' && chars[start + 2] == 'i' && chars[start + 3] == 'v' { return TK_KW_PRIV; } },
+                's' => { if chars[start + 1] == 'e' && chars[start + 2] == 'l' && chars[start + 3] == 'f' { return TK_KW_SELFVALUE; } },
+                't' => {
+                    match chars[start + 1] {
+                        'r' => { if chars[start + 2] == 'u' && chars[start + 3] == 'e' { return TK_KW_TRUE; } },
+                        'y' => { if chars[start + 2] == 'p' && chars[start + 3] == 'e' { return TK_KW_TYPE; } },
+                        _ => {},
+                    }
+                },
+                _ => {},
+            }
+        },
+        5 => {
+            match chars[start] {
+                'a' => {
+                    match chars[start + 1] {
+                        's' => { if chars[start + 2] == 'y' && chars[start + 3] == 'n' && chars[start + 4] == 'c' { return TK_KW_ASYNC; } },
+                        'w' => { if chars[start + 2] == 'a' && chars[start + 3] == 'i' && chars[start + 4] == 't' { return TK_KW_AWAIT; } },
+                        _ => {},
+                    }
+                },
+                'b' => { if chars[start + 1] == 'r' && chars[start + 2] == 'e' && chars[start + 3] == 'a' && chars[start + 4] == 'k' { return TK_KW_BREAK; } },
+                'c' => {
+                    match chars[start + 1] {
+                        'o' => { if chars[start + 2] == 'n' && chars[start + 3] == 's' && chars[start + 4] == 't' { return TK_KW_CONST; } },
+                        'r' => { if chars[start + 2] == 'a' && chars[start + 3] == 't' && chars[start + 4] == 'e' { return TK_KW_CRATE; } },
+                        _ => {},
+                    }
+                },
+                'f' => {
+                    match chars[start + 1] {
+                        'a' => { if chars[start + 2] == 'l' && chars[start + 3] == 's' && chars[start + 4] == 'e' { return TK_KW_FALSE; } },
+                        'i' => { if chars[start + 2] == 'n' && chars[start + 3] == 'a' && chars[start + 4] == 'l' { return TK_KW_FINAL; } },
+                        _ => {},
+                    }
+                },
+                'm' => {
+                    if chars[start + 1] == 'a' {
+                        match chars[start + 2] {
+                            'c' => { if chars[start + 3] == 'r' && chars[start + 4] == 'o' { return TK_KW_MACRO; } },
+                            't' => { if chars[start + 3] == 'c' && chars[start + 4] == 'h' { return TK_KW_MATCH; } },
+                            _ => {},
+                        }
+                    }
+                },
+                's' => { if chars[start + 1] == 'u' && chars[start + 2] == 'p' && chars[start + 3] == 'e' && chars[start + 4] == 'r' { return TK_KW_SUPER; } },
+                't' => { if chars[start + 1] == 'r' && chars[start + 2] == 'a' && chars[start + 3] == 'i' && chars[start + 4] == 't' { return TK_KW_TRAIT; } },
+                'u' => { if chars[start + 1] == 'n' && chars[start + 2] == 'i' && chars[start + 3] == 'o' && chars[start + 4] == 'n' { return TK_KW_UNION; } },
+                'w' => {
+                    if chars[start + 1] == 'h' {
+                        match chars[start + 2] {
+                            'e' => { if chars[start + 3] == 'r' && chars[start + 4] == 'e' { return TK_KW_WHERE; } },
+                            'i' => { if chars[start + 3] == 'l' && chars[start + 4] == 'e' { return TK_KW_WHILE; } },
+                            _ => {},
+                        }
+                    }
+                },
+                'y' => { if chars[start + 1] == 'i' && chars[start + 2] == 'e' && chars[start + 3] == 'l' && chars[start + 4] == 'd' { return TK_KW_YIELD; } },
+                _ => {},
+            }
+        },
+        6 => {
+            match chars[start] {
+                'b' => { if chars[start + 1] == 'e' && chars[start + 2] == 'c' && chars[start + 3] == 'o' && chars[start + 4] == 'm' && chars[start + 5] == 'e' { return TK_KW_BECOME; } },
+                'e' => { if chars[start + 1] == 'x' && chars[start + 2] == 't' && chars[start + 3] == 'e' && chars[start + 4] == 'r' && chars[start + 5] == 'n' { return TK_KW_EXTERN; } },
+                'r' => { if chars[start + 1] == 'e' && chars[start + 2] == 't' && chars[start + 3] == 'u' && chars[start + 4] == 'r' && chars[start + 5] == 'n' { return TK_KW_RETURN; } },
+                's' => {
+                    if chars[start + 1] == 't' {
+                        match chars[start + 2] {
+                            'a' => { if chars[start + 3] == 't' && chars[start + 4] == 'i' && chars[start + 5] == 'c' { return TK_KW_STATIC; } },
+                            'r' => { if chars[start + 3] == 'u' && chars[start + 4] == 'c' && chars[start + 5] == 't' { return TK_KW_STRUCT; } },
+                            _ => {},
+                        }
+                    }
+                },
+                't' => { if chars[start + 1] == 'y' && chars[start + 2] == 'p' && chars[start + 3] == 'e' && chars[start + 4] == 'o' && chars[start + 5] == 'f' { return TK_KW_TYPEOF; } },
+                'u' => { if chars[start + 1] == 'n' && chars[start + 2] == 's' && chars[start + 3] == 'a' && chars[start + 4] == 'f' && chars[start + 5] == 'e' { return TK_KW_UNSAFE; } },
+                _ => {},
+            }
+        },
+        7 => {
+            match chars[start] {
+                'u' => { if chars[start + 1] == 'n' && chars[start + 2] == 's' && chars[start + 3] == 'i' && chars[start + 4] == 'z' && chars[start + 5] == 'e' && chars[start + 6] == 'd' { return TK_KW_UNSIZED; } },
+                'v' => { if chars[start + 1] == 'i' && chars[start + 2] == 'r' && chars[start + 3] == 't' && chars[start + 4] == 'u' && chars[start + 5] == 'a' && chars[start + 6] == 'l' { return TK_KW_VIRTUAL; } },
+                _ => {},
+            }
+        },
+        8 => {
+            match chars[start] {
+                'a' => { if chars[start + 1] == 'b' && chars[start + 2] == 's' && chars[start + 3] == 't' && chars[start + 4] == 'r' && chars[start + 5] == 'a' && chars[start + 6] == 'c' && chars[start + 7] == 't' { return TK_KW_ABSTRACT; } },
+                'c' => { if chars[start + 1] == 'o' && chars[start + 2] == 'n' && chars[start + 3] == 't' && chars[start + 4] == 'i' && chars[start + 5] == 'n' && chars[start + 6] == 'u' && chars[start + 7] == 'e' { return TK_KW_CONTINUE; } },
+                'o' => { if chars[start + 1] == 'v' && chars[start + 2] == 'e' && chars[start + 3] == 'r' && chars[start + 4] == 'r' && chars[start + 5] == 'i' && chars[start + 6] == 'd' && chars[start + 7] == 'e' { return TK_KW_OVERRIDE; } },
+                _ => {},
+            }
+        },
+        11 => { if chars[start] == 'm' && chars[start + 1] == 'a' && chars[start + 2] == 'c' && chars[start + 3] == 'r' && chars[start + 4] == 'o' && chars[start + 5] == '_' && chars[start + 6] == 'r' && chars[start + 7] == 'u' && chars[start + 8] == 'l' && chars[start + 9] == 'e' && chars[start + 10] == 's' { return TK_KW_MACRORULES; } },
+        _ => {},
+    }
+    return -1;
+}
+
 pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
@@ -5843,13 +5232,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 end = try_AT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_AT; best_channel = 0; }
             },
-            'A'..='R' | 'T'..='Z' | 'g'..='h' | 'j'..='k' | 'n' | 'q' | 'x' | 'z' | 'ª' | 'µ' | 'º' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ˁ' | 'ˆ'..='ˑ' | 'ˠ'..='ˤ' | 'ˬ' | 'ˮ' | 'Ͱ'..='ʹ' | 'Ͷ'..='ͷ' | 'ͺ'..='ͽ' | 'Ϳ' | 'Ά' | 'Έ'..='Ί' | 'Ό' | 'Ύ'..='Ρ' | 'Σ'..='ϵ' | 'Ϸ'..='ҁ' | 'Ҋ'..='ԯ' | 'Ա'..='Ֆ' | 'ՙ' | 'ՠ'..='ֈ' | 'א'..='ת' | 'ׯ'..='ײ' | 'ؠ'..='ي' | 'ٮ'..='ٯ' | 'ٱ'..='ۓ' | 'ە' | 'ۥ'..='ۦ' | 'ۮ'..='ۯ' | 'ۺ'..='ۼ' | 'ۿ' | 'ܐ' | 'ܒ'..='ܯ' | 'ݍ'..='ޥ' | 'ޱ' | 'ߊ'..='ߪ' | 'ߴ'..='ߵ' | 'ߺ' | 'ࠀ'..='ࠕ' | 'ࠚ' | 'ࠤ' | 'ࠨ' | 'ࡀ'..='ࡘ' | 'ࡠ'..='ࡪ' | 'ࡰ'..='ࢇ' | 'ࢉ'..='࢏' | 'ࢠ'..='ࣉ' | 'ऄ'..='ह' | 'ऽ' | 'ॐ' | 'क़'..='ॡ' | 'ॱ'..='ঀ' | 'অ'..='ঌ' | 'এ'..='ঐ' | 'ও'..='ন' | 'প'..='র' | 'ল' | 'শ'..='হ' | 'ঽ' | 'ৎ' | 'ড়'..='ঢ়' | 'য়'..='ৡ' | 'ৰ'..='ৱ' | 'ৼ' | 'ਅ'..='ਊ' | 'ਏ'..='ਐ' | 'ਓ'..='ਨ' | 'ਪ'..='ਰ' | 'ਲ'..='ਲ਼' | 'ਵ'..='ਸ਼' | 'ਸ'..='ਹ' | 'ਖ਼'..='ੜ' | 'ਫ਼' | 'ੲ'..='ੴ' | 'અ'..='ઍ' | 'એ'..='ઑ' | 'ઓ'..='ન' | 'પ'..='ર' | 'લ'..='ળ' | 'વ'..='હ' | 'ઽ' | 'ૐ' | 'ૠ'..='ૡ' | 'ૹ' | 'ଅ'..='ଌ' | 'ଏ'..='ଐ' | 'ଓ'..='ନ' | 'ପ'..='ର' | 'ଲ'..='ଳ' | 'ଵ'..='ହ' | 'ଽ' | 'ଡ଼'..='ଢ଼' | 'ୟ'..='ୡ' | 'ୱ' | 'ஃ' | 'அ'..='ஊ' | 'எ'..='ஐ' | 'ஒ'..='க' | 'ங'..='ச' | 'ஜ' | 'ஞ'..='ட' | 'ண'..='த' | 'ந'..='ப' | 'ம'..='ஹ' | 'ௐ' | 'అ'..='ఌ' | 'ఎ'..='ఐ' | 'ఒ'..='న' | 'ప'..='హ' | 'ఽ' | 'ౘ'..='ౚ' | '౜'..='ౝ' | 'ౠ'..='ౡ' | 'ಀ' | 'ಅ'..='ಌ' | 'ಎ'..='ಐ' | 'ಒ'..='ನ' | 'ಪ'..='ಳ' | 'ವ'..='ಹ' | 'ಽ' | '೜'..='ೞ' | 'ೠ'..='ೡ' | 'ೱ'..='ೲ' | 'ഄ'..='ഌ' | 'എ'..='ഐ' | 'ഒ'..='ഺ' | 'ഽ' | 'ൎ' | 'ൔ'..='ൖ' | 'ൟ'..='ൡ' | 'ൺ'..='ൿ' | 'අ'..='ඖ' | 'ක'..='න' | 'ඳ'..='ර' | 'ල' | 'ව'..='ෆ' | 'ก'..='ะ' | 'า'..='ำ' | 'เ'..='ๆ' | 'ກ'..='ຂ' | 'ຄ' | 'ຆ'..='ຊ' | 'ຌ'..='ຣ' | 'ລ' | 'ວ'..='ະ' | 'າ'..='ຳ' | 'ຽ' | 'ເ'..='ໄ' | 'ໆ' | 'ໜ'..='ໟ' | 'ༀ' | 'ཀ'..='ཇ' | 'ཉ'..='ཬ' | 'ྈ'..='ྌ' | 'က'..='ဪ' | 'ဿ' | 'ၐ'..='ၕ' | 'ၚ'..='ၝ' | 'ၡ' | 'ၥ'..='ၦ' | 'ၮ'..='ၰ' | 'ၵ'..='ႁ' | 'ႎ' | 'Ⴀ'..='Ⴥ' | 'Ⴧ' | 'Ⴭ' | 'ა'..='ჺ' | 'ჼ'..='ቈ' | 'ቊ'..='ቍ' | 'ቐ'..='ቖ' | 'ቘ' | 'ቚ'..='ቝ' | 'በ'..='ኈ' | 'ኊ'..='ኍ' | 'ነ'..='ኰ' | 'ኲ'..='ኵ' | 'ኸ'..='ኾ' | 'ዀ' | 'ዂ'..='ዅ' | 'ወ'..='ዖ' | 'ዘ'..='ጐ' | 'ጒ'..='ጕ' | 'ጘ'..='ፚ' | 'ᎀ'..='ᎏ' | 'Ꭰ'..='Ᏽ' | 'ᏸ'..='ᏽ' | 'ᐁ'..='ᙬ' | 'ᙯ'..='ᙿ' | 'ᚁ'..='ᚚ' | 'ᚠ'..='ᛪ' | 'ᛮ'..='ᛰ' | 'ᛱ'..='ᛸ' | 'ᜀ'..='ᜑ' | 'ᜟ'..='ᜱ' | 'ᝀ'..='ᝑ' | 'ᝠ'..='ᝬ' | 'ᝮ'..='ᝰ' | 'ក'..='ឳ' | 'ៗ' | 'ៜ' | 'ᠠ'..='ᡸ' | 'ᢀ'..='ᢄ' | 'ᢅ'..='ᢆ' | 'ᢇ'..='ᢨ' | 'ᢪ' | 'ᢰ'..='ᣵ' | 'ᤀ'..='ᤞ' | 'ᥐ'..='ᥭ' | 'ᥰ'..='ᥴ' | 'ᦀ'..='ᦫ' | 'ᦰ'..='ᧉ' | 'ᨀ'..='ᨖ' | 'ᨠ'..='ᩔ' | 'ᪧ' | 'ᬅ'..='ᬳ' | 'ᭅ'..='ᭌ' | 'ᮃ'..='ᮠ' | 'ᮮ'..='ᮯ' | 'ᮺ'..='ᯥ' | 'ᰀ'..='ᰣ' | 'ᱍ'..='ᱏ' | 'ᱚ'..='ᱽ' | 'ᲀ'..='ᲊ' | 'Ა'..='Ჺ' | 'Ჽ'..='Ჿ' | 'ᳩ'..='ᳬ' | 'ᳮ'..='ᳳ' | 'ᳵ'..='ᳶ' | 'ᳺ' | 'ᴀ'..='ᶿ' | 'Ḁ'..='ἕ' | 'Ἐ'..='Ἕ' | 'ἠ'..='ὅ' | 'Ὀ'..='Ὅ' | 'ὐ'..='ὗ' | 'Ὑ' | 'Ὓ' | 'Ὕ' | 'Ὗ'..='ώ' | 'ᾀ'..='ᾴ' | 'ᾶ'..='ᾼ' | 'ι' | 'ῂ'..='ῄ' | 'ῆ'..='ῌ' | 'ῐ'..='ΐ' | 'ῖ'..='Ί' | 'ῠ'..='Ῥ' | 'ῲ'..='ῴ' | 'ῶ'..='ῼ' | 'ⁱ' | 'ⁿ' | 'ₐ'..='ₜ' | 'ℂ' | 'ℇ' | 'ℊ'..='ℓ' | 'ℕ' | '℘' | 'ℙ'..='ℝ' | 'ℤ' | 'Ω' | 'ℨ' | 'K'..='ℭ' | '℮' | 'ℯ'..='ℹ' | 'ℼ'..='ℿ' | 'ⅅ'..='ⅉ' | 'ⅎ' | 'Ⅰ'..='ↂ' | 'Ↄ'..='ↄ' | 'ↅ'..='ↈ' | 'Ⰰ'..='ⳤ' | 'Ⳬ'..='ⳮ' | 'Ⳳ'..='ⳳ' | 'ⴀ'..='ⴥ' | 'ⴧ' | 'ⴭ' | 'ⴰ'..='ⵧ' | 'ⵯ' | 'ⶀ'..='ⶖ' | 'ⶠ'..='ⶦ' | 'ⶨ'..='ⶮ' | 'ⶰ'..='ⶶ' | 'ⶸ'..='ⶾ' | 'ⷀ'..='ⷆ' | 'ⷈ'..='ⷎ' | 'ⷐ'..='ⷖ' | 'ⷘ'..='ⷞ' | 'ⸯ' | '々'..='〆' | '〇' | '〡'..='〩' | '〱'..='〵' | '〸'..='〺' | '〻'..='〼' | 'ぁ'..='ゖ' | '゛'..='゜' | 'ゝ'..='ゟ' | 'ァ'..='ヺ' | 'ー'..='ヿ' | 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | 'ㆠ'..='ㆿ' | 'ㇰ'..='ㇿ' | '㐀'..='䶿' | '一'..='ꒌ' | 'ꓐ'..='ꓽ' | 'ꔀ'..='ꘌ' | 'ꘐ'..='ꘟ' | 'ꘪ'..='ꘫ' | 'Ꙁ'..='ꙮ' | 'ꙿ'..='ꚝ' | 'ꚠ'..='ꛥ' | 'ꛦ'..='ꛯ' | 'ꜗ'..='ꜟ' | 'Ꜣ'..='ꞈ' | 'Ꞌ'..='Ƛ' | '꟱'..='ꠁ' | 'ꠃ'..='ꠅ' | 'ꠇ'..='ꠊ' | 'ꠌ'..='ꠢ' | 'ꡀ'..='ꡳ' | 'ꢂ'..='ꢳ' | 'ꣲ'..='ꣷ' | 'ꣻ' | 'ꣽ'..='ꣾ' | 'ꤊ'..='ꤥ' | 'ꤰ'..='ꥆ' | 'ꥠ'..='ꥼ' | 'ꦄ'..='ꦲ' | 'ꧏ' | 'ꧠ'..='ꧤ' | 'ꧦ'..='ꧯ' | 'ꧺ'..='ꧾ' | 'ꨀ'..='ꨨ' | 'ꩀ'..='ꩂ' | 'ꩄ'..='ꩋ' | 'ꩠ'..='ꩶ' | 'ꩺ' | 'ꩾ'..='ꪯ' | 'ꪱ' | 'ꪵ'..='ꪶ' | 'ꪹ'..='ꪽ' | 'ꫀ' | 'ꫂ' | 'ꫛ'..='ꫝ' | 'ꫠ'..='ꫪ' | 'ꫲ'..='ꫴ' | 'ꬁ'..='ꬆ' | 'ꬉ'..='ꬎ' | 'ꬑ'..='ꬖ' | 'ꬠ'..='ꬦ' | 'ꬨ'..='ꬮ' | 'ꬰ'..='ꭚ' | 'ꭜ'..='ꭩ' | 'ꭰ'..='ꯢ' | '가'..='힣' | 'ힰ'..='ퟆ' | 'ퟋ'..='ퟻ' | '豈'..='舘' | '並'..='龎' | 'ﬀ'..='ﬆ' | 'ﬓ'..='ﬗ' | 'יִ' | 'ײַ'..='ﬨ' | 'שׁ'..='זּ' | 'טּ'..='לּ' | 'מּ' | 'נּ'..='סּ' | 'ףּ'..='פּ' | 'צּ'..='ﮱ' | 'ﯓ'..='ﴽ' | 'ﵐ'..='ﶏ' | 'ﶒ'..='ﷇ' | 'ﷰ'..='ﷻ' | 'ﹰ'..='ﹴ' | 'ﹶ'..='ﻼ' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ' | 'ｦ'..='ﾾ' | 'ￂ'..='ￇ' | 'ￊ'..='ￏ' | 'ￒ'..='ￗ' | 'ￚ'..='ￜ' | '𐀀'..='𐀋' | '𐀍'..='𐀦' | '𐀨'..='𐀺' | '𐀼'..='𐀽' | '𐀿'..='𐁍' | '𐁐'..='𐁝' | '𐂀'..='𐃺' | '𐅀'..='𐅴' | '𐊀'..='𐊜' | '𐊠'..='𐋐' | '𐌀'..='𐌟' | '𐌭'..='𐍀' | '𐍁' | '𐍂'..='𐍉' | '𐍊' | '𐍐'..='𐍵' | '𐎀'..='𐎝' | '𐎠'..='𐏃' | '𐏈'..='𐏏' | '𐏑'..='𐏕' | '𐐀'..='𐒝' | '𐒰'..='𐓓' | '𐓘'..='𐓻' | '𐔀'..='𐔧' | '𐔰'..='𐕣' | '𐕰'..='𐕺' | '𐕼'..='𐖊' | '𐖌'..='𐖒' | '𐖔'..='𐖕' | '𐖗'..='𐖡' | '𐖣'..='𐖱' | '𐖳'..='𐖹' | '𐖻'..='𐖼' | '𐗀'..='𐗳' | '𐘀'..='𐜶' | '𐝀'..='𐝕' | '𐝠'..='𐝧' | '𐞀'..='𐞅' | '𐞇'..='𐞰' | '𐞲'..='𐞺' | '𐠀'..='𐠅' | '𐠈' | '𐠊'..='𐠵' | '𐠷'..='𐠸' | '𐠼' | '𐠿'..='𐡕' | '𐡠'..='𐡶' | '𐢀'..='𐢞' | '𐣠'..='𐣲' | '𐣴'..='𐣵' | '𐤀'..='𐤕' | '𐤠'..='𐤹' | '𐥀'..='𐥙' | '𐦀'..='𐦷' | '𐦾'..='𐦿' | '𐨀' | '𐨐'..='𐨓' | '𐨕'..='𐨗' | '𐨙'..='𐨵' | '𐩠'..='𐩼' | '𐪀'..='𐪜' | '𐫀'..='𐫇' | '𐫉'..='𐫤' | '𐬀'..='𐬵' | '𐭀'..='𐭕' | '𐭠'..='𐭲' | '𐮀'..='𐮑' | '𐰀'..='𐱈' | '𐲀'..='𐲲' | '𐳀'..='𐳲' | '𐴀'..='𐴣' | '𐵊'..='𐵥' | '𐵯'..='𐶅' | '𐺀'..='𐺩' | '𐺰'..='𐺱' | '𐻂'..='𐻇' | '𐼀'..='𐼜' | '𐼧' | '𐼰'..='𐽅' | '𐽰'..='𐾁' | '𐾰'..='𐿄' | '𐿠'..='𐿶' | '𑀃'..='𑀷' | '𑁱'..='𑁲' | '𑁵' | '𑂃'..='𑂯' | '𑃐'..='𑃨' | '𑄃'..='𑄦' | '𑅄' | '𑅇' | '𑅐'..='𑅲' | '𑅶' | '𑆃'..='𑆲' | '𑇁'..='𑇄' | '𑇚' | '𑇜' | '𑈀'..='𑈑' | '𑈓'..='𑈫' | '𑈿'..='𑉀' | '𑊀'..='𑊆' | '𑊈' | '𑊊'..='𑊍' | '𑊏'..='𑊝' | '𑊟'..='𑊨' | '𑊰'..='𑋞' | '𑌅'..='𑌌' | '𑌏'..='𑌐' | '𑌓'..='𑌨' | '𑌪'..='𑌰' | '𑌲'..='𑌳' | '𑌵'..='𑌹' | '𑌽' | '𑍐' | '𑍝'..='𑍡' | '𑎀'..='𑎉' | '𑎋' | '𑎎' | '𑎐'..='𑎵' | '𑎷' | '𑏑' | '𑏓' | '𑐀'..='𑐴' | '𑑇'..='𑑊' | '𑑟'..='𑑡' | '𑒀'..='𑒯' | '𑓄'..='𑓅' | '𑓇' | '𑖀'..='𑖮' | '𑗘'..='𑗛' | '𑘀'..='𑘯' | '𑙄' | '𑚀'..='𑚪' | '𑚸' | '𑜀'..='𑜚' | '𑝀'..='𑝆' | '𑠀'..='𑠫' | '𑢠'..='𑣟' | '𑣿'..='𑤆' | '𑤉' | '𑤌'..='𑤓' | '𑤕'..='𑤖' | '𑤘'..='𑤯' | '𑤿' | '𑥁' | '𑦠'..='𑦧' | '𑦪'..='𑧐' | '𑧡' | '𑧣' | '𑨀' | '𑨋'..='𑨲' | '𑨺' | '𑩐' | '𑩜'..='𑪉' | '𑪝' | '𑪰'..='𑫸' | '𑯀'..='𑯠' | '𑰀'..='𑰈' | '𑰊'..='𑰮' | '𑱀' | '𑱲'..='𑲏' | '𑴀'..='𑴆' | '𑴈'..='𑴉' | '𑴋'..='𑴰' | '𑵆' | '𑵠'..='𑵥' | '𑵧'..='𑵨' | '𑵪'..='𑶉' | '𑶘' | '𑶰'..='𑷛' | '𑻠'..='𑻲' | '𑼂' | '𑼄'..='𑼐' | '𑼒'..='𑼳' | '𑾰' | '𒀀'..='𒎙' | '𒐀'..='𒑮' | '𒒀'..='𒕃' | '𒾐'..='𒿰' | '𓀀'..='𓐯' | '𓑁'..='𓑆' | '𓑠'..='𔏺' | '𔐀'..='𔙆' | '𖄀'..='𖄝' | '𖠀'..='𖨸' | '𖩀'..='𖩞' | '𖩰'..='𖪾' | '𖫐'..='𖫭' | '𖬀'..='𖬯' | '𖭀'..='𖭃' | '𖭣'..='𖭷' | '𖭽'..='𖮏' | '𖵀'..='𖵬' | '𖹀'..='𖹿' | '𖺠'..='𖺸' | '𖺻'..='𖻓' | '𖼀'..='𖽊' | '𖽐' | '𖾓'..='𖾟' | '𖿠'..='𖿡' | '𖿣' | '𖿲'..='𖿳' | '𖿴'..='𖿶' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛄲' | '𛅐'..='𛅒' | '𛅕' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𛰀'..='𛱪' | '𛱰'..='𛱼' | '𛲀'..='𛲈' | '𛲐'..='𛲙' | '𝐀'..='𝑔' | '𝑖'..='𝒜' | '𝒞'..='𝒟' | '𝒢' | '𝒥'..='𝒦' | '𝒩'..='𝒬' | '𝒮'..='𝒹' | '𝒻' | '𝒽'..='𝓃' | '𝓅'..='𝔅' | '𝔇'..='𝔊' | '𝔍'..='𝔔' | '𝔖'..='𝔜' | '𝔞'..='𝔹' | '𝔻'..='𝔾' | '𝕀'..='𝕄' | '𝕆' | '𝕊'..='𝕐' | '𝕒'..='𝚥' | '𝚨'..='𝛀' | '𝛂'..='𝛚' | '𝛜'..='𝛺' | '𝛼'..='𝜔' | '𝜖'..='𝜴' | '𝜶'..='𝝎' | '𝝐'..='𝝮' | '𝝰'..='𝞈' | '𝞊'..='𝞨' | '𝞪'..='𝟂' | '𝟄'..='𝟋' | '𝼀'..='𝼞' | '𝼥'..='𝼪' | '𞀰'..='𞁭' | '𞄀'..='𞄬' | '𞄷'..='𞄽' | '𞅎' | '𞊐'..='𞊭' | '𞋀'..='𞋫' | '𞓐'..='𞓫' | '𞗐'..='𞗭' | '𞗰' | '𞛀'..='𞛞' | '𞛠'..='𞛢' | '𞛤'..='𞛥' | '𞛧'..='𞛭' | '𞛰'..='𞛴' | '𞛾'..='𞛿' | '𞟠'..='𞟦' | '𞟨'..='𞟫' | '𞟭'..='𞟮' | '𞟰'..='𞟾' | '𞠀'..='𞣄' | '𞤀'..='𞥃' | '𞥋' | '𞸀'..='𞸃' | '𞸅'..='𞸟' | '𞸡'..='𞸢' | '𞸤' | '𞸧' | '𞸩'..='𞸲' | '𞸴'..='𞸷' | '𞸹' | '𞸻' | '𞹂' | '𞹇' | '𞹉' | '𞹋' | '𞹍'..='𞹏' | '𞹑'..='𞹒' | '𞹔' | '𞹗' | '𞹙' | '𞹛' | '𞹝' | '𞹟' | '𞹡'..='𞹢' | '𞹤' | '𞹧'..='𞹪' | '𞹬'..='𞹲' | '𞹴'..='𞹷' | '𞹹'..='𞹼' | '𞹾' | '𞺀'..='𞺉' | '𞺋'..='𞺛' | '𞺡'..='𞺣' | '𞺥'..='𞺩' | '𞺫'..='𞺻' | '𠀀'..='𪛟' | '𪜀'..='𫠝' | '𫠠'..='𬺭' | '𬺰'..='𮯠' | '𮯰'..='𮹝' | '丽'..='𪘀' | '𰀀'..='𱍊' | '𱍐'..='𳑹' => {
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
-            'S' => {
-                end = try_KW_SELFTYPE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_SELFTYPE; best_channel = 0; }
+            'A'..='Z' | 'a' | 'c'..='q' | 's'..='z' | 'ª' | 'µ' | 'º' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ˁ' | 'ˆ'..='ˑ' | 'ˠ'..='ˤ' | 'ˬ' | 'ˮ' | 'Ͱ'..='ʹ' | 'Ͷ'..='ͷ' | 'ͺ'..='ͽ' | 'Ϳ' | 'Ά' | 'Έ'..='Ί' | 'Ό' | 'Ύ'..='Ρ' | 'Σ'..='ϵ' | 'Ϸ'..='ҁ' | 'Ҋ'..='ԯ' | 'Ա'..='Ֆ' | 'ՙ' | 'ՠ'..='ֈ' | 'א'..='ת' | 'ׯ'..='ײ' | 'ؠ'..='ي' | 'ٮ'..='ٯ' | 'ٱ'..='ۓ' | 'ە' | 'ۥ'..='ۦ' | 'ۮ'..='ۯ' | 'ۺ'..='ۼ' | 'ۿ' | 'ܐ' | 'ܒ'..='ܯ' | 'ݍ'..='ޥ' | 'ޱ' | 'ߊ'..='ߪ' | 'ߴ'..='ߵ' | 'ߺ' | 'ࠀ'..='ࠕ' | 'ࠚ' | 'ࠤ' | 'ࠨ' | 'ࡀ'..='ࡘ' | 'ࡠ'..='ࡪ' | 'ࡰ'..='ࢇ' | 'ࢉ'..='࢏' | 'ࢠ'..='ࣉ' | 'ऄ'..='ह' | 'ऽ' | 'ॐ' | 'क़'..='ॡ' | 'ॱ'..='ঀ' | 'অ'..='ঌ' | 'এ'..='ঐ' | 'ও'..='ন' | 'প'..='র' | 'ল' | 'শ'..='হ' | 'ঽ' | 'ৎ' | 'ড়'..='ঢ়' | 'য়'..='ৡ' | 'ৰ'..='ৱ' | 'ৼ' | 'ਅ'..='ਊ' | 'ਏ'..='ਐ' | 'ਓ'..='ਨ' | 'ਪ'..='ਰ' | 'ਲ'..='ਲ਼' | 'ਵ'..='ਸ਼' | 'ਸ'..='ਹ' | 'ਖ਼'..='ੜ' | 'ਫ਼' | 'ੲ'..='ੴ' | 'અ'..='ઍ' | 'એ'..='ઑ' | 'ઓ'..='ન' | 'પ'..='ર' | 'લ'..='ળ' | 'વ'..='હ' | 'ઽ' | 'ૐ' | 'ૠ'..='ૡ' | 'ૹ' | 'ଅ'..='ଌ' | 'ଏ'..='ଐ' | 'ଓ'..='ନ' | 'ପ'..='ର' | 'ଲ'..='ଳ' | 'ଵ'..='ହ' | 'ଽ' | 'ଡ଼'..='ଢ଼' | 'ୟ'..='ୡ' | 'ୱ' | 'ஃ' | 'அ'..='ஊ' | 'எ'..='ஐ' | 'ஒ'..='க' | 'ங'..='ச' | 'ஜ' | 'ஞ'..='ட' | 'ண'..='த' | 'ந'..='ப' | 'ம'..='ஹ' | 'ௐ' | 'అ'..='ఌ' | 'ఎ'..='ఐ' | 'ఒ'..='న' | 'ప'..='హ' | 'ఽ' | 'ౘ'..='ౚ' | '౜'..='ౝ' | 'ౠ'..='ౡ' | 'ಀ' | 'ಅ'..='ಌ' | 'ಎ'..='ಐ' | 'ಒ'..='ನ' | 'ಪ'..='ಳ' | 'ವ'..='ಹ' | 'ಽ' | '೜'..='ೞ' | 'ೠ'..='ೡ' | 'ೱ'..='ೲ' | 'ഄ'..='ഌ' | 'എ'..='ഐ' | 'ഒ'..='ഺ' | 'ഽ' | 'ൎ' | 'ൔ'..='ൖ' | 'ൟ'..='ൡ' | 'ൺ'..='ൿ' | 'අ'..='ඖ' | 'ක'..='න' | 'ඳ'..='ර' | 'ල' | 'ව'..='ෆ' | 'ก'..='ะ' | 'า'..='ำ' | 'เ'..='ๆ' | 'ກ'..='ຂ' | 'ຄ' | 'ຆ'..='ຊ' | 'ຌ'..='ຣ' | 'ລ' | 'ວ'..='ະ' | 'າ'..='ຳ' | 'ຽ' | 'ເ'..='ໄ' | 'ໆ' | 'ໜ'..='ໟ' | 'ༀ' | 'ཀ'..='ཇ' | 'ཉ'..='ཬ' | 'ྈ'..='ྌ' | 'က'..='ဪ' | 'ဿ' | 'ၐ'..='ၕ' | 'ၚ'..='ၝ' | 'ၡ' | 'ၥ'..='ၦ' | 'ၮ'..='ၰ' | 'ၵ'..='ႁ' | 'ႎ' | 'Ⴀ'..='Ⴥ' | 'Ⴧ' | 'Ⴭ' | 'ა'..='ჺ' | 'ჼ'..='ቈ' | 'ቊ'..='ቍ' | 'ቐ'..='ቖ' | 'ቘ' | 'ቚ'..='ቝ' | 'በ'..='ኈ' | 'ኊ'..='ኍ' | 'ነ'..='ኰ' | 'ኲ'..='ኵ' | 'ኸ'..='ኾ' | 'ዀ' | 'ዂ'..='ዅ' | 'ወ'..='ዖ' | 'ዘ'..='ጐ' | 'ጒ'..='ጕ' | 'ጘ'..='ፚ' | 'ᎀ'..='ᎏ' | 'Ꭰ'..='Ᏽ' | 'ᏸ'..='ᏽ' | 'ᐁ'..='ᙬ' | 'ᙯ'..='ᙿ' | 'ᚁ'..='ᚚ' | 'ᚠ'..='ᛪ' | 'ᛮ'..='ᛰ' | 'ᛱ'..='ᛸ' | 'ᜀ'..='ᜑ' | 'ᜟ'..='ᜱ' | 'ᝀ'..='ᝑ' | 'ᝠ'..='ᝬ' | 'ᝮ'..='ᝰ' | 'ក'..='ឳ' | 'ៗ' | 'ៜ' | 'ᠠ'..='ᡸ' | 'ᢀ'..='ᢄ' | 'ᢅ'..='ᢆ' | 'ᢇ'..='ᢨ' | 'ᢪ' | 'ᢰ'..='ᣵ' | 'ᤀ'..='ᤞ' | 'ᥐ'..='ᥭ' | 'ᥰ'..='ᥴ' | 'ᦀ'..='ᦫ' | 'ᦰ'..='ᧉ' | 'ᨀ'..='ᨖ' | 'ᨠ'..='ᩔ' | 'ᪧ' | 'ᬅ'..='ᬳ' | 'ᭅ'..='ᭌ' | 'ᮃ'..='ᮠ' | 'ᮮ'..='ᮯ' | 'ᮺ'..='ᯥ' | 'ᰀ'..='ᰣ' | 'ᱍ'..='ᱏ' | 'ᱚ'..='ᱽ' | 'ᲀ'..='ᲊ' | 'Ა'..='Ჺ' | 'Ჽ'..='Ჿ' | 'ᳩ'..='ᳬ' | 'ᳮ'..='ᳳ' | 'ᳵ'..='ᳶ' | 'ᳺ' | 'ᴀ'..='ᶿ' | 'Ḁ'..='ἕ' | 'Ἐ'..='Ἕ' | 'ἠ'..='ὅ' | 'Ὀ'..='Ὅ' | 'ὐ'..='ὗ' | 'Ὑ' | 'Ὓ' | 'Ὕ' | 'Ὗ'..='ώ' | 'ᾀ'..='ᾴ' | 'ᾶ'..='ᾼ' | 'ι' | 'ῂ'..='ῄ' | 'ῆ'..='ῌ' | 'ῐ'..='ΐ' | 'ῖ'..='Ί' | 'ῠ'..='Ῥ' | 'ῲ'..='ῴ' | 'ῶ'..='ῼ' | 'ⁱ' | 'ⁿ' | 'ₐ'..='ₜ' | 'ℂ' | 'ℇ' | 'ℊ'..='ℓ' | 'ℕ' | '℘' | 'ℙ'..='ℝ' | 'ℤ' | 'Ω' | 'ℨ' | 'K'..='ℭ' | '℮' | 'ℯ'..='ℹ' | 'ℼ'..='ℿ' | 'ⅅ'..='ⅉ' | 'ⅎ' | 'Ⅰ'..='ↂ' | 'Ↄ'..='ↄ' | 'ↅ'..='ↈ' | 'Ⰰ'..='ⳤ' | 'Ⳬ'..='ⳮ' | 'Ⳳ'..='ⳳ' | 'ⴀ'..='ⴥ' | 'ⴧ' | 'ⴭ' | 'ⴰ'..='ⵧ' | 'ⵯ' | 'ⶀ'..='ⶖ' | 'ⶠ'..='ⶦ' | 'ⶨ'..='ⶮ' | 'ⶰ'..='ⶶ' | 'ⶸ'..='ⶾ' | 'ⷀ'..='ⷆ' | 'ⷈ'..='ⷎ' | 'ⷐ'..='ⷖ' | 'ⷘ'..='ⷞ' | 'ⸯ' | '々'..='〆' | '〇' | '〡'..='〩' | '〱'..='〵' | '〸'..='〺' | '〻'..='〼' | 'ぁ'..='ゖ' | '゛'..='゜' | 'ゝ'..='ゟ' | 'ァ'..='ヺ' | 'ー'..='ヿ' | 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | 'ㆠ'..='ㆿ' | 'ㇰ'..='ㇿ' | '㐀'..='䶿' | '一'..='ꒌ' | 'ꓐ'..='ꓽ' | 'ꔀ'..='ꘌ' | 'ꘐ'..='ꘟ' | 'ꘪ'..='ꘫ' | 'Ꙁ'..='ꙮ' | 'ꙿ'..='ꚝ' | 'ꚠ'..='ꛥ' | 'ꛦ'..='ꛯ' | 'ꜗ'..='ꜟ' | 'Ꜣ'..='ꞈ' | 'Ꞌ'..='Ƛ' | '꟱'..='ꠁ' | 'ꠃ'..='ꠅ' | 'ꠇ'..='ꠊ' | 'ꠌ'..='ꠢ' | 'ꡀ'..='ꡳ' | 'ꢂ'..='ꢳ' | 'ꣲ'..='ꣷ' | 'ꣻ' | 'ꣽ'..='ꣾ' | 'ꤊ'..='ꤥ' | 'ꤰ'..='ꥆ' | 'ꥠ'..='ꥼ' | 'ꦄ'..='ꦲ' | 'ꧏ' | 'ꧠ'..='ꧤ' | 'ꧦ'..='ꧯ' | 'ꧺ'..='ꧾ' | 'ꨀ'..='ꨨ' | 'ꩀ'..='ꩂ' | 'ꩄ'..='ꩋ' | 'ꩠ'..='ꩶ' | 'ꩺ' | 'ꩾ'..='ꪯ' | 'ꪱ' | 'ꪵ'..='ꪶ' | 'ꪹ'..='ꪽ' | 'ꫀ' | 'ꫂ' | 'ꫛ'..='ꫝ' | 'ꫠ'..='ꫪ' | 'ꫲ'..='ꫴ' | 'ꬁ'..='ꬆ' | 'ꬉ'..='ꬎ' | 'ꬑ'..='ꬖ' | 'ꬠ'..='ꬦ' | 'ꬨ'..='ꬮ' | 'ꬰ'..='ꭚ' | 'ꭜ'..='ꭩ' | 'ꭰ'..='ꯢ' | '가'..='힣' | 'ힰ'..='ퟆ' | 'ퟋ'..='ퟻ' | '豈'..='舘' | '並'..='龎' | 'ﬀ'..='ﬆ' | 'ﬓ'..='ﬗ' | 'יִ' | 'ײַ'..='ﬨ' | 'שׁ'..='זּ' | 'טּ'..='לּ' | 'מּ' | 'נּ'..='סּ' | 'ףּ'..='פּ' | 'צּ'..='ﮱ' | 'ﯓ'..='ﴽ' | 'ﵐ'..='ﶏ' | 'ﶒ'..='ﷇ' | 'ﷰ'..='ﷻ' | 'ﹰ'..='ﹴ' | 'ﹶ'..='ﻼ' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ' | 'ｦ'..='ﾾ' | 'ￂ'..='ￇ' | 'ￊ'..='ￏ' | 'ￒ'..='ￗ' | 'ￚ'..='ￜ' | '𐀀'..='𐀋' | '𐀍'..='𐀦' | '𐀨'..='𐀺' | '𐀼'..='𐀽' | '𐀿'..='𐁍' | '𐁐'..='𐁝' | '𐂀'..='𐃺' | '𐅀'..='𐅴' | '𐊀'..='𐊜' | '𐊠'..='𐋐' | '𐌀'..='𐌟' | '𐌭'..='𐍀' | '𐍁' | '𐍂'..='𐍉' | '𐍊' | '𐍐'..='𐍵' | '𐎀'..='𐎝' | '𐎠'..='𐏃' | '𐏈'..='𐏏' | '𐏑'..='𐏕' | '𐐀'..='𐒝' | '𐒰'..='𐓓' | '𐓘'..='𐓻' | '𐔀'..='𐔧' | '𐔰'..='𐕣' | '𐕰'..='𐕺' | '𐕼'..='𐖊' | '𐖌'..='𐖒' | '𐖔'..='𐖕' | '𐖗'..='𐖡' | '𐖣'..='𐖱' | '𐖳'..='𐖹' | '𐖻'..='𐖼' | '𐗀'..='𐗳' | '𐘀'..='𐜶' | '𐝀'..='𐝕' | '𐝠'..='𐝧' | '𐞀'..='𐞅' | '𐞇'..='𐞰' | '𐞲'..='𐞺' | '𐠀'..='𐠅' | '𐠈' | '𐠊'..='𐠵' | '𐠷'..='𐠸' | '𐠼' | '𐠿'..='𐡕' | '𐡠'..='𐡶' | '𐢀'..='𐢞' | '𐣠'..='𐣲' | '𐣴'..='𐣵' | '𐤀'..='𐤕' | '𐤠'..='𐤹' | '𐥀'..='𐥙' | '𐦀'..='𐦷' | '𐦾'..='𐦿' | '𐨀' | '𐨐'..='𐨓' | '𐨕'..='𐨗' | '𐨙'..='𐨵' | '𐩠'..='𐩼' | '𐪀'..='𐪜' | '𐫀'..='𐫇' | '𐫉'..='𐫤' | '𐬀'..='𐬵' | '𐭀'..='𐭕' | '𐭠'..='𐭲' | '𐮀'..='𐮑' | '𐰀'..='𐱈' | '𐲀'..='𐲲' | '𐳀'..='𐳲' | '𐴀'..='𐴣' | '𐵊'..='𐵥' | '𐵯'..='𐶅' | '𐺀'..='𐺩' | '𐺰'..='𐺱' | '𐻂'..='𐻇' | '𐼀'..='𐼜' | '𐼧' | '𐼰'..='𐽅' | '𐽰'..='𐾁' | '𐾰'..='𐿄' | '𐿠'..='𐿶' | '𑀃'..='𑀷' | '𑁱'..='𑁲' | '𑁵' | '𑂃'..='𑂯' | '𑃐'..='𑃨' | '𑄃'..='𑄦' | '𑅄' | '𑅇' | '𑅐'..='𑅲' | '𑅶' | '𑆃'..='𑆲' | '𑇁'..='𑇄' | '𑇚' | '𑇜' | '𑈀'..='𑈑' | '𑈓'..='𑈫' | '𑈿'..='𑉀' | '𑊀'..='𑊆' | '𑊈' | '𑊊'..='𑊍' | '𑊏'..='𑊝' | '𑊟'..='𑊨' | '𑊰'..='𑋞' | '𑌅'..='𑌌' | '𑌏'..='𑌐' | '𑌓'..='𑌨' | '𑌪'..='𑌰' | '𑌲'..='𑌳' | '𑌵'..='𑌹' | '𑌽' | '𑍐' | '𑍝'..='𑍡' | '𑎀'..='𑎉' | '𑎋' | '𑎎' | '𑎐'..='𑎵' | '𑎷' | '𑏑' | '𑏓' | '𑐀'..='𑐴' | '𑑇'..='𑑊' | '𑑟'..='𑑡' | '𑒀'..='𑒯' | '𑓄'..='𑓅' | '𑓇' | '𑖀'..='𑖮' | '𑗘'..='𑗛' | '𑘀'..='𑘯' | '𑙄' | '𑚀'..='𑚪' | '𑚸' | '𑜀'..='𑜚' | '𑝀'..='𑝆' | '𑠀'..='𑠫' | '𑢠'..='𑣟' | '𑣿'..='𑤆' | '𑤉' | '𑤌'..='𑤓' | '𑤕'..='𑤖' | '𑤘'..='𑤯' | '𑤿' | '𑥁' | '𑦠'..='𑦧' | '𑦪'..='𑧐' | '𑧡' | '𑧣' | '𑨀' | '𑨋'..='𑨲' | '𑨺' | '𑩐' | '𑩜'..='𑪉' | '𑪝' | '𑪰'..='𑫸' | '𑯀'..='𑯠' | '𑰀'..='𑰈' | '𑰊'..='𑰮' | '𑱀' | '𑱲'..='𑲏' | '𑴀'..='𑴆' | '𑴈'..='𑴉' | '𑴋'..='𑴰' | '𑵆' | '𑵠'..='𑵥' | '𑵧'..='𑵨' | '𑵪'..='𑶉' | '𑶘' | '𑶰'..='𑷛' | '𑻠'..='𑻲' | '𑼂' | '𑼄'..='𑼐' | '𑼒'..='𑼳' | '𑾰' | '𒀀'..='𒎙' | '𒐀'..='𒑮' | '𒒀'..='𒕃' | '𒾐'..='𒿰' | '𓀀'..='𓐯' | '𓑁'..='𓑆' | '𓑠'..='𔏺' | '𔐀'..='𔙆' | '𖄀'..='𖄝' | '𖠀'..='𖨸' | '𖩀'..='𖩞' | '𖩰'..='𖪾' | '𖫐'..='𖫭' | '𖬀'..='𖬯' | '𖭀'..='𖭃' | '𖭣'..='𖭷' | '𖭽'..='𖮏' | '𖵀'..='𖵬' | '𖹀'..='𖹿' | '𖺠'..='𖺸' | '𖺻'..='𖻓' | '𖼀'..='𖽊' | '𖽐' | '𖾓'..='𖾟' | '𖿠'..='𖿡' | '𖿣' | '𖿲'..='𖿳' | '𖿴'..='𖿶' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛄲' | '𛅐'..='𛅒' | '𛅕' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𛰀'..='𛱪' | '𛱰'..='𛱼' | '𛲀'..='𛲈' | '𛲐'..='𛲙' | '𝐀'..='𝑔' | '𝑖'..='𝒜' | '𝒞'..='𝒟' | '𝒢' | '𝒥'..='𝒦' | '𝒩'..='𝒬' | '𝒮'..='𝒹' | '𝒻' | '𝒽'..='𝓃' | '𝓅'..='𝔅' | '𝔇'..='𝔊' | '𝔍'..='𝔔' | '𝔖'..='𝔜' | '𝔞'..='𝔹' | '𝔻'..='𝔾' | '𝕀'..='𝕄' | '𝕆' | '𝕊'..='𝕐' | '𝕒'..='𝚥' | '𝚨'..='𝛀' | '𝛂'..='𝛚' | '𝛜'..='𝛺' | '𝛼'..='𝜔' | '𝜖'..='𝜴' | '𝜶'..='𝝎' | '𝝐'..='𝝮' | '𝝰'..='𝞈' | '𝞊'..='𝞨' | '𝞪'..='𝟂' | '𝟄'..='𝟋' | '𝼀'..='𝼞' | '𝼥'..='𝼪' | '𞀰'..='𞁭' | '𞄀'..='𞄬' | '𞄷'..='𞄽' | '𞅎' | '𞊐'..='𞊭' | '𞋀'..='𞋫' | '𞓐'..='𞓫' | '𞗐'..='𞗭' | '𞗰' | '𞛀'..='𞛞' | '𞛠'..='𞛢' | '𞛤'..='𞛥' | '𞛧'..='𞛭' | '𞛰'..='𞛴' | '𞛾'..='𞛿' | '𞟠'..='𞟦' | '𞟨'..='𞟫' | '𞟭'..='𞟮' | '𞟰'..='𞟾' | '𞠀'..='𞣄' | '𞤀'..='𞥃' | '𞥋' | '𞸀'..='𞸃' | '𞸅'..='𞸟' | '𞸡'..='𞸢' | '𞸤' | '𞸧' | '𞸩'..='𞸲' | '𞸴'..='𞸷' | '𞸹' | '𞸻' | '𞹂' | '𞹇' | '𞹉' | '𞹋' | '𞹍'..='𞹏' | '𞹑'..='𞹒' | '𞹔' | '𞹗' | '𞹙' | '𞹛' | '𞹝' | '𞹟' | '𞹡'..='𞹢' | '𞹤' | '𞹧'..='𞹪' | '𞹬'..='𞹲' | '𞹴'..='𞹷' | '𞹹'..='𞹼' | '𞹾' | '𞺀'..='𞺉' | '𞺋'..='𞺛' | '𞺡'..='𞺣' | '𞺥'..='𞺩' | '𞺫'..='𞺻' | '𠀀'..='𪛟' | '𪜀'..='𫠝' | '𫠠'..='𬺭' | '𬺰'..='𮯠' | '𮯰'..='𮹝' | '丽'..='𪘀' | '𰀀'..='𱍊' | '𱍐'..='𳑹' => {
                 end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
             },
@@ -5873,25 +5256,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 end = try_UNDERSCORE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_UNDERSCORE; best_channel = 0; }
             },
-            'a' => {
-                end = try_KW_AS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_AS; best_channel = 0; }
-                end = try_KW_ASYNC(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_ASYNC; best_channel = 0; }
-                end = try_KW_AWAIT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_AWAIT; best_channel = 0; }
-                end = try_KW_ABSTRACT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_ABSTRACT; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
             'b' => {
-                end = try_KW_BREAK(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_BREAK; best_channel = 0; }
-                end = try_KW_BECOME(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_BECOME; best_channel = 0; }
-                end = try_KW_BOX(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_BOX; best_channel = 0; }
                 end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
                 end = try_BYTE_LITERAL(&lexer.chars, start);
@@ -5901,165 +5266,13 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 end = try_RAW_BYTE_STRING_LITERAL(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_RAW_BYTE_STRING_LITERAL; best_channel = 0; }
             },
-            'c' => {
-                end = try_KW_CONST(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_CONST; best_channel = 0; }
-                end = try_KW_CONTINUE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_CONTINUE; best_channel = 0; }
-                end = try_KW_CRATE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_CRATE; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
-            'd' => {
-                end = try_KW_DYN(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_DYN; best_channel = 0; }
-                end = try_KW_DO(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_DO; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
-            'e' => {
-                end = try_KW_ELSE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_ELSE; best_channel = 0; }
-                end = try_KW_ENUM(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_ENUM; best_channel = 0; }
-                end = try_KW_EXTERN(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_EXTERN; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
-            'f' => {
-                end = try_KW_FALSE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_FALSE; best_channel = 0; }
-                end = try_KW_FN(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_FN; best_channel = 0; }
-                end = try_KW_FOR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_FOR; best_channel = 0; }
-                end = try_KW_FINAL(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_FINAL; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
-            'i' => {
-                end = try_KW_IF(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_IF; best_channel = 0; }
-                end = try_KW_IMPL(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_IMPL; best_channel = 0; }
-                end = try_KW_IN(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_IN; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
-            'l' => {
-                end = try_KW_LET(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_LET; best_channel = 0; }
-                end = try_KW_LOOP(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_LOOP; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
-            'm' => {
-                end = try_KW_MATCH(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_MATCH; best_channel = 0; }
-                end = try_KW_MOD(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_MOD; best_channel = 0; }
-                end = try_KW_MOVE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_MOVE; best_channel = 0; }
-                end = try_KW_MUT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_MUT; best_channel = 0; }
-                end = try_KW_MACRO(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_MACRO; best_channel = 0; }
-                end = try_KW_MACRORULES(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_MACRORULES; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
-            'o' => {
-                end = try_KW_OVERRIDE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_OVERRIDE; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
-            'p' => {
-                end = try_KW_PUB(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_PUB; best_channel = 0; }
-                end = try_KW_PRIV(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_PRIV; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
             'r' => {
-                end = try_KW_REF(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_REF; best_channel = 0; }
-                end = try_KW_RETURN(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_RETURN; best_channel = 0; }
-                end = try_KW_RAW(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_RAW; best_channel = 0; }
                 end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
                 end = try_RAW_IDENTIFIER(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_RAW_IDENTIFIER; best_channel = 0; }
                 end = try_RAW_STRING_LITERAL(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_RAW_STRING_LITERAL; best_channel = 0; }
-            },
-            's' => {
-                end = try_KW_SELFVALUE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_SELFVALUE; best_channel = 0; }
-                end = try_KW_STATIC(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_STATIC; best_channel = 0; }
-                end = try_KW_STRUCT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_STRUCT; best_channel = 0; }
-                end = try_KW_SUPER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_SUPER; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
-            't' => {
-                end = try_KW_TRAIT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_TRAIT; best_channel = 0; }
-                end = try_KW_TRUE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_TRUE; best_channel = 0; }
-                end = try_KW_TYPE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_TYPE; best_channel = 0; }
-                end = try_KW_TYPEOF(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_TYPEOF; best_channel = 0; }
-                end = try_KW_TRY(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_TRY; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
-            'u' => {
-                end = try_KW_UNSAFE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_UNSAFE; best_channel = 0; }
-                end = try_KW_USE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_USE; best_channel = 0; }
-                end = try_KW_UNSIZED(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_UNSIZED; best_channel = 0; }
-                end = try_KW_UNION(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_UNION; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
-            'v' => {
-                end = try_KW_VIRTUAL(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_VIRTUAL; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
-            'w' => {
-                end = try_KW_WHERE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_WHERE; best_channel = 0; }
-                end = try_KW_WHILE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_WHILE; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-            },
-            'y' => {
-                end = try_KW_YIELD(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_KW_YIELD; best_channel = 0; }
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
             },
             '{' => {
                 end = try_LCURLYBRACE(&lexer.chars, start);
@@ -6088,6 +5301,10 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             triv_lo = ts.trivia_mark();
             lexer.pos = start + 1;
         } else {
+            if best_kind == TK_NON_KEYWORD_IDENTIFIER {
+                let kw_kind = classify_keyword(&lexer.chars, start, best_end);
+                if kw_kind >= 0 { best_kind = kw_kind; best_channel = 0; }
+            }
             let tok_start = start;
             best_kind = RustLexerBase::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, best_channel);
             if best_channel != 0 {
