@@ -165,6 +165,7 @@ use {
     rule_result_type,
     warn_unhandled_actions,
     wrapper_arg_forward,
+    alt_scan_gate_conditions,
 } from "./action_gen.wado";
 use {
     compute_fragment_entries,
@@ -8214,7 +8215,11 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
         match alt_initial_gate(idx, ctx) {
             Some(gate) => {
                 any_gated = true;
-                w.line(`let _sd_p_${idx} = if ${gate} { ${scan} } else { -1 };`);
+                if alt_scan_checks_gate(idx, ctx) {
+                    w.line(`let _sd_p_${idx} = ${scan};`);
+                } else {
+                    w.line(`let _sd_p_${idx} = if ${gate} { ${scan} } else { -1 };`);
+                }
             },
             None => {
                 w.line(`let _sd_p_${idx} = ${scan};`);
@@ -8280,6 +8285,13 @@ fn alt_initial_gate(idx: i32, ctx: &mut GenContext) -> Option<String> {
         return null;
     }
     return Option::Some(join_gate_conds(&alt_initial_gate_conditions(alt, ctx)));
+}
+
+/// Whether alternative `idx`'s scan helper tests its gate itself, against a
+/// scan gate seeded from the parser's.
+fn alt_scan_checks_gate(idx: i32, ctx: &GenContext) -> bool {
+    let rule = &ctx.parser_rules()[ctx.current_rule_index()];
+    return !alt_scan_gate_conditions(&rule.alternatives[idx], ctx).is_empty();
 }
 
 /// The alts a `Dispatch` node's tournament fallback chooses between, in
