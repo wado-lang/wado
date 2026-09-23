@@ -190,9 +190,10 @@ test "gen_lexer: the first-char dispatch is one match, not an else-if chain" {
 
 test "gen_lexer: dispatch arms follow char order, not grammar order" {
     let out = lexer_source("lexer grammar L; B : 'b' ; A : 'a' ; C : 'c' ;");
-    assert out.contains("'a' => {"), out;
-    assert out.contains("'b' => {"), out;
-    assert out.contains("'c' => {"), out;
+    let a = out.find("'a' => {").unwrap();
+    let b = out.find("'b' => {").unwrap();
+    let c = out.find("'c' => {").unwrap();
+    assert a < b < c, out;
 }
 
 test "gen_lexer: a dispatch with no wildcard rule still covers every char" {
