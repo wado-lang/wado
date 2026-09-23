@@ -386,7 +386,7 @@ forHead
 
 forTail
     : 'of' exprNoStruct
-    | (':' typeRef)? '=' expression ';' condition? ';' exprNoStruct?
+    | '=' expression ';' condition? ';' exprNoStruct?
     ;
 
 whileStatement
