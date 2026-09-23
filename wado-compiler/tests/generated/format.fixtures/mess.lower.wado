@@ -2580,9 +2580,17 @@ pub fn i32_clz(x: i32) -> i32;
 
 pub fn i64_clz(x: i64) -> i64;
 
+pub fn i64_reinterpret_f64(f: f64) -> i64;
+
 pub fn f64_reinterpret_i64(i: i64) -> f64;
 
+pub fn i32_reinterpret_f32(f: f32) -> i32;
+
 pub fn f32_reinterpret_i32(i: i32) -> f32;
+
+pub fn u16_reinterpret_f16(f: f16) -> u16;
+
+pub fn u16_reinterpret_bf16(f: bf16) -> u16;
 
 pub fn unreachable() -> !;
 
@@ -2607,6 +2615,10 @@ pub fn error_context_new(ptr: i32, len: i32) -> i32;
 pub fn error_context_debug_message(handle: i32, outptr: i32);
 
 pub fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
+
+pub fn i8x16_eq(a: v128, b: v128) -> v128;
+
+pub fn i8x16_all_true(a: v128) -> bool;
 
 #[retain(buf)]
 pub fn "core:prelude/format.wado/Formatter::new"(buf: &mut String) -> Formatter {
@@ -2721,111 +2733,6 @@ pub fn "$field_get$core:prelude/fpfmt.wado/FormatResult$i32"(v: &FormatResult, i
     };
 }
 
-<<<<<<< HEAD
-pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/Reflect::type_name"() -> String {
-    return String { repr: packed"SpecialKind", used: 11 };
-}
-
-pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/ReflectEnum::discriminant"(self: Box<core:prelude/fpfmt.wado/SpecialKind>) -> i32 {
-    return self.value as i32;
-}
-
-pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/ReflectEnum::from_discriminant"(disc: i32) -> Option<SpecialKind> {
-    if (disc == 0) {
-        return Option<SpecialKind>::Some(SpecialKind::NotSpecial);
-    }
-    if (disc == 1) {
-        return Option<SpecialKind>::Some(SpecialKind::Zero);
-    }
-    if (disc == 2) {
-        return Option<SpecialKind>::Some(SpecialKind::Inf);
-    }
-    if (disc == 3) {
-        return Option<SpecialKind>::Some(SpecialKind::NaN);
-    }
-    return Option<SpecialKind>::None;
-}
-
-pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/ReflectEnum::members"() -> [EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>] {
-    return [EnumCase<core:prelude/fpfmt.wado/SpecialKind> { discriminant: 0, value: SpecialKind::NotSpecial, case_name: String { repr: packed"NotSpecial", used: 10 }, wire_override: Option<String>::None }, EnumCase<core:prelude/fpfmt.wado/SpecialKind> { discriminant: 1, value: SpecialKind::Zero, case_name: String { repr: packed"Zero", used: 4 }, wire_override: Option<String>::None }, EnumCase<core:prelude/fpfmt.wado/SpecialKind> { discriminant: 2, value: SpecialKind::Inf, case_name: String { repr: packed"Inf", used: 3 }, wire_override: Option<String>::None }, EnumCase<core:prelude/fpfmt.wado/SpecialKind> { discriminant: 3, value: SpecialKind::NaN, case_name: String { repr: packed"NaN", used: 3 }, wire_override: Option<String>::None }];
-}
-
-pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
-    return CaseStyle::Identity;
-}
-
-pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
-
-pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8,u8)->u8>, f: &mut Formatter);
-
-pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
-
-pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
-
-pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char])->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char],[i32,char])->[i32,char]>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
-
-pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
-
-pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
-
-pub fn "fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(i32)->i32>, f: &mut Formatter);
-
-pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/Display::fmt"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, f: &mut Formatter) {
-    if (self.value == %0) {
-        f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"NotSpecial", used: 10 });
-    } else {
-        if (self.value == %2) {
-            f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"Zero", used: 4 });
-        } else {
-            if (self.value == %4) {
-                f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"Inf", used: 3 });
-            } else {
-                if (self.value == %6) {
-                    f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"NaN", used: 3 });
-                };
-            };
-        };
-    };
-}
-
 pub fn f16::to_bits(self: Box<f16>) -> u16 {
     return core::builtin::u16_reinterpret_f16(self.value);
 }
@@ -2873,284 +2780,6 @@ pub fn "bf16^core:prelude/traits.wado/Ord::cmp"(self: Box<bf16>, other: Box<bf16
     return Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<bf16>::from"(self.value) }."f32^core:prelude/traits.wado/Ord::cmp"(Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<bf16>::from"(other.value) });
 }
 
-pub fn "f16^core:prelude/traits.wado/Display::fmt"(self: Box<f16>, f: &mut Formatter) {
-    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<f16>::from"(self.value) }."f32^core:prelude/traits.wado/Display::fmt"(f);
-}
-
-pub fn "bf16^core:prelude/traits.wado/Display::fmt"(self: Box<bf16>, f: &mut Formatter) {
-    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<bf16>::from"(self.value) }."f32^core:prelude/traits.wado/Display::fmt"(f);
-}
-
-pub fn "f16^core:prelude/traits.wado/Inspect::inspect"(self: Box<f16>, f: &mut Formatter) {
-    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<f16>::from"(self.value) }."f32^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(f);
-}
-
-pub fn "bf16^core:prelude/traits.wado/Inspect::inspect"(self: Box<bf16>, f: &mut Formatter) {
-    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<bf16>::from"(self.value) }."f32^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(f);
-}
-
-pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
-
-pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8,u8)->u8>, f: &mut Formatter);
-
-pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
-
-pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
-
-pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char])->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char],[i32,char])->[i32,char]>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
-
-pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
-
-pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
-
-pub fn "fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(i32)->i32>, f: &mut Formatter);
-
-||||||| 51329236232
-pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/Reflect::type_name"() -> String {
-    return String { repr: packed"SpecialKind", used: 11 };
-}
-
-pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/ReflectEnum::discriminant"(self: Box<core:prelude/fpfmt.wado/SpecialKind>) -> i32 {
-    return self.value as i32;
-}
-
-pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/ReflectEnum::from_discriminant"(disc: i32) -> Option<SpecialKind> {
-    if (disc == 0) {
-        return Option<SpecialKind>::Some(SpecialKind::NotSpecial);
-    }
-    if (disc == 1) {
-        return Option<SpecialKind>::Some(SpecialKind::Zero);
-    }
-    if (disc == 2) {
-        return Option<SpecialKind>::Some(SpecialKind::Inf);
-    }
-    if (disc == 3) {
-        return Option<SpecialKind>::Some(SpecialKind::NaN);
-    }
-    return Option<SpecialKind>::None;
-}
-
-pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/ReflectEnum::members"() -> [EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>] {
-    return [EnumCase<core:prelude/fpfmt.wado/SpecialKind> { discriminant: 0, value: SpecialKind::NotSpecial, case_name: String { repr: packed"NotSpecial", used: 10 }, wire_override: Option<String>::None }, EnumCase<core:prelude/fpfmt.wado/SpecialKind> { discriminant: 1, value: SpecialKind::Zero, case_name: String { repr: packed"Zero", used: 4 }, wire_override: Option<String>::None }, EnumCase<core:prelude/fpfmt.wado/SpecialKind> { discriminant: 2, value: SpecialKind::Inf, case_name: String { repr: packed"Inf", used: 3 }, wire_override: Option<String>::None }, EnumCase<core:prelude/fpfmt.wado/SpecialKind> { discriminant: 3, value: SpecialKind::NaN, case_name: String { repr: packed"NaN", used: 3 }, wire_override: Option<String>::None }];
-}
-
-pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
-    return CaseStyle::Identity;
-}
-
-pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
-
-pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8,u8)->u8>, f: &mut Formatter);
-
-pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
-
-pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
-
-pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char])->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char],[i32,char])->[i32,char]>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
-
-pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
-
-pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
-
-pub fn "fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(i32)->i32>, f: &mut Formatter);
-
-pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/Display::fmt"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, f: &mut Formatter) {
-    if (self.value == %0) {
-        f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"NotSpecial", used: 10 });
-    } else {
-        if (self.value == %2) {
-            f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"Zero", used: 4 });
-        } else {
-            if (self.value == %4) {
-                f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"Inf", used: 3 });
-            } else {
-                if (self.value == %6) {
-                    f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"NaN", used: 3 });
-                };
-            };
-        };
-    };
-}
-
-pub fn f16::to_bits(self: Box<f16>) -> u16 {
-    return core::builtin::u16_reinterpret_f16(self.value);
-}
-
-pub fn bf16::to_bits(self: Box<bf16>) -> u16 {
-    return core::builtin::u16_reinterpret_bf16(self.value);
-}
-
-fn "f32^core:prelude/traits.wado/From<f16>::from"(value: f16) -> f32 {
-    let bits: u16 = Box<f16> { value: value }.f16::to_bits();
-    let sign: u32 = ((bits & core::prelude/half.wado::F16_SIGN) as u32 << 16);
-    let exp: u32 = ((bits & core::prelude/half.wado::F16_EXP) as u32 >> 10);
-    let mantissa: u32 = (bits & core::prelude/half.wado::F16_MANTISSA) as u32;
-    if (exp == 0) {
-        if (mantissa == 0) {
-            return "core::prelude/primitive.wado::f32::from_bits"(sign);
-        }
-        let magic: f32 = "core::prelude/primitive.wado::f32::from_bits"(core::prelude/half.wado::F16_SUBNORMAL_MAGIC);
-        let shifted: f32 = "core::prelude/primitive.wado::f32::from_bits"((core::prelude/half.wado::F16_SUBNORMAL_MAGIC | (mantissa << 13)));
-        return "core::prelude/primitive.wado::f32::from_bits"((sign | Box<f32> { value: (shifted - magic) }.f32::to_bits()));
-    }
-    if (exp == 31) {
-        return "core::prelude/primitive.wado::f32::from_bits"(((sign | 2139095040) | (mantissa << 13)));
-    }
-    return "core::prelude/primitive.wado::f32::from_bits"(((sign | ((exp + 112) << 23)) | (mantissa << 13)));
-}
-
-fn "f32^core:prelude/traits.wado/From<bf16>::from"(value: bf16) -> f32 {
-    return "core::prelude/primitive.wado::f32::from_bits"((Box<bf16> { value: value }.bf16::to_bits() as u32 << 16));
-}
-
-pub fn "f16^core:prelude/traits.wado/Display::fmt"(self: Box<f16>, f: &mut Formatter) {
-    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<f16>::from"(self.value) }."f32^core:prelude/traits.wado/Display::fmt"(f);
-}
-
-pub fn "bf16^core:prelude/traits.wado/Display::fmt"(self: Box<bf16>, f: &mut Formatter) {
-    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<bf16>::from"(self.value) }."f32^core:prelude/traits.wado/Display::fmt"(f);
-}
-
-pub fn "f16^core:prelude/traits.wado/Inspect::inspect"(self: Box<f16>, f: &mut Formatter) {
-    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<f16>::from"(self.value) }."f32^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(f);
-}
-
-pub fn "bf16^core:prelude/traits.wado/Inspect::inspect"(self: Box<bf16>, f: &mut Formatter) {
-    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<bf16>::from"(self.value) }."f32^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(f);
-}
-
-pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
-
-pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8,u8)->u8>, f: &mut Formatter);
-
-pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
-
-pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
-
-pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char])->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char],[i32,char])->[i32,char]>, f: &mut Formatter);
-
-pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
-
-pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
-
-pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
-
-pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
-
-pub fn "fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(i32)->i32>, f: &mut Formatter);
-
-=======
->>>>>>> origin/main
 pub fn "core:prelude/int128.wado/u128::from_u64"(value: u64) -> u128 {
     return u128 { low: value, high: 0 };
 }
@@ -3542,6 +3171,18 @@ fn u64::fmt_into(self: Box<u64>, f: &mut Formatter) {
     self.u64::fmt_decimal(f);
 }
 
+pub fn f32::to_bits(self: Box<f32>) -> u32 {
+    return core::builtin::i32_reinterpret_f32(self.value) as u32;
+}
+
+pub fn f32::from_bits(bits: u32) -> f32 {
+    return core::builtin::f32_reinterpret_i32(bits as i32);
+}
+
+pub fn f64::to_bits(self: Box<f64>) -> u64 {
+    return core::builtin::i64_reinterpret_f64(self.value) as u64;
+}
+
 pub fn "i32^core:prelude/traits.wado/Display::fmt"(self: Box<i32>, f: &mut Formatter) {
     self.i32::fmt_into(f);
 }
@@ -3554,194 +3195,10 @@ pub fn "()^core:prelude/traits.wado/Ord::cmp"(self: &(), other: &()) -> Ordering
     return Ordering::Equal;
 }
 
-<<<<<<< HEAD
 pub fn "v128^core:prelude/traits.wado/Eq::eq"(self: Box<v128>, other: Box<v128>) -> bool {
     return core::builtin::i8x16_all_true(core::builtin::i8x16_eq(self.value, other.value));
 }
 
-pub fn "v128^core:prelude/traits.wado/Inspect::inspect"(self: Box<v128>, f: &mut Formatter) {
-    f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"v128(0x", used: 7 });
-    let mut i: i32 = 0;
-    loop {
-        if !(i < 16) {
-            break;
-        }
-        $for_0_body: {
-            let byte: u8 = match i {
-                0 => core::builtin::i8x16_extract_lane_u(0, self.value),
-                1 => core::builtin::i8x16_extract_lane_u(1, self.value),
-                2 => core::builtin::i8x16_extract_lane_u(2, self.value),
-                3 => core::builtin::i8x16_extract_lane_u(3, self.value),
-                4 => core::builtin::i8x16_extract_lane_u(4, self.value),
-                5 => core::builtin::i8x16_extract_lane_u(5, self.value),
-                6 => core::builtin::i8x16_extract_lane_u(6, self.value),
-                7 => core::builtin::i8x16_extract_lane_u(7, self.value),
-                8 => core::builtin::i8x16_extract_lane_u(8, self.value),
-                9 => core::builtin::i8x16_extract_lane_u(9, self.value),
-                10 => core::builtin::i8x16_extract_lane_u(10, self.value),
-                11 => core::builtin::i8x16_extract_lane_u(11, self.value),
-                12 => core::builtin::i8x16_extract_lane_u(12, self.value),
-                13 => core::builtin::i8x16_extract_lane_u(13, self.value),
-                14 => core::builtin::i8x16_extract_lane_u(14, self.value),
-                _ => core::builtin::i8x16_extract_lane_u(15, self.value),
-            } as u8;
-            f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"($tmpl: {
-                let mut $r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(16);
-                let mut $f: Formatter = Formatter { fill: '0', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: true, width: 2, precision: -2, indent: 0, buf: &mut $r };
-                Box<u8> { value: byte }."u8^core:prelude/traits.wado/LowerHex::fmt_lower_hex"(&mut $f);
-                break $tmpl: $r;
-            });
-        }
-        i = (i + 1);
-    }
-    f."core:prelude/format.wado/Formatter::write_char"(')');
-}
-
-pub fn "bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<bool>, f: &mut Formatter) {
-    self.bool::fmt_into(f);
-}
-
-pub fn "char^core:prelude/traits.wado/Inspect::inspect"(self: Box<char>, f: &mut Formatter) {
-    f."core:prelude/format.wado/Formatter::write_char"('\'');
-    let c: char = self.value;
-    if (c == '\'') {
-        f."core:prelude/format.wado/Formatter::write_char"('\\');
-        f."core:prelude/format.wado/Formatter::write_char"('\'');
-    } else {
-        if (c == '\\') {
-            f."core:prelude/format.wado/Formatter::write_char"('\\');
-            f."core:prelude/format.wado/Formatter::write_char"('\\');
-        } else {
-            if (c == '\n') {
-                f."core:prelude/format.wado/Formatter::write_char"('\\');
-                f."core:prelude/format.wado/Formatter::write_char"('n');
-            } else {
-                if (c == '\r') {
-                    f."core:prelude/format.wado/Formatter::write_char"('\\');
-                    f."core:prelude/format.wado/Formatter::write_char"('r');
-                } else {
-                    if (c == '\t') {
-                        f."core:prelude/format.wado/Formatter::write_char"('\\');
-                        f."core:prelude/format.wado/Formatter::write_char"('t');
-                    } else {
-                        f."core:prelude/format.wado/Formatter::write_char"(c);
-                    }
-                }
-            }
-        }
-    }
-    f."core:prelude/format.wado/Formatter::write_char"('\'');
-}
-
-pub fn "i8^core:prelude/traits.wado/Inspect::inspect"(self: Box<i8>, f: &mut Formatter) {
-    self.i8::fmt_into(f);
-}
-
-pub fn "u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<u8>, f: &mut Formatter) {
-    self.u8::fmt_into(f);
-}
-
-pub fn "i16^core:prelude/traits.wado/Inspect::inspect"(self: Box<i16>, f: &mut Formatter) {
-    self.i16::fmt_into(f);
-}
-
-pub fn "u16^core:prelude/traits.wado/Inspect::inspect"(self: Box<u16>, f: &mut Formatter) {
-    self.u16::fmt_into(f);
-}
-
-||||||| 51329236232
-pub fn "v128^core:prelude/traits.wado/Inspect::inspect"(self: Box<v128>, f: &mut Formatter) {
-    f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"v128(0x", used: 7 });
-    let mut i: i32 = 0;
-    loop {
-        if !(i < 16) {
-            break;
-        }
-        $for_0_body: {
-            let byte: u8 = match i {
-                0 => core::builtin::i8x16_extract_lane_u(0, self.value),
-                1 => core::builtin::i8x16_extract_lane_u(1, self.value),
-                2 => core::builtin::i8x16_extract_lane_u(2, self.value),
-                3 => core::builtin::i8x16_extract_lane_u(3, self.value),
-                4 => core::builtin::i8x16_extract_lane_u(4, self.value),
-                5 => core::builtin::i8x16_extract_lane_u(5, self.value),
-                6 => core::builtin::i8x16_extract_lane_u(6, self.value),
-                7 => core::builtin::i8x16_extract_lane_u(7, self.value),
-                8 => core::builtin::i8x16_extract_lane_u(8, self.value),
-                9 => core::builtin::i8x16_extract_lane_u(9, self.value),
-                10 => core::builtin::i8x16_extract_lane_u(10, self.value),
-                11 => core::builtin::i8x16_extract_lane_u(11, self.value),
-                12 => core::builtin::i8x16_extract_lane_u(12, self.value),
-                13 => core::builtin::i8x16_extract_lane_u(13, self.value),
-                14 => core::builtin::i8x16_extract_lane_u(14, self.value),
-                _ => core::builtin::i8x16_extract_lane_u(15, self.value),
-            } as u8;
-            f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"($tmpl: {
-                let mut $r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(16);
-                let mut $f: Formatter = Formatter { fill: '0', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: true, width: 2, precision: -2, indent: 0, buf: &mut $r };
-                Box<u8> { value: byte }."u8^core:prelude/traits.wado/LowerHex::fmt_lower_hex"(&mut $f);
-                break $tmpl: $r;
-            });
-        }
-        i = (i + 1);
-    }
-    f."core:prelude/format.wado/Formatter::write_char"(')');
-}
-
-pub fn "bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<bool>, f: &mut Formatter) {
-    self.bool::fmt_into(f);
-}
-
-pub fn "char^core:prelude/traits.wado/Inspect::inspect"(self: Box<char>, f: &mut Formatter) {
-    f."core:prelude/format.wado/Formatter::write_char"('\'');
-    let c: char = self.value;
-    if (c == '\'') {
-        f."core:prelude/format.wado/Formatter::write_char"('\\');
-        f."core:prelude/format.wado/Formatter::write_char"('\'');
-    } else {
-        if (c == '\\') {
-            f."core:prelude/format.wado/Formatter::write_char"('\\');
-            f."core:prelude/format.wado/Formatter::write_char"('\\');
-        } else {
-            if (c == '\n') {
-                f."core:prelude/format.wado/Formatter::write_char"('\\');
-                f."core:prelude/format.wado/Formatter::write_char"('n');
-            } else {
-                if (c == '\r') {
-                    f."core:prelude/format.wado/Formatter::write_char"('\\');
-                    f."core:prelude/format.wado/Formatter::write_char"('r');
-                } else {
-                    if (c == '\t') {
-                        f."core:prelude/format.wado/Formatter::write_char"('\\');
-                        f."core:prelude/format.wado/Formatter::write_char"('t');
-                    } else {
-                        f."core:prelude/format.wado/Formatter::write_char"(c);
-                    }
-                }
-            }
-        }
-    }
-    f."core:prelude/format.wado/Formatter::write_char"('\'');
-}
-
-pub fn "i8^core:prelude/traits.wado/Inspect::inspect"(self: Box<i8>, f: &mut Formatter) {
-    self.i8::fmt_into(f);
-}
-
-pub fn "u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<u8>, f: &mut Formatter) {
-    self.u8::fmt_into(f);
-}
-
-pub fn "i16^core:prelude/traits.wado/Inspect::inspect"(self: Box<i16>, f: &mut Formatter) {
-    self.i16::fmt_into(f);
-}
-
-pub fn "u16^core:prelude/traits.wado/Inspect::inspect"(self: Box<u16>, f: &mut Formatter) {
-    self.u16::fmt_into(f);
-}
-
-=======
->>>>>>> origin/main
 pub fn "i32^core:prelude/traits.wado/Inspect::inspect"(self: Box<i32>, f: &mut Formatter) {
     self.i32::fmt_into(f);
 }
