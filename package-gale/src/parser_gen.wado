@@ -275,11 +275,6 @@ pub fn gen_parser(
         ctx.set_current_rule_index(i);
         gen_parse_fn(&mut parse_w, rule, lowered_rule, ctx);
     }
-    // The runtime-FOLLOW redesign retired per-(rule, mask) variant
-    // emission: each rule is emitted exactly once and threads the
-    // caller's continuation at runtime via the `follow` argument (see
-    // `follow_yields` / `FollowArg`). The follow-mask globals are
-    // emitted by `gen_follow_mask_globals` at the end of codegen.
     gen_predicate_fns(&mut parse_w, ctx);
     if !ctx.fragment_entries().is_empty() {
         let entries = compute_fragment_entries(grammar, ctx);
@@ -326,11 +321,6 @@ fn called_scan_chunks(chunks: &List<String>, parse_text: &String) -> List<String
     return out;
 }
 
-
-/// Consume the matched `kind` and return its index: EOF matches in place (the
-/// stream holds one EOF; advancing past it reads out of bounds, ANTLR4's
-/// `matchedEOF`), everything else advances. Used by `expect`'s match / delete /
-/// resync branches, which all consume `kind` the same way.
 /// The LR loop's caller-continuation argument. Separate from `follow`
 /// because every caller sets that one; only a mid-operand call sets this.
 fn add_lr_cont_param(f: &mut FnSpec) {
@@ -396,9 +386,6 @@ pub fn gen_alt_scan_fn<S: AsStrSlice>(
     let was_scan = ctx.set_in_scan_fn(true);
     let mut f = FnSpec::new(&name);
     add_scan_params(&mut f, ctx);
-    if ctx.current_rule_reads_follow() {
-        add_follow_param(&mut f);
-    }
     f.set_return_type("i32");
     let mut bw = CodeWriter::with_capacity(256);
     bw.line("let mut pos = pos;");
@@ -413,7 +400,7 @@ pub fn gen_alt_scan_fn<S: AsStrSlice>(
         &body.gate_cond,
     );
     bw.line("return pos;");
-    let params = `tokens, pos${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())}`;
+    let params = `tokens, pos${scan_trailing_args(ctx)}`;
     ctx.set_in_scan_fn(was_scan);
     let text = bw.to_string();
     if let Some(callee) = forwarded_scan_callee(&text, &params) {
@@ -438,26 +425,35 @@ fn forwarded_scan_callee(body: &String, params: &String) -> Option<String> {
         return null;
     }
     let callee = text.sub(head.len(), text.len() - tail.len());
-    for let c of callee.chars() {
-        if !(c.is_ascii_alphanumeric() || c == '_') {
-            return null;
-        }
+    if !callee.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return null;
     }
     return Option::Some(callee.to_string());
 }
 
-/// The scan function alternative helper `name` is called by.
-fn scan_helper_callee(name: String, ctx: &GenContext) -> String {
-    return ctx.forwarded_call(&name).unwrap_or(name);
+/// The call measuring hoisted alternative `i` from `start`, through the function
+/// its helper forwards to where it only forwards.
+fn hoisted_scan_call<S: AsStrSlice>(base_name: S, i: i32, ctx: &GenContext) -> String {
+    let name = scan_alt_helper_name(base_name, i);
+    return `${ctx.forwarded_call(&name).unwrap_or(name)}(tokens, start${scan_trailing_args(ctx)})`;
 }
 
-/// A scan function's leading parameters: the token kinds, the position, and
-/// the gate where the grammar simulates one.
+/// What a scan call passes after the position: the gate, and the caller's
+/// follow where the rule reads one.
+fn scan_trailing_args(ctx: &GenContext) -> String {
+    return `${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())}`;
+}
+
+/// A scan function's parameters up to `min_prec`: the token kinds, the
+/// position, and those `scan_trailing_args` passes.
 fn add_scan_params(f: &mut FnSpec, ctx: &GenContext) {
     f.add_param("tokens", "&Array<i32>");
     f.add_param("pos", "i32");
     if ctx.emit_scan_gate() {
         f.add_param(&SCAN_GATE_HANDLE, `&mut ${SCAN_GATE_TYPE}`);
+    }
+    if ctx.current_rule_reads_follow() {
+        add_follow_param(f);
     }
 }
 
@@ -544,16 +540,12 @@ fn gen_scan_gate_scope_wrapper<S: AsStrSlice, S1: AsStrSlice>(
 ) {
     let mut f = FnSpec::new(name);
     add_scan_params(&mut f, ctx);
-    let reads_follow = ctx.current_rule_reads_follow();
-    if reads_follow {
-        add_follow_param(&mut f);
-    }
     f.set_return_type("i32");
     f.emit_begin(w);
     let slot = ctx.scan_gate_member(&scope.field);
     w.line(`let _gate_saved = ${slot};`);
     w.line(`${slot} = ${scope.value};`);
-    w.line(`let _gate_end = ${inner}(tokens, pos${ctx.scan_gate_arg()}${follow_sep(reads_follow)});`);
+    w.line(`let _gate_end = ${inner}(tokens, pos${scan_trailing_args(ctx)});`);
     w.line(`${slot} = _gate_saved;`);
     w.line("return _gate_end;");
     w.end();
@@ -659,9 +651,6 @@ fn gen_scan_function_named<S: AsStrSlice>(
     // declares `min_prec`.
     let mut f = FnSpec::new(fn_name);
     add_scan_params(&mut f, ctx);
-    if ctx.current_rule_reads_follow() {
-        add_follow_param(&mut f);
-    }
     f.set_return_type("i32");
     f.emit_begin(w);
 
@@ -794,9 +783,6 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
     let mut fa = FnSpec::new(&atom_name);
     add_scan_params(&mut fa, ctx);
-    if ctx.current_rule_reads_follow() {
-        add_follow_param(&mut fa);
-    }
     fa.set_return_type("i32");
     fa.emit_begin(w);
     if non_lr_alts.len() == 0 {
@@ -832,9 +818,6 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
     let mut f2 = FnSpec::new(fn_name);
     add_scan_params(&mut f2, ctx);
-    if ctx.current_rule_reads_follow() {
-        add_follow_param(&mut f2);
-    }
     f2.add_param_spec(ParamSpec {
         name: "min_prec",
         type_str: "i32",
@@ -846,7 +829,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     f2.set_return_type("i32");
     f2.emit_begin(w);
     w.line(
-        `let mut pos = ${atom_name}(tokens, pos${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())});`,
+        `let mut pos = ${atom_name}(tokens, pos${scan_trailing_args(ctx)});`,
     );
     w.line("if pos < 0 { return -1; }");
     if atn_loop_dec >= 0 {
@@ -883,9 +866,6 @@ fn gen_scan_lr_suffix_helpers<S: AsStrSlice>(
 
         let mut f = FnSpec::new(&suffix_fn);
         add_scan_params(&mut f, ctx);
-        if ctx.current_rule_reads_follow() {
-            add_follow_param(&mut f);
-        }
         f.set_return_type("i32");
         f.emit_begin(w);
         w.line("let mut pos = pos;");
@@ -942,7 +922,7 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
         } else {
             w.else_begin(`else if _atn_alt == ${i}`);
         }
-        w.line(`pos = ${suffix_fn}(tokens, pos${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())});`);
+        w.line(`pos = ${suffix_fn}(tokens, pos${scan_trailing_args(ctx)});`);
         w.line("if pos < 0 { return -1; }");
     }
     if !is_first {
@@ -1052,7 +1032,7 @@ fn emit_lr_atn_group_repick<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     parse_launched: bool,
     ctx: &GenContext,
 ) {
-    let fsep = follow_sep(ctx.current_rule_reads_follow());
+    let trailing = scan_trailing_args(ctx);
     for let group of &lr_dispatch.groups {
         if group.len() < 2 {
             continue;
@@ -1072,9 +1052,7 @@ fn emit_lr_atn_group_repick<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             w.line(`let mut _lr_s_${*gi}: i32 = -1;`);
             w.begin(`if ${lr.own_prec} >= min_prec`);
             gen_scan_gate_from(w, ctx, &origin);
-            w.line(
-                `_lr_s_${*gi} = ${scan_fn}_lr_${lr.alt_index}(${tokens_expr}, ${pos_expr}${ctx.scan_gate_arg()}${fsep});`,
-            );
+            w.line(`_lr_s_${*gi} = ${scan_fn}_lr_${lr.alt_index}(${tokens_expr}, ${pos_expr}${trailing});`);
             w.end();
         }
         gen_lr_candidates_end(w, ctx, &origin);
@@ -1152,7 +1130,7 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
     if let Some(local) = prebound {
         gen_scan_rewind(w, ctx, local);
     } else {
-        w.line(`pos = ${suffix_fn}(tokens, pos${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())});`);
+        w.line(`pos = ${suffix_fn}(tokens, pos${scan_trailing_args(ctx)});`);
         gen_scan_rewind_break(w, ctx, "lr_saved_pos", "pos < 0");
     }
     if mid_operand_gated {
@@ -1444,11 +1422,7 @@ fn emit_lr_overlap(
                         gen_scan_gate_from(w, ctx, &origin);
                     }
                     first_candidate = false;
-                    w.line(
-                        `let ${*local} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${ctx.scan_gate_arg()}${follow_sep(
-                            ctx.current_rule_reads_follow(),
-                        )});`,
-                    );
+                    w.line(`let ${*local} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${scan_trailing_args(ctx)});`);
                     // A position the scan branch may commit to, so it keeps the
                     // gate it was reached under — the run rolls the global back.
                     // The parse commits no scan gate.
@@ -1717,20 +1691,20 @@ fn gen_scan_multi_alt<S: AsStrSlice>(
         arms.push(DecisionBranch { test: admits_or_everything(&groups_tokens[g]), gate: "", alts: groups_alts[g] });
         bodies.push(body.to_string());
     }
-    let first_branch = arms.is_empty();
+    let untested = arms.is_empty();
     emit_tested_arms(w, &arms, &bodies, "alt_kind", ctx);
 
     if unguarded_idx.len() > 0 {
         let empty_alts: List<i32> = [];
         let no_guard: List<String> = [];
-        if first_branch {
+        if untested {
             gen_scan_partition_body(w, &empty_alts, unguarded_idx, scan_alts, ctx, plan, base_name, &no_guard);
         } else {
             w.else_begin("else");
             gen_scan_partition_body(w, &empty_alts, unguarded_idx, scan_alts, ctx, plan, base_name, &no_guard);
             w.end();
         }
-    } else if !first_branch {
+    } else if !untested {
         w.else_begin("else");
         w.line("return -1;");
         w.end();
@@ -1847,11 +1821,7 @@ fn gen_scan_partition_body<S: AsStrSlice>(
         let guarded = guarded_alts.len() == 1;
         let i = if guarded { guarded_alts[0] } else { unguarded_alts[0] };
         if plan.is_hoisted(i) {
-            w.line(
-                `pos = ${scan_helper_callee(scan_alt_helper_name(base_name, i), ctx)}(tokens, start${ctx.scan_gate_arg()}${follow_sep(
-                    ctx.current_rule_reads_follow(),
-                )});`,
-            );
+            w.line(`pos = ${hoisted_scan_call(base_name, i, ctx)};`);
             w.line("if pos >= 0 { break scan_alts; }");
             w.line("return -1;");
             return;
@@ -1887,12 +1857,7 @@ fn gen_scan_partition_body<S: AsStrSlice>(
             if k > 0 {
                 gen_scan_gate_restore(w, ctx, "start");
             }
-            w.line(
-                `let try_${i}_end = ${scan_helper_callee(scan_alt_helper_name(base_name, i), ctx)}(tokens, start${ctx.scan_gate_arg(
-                )}${follow_sep(
-                    ctx.current_rule_reads_follow(),
-                )});`,
-            );
+            w.line(`let try_${i}_end = ${hoisted_scan_call(base_name, i, ctx)};`);
             w.line(&scan_gate_best_commit(ctx, "best", `try_${i}_end > best`, `try_${i}_end`));
             continue;
         }
@@ -2003,22 +1968,37 @@ fn gen_scan_alt_candidate<S: AsStrSlice>(
     } else if from > 0 {
         w.line(`pos = start + ${from};`);
     }
-    let can_fail = !body.gate_cond.is_empty() || scan_elements_can_fail(&body.elements, from, &rest_known, ctx);
-    let label = `try_${i}`;
+    return gen_scan_labeled_walk(
+        w,
+        `try_${i}`,
+        &body.elements,
+        from,
+        &rest_known,
+        ctx,
+        commit_stmt,
+        &body.gates,
+        &body.gate_cond,
+    );
+}
+
+/// Walk `elements[from..]` then run `commit_stmt`, inside a block `label` a
+/// failure breaks out of. Returns whether the walk can fail; if not, no block is opened.
+fn gen_scan_labeled_walk<S: AsStrSlice, S1: AsStrSlice>(
+    w: &mut CodeWriter,
+    label: S,
+    elements: &List<ScanElement>,
+    from: i32,
+    known: &List<List<String>>,
+    ctx: &mut GenContext,
+    commit_stmt: S1,
+    gates: &List<ScanGate> = &NO_SCAN_GATES,
+    gate_cond: &String = &NO_SCAN_GATE_COND,
+) -> bool {
+    let can_fail = !gate_cond.is_empty() || scan_elements_can_fail(elements, from, known, ctx);
     if can_fail {
         w.begin(`${label}:`);
     }
-    gen_scan_op_elements_in_block(
-        w,
-        &body.elements,
-        from,
-        body.elements.len(),
-        ctx,
-        &label,
-        &body.gates,
-        &body.gate_cond,
-        &rest_known,
-    );
+    gen_scan_op_elements_in_block(w, elements, from, elements.len(), ctx, label, gates, gate_cond, known);
     w.line(commit_stmt);
     if can_fail {
         w.end();
@@ -2611,28 +2591,17 @@ fn gen_scan_op_group<S: AsStrSlice>(
         let mut body = CodeWriter::with_capacity(256);
         let branch_known = branch_proves(&branches, i);
         for let ai of &branches[i].alts {
-            let inner = `sg_${gc}_${*ai}`;
-            let elements = &ge.alts[*ai].elements;
-            let can_fail = scan_elements_can_fail(elements, 0, &branch_known, ctx);
             gen_scan_rewind(&mut body, ctx, &gp_var);
-            if can_fail {
-                body.begin(`${inner}:`);
-            }
-            gen_scan_op_elements_in_block(
+            let commit = scan_gate_best_commit(ctx, &best_var, `pos > ${best_var}`, "pos");
+            let _ = gen_scan_labeled_walk(
                 &mut body,
-                elements,
+                `sg_${gc}_${*ai}`,
+                &ge.alts[*ai].elements,
                 0,
-                elements.len(),
-                ctx,
-                &inner,
-                &NO_SCAN_GATES,
-                &NO_SCAN_GATE_COND,
                 &branch_known,
+                ctx,
+                &commit,
             );
-            body.line(&scan_gate_best_commit(ctx, &best_var, `pos > ${best_var}`, "pos"));
-            if can_fail {
-                body.end();
-            }
         }
         bodies.push(body.to_string());
     }
@@ -2686,28 +2655,15 @@ fn gen_scan_group_decided<S: AsStrSlice>(
     for let mut i = 0; i < branches.len(); i += 1 {
         let mut body = CodeWriter::with_capacity(256);
         let ai = branches[i].alts[0];
-        let inner = `sg_${gc}_${ai}`;
-        let elements = &ge.alts[ai].elements;
-        let known = branch_proves(branches, i);
-        let can_fail = scan_elements_can_fail(elements, 0, &known, ctx);
-        if can_fail {
-            body.begin(`${inner}:`);
-        }
-        gen_scan_op_elements_in_block(
+        let _ = gen_scan_labeled_walk(
             &mut body,
-            elements,
+            `sg_${gc}_${ai}`,
+            &ge.alts[ai].elements,
             0,
-            elements.len(),
+            &branch_proves(branches, i),
             ctx,
-            &inner,
-            &NO_SCAN_GATES,
-            &NO_SCAN_GATE_COND,
-            &known,
+            `break ${done};`,
         );
-        body.line(`break ${done};`);
-        if can_fail {
-            body.end();
-        }
         bodies.push(body.to_string());
     }
     close_decision_chain(w, &emit_decision_arms(w, branches, &bodies, &kind_var, ctx));
@@ -2730,11 +2686,7 @@ fn scan_group_token_kinds(ge: &ScanGroupElement, ctx: &GenContext) -> Option<Lis
         let Some(alt_kinds) = scan_one_token_kinds(&alt.elements[0], ctx) else {
             return null;
         };
-        for let k of &alt_kinds {
-            if !kinds.contains(k) {
-                kinds.push(*k);
-            }
-        }
+        dedup_append_arr(&mut kinds, &alt_kinds);
     }
     return Option::Some(kinds);
 }
@@ -2742,15 +2694,7 @@ fn scan_group_token_kinds(ge: &ScanGroupElement, ctx: &GenContext) -> Option<Lis
 /// Whether `known` proves `tokens[pos]` is in bounds and one of `kinds`. An EOF
 /// kind also stands for running off the end, so it proves no bound.
 fn known_within(known: &List<List<String>>, kinds: &List<String>) -> bool {
-    if known.is_empty() || known[0].is_empty() {
-        return false;
-    }
-    for let k of &known[0] {
-        if *k == "TK_EOF" || !kinds.contains(k) {
-            return false;
-        }
-    }
-    return true;
+    return !known.is_empty() && !known[0].contains_str("TK_EOF") && proves(&known[0], kinds);
 }
 
 /// One token out of `kinds`: a single set test rather than an arm per token.
@@ -3087,17 +3031,12 @@ global NO_INLINED_BODY: Option<String> = null;
 /// The one statement a unit function's body is before its `return;`, which a
 /// caller passing the same parameters can run in its place.
 fn single_statement_fn_body(text: &String) -> Option<String> {
-    let mut lines: List<String> = [];
-    let mut cur = String::new();
-    for let c of text.chars() {
-        if c == '\n' {
-            lines.push(cur);
-            cur = String::new();
-        } else {
-            cur.push(c);
-        }
-    }
-    if lines.len() != 5 || !cur.is_empty() || lines[2] != "    return;" || lines[3] != "}" || !lines[4].is_empty() {
+    let lines: List<String> = text.split("\n").collect();
+    if lines.len() != 6
+        || lines[2] != "    return;"
+        || lines[3] != "}"
+        || !lines[4].is_empty()
+        || !lines[5].is_empty() {
         return null;
     }
     let head = lines[0].as_str_slice();
@@ -3109,10 +3048,8 @@ fn single_statement_fn_body(text: &String) -> Option<String> {
         return null;
     }
     let body = stmt.sub(4, stmt.len());
-    for let c of body.sub(0, body.len() - 1).chars() {
-        if c == ';' || c == '{' || c == '}' {
-            return null;
-        }
+    if body.sub(0, body.len() - 1).chars().any(|c| c == ';' || c == '{' || c == '}') {
+        return null;
     }
     return Option::Some(body.to_string());
 }
@@ -3653,10 +3590,8 @@ fn forwarded_rule_call(body: &String) -> Option<String> {
         return null;
     }
     let call = text.sub(0, text.len() - tail.len() + 1);
-    for let c of call.chars() {
-        if c == ';' || c == '\n' {
-            return null;
-        }
+    if call.chars().any(|c| c == ';' || c == '\n') {
+        return null;
     }
     return Option::Some(call.to_string());
 }
@@ -4096,31 +4031,20 @@ fn element_proven_first(actions: &List<AltAction>, proven_first: &List<String>, 
 }
 
 fn has_action_before(actions: &List<AltAction>, index: i32) -> bool {
-    for let a of actions {
-        if a.before_index == index {
-            return true;
-        }
-    }
-    return false;
+    return actions.iter_ref().any(|a| a.before_index == index);
 }
 
-fn all_contained(xs: &List<String>, set: &List<String>) -> bool {
-    for let x of xs {
-        if !set.contains(x) {
-            return false;
-        }
-    }
-    return true;
+/// Whether a test that proved the token is one of `proven` also proves it is
+/// one of `kinds`. Nothing proven proves nothing.
+fn proves(proven: &List<String>, kinds: &List<String>) -> bool {
+    return !proven.is_empty() && proven.iter_ref().all(|k| kinds.contains(k));
 }
 
 /// A token leaf whose kind the enclosing dispatch has already tested.
 fn leaf_is_proven(op: &Op, proven_first: &List<String>) -> bool {
-    if proven_first.is_empty() {
-        return false;
-    }
     return match *op {
-        Token(t) => all_contained(proven_first, &[t.kind]),
-        Literal(l) => all_contained(proven_first, &[l.kind]),
+        Token(t) => proves(proven_first, &[t.kind]),
+        Literal(l) => proves(proven_first, &[l.kind]),
         _ => false,
     };
 }
@@ -4274,7 +4198,7 @@ fn gen_group_body(
     proven: &List<String> = &EMPTY_SYNC,
 ) {
     if let Some(kinds) = group_token_only_kinds(&g.alts) {
-        if !proven.is_empty() && all_contained(proven, &kinds) {
+        if proves(proven, &kinds) {
             w.line("p.take();");
         } else {
             w.line(`let _ = ${expect_set_call(ctx, &kinds)};`);
@@ -4596,9 +4520,7 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
         // The other shape of a scan entry: the generated scan takes the tokens
         // and the position as arguments, so only the gate is left to hand it.
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
-        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${ctx.scan_gate_arg()}${follow_sep(
-            ctx.current_rule_reads_follow(),
-        )})`;
+        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)})`;
     };
     let matched = prebound matches { Some(_) };
     if mid_operand_gated {
@@ -6072,7 +5994,7 @@ fn gen_consume_token_group_op(
     let base = token_group_field_name(alts);
     let _ = dedup_name(&base, name_counts);
     let kinds = collect_token_only_kinds(alts);
-    if !proven.is_empty() && all_contained(proven, &kinds) {
+    if proves(proven, &kinds) {
         w.line(`${leaf_binding(ctx, &base, &to.field)}p.take();`);
         return;
     }
@@ -7264,13 +7186,8 @@ fn decline_continue_check<S: AsStrSlice>(
     ctx: &mut GenContext,
 ) -> String {
     let mut kinds = *loop_first;
-    for let set of [&duties.decline_cont_first, &duties.decline_viable] {
-        for let k of set {
-            if !kinds.contains(k) {
-                kinds.push(*k);
-            }
-        }
-    }
+    dedup_append_arr(&mut kinds, &duties.decline_cont_first);
+    dedup_append_arr(&mut kinds, &duties.decline_viable);
     if kinds.is_empty() {
         return String::from("false");
     }
@@ -8616,7 +8533,7 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
     ctx: &mut GenContext,
     fall_through_on_no_match: bool = false,
 ) {
-    let fsep = follow_sep(ctx.current_rule_reads_follow());
+    let trailing = scan_trailing_args(ctx);
     w.line("let _sd_tokens = &p.kinds;");
     w.line("let _sd_pos = p.pos;");
     // A gated candidate scores -1 for a reason the lookahead did not predict, so
@@ -8632,7 +8549,7 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
         let Some(scan_fn) = ctx.alt_scan_fn(idx) else {
             panic(`emit_scan_tournament: alt ${idx} of ${rule_display} has no scan function`);
         };
-        let scan = `${scan_fn}(_sd_tokens, _sd_pos${ctx.scan_gate_arg()}${fsep})`;
+        let scan = `${scan_fn}(_sd_tokens, _sd_pos${trailing})`;
         // An alt-initial predicate says whether the alternative exists at all,
         // and a scan is a pure token function that cannot ask one. Evaluate it
         // here, where the parser is in scope, and score a refused alternative as
@@ -8887,8 +8804,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                 && skip == 0
                 && d.branches.len() == 1
                 && fallback.is_empty()
-                && !proven_first.is_empty()
-                && all_contained(proven_first, &d.branches[0].tokens) {
+                && proves(proven_first, &d.branches[0].tokens) {
                 gen_prediction_code_inner(
                     w,
                     &d.branches[0].child,

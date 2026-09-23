@@ -123,7 +123,7 @@ A grammar taken from elsewhere carries `// Source:` (the URL it came from) and `
 
 ## Inlined runtime
 
-The generated parser inlines the runtime fragments in `src/runtime/*.wado` (`lex`, `diag`, `tree`, `tools` always; `follow` / `highlight` / `atn` / `atn_predict` / `atn_lr` / `latn` gated per-feature). Each fragment is also a real module for dev / test, and a standard-library `use` in one is hoisted to the top of the generated file. A type only the generator needs lives outside `src/runtime/`, as the `.g4` lexer's `Token` does.
+The generated parser inlines the runtime fragments in `src/runtime/*.wado` (`lex`, `diag`, `tree`, `tools` always; `follow` / `highlight` / `atn` / `atn_predict` / `atn_lr` / `latn` gated per-feature). Each fragment is also a real module for dev / test. A standard-library `use` in one is hoisted to the top of the generated file. A type only the generator needs lives outside `src/runtime/`, as the `.g4` lexer's `Token` does.
 
 Two rules follow from every byte of these files landing in every generated parser:
 

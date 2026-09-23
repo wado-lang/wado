@@ -27,11 +27,11 @@ language front ends, LSP, and syntax highlighting all work on broken input.
 
 The CST is a flat pre-order event stream held in parallel `i32` columns — the
 single source of truth, not a node object tree. A node is addressed by the row
-index of its `E_OPEN` event (row 0 is the root):
+index of its `Open` event (row 0 is the root):
 
 ```
-CstStore { tag, a, b, alt, end, flags, next }   // parallel List<i32>
-row tags: E_OPEN | E_CLOSE | E_TOK | E_MISS | E_SKIP
+CstStore { tag, a, b, alt, end, flags, next }   // parallel columns
+EventTag: Open | Close | Tok | Miss | Skip
 ```
 
 - Consumers read the store through `CstStore` cursor methods over a row index —
@@ -43,8 +43,8 @@ row tags: E_OPEN | E_CLOSE | E_TOK | E_MISS | E_SKIP
 - `NodeKind` is an `i32` newtype (rule id; `K_ERROR` for a recovery region).
   Its `Display` renders the rule name and `Inspect` renders `name(id)`, so
   debugging shows names. The name table is grammar-specific, emitted by codegen.
-- `flags`: `NODE_ERROR` (this node or a descendant was repaired; bubbles up),
-  `NODE_INCOMPLETE` (a required terminal was inserted). `end` is `span.end` and
+- `flags`: `NodeFlags::Error` (this node or a descendant was repaired; bubbles
+  up), `NodeFlags::Incomplete` (a required terminal was inserted). `end` is `span.end` and
   `next` the row past a node's subtree — both derived by the `finish()` finalize
   pass so every query stays O(1).
 
@@ -52,12 +52,12 @@ row tags: E_OPEN | E_CLOSE | E_TOK | E_MISS | E_SKIP
 
 The three recovery edits — insert, delete, region — are each first-class:
 
-| Concern           | Store                 | Token-stream flag (`lex.wado`) |
-| ----------------- | --------------------- | ------------------------------ |
-| Inserted terminal | `E_MISS` row          | `TOK_SYNTHETIC` (zero-width)   |
-| Deleted terminal  | `E_SKIP` row          | `TOK_SKIPPED`                  |
-| Error region      | `E_OPEN` of `K_ERROR` | —                              |
-| Lexer no-match    | `E_TOK` of `TK_ERROR` | `TOK_LEX_ERROR`                |
+| Concern           | Store               | `TokenFlags` (`lex.wado`) |
+| ----------------- | ------------------- | ------------------------- |
+| Inserted terminal | `Miss` row          | `Synthetic` (zero-width)  |
+| Deleted terminal  | `Skip` row          | `Skipped`                 |
+| Error region      | `Open` of `K_ERROR` | —                         |
+| Lexer no-match    | `Tok` of `TK_ERROR` | `LexError`                |
 
 A `Missing` token keeps the _expected_ kind in the stream, so a `Missing` slot is
 still "a STRING", just synthetic.
@@ -92,18 +92,26 @@ Diagnostic { severity, code, message, span, line, col,
 
 `expected`/`found` are token-kind ids (tooling reuses the grammar's name tables).
 `message` reads `expected X or Y; got ")"`, composed once by `with_expected`.
-`code` is machine-switchable: `MissingToken`, `ExtraToken`, `UnexpectedToken`,
-`NoViableAlternative`, `UnterminatedConstruct` (the input ended inside a
-construct), and `LexError` (a character no lexer rule matched, `token
-recognition error at: 'x'`, one per `TOK_LEX_ERROR` token). `recovery` names the
-edit applied: `Inserted`, `Deleted`, `SkippedTo`, `FilledMissing` (an insertion at
-end of input), or `None` for a failure that unwound. `line` / `col` resolve once
-per parse, from one line index built only when there is a diagnostic.
+
+`code` is machine-switchable:
+
+- `MissingToken`, `ExtraToken`, `UnexpectedToken`, `NoViableAlternative`.
+- `UnterminatedConstruct`: the input ended inside a construct.
+- `LexError`: no lexer rule matched a character. It reads `token recognition
+  error at: 'x'`, one per `LexError` token, merged into the parse diagnostics in
+  source order and within the `max_errors` cap.
+
+`recovery` names the edit applied: `Inserted`, `Deleted`, `SkippedTo`,
+`FilledMissing` (an insertion at end of input), or `None` for a failure that
+unwound.
+
+`line` / `col` are resolved once per parse. The line index behind them is built
+only when there is a diagnostic.
 
 ## Public API
 
 ```
-parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult
+parse<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult
 ParseResult { cst: CstStore, tokens: TokenStream, diagnostics: List<Diagnostic> }
 ```
 

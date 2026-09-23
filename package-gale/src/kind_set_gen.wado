@@ -84,33 +84,14 @@ pub fn gen_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -
     return join_lookahead_condition(ctx, sig, sig.len(), LookaheadAccess::Parse);
 }
 
-/// Emit a `_kind_set_<id>(k: i32) -> bool` function for every
-/// multi-element token-kind set interned during parser codegen. The
-/// `ctx.kind_check_str` and `ctx.kind_negate_check_str` methods rewrite
-/// every multi-element `matches { ... }` check into a call into one of
-/// these helpers, so duplicate sets share a single function body in
-/// the generated wasm.
-/// Emit `_kind_set_<id>(k) -> bool` helpers. The id range
-/// `0..lowered.kind_sets.len()` reads tokens directly from
-/// `lowered.kind_sets` — that's lower's Phase 2.7 pre-interning
-/// surfacing as actual generated code. Higher ids (sets emit-time
-/// `kind_check_str` interned during walk) read from
-/// `ctx.kind_sets()` as a salvage tail, same pattern as the
-/// variant-emission split.
-///
-/// For the lower-registered prefix, the generated helper body is
-/// the canonical proof that `lowered.kind_sets[i].tokens` matches
-/// what emit subsequently calls — a mismatch would compile but
-/// parse wrong (the helper body would not include the token emit
-/// queries). Today the two registries converge by construction
-/// because both intern through the same `ctx.intern_kind_set`
-/// keyed by canonical token order.
+/// Emit the `_kind_set_<id>(k) -> bool` helper of each interned kind set the
+/// code already in `w` calls. Lower's pre-interned sets take the ids first.
 pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
     let entries = ctx.kind_sets();
     let mut called = TreeSet::<String>::new();
     collect_called_names(&w.to_string(), &mut called);
     for let mut idx = 0; idx < entries.len(); idx += 1 {
-        if !ctx.kind_set_is_used(idx) || !called.contains(`_kind_set_${entries[idx].id}`) {
+        if !called.contains(`_kind_set_${entries[idx].id}`) {
             continue;
         }
         if idx < lowered.kind_sets.len() {

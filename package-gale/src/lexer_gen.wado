@@ -756,10 +756,8 @@ pub fn lexer_rule_route(
     return LexerRuleRoute::Matcher;
 }
 
-/// The earlier rules that make every match `rule` could make, so it never wins:
-/// a tie goes to the earlier rule. Read off the grammar's shape, so empty unless
-/// `rule` is only references to earlier rules, or an earlier rule offers `rule`
-/// whole with nothing but optional elements after it.
+/// The earlier rules that make every match `rule` could make, so it never wins
+/// the tie. Empty unless the grammar's shape shows it.
 fn lexer_rule_subsumers(
     rule: &LexerRule,
     lexer_rules: &List<LexerRule>,
@@ -875,15 +873,8 @@ fn lexer_rule_outranks(
         && lexer_rule_is_dispatched(earlier, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
 }
 
-/// Whether the first-char dispatch calls `rule`'s own matcher.
-///
-/// Exactly the rules the route leaves to their own matcher: everything else is
-/// reached another way — a keyword through its carrier's reclassification, a
-/// fixed literal through the shared matcher, a fragment inlined or called by
-/// name — or, subsumed, never wins; dispatching it would run it twice or, where the
-/// shortcut records no `best_act`, drop what the rule carries. Derived from the
-/// route rather than re-deciding it, so a shortcut added there is one the
-/// dispatch already knows about.
+/// Whether the first-char dispatch calls `rule`'s own matcher: exactly when
+/// `lexer_rule_route` leaves the rule to it.
 fn lexer_rule_is_dispatched(
     rule: &LexerRule,
     lexer_rules: &List<LexerRule>,
@@ -2402,16 +2393,12 @@ fn lexer_alts_char_set(alts: &List<LexerAlternative>, all_rules: &List<LexerRule
 }
 
 fn folded_class(start: char, end: char, ci: bool) -> CharClass {
-    if !ci {
-        return CharClass {
-            ranges: [
-                CharRange { start, end },
-            ],
-            negated: false,
-        };
-    }
     let mut ranges: List<CharRange> = [];
-    fold_range_ci(start, end, &mut ranges);
+    if ci {
+        fold_range_ci(start, end, &mut ranges);
+    } else {
+        ranges.push(CharRange { start, end });
+    }
     return CharClass { ranges, negated: false };
 }
 
@@ -2806,14 +2793,7 @@ fn any_leading_chars() -> Option<LeadingChars> {
 }
 
 fn folded_ranges(start: char, end: char, ci: bool) -> List<[i32, i32]> {
-    if !ci {
-        return [
-            [start as i32, end as i32],
-        ];
-    }
-    let mut folded: List<CharRange> = [];
-    fold_range_ci(start, end, &mut folded);
-    return folded.iter_ref().map(|r: &CharRange| [r.start as i32, r.end as i32]).collect();
+    return folded_class(start, end, ci).ranges.iter_ref().map(|r: &CharRange| [r.start as i32, r.end as i32]).collect();
 }
 
 /// Union two leading sets. A complement absorbs a plain set by dropping the
@@ -3285,7 +3265,7 @@ fn lexer_suffix_always_matches(alt: &LexerAlternative, plan: &LexerSeqPlan, from
             return false;
         };
         let Repeat(rep) = &alt.elements[i] else {
-            return false;
+            unreachable();
         };
         if !rep.kind matches { Optional | Star } || rp.emit matches { NonGreedy | LookaheadAware } {
             return false;
@@ -4058,10 +4038,8 @@ fn keyword_first_char_covered(kw: &KeywordInfo, first_chars: &List<[char, char]>
     return is_wildcard || keyword_accepts(kw, 0).iter_ref().any(|c| char_matches_ranges(*c, first_chars));
 }
 
-/// The kinds a match has to carry for `classify_keyword` to have a say: those
-/// of the rules the default mode dispatches that could match some keyword's
-/// whole text. A parser literal is not one of them, since it precedes every
-/// lexer rule and so wins the tie.
+/// The kinds of the default-mode dispatched rules that could match some
+/// keyword's whole text: the matches `classify_keyword` is asked about.
 fn keyword_carrier_kinds(
     lexer_rules: &List<LexerRule>,
     keywords: &List<KeywordInfo>,
@@ -4163,13 +4141,7 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
     w.begin("match end - start");
     for let len of &lens {
         let same_len: List<KeywordInfo> = keywords.iter_ref().filter(|kw| kw.text.len() == *len).map(|kw| *kw).collect();
-        if let Some(leaf) = keyword_trie_leaf(&same_len, 0) {
-            w.line(`${*len} => { ${leaf} },`);
-            continue;
-        }
-        w.begin(`${*len} =>`);
-        gen_keyword_trie(w, &same_len, 0);
-        w.end_with(",");
+        gen_keyword_arm(w, `${*len}`, &same_len, 0);
     }
     w.line("_ => {},");
     w.end();
@@ -4178,33 +4150,29 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
     w.blank();
 }
 
-/// Matches `group` — keywords of one length, in declaration order — from `pos`
-/// on, testing each position once however many keywords share it.
-fn gen_keyword_trie(w: &mut CodeWriter, group: &List<KeywordInfo>, pos: i32) {
+/// A match arm settling `group` — keywords of one length, in declaration order
+/// — from `pos` on, testing each position once however many keywords share it.
+fn gen_keyword_arm<S: AsStrSlice>(w: &mut CodeWriter, pattern: S, group: &List<KeywordInfo>, pos: i32) {
     if let Some(leaf) = keyword_trie_leaf(group, pos) {
-        w.line(leaf);
+        w.line(`${pattern} => { ${leaf} },`);
         return;
     }
     let shared = keyword_shared_tests(group, pos);
     let at = pos + shared.len();
+    w.begin(`${pattern} =>`);
     if !shared.is_empty() {
         w.begin(`if ${shared.join(" && ")}`);
     }
     w.begin(`match ${keyword_char_access(at)}`);
     for let arm of &keyword_arms(group, at) {
-        if let Some(leaf) = keyword_trie_leaf(&arm.keywords, at + 1) {
-            w.line(`${arm.pattern} => { ${leaf} },`);
-            continue;
-        }
-        w.begin(`${arm.pattern} =>`);
-        gen_keyword_trie(w, &arm.keywords, at + 1);
-        w.end_with(",");
+        gen_keyword_arm(w, &arm.pattern, &arm.keywords, at + 1);
     }
     w.line("_ => {},");
     w.end();
     if !shared.is_empty() {
         w.end();
     }
+    w.end_with(",");
 }
 
 /// The tests every keyword in `group` makes alike, from `pos` on.
@@ -4248,16 +4216,13 @@ fn keyword_arms(group: &List<KeywordInfo>, pos: i32) -> List<KeywordArm> {
     }
     chars.sort();
     let mut arms: List<KeywordArm> = [];
-    let mut arm_members: List<List<String>> = [];
     for let c of &chars {
         let members: List<KeywordInfo> = group.iter_ref().filter(|kw| keyword_accepts(kw, pos).contains(c)).map(
             |kw| *kw,
         ).collect();
-        let names: List<String> = members.iter_ref().map(|kw| kw.rule_name).collect();
-        if let Some(i) = arm_members.iter_ref().position(|m| *m == names) {
+        if let Some(i) = arms.iter_ref().position(|a| a.keywords == members) {
             arms[i].pattern.push_str(` | '${*c}'`);
         } else {
-            arm_members.push(names);
             arms.push(KeywordArm { pattern: `'${*c}'`, keywords: members });
         }
     }
@@ -4299,9 +4264,8 @@ fn gen_char_mismatch<S: AsStrSlice>(access: S, c: char, ci: bool) -> String {
     return `${expr} != ${char_pat(c, c)}`;
 }
 
-/// A char or range pattern for generated source, spelling as an escape any
-/// char that prints as nothing on its own: a separator, a mark, a format or
-/// control char past ASCII.
+/// A char or range pattern for generated source, escaping any char past ASCII
+/// that prints as nothing on its own.
 fn char_pat(start: char, end: char) -> String {
     if start == end {
         return quoted_char(start);
@@ -4314,7 +4278,7 @@ global UNPRINTED_CHAR_GROUPS: List<String> = ["Z", "M", "C"];
 
 fn quoted_char(c: char) -> String {
     let code = c as u32;
-    if code > 0x7F && UNPRINTED_CHAR_GROUPS.iter_ref().any(|g| icu::value_contains("gc", *g, c) == Option::Some(true)) {
+    if code > 0x7F && UNPRINTED_CHAR_GROUPS.iter_ref().any(|g| icu::value_contains("gc", *g, c).unwrap()) {
         return `'\\u{${code:x}}'`;
     }
     return `${char_range_pat(c..=c)}`;
@@ -4406,9 +4370,8 @@ fn branch_catch_all_calls(calls: &List<TryCall>, members: &List<i32>) -> List<i3
     return (0..<calls.len()).filter(|i| calls[i].is_catch_all && !last_resort.contains(&i)).collect();
 }
 
-/// The catch-alls declared after every other candidate. A one-char match
-/// from any other rule ties and wins, so one of these wins only where
-/// nothing matched, and runs once after the dispatch rather than in each arm.
+/// The catch-alls declared after every other candidate: any other match ties
+/// and wins, so these run once after the dispatch, where nothing matched.
 fn last_resort_calls(calls: &List<TryCall>) -> List<i32> {
     let mut out: List<i32> = [];
     for let mut i = calls.len() - 1; i >= 0 && calls[i].is_catch_all; i -= 1 {
@@ -5160,6 +5123,7 @@ fn gen_tokenize_fn<S: AsStrSlice>(
     w.else_begin("else");
     if !keywords.is_empty() {
         let kinds = keyword_carrier_kinds(lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
+        assert !kinds.is_empty(), "an admitted keyword's carrier, or the rule subsuming it, is dispatched";
         let mut gate = if kinds.len() == 1 {
             `best_kind == ${kinds[0]}`;
         } else {

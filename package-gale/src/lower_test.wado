@@ -3147,11 +3147,17 @@ test "a prefix alt's scan operand climbs from the parse operand's precedence" {
     assign_atn_call_sites(&mut g);
     let lit = collect_literal_tokens(&g.parser_rules);
     let lowered = lower(&g, &lit);
-    let LeftRecursive(l) = &lowered.parser_rules[0] else { panic("rule e should lower to LeftRecursive"); };
+    let LeftRecursive(l) = &lowered.parser_rules[0] else {
+        panic("rule e should lower to LeftRecursive");
+    };
     let prefix = &l.atom.alts[0];
     assert prefix.prefix_self_ref_min_prec == 2, `got ${prefix.prefix_self_ref_min_prec}`;
-    let RuleCall(parse_rc) = &prefix.ops[1] else { panic("parse operand should be a RuleCall"); };
-    let RuleCall(scan_rc) = &l.atom.scan_alts[0].elements[1] else { panic("scan operand should be a RuleCall"); };
+    let RuleCall(parse_rc) = &prefix.ops[1] else {
+        panic("parse operand should be a RuleCall");
+    };
+    let RuleCall(scan_rc) = &l.atom.scan_alts[0].elements[1] else {
+        panic("scan operand should be a RuleCall");
+    };
     assert parse_rc.min_prec_arg == Option::Some(2), `parse operand: ${parse_rc.min_prec_arg:?}`;
     assert scan_rc.min_prec_arg == parse_rc.min_prec_arg, `scan operand: ${scan_rc.min_prec_arg:?}`;
 }

@@ -83,13 +83,13 @@ pub struct LexerSlice {
 }
 
 impl LexerSlice {
-    pub fn new(chars: &List<char>, start: i32, end: i32) -> LexerSlice {
-        return LexerSlice { chars, start, end };
+    pub fn from_chars(chars: List<char>) -> LexerSlice {
+        let end = chars.len();
+        return LexerSlice { chars: &chars, start: 0, end };
     }
 
     pub fn from_string<S: AsStrSlice>(s: S) -> LexerSlice {
-        let chars = s.chars().collect();
-        return LexerSlice { chars: &chars, start: 0, end: chars.len() };
+        return LexerSlice::from_chars(s.chars().collect());
     }
 
     pub fn len(&self) -> i32 {

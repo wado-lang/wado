@@ -62,10 +62,10 @@ test "a character no lexer rule matches is a LexError diagnostic" {
 test "a later lex error neither takes the error budget nor jumps the order" {
     let capped = json::parse("{\"a\" 1} #", 1);
     assert capped.diagnostics.len() == 1;
-    assert !(capped.diagnostics[0].code matches { LexError }), `${capped.diagnostics[0]}`;
+    assert !capped.diagnostics[0].code matches { LexError }, `${capped.diagnostics[0]}`;
 
     let r = json::parse("{\"a\" 1} #");
-    assert !(r.diagnostics[0].code matches { LexError }), `${r.diagnostics[0]}`;
+    assert !r.diagnostics[0].code matches { LexError }, `${r.diagnostics[0]}`;
     let mut lex_errors = 0;
     for let mut i = 0; i < r.diagnostics.len(); i += 1 {
         if r.diagnostics[i].code matches { LexError } {

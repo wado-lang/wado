@@ -334,18 +334,26 @@ fn rule_capture_literal<S: AsStrSlice>(rule: &ParserRule, capture_id: i32, order
     return `RuleCapture { rule_id: ${rule_kind_const(&rule.name)} as i32, capture_id: ${capture_id}, order: ${order} },  // @${capture}`;
 }
 
-fn gen_string_list(w: &mut CodeWriter, field: &String, items: &List<String>) {
-    if items.is_empty() {
+fn gen_list_field(w: &mut CodeWriter, field: &String, rows: &List<String>) {
+    if rows.is_empty() {
         w.line(`${field}: [],`);
         return;
     }
     w.line(`${field}: [`);
     w.indent();
-    for let item of items {
-        w.line(wado`"${*item}",`);
+    for let row of rows {
+        w.line(row);
     }
     w.dedent();
     w.line("],");
+}
+
+fn string_rows(items: &List<String>) -> List<String> {
+    let mut rows: List<String> = [];
+    for let item of items {
+        rows.push(wado`"${*item}",`);
+    }
+    return rows;
 }
 
 /// `HIGHLIGHT_MAPPING`: the query resolved down to capture ids, token kinds and
@@ -373,20 +381,20 @@ fn gen_highlight_mapping(
 
     w.line("pub global HIGHLIGHT_MAPPING: HighlightMapping = HighlightMapping {");
     w.indent();
-    gen_string_list(w, &"capture_names", &vocabulary);
-    gen_string_list(w, &"capture_classes", &classes);
+    gen_list_field(w, &"capture_names", &string_rows(&vocabulary));
+    gen_list_field(w, &"capture_classes", &string_rows(&classes));
 
-    w.line("default_ids: [");
-    w.indent();
+    let mut default_rows: List<String> = [];
     for let mut i = 0; i < slots.len(); i += 1 {
         let slot = slot_comment(&slots[i], lexer_rules, lit_tokens);
-        match resolved.default_by_kind.get(i) {
-            Some(c) => w.line(`${capture_ids[c]},  // ${slot} @${c}`),
-            None => w.line(`-1,  // ${slot}`),
-        }
+        default_rows.push(
+            match resolved.default_by_kind.get(i) {
+                Some(c) => `${capture_ids[c]},  // ${slot} @${c}`,
+                None => `-1,  // ${slot}`,
+            },
+        );
     }
-    w.dedent();
-    w.line("],");
+    gen_list_field(w, &"default_ids", &default_rows);
 
     let mut by_kind: List<List<ResolvedOverride>> = [];
     for let ov of &resolved.overrides {
@@ -423,17 +431,13 @@ fn gen_highlight_mapping(
 
     let mut rule_captures = resolved.rule_captures;
     rule_captures.sort_by(|a: &ResolvedRuleCapture, b: &ResolvedRuleCapture| a.order.cmp(&b.order));
-    if rule_captures.is_empty() {
-        w.line("rule_captures: [],");
-    } else {
-        w.line("rule_captures: [");
-        w.indent();
-        for let rc of &rule_captures {
-            w.line(rule_capture_literal(&parser_rules[rc.rule_index], capture_ids[rc.capture], rc.order, rc.capture));
-        }
-        w.dedent();
-        w.line("],");
+    let mut rule_capture_rows: List<String> = [];
+    for let rc of &rule_captures {
+        rule_capture_rows.push(
+            rule_capture_literal(&parser_rules[rc.rule_index], capture_ids[rc.capture], rc.order, rc.capture),
+        );
     }
+    gen_list_field(w, &"rule_captures", &rule_capture_rows);
     w.dedent();
     w.line("};");
     w.blank();

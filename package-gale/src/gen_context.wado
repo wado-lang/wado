@@ -132,9 +132,6 @@ pub struct GenContext {
     /// declares the slots, which is what makes this a fixpoint rather than a
     /// local test.
     follow_forward_edges: List<List<String>>,
-    /// Lower pre-interns every set it sees, but an emit site may pick a
-    /// cheaper form, so the registry over-approximates what is called.
-    kind_set_used: List<bool>,
     /// Registry of runtime FOLLOW-continuation masks keyed by canonical
     /// per-depth representation. IDs are assigned in insertion order so
     /// `FOLLOW_MASK_<id>` global names are stable across runs. See
@@ -359,7 +356,6 @@ impl GenContext {
             open_end_cache: none_bool_cache(rule_count),
             single_alt_owner,
             kind_set_registry: TreeMap::new(),
-            kind_set_used: [],
             lr_rule_snakes: [],
             follow_rule_snakes: [],
             rule_reads_follow: false_flags(rule_count),
@@ -433,10 +429,7 @@ impl GenContext {
         if self.needs_scan_atn() || self.rule_reads_follow(snake) {
             return null;
         }
-        let Some(i) = self.snake_index.get_str(snake) else {
-            return null;
-        };
-        let rule = &self.parser_rules[i];
+        let rule = &self.parser_rules[self.snake_index[*snake]];
         if rule.alternatives.len() != 1
             || rule.init_action matches { Some(_) }
             || rule.after_action matches { Some(_) } {
@@ -459,11 +452,8 @@ impl GenContext {
     /// when it matches: a single-alt scan guards that itself, and a multi-alt
     /// one does where every alternative opens on an element that consumes.
     pub fn scan_callee_consumes<S: AsStrSlice>(&mut self, snake: S) -> bool {
-        let Some(i) = self.snake_index.get_str(snake) else {
-            return false;
-        };
         let mut visiting: List<i32> = [];
-        return self.rule_scan_consumes(i, &mut visiting);
+        return self.rule_scan_consumes(self.snake_index[snake.to_string()], &mut visiting);
     }
 
     fn rule_scan_consumes(&mut self, i: i32, visiting: &mut List<i32>) -> bool {
@@ -492,10 +482,7 @@ impl GenContext {
         return match e {
             TokenRef(_) | Literal(_) => true,
             Label(l) => self.element_scan_consumes(&l.element, visiting),
-            RuleRef(r) => {
-                let callee = self.rule_index_of(&r.name);
-                callee >= 0 && self.rule_scan_consumes(callee, visiting);
-            },
+            RuleRef(r) => self.rule_scan_consumes(self.rule_index[r.name], visiting),
             _ => false,
         };
     }
@@ -556,9 +543,7 @@ impl GenContext {
     /// Whether an action of the rule being emitted reads the binding `base`.
     pub fn reads_binding<S: AsStrSlice>(&self, base: S) -> bool {
         let r = self.current_rule_index;
-        if r < 0 || r >= self.binding_reads.len() {
-            return true;
-        }
+        assert r >= 0 && r < self.binding_reads.len(), "gen_parser installs the binding reads before any rule emits";
         return match &self.binding_reads[r] {
             Some(reads) => reads.contains_str(base),
             None => true,
@@ -2276,20 +2261,6 @@ impl GenContext {
         return self.kind_set_registry.values().iter_value().collect();
     }
 
-    pub fn kind_set_is_used(&self, id: i32) -> bool {
-        if id < 0 || id >= self.kind_set_used.len() {
-            return false;
-        }
-        return self.kind_set_used[id];
-    }
-
-    fn mark_kind_set_used(&mut self, id: i32) {
-        while self.kind_set_used.len() <= id {
-            self.kind_set_used.push(false);
-        }
-        self.kind_set_used[id] = true;
-    }
-
     /// Intern a recovery sync set (a leaf's FIRST-of-rest). Returns the
     /// `SYNC_<id>` global's id, or `null` for an empty set (the caller passes
     /// `&EMPTY_SYNC`). IDs are insertion-order so names are stable across runs.
@@ -2312,7 +2283,7 @@ impl GenContext {
     }
 
     pub fn forwarded_call<S: AsStrSlice>(&self, helper: S) -> Option<String> {
-        return self.forwarded_calls.get(helper.to_string());
+        return self.forwarded_calls.get_str(helper);
     }
 
     pub fn set_alt_exit_label(&mut self, label: Option<String>) {
@@ -2323,9 +2294,9 @@ impl GenContext {
     /// (empty for none).
     pub fn alt_exit<S: AsStrSlice>(&self, value: S) -> String {
         let Some(label) = &self.alt_exit_label else {
-            return if value.len() == 0 { String::from("return;") } else { `return ${value};` };
+            return if value.is_empty() { String::from("return;") } else { `return ${value};` };
         };
-        return if value.len() == 0 { `break ${label};` } else { `break ${label}: ${value};` };
+        return if value.is_empty() { `break ${label};` } else { `break ${label}: ${value};` };
     }
 
     /// `SYNC_<id>`, the set as the bits a membership test reads, or
@@ -2445,7 +2416,6 @@ impl GenContext {
             return `${expr} == ${tokens[0]}`;
         }
         let id = self.intern_kind_set(tokens);
-        self.mark_kind_set_used(id);
         return `_kind_set_${id}(${expr})`;
     }
 
@@ -2614,7 +2584,6 @@ impl GenContext {
             return `${expr} != ${tokens[0]}`;
         }
         let id = self.intern_kind_set(tokens);
-        self.mark_kind_set_used(id);
         return `!_kind_set_${id}(${expr})`;
     }
 }

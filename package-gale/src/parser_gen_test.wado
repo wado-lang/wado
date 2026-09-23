@@ -4,12 +4,20 @@
 
 use { gen_alt_scan_fn } from "./parser_gen.wado";
 use { GenContext } from "./gen_context.wado";
+use { Alternative, ParserRule, Visibility } from "./ir.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { ScanBody, ScanElement, ScanTokenElement, ScanRuleCallElement, FollowArg } from "./gir.wado";
 
 /// `r` is registered left-recursive: only then does `scan_r` take `min_prec`.
-fn empty_ctx() -> GenContext {
-    let mut ctx = GenContext::new(&[], &[]);
+/// Its two alternatives keep its scan a call rather than an inlined token test.
+fn lr_ctx() -> GenContext {
+    let rules: List<ParserRule> = [
+        ParserRule::new("r", Visibility::Default, [], [
+            Alternative::new([]),
+            Alternative::new([]),
+        ]),
+    ];
+    let mut ctx = GenContext::new(&rules, &[]);
     ctx.set_lr_rule_snakes(&(["r"] as List<String>));
     return ctx;
 }
@@ -26,7 +34,7 @@ fn self_ref_call(min_prec_arg: Option<i32>) -> ScanElement {
 // trailing self-ref is not special, so a prefix operand climbs exactly as
 // far as its parse twin.
 test "alt-scan passes a self-ref's stamped min_prec verbatim" {
-    let mut ctx = empty_ctx();
+    let mut ctx = lr_ctx();
     let mut w = CodeWriter::new();
     let elements: List<ScanElement> = [
         ScanElement::Token(ScanTokenElement { kind: "TK_X" }),

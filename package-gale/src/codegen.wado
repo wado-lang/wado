@@ -284,10 +284,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             }
         }
     }
-    // Scan functions (and their kind-set helpers) are emitted only when a rule
-    // needs a longest-match tournament; the FOLLOW runtime / mask globals only
-    // when lowering built a caller-FOLLOW gate (`emit_follow`).
-    let ef = ctx.emit_follow();
+    let emit_follow = ctx.emit_follow();
     // A superClass grammar can't be highlighted: the `highlight` entry calls
     // `tokenize` / `parse` (base effect) but can't install the handler. Skip it
     // (warned below) instead of emitting uncompilable code.
@@ -328,7 +325,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // emit whatever was interned (a no-op when none).
     gen_kind_set_helpers(&mut w, &lowered, &ctx);
     gen_sync_set_globals(&mut w, &ctx);
-    if ef {
+    if emit_follow {
         gen_follow_mask_globals(&mut w, &ctx);
     }
     // Serialized ATN blob for the runtime simulator. Only emitted when
@@ -348,7 +345,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let body = w.to_string();
     let rt = gen_runtime(
         &RuntimeFeatures {
-            emit_follow: ef,
+            emit_follow,
             atn_decode: ctx.needs_atn() || needs_latn,
             // Several decision kinds route here, each on its own condition;
             // the emitted parser is the one place they all meet.
@@ -634,7 +631,7 @@ fn member_field<S: AsStrSlice>(members: &MemberDecls, name: S) -> [String, Strin
             return [mf.ty, mf.init];
         }
     }
-    panic(`gen_scan_gate_global: '${name}' is simulated but no member declares it`);
+    panic(`gen_scan_gate_type: '${name}' is simulated but no member declares it`);
 }
 
 /// Emit the decoded `LATN_SIM` global for the runtime lexer simulator. Same
@@ -645,18 +642,8 @@ fn gen_latn_data_global(w: &mut CodeWriter, atn: &Atn) {
     w.blank();
 }
 
-/// Emit `global <sim_name>: AtnSim = atn_decode(&b"...packed blob...");`.
-/// Shared by the parser (`ATN_SIM`) and lexer (`LATN_SIM`) — same wire format
-/// and decoder; only the atom semantics differ.
-///
-/// The literal is a bare call argument, not bound to its own `global` first:
-/// a `global` is a permanent GC root for the module's lifetime, so naming it
-/// (`global ATN_DATA = b"...";`) would keep the raw blob reachable forever
-/// even though `atn_decode` reads it once and never stores a reference. As
-/// an argument it has no referrers left once `atn_decode` returns, so it's
-/// collectible immediately — and this costs nothing at compile time:
-/// `array.new_data` fires the same way whether the literal is a global's
-/// initializer or a nested call argument.
+/// Emit `global <sim_name>: AtnSim = atn_decode(&b"...");`. The blob is a call
+/// argument rather than a global of its own, a GC root, so it dies once decoded.
 fn emit_atn_blob_global<S: AsStrSlice>(w: &mut CodeWriter, atn: &Atn, sim_name: S, lr_tables: bool) {
     let bytes = atn_blob_bytes(atn);
     let mut body = String::with_capacity(bytes.len() * 4);
@@ -686,19 +673,9 @@ fn push_attr_escaped<S: AsStrSlice>(out: &mut String, s: S) {
 }
 
 fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
-    // Emit `#![generated(by = "gale", sources = ["a.g4", "b.g4"])]`. If the
-    // grammar has no recorded source files (e.g. constructed directly in a
-    // unit test), fall back to `{name}.g4` so existing tests still see a
-    // sensible provenance entry.
-    let mut sources: List<String> = [];
-    // `source_files` is set by both entry points (the Kiln generator from
-    // `req.primary.path`, the CLI from the loaded file paths). When it is
-    // genuinely unknown, emit an empty list rather than fabricating
-    // `<GrammarName>.g4` — a plausible-looking name for a file that does
-    // not exist.
-    for let sf of &grammar.source_files {
-        sources.push(*sf);
-    }
+    // With no recorded source file, `sources` stays empty rather than naming a
+    // plausible `<GrammarName>.g4` that does not exist.
+    let sources = &grammar.source_files;
     let mut parts = String::with_capacity(32);
     parts.push_str("#![generated(by = \"gale\", sources = [");
     for let mut i = 0; i < sources.len(); i += 1 {
@@ -733,21 +710,8 @@ struct InlinedRuntime {
     code: CodeWriter,
 }
 
-/// Emit the inlined runtime, split across `src/runtime/*.wado` and gated so
-/// a generated parser carries only the fragments it calls:
-///
-/// - `lex` / `diag` / `tree` / `tools` are always emitted: the core lexing
-///   vocabulary, the diagnostics types, the flat CST store + `TreeBuilder`,
-///   and the ANTLR4-format token-stream dump (`to_lexer_string`), which
-///   takes the generated `TokenStream` and so cannot live outside the
-///   generated module. Comparison helpers that take only strings are not
-///   bundled — see `tests/support/tree_compare.wado`.
-/// - `atn` (the blob decoder) under either simulator; `atn_predict` and
-///   `atn_lr` under the parser calls they define; `latn` under the lexer's.
-///
-/// Each fragment is a real module for dev/test, importing its siblings via
-/// `use { ... } from "./lex.wado"` etc.; `gen_runtime_fragment` drops those,
-/// since every fragment lands in the one generated module.
+/// The fragments of `src/runtime/` a generated parser carries: `lex`, `diag`,
+/// `tree` and `tools` always, each other one only when the parser calls it.
 fn gen_runtime(f: &RuntimeFeatures) -> InlinedRuntime {
     let mut rt = InlinedRuntime { imports: [], code: CodeWriter::new() };
     gen_runtime_fragment(&mut rt, &#include_str("./runtime/lex.wado"));
@@ -779,9 +743,8 @@ fn gen_runtime(f: &RuntimeFeatures) -> InlinedRuntime {
     return rt;
 }
 
-/// Append a runtime fragment. A sibling-runtime import (`from "./..."`) is
-/// dropped, since the sibling is inlined too; a standard-library one is kept
-/// for the top of the file. A `use` may span lines, up to its mandatory `;`.
+/// Append a runtime fragment. A sibling import (`from "./..."`) is dropped,
+/// since the sibling is inlined too, and a standard-library one is hoisted.
 fn gen_runtime_fragment<S: AsStrSlice>(rt: &mut InlinedRuntime, src: S) {
     let mut block = String::new();
     let mut in_use = false;

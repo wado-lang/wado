@@ -28,7 +28,7 @@ impl G4Lexer {
         for let mut i = start; i < end; i += 1 {
             buf.push(self.chars[i]);
         }
-        return Token::new(kind as i32, owned_slice(buf), Span::new(start, end));
+        return Token::new(kind as i32, LexerSlice::from_chars(buf), Span::new(start, end));
     }
 
     fn at_end(&self) -> bool {
@@ -102,7 +102,7 @@ impl G4Lexer {
                 if let Some(esc) = bad {
                     return self.owned_token(G4Token::InvalidEscape, esc.start, esc.end);
                 }
-                return Token::new(G4Token::StringLit as i32, owned_slice(text), Span::new(start, self.pos));
+                return Token::new(G4Token::StringLit as i32, LexerSlice::from_chars(text), Span::new(start, self.pos));
             } else if c == '\\' && !self.at_end() {
                 self.read_string_escape(&mut text, &mut bad);
             } else {
@@ -153,7 +153,7 @@ impl G4Lexer {
                 break;
             }
         }
-        return Token::new(G4Token::IntLit as i32, owned_slice(buf), Span::new(start, self.pos));
+        return Token::new(G4Token::IntLit as i32, LexerSlice::from_chars(buf), Span::new(start, self.pos));
     }
 
     fn read_identifier(&mut self) -> Token {
@@ -182,7 +182,7 @@ impl G4Lexer {
             8 => if buf_eq(&buf, "fragment") { G4Token::Fragment } else { G4Token::Identifier },
             _ => G4Token::Identifier,
         };
-        return Token::new(kind as i32, owned_slice(buf), Span::new(start, self.pos));
+        return Token::new(kind as i32, LexerSlice::from_chars(buf), Span::new(start, self.pos));
     }
 
     pub fn next_token(&mut self) -> Token {
@@ -245,11 +245,8 @@ impl G4Lexer {
     }
 }
 
-/// Tokenize directly from an already-collected char buffer. `parse` uses
-/// this to share the single `List<char>` collection between the lexer and
-/// the parser (which keeps it for `scan_balanced`), instead of collecting
-/// the whole input twice. Token text is owned (`owned_slice`), so
-/// the tokens do not alias `chars` and the buffer may be moved afterwards.
+/// Tokenize an already-collected char buffer, which `parse` shares with the
+/// parser. Token text is owned, so the tokens do not alias `chars`.
 pub fn tokenize_chars(chars: &List<char>) -> List<Token> {
     let mut lexer = G4Lexer::new(chars);
     let mut tokens: List<Token> = [];
@@ -262,15 +259,6 @@ pub fn tokenize_chars(chars: &List<char>) -> List<Token> {
         }
     }
     return tokens;
-}
-
-/// Wrap an owned char buffer as a `LexerSlice` over its full extent, without
-/// the `String` round-trip + re-`collect` that `LexerSlice::from_string`
-/// performs. Kept local to the g4 frontend so it is not inlined into every
-/// generated parser through the runtime (`runtime/lex.wado`).
-fn owned_slice(buf: List<char>) -> LexerSlice {
-    let n = buf.len();
-    return LexerSlice { chars: &buf, start: 0, end: n };
 }
 
 /// Compare an owned char buffer against a keyword literal. Callers gate on

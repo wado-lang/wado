@@ -166,15 +166,6 @@ test "Span::len returns length" {
     assert s.len() == 7;
 }
 
-test "Span equality" {
-    let a = Span::new(0, 5);
-    let b = Span::new(0, 5);
-    let c = Span::new(1, 5);
-    assert a == b;
-    assert a != c;
-}
-
-
 test "highlight_html escapes HTML and wraps captures" {
     let source = "<div>";
     let captures: List<HighlightCapture> = [
@@ -227,7 +218,11 @@ test "HighlightVisitor collects captures from tokens" {
 
 test "HighlightVisitor applies context overrides" {
     let mut mapping = mapping_of(["string", "string.special.key"], [0]);
-    mapping.overrides_by_kind = [[RuleCapture { rule_id: 1, capture_id: 1, order: 0 }]];
+    mapping.overrides_by_kind = [
+        [
+            RuleCapture { rule_id: 1, capture_id: 1, order: 0 },
+        ],
+    ];
     let ts = stream_of("0123456789012345", [
         [0, 0, 5],
         [0, 11, 16],

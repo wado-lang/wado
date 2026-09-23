@@ -58,11 +58,8 @@ impl HighlightVisitor {
     }
 
     fn classify(&self, kind: i32, rule_capture: i32) -> i32 {
-        let mut before = i32::MAX;
-        if rule_capture >= 0 {
-            before = self.mapping.rule_captures[rule_capture].order;
-        }
-        if kind >= 0 && kind < self.mapping.overrides_by_kind.len() {
+        let before = if rule_capture >= 0 { self.mapping.rule_captures[rule_capture].order } else { i32::MAX };
+        if kind < self.mapping.overrides_by_kind.len() {
             for let candidate of &self.mapping.overrides_by_kind[kind] {
                 if candidate.order > before {
                     break;
@@ -77,10 +74,7 @@ impl HighlightVisitor {
         if rule_capture >= 0 {
             return self.mapping.rule_captures[rule_capture].capture_id;
         }
-        if kind >= 0 && kind < self.mapping.default_ids.len() {
-            return self.mapping.default_ids[kind];
-        }
-        return -1;
+        return self.mapping.default_ids[kind];
     }
 }
 
