@@ -100,6 +100,7 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "opt_value_copy_void_stores_callee_keeps_copy.wado/build"() {
+    let $load_8: i32;
     let out_0: ref "core:prelude//List<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>";
     let sinks: ref "core:prelude//List<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>";
     let i_2: i32;
@@ -136,7 +137,7 @@ fn "opt_value_copy_void_stores_callee_keeps_copy.wado/build"() {
             }
             builtin::array_set<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Sink">(sinks.repr, used_33, value_32);
             sinks.used = used_33 + 1;
-            value_39 = struct.new "opt_value_copy_void_stores_callee_keeps_copy.wado//Item" { tags: ref.as_non_null(v_42 = it_3.tags; struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:prelude/string.wado//String">(v_42.repr, v_42.used)), used: v_42.used }) };
+            value_39 = struct.new "opt_value_copy_void_stores_callee_keeps_copy.wado//Item" { tags: ref.as_non_null(v_42 = it_3.tags; struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:prelude/string.wado//String">(v_42.repr, local.tee $load_8(v_42.used))), used: $load_8 }) };
             used_40 = out_0.used;
             if @unlikely(used_40 >= builtin::array_len(out_0.repr)) {
                 cold_path;
@@ -251,19 +252,20 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -326,7 +328,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l27;
@@ -335,24 +337,26 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>::grow"(self) {
+    let $load_0: ref "Array<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>";
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "Array<opt_value_copy_void_stores_callee_keeps_copy.wado/Sink>";
     let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    a = local.tee capacity(builtin::array_len(local.tee $load_0(self.repr))) * 2;
     new_repr = builtin::array_new<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Sink">(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Sink">(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Sink">(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>::grow"(self) {
+    let $load_0: ref "Array<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>";
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "Array<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>";
     let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    a = local.tee capacity(builtin::array_len(local.tee $load_0(self.repr))) * 2;
     new_repr = builtin::array_new<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Item">(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Item">(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Item">(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 

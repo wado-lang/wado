@@ -147,6 +147,8 @@ global global:core:prelude/array.wado::$const_obj_104: ref null Array<u8> = arra
 global global:core:prelude/array.wado::$const_obj_105: ref null Array<u8> = array.new_fixed<u8>(44, 32);
 
 fn "nested_array.wado/nested_array_3deep_iterate_test"() with Stdout {
+    let $load_5: i32;
+    let $load_7: i32;
     let total: i32;
     let $local_12: ref "core:prelude/string.wado//String";
     let handle_26: i32;
@@ -196,8 +198,8 @@ fn "nested_array.wado/nested_array_3deep_iterate_test"() with Stdout {
         l1: loop {
             break_if b0 $sroa_$iter_0_index >= 2;
             v_101 = builtin::array_get_value<ref "core:prelude//List<core:prelude/list.wado/List<i32>>">($sroa_$iter_0_repr, $sroa_$iter_0_index);
-            $sroa_item_repr_165 = builtin::array_clone_deep_prefix<ref "core:prelude//List<i32>">(v_101.repr, v_101.used);
-            $sroa_item_used_166 = v_101.used;
+            $sroa_item_repr_165 = builtin::array_clone_deep_prefix<ref "core:prelude//List<i32>">(v_101.repr, local.tee $load_5(v_101.used));
+            $sroa_item_used_166 = $load_5;
             $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
             $sroa_$iter_1_index = 0;
             b2: block {
@@ -207,11 +209,11 @@ fn "nested_array.wado/nested_array_3deep_iterate_test"() with Stdout {
                     let $array_clone_src_5: ref Array<i32>;
                     $array_clone_src_5 = v_108.repr;
                     let $array_clone_len_7: i32;
-                    $array_clone_len_7 = v_108.used;
+                    $array_clone_len_7 = local.tee $load_7(v_108.used);
                     let $array_clone_dst_6: ref Array<i32>;
                     $array_clone_dst_6 = builtin::array_new<i32>($array_clone_len_7);
                     builtin::array_copy<i32>($array_clone_dst_6, 0, $array_clone_src_5, 0, $array_clone_len_7);
-                    $sroa_item_used_171 = v_108.used;
+                    $sroa_item_used_171 = $load_7;
                     $sroa_$iter_1_index = $sroa_$iter_1_index + 1;
                     $sroa_$iter_2_index = 0;
                     b4: block {
@@ -246,6 +248,7 @@ fn "nested_array.wado/nested_array_3deep_iterate_test"() with Stdout {
 }
 
 fn "nested_array.wado/nested_array_iterate_test"() with Stdout {
+    let $load_3: i32;
     let buf_2: ref "core:prelude/string.wado//String";
     let $local_9: ref "core:prelude/string.wado//String";
     let handle_27: i32;
@@ -290,11 +293,11 @@ fn "nested_array.wado/nested_array_iterate_test"() with Stdout {
             let $array_clone_src_3: ref Array<i32>;
             $array_clone_src_3 = v.repr;
             let $array_clone_len_5: i32;
-            $array_clone_len_5 = v.used;
+            $array_clone_len_5 = local.tee $load_3(v.used);
             let $array_clone_dst_4: ref Array<i32>;
             $array_clone_dst_4 = builtin::array_new<i32>($array_clone_len_5);
             builtin::array_copy<i32>($array_clone_dst_4, 0, $array_clone_src_3, 0, $array_clone_len_5);
-            $sroa_item_used = v.used;
+            $sroa_item_used = $load_3;
             $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
             $sroa_$iter_1_index = 0;
             b8: block {
@@ -382,6 +385,8 @@ fn "nested_array.wado/nested_array_method_test"() with Stdout {
 }
 
 fn "nested_array.wado/nested_array_mutate_test"() with Stdout {
+    let $load_1: i32;
+    let $load_4: ref Array<i32>;
     let row: ref "core:prelude//List<i32>";
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4_4: ref "core:prelude/format.wado//Formatter";
@@ -404,17 +409,17 @@ fn "nested_array.wado/nested_array_mutate_test"() with Stdout {
     let $sroa_matrix_repr: ref "Array<core:prelude/list.wado/List<i32>>";
     $sroa_matrix_repr = array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 });
     v = builtin::array_get_value<ref "core:prelude//List<i32>">($sroa_matrix_repr, 0);
-    row = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v.repr; let $array_clone_len_3: i32; $array_clone_len_3 = v.used; let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: v.used };
+    row = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_1(v.used); let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_1 };
     used = row.used;
     if @unlikely(used >= builtin::array_len(row.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(row);
     }
-    builtin::array_set<i32>(row.repr, used, 99);
+    builtin::array_set<i32>(local.tee $load_4(row.repr), used, 99);
     row.used = used + 1;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
-    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$spec0"(row.repr, row.used, $local_4_4, 256);
+    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$spec0"($load_4, row.used, $local_4_4, 256);
     rx_37 = builtin::i32_wrap_i64(local.tee packed_36("wasi/stream-new"()));
     tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
     handle_29 = "nested_array.wado/$cm_binding__Stdout_write_via_stream"(rx_37);
@@ -574,7 +579,8 @@ fn "nested_array.wado/$cm_export__run"() {
 }
 
 fn "nested_array.wado/$value_copy$core:prelude/list.wado/List<i32>"(v) {
-    return struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v.repr; let $array_clone_len_3: i32; $array_clone_len_3 = v.used; let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: v.used };
+    let $load_1: i32;
+    return struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_1(v.used); let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_1 };
 }
 
 fn "core:prelude/primitive.wado/count_digits_u64"(val) {
@@ -917,19 +923,20 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$spec0
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -992,7 +999,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l76;
@@ -1019,13 +1026,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:pre
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
+    let $load_0: ref Array<i32>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<i32>;
     let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    a = local.tee capacity(builtin::array_len(local.tee $load_0(self.repr))) * 2;
     new_repr = builtin::array_new<i32>(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<i32>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 

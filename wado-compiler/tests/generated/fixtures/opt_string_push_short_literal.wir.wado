@@ -61,6 +61,7 @@ global global:opt_string_push_short_literal.wado::$const_obj_1: ref null Array<u
 global global:opt_string_push_short_literal.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(48, 46);
 
 fn "opt_string_push_short_literal.wado/run"() with Stdout {
+    let $load_0: ref Array<u8>;
     let buf: ref "core:prelude/string.wado//String";
     let self_8: ref Array<u8>;
     let self_12: ref Array<u8>;
@@ -71,11 +72,11 @@ fn "opt_string_push_short_literal.wado/run"() with Stdout {
     let tx_27: i32;
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
     buf.used = 6;
-    self_8 = buf.repr;
+    self_8 = local.tee $load_0(buf.repr);
     builtin::array_copy<u8>(self_8, 0, global:opt_string_push_short_literal.wado::$const_obj_2, 0, 2);
-    self_12 = buf.repr;
+    self_12 = $load_0;
     builtin::array_copy<u8>(self_12, 0 + 2, global:opt_string_push_short_literal.wado::$const_obj_1, 0, 1);
-    self_16 = buf.repr;
+    self_16 = $load_0;
     builtin::array_copy<u8>(self_16, 0 + 3, global:opt_string_push_short_literal.wado::$const_obj_0, 0, 3);
     rx_26 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_27 = builtin::i32_wrap_i64(packed >> 32_i64);
@@ -163,7 +164,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l2;

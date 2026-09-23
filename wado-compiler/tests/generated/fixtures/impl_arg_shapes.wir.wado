@@ -132,6 +132,8 @@ fn "impl_arg_shapes.wado/$cm_export__$test_3_a_mut_reference_impl_argument_appli
 }
 
 fn "impl_arg_shapes.wado/$test_2_a_function_type_impl_argument_applies_to_its_own_shape$cold0"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/format.wado//Formatter";
     let self_18: ref Array<u8>;
@@ -152,18 +154,18 @@ fn "impl_arg_shapes.wado/$test_2_a_function_type_impl_argument_applies_to_its_ow
     let start_72: i32;
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(126), used: 0 };
     $local_7.used = 107;
-    self_18 = $local_7.repr;
+    self_18 = local.tee $load_0($local_7.repr);
     builtin::array_copy<u8>(self_18, 0, global:impl_arg_shapes.wado::$const_obj_94, 0, 20);
-    self_22 = $local_7.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 20;
     builtin::array_copy<u8>(self_22, offset_23, global:impl_arg_shapes.wado::$const_obj_93, 0, 62);
-    self_26 = $local_7.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 82;
     builtin::array_copy<u8>(self_26, offset_27, global:impl_arg_shapes.wado::$const_obj_92, 0, 4);
-    self_30 = $local_7.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 86;
     builtin::array_copy<u8>(self_30, offset_31, global:impl_arg_shapes.wado::$const_obj_91, 0, 20);
-    self_34 = $local_7.repr;
+    self_34 = $load_0;
     offset_35 = 0 + 106;
     builtin::array_copy<u8>(self_34, offset_35, global:impl_arg_shapes.wado::$const_obj_90, 0, 1);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -175,9 +177,9 @@ fn "impl_arg_shapes.wado/$test_2_a_function_type_impl_argument_applies_to_its_ow
     }
     start_46 = $local_7.used;
     $local_7.used = new_used_45;
-    self_48 = $local_7.repr;
+    self_48 = local.tee $load_5($local_7.repr);
     builtin::array_copy<u8>(self_48, start_46, global:impl_arg_shapes.wado::$const_obj_89, 0, 26);
-    self_52 = $local_7.repr;
+    self_52 = $load_5;
     offset_53 = start_46 + 26;
     builtin::array_copy<u8>(self_52, offset_53, global:impl_arg_shapes.wado::$const_obj_88, 0, 10);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -277,19 +279,20 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -352,7 +355,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l26;

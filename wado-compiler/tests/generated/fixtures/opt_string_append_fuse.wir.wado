@@ -64,6 +64,10 @@ global global:opt_string_append_fuse.wado::$const_obj_5: ref null Array<u8> = ar
 global global:opt_string_append_fuse.wado::$const_obj_6: ref null Array<u8> = array.new_fixed<u8>(116, 114, 117, 101);
 
 fn "opt_string_append_fuse.wado/run"() with Stdout {
+    let $load_0: ref Array<u8>;
+    let $load_4: ref Array<u8>;
+    let $load_9: ref Array<u8>;
+    let $load_11: ref Array<u8>;
     let buf_0: ref "core:prelude/string.wado//String";
     let i: i32;
     let s_2: ref "core:prelude/string.wado//String";
@@ -81,14 +85,14 @@ fn "opt_string_append_fuse.wado/run"() with Stdout {
     let tx_134: i32;
     buf_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
     buf_0.used = 6;
-    builtin::array_set_u8(buf_0.repr, 0, 91);
-    builtin::array_copy<u8>(buf_0.repr, 0 + 1, global:opt_string_append_fuse.wado::$const_obj_6, 0, 4);
-    builtin::array_set_u8(buf_0.repr, 0 + 5, 93);
+    builtin::array_set_u8(local.tee $load_0(buf_0.repr), 0, 91);
+    builtin::array_copy<u8>($load_0, 0 + 1, global:opt_string_append_fuse.wado::$const_obj_6, 0, 4);
+    builtin::array_set_u8($load_0, 0 + 5, 93);
     buf_0.used = 7;
-    builtin::array_set_u8(buf_0.repr, 6, 34);
+    builtin::array_set_u8($load_0, 6, 34);
     buf_0.used = 12;
-    builtin::array_copy<u8>(buf_0.repr, 7, global:opt_string_append_fuse.wado::$const_obj_5, 0, 3);
-    builtin::array_copy<u8>(buf_0.repr, 7 + 3, global:opt_string_append_fuse.wado::$const_obj_4, 0, 2);
+    builtin::array_copy<u8>($load_0, 7, global:opt_string_append_fuse.wado::$const_obj_5, 0, 3);
+    builtin::array_copy<u8>($load_0, 7 + 3, global:opt_string_append_fuse.wado::$const_obj_4, 0, 2);
     i = 0;
     b0: block {
         l1: loop {
@@ -100,9 +104,9 @@ fn "opt_string_append_fuse.wado/run"() with Stdout {
             }
             start_64 = buf_0.used;
             buf_0.used = new_used_63;
-            builtin::array_set_u8(buf_0.repr, start_64, 60);
-            builtin::array_copy<u8>(buf_0.repr, start_64 + 1, global:opt_string_append_fuse.wado::$const_obj_3, 0, 54);
-            builtin::array_set_u8(buf_0.repr, start_64 + 55, 62);
+            builtin::array_set_u8(local.tee $load_4(buf_0.repr), start_64, 60);
+            builtin::array_copy<u8>($load_4, start_64 + 1, global:opt_string_append_fuse.wado::$const_obj_3, 0, 54);
+            builtin::array_set_u8($load_4, start_64 + 55, 62);
             i = i + 1;
             continue l1;
         };
@@ -119,15 +123,15 @@ fn "opt_string_append_fuse.wado/run"() with Stdout {
     }
     start_103 = s_2.used;
     s_2.used = 3;
-    builtin::array_set_u8(s_2.repr, start_103, 60);
-    if @unlikely(7 > builtin::array_len(s_2.repr)) {
+    builtin::array_set_u8(local.tee $load_9(s_2.repr), start_103, 60);
+    if @unlikely(7 > builtin::array_len($load_9)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_2, 7);
     }
     start_115 = s_2.used;
     s_2.used = 7;
-    builtin::array_copy<u8>(s_2.repr, start_115, s_2.repr, 0, 3);
-    builtin::array_set_u8(s_2.repr, start_115 + 3, 62);
+    builtin::array_copy<u8>(local.tee $load_11(s_2.repr), start_115, $load_11, 0, 3);
+    builtin::array_set_u8($load_11, start_115 + 3, 62);
     rx_133 = builtin::i32_wrap_i64(local.tee packed_132("wasi/stream-new"()));
     tx_134 = builtin::i32_wrap_i64(packed_132 >> 32_i64);
     handle_130 = "opt_string_append_fuse.wado/$cm_binding__Stdout_write_via_stream"(rx_133);
@@ -156,19 +160,20 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -231,7 +236,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l8;

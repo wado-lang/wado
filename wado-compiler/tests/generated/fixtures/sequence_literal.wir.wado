@@ -168,9 +168,9 @@ global mut global:sequence_literal.wado::$const_obj_26: ref null "sequence_liter
 global global:core:prelude/traits.wado::$const_obj_33: ref null Array<u8> = array.new_fixed<u8>(32, 125);
 global global:core:prelude/traits.wado::$const_obj_34: ref null Array<u8> = array.new_fixed<u8>(58, 32);
 global global:core:prelude/traits.wado::$const_obj_35: ref null Array<u8> = array.new_fixed<u8>(32, 123, 32);
-global global:core:prelude/traits.wado::$const_obj_36: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 116, 101, 109, 115), used: 5 };
-global global:core:prelude/traits.wado::$const_obj_37: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(70, 114, 111, 122, 101, 110, 86, 101, 99), used: 9 };
-global global:core:prelude/traits.wado::$const_obj_42: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83, 101, 113, 86, 101, 99), used: 6 };
+global global:core:prelude/traits.wado::$const_obj_36: ref null Array<u8> = array.new_fixed<u8>(105, 116, 101, 109, 115);
+global global:core:prelude/traits.wado::$const_obj_37: ref null Array<u8> = array.new_fixed<u8>(70, 114, 111, 122, 101, 110, 86, 101, 99);
+global global:core:prelude/traits.wado::$const_obj_42: ref null Array<u8> = array.new_fixed<u8>(83, 101, 113, 86, 101, 99);
 global global:core:prelude/array.wado::$const_obj_44: ref null Array<u8> = array.new_fixed<u8>(46, 46, 46);
 global global:core:prelude/array.wado::$const_obj_45: ref null Array<u8> = array.new_fixed<u8>(44, 32, 46, 46, 46);
 global global:core:prelude/array.wado::$const_obj_46: ref null Array<u8> = array.new_fixed<u8>(44, 32);
@@ -198,6 +198,9 @@ global global:core:prelude/traits.wado::$const_obj_139: ref null Array<u8> = arr
 global global:core:prelude/primitive.wado::$const_obj_142: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "sequence_literal.wado/$test_0_an_annotation_or_a_cast_supplies_the_target_type"() {
+    let $load_0: ref "core:prelude//List<i32>";
+    let $load_1: i32;
+    let $load_15: ref Array<i32>;
     let s: ref "sequence_literal.wado//SeqVec<i32>";
     let $v1_1: i32;
     let $v1_3: i32;
@@ -234,7 +237,7 @@ fn "sequence_literal.wado/$test_0_an_annotation_or_a_cast_supplies_the_target_ty
     let $v1_51: i32;
     let $v1_59: i32;
     s = "sequence_literal.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>(10, 20, 30));
-    $v1_1 = s.items.used;
+    $v1_1 = local.tee $load_1(local.tee $load_0(s.items).used);
     if @unlikely($v1_1 != 3) {
         cold_path;
         $local_12 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(144);
@@ -264,13 +267,13 @@ condition: s.len() == 3
         "core:rt/panic"($local_12.repr, $local_12.used);
         unreachable;
     }
-    $v1_43 = s.items.used;
+    $v1_43 = $load_1;
     if @unlikely(0 >= $v1_43) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec0"($v1_43);
         unreachable;
     }
-    $v1_3 = builtin::array_get_value<i32>(s.items.repr, 0);
+    $v1_3 = builtin::array_get_value<i32>(local.tee $load_15($load_0.repr), 0);
     if @unlikely($v1_3 != 10) {
         cold_path;
         $local_14 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(147);
@@ -300,13 +303,13 @@ condition: s.get(0) == 10
         "core:rt/panic"($local_14.repr, $local_14.used);
         unreachable;
     }
-    $v1_51 = s.items.used;
+    $v1_51 = $load_1;
     if @unlikely(1 >= $v1_51) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec1"($v1_51);
         unreachable;
     }
-    $v1_5 = builtin::array_get_value<i32>(s.items.repr, 1);
+    $v1_5 = builtin::array_get_value<i32>($load_15, 1);
     if @unlikely($v1_5 != 20) {
         cold_path;
         $local_16 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(147);
@@ -336,13 +339,13 @@ condition: s.get(1) == 20
         "core:rt/panic"($local_16.repr, $local_16.used);
         unreachable;
     }
-    $v1_59 = s.items.used;
+    $v1_59 = $load_1;
     if @unlikely(2 >= $v1_59) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(2, $v1_59);
         unreachable;
     }
-    $v1_7 = builtin::array_get_value<i32>(s.items.repr, 2);
+    $v1_7 = builtin::array_get_value<i32>($load_15, 2);
     if @unlikely($v1_7 != 30) {
         cold_path;
         $local_18 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(147);
@@ -457,6 +460,11 @@ condition: empty.len() == 0
 }
 
 fn "sequence_literal.wado/$test_2_an_immutable_target_needs_only_the_from_impl"() {
+    let $load_0: ref "core:prelude//List<i32>";
+    let $load_1: i32;
+    let $load_15: ref Array<i32>;
+    let $load_55: ref "core:prelude//List<i32>";
+    let $load_56: i32;
     let v: ref "sequence_literal.wado//FrozenVec<i32>";
     let $v1_1: i32;
     let $v1_3: i32;
@@ -500,7 +508,7 @@ fn "sequence_literal.wado/$test_2_an_immutable_target_needs_only_the_from_impl"(
     let $v1_66: i32;
     let $v1_76: i32;
     v = "sequence_literal.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>(1, 2, 3, 4, 5));
-    $v1_1 = v.items.used;
+    $v1_1 = local.tee $load_1(local.tee $load_0(v.items).used);
     if @unlikely($v1_1 != 5) {
         cold_path;
         $local_14 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(144);
@@ -530,13 +538,13 @@ condition: v.len() == 5
         "core:rt/panic"($local_14.repr, $local_14.used);
         unreachable;
     }
-    $v1_50 = v.items.used;
+    $v1_50 = $load_1;
     if @unlikely(0 >= $v1_50) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec0"($v1_50);
         unreachable;
     }
-    $v1_3 = builtin::array_get_value<i32>(v.items.repr, 0);
+    $v1_3 = builtin::array_get_value<i32>(local.tee $load_15($load_0.repr), 0);
     if @unlikely($v1_3 != 1) {
         cold_path;
         $local_16 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(146);
@@ -566,13 +574,13 @@ condition: v.get(0) == 1
         "core:rt/panic"($local_16.repr, $local_16.used);
         unreachable;
     }
-    $v1_58 = v.items.used;
+    $v1_58 = $load_1;
     if @unlikely(2 >= $v1_58) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(2, $v1_58);
         unreachable;
     }
-    $v1_5 = builtin::array_get_value<i32>(v.items.repr, 2);
+    $v1_5 = builtin::array_get_value<i32>($load_15, 2);
     if @unlikely($v1_5 != 3) {
         cold_path;
         $local_18 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(146);
@@ -602,13 +610,13 @@ condition: v.get(2) == 3
         "core:rt/panic"($local_18.repr, $local_18.used);
         unreachable;
     }
-    $v1_66 = v.items.used;
+    $v1_66 = $load_1;
     if @unlikely(4 >= $v1_66) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(4, $v1_66);
         unreachable;
     }
-    $v1_7 = builtin::array_get_value<i32>(v.items.repr, 4);
+    $v1_7 = builtin::array_get_value<i32>($load_15, 4);
     if @unlikely($v1_7 != 5) {
         cold_path;
         $local_20 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(146);
@@ -639,7 +647,7 @@ condition: v.get(4) == 5
         unreachable;
     }
     v2 = "sequence_literal.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>(10, 20));
-    $v1_10 = v2.items.used;
+    $v1_10 = local.tee $load_56(local.tee $load_55(v2.items).used);
     if @unlikely($v1_10 != 2) {
         cold_path;
         $local_22 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(147);
@@ -669,13 +677,13 @@ condition: v2.len() == 2
         "core:rt/panic"($local_22.repr, $local_22.used);
         unreachable;
     }
-    $v1_76 = v2.items.used;
+    $v1_76 = $load_56;
     if @unlikely(1 >= $v1_76) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec1"($v1_76);
         unreachable;
     }
-    $v1_12 = builtin::array_get_value<i32>(v2.items.repr, 1);
+    $v1_12 = builtin::array_get_value<i32>($load_55.repr, 1);
     if @unlikely($v1_12 != 20) {
         cold_path;
         $local_24 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(150);
@@ -727,6 +735,8 @@ fn "sequence_literal.wado/$cm_export__$test_3_a_newtype_over_such_a_type_coerces
 }
 
 fn "sequence_literal.wado/$test_1_a_parameter_supplies_the_target_type__and_an_empty_literal_coerces$cold0"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_5: ref "core:prelude/string.wado//String";
     let $local_6: ref "core:prelude/format.wado//Formatter";
     let self_18: ref Array<u8>;
@@ -747,21 +757,21 @@ fn "sequence_literal.wado/$test_1_a_parameter_supplies_the_target_type__and_an_e
     let start_72: i32;
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(166), used: 0 };
     $local_5.used = 120;
-    self_18 = $local_5.repr;
+    self_18 = local.tee $load_0($local_5.repr);
     builtin::array_copy<u8>(self_18, 0, global:sequence_literal.wado::$const_obj_77, 0, 20);
-    self_22 = $local_5.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 20;
     if ref.is_null(global:sequence_literal.wado::$const_obj_76) {
         global:sequence_literal.wado::$const_obj_76 = array.new_data<u8>("$test_1_a_parameter_supplies_the_target_type__and_an_empty_literal_coerces");
     }
     builtin::array_copy<u8>(self_22, offset_23, global:sequence_literal.wado::$const_obj_76, 0, 74);
-    self_26 = $local_5.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 94;
     builtin::array_copy<u8>(self_26, offset_27, global:sequence_literal.wado::$const_obj_75, 0, 4);
-    self_30 = $local_5.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 98;
     builtin::array_copy<u8>(self_30, offset_31, global:sequence_literal.wado::$const_obj_74, 0, 21);
-    self_34 = $local_5.repr;
+    self_34 = $load_0;
     offset_35 = 0 + 119;
     builtin::array_copy<u8>(self_34, offset_35, global:sequence_literal.wado::$const_obj_73, 0, 1);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
@@ -773,9 +783,9 @@ fn "sequence_literal.wado/$test_1_a_parameter_supplies_the_target_type__and_an_e
     }
     start_46 = $local_5.used;
     $local_5.used = new_used_45;
-    self_48 = $local_5.repr;
+    self_48 = local.tee $load_5($local_5.repr);
     builtin::array_copy<u8>(self_48, start_46, global:sequence_literal.wado::$const_obj_72, 0, 46);
-    self_52 = $local_5.repr;
+    self_52 = $load_5;
     offset_53 = start_46 + 46;
     builtin::array_copy<u8>(self_52, offset_53, global:sequence_literal.wado::$const_obj_71, 0, 30);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
@@ -1168,6 +1178,9 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<i32>"(
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index, $v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_15: ref Array<u8>;
@@ -1197,18 +1210,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     let start_95: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 };
     $local_4.used = 64;
-    self_15 = $local_4.repr;
+    self_15 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_15, 0, global:sequence_literal.wado::$const_obj_77, 0, 20);
-    self_19 = $local_4.repr;
+    self_19 = $load_0;
     offset_20 = 0 + 20;
     builtin::array_copy<u8>(self_19, offset_20, global:core:prelude/list.wado::$const_obj_132, 0, 17);
-    self_23 = $local_4.repr;
+    self_23 = $load_0;
     offset_24 = 0 + 37;
     builtin::array_copy<u8>(self_23, offset_24, global:sequence_literal.wado::$const_obj_75, 0, 4);
-    self_27 = $local_4.repr;
+    self_27 = $load_0;
     offset_28 = 0 + 41;
     builtin::array_copy<u8>(self_27, offset_28, global:core:prelude/list.wado::$const_obj_130, 0, 22);
-    self_31 = $local_4.repr;
+    self_31 = $load_0;
     offset_32 = 0 + 63;
     builtin::array_copy<u8>(self_31, offset_32, global:sequence_literal.wado::$const_obj_73, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -1220,15 +1233,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     }
     start_43 = $local_4.used;
     $local_4.used = new_used_42;
-    self_45 = $local_4.repr;
+    self_45 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_45, start_43, global:core:prelude/traits.wado::$const_obj_34, 0, 2);
-    self_49 = $local_4.repr;
+    self_49 = $load_5;
     offset_50 = start_43 + 2;
     builtin::array_copy<u8>(self_49, offset_50, global:core:prelude/list.wado::$const_obj_127, 0, 19);
-    self_53 = $local_4.repr;
+    self_53 = $load_5;
     offset_54 = start_43 + 21;
     builtin::array_copy<u8>(self_53, offset_54, global:core:prelude/list.wado::$const_obj_126, 0, 30);
-    self_57 = $local_4.repr;
+    self_57 = $load_5;
     offset_58 = start_43 + 51;
     builtin::array_copy<u8>(self_57, offset_58, global:core:prelude/list.wado::$const_obj_125, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -1240,9 +1253,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     }
     start_69 = $local_4.used;
     $local_4.used = new_used_68;
-    self_71 = $local_4.repr;
+    self_71 = local.tee $load_10($local_4.repr);
     builtin::array_copy<u8>(self_71, start_69, global:sequence_literal.wado::$const_obj_70, 0, 1);
-    self_75 = $local_4.repr;
+    self_75 = $load_10;
     offset_76 = start_69 + 1;
     builtin::array_copy<u8>(self_75, offset_76, global:core:prelude/list.wado::$const_obj_123, 0, 11);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -1260,7 +1273,6 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
 }
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<sequence_literal.wado/FrozenVec<i32>,[core:prelude/list.wado/List<i32>]>$scalar"(v, f) {
-    let s_9: ref "core:prelude/string.wado//String";
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
@@ -1272,7 +1284,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<s
     let new_used_59: i32;
     let start_60: i32;
     let self_65: ref "core:prelude/string.wado//String";
-    let other_66: ref "core:prelude/string.wado//String";
     let new_used_77: i32;
     let start_78: i32;
     let self_80: ref "core:prelude/string.wado//String";
@@ -1297,7 +1308,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<s
     let start_245: i32;
     let new_used_260: i32;
     let start_261: i32;
-    s_9 = global:core:prelude/traits.wado::$const_obj_37;
     self_10 = f.buf;
     new_used_22 = self_10.used + 9;
     if @unlikely(new_used_22 > builtin::array_len(self_10.repr)) {
@@ -1306,7 +1316,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<s
     }
     start_23 = self_10.used;
     self_10.used = new_used_22;
-    builtin::array_copy<u8>(self_10.repr, start_23, s_9.repr, 0, 9);
+    builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_37, 0, 9);
     self_27 = f.buf;
     new_used_39 = self_27.used + 2;
     if @unlikely(new_used_39 > builtin::array_len(self_27.repr)) {
@@ -1345,7 +1355,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<s
         };
     };
     self_65 = f.buf;
-    other_66 = global:core:prelude/traits.wado::$const_obj_36;
     new_used_77 = self_65.used + 5;
     if @unlikely(new_used_77 > builtin::array_len(self_65.repr)) {
         cold_path;
@@ -1353,7 +1362,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<s
     }
     start_78 = self_65.used;
     self_65.used = new_used_77;
-    builtin::array_copy<u8>(self_65.repr, start_78, other_66.repr, 0, 5);
+    builtin::array_copy<u8>(self_65.repr, start_78, global:core:prelude/traits.wado::$const_obj_36, 0, 5);
     self_80 = f.buf;
     new_used_92 = self_80.used + 2;
     if @unlikely(new_used_92 > builtin::array_len(self_80.repr)) {
@@ -1420,7 +1429,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<s
 }
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<sequence_literal.wado/SeqVec<i32>,[core:prelude/list.wado/List<i32>]>$scalar"(v, f) {
-    let s_9: ref "core:prelude/string.wado//String";
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
@@ -1432,7 +1440,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<s
     let new_used_59: i32;
     let start_60: i32;
     let self_65: ref "core:prelude/string.wado//String";
-    let other_66: ref "core:prelude/string.wado//String";
     let new_used_77: i32;
     let start_78: i32;
     let self_80: ref "core:prelude/string.wado//String";
@@ -1457,7 +1464,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<s
     let start_245: i32;
     let new_used_260: i32;
     let start_261: i32;
-    s_9 = global:core:prelude/traits.wado::$const_obj_42;
     self_10 = f.buf;
     new_used_22 = self_10.used + 6;
     if @unlikely(new_used_22 > builtin::array_len(self_10.repr)) {
@@ -1466,7 +1472,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<s
     }
     start_23 = self_10.used;
     self_10.used = new_used_22;
-    builtin::array_copy<u8>(self_10.repr, start_23, s_9.repr, 0, 6);
+    builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_42, 0, 6);
     self_27 = f.buf;
     new_used_39 = self_27.used + 2;
     if @unlikely(new_used_39 > builtin::array_len(self_27.repr)) {
@@ -1505,7 +1511,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<s
         };
     };
     self_65 = f.buf;
-    other_66 = global:core:prelude/traits.wado::$const_obj_36;
     new_used_77 = self_65.used + 5;
     if @unlikely(new_used_77 > builtin::array_len(self_65.repr)) {
         cold_path;
@@ -1513,7 +1518,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<s
     }
     start_78 = self_65.used;
     self_65.used = new_used_77;
-    builtin::array_copy<u8>(self_65.repr, start_78, other_66.repr, 0, 5);
+    builtin::array_copy<u8>(self_65.repr, start_78, global:core:prelude/traits.wado::$const_obj_36, 0, 5);
     self_80 = f.buf;
     new_used_92 = self_80.used + 2;
     if @unlikely(new_used_92 > builtin::array_len(self_80.repr)) {
@@ -1580,6 +1585,9 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<s
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec0"($v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_14: ref Array<u8>;
@@ -1609,18 +1617,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     let start_94: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 };
     $local_4.used = 64;
-    self_14 = $local_4.repr;
+    self_14 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_14, 0, global:sequence_literal.wado::$const_obj_77, 0, 20);
-    self_18 = $local_4.repr;
+    self_18 = $load_0;
     offset_19 = 0 + 20;
     builtin::array_copy<u8>(self_18, offset_19, global:core:prelude/list.wado::$const_obj_132, 0, 17);
-    self_22 = $local_4.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 37;
     builtin::array_copy<u8>(self_22, offset_23, global:sequence_literal.wado::$const_obj_75, 0, 4);
-    self_26 = $local_4.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 41;
     builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/list.wado::$const_obj_130, 0, 22);
-    self_30 = $local_4.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:sequence_literal.wado::$const_obj_73, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -1632,15 +1640,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     }
     start_42 = $local_4.used;
     $local_4.used = new_used_41;
-    self_44 = $local_4.repr;
+    self_44 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_44, start_42, global:core:prelude/traits.wado::$const_obj_34, 0, 2);
-    self_48 = $local_4.repr;
+    self_48 = $load_5;
     offset_49 = start_42 + 2;
     builtin::array_copy<u8>(self_48, offset_49, global:core:prelude/list.wado::$const_obj_127, 0, 19);
-    self_52 = $local_4.repr;
+    self_52 = $load_5;
     offset_53 = start_42 + 21;
     builtin::array_copy<u8>(self_52, offset_53, global:core:prelude/list.wado::$const_obj_126, 0, 30);
-    self_56 = $local_4.repr;
+    self_56 = $load_5;
     offset_57 = start_42 + 51;
     builtin::array_copy<u8>(self_56, offset_57, global:core:prelude/list.wado::$const_obj_125, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -1652,9 +1660,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     }
     start_68 = $local_4.used;
     $local_4.used = new_used_67;
-    self_70 = $local_4.repr;
+    self_70 = local.tee $load_10($local_4.repr);
     builtin::array_copy<u8>(self_70, start_68, global:sequence_literal.wado::$const_obj_70, 0, 1);
-    self_74 = $local_4.repr;
+    self_74 = $load_10;
     offset_75 = start_68 + 1;
     builtin::array_copy<u8>(self_74, offset_75, global:core:prelude/list.wado::$const_obj_123, 0, 11);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -1672,6 +1680,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec1"($v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_14: ref Array<u8>;
@@ -1701,18 +1712,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     let start_94: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 };
     $local_4.used = 64;
-    self_14 = $local_4.repr;
+    self_14 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_14, 0, global:sequence_literal.wado::$const_obj_77, 0, 20);
-    self_18 = $local_4.repr;
+    self_18 = $load_0;
     offset_19 = 0 + 20;
     builtin::array_copy<u8>(self_18, offset_19, global:core:prelude/list.wado::$const_obj_132, 0, 17);
-    self_22 = $local_4.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 37;
     builtin::array_copy<u8>(self_22, offset_23, global:sequence_literal.wado::$const_obj_75, 0, 4);
-    self_26 = $local_4.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 41;
     builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/list.wado::$const_obj_130, 0, 22);
-    self_30 = $local_4.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:sequence_literal.wado::$const_obj_73, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -1724,15 +1735,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     }
     start_42 = $local_4.used;
     $local_4.used = new_used_41;
-    self_44 = $local_4.repr;
+    self_44 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_44, start_42, global:core:prelude/traits.wado::$const_obj_34, 0, 2);
-    self_48 = $local_4.repr;
+    self_48 = $load_5;
     offset_49 = start_42 + 2;
     builtin::array_copy<u8>(self_48, offset_49, global:core:prelude/list.wado::$const_obj_127, 0, 19);
-    self_52 = $local_4.repr;
+    self_52 = $load_5;
     offset_53 = start_42 + 21;
     builtin::array_copy<u8>(self_52, offset_53, global:core:prelude/list.wado::$const_obj_126, 0, 30);
-    self_56 = $local_4.repr;
+    self_56 = $load_5;
     offset_57 = start_42 + 51;
     builtin::array_copy<u8>(self_56, offset_57, global:core:prelude/list.wado::$const_obj_125, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -1744,9 +1755,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     }
     start_68 = $local_4.used;
     $local_4.used = new_used_67;
-    self_70 = $local_4.repr;
+    self_70 = local.tee $load_10($local_4.repr);
     builtin::array_copy<u8>(self_70, start_68, global:sequence_literal.wado::$const_obj_70, 0, 1);
-    self_74 = $local_4.repr;
+    self_74 = $load_10;
     offset_75 = start_68 + 1;
     builtin::array_copy<u8>(self_74, offset_75, global:core:prelude/list.wado::$const_obj_123, 0, 11);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -1780,19 +1791,20 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(cap
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -1810,6 +1822,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_u
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_6: i32;
     let byte: u8;
     let new_used: i32;
     let start_9: i32;
@@ -1833,9 +1846,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, $av_51 + 4);
     }
-    self.used = self.used + $inline_encode_char_6: block -> i32 {
+    self.used = local.tee $load_6(self.used) + $inline_encode_char_6: block -> i32 {
         repr = self.repr;
-        pos = self.used;
+        pos = $load_6;
         if c <u 128 {
             builtin::array_set_u8(repr, pos, c & 255);
             break $inline_encode_char_6: 1;
@@ -1860,7 +1873,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "core:prelude/traits.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let s_8: ref "core:prelude/string.wado//String";
     let self_9: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
     let start_22: i32;
@@ -1868,7 +1880,6 @@ fn "core:prelude/traits.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/t
     let new_used_52: i32;
     let start_53: i32;
     let self_58: ref "core:prelude/string.wado//String";
-    let other_59: ref "core:prelude/string.wado//String";
     let new_used_70: i32;
     let start_71: i32;
     let self_73: ref "core:prelude/string.wado//String";
@@ -1883,7 +1894,6 @@ fn "core:prelude/traits.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/t
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<sequence_literal.wado/FrozenVec<i32>,[core:prelude/list.wado/List<i32>]>$scalar"(self.items, f);
         return;
     }
-    s_8 = global:core:prelude/traits.wado::$const_obj_37;
     self_9 = f.buf;
     new_used_21 = self_9.used + 9;
     if @unlikely(new_used_21 > builtin::array_len(self_9.repr)) {
@@ -1892,7 +1902,7 @@ fn "core:prelude/traits.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/t
     }
     start_22 = self_9.used;
     self_9.used = new_used_21;
-    builtin::array_copy<u8>(self_9.repr, start_22, s_8.repr, 0, 9);
+    builtin::array_copy<u8>(self_9.repr, start_22, global:core:prelude/traits.wado::$const_obj_37, 0, 9);
     self_40 = f.buf;
     new_used_52 = self_40.used + 3;
     if @unlikely(new_used_52 > builtin::array_len(self_40.repr)) {
@@ -1903,7 +1913,6 @@ fn "core:prelude/traits.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/t
     self_40.used = new_used_52;
     builtin::array_copy<u8>(self_40.repr, start_53, global:core:prelude/traits.wado::$const_obj_35, 0, 3);
     self_58 = f.buf;
-    other_59 = global:core:prelude/traits.wado::$const_obj_36;
     new_used_70 = self_58.used + 5;
     if @unlikely(new_used_70 > builtin::array_len(self_58.repr)) {
         cold_path;
@@ -1911,7 +1920,7 @@ fn "core:prelude/traits.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/t
     }
     start_71 = self_58.used;
     self_58.used = new_used_70;
-    builtin::array_copy<u8>(self_58.repr, start_71, other_59.repr, 0, 5);
+    builtin::array_copy<u8>(self_58.repr, start_71, global:core:prelude/traits.wado::$const_obj_36, 0, 5);
     self_73 = f.buf;
     new_used_85 = self_73.used + 2;
     if @unlikely(new_used_85 > builtin::array_len(self_73.repr)) {
@@ -1976,7 +1985,6 @@ fn "sequence_literal.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/trai
 }
 
 fn "core:prelude/traits.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let s_8: ref "core:prelude/string.wado//String";
     let self_9: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
     let start_22: i32;
@@ -1984,7 +1992,6 @@ fn "core:prelude/traits.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/trai
     let new_used_52: i32;
     let start_53: i32;
     let self_58: ref "core:prelude/string.wado//String";
-    let other_59: ref "core:prelude/string.wado//String";
     let new_used_70: i32;
     let start_71: i32;
     let self_73: ref "core:prelude/string.wado//String";
@@ -1999,7 +2006,6 @@ fn "core:prelude/traits.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/trai
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<sequence_literal.wado/SeqVec<i32>,[core:prelude/list.wado/List<i32>]>$scalar"(self.items, f);
         return;
     }
-    s_8 = global:core:prelude/traits.wado::$const_obj_42;
     self_9 = f.buf;
     new_used_21 = self_9.used + 6;
     if @unlikely(new_used_21 > builtin::array_len(self_9.repr)) {
@@ -2008,7 +2014,7 @@ fn "core:prelude/traits.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/trai
     }
     start_22 = self_9.used;
     self_9.used = new_used_21;
-    builtin::array_copy<u8>(self_9.repr, start_22, s_8.repr, 0, 6);
+    builtin::array_copy<u8>(self_9.repr, start_22, global:core:prelude/traits.wado::$const_obj_42, 0, 6);
     self_40 = f.buf;
     new_used_52 = self_40.used + 3;
     if @unlikely(new_used_52 > builtin::array_len(self_40.repr)) {
@@ -2019,7 +2025,6 @@ fn "core:prelude/traits.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/trai
     self_40.used = new_used_52;
     builtin::array_copy<u8>(self_40.repr, start_53, global:core:prelude/traits.wado::$const_obj_35, 0, 3);
     self_58 = f.buf;
-    other_59 = global:core:prelude/traits.wado::$const_obj_36;
     new_used_70 = self_58.used + 5;
     if @unlikely(new_used_70 > builtin::array_len(self_58.repr)) {
         cold_path;
@@ -2027,7 +2032,7 @@ fn "core:prelude/traits.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/trai
     }
     start_71 = self_58.used;
     self_58.used = new_used_70;
-    builtin::array_copy<u8>(self_58.repr, start_71, other_59.repr, 0, 5);
+    builtin::array_copy<u8>(self_58.repr, start_71, global:core:prelude/traits.wado::$const_obj_36, 0, 5);
     self_73 = f.buf;
     new_used_85 = self_73.used + 2;
     if @unlikely(new_used_85 > builtin::array_len(self_73.repr)) {
@@ -2151,7 +2156,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l148;
@@ -2160,6 +2165,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, $mv$alt_prefix$repr, $mv$alt_prefix$used, digit_count) {
+    let $load_0: bool;
+    let $load_2: i32;
     let prefix: ref "core:prelude/string.wado//StrSlice";
     let sign_len: i32;
     let prefix_len: i32;
@@ -2252,12 +2259,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let $av_308: bool;
     let $av_309: i32;
     prefix = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$alt_prefix$repr, start: 0, end: $mv$alt_prefix$used };
-    $av_308 = self.sign_plus;
+    $av_308 = local.tee $load_0(self.sign_plus);
     sign_len = select i32(select i32(is_negative, 1, $av_308), 1, 0);
     prefix_len = select i32(self.alternate, $mv$alt_prefix$used, 0);
     content_len = (sign_len + prefix_len) + digit_count;
-    $av_309 = self.width;
-    if select i32($av_309 <= 0, 1, content_len >= $av_309) {
+    $av_309 = local.tee $load_2(self.width);
+    if ($av_309 <= 0) | (content_len >= $av_309) {
         if is_negative {
             self_21 = self.buf;
             new_used_26 = self_21.used + 1;
@@ -2299,7 +2306,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_65, new_used_67);
         }, start_68 = self_65.used, self_65.used = new_used_67, start_68;
     }
-    padding = self.width - content_len;
+    padding = $load_2 - content_len;
     if self.zero_pad {
         if is_negative {
             self_72 = self.buf;
@@ -2311,7 +2318,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             start_78 = self_72.used;
             self_72.used = new_used_77;
             builtin::array_set_u8(self_72.repr, start_78, 45);
-        } else if self.sign_plus {
+        } else if $load_0 {
             self_86 = self.buf;
             new_used_91 = self_86.used + 1;
             if @unlikely(new_used_91 > builtin::array_len(self_86.repr)) {
@@ -2371,7 +2378,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             start_133 = self_127.used;
             self_127.used = new_used_132;
             builtin::array_set_u8(self_127.repr, start_133, 45);
-        } else if self.sign_plus {
+        } else if $load_0 {
             self_141 = self.buf;
             new_used_146 = self_141.used + 1;
             if @unlikely(new_used_146 > builtin::array_len(self_141.repr)) {
@@ -2559,13 +2566,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
+    let $load_0: ref Array<i32>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<i32>;
     let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    a = local.tee capacity(builtin::array_len(local.tee $load_0(self.repr))) * 2;
     new_repr = builtin::array_new<i32>(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<i32>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
