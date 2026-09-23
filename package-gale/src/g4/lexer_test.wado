@@ -1,5 +1,4 @@
-use { Token, LexerSlice } from "../runtime/lex.wado";
-use { G4Token } from "./token.wado";
+use { G4Token, Token, LexerSlice } from "./token.wado";
 use { tokenize_chars } from "./lexer.wado";
 
 /// Test convenience wrapper: collect a `String` into a char buffer and
@@ -257,4 +256,14 @@ test "a token the lexer cannot form carries its source text, not a message" {
 
     let stray = tokenize("%");
     assert_token(&stray[0], G4Token::UnexpectedChar, "%");
+}
+
+test "LexerSlice reads back, compares with text, and displays" {
+    let s = LexerSlice::from_string("hello");
+    assert s.len() == 5;
+    assert s.to_string() == "hello";
+    assert s == "hello";
+    assert s != "hell";
+    assert s != "helloo";
+    assert `<${s}>` == "<hello>";
 }
