@@ -580,10 +580,14 @@ fn classify_token(
         None => match &token.kind {
             // Keywords wherever they are not a member's name, which colours as
             // the member.
-            TokenKind::Ident(name) if name == "self" && !ast_spans.is_member_name(token.span.start) => {
+            TokenKind::Ident(name)
+                if name == "self" && !ast_spans.is_member_name(token.span.start) =>
+            {
                 CONSTANT
             }
-            TokenKind::Ident(name) if name == "Self" && !ast_spans.is_member_name(token.span.start) => {
+            TokenKind::Ident(name)
+                if name == "Self" && !ast_spans.is_member_name(token.span.start) =>
+            {
                 KEYWORD
             }
 
@@ -1366,12 +1370,27 @@ mod tests {
                 .token_type
         };
         let decl = src.lines().next().expect("line");
-        assert_eq!(at(0, decl.find("self").expect("self")), token_type::PROPERTY);
-        assert_eq!(at(0, decl.find("Self").expect("Self")), token_type::PROPERTY);
+        assert_eq!(
+            at(0, decl.find("self").expect("self")),
+            token_type::PROPERTY
+        );
+        assert_eq!(
+            at(0, decl.find("Self").expect("Self")),
+            token_type::PROPERTY
+        );
         let body = src.lines().nth(2).expect("line");
-        assert_eq!(at(2, body.find("Self").expect("Self")), token_type::FUNCTION);
-        assert_eq!(at(2, body.find(".self").expect(".self") + 1), token_type::PROPERTY);
-        assert_eq!(at(2, body.find(".Self").expect(".Self") + 1), token_type::PROPERTY);
+        assert_eq!(
+            at(2, body.find("Self").expect("Self")),
+            token_type::FUNCTION
+        );
+        assert_eq!(
+            at(2, body.find(".self").expect(".self") + 1),
+            token_type::PROPERTY
+        );
+        assert_eq!(
+            at(2, body.find(".Self").expect(".Self") + 1),
+            token_type::PROPERTY
+        );
     }
 
     /// A `__DATA__` tail is not Wado, and no token carries it. `classify_all`
