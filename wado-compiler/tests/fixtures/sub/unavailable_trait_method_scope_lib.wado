@@ -1,0 +1,18 @@
+pub trait Old with () {
+    #[unavailable("use `New`")]
+    fn foo(&self);
+}
+
+pub trait New with () {
+    fn foo(&self) -> i32 {
+        return 1;
+    }
+}
+
+pub struct Y {
+    pub v: i32,
+}
+
+impl Old for Y {}
+
+impl New for Y {}

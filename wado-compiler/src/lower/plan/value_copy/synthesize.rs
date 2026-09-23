@@ -198,6 +198,8 @@ fn generate_copy_function(
         effects: vec![],
         retains: vec![],
         immediates: vec![],
+        trap: None,
+        linear_memory: None,
         body: Some(body),
         span,
         local_count,

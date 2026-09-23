@@ -401,7 +401,7 @@ impl<H> Router<H> {
             if end == pos {
                 return null;
             }
-            let segment = view.sub_unchecked(pos, end);
+            let segment = view.slice_unchecked(pos, end);
             let target = bsearch_target_by_bytes(&self.states[state].literals, &segment);
             if target >= 0 {
                 state = target;
@@ -518,7 +518,7 @@ impl<H> Router<H> {
             if end == pos {
                 return [];
             }
-            let segment = view.sub_unchecked(pos, end);
+            let segment = view.slice_unchecked(pos, end);
             let target = bsearch_target_by_bytes(&self.states[state].literals, &segment);
             if target >= 0 {
                 state = target;
@@ -939,7 +939,7 @@ impl PathParamsDeserializer {
     fn parse_scalar<T: FromStr, S: AsStrSlice>(&self, type_name: S) -> Result<T, DeserializeError> {
         self.require_active_param()?;
         let [s, e] = self.current_range();
-        return match T::from_str(self.src.path.as_str_slice().sub(s, e)) {
+        return match T::from_str(self.src.path.as_str_slice().slice(s, e)) {
             Ok(v) => Result::Ok(v),
             Err(reason) => Result::Err(self.invalid_param(type_name, `${reason}`)),
         };

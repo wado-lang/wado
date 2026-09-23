@@ -290,7 +290,7 @@ internal fn split_sign(s: &StrSlice) -> Result<[bool, StrSlice], IntErrorKind> {
     if has_sign && len == 1 {
         return Result::Err(IntErrorKind::InvalidDigit);
     }
-    return Result::Ok([is_negative, s.sub_unchecked(if has_sign { 1 } else { 0 }, len)]);
+    return Result::Ok([is_negative, s.slice_unchecked(if has_sign { 1 } else { 0 }, len)]);
 }
 
 /// Split a leading `+` (if any) off the view, returning the digits after it.
@@ -306,7 +306,7 @@ internal fn split_plus(s: &StrSlice) -> Result<StrSlice, IntErrorKind> {
         if len == 1 {
             return Result::Err(IntErrorKind::InvalidDigit);
         }
-        return Result::Ok(s.sub_unchecked(1, len));
+        return Result::Ok(s.slice_unchecked(1, len));
     }
     return Result::Ok(*s);
 }

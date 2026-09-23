@@ -263,8 +263,8 @@ fn joined_text(s: &onnx::CstStore, toks: &onnx::TokenStream, node: i32) -> Strin
 
 fn unquote(text: String) -> String {
     let view = text.as_str_slice();
-    if view.len() >= 2 && view.sub(0, 1) == "\"" {
-        return view.sub(1, view.len() - 1).to_string();
+    if view.len() >= 2 && view.slice(0, 1) == "\"" {
+        return view.slice(1, view.len() - 1).to_string();
     }
     return text;
 }

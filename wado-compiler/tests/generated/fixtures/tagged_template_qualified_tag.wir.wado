@@ -6,40 +6,35 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 array Array<u8> (mut u8);  // TypeId(1)
 
-struct core:prelude/string.wado//String {  // TypeId(2)
-    mut repr: ref Array<u8>,
-    mut used: i32,
-}
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(4)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(5)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(6)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//tagged_template_qualified_tag.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//tagged_template_qualified_tag.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//tagged_template_qualified_tag.wado/$cm_export__run" = fn();  // TypeId(10)
 
-type "functype//tagged_template_qualified_tag.wado/$cm_export__run" = fn();  // TypeId(11)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(11)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(12)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(12)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(13)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(13)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(14)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(14)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(15)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(15)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(16)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(17)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(16)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -63,8 +58,6 @@ fn "tagged_template_qualified_tag.wado/$cm_export__run"() {
     let packed: i64;
     let rx_8: i32;
     let tx_9: i32;
-    drop(black_box(7));
-    drop(black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 100, 97), used: 3 }));
     rx_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_9 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "tagged_template_qualified_tag.wado/$cm_binding__Stdout_write_via_stream"(rx_8);
@@ -145,7 +138,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l2;

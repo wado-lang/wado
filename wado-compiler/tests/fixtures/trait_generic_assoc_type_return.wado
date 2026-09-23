@@ -21,7 +21,7 @@ fn parse_view<T: FromStr>(s: &StrSlice) -> Result<T, T::Err> {
 }
 
 export fn run() with Stdout {
-    let r = parse_view::<i32>(&"xyz123abc".as_str_slice().sub(3, 6));
+    let r = parse_view::<i32>(&"xyz123abc".as_str_slice().slice(3, 6));
     if let Ok(v) = r {
         println(`OK: ${v}`);
     } else {

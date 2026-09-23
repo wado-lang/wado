@@ -918,11 +918,10 @@ impl SolverBridge {
             } else {
                 RefRule::Inherits
             };
-            let methods = header
-                .methods
-                .iter()
-                .map(|m| lowering.method(&m.name))
-                .collect();
+            let (reserved, methods): (Vec<_>, Vec<_>) =
+                header.methods.iter().partition(|m| m.is_reserved);
+            let methods = methods.iter().map(|m| lowering.method(&m.name)).collect();
+            let reserved = reserved.iter().map(|m| lowering.method(&m.name)).collect();
             let id = lowering.trait_decl(trait_);
             let assoc_bounds = header
                 .assoc_types
@@ -941,6 +940,7 @@ impl SolverBridge {
             def.arg_defaults = defaults;
             def.on_ref = on_ref;
             def.methods = methods;
+            def.reserved = reserved;
             def.assoc_bounds = assoc_bounds;
         }
     }

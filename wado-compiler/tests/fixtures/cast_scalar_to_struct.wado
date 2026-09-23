@@ -1,0 +1,13 @@
+// `as` into an aggregate is a newtype step too, so a scalar source shares no
+// representation with it (issue #2048): it used to reach WIR build and panic.
+
+struct S {
+    x: i32,
+}
+
+export fn run() {
+    let s: S = 1 as S;
+}
+
+__DATA__
+{"compile_error": "cannot cast 'i32' to 'S': the two types share no representation; `as` reinterprets only across a newtype boundary"}

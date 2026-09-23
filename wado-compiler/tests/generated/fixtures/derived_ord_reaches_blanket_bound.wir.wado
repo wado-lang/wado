@@ -261,19 +261,20 @@ fn "core:rt/panic"(message) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -336,7 +337,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l10;
@@ -345,6 +346,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0"(self) {
+    let $load_1: i32;
+    let $load_2: ref "Array<derived_ord_reaches_blanket_bound.wado/P>";
     let best: ref "derived_ord_reaches_blanket_bound.wado//P";
     let item_7: ref "derived_ord_reaches_blanket_bound.wado//P";
     let v_8: ref "derived_ord_reaches_blanket_bound.wado//P";
@@ -358,13 +361,13 @@ fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIte
     let $av_27: i32;
     $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_P__core_prelude_traits_wado_Iterator__next_0: block {
         $av_27 = self.index;
-        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_P__core_prelude_traits_wado_Iterator__next_0 $av_27 >= self.end;
-        v_8 = builtin::array_get_value<ref "derived_ord_reaches_blanket_bound.wado//P">(self.repr, $av_27);
+        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_P__core_prelude_traits_wado_Iterator__next_0 $av_27 >= local.tee $load_1(self.end);
+        v_8 = builtin::array_get_value<ref "derived_ord_reaches_blanket_bound.wado//P">(local.tee $load_2(self.repr), $av_27);
         item_7 = struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: v_8.n };
         self.index = $av_27 + 1;
         best = item_7;
-        $licm_end_17 = self.end;
-        $licm_repr_18 = self.repr;
+        $licm_end_17 = $load_1;
+        $licm_repr_18 = $load_2;
         $hfs_index_26 = self.index;
         b17: block {
             l18: loop {
@@ -402,6 +405,8 @@ fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIte
 }
 
 fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>^core:prelude/traits.wado/Iterator::max_by$$Closure_1"(self) {
+    let $load_1: i32;
+    let $load_2: ref "Array<derived_ord_reaches_blanket_bound.wado/Color>";
     let item_7: "derived_ord_reaches_blanket_bound.wado//enum:Color";
     let item_9: "derived_ord_reaches_blanket_bound.wado//enum:Color";
     let $licm_end_15: i32;
@@ -411,12 +416,12 @@ fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIte
     let $av_24: i32;
     $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__next_0: block {
         $av_24 = self.index;
-        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__next_0 $av_24 >= self.end;
-        item_7 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(self.repr, $av_24);
+        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__next_0 $av_24 >= local.tee $load_1(self.end);
+        item_7 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(local.tee $load_2(self.repr), $av_24);
         self.index = $av_24 + 1;
         $sroa_best_value = item_7;
-        $licm_end_15 = self.end;
-        $licm_repr_16 = self.repr;
+        $licm_end_15 = $load_1;
+        $licm_repr_16 = $load_2;
         $hfs_index_23 = self.index;
         b24: block {
             l25: loop {
@@ -446,6 +451,8 @@ fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIte
 }
 
 fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>^core:prelude/traits.wado/Iterator::min_by$$Closure_2"(self) {
+    let $load_1: i32;
+    let $load_2: ref "Array<derived_ord_reaches_blanket_bound.wado/Color>";
     let $match_7: "core:prelude/traits.wado//enum:Ordering";
     let item_8: "derived_ord_reaches_blanket_bound.wado//enum:Color";
     let item_10: "derived_ord_reaches_blanket_bound.wado//enum:Color";
@@ -456,12 +463,12 @@ fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIte
     let $av_25: i32;
     $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__next_0: block {
         $av_25 = self.index;
-        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__next_0 $av_25 >= self.end;
-        item_8 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(self.repr, $av_25);
+        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__next_0 $av_25 >= local.tee $load_1(self.end);
+        item_8 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(local.tee $load_2(self.repr), $av_25);
         self.index = $av_25 + 1;
         $sroa_best_value = item_8;
-        $licm_end_20 = self.end;
-        $licm_repr_21 = self.repr;
+        $licm_end_20 = $load_1;
+        $licm_repr_21 = $load_2;
         $hfs_index_24 = self.index;
         b30: block {
             l31: loop {

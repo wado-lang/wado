@@ -146,9 +146,7 @@ fn is_byte_literal_expr(expr: &Expr) -> bool {
 /// side of `b'\n' == 10`.
 pub(super) fn is_numeric_literal_target(tt: &TypeTable, target: TypeId) -> bool {
     // `i128` / `u128` are structs, so `is_numeric` does not see them.
-    tt.is_numeric(target)
-        || matches!(tt.get(target), ResolvedType::Struct { def, .. }
-            if matches!(tt.struct_head_name(*def).as_str(), "i128" | "u128"))
+    tt.is_numeric(target) || tt.wide_int_item(target).is_some()
 }
 
 /// Which of two operands resolves first, so the other can take its type.
@@ -348,20 +346,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // What is left is `i128` / `u128`: structs, so they reach neither test
         // above, and the gate admits no other struct.
         if !util::is_float_only_literal(repr) {
-            let struct_name = match self.tysys.type_table.borrow().get(target_type) {
-                ResolvedType::Struct { def, .. } => {
-                    Some(self.tysys.type_table.borrow().struct_head_name(*def))
-                }
-                _ => None,
-            };
+            let wide = self.tysys.type_table.borrow().wide_int_item(target_type);
             // A negated literal only ever lands on `i128`; `u128` has no
             // negative values to land on.
-            if let Some(name) = struct_name
-                && (name == "i128" || (name == "u128" && neg.is_none()))
+            if let Some(item) = wide
+                && (item == CompilerItem::I128 || neg.is_none())
             {
+                let name = item.attr_name();
                 let parsed = if neg.is_some() {
                     util::parse_i128_literal(&format!("-{repr}")).is_ok()
-                } else if name == "u128" {
+                } else if item == CompilerItem::U128 {
                     util::parse_u128_literal(repr).is_ok()
                 } else {
                     util::parse_i128_literal(repr).is_ok()

@@ -39,35 +39,33 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//bug_copy_prop_mut_param_rebind.wado/rebind" = fn(i32);  // TypeId(12)
+type "functype//bug_copy_prop_mut_param_rebind.wado/use_copy" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//bug_copy_prop_mut_param_rebind.wado/use_copy" = fn(i32) -> i32;  // TypeId(13)
+type "functype//bug_copy_prop_mut_param_rebind.wado/id" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//bug_copy_prop_mut_param_rebind.wado/id" = fn(i32) -> i32;  // TypeId(14)
+type "functype//bug_copy_prop_mut_param_rebind.wado/$cm_export__run" = fn();  // TypeId(14)
 
-type "functype//bug_copy_prop_mut_param_rebind.wado/$cm_export__run" = fn();  // TypeId(15)
+type "functype//bug_copy_prop_mut_param_rebind.wado/run$cold0" = fn(i32, i32);  // TypeId(15)
 
-type "functype//bug_copy_prop_mut_param_rebind.wado/run$cold0" = fn(i32, i32);  // TypeId(16)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(16)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(17)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(17)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(18)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(18)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(19)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(19)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(20)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(20)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(21)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(21)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(22)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(26)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(25)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -92,11 +90,7 @@ global global:bug_copy_prop_mut_param_rebind.wado::$const_obj_8: ref null Array<
 global global:bug_copy_prop_mut_param_rebind.wado::$const_obj_9: ref null Array<u8> = array.new_fixed<u8>(114, 117, 110);
 global global:bug_copy_prop_mut_param_rebind.wado::$const_obj_10: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 
-fn "bug_copy_prop_mut_param_rebind.wado/rebind"(n) {
-}
-
 fn "bug_copy_prop_mut_param_rebind.wado/use_copy"(n) {
-    "bug_copy_prop_mut_param_rebind.wado/rebind"(n);
     return n + 1;
 }
 
@@ -117,6 +111,9 @@ fn "bug_copy_prop_mut_param_rebind.wado/$cm_export__run"() {
 }
 
 fn "bug_copy_prop_mut_param_rebind.wado/run$cold0"(x, $v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4: ref "core:prelude/format.wado//Formatter";
     let self_16: ref Array<u8>;
@@ -142,18 +139,18 @@ fn "bug_copy_prop_mut_param_rebind.wado/run$cold0"(x, $v1) {
     let start_88: i32;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(153), used: 0 };
     $local_3.used = 63;
-    self_16 = $local_3.repr;
+    self_16 = local.tee $load_0($local_3.repr);
     builtin::array_copy<u8>(self_16, 0, global:bug_copy_prop_mut_param_rebind.wado::$const_obj_10, 0, 20);
-    self_20 = $local_3.repr;
+    self_20 = $load_0;
     offset_21 = 0 + 20;
     builtin::array_copy<u8>(self_20, offset_21, global:bug_copy_prop_mut_param_rebind.wado::$const_obj_9, 0, 3);
-    self_24 = $local_3.repr;
+    self_24 = $load_0;
     offset_25 = 0 + 23;
     builtin::array_copy<u8>(self_24, offset_25, global:bug_copy_prop_mut_param_rebind.wado::$const_obj_8, 0, 4);
-    self_28 = $local_3.repr;
+    self_28 = $load_0;
     offset_29 = 0 + 27;
     builtin::array_copy<u8>(self_28, offset_29, global:bug_copy_prop_mut_param_rebind.wado::$const_obj_7, 0, 35);
-    self_32 = $local_3.repr;
+    self_32 = $load_0;
     offset_33 = 0 + 62;
     builtin::array_copy<u8>(self_32, offset_33, global:bug_copy_prop_mut_param_rebind.wado::$const_obj_6, 0, 1);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -165,9 +162,9 @@ fn "bug_copy_prop_mut_param_rebind.wado/run$cold0"(x, $v1) {
     }
     start_44 = $local_3.used;
     $local_3.used = new_used_43;
-    self_46 = $local_3.repr;
+    self_46 = local.tee $load_5($local_3.repr);
     builtin::array_copy<u8>(self_46, start_44, global:bug_copy_prop_mut_param_rebind.wado::$const_obj_5, 0, 30);
-    self_50 = $local_3.repr;
+    self_50 = $load_5;
     offset_51 = start_44 + 30;
     builtin::array_copy<u8>(self_50, offset_51, global:bug_copy_prop_mut_param_rebind.wado::$const_obj_4, 0, 3);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -179,9 +176,9 @@ fn "bug_copy_prop_mut_param_rebind.wado/run$cold0"(x, $v1) {
     }
     start_62 = $local_3.used;
     $local_3.used = new_used_61;
-    self_64 = $local_3.repr;
+    self_64 = local.tee $load_10($local_3.repr);
     builtin::array_copy<u8>(self_64, start_62, global:bug_copy_prop_mut_param_rebind.wado::$const_obj_1, 0, 1);
-    self_68 = $local_3.repr;
+    self_68 = $load_10;
     offset_69 = start_62 + 1;
     builtin::array_copy<u8>(self_68, offset_69, global:bug_copy_prop_mut_param_rebind.wado::$const_obj_2, 0, 13);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -281,19 +278,20 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -356,7 +354,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l26;

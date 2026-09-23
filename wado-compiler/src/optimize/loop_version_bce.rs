@@ -96,7 +96,7 @@ pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCach
         .iter()
         .any(|f| f.borrow().body.as_ref().is_some_and(body_contains_loop))
     {
-        compute_fn_effects(&project.functions, &project.builtin_registry)
+        compute_fn_effects(project)
     } else {
         Vec::new()
     };
