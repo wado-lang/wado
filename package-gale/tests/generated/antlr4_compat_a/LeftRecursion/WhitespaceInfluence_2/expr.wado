@@ -781,6 +781,9 @@ impl TreeBuilder {
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
+        if self.last_finished >= checkpoint {
+            self.last_finished += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -792,6 +795,9 @@ impl TreeBuilder {
         }
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
+        }
+        if self.last_finished >= checkpoint {
+            self.last_finished = -1;
         }
     }
 
@@ -3189,7 +3195,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_BANG {
             pos = start + 1;
             try_2: {
-                pos = scan_expression(tokens, pos, 0);
+                pos = scan_expression(tokens, pos, 16);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
@@ -3197,7 +3203,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_MINUS {
             pos = start + 1;
             try_3: {
-                pos = scan_expression(tokens, pos, 0);
+                pos = scan_expression(tokens, pos, 16);
                 if pos < 0 { break try_3; }
                 break scan_alts;
             }
@@ -3205,7 +3211,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_PLUS {
             pos = start + 1;
             try_4: {
-                pos = scan_expression(tokens, pos, 0);
+                pos = scan_expression(tokens, pos, 16);
                 if pos < 0 { break try_4; }
                 break scan_alts;
             }
