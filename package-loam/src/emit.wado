@@ -128,31 +128,13 @@ pub fn emit(graph: &Graph, shapes: &TreeMap<String, Shape>) -> Result<String, Em
     for let axis of axes {
         StructSpec::new(axis, Vis::Pub).emit(&mut w);
     }
-<<<<<<< HEAD
     w.blank();
     w.raw(&RUNTIME);
-||||||| 0080d5ee3
-    out.push('\n');
-    out.push_str(&RUNTIME);
-=======
-    out.push('\n');
-    out.push_str(&RUNTIME);
-    out.push_str(&GRAPH_BANNER);
->>>>>>> origin/main
+    w.raw(&GRAPH_BANNER);
 
-<<<<<<< HEAD
-    emit_weights(&mut w, graph, shapes, &names);
-    emit_forward(&mut w, graph, shapes, &names)?;
+    emit_weights(&mut w, graph, shapes, &names, &held);
+    emit_forward(&mut w, graph, shapes, &names, &held)?;
     return Result::Ok(w.to_string());
-||||||| 0080d5ee3
-    emit_weights(&mut out, graph, shapes, &names);
-    emit_forward(&mut out, graph, shapes, &names)?;
-    return Result::Ok(out);
-=======
-    emit_weights(&mut out, graph, shapes, &names, &held);
-    emit_forward(&mut out, graph, shapes, &names, &held)?;
-    return Result::Ok(out);
->>>>>>> origin/main
 }
 
 /// The one element type the kernels have arithmetic for. Everything a node
@@ -252,36 +234,16 @@ impl Names {
 /// the module stands on its own.
 global RUNTIME: String = #include_str("./runtime/tensor.wado");
 
-<<<<<<< HEAD
-/// Whether `name` already means something in the generated module.
-fn is_bound(module: &TreeSet<String>, name: &String) -> bool {
-    return module.contains(*name) || is_reserved(name);
-}
-||||||| 0080d5ee3
-/// The words Wado reserves, which an ONNX tensor may well be named after
-/// (`in`, `of`, `type`). From `wado-compiler/src/syntax.rs`.
-global KEYWORDS: List<String> = [
-    "if", "else", "while", "for", "loop", "break", "continue", "return", "match", "fn", "let", "global", "const",
-    "struct", "enum", "variant", "flags", "impl", "trait", "type", "resource", "extends", "world", "effect", "interface",
-    "pub", "internal", "export", "mut", "async", "unique", "reactive", "use", "from", "import", "as", "with", "in", "of",
-    "assert", "true", "false", "null", "matches", "self", "Self",
-];
-=======
 /// Where the inlined runtime ends and this graph's own code begins. A reader
 /// needs the line, and a test asserting a kernel is absent needs the boundary.
 internal global GRAPH_BANNER: String = `
 // --- The Loam runtime ends here; the rest is generated from this graph. ---
 `;
 
-/// The words Wado reserves, which an ONNX tensor may well be named after
-/// (`in`, `of`, `type`). From `wado-compiler/src/syntax.rs`.
-global KEYWORDS: List<String> = [
-    "if", "else", "while", "for", "loop", "break", "continue", "return", "match", "fn", "let", "global", "const",
-    "struct", "enum", "variant", "flags", "impl", "trait", "type", "resource", "extends", "world", "effect", "interface",
-    "pub", "internal", "export", "mut", "async", "unique", "reactive", "use", "from", "import", "as", "with", "in", "of",
-    "assert", "true", "false", "null", "matches", "self", "Self",
-];
->>>>>>> origin/main
+/// Whether `name` already means something in the generated module.
+fn is_bound(module: &TreeSet<String>, name: &String) -> bool {
+    return module.contains(*name) || is_reserved(name);
+}
 
 /// The names the generated module binds before it names an axis or a tensor,
 /// beyond the language's own. The runtime's are read out of the runtime itself,
@@ -360,32 +322,16 @@ fn sanitize(name: &String) -> String {
 }
 
 /// The graph's initializers, as the struct a caller fills from a checkpoint.
-<<<<<<< HEAD
-fn emit_weights(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String, Shape>, names: &Names) {
-    let mut weights = StructSpec::new("Weights", Vis::Pub);
-||||||| 0080d5ee3
-fn emit_weights(out: &mut String, graph: &Graph, shapes: &TreeMap<String, Shape>, names: &Names) {
-    out.push_str("\n/// The graph's initializers. Roadmap step 3 fills these from a checkpoint.\n");
-    out.push_str("pub struct Weights {\n");
-=======
 fn emit_weights(
-    out: &mut String,
+    w: &mut CodeWriter,
     graph: &Graph,
     shapes: &TreeMap<String, Shape>,
     names: &Names,
     held: &TreeMap<String, String>,
 ) {
-    out.push_str("\n/// The graph's initializers. Roadmap step 3 fills these from a checkpoint.\n");
-    out.push_str("pub struct Weights {\n");
->>>>>>> origin/main
+    let mut weights = StructSpec::new("Weights", Vis::Pub);
     for let vi of &graph.initializers {
-<<<<<<< HEAD
-        weights.add_pub_field(names.get(&vi.name), tensor_type(shapes, &vi.name));
-||||||| 0080d5ee3
-        out.push_str(`    pub ${names.get(&vi.name)}: ${tensor_type(shapes, &vi.name)},\n`);
-=======
-        out.push_str(`    pub ${names.get(&vi.name)}: ${tensor_type(shapes, held, &vi.name)},\n`);
->>>>>>> origin/main
+        weights.add_pub_field(names.get(&vi.name), tensor_type(shapes, held, &vi.name));
     }
     w.blank();
     w.line("/// The graph's initializers. Roadmap step 3 fills these from a checkpoint.");
@@ -434,28 +380,16 @@ fn emit_forward(
         already_reference: TreeSet::<String>::new(),
         scalars: TreeMap::<String, String>::new(),
     };
-<<<<<<< HEAD
     let result = graph.outputs[0].name;
     let mut forward = FnSpec::new("forward", Vis::Pub);
-||||||| 0080d5ee3
-    let mut params: List<String> = [];
-=======
-    let mut params: List<String> = [];
     let mut widened: List<String> = [];
->>>>>>> origin/main
     for let vi of &graph.inputs {
         let ident = names.get(&vi.name);
-<<<<<<< HEAD
-        forward.add_param(ident, `&${tensor_type(shapes, &vi.name)}`);
-||||||| 0080d5ee3
-        params.push(`${ident}: &${tensor_type(shapes, &vi.name)}`);
-=======
-        params.push(`${ident}: &${tensor_type(shapes, held, &vi.name)}`);
->>>>>>> origin/main
+        forward.add_param(ident, `&${tensor_type(shapes, held, &vi.name)}`);
         exprs.values[vi.name] = ident;
         exprs.already_reference.insert(vi.name);
         if converted(&vi.name, held) {
-            widened.push(`    let ${ident} = widen(${ident});\n`);
+            widened.push(`let ${ident} = widen(${ident});`);
             exprs.already_reference.remove(vi.name);
         }
     }
@@ -463,28 +397,18 @@ fn emit_forward(
         let ident = names.get(&vi.name);
         exprs.values[vi.name] = `weights.${ident}`;
         if converted(&vi.name, held) {
-            widened.push(`    let ${ident} = widen(&weights.${ident});\n`);
+            widened.push(`let ${ident} = widen(&weights.${ident});`);
             exprs.values[vi.name] = ident;
         }
     }
-    forward.add_param("weights", "&Weights").set_return_type(tensor_type(shapes, &result));
+    forward.add_param("weights", "&Weights").set_return_type(tensor_type(shapes, held, &result));
 
-<<<<<<< HEAD
     w.blank();
     w.line("/// The graph's forward pass, one kernel call per operator.");
     forward.emit_begin(w);
-||||||| 0080d5ee3
-    let result = graph.outputs[0].name;
-    out.push_str("\n/// The graph's forward pass, one kernel call per operator.\n");
-    out.push_str(`pub fn forward(${params.join(", ")}) -> ${tensor_type(shapes, &result)} {\n`);
-=======
-    let result = graph.outputs[0].name;
-    out.push_str("\n/// The graph's forward pass, one kernel call per operator.\n");
-    out.push_str(`pub fn forward(${params.join(", ")}) -> ${tensor_type(shapes, held, &result)} {\n`);
     for let line of widened {
-        out.push_str(&line);
+        w.line(&line);
     }
->>>>>>> origin/main
     for let node of &graph.nodes {
         let produced = node.outputs[0];
         if node.op == "Constant" {
@@ -503,15 +427,9 @@ fn emit_forward(
         builtin::cold_path();
         return Result::Err(EmitError::ReturnedConstant(result));
     }
-<<<<<<< HEAD
-    w.line(`return ${exprs.value(&result)};`);
-    w.end();
-||||||| 0080d5ee3
-    out.push_str(`    return ${exprs.value(&result)};\n}\n`);
-=======
     let returned = if converted(&result, held) { `narrow(${exprs.reference(&result)})` } else { exprs.value(&result) };
-    out.push_str(`    return ${returned};\n}\n`);
->>>>>>> origin/main
+    w.line(`return ${returned};`);
+    w.end();
     return Result::Ok(());
 }
 
