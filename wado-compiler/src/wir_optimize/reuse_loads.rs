@@ -73,10 +73,9 @@ impl Kills {
             WirInstr::StructSet { field_name, .. } => {
                 self.fields.insert(field_name.clone());
             }
-            WirInstr::Call { .. }
-            | WirInstr::CallIndirect { .. }
-            | WirInstr::CallRef { .. }
-            | WirInstr::ArrayClone { .. } => self.everything = true,
+            WirInstr::Call { .. } | WirInstr::CallIndirect { .. } | WirInstr::CallRef { .. } => {
+                self.everything = true;
+            }
             _ => {}
         }
     }
@@ -96,10 +95,15 @@ impl Kills {
 /// Chains whose value a temp can supply here, each with its defining temp.
 type Avail = IndexMap<Key, usize>;
 
+struct Temp {
+    name: String,
+    ty: WirType,
+    used: bool,
+}
+
 struct Reuser {
     avail: Avail,
-    temps: Vec<(String, WirType)>,
-    used: Vec<bool>,
+    temps: Vec<Temp>,
     taken: IndexSet<String>,
 }
 
@@ -182,12 +186,13 @@ impl Reuser {
 
     fn visit_chain(&mut self, instr: &mut WirInstr, key: Key) {
         if let Some(&id) = self.avail.get(&key) {
-            self.used[id] = true;
+            let temp = &mut self.temps[id];
+            temp.used = true;
             let WirInstr::StructGet { result_ty, .. } = instr else {
                 unreachable!("a chain key is read off a struct.get");
             };
             *instr = WirInstr::LocalGet {
-                name: self.temps[id].0.clone(),
+                name: temp.name.clone(),
                 result_ty: result_ty.clone(),
             };
             return;
@@ -200,12 +205,16 @@ impl Reuser {
         };
         self.visit(expr);
         let id = self.temps.len();
-        let mut name = format!("$load_{id}");
-        while self.taken.contains(&name) {
-            name.push('_');
-        }
-        self.temps.push((name.clone(), result_ty.clone()));
-        self.used.push(false);
+        let name = format!("$load_{id}");
+        assert!(
+            !self.taken.contains(&name),
+            "only this pass mints `$load_` locals, once per function"
+        );
+        self.temps.push(Temp {
+            name: name.clone(),
+            ty: result_ty.clone(),
+            used: false,
+        });
         self.avail.insert(key, id);
         let get = std::mem::replace(instr, WirInstr::Nop);
         *instr = WirInstr::LocalTee {
@@ -235,7 +244,6 @@ pub(super) fn reuse_struct_loads(module: &mut WirPackage) {
         let mut reuser = Reuser {
             avail: Avail::default(),
             temps: Vec::new(),
-            used: Vec::new(),
             taken: locals
                 .iter()
                 .map(|(name, _)| name)
@@ -247,22 +255,15 @@ pub(super) fn reuse_struct_loads(module: &mut WirPackage) {
         if reuser.temps.is_empty() {
             continue;
         }
-        let unused: IndexSet<String> = reuser
-            .temps
-            .iter()
-            .zip(&reuser.used)
-            .filter(|(_, used)| !**used)
-            .map(|((name, _), _)| name.clone())
-            .collect();
+        let (used, unused): (Vec<Temp>, Vec<Temp>) =
+            reuser.temps.into_iter().partition(|temp| temp.used);
+        let unused: IndexSet<String> = unused.into_iter().map(|temp| temp.name).collect();
         for instr in body.iter_mut() {
             unwrap_unused(instr, &unused);
         }
-        let decls = reuser
-            .temps
+        let decls = used
             .into_iter()
-            .zip(reuser.used)
-            .filter(|(_, used)| *used)
-            .map(|((name, ty), _)| WirInstr::DeclareLocal { name, ty });
+            .map(|Temp { name, ty, .. }| WirInstr::DeclareLocal { name, ty });
         body.splice(0..0, decls);
     }
 }

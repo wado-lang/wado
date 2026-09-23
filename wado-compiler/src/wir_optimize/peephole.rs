@@ -822,10 +822,7 @@ fn try_select_pure_if(instr: &mut WirInstr, null: &Nullability) -> bool {
 }
 
 /// Fold a `select` over 0/1 values into the connective it computes:
-/// `select(c, x, 0)` is `c & x`, `select(c, 1, x)` is `c | x`. Cranelift lowers
-/// a `select` to a conditional move and the bitwise form to one instruction.
-/// The connective evaluates `x` after `c` where the `select` evaluated it
-/// before, so `x` must be observation-free and unable to trap.
+/// `select(c, x, 0)` is `c & x`, `select(c, 1, x)` is `c | x`.
 fn try_fold_boolean_select(instr: &mut WirInstr, null: &Nullability) -> bool {
     let WirInstr::Select {
         condition,
@@ -842,6 +839,7 @@ fn try_fold_boolean_select(instr: &mut WirInstr, null: &Nullability) -> bool {
             (WirInstr::I32Const(1), x) => (WirInstr::I32Or, x),
             _ => return false,
         };
+    // The connective evaluates `x` after `c`, where the `select` evaluated it before.
     if !is_boolean_valued(condition.peel_hint())
         || !is_boolean_valued(other)
         || !is_side_effect_free(other)

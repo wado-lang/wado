@@ -570,10 +570,6 @@ impl LookupTree<'_> {
 
     /// The condition testing that `positions` hold `key`'s own bytes. `None`
     /// when `positions` is empty.
-    ///
-    /// Each run of four tests is joined by `&`, not `&&`: wasmtime shares an
-    /// `array.get`'s null, length and address checks only across the gets in one
-    /// block, and four is where that sharing stops.
     fn byte_tests(&self, key: &Key, positions: impl Iterator<Item = usize>) -> Option<TirExpr> {
         let mut tests = positions.map(|pos| {
             i32_eq(
@@ -582,6 +578,7 @@ impl LookupTree<'_> {
                 self.span,
             )
         });
+        // wasmtime shares `array.get` checks across the gets of one block, up to four.
         std::iter::from_fn(|| {
             tests
                 .by_ref()
