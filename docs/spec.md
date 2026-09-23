@@ -938,6 +938,16 @@ match color {
 }
 ```
 
+The guardless arms must cover every value together. A guarded arm covers
+nothing, and a case is covered only as far as its payload patterns reach:
+
+```wado
+match opt {
+    Some(1) => "one",
+    None => "none",
+}   // Error: non-exhaustive match: missing case `Some(-2147483648..=0)`
+```
+
 #### Guard Expressions
 
 Guards use `&&` to reflect left-to-right evaluation (pattern first, then guard):

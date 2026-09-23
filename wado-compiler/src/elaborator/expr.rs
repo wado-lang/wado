@@ -3007,20 +3007,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn exh_literal(&mut self, lit: &Literal, scrutinee_type: TypeId) -> Pat {
+        // A literal that does not parse was reported where it was lexed or
+        // resolved, and takes no value here.
         let value = match lit {
-            // A float literal was reported where the pattern was resolved.
             Literal::Number(repr) if util::is_float_only_literal(repr) => return Pat::Wild,
             Literal::Number(repr) => {
-                let parsed = if self.exh_is_unsigned(scrutinee_type) {
-                    util::parse_u128_literal(repr).map(|v| v as i128)
+                if self.exh_is_unsigned(scrutinee_type) {
+                    util::parse_u128_literal(repr).map(|v| v as i128).ok()
                 } else {
-                    util::parse_i128_literal(repr)
-                };
-                parsed.unwrap_or(0)
+                    util::parse_i128_literal(repr).ok()
+                }
             }
             Literal::Bool(b) => return Pat::Bool(*b),
-            Literal::Char(raw) => escape::unescape_char(raw).unwrap_or('\0') as i128,
-            Literal::Byte(raw) => i128::from(escape::unescape_byte(raw).unwrap_or(0)),
+            Literal::Char(raw) => escape::unescape_char(raw).ok().map(|c| c as i128),
+            Literal::Byte(raw) => escape::unescape_byte(raw).ok().map(i128::from),
             // `null` is the `None` case where the scrutinee has one.
             Literal::Null => {
                 let none = self
@@ -3037,7 +3037,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => return Pat::Opaque,
         };
-        self.exh_int(value, value, scrutinee_type)
+        value.map_or(Pat::Opaque, |v| self.exh_int(v, v, scrutinee_type))
     }
 
     /// The case `name` of the enum or variant `scrutinee_type`, its payload

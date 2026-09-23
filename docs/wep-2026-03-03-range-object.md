@@ -490,7 +490,8 @@ let name = match bit {
 };
 ```
 
-When the compiler cannot prove exhaustiveness (large integer ranges, complex combinations), a wildcard `_` arm is required.
+Coverage is decided exactly, nested in a payload or a tuple too, and a gap is
+reported as the range it leaves (`101..=255`).
 
 #### Overlap Detection
 
