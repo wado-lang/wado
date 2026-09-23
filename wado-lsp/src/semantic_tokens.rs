@@ -578,8 +578,8 @@ fn classify_token(
         Some(category) => classify_keyword(category),
 
         None => match &token.kind {
-            // Keywords wherever they are not a member's name; otherwise they
-            // colour as the binding and the type they resolve to.
+            // Keywords wherever they are not a member's name, which colours as
+            // the member.
             TokenKind::Ident(name) if name == "self" && !ast_spans.is_member_name(token.span.start) => {
                 CONSTANT
             }
