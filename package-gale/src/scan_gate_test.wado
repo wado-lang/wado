@@ -63,6 +63,14 @@ test "the same action with a translatable members block reaches the gate" {
     assert out.contains("n: i32 = 0"), `the gate copies the member's own type and initialiser: ${out}`;
 }
 
+// The gate is parser state that every scan walks by reference, never a global.
+test "the scan gate lives on the parser" {
+    let out = gen_source(&members_grammar("    int n = 0;"));
+    assert out.contains("scan_gate: ScanGate = ScanGate {}"), out;
+    assert out.contains("fn scan_r(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate)"), out;
+    assert !out.contains("global mut"), out;
+}
+
 // Every scan the parse launches starts from the parser's gate. The LR dispatch
 // launches one three ways — the branch call, the fallbacks it binds ahead of
 // its chain, and the ATN repick — and a bare call site records none of that,
@@ -97,7 +105,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
                 seeded += 1;
             }
         }
-        after_seed = l.starts_with("SCAN_GATE.") && l.contains(" = p.");
+        after_seed = l.starts_with("p.scan_gate.") && l.contains(" = p.");
     }
     assert calls > 0, `the grammar must reach a parse-launched LR scan: ${out}`;
     assert seeded == calls, `${calls - seeded} of ${calls} parse-launched LR scans start from a stale gate: ${out}`;
@@ -363,27 +371,27 @@ test "scan_gate_fields: a write inside a group disqualifies the field" {
 
 // A condition the scan may evaluate reads simulated fields and nothing else.
 test "reads_only_scan_gate_fields: a simulated field" {
-    assert reads_only_scan_gate_fields("(SCAN_GATE.no_struct == 0)", &["no_struct"]);
+    assert reads_only_scan_gate_fields("(gate.no_struct == 0)", &["no_struct"]);
 }
 
 test "reads_only_scan_gate_fields: two of them" {
     let fields = ["no_struct", "depth"] as List<String>;
-    assert reads_only_scan_gate_fields("(SCAN_GATE.no_struct == 0 && SCAN_GATE.depth > 1)", &fields);
+    assert reads_only_scan_gate_fields("(gate.no_struct == 0 && gate.depth > 1)", &fields);
 }
 
 // One field name can be a prefix of another. Taking the short one out of the
-// long one leaves `_tail`, which is a read of a field the global does not have.
+// long one leaves `_tail`, which is a read of a field the gate does not have.
 test "reads_only_scan_gate_fields: a field whose name extends a simulated one" {
-    assert !reads_only_scan_gate_fields("(SCAN_GATE.no_struct_tail == 0)", &["no_struct"]);
+    assert !reads_only_scan_gate_fields("(gate.no_struct_tail == 0)", &["no_struct"]);
 }
 
 test "reads_only_scan_gate_fields: the longer name, simulated, is read" {
     let fields = ["no_struct", "no_struct_tail"] as List<String>;
-    assert reads_only_scan_gate_fields("(SCAN_GATE.no_struct_tail == 0)", &fields);
+    assert reads_only_scan_gate_fields("(gate.no_struct_tail == 0)", &fields);
 }
 
 test "reads_only_scan_gate_fields: an unsimulated field" {
-    assert !reads_only_scan_gate_fields("(SCAN_GATE.depth == 0)", &["no_struct"]);
+    assert !reads_only_scan_gate_fields("(gate.depth == 0)", &["no_struct"]);
 }
 
 test "reads_only_scan_gate_fields: a parser read" {

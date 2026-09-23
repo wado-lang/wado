@@ -18,8 +18,10 @@ use { PARSER_HANDLE, VALS_LOCAL, to_snake_case } from "./ident.wado";
 use { TreeMap } from "core:collections";
 use { rule_is_left_recursive } from "./action_translate.wado";
 
-/// The generated global the scan mutates, and its struct type.
-pub global SCAN_GATE_HANDLE: String = "SCAN_GATE";
+/// The scan's copy of the gate members: a scan function's `&mut` parameter, and
+/// the parser field it points at. A rendered condition names the parameter.
+pub global SCAN_GATE_HANDLE: String = "gate";
+pub global SCAN_GATE_FIELD: String = "scan_gate";
 pub global SCAN_GATE_TYPE: String = "ScanGate";
 
 /// `<parser handle>.<member> = <int literal>`, with an optional trailing `;` and
@@ -90,7 +92,7 @@ fn one_assignment<S: AsStrSlice>(text: S) -> Option<[String, String]> {
 }
 
 /// A parse-side condition rendered for the scan: every simulated member read
-/// re-pointed at `SCAN_GATE`.
+/// re-pointed at the scan gate.
 ///
 /// A Java body reaches a member through a bare name, so the translator renders
 /// it against whichever handle it is given and this finds nothing left to do. A
@@ -116,7 +118,7 @@ pub fn scan_gate_condition<S: AsStrSlice>(code: S, fields: &List<String>) -> Str
 /// unsimulated, which is the behaviour before this existed.
 ///
 /// Longest field first, because one field name can be a prefix of another:
-/// taking `SCAN_GATE.no_struct` out of `SCAN_GATE.no_struct_tail` leaves
+/// taking `gate.no_struct` out of `gate.no_struct_tail` leaves
 /// `_tail`. Asking for a name rather than for the handles is what sees that
 /// leftover — and the parser handle is one letter, so asking whether it appears
 /// anywhere answers yes inside `depth`.

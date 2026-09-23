@@ -38,7 +38,7 @@ use {
     elements_match,
 } from "./gen_util.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
-use { GateScope, SCAN_GATE_HANDLE, runnable_gate_scope } from "./scan_gate.wado";
+use { GateScope, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from "./scan_gate.wado";
 use { DiagnosticKind, DiagnosticOwner, DiagnosticSite } from "./gir.wado";
 use {
     join_kinds,
@@ -248,6 +248,7 @@ pub fn gen_parser(
         ctx.needs_atn(),
         ctx.emit_actions(),
         !ctx.fragment_entries().is_empty(),
+        ctx.emit_scan_gate(),
         members,
         ctx.parser_superclass_name(),
     );
@@ -340,9 +341,9 @@ fn ensure_alt_scan_fn<S: AsStrSlice>(
 /// side and the parse side's tournament call.
 pub fn gen_alt_scan_fn<S: AsStrSlice>(w: &mut CodeWriter, name: S, body: &ScanBody, alt_index: i32, ctx: &mut GenContext) {
     ctx.record_alt_scan_fn(alt_index, &name);
+    let was_scan = ctx.set_in_scan_fn(true);
     let mut f = FnSpec::new(&name);
-    f.add_param("tokens", "&Array<i32>");
-    f.add_param("pos", "i32");
+    add_scan_params(&mut f, ctx);
     if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f);
     }
@@ -362,6 +363,17 @@ pub fn gen_alt_scan_fn<S: AsStrSlice>(w: &mut CodeWriter, name: S, body: &ScanBo
     w.line("return pos;");
     w.end();
     w.blank();
+    ctx.set_in_scan_fn(was_scan);
+}
+
+/// A scan function's leading parameters: the token kinds, the position, and
+/// the gate where the grammar simulates one.
+fn add_scan_params(f: &mut FnSpec, ctx: &GenContext) {
+    f.add_param("tokens", "&Array<i32>");
+    f.add_param("pos", "i32");
+    if ctx.emit_scan_gate() {
+        f.add_param(&SCAN_GATE_HANDLE, `&mut ${SCAN_GATE_TYPE}`);
+    }
 }
 
 /// Returns true if the alternative has a generated scan function (has scannable prefix).
@@ -381,10 +393,12 @@ fn alt_scan_is_full(elements: &List<Element>, ctx: &mut GenContext) -> bool {
 // alternatives without expensive speculative parsing.
 
 fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
+    let was_scan = ctx.set_in_scan_fn(true);
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         ctx.set_current_rule_index(i);
         gen_scan_function(w, &grammar.parser_rules[i], &lowered.parser_rules[i], ctx);
     }
+    ctx.set_in_scan_fn(was_scan);
 }
 
 fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
@@ -405,7 +419,7 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule,
 }
 
 /// The gate scope `rule` opens, or `null` where the scan cannot run it. A field
-/// the scan does not simulate has no `SCAN_GATE` slot to save.
+/// the scan does not simulate has no scan gate slot to save.
 ///
 /// The left-recursive case is settled before this, in `runnable_gate_scope`:
 /// such a rule's scope is unrunnable everywhere, not only in the wrapper that
@@ -439,18 +453,17 @@ fn gen_scan_gate_scope_wrapper<S: AsStrSlice, S1: AsStrSlice>(
     scope: &GateScope,
 ) {
     let mut f = FnSpec::new(name);
-    f.add_param("tokens", "&Array<i32>");
-    f.add_param("pos", "i32");
+    add_scan_params(&mut f, ctx);
     let reads_follow = ctx.current_rule_reads_follow();
     if reads_follow {
         add_follow_param(&mut f);
     }
     f.set_return_type("i32");
     f.emit_begin(w);
-    let slot = `${SCAN_GATE_HANDLE}.${scope.field}`;
+    let slot = ctx.scan_gate_member(&scope.field);
     w.line(`let _gate_saved = ${slot};`);
     w.line(`${slot} = ${scope.value};`);
-    w.line(`let _gate_end = ${inner}(tokens, pos${follow_sep(reads_follow)});`);
+    w.line(`let _gate_end = ${inner}(tokens, pos${ctx.scan_gate_arg()}${follow_sep(reads_follow)});`);
     w.line(`${slot} = _gate_saved;`);
     w.line("return _gate_end;");
     w.end();
@@ -558,8 +571,7 @@ fn gen_scan_function_named<S: AsStrSlice>(
     // Only a left-recursive rule climbs precedence, so only its `scan_X`
     // declares `min_prec`.
     let mut f = FnSpec::new(fn_name);
-    f.add_param("tokens", "&Array<i32>");
-    f.add_param("pos", "i32");
+    add_scan_params(&mut f, ctx);
     if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f);
     }
@@ -694,8 +706,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
 
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
     let mut fa = FnSpec::new(&atom_name);
-    fa.add_param("tokens", "&Array<i32>");
-    fa.add_param("pos", "i32");
+    add_scan_params(&mut fa, ctx);
     if ctx.current_rule_reads_follow() {
         add_follow_param(&mut fa);
     }
@@ -733,8 +744,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
     let mut f2 = FnSpec::new(fn_name);
-    f2.add_param("tokens", "&Array<i32>");
-    f2.add_param("pos", "i32");
+    add_scan_params(&mut f2, ctx);
     if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f2);
     }
@@ -748,7 +758,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     }
     f2.set_return_type("i32");
     f2.emit_begin(w);
-    w.line(`let mut pos = ${atom_name}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
+    w.line(`let mut pos = ${atom_name}(tokens, pos${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())});`);
     w.line("if pos < 0 { return -1; }");
     if atn_loop_dec >= 0 {
         gen_lr_suffix_dispatch_atn(w, fn_name, lr_alts, lr_dispatch, ctx, atn_loop_dec);
@@ -783,8 +793,7 @@ fn gen_scan_lr_suffix_helpers<S: AsStrSlice>(
         let suffix_fn = `${fn_name}_lr_${lr_idx}`;
 
         let mut f = FnSpec::new(&suffix_fn);
-        f.add_param("tokens", "&Array<i32>");
-        f.add_param("pos", "i32");
+        add_scan_params(&mut f, ctx);
         if ctx.current_rule_reads_follow() {
             add_follow_param(&mut f);
         }
@@ -844,7 +853,7 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
         } else {
             w.else_begin(`else if _atn_alt == ${i}`);
         }
-        w.line(`pos = ${suffix_fn}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
+        w.line(`pos = ${suffix_fn}(tokens, pos${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())});`);
         w.line("if pos < 0 { return -1; }");
     }
     if !is_first {
@@ -882,8 +891,8 @@ fn lr_atn_alt_decl(lr_dispatch: &LrDispatchData) -> String {
 /// answer, and with it its diagnostic path, untouched.
 /// The gate a candidate suffix scan starts from.
 ///
-/// A dispatch measures its candidates one after another and each mutates
-/// `SCAN_GATE`, so one starting from wherever the last ended measures under a
+/// A dispatch measures its candidates one after another and each mutates the
+/// scan gate, so one starting from wherever the last ended measures under a
 /// reading nobody took — and the branch the chain picks then commits under a
 /// loser's. Every candidate scan opens with `gen_scan_gate_from`.
 variant ScanOrigin {
@@ -922,7 +931,7 @@ fn gen_scan_gate_from(w: &mut CodeWriter, ctx: &GenContext, from: &ScanOrigin) {
         Parser => {
             if ctx.emit_scan_gate() {
                 for let f of ctx.scan_gate_fields() {
-                    w.line(`${SCAN_GATE_HANDLE}.${*f} = ${PARSER_HANDLE}.${*f};`);
+                    w.line(`${ctx.scan_gate_member(f)} = ${PARSER_HANDLE}.${*f};`);
                 }
             }
         },
@@ -975,7 +984,7 @@ fn emit_lr_atn_group_repick<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             w.begin(`if ${lr.own_prec} >= min_prec`);
             gen_scan_gate_from(w, ctx, &origin);
             w.line(
-                `_lr_s_${*gi} = ${scan_fn}_lr_${lr.alt_index}(${tokens_expr}, ${pos_expr}${fsep});`,
+                `_lr_s_${*gi} = ${scan_fn}_lr_${lr.alt_index}(${tokens_expr}, ${pos_expr}${ctx.scan_gate_arg()}${fsep});`,
             );
             w.end();
         }
@@ -1041,7 +1050,7 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
     if let Some(local) = prebound {
         gen_scan_rewind(w, ctx, local);
     } else {
-        w.line(`pos = ${suffix_fn}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
+        w.line(`pos = ${suffix_fn}(tokens, pos${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())});`);
     }
     gen_scan_rewind_break(w, ctx, "lr_saved_pos", "pos < 0");
     if mid_operand_gated {
@@ -1307,7 +1316,7 @@ fn emit_lr_overlap(
                     let alt = lr_alts[lr_dispatch.valid_lr_alts[group[p.0]]].alt_index;
                     gen_scan_gate_from(w, ctx, &origin);
                     w.line(
-                        `let ${*local} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${follow_sep(
+                        `let ${*local} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${ctx.scan_gate_arg()}${follow_sep(
                             ctx.current_rule_reads_follow(),
                         )});`,
                     );
@@ -1624,7 +1633,7 @@ fn gen_scan_partition_body<S: AsStrSlice>(
         let guarded = guarded_alts.len() == 1;
         let i = if guarded { guarded_alts[0] } else { unguarded_alts[0] };
         if plan.is_hoisted(i) {
-            w.line(`pos = ${scan_alt_helper_name(base_name, i)}(tokens, start${follow_sep(
+            w.line(`pos = ${scan_alt_helper_name(base_name, i)}(tokens, start${ctx.scan_gate_arg()}${follow_sep(
                 ctx.current_rule_reads_follow(),
             )});`);
             w.line("if pos >= 0 { break scan_alts; }");
@@ -1661,7 +1670,7 @@ fn gen_scan_partition_body<S: AsStrSlice>(
             // already where it belongs and only the gate has to follow it.
             gen_scan_gate_restore(w, ctx, "start");
             w.line(
-                `let try_${i}_end = ${scan_alt_helper_name(base_name, i)}(tokens, start${follow_sep(
+                `let try_${i}_end = ${scan_alt_helper_name(base_name, i)}(tokens, start${ctx.scan_gate_arg()}${follow_sep(
                     ctx.current_rule_reads_follow(),
                 )});`,
             );
@@ -1820,12 +1829,13 @@ fn gen_scan_op_element<S: AsStrSlice>(
             let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
             let cont = if rc.lr_cont_mask >= 0 { `, FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
             assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
+            let call = `pos = ${fn_name}(tokens, pos${ctx.scan_gate_arg()}${follow_arg_str}${min_prec_arg}${cont});`;
             if push_ret >= 0 {
                 w.line(`SCAN_STACK.push(${push_ret});`);
-                w.line(`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
+                w.line(&call);
                 w.line("SCAN_STACK.pop();");
             } else {
-                w.line(`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
+                w.line(&call);
             }
             w.line(`if pos < 0 { ${fail_stmt} }`);
         },
@@ -1890,7 +1900,7 @@ fn gen_scan_op_element_assign(
             };
             let cont = if rc.lr_cont_mask >= 0 { `, FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
             assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
-            w.line(`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
+            w.line(`pos = ${fn_name}(tokens, pos${ctx.scan_gate_arg()}${follow_arg_str}${min_prec_arg}${cont});`);
         },
         Wildcard => {
             w.line("if pos >= tokens.len() || tokens[pos] == TK_EOF { pos = -1; } else { pos += 1; }");
@@ -2594,11 +2604,11 @@ fn gen_scan_op_elements<S: AsStrSlice>(
     gate_cond: &String = &NO_SCAN_GATE_COND,
     known: &List<List<String>> = &NOTHING_KNOWN,
 ) {
-    gen_scan_gate_check(w, gate_cond, fail_stmt);
+    gen_scan_gate_check(w, ctx, gate_cond, fail_stmt);
     let mut k = *known;
     let mut proven_run = 0;
     for let mut i = start; i <= end; i += 1 {
-        gen_scan_gates_before(w, gates, i, start, end);
+        gen_scan_gates_before(w, ctx, gates, i, start, end);
         if i == end {
             break;
         }
@@ -2632,11 +2642,11 @@ global NO_SCAN_GATE_COND: String = "";
 /// says it does not exist. The parse side's twin is the `alt_initial_gate`
 /// guard on the tournament; both have to be present or the measurement and the
 /// parse disagree about which alternatives are in the running.
-fn gen_scan_gate_check<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, gate_cond: S, fail_stmt: S1) {
+fn gen_scan_gate_check<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, gate_cond: S, fail_stmt: S1) {
     if gate_cond.is_empty() {
         return;
     }
-    w.line(`if !(${gate_cond}) { ${fail_stmt} }`);
+    w.line(`if !(${ctx.scan_gate_cond(gate_cond)}) { ${fail_stmt} }`);
 }
 
 /// Enter an inlined scan from parse context: the parser's tokens, where the
@@ -2667,12 +2677,12 @@ fn gen_scan_entry(w: &mut CodeWriter, ctx: &GenContext, from: &ScanOrigin) {
 /// flag the head closed. Walking `start..=end` rather than `start..end` is what
 /// keeps both ends reachable when the body is empty, which is a single-element
 /// alternative whose one element the candidate skipped.
-fn gen_scan_gates_before(w: &mut CodeWriter, gates: &List<ScanGate>, at: i32, start: i32, end: i32) {
+fn gen_scan_gates_before(w: &mut CodeWriter, ctx: &GenContext, gates: &List<ScanGate>, at: i32, start: i32, end: i32) {
     let lo = if at == start { i32::MIN } else { at };
     let hi = if at == end { i32::MAX } else { at + 1 };
     for let g of gates {
         if g.before_index >= lo && g.before_index < hi {
-            w.line(`${SCAN_GATE_HANDLE}.${g.field} = ${g.value};`);
+            w.line(`${ctx.scan_gate_member(&g.field)} = ${g.value};`);
         }
     }
 }
@@ -4166,7 +4176,7 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
         // The other shape of a scan entry: the generated scan takes the tokens
         // and the position as arguments, so only the gate is left to hand it.
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
-        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.current_rule_reads_follow())})`;
+        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())})`;
     };
     if mid_operand_gated {
         // A caller that needs this operand to leave a delimiter behind hands
@@ -6707,15 +6717,15 @@ fn gen_scan_gate_save<S: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, slot:
         return;
     }
     let decl = if mutable { "let mut" } else { "let" };
-    w.line(`${decl} ${scan_gate_local(slot)} = ${SCAN_GATE_HANDLE};`);
+    w.line(`${decl} ${scan_gate_local(slot)} = ${ctx.scan_gate_place()};`);
 }
 
-/// The assignment that puts the gate now in `SCAN_GATE` into `slot`'s local.
+/// The assignment that puts the current scan gate into `slot`'s local.
 fn scan_gate_snapshot<S: AsStrSlice>(ctx: &GenContext, slot: S) -> List<String> {
     if !ctx.emit_scan_gate() {
         return [];
     }
-    return [`${scan_gate_local(slot)} = ${SCAN_GATE_HANDLE};`];
+    return [`${scan_gate_local(slot)} = ${ctx.scan_gate_place()};`];
 }
 
 /// Commit a position the scan reached to `slot`, with the gate it reached it
@@ -6762,7 +6772,7 @@ fn gen_scan_gate_restore<S: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, sl
     if !ctx.emit_scan_gate() {
         return;
     }
-    w.line(`${SCAN_GATE_HANDLE} = ${scan_gate_local(slot)};`);
+    w.line(`${ctx.scan_gate_place()} = ${scan_gate_local(slot)};`);
 }
 
 /// The lookahead read every gate and probe opens with: the kind at `at`, EOF
@@ -8128,7 +8138,7 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
         let Some(scan_fn) = ctx.alt_scan_fn(idx) else {
             panic(`emit_scan_tournament: alt ${idx} of ${rule_display} has no scan function`);
         };
-        let scan = `${scan_fn}(_sd_tokens, _sd_pos${fsep})`;
+        let scan = `${scan_fn}(_sd_tokens, _sd_pos${ctx.scan_gate_arg()}${fsep})`;
         // An alt-initial predicate says whether the alternative exists at all,
         // and a scan is a pure token function that cannot ask one. Evaluate it
         // here, where the parser is in scope, and score a refused alternative as

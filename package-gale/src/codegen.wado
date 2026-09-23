@@ -56,7 +56,7 @@ use {
 use { gen_highlight } from "./highlight_gen.wado";
 use { HighlightRule } from "./highlight_query.wado";
 use { GenContext } from "./gen_context.wado";
-use { SCAN_GATE_HANDLE, SCAN_GATE_TYPE, scan_gate_fields } from "./scan_gate.wado";
+use { SCAN_GATE_TYPE, scan_gate_fields } from "./scan_gate.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
@@ -343,7 +343,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         gen_latn_data_global(&mut w, &latn.atn);
     }
     if ctx.emit_scan_gate() {
-        gen_scan_gate_global(&mut w, ctx.scan_gate_fields(), &parser_members);
+        gen_scan_gate_type(&mut w, ctx.scan_gate_fields(), &parser_members);
     }
     let body = w.to_string();
     let rt = gen_runtime(
@@ -608,24 +608,21 @@ fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
     w.blank();
 }
 
-/// Emit the scan's copy of the parser's gate members: one struct global the
-/// scan walk mutates. Its fields carry the parser's own names, which is what
-/// lets one predicate text render for both sides — see `scan_gate.wado`.
-///
-/// The parse seeds it from `p` before each scan, so nothing here has to
-/// survive a scan the tournament abandons.
-fn gen_scan_gate_global(w: &mut CodeWriter, fields: &List<String>, members: &MemberDecls) {
+/// Emit the type of the scan's copy of the parser's gate members, which the
+/// parser holds and every scan walks by reference. Its fields carry the
+/// parser's own names, which is what lets one predicate text render for both
+/// sides — see `scan_gate.wado`.
+fn gen_scan_gate_type(w: &mut CodeWriter, fields: &List<String>, members: &MemberDecls) {
     w.begin(`struct ${SCAN_GATE_TYPE}`);
     for let f of fields {
         // The member's own declared type and initialiser, not `i32 = 0`. The
-        // seed is `SCAN_GATE.f = p.f;`, so a `long` member declared here as an
+        // seed is `p.scan_gate.f = p.f;`, so a `long` member declared here as an
         // `i32` is a type error in the generated parser rather than anything
         // this side would notice.
         let [ty, init] = member_field(members, f);
         w.line(`${*f}: ${ty} = ${init},`);
     }
     w.end();
-    w.line(`global mut ${SCAN_GATE_HANDLE}: ${SCAN_GATE_TYPE} = ${SCAN_GATE_TYPE} {};`);
     w.blank();
 }
 

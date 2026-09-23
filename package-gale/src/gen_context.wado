@@ -14,7 +14,8 @@ use { Admits, Diagnostic, DiagnosticKind, DiagnosticOwner, admits_or_everything 
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
-use { gate_body_of } from "./scan_gate.wado";
+use { gate_body_of, SCAN_GATE_HANDLE, SCAN_GATE_FIELD } from "./scan_gate.wado";
+use { PARSER_HANDLE } from "./ident.wado";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
 use { TreeMap } from "core:collections";
 
@@ -290,6 +291,9 @@ pub struct GenContext {
     alt_scan_fns: TreeMap<[i32, i32], String>,
     /// Per rule, the binding bases its actions read (`rule_binding_reads`).
     binding_reads: List<Option<List<String>>>,
+    /// Whether the code being emitted is a scan function's, which reaches the
+    /// gate through its parameter rather than through the parser.
+    in_scan_fn: bool,
 }
 
 impl GenContext {
@@ -360,7 +364,52 @@ impl GenContext {
             alt_bindings: [],
             alt_scan_fns: TreeMap::new(),
             binding_reads: [],
+            in_scan_fn: false,
         };
+    }
+
+    /// Enter or leave a scan function's body; returns the previous setting.
+    pub fn set_in_scan_fn(&mut self, on: bool) -> bool {
+        let was = self.in_scan_fn;
+        self.in_scan_fn = on;
+        return was;
+    }
+
+    /// The scan gate as a place: the parameter's target inside a scan
+    /// function, the parser's field anywhere else.
+    pub fn scan_gate_place(&self) -> String {
+        if self.in_scan_fn {
+            return `*${SCAN_GATE_HANDLE}`;
+        }
+        return `${PARSER_HANDLE}.${SCAN_GATE_FIELD}`;
+    }
+
+    /// `place.field` of the scan gate.
+    pub fn scan_gate_member<S: AsStrSlice>(&self, field: S) -> String {
+        if self.in_scan_fn {
+            return `${SCAN_GATE_HANDLE}.${field}`;
+        }
+        return `${PARSER_HANDLE}.${SCAN_GATE_FIELD}.${field}`;
+    }
+
+    /// The trailing gate argument of a scan call, empty without a gate.
+    pub fn scan_gate_arg(&self) -> String {
+        if !self.emit_scan_gate() {
+            return String::new();
+        }
+        if self.in_scan_fn {
+            return `, ${SCAN_GATE_HANDLE}`;
+        }
+        return `, &mut ${PARSER_HANDLE}.${SCAN_GATE_FIELD}`;
+    }
+
+    /// A condition rendered against the parameter (`scan_gate_condition`),
+    /// pointed at the gate as this code reaches it.
+    pub fn scan_gate_cond<S: AsStrSlice>(&self, cond: S) -> String {
+        if self.in_scan_fn {
+            return cond.to_string();
+        }
+        return cond.replace(`${SCAN_GATE_HANDLE}.`, `${PARSER_HANDLE}.${SCAN_GATE_FIELD}.`);
     }
 
     pub fn set_binding_reads(&mut self, reads: List<Option<List<String>>>) {
@@ -756,7 +805,7 @@ impl GenContext {
     /// The members fields a scan simulates as it walks — see `scan_gate.wado`.
     ///
     /// Keeps only what the members block declares, so the set can never name a
-    /// field the generated `SCAN_GATE` has no type or initialiser to copy. The
+    /// field the generated `ScanGate` has no type or initialiser to copy. The
     /// action bodies and the members block are two readings of the grammar and
     /// either can come back empty on its own: a block the translator refuses
     /// warns and declares nothing, which has to degrade to an unsimulated gate
@@ -786,7 +835,7 @@ impl GenContext {
         return gate_body_of(&self.gate_bodies, action_id);
     }
 
-    /// Whether the generated parser carries the `SCAN_GATE` global at all. Off
+    /// Whether the generated parser carries a scan gate at all. Off
     /// leaves every scan byte-identical to one emitted before it existed.
     pub fn emit_scan_gate(&self) -> bool {
         return self.emit_actions && !self.scan_gate_fields.is_empty();
