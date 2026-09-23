@@ -1,0 +1,17 @@
+// floor_char_boundary cuts to a byte budget without panicking, and its range
+// check is one unsigned compare: the negative-index panic sits behind it, cold.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let s = builtin::black_box("ab日本");
+    let n = builtin::black_box(5);
+    println(s.substr_bytes(0, s.floor_char_boundary(n)));
+    println(s.substr_bytes(0, s.floor_char_boundary(n - 1)));
+    println(s.substr_bytes(0, s.floor_char_boundary(n * 40)));
+}
+
+__DATA__
+{
+    "stdout": "ab日\nab\nab日本\n",
+    "wir_expect:O2": [" >=u len_","floor_boundary$cold0"]
+}

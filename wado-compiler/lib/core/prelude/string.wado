@@ -188,6 +188,32 @@ fn boundary_at(repr: &Array<u8>, start: i32, len: i32, index: i32) -> bool {
     return is_char_start(repr[start + index]);
 }
 
+/// The nearest character boundary at or below `index`, counted from `start`;
+/// `len` when `index >= len`. Panics if `index` is negative.
+fn floor_boundary(repr: &Array<u8>, start: i32, len: i32, index: i32) -> i32 {
+    if index as u32 >= len as u32 {
+        builtin::cold_path();
+        assert index >= 0, "negative byte index";
+        return len;
+    }
+    return char_start_backward(repr, start + index) - start;
+}
+
+/// The nearest character boundary at or above `index`, counted from `start`;
+/// `len` when `index >= len`. Panics if `index` is negative.
+fn ceil_boundary(repr: &Array<u8>, start: i32, len: i32, index: i32) -> i32 {
+    if index as u32 >= len as u32 {
+        builtin::cold_path();
+        assert index >= 0, "negative byte index";
+        return len;
+    }
+    let mut p = index;
+    while p < len && !is_char_start(repr[start + p]) {
+        p += 1;
+    }
+    return p;
+}
+
 /// True if `needle[0..needle_len)` equals `haystack[pos..pos+needle_len)`.
 /// Caller ensures `pos + needle_len <= haystack.len()`.
 #[inline]
@@ -716,8 +742,8 @@ impl String {
         self.set_byte_unchecked(start, byte);
     }
 
-    /// Truncates the string to the given byte length.
-    /// Panics if `byte_len` is negative or not on a UTF-8 character boundary.
+    /// Truncates the string to the given byte length. Panics if `byte_len` is
+    /// negative or off a character boundary; round a budget with `floor_char_boundary`.
     pub fn truncate(&mut self, byte_len: i32) {
         if byte_len >= self.used {
             return;
@@ -746,6 +772,18 @@ impl String {
     /// UTF-8 character in this string.
     pub fn is_char_boundary(&self, byte_index: i32) -> bool {
         return boundary_at(&self.repr as &Array<u8>, 0, self.used, byte_index);
+    }
+
+    /// The largest character boundary `<= byte_index`, or `len()` beyond it:
+    /// cuts to a byte budget with `truncate` or `substr_bytes`. Panics if negative.
+    pub fn floor_char_boundary(&self, byte_index: i32) -> i32 {
+        return floor_boundary(&self.repr as &Array<u8>, 0, self.used, byte_index);
+    }
+
+    /// The smallest character boundary `>= byte_index`, or `len()` beyond it.
+    /// Panics if `byte_index` is negative.
+    pub fn ceil_char_boundary(&self, byte_index: i32) -> i32 {
+        return ceil_boundary(&self.repr as &Array<u8>, 0, self.used, byte_index);
     }
 
     /// Removes and returns the last character, or None if empty.
@@ -802,8 +840,8 @@ impl String {
         return self.as_str_slice().eq_ignore_ascii_case(other);
     }
 
-    /// Extract a substring by byte range `[start, end)`.
-    /// Panics if the range is out of bounds or either end is not on a UTF-8 boundary.
+    /// Extract a substring by byte range `[start, end)`. Panics if the range is out
+    /// of bounds or off a character boundary; round a budget with `floor_char_boundary`.
     pub fn substr_bytes(&self, start: i32, end: i32) -> String {
         return self.as_str_slice().substr_bytes(start, end);
     }
@@ -1291,6 +1329,18 @@ impl StrSlice {
         return boundary_at(self.repr, self.start, self.len(), index);
     }
 
+    /// The largest character boundary `<= index`, or `len()` beyond it.
+    /// Panics if `index` is negative.
+    pub fn floor_char_boundary(&self, index: i32) -> i32 {
+        return floor_boundary(self.repr, self.start, self.len(), index);
+    }
+
+    /// The smallest character boundary `>= index`, or `len()` beyond it.
+    /// Panics if `index` is negative.
+    pub fn ceil_char_boundary(&self, index: i32) -> i32 {
+        return ceil_boundary(self.repr, self.start, self.len(), index);
+    }
+
     /// Byte end of the leading `char_count` characters, or `len()` when the
     /// view holds fewer.
     internal fn char_prefix_end(&self, char_count: i32) -> i32 {
@@ -1721,6 +1771,14 @@ pub trait AsStrSlice: Eq<String> with () {
         return self.as_str_slice().is_char_boundary(index);
     }
 
+    fn floor_char_boundary(&self, index: i32) -> i32 {
+        return self.as_str_slice().floor_char_boundary(index);
+    }
+
+    fn ceil_char_boundary(&self, index: i32) -> i32 {
+        return self.as_str_slice().ceil_char_boundary(index);
+    }
+
     fn sub(&self, start: i32, end: i32) -> StrSlice {
         return self.as_str_slice().sub(start, end);
     }
@@ -1941,6 +1999,14 @@ impl<T: AsStrSlice> AsStrSlice for &T {
 
     fn is_char_boundary(&self, index: i32) -> bool {
         return (*self).is_char_boundary(index);
+    }
+
+    fn floor_char_boundary(&self, index: i32) -> i32 {
+        return (*self).floor_char_boundary(index);
+    }
+
+    fn ceil_char_boundary(&self, index: i32) -> i32 {
+        return (*self).ceil_char_boundary(index);
     }
 
     fn char_at_byte_unchecked(&self, byte_index: i32) -> char {

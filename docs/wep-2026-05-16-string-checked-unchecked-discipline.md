@@ -115,16 +115,21 @@ Methods whose validation is genuinely useful and separable get a checked/uncheck
 
 `pop()` already returns `Option<char>` and the empty-check is essentially free, so no `pop_unchecked` is added.
 
-### New Rust-Aligned Helper
+### New Rust-Aligned Helpers
 
 ```wado
 impl String {
     // True if `i` is 0, len(), or the start of a UTF-8 sequence in self.
     pub fn is_char_boundary(&self, i: i32) -> bool;
+    // The nearest boundary at or below / at or above `i`; len() when i >= len().
+    pub fn floor_char_boundary(&self, i: i32) -> i32;
+    pub fn ceil_char_boundary(&self, i: i32) -> i32;
 }
 ```
 
-This gives users a cheap way to validate an index before calling an `_unchecked` method, mirroring `str::is_char_boundary` in Rust.
+`is_char_boundary` validates an index before an `_unchecked` call, mirroring `str::is_char_boundary` in Rust. `floor_char_boundary` turns a byte budget into an index the checked methods accept: `s.substr_bytes(0, s.floor_char_boundary(200))` never panics, where `s.substr_bytes(0, 200)` does on the first input that puts a multibyte character across byte 200. `StrSlice` and every `AsStrSlice` carry all three.
+
+An index past `len()` clamps to `len()`: a budget longer than the text is the common case, and the bytes past `len()` are spare capacity, so the range check is needed anyway. A negative index panics, as `truncate` does, rather than clamping a caller's bug to 0. Both are one unsigned compare, the panic outlined behind it, so no `_unchecked` sibling is added.
 
 ### `internal_*` Inventory
 

@@ -323,6 +323,10 @@ println(`${point:#?}`);                   // pretty-print with indentation (Insp
 let n = s.len();                         // UTF8 byte length
 let chars = s.chars().count();           // character count based on Unicode scalars
 
+// Byte indices must sit on a character boundary, or substr_bytes/truncate panic.
+// Round a byte budget down to one first; past len() it clamps to len().
+let head = s.substr_bytes(0, s.floor_char_boundary(200));
+
 // String building
 let mut builder = String::with_capacity(20);
 let part: String = "Hello";
