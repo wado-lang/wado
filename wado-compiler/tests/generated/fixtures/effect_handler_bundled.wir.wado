@@ -132,6 +132,8 @@ global global:effect_handler_bundled.wado::$const_obj_4: ref null Array<u8> = ar
 global global:effect_handler_bundled.wado::$const_obj_5: ref null Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111, 44, 32);
 
 fn "effect_handler_bundled.wado/run"() with Stdout {
+    let $load_5: i32;
+    let $load_15: ref Array<u8>;
     let h: ref "effect_handler_bundled.wado//MultiMock";
     let n1: i32;
     let n2: i32;
@@ -198,11 +200,11 @@ fn "effect_handler_bundled.wado/run"() with Stdout {
     let $array_clone_src_2: ref Array<u8>;
     $array_clone_src_2 = v.repr;
     let $array_clone_len_4: i32;
-    $array_clone_len_4 = v.used;
+    $array_clone_len_4 = local.tee $load_5(v.used);
     let $array_clone_dst_3: ref Array<u8>;
     $array_clone_dst_3 = builtin::array_new<u8>($array_clone_len_4);
     builtin::array_copy<u8>($array_clone_dst_3, 0, $array_clone_src_2, 0, $array_clone_len_4);
-    $sroa_g_used = v.used;
+    $sroa_g_used = $load_5;
     n1 = $inline__effect_dispatch__Counter__tick_3: block -> i32 {
         $local_0_19 = global:effect_handler_bundled.wado::$effect_Counter;
         if @likely(ref.is_null($local_0_19) == 0) {
@@ -247,9 +249,9 @@ fn "effect_handler_bundled.wado/run"() with Stdout {
     }
     start_35 = $local_4_4.used;
     $local_4_4.used = new_used_34;
-    self_37 = $local_4_4.repr;
+    self_37 = local.tee $load_15($local_4_4.repr);
     builtin::array_copy<u8>(self_37, start_35, $array_clone_dst_3, 0, $sroa_g_used);
-    self_41 = $local_4_4.repr;
+    self_41 = $load_15;
     offset_42 = start_35 + $sroa_g_used;
     builtin::array_copy<u8>(self_41, offset_42, global:effect_handler_bundled.wado::$const_obj_4, 0, 5);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4_4 };
@@ -384,19 +386,20 @@ fn "core:rt/panic"(message) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -459,7 +462,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l31;
@@ -468,13 +471,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "effect_handler_bundled.wado/effect_handler_bundled.wado/$Closure_0::$call"(self) {
+    let $load_5: i32;
     let self_1: ref "effect_handler_bundled.wado//MultiMock";
     let $local_1: ref "core:prelude/string.wado//String";
     let v: ref "core:prelude/string.wado//String";
     let new_used_28: i32;
     let start_29: i32;
     let $sroa_other_used_34: i32;
-    return self_1 = self.$capture_0, self_1.count = self_1.count + 1, $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }, $local_1.used = 7, builtin::array_copy<u8>($local_1.repr, 0, global:effect_handler_bundled.wado::$const_obj_5, 0, 7), v = self_1.name, let $array_clone_src_1: ref Array<u8>, $array_clone_src_1 = v.repr, let $array_clone_len_3: i32, $array_clone_len_3 = v.used, let $array_clone_dst_2: ref Array<u8>, $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3), builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3), $sroa_other_used_34 = v.used, $inline_core_prelude_string_wado_String__internal_push_string_10: block {
+    return self_1 = self.$capture_0, self_1.count = self_1.count + 1, $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }, $local_1.used = 7, builtin::array_copy<u8>($local_1.repr, 0, global:effect_handler_bundled.wado::$const_obj_5, 0, 7), v = self_1.name, let $array_clone_src_1: ref Array<u8>, $array_clone_src_1 = v.repr, let $array_clone_len_3: i32, $array_clone_len_3 = local.tee $load_5(v.used), let $array_clone_dst_2: ref Array<u8>, $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3), builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3), $sroa_other_used_34 = $load_5, $inline_core_prelude_string_wado_String__internal_push_string_10: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_10 $sroa_other_used_34 == 0;
         new_used_28 = 7 + $sroa_other_used_34;
         if @unlikely(new_used_28 > 23) {

@@ -80,7 +80,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:opt_sroa_param_alias.wado::$const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
 
 fn "opt_sroa_param_alias.wado/f"(p, q) {
-    q.m.value = q.m.value + 100;
+    let $load_0: ref "opt_sroa_param_alias.wado//M";
+    local.tee $load_0(q.m).value = $load_0.value + 100;
     return p.value;
 }
 
@@ -224,7 +225,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l4;

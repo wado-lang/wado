@@ -1,0 +1,61 @@
+use { println, Stdout } from "core:cli";
+
+fn take<T>(t: T) -> T {
+    return t;
+}
+
+fn byte_len<S: AsStrSlice>(s: S) -> i32 {
+    return s.len();
+}
+
+fn inner<T>(o: Option<T>, fallback: T) -> T {
+    if let Some(v) = o {
+        return v;
+    }
+    return fallback;
+}
+
+struct Holder {}
+
+impl Holder {
+    fn make<T>(t: T) -> T {
+        return t;
+    }
+
+    fn keep<T>(&self, t: T) -> T {
+        return t;
+    }
+}
+
+export fn run() with Stdout {
+    let c = builtin::black_box(true);
+    let n = take(if c { 1 } else { 2 });
+    let s = take(if c { "x" } else { "y" });
+    let m = take(match c { true => "t", false => "f" });
+    let l = take(pick: {
+        if c {
+            break pick: "L";
+        }
+        "M"
+    });
+    let b = byte_len(if c { "ab" } else { "c" });
+    let o = inner(if c { Option::Some("o") } else { null }, "-");
+    let on = take(if !c { null } else { Option::Some(1) });
+    let om = take(match c { false => null, true => Option::Some(5) });
+    let ol = take(pick: {
+        if !c {
+            break pick: null;
+        }
+        Option::Some('z')
+    });
+    let st = Holder::make(match c { true => 3, false => 4 });
+    let h = Holder {};
+    let i = h.keep(if c { "k" } else { "-" });
+    let mut out = "";
+    out.push_str(if c { "p" } else { "-" });
+    out.push_str(match c { true => "q", false => "-" });
+    println(`${n} ${s} ${m} ${l} ${b} ${o} ${on:?} ${om:?} ${ol:?} ${st} ${i} ${out}`);
+}
+
+__DATA__
+{"stdout": "1 x t L 2 o Option::Some(1) Option::Some(5) Option::Some('z') 3 k pq\n"}

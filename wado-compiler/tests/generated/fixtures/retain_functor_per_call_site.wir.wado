@@ -116,6 +116,7 @@ fn "retain_functor_per_call_site.wado/via"(f, p) {
 }
 
 fn "retain_functor_per_call_site.wado/$test_0_a_field_reaches_a_functor_that_keeps_nothing"() {
+    let $load_0: ref null "core:prelude/string.wado//String";
     let $cond_3: bool;
     let $local_1: ref struct;
     let $local_2: ref "core:prelude/types.wado//Box<retain_functor_per_call_site.wado/Payload>";
@@ -127,8 +128,8 @@ fn "retain_functor_per_call_site.wado/$test_0_a_field_reaches_a_functor_that_kee
     $local_2 = struct.new "core:prelude/types.wado//Box<retain_functor_per_call_site.wado/Payload>" { value: $sroa_b_item };
     $local_3 = $sroa_b_item;
     $local_4 = "retain_functor_per_call_site.wado/via"($local_1, $local_2);
-    if ref.eq($local_2.value, $local_3) == 0 {
-        $sroa_b_item = $local_2.value;
+    if ref.eq(local.tee $load_0($local_2.value), $local_3) == 0 {
+        $sroa_b_item = $load_0;
     }
     if @unlikely($local_4 != 1) {
         cold_path;
@@ -163,6 +164,8 @@ condition: b.item matches { Text(_) }
 }
 
 fn "retain_functor_per_call_site.wado/$test_0_a_field_reaches_a_functor_that_keeps_nothing$cold2"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/format.wado//Formatter";
     let self_22: ref Array<u8>;
@@ -183,18 +186,18 @@ fn "retain_functor_per_call_site.wado/$test_0_a_field_reaches_a_functor_that_kee
     let start_76: i32;
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(160), used: 0 };
     $local_7.used = 110;
-    self_22 = $local_7.repr;
+    self_22 = local.tee $load_0($local_7.repr);
     builtin::array_copy<u8>(self_22, 0, global:retain_functor_per_call_site.wado::$const_obj_23, 0, 20);
-    self_26 = $local_7.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 20;
     builtin::array_copy<u8>(self_26, offset_27, global:retain_functor_per_call_site.wado::$const_obj_22, 0, 52);
-    self_30 = $local_7.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 72;
     builtin::array_copy<u8>(self_30, offset_31, global:retain_functor_per_call_site.wado::$const_obj_21, 0, 4);
-    self_34 = $local_7.repr;
+    self_34 = $load_0;
     offset_35 = 0 + 76;
     builtin::array_copy<u8>(self_34, offset_35, global:retain_functor_per_call_site.wado::$const_obj_20, 0, 33);
-    self_38 = $local_7.repr;
+    self_38 = $load_0;
     offset_39 = 0 + 109;
     builtin::array_copy<u8>(self_38, offset_39, global:retain_functor_per_call_site.wado::$const_obj_19, 0, 1);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -206,9 +209,9 @@ fn "retain_functor_per_call_site.wado/$test_0_a_field_reaches_a_functor_that_kee
     }
     start_50 = $local_7.used;
     $local_7.used = new_used_49;
-    self_52 = $local_7.repr;
+    self_52 = local.tee $load_5($local_7.repr);
     builtin::array_copy<u8>(self_52, start_50, global:retain_functor_per_call_site.wado::$const_obj_18, 0, 43);
-    self_56 = $local_7.repr;
+    self_56 = $load_5;
     offset_57 = start_50 + 43;
     builtin::array_copy<u8>(self_56, offset_57, global:retain_functor_per_call_site.wado::$const_obj_17, 0, 27);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -308,19 +311,20 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -383,7 +387,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l29;
