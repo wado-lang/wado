@@ -994,45 +994,33 @@ impl TypeSystem {
         trait_name: &str,
     ) -> Vec<String> {
         let mut chain = Vec::new();
-        if let Some(tr) = self
+        let Some(tr) = self
             .on_bound_of(trait_)
             .filter(|tr| tr.is_field_recursive())
-        {
-            self.collect_trait_unimpl_reason(ctx, scope, type_id, tr, trait_name, &mut chain);
-        }
-        chain
-    }
-
-    fn collect_trait_unimpl_reason(
-        &self,
-        ctx: &Scope,
-        scope: &TypeLookup,
-        type_id: TypeId,
-        tr: OnBoundTrait,
-        trait_name: &str,
-        chain: &mut Vec<String>,
-    ) {
-        // Bound the depth so a pathologically nested (or cyclic) type cannot
-        // produce an unbounded chain.
-        if chain.len() >= 8 {
-            return;
-        }
-        let resolved = self.type_table.borrow().get(type_id).clone();
-        let Some(trait_) = self.compiler_trait(tr.compiler_item()) else {
-            return;
+        else {
+            return chain;
         };
-        if let StructuralConformance::Fails {
-            member: label,
-            type_id: member_tid,
-        } = self.structural_conformance(ctx, scope, &resolved, tr, &trait_)
-        {
+        let trait_ = FqTraitName::declared(self.resolutions.defs(), trait_);
+        let mut type_id = type_id;
+        // Bounded, so a pathologically nested (or cyclic) type cannot produce
+        // an unbounded chain.
+        while chain.len() < 8 {
+            let resolved = self.type_table.borrow().get(type_id).clone();
+            let StructuralConformance::Fails {
+                member: label,
+                type_id: member_tid,
+            } = self.structural_conformance(ctx, scope, &resolved, tr, &trait_)
+            else {
+                break;
+            };
             let owner = self.type_id_to_string(type_id);
             let member_ty = self.type_id_to_string(member_tid);
             chain.push(format!(
                 "`{owner}` does not implement `{trait_name}` because {label} of type `{member_ty}` does not implement `{trait_name}`"
             ));
-            self.collect_trait_unimpl_reason(ctx, scope, member_tid, tr, trait_name, chain);
+            type_id = member_tid;
         }
+        chain
     }
 
     /// Whether the members `kind` exposes can be enumerated at `scope`: a
@@ -2047,7 +2035,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// interface or resource answers too, since an effect bound names one.
     pub(super) fn trait_decl_at(&self, site: AstId) -> Option<DefId> {
         self.tysys.resolutions.declared(site).filter(|def| {
-            self.tysys.trait_env.declares_trait(def) || self.tysys.effect_decl(*def).is_some()
+            self.tysys.trait_env.declares_trait(def) || self.tysys.trait_env.declares_effect(*def)
         })
     }
 

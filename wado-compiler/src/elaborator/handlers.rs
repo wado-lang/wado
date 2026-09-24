@@ -98,15 +98,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         effect_ty: &ast::Type,
         ctx: &mut FunctionContext,
     ) {
-        // The `with` clause names the effect in this module, and the walk
-        // answered for that site — so the declaration comes from the site
-        // rather than from asking a module about a spelling.
         let interface_name = self.get_type_name(effect_ty);
         let site = effect_ty.id();
         let effect_decl = site.and_then(|id| self.tysys.resolutions.declared(id));
         if let (Some(site), Some(def)) = (site, effect_decl) {
-            let decl_ast = self.tysys.resolutions.defs().ast_id(def);
-            self.record_reference_to_def(site, decl_ast);
+            self.record_reference_to_decl(site, def, effect_ty.span());
         }
         let effect = site.and_then(|id| self.tysys.effect_at(id, &interface_name));
         // An effect declares its own parameter defaults, and a `with` clause
@@ -362,15 +358,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else {
                 continue;
             };
-            // Accept either an effect or a resource declaration. The
-            // dispatch synthesis pass treats both uniformly.
-            if !(self.tysys.trait_env.effect_decl_index.contains(&trait_ref)
-                || self
-                    .tysys
-                    .trait_env
-                    .resource_decl_index
-                    .contains(&trait_ref))
-            {
+            if !self.tysys.trait_env.declares_effect(trait_ref) {
                 continue;
             }
             let type_args = self

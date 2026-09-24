@@ -539,14 +539,13 @@ impl OwnedEffectData {
                             if declares_effect_param(trait_decl, method, name) {
                                 return EffectRef::Param { name: name.clone() };
                             }
-                            // The elaborator reported a name reaching no effect.
-                            sites
-                                .get(i)
-                                .and_then(|&(site, _)| effect_at(sem, site, &closure))
-                                .unwrap_or_else(|| EffectRef::Concrete {
-                                    name: name.clone(),
-                                    module_source: src.clone(),
-                                })
+                            // Every name past the parameter test has a site.
+                            // One reaching no effect was reported in elaboration.
+                            let (site, _) = sites[i];
+                            effect_at(sem, site, &closure).unwrap_or_else(|| EffectRef::Concrete {
+                                name: name.clone(),
+                                module_source: src.clone(),
+                            })
                         })
                         .collect();
                     trait_method_effects.insert(

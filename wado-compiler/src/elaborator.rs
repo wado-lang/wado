@@ -1240,15 +1240,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// The declaration `name` reaches where it is written: what the walk
+    /// recorded at `site`, or for a synthesised node with none, the frame's scope.
+    fn decl_written_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
+        site.map_or_else(
+            || self.decl_key_or_local(name),
+            |site| self.tysys.resolutions.declared_if_walked(site),
+        )
+    }
+
     /// Whether `name` names a type where it is written: a primitive, or a type
-    /// declaration the site reaches. No site reads the frame's scope.
+    /// declaration.
     pub(crate) fn names_type_at(&self, site: Option<AstId>, name: &str) -> bool {
         TypeTable::primitive_by_name(name).is_some()
-            || site
-                .map_or_else(
-                    || self.decl_key_or_local(name),
-                    |site| self.tysys.resolutions.declared_if_walked(site),
-                )
+            || self
+                .decl_written_at(site, name)
                 .is_some_and(|def| self.tysys.resolutions.defs().kind(def).is_type())
     }
 
@@ -1359,7 +1365,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         trait_type: &ast::Type,
         marked: Option<DefId>,
     ) -> Option<tir::SynthTrait> {
-        if marked.is_none() || marked != self.tysys.compiler_trait_def(CompilerItem::From) {
+        let from = self.tysys.compiler_trait_def(CompilerItem::From);
+        if marked.is_none_or(|trait_| from != Some(trait_)) {
             return None;
         }
         if let ast::Type::Generic(generic) = trait_type
@@ -1695,14 +1702,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         site: Option<AstId>,
         type_name: &str,
     ) -> trait_env::ImplTargetKey {
-        let defs = self.tysys.resolutions.defs();
-        site.map_or_else(
-            || self.decl_key_or_local(type_name),
-            |site| self.tysys.resolutions.declared_if_walked(site),
-        )
-        .map_or_else(
+        self.decl_written_at(site, type_name).map_or_else(
             || trait_env::ImplTargetKey::of_undeclared(&self.current_module_source, type_name),
-            |def| trait_env::ImplTargetKey::of_decl(defs, def),
+            |def| trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def),
         )
     }
 
@@ -1813,8 +1815,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if let Some(&binder) = self.annotate_ctx.trait_ctx.effect_params.get(name) {
             self.record_reference(site, binder);
         } else if let Some(def) = self.tysys.resolutions.declared(site) {
-            let decl_ast = self.tysys.resolutions.defs().ast_id(def);
-            self.record_reference_to_def(site, decl_ast);
+            self.record_reference_to_decl(site, def, span);
         }
         self.tysys.effect_at(site, name).unwrap_or_else(|| {
             let _ = self.emit(TypeError::UnknownEffect {
@@ -2260,10 +2261,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let is_handler_method = trait_name
                 .as_ref()
                 .and_then(FqTraitName::canonical)
-                .is_some_and(|key| {
-                    scope.tysys.trait_env.effect_decl_index.contains(&key)
-                        || scope.tysys.trait_env.resource_decl_index.contains(&key)
-                });
+                .is_some_and(|key| scope.tysys.trait_env.declares_effect(key));
             let is_ref_impl = matches!(
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),

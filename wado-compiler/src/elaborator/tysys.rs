@@ -139,13 +139,13 @@ impl TypeSystem {
 
     /// `def` as an effect, when it declares an `interface` or a resource.
     pub(crate) fn effect_decl(&self, def: DefId) -> Option<EffectRef> {
-        let is_effect = self.trait_env.effect_decl_index.contains(&def)
-            || self.trait_env.resource_decl_index.contains(&def);
         let defs = self.resolutions.defs();
-        is_effect.then(|| EffectRef::Concrete {
-            name: defs.name(def).to_string(),
-            module_source: defs.module(def).clone(),
-        })
+        self.trait_env
+            .declares_effect(def)
+            .then(|| EffectRef::Concrete {
+                name: defs.name(def).to_string(),
+                module_source: defs.module(def).clone(),
+            })
     }
 
     /// The `Type::Case` spelling of the case the resolve walk names at a bare

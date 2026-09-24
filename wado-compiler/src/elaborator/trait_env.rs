@@ -1444,6 +1444,12 @@ impl TraitEnv {
         self.trait_decl_headers.contains_key(key)
     }
 
+    /// Whether `def` names an `interface` or a resource: what a `with` clause
+    /// and a handler binding accept.
+    pub(crate) fn declares_effect(&self, def: DefId) -> bool {
+        self.effect_decl_index.contains(&def) || self.resource_decl_index.contains(&def)
+    }
+
     /// Every declaration written under `name`, whichever module declares it.
     ///
     /// The frame derivation's raw material, and not a scope: it holds what

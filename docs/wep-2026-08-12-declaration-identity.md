@@ -502,8 +502,8 @@ always to give the caller the reference site.
 The one scope, which every other entry exists by not being:
 
 - `Scopes::resolve`, `resolve_value`
-- `Resolutions::resolve_in` — the first, for a spelling no walk visits: an
-  attribute argument such as `#[benign(E)]`
+- `Resolutions::resolve_in` — the same scope, for a spelling no walk visits,
+  such as the attribute argument in `#[benign(E)]`
 
 The three recorded facts the frame derivation is built from. Each is one tier,
 none is a scope, and none takes a vantage a caller could get wrong:
@@ -683,10 +683,10 @@ to — a concrete impl records a resolution, a generic one a definition to
 substitute. Reading one of the two is what let a widening
 `impl<T> Mul for W<T>` satisfy `Mul<Output = T>`.
 
-The receiver side of that key is the target's declaration and arguments, a
-reference layer included, never the `TypeId` slot: a generic instance and the
-struct it monomorphizes to are two slots for one type. An impl on the reference
-itself answers before the reference is looked through.
+The key names the receiver by its declaration and arguments, and keeps any
+reference layer. It never uses the `TypeId` slot, because a generic instance and
+the struct it monomorphizes to are two slots for one type. An impl on the
+reference itself answers before the reference is looked through.
 
 Fixtures: `assoc_type_per_trait_args.wado`,
 `reference_impl_assoc_type_projects.wado`,

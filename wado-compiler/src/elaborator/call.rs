@@ -512,20 +512,12 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Whether `name` is a declared effect (`interface`) or resource —
-    /// the set of identifiers `resolve_call`'s qualified-call fallback may
-    /// treat as a deferred effect operation (`Stdout::write()`, etc.).
-    fn is_effect_or_resource_decl(&self, def: DefId) -> bool {
-        self.tysys.trait_env.effect_decl_index.contains(&def)
-            || self.tysys.trait_env.resource_decl_index.contains(&def)
-    }
-
     /// The effect / resource declaration a qualified callee's receiver segment
     /// names — answered by the site the walk resolved, so an import alias needs
     /// no translation back into a spelling.
     fn effect_or_resource_decl_at(&self, site: Option<ast::AstId>) -> Option<DefId> {
         let def = self.tysys.resolutions.declared(site?)?;
-        self.is_effect_or_resource_decl(def).then_some(def)
+        self.tysys.trait_env.declares_effect(def).then_some(def)
     }
 
     /// The callee of an operation dispatch `[ns::]E::op`, where `E` names an
