@@ -12,7 +12,8 @@ const WEB_NAMESPACE: &str = "web:";
 ///
 /// # Errors
 ///
-/// Returns an error if a `web:*` import is not an instance of functions.
+/// Returns an error if a `web:*` import is not an instance of functions and
+/// value types.
 pub fn define_web_imports_as_traps<T: 'static>(
     linker: &mut Linker<T>,
     component: &Component,
@@ -28,9 +29,18 @@ pub fn define_web_imports_as_traps<T: 'static>(
         };
         let mut linker_instance = linker.instance(interface)?;
         for (function, export) in instance.exports(engine) {
-            let ComponentItem::ComponentFunc(_) = export.ty else {
-                bail!("`{interface}` exports `{function}`, which is not a function");
-            };
+            match export.ty {
+                ComponentItem::ComponentFunc(_) => {}
+                // A value type needs no definition: the linker matches it structurally.
+                ComponentItem::Type(_) => continue,
+                ComponentItem::CoreFunc(_)
+                | ComponentItem::Module(_)
+                | ComponentItem::Component(_)
+                | ComponentItem::ComponentInstance(_)
+                | ComponentItem::Resource(_) => {
+                    bail!("`{interface}` exports `{function}`, which is not a function")
+                }
+            }
             let name = format!("{interface}#{function}");
             linker_instance.func_new(function, move |_, _, _, _| {
                 Err(wasmtime::Error::msg(format!(

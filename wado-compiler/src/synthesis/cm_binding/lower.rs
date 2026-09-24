@@ -174,7 +174,7 @@ pub fn synthesize_lower(
              which computes element offsets; synthesize_lower covers primitives only"
         ),
         Type::Reference(_) | Type::MutReference(_) => vec![expr_stmt(builtin_call(
-            "i32_store",
+            scalar_store_op(ty, ctx.cm_interface_registry, &ctx.names),
             vec![addr, value],
             TypeTable::UNIT,
         ))],
@@ -1439,7 +1439,9 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 ctx,
             );
         }
-        Type::Named(_) if ctx.cm_interface_registry.extern_handle(&resolved).is_some() => {
+        Type::Named(_) | Type::Reference(_) | Type::MutReference(_)
+            if ctx.cm_interface_registry.extern_handle(&resolved).is_some() =>
+        {
             flat_args.push(handle_to_f64(value));
         }
         // Primitive, flags, resource, or borrow handle: the value is the single flat arg.

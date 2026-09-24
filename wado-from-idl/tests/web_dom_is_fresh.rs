@@ -24,7 +24,7 @@ fn package_web_dom_is_generated_from_the_vendored_snapshot() {
     );
 }
 
-/// The facade is hand-written, so a name a wider slice adds must be added there.
+/// `package-web`'s hand-written facade re-exports every name `dom.wado` declares.
 #[test]
 fn package_web_lib_re_exports_every_generated_name() {
     let root = root();

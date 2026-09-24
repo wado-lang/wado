@@ -1728,7 +1728,7 @@ pub struct HandleClasses {
 }
 
 impl HandleClasses {
-    /// A handle is `class * STRIDE + index`: an integer-valued `f64` below 2^53.
+    /// The handles one class spans; a handle is `class * STRIDE + index`.
     pub const STRIDE: f64 = 137_438_953_472.0;
 
     pub fn parse(value: &str) -> Option<Self> {

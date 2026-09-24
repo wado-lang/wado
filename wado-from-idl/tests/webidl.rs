@@ -206,8 +206,8 @@ fn an_interface_is_an_unrestricted_resource_with_its_own_cm_interface() {
     );
 }
 
-/// A pre-order walk numbers each interface just before its descendants, so a
-/// type pattern tests one range whatever the host tags an object with.
+/// Each interface's classes come just before its descendants', so one range
+/// covers a subtree.
 #[test]
 fn classes_number_the_inheritance_forest_in_pre_order() {
     let (code, _) = chain().generate();
@@ -506,6 +506,24 @@ fn a_parent_outside_the_slice_is_rejected() {
     assert!(
         err.to_string()
             .contains("`Element` extends `CharacterData`, which is not in the slice"),
+        "{err}"
+    );
+}
+
+#[test]
+fn an_inheritance_cycle_is_rejected() {
+    let mut defs = Definitions::default();
+    defs.interfaces
+        .push(interface("Node", r#""Element""#, "", &[]));
+    defs.interfaces
+        .push(interface("Element", r#""Node""#, "", &[]));
+    for name in ["EventTarget", "Window"] {
+        defs.interfaces.push(interface(name, "null", "", &[]));
+    }
+    let err = transform(&defs.build()).expect_err("a cycle is an error");
+    assert!(
+        err.to_string()
+            .contains("`Node`, `Element` inherit from each other in a cycle"),
         "{err}"
     );
 }

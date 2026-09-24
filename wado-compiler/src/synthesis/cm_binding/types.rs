@@ -426,6 +426,11 @@ pub fn cm_type_to_type_id(
                 .collect();
             type_table.make_tuple(resolved)
         }
+        Type::Reference(inner) | Type::MutReference(inner)
+            if registry.extern_handle(ty).is_some() =>
+        {
+            cm_type_to_type_id(inner, type_table, registry, wasi_package)
+        }
         // Borrowed resource handles are i32 at the CM boundary.
         Type::Reference(_) | Type::MutReference(_) => TypeTable::I32,
         other => panic!("unsupported type at CM boundary: {other:?}"),

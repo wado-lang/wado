@@ -14,8 +14,9 @@ use crate::ast::{
     self, HandleClasses, Item, Module, Type, declared_handle_classes, declares_unrestricted,
     wire_numbers_of,
 };
+use crate::bail_with;
 use crate::builtin_registry::BuiltinRegistry;
-use crate::compiler_host::CompilerHost;
+use crate::compiler_host::{Code, CompilerHost};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::logger::{Bail, Logger, ModuleDiag};
@@ -1057,7 +1058,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             cm_interface_registry.extend_source_interfaces(cm_source_interfaces.clone());
             // Resolve `Interface::method` calls into CM components during
             // annotate — the same role build_from_stdlib plays for WASI.
-            fold_component_interfaces(&mut cm_interface_registry, modules, &stdlib_set);
+            fold_component_interfaces(&mut cm_interface_registry, modules, &stdlib_set)
+                .map_err(|msg| bail_with(logger, Code::DuplicateDefinition, msg))?;
             (cm_interface_registry, world_registry)
         };
         let builtin_registry = {
@@ -3975,7 +3977,7 @@ pub(crate) fn fold_component_interfaces(
     registry: &mut Arc<CmInterfaceRegistry>,
     modules: &IndexMap<ModuleSource, Module>,
     stdlib_set: &IndexSet<ModuleSource>,
-) {
+) -> Result<(), String> {
     for (ms, module) in modules {
         if !matches!(ms, ModuleSource::Wasm { .. }) || stdlib_set.contains(ms) {
             continue;
@@ -3990,9 +3992,10 @@ pub(crate) fn fold_component_interfaces(
                 &world_func_names,
                 &host_leaf_imports,
                 ms,
-            );
+            )?;
         }
     }
+    Ok(())
 }
 
 /// Bare names of the world-level function imports (Phase 9) a component-binding

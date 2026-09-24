@@ -205,8 +205,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     Ok(WebIdlOutput { module, skipped })
 }
 
-/// Number every interface by a pre-order walk of the inheritance forest in
-/// slice order, so each one's descendants take the classes right after its own.
+/// Each interface's handle classes: its own, then its descendants' right after.
 fn number_classes<'a>(
     merged: &IndexMap<&'a str, Merged<'_>>,
 ) -> Result<IndexMap<&'a str, HandleClasses>> {
@@ -250,6 +249,17 @@ fn number_classes<'a>(
     let mut out = IndexMap::new();
     for root in roots {
         visit(root, &children, &mut next, &mut out)?;
+    }
+    let cycle: Vec<&str> = merged
+        .keys()
+        .copied()
+        .filter(|name| !out.contains_key(name))
+        .collect();
+    if !cycle.is_empty() {
+        bail!(
+            "`{}` inherit from each other in a cycle",
+            cycle.join("`, `")
+        );
     }
     Ok(out)
 }

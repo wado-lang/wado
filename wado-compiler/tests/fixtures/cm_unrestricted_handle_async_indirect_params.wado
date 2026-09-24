@@ -1,0 +1,26 @@
+// An async import past four flat params takes them in a memory buffer, where
+// an unrestricted handle is stored as its `u64` bits. Converted to `f64` first,
+// the store failed validation.
+
+#[cm("web:demo/node", linearity = "unrestricted", classes = "0..=0")]
+resource Node {}
+
+#[cm("web:demo/global")]
+interface Dom {
+    #[cm("web:demo/global#touch")]
+    async fn touch(n: Node, a: i32, b: i32, c: i32, d: i32) -> AsyncCall<i32>;
+
+    #[cm("web:demo/global#root")]
+    fn root() -> Node;
+}
+
+export fn run() with Dom {
+    let n = Dom::root();
+    let _ = Dom::touch(n, 1, 2, 3, 4).wait();
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "skip_os": true
+}

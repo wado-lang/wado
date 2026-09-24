@@ -911,11 +911,13 @@ impl<'a> AdapterBuilder<'a> {
                 }
                 ParamLowering::Direct => {
                     let range = plan.first_param..plan.first_param + plan.param_count;
-                    let is_handle = self.registry().extern_handle(plan.ty).is_some();
+                    // The buffer stores a handle as its guest bits (`scalar_store_op`).
+                    let flat_handle =
+                        !self.params_in_buffer && self.registry().extern_handle(plan.ty).is_some();
                     for param in &self.params[range] {
                         let arg = local_ref(param.local_index, &param.name, param.type_id);
                         self.flat_args
-                            .push(if is_handle { handle_to_f64(arg) } else { arg });
+                            .push(if flat_handle { handle_to_f64(arg) } else { arg });
                     }
                 }
             }

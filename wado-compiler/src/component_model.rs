@@ -968,8 +968,7 @@ pub struct CmInterfaceRegistry {
     /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
     resources: IndexMap<(String, String), String>,
 
-    /// Resources declared `#[cm(..., linearity = "unrestricted")]`, registered as
-    /// `f64` newtypes rather than in [`Self::resources`].
+    /// Resources declared `linearity = "unrestricted"`, registered as `f64` newtypes.
     /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
     unrestricted_resources: IndexMap<(String, String), String>,
 
@@ -1948,7 +1947,9 @@ impl CmInterfaceRegistry {
             let local_names = build_local_name_resolver(path, &module, &defs_by_module);
             let sources = collect_named_type_sources(&module, &local_names);
             registry.extend_source_interfaces(sources);
-            registry.register_module_decls(&module, &CmDeclScope::Module);
+            if let Err(msg) = registry.register_module_decls(&module, &CmDeclScope::Module) {
+                panic!("the stdlib binds each `Interface::method` once: {msg}");
+            }
             resolved_modules.push((path, module));
         }
 
@@ -1969,7 +1970,11 @@ impl CmInterfaceRegistry {
     /// declarations are handled separately by [`Self::register_module_worlds`]
     /// so that interface exports can be expanded against the full set of
     /// interface declarations across modules.
-    fn register_module_decls(&mut self, module: &ast::Module, scope: &CmDeclScope) {
+    fn register_module_decls(
+        &mut self,
+        module: &ast::Module,
+        scope: &CmDeclScope,
+    ) -> Result<(), String> {
         use crate::ast::Item;
 
         // First, collect newtypes from this module
@@ -2139,7 +2144,7 @@ impl CmInterfaceRegistry {
             }
         }
 
-        self.register_interface_cm_methods(module, scope);
+        self.register_interface_cm_methods(module, scope)?;
 
         // World-level function imports (Phase 9): a bodyless free function
         // carrying a `#[cm]` world-import boundary.
@@ -2227,11 +2232,12 @@ impl CmInterfaceRegistry {
                             method.is_async,
                             params,
                             return_type,
-                        );
+                        )?;
                     }
                 }
             }
         }
+        Ok(())
     }
 
     /// Register the `#[cm(…)]` declarations a user module makes, so a call to
@@ -2274,8 +2280,7 @@ impl CmInterfaceRegistry {
         defs_by_module.insert(SELF_PATH, definitions);
         let local_names = build_local_name_resolver(SELF_PATH, module, &defs_by_module);
         self.extend_source_interfaces(collect_named_type_sources(module, &local_names));
-        self.register_module_decls(module, &CmDeclScope::CmAttributed);
-        Ok(())
+        self.register_module_decls(module, &CmDeclScope::CmAttributed)
     }
 
     /// Check that every `#[cm(…)]` function name `module` binds is one the
@@ -2321,7 +2326,11 @@ impl CmInterfaceRegistry {
     /// Register every `#[cm(…)]` operation an `interface` in `module` declares.
     /// A param keeps its resolved type while the return type keeps the names as
     /// written, so a newtype survives the round trip.
-    fn register_interface_cm_methods(&mut self, module: &ast::Module, scope: &CmDeclScope) {
+    fn register_interface_cm_methods(
+        &mut self,
+        module: &ast::Module,
+        scope: &CmDeclScope,
+    ) -> Result<(), String> {
         for item in &module.items {
             let Item::Interface(effect) = item else {
                 continue;
@@ -2354,9 +2363,10 @@ impl CmInterfaceRegistry {
                     method.is_async,
                     params,
                     return_type,
-                );
+                )?;
             }
         }
+        Ok(())
     }
 
     /// Register a component dependency's binding module via the stdlib's
@@ -2369,8 +2379,8 @@ impl CmInterfaceRegistry {
         world_func_names: &[String],
         host_leaf_imports: &[String],
         module_source: &ModuleSource,
-    ) {
-        self.register_module_decls(module, &CmDeclScope::Module);
+    ) -> Result<(), String> {
+        self.register_module_decls(module, &CmDeclScope::Module)?;
         for fq in interface_fqs {
             self.component_interfaces.insert(fq.clone());
             self.cm_interface_module_sources
@@ -2384,6 +2394,7 @@ impl CmInterfaceRegistry {
             self.world_import_sources
                 .insert(name.clone(), module_source.clone());
         }
+        Ok(())
     }
 
     /// Whether `fq` names an interface imported from a CM component dependency.
@@ -2495,7 +2506,7 @@ impl CmInterfaceRegistry {
                     method.is_async,
                     params,
                     return_type,
-                );
+                )?;
             }
         }
         Ok(())
@@ -3069,13 +3080,8 @@ impl CmInterfaceRegistry {
         self.get_newtype_by_source(&source, &DeclName::new(&named.name))
     }
 
-    /// The registration source and base type of a *local* newtype — one
-    /// declared in the compiled package, not imported from a CM interface.
-    /// `None` for CM-imported or source-less references. The CM codegen emits a
-    /// local newtype as a named alias at the boundary (issue #1456) rather than
-    /// erasing it to its base; the returned source keys that alias so references
-    /// to one newtype never double-emit. An unrestricted resource is not one:
-    /// its handle crosses as the bare universal handle wherever it is declared.
+    /// The registration source and base type of a newtype the compiled package
+    /// declares, which the boundary keeps as a named alias (issue #1456).
     pub fn local_newtype_base(&self, source: Option<&str>, name: &str) -> Option<(&str, &Type)> {
         let source = source?;
         if self.is_cm_source(source) || self.is_unrestricted_resource(source, name) {
@@ -3355,6 +3361,8 @@ impl CmInterfaceRegistry {
     /// * `is_async` - Whether this is an async function
     /// * `params` - Parameter names and types
     /// * `return_type` - Return type (if any)
+    ///
+    /// `Err` when `interface_name::method_name` already binds another function.
     pub fn register(
         &mut self,
         interface_name: &str,
@@ -3363,7 +3371,7 @@ impl CmInterfaceRegistry {
         is_async: bool,
         params: Vec<(String, String, Type)>,
         return_type: Option<Type>,
-    ) {
+    ) -> Result<(), String> {
         let interface_path = wasi.interface_path();
 
         // Get the WASI function name from the attribute, or derive from method name
@@ -3371,6 +3379,18 @@ impl CmInterfaceRegistry {
             .function
             .clone()
             .unwrap_or_else(|| method_name.replace('_', "-"));
+        let qualified_name = format!("{interface_name}::{method_name}");
+        // A call finds its binding by these names alone, so a second binding
+        // under them would take over the first one's call sites.
+        if let Some(bound) = self.effect_to_func.get(&qualified_name)
+            && (bound.interface_path != interface_path || bound.wasi_func_name != wasi_func_name)
+        {
+            return Err(format!(
+                "`{qualified_name}` binds `{interface_path}#{wasi_func_name}`, but another \
+                 `{qualified_name}` already binds `{}#{}`: rename one of the interfaces",
+                bound.interface_path, bound.wasi_func_name
+            ));
+        }
         // Params carry their value types: newtypes peeled, extern handles kept,
         // so a binding's GC-level types match the caller's.
         let resolved_params: Vec<(String, String, Type)> = params
@@ -3396,7 +3416,6 @@ impl CmInterfaceRegistry {
         self.used_names.insert(local_name.clone());
 
         // Register in effect -> func map
-        let qualified_name = format!("{interface_name}::{method_name}");
         self.effect_to_func
             .insert(qualified_name, func_info.clone());
 
@@ -3409,6 +3428,7 @@ impl CmInterfaceRegistry {
         // Register local alias: local_name -> (interface_path, wasi_func_name)
         self.local_aliases
             .insert(local_name, (interface_path, wasi_func_name));
+        Ok(())
     }
 
     /// Register a world-level function import (Phase 9), keyed by its bare name
@@ -3794,6 +3814,11 @@ impl CmInterfaceRegistry {
                     .map(|t| self.resolve_type_impl(t, preserve_local, keep_handles))
                     .collect();
                 Type::Tuple(resolved)
+            }
+            Type::Reference(inner) | Type::MutReference(inner)
+                if !keep_handles && self.extern_handle(ty).is_some() =>
+            {
+                self.resolve_type_impl(inner, preserve_local, keep_handles)
             }
             Type::Reference(inner) => Type::Reference(Box::new(self.resolve_type_impl(
                 inner,
@@ -5059,7 +5084,9 @@ mod tests {
         let local_names = build_local_name_resolver(module_path, &module, &defs_by_module);
         let mut registry = CmInterfaceRegistry::new();
         registry.extend_source_interfaces(collect_named_type_sources(&module, &local_names));
-        registry.register_module_decls(&module, &CmDeclScope::Module);
+        registry
+            .register_module_decls(&module, &CmDeclScope::Module)
+            .unwrap();
         registry
     }
 
@@ -5076,9 +5103,8 @@ mod tests {
             .collect()
     }
 
-    /// An extern-handle is a value, so `&Handle` crosses as the handle itself
-    /// wherever it is written, and the boundary sees its `f64`. A surviving
-    /// `Type::Reference` has no borrow type in `codegen::component` to lower to.
+    /// An extern handle is a value, so a `&Handle` argument crosses as the handle,
+    /// which the boundary sees as its `f64`.
     #[test]
     fn an_extern_handle_argument_is_peeled_outside_a_resource_method() {
         let registry = registry_from(
@@ -5239,18 +5265,20 @@ mod tests {
 
         let wasi = CmImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
 
-        registry.register(
-            "Stdout",
-            "write_via_stream",
-            &wasi,
-            true,
-            vec![(
-                "data".to_string(),
-                "data".to_string(),
-                make_stream_u8_type(),
-            )],
-            Some(make_result_type()),
-        );
+        registry
+            .register(
+                "Stdout",
+                "write_via_stream",
+                &wasi,
+                true,
+                vec![(
+                    "data".to_string(),
+                    "data".to_string(),
+                    make_stream_u8_type(),
+                )],
+                Some(make_result_type()),
+            )
+            .unwrap();
 
         // Local name uses wasi:{package}/{effect}::{method} format
         let resolved = registry.resolve("Stdout::write_via_stream");
@@ -5267,34 +5295,38 @@ mod tests {
         // Register stdout
         let stdout_wasi =
             CmImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
-        registry.register(
-            "Stdout",
-            "write_via_stream",
-            &stdout_wasi,
-            true,
-            vec![(
-                "data".to_string(),
-                "data".to_string(),
-                make_stream_u8_type(),
-            )],
-            Some(make_result_type()),
-        );
+        registry
+            .register(
+                "Stdout",
+                "write_via_stream",
+                &stdout_wasi,
+                true,
+                vec![(
+                    "data".to_string(),
+                    "data".to_string(),
+                    make_stream_u8_type(),
+                )],
+                Some(make_result_type()),
+            )
+            .unwrap();
 
         // Register stderr - different interface, same function name
         let stderr_wasi =
             CmImport::parse("wasi:cli/stderr@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
-        registry.register(
-            "Stderr",
-            "write_via_stream",
-            &stderr_wasi,
-            true,
-            vec![(
-                "data".to_string(),
-                "data".to_string(),
-                make_stream_u8_type(),
-            )],
-            Some(make_result_type()),
-        );
+        registry
+            .register(
+                "Stderr",
+                "write_via_stream",
+                &stderr_wasi,
+                true,
+                vec![(
+                    "data".to_string(),
+                    "data".to_string(),
+                    make_stream_u8_type(),
+                )],
+                Some(make_result_type()),
+            )
+            .unwrap();
 
         // Each gets its own unique name via wasi:{package}/{effect}::{method} pattern
         let stdout_resolved = registry.resolve("Stdout::write_via_stream");
@@ -5316,18 +5348,20 @@ mod tests {
 
         let wasi = CmImport::parse("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").unwrap();
 
-        registry.register(
-            "Stdout",
-            "write_via_stream",
-            &wasi,
-            true,
-            vec![(
-                "data".to_string(),
-                "data".to_string(),
-                make_stream_u8_type(),
-            )],
-            Some(make_result_type()),
-        );
+        registry
+            .register(
+                "Stdout",
+                "write_via_stream",
+                &wasi,
+                true,
+                vec![(
+                    "data".to_string(),
+                    "data".to_string(),
+                    make_stream_u8_type(),
+                )],
+                Some(make_result_type()),
+            )
+            .unwrap();
 
         let interfaces: Vec<_> = registry.interfaces().collect();
         assert_eq!(interfaces.len(), 1);
