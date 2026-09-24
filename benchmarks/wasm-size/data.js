@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790255740590,
+  "lastUpdate": 1790282454675,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59325,6 +59325,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/deea526b073d41b3cb5681147e4516f49bb63520"
         },
         "date": 1790255740200,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6703,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 239681,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "823564701d31788b5bd608bb195853bdf0cc692f",
+          "message": "Merge pull request #2148 from wado-lang/claude/web-dom-tide-continuation-g9c29t\n\nfeat(web)!: test DOM code under `wado test` with `FakeDom`, and read a handle's class without the host",
+          "timestamp": "2026-09-25T05:25:03+09:00",
+          "tree_id": "c924eb45b2f8a1f3cf08c69e487556e9302086a8",
+          "url": "https://github.com/wado-lang/wado/commit/823564701d31788b5bd608bb195853bdf0cc692f"
+        },
+        "date": 1790282454044,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
