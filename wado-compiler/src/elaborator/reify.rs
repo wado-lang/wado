@@ -10372,11 +10372,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         None
     }
 
-    /// Wrap `inner` in the reference kind of `scrutinee_type` for match
-    /// ergonomics. Walks the reference layers of the scrutinee: a `&mut`
-    /// sets `&mut` unless a `&` is also present (most restrictive wins),
-    /// matching `Elaborator::resolve_if_pattern`'s `RefBinding`. A
-    /// non-reference scrutinee returns `inner` unchanged.
+    /// `inner` wrapped in the reference kind of `scrutinee_type` for match
+    /// ergonomics, as `Elaborator::peel_scrutinee_refs` reckons it.
     fn apply_scrutinee_ref_kind(&self, scrutinee_type: TypeId, inner: TypeId) -> TypeId {
         use crate::tir::ResolvedType;
         let mut cur = scrutinee_type;
