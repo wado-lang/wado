@@ -819,7 +819,7 @@ impl SolverBridge {
             let head = lowering.type_decl(def);
             lowering.opaque_heads.insert(head);
         }
-        for module in tysys.module_visible_types.keys() {
+        for module in tysys.modules.iter() {
             lowering.module(module);
         }
     }
@@ -949,7 +949,7 @@ impl SolverBridge {
     /// site only where that trait's declaration is in scope there
     /// (WEP 2026-09-01); where its impls were written does not enter.
     fn state_scopes(tysys: &TypeSystem, lowering: &mut Lowering, program: &mut Program) {
-        for module in tysys.module_visible_types.keys() {
+        for module in tysys.modules.iter() {
             // A declaration reachable under two names is in scope once.
             let traits_in_scope: IndexSet<TraitDeclId> = tysys
                 .resolutions

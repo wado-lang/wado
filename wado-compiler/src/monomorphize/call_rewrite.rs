@@ -81,16 +81,11 @@ impl Monomorphizer {
             .method_info
             .as_ref()
             .and_then(LocalMethodName::trait_decl);
-        let trait_name = key
-            .method_info
-            .as_ref()
-            .and_then(|i| i.base_trait_name())
-            .map(str::to_string);
-        if let Some(trait_name) = trait_name {
+        if let Some(trait_) = trait_decl {
             for candidate in struct_candidates {
                 if let Some(impl_module) = self.functions.trait_env.impl_module_for(
                     candidate.as_receiver(),
-                    &trait_name,
+                    trait_,
                     type_module_hint,
                 ) {
                     key.module_source = impl_module.clone();
@@ -102,12 +97,11 @@ impl Monomorphizer {
             }
             // Blanket impl fallback: dispatch through `impl<I: Bound> Trait for I`
             // isn't keyed by struct name. The queued instantiation lives in the
-            // blanket's home module, looked up by trait name only.
-            if let Some(trait_) = trait_decl
-                && let Some(impl_module) = self
-                    .functions
-                    .trait_env
-                    .blanket_impl_module_for_trait(trait_, type_module_hint)
+            // blanket's home module, looked up by trait only.
+            if let Some(impl_module) = self
+                .functions
+                .trait_env
+                .blanket_impl_module_for_trait(trait_, type_module_hint)
             {
                 key.module_source = impl_module.clone();
                 if let Some(mangled) = self.lookup_function_instantiation(&key) {

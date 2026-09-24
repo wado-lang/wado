@@ -255,7 +255,7 @@ impl AstVisitor for Sites {
         self.0.push((id, span));
     }
 
-    fn visit_effect_id(&mut self, _id: AstId, _span: Span) {}
+    fn visit_effect_name(&mut self, _name: &str, _id: AstId, _span: Span) {}
 
     fn visit_block(&mut self, _block: &Block) {}
 

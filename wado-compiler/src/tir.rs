@@ -666,9 +666,19 @@ struct GenericAssocTypeKey {
 /// [`AssocAnswers`] picks between them.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct AssocTypeKey {
-    receiver: TypeId,
+    receiver: AssocReceiver,
     trait_decl: DefId,
     assoc_name: String,
+}
+
+/// A receiver as the associated-type registry keys it: a declaration and its
+/// arguments, one type whether read as the instance or as the monomorphized struct.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum AssocReceiver {
+    Nominal(DefId, Vec<AssocReceiver>),
+    Ref(Box<AssocReceiver>),
+    MutRef(Box<AssocReceiver>),
+    Other(TypeId),
 }
 
 /// The answers registered under one key, by the arguments the impl wrote
@@ -1724,13 +1734,6 @@ impl TypeTable {
         Some(self.defs.ast_id(*def))
     }
 
-    /// The declaring [`AstId`](crate::ast::AstId) of the type named `name` in
-    /// `module_source`.
-    pub fn decl_by_name(&self, name: &str, module_source: &ModuleSource) -> Option<AstId> {
-        let type_id = self.find_decl_type_by_name(name, module_source)?;
-        self.symbol_by_type.get(type_id).copied()
-    }
-
     /// Whether `decl` is one of the four reflection member handles, whose own
     /// `Members` would mention `StructField<Self, …>` and grow `Self` without
     /// bound (WEP 2026-06-13).
@@ -2694,25 +2697,13 @@ impl TypeTable {
         None
     }
 
-    /// Find a tuple type with the given element types.
-    pub fn find_tuple(&self, elems: &[TypeId]) -> Option<TypeId> {
-        self.find_generic_instance(Self::TUPLE_TYPE_NAME, elems)
-    }
-
-    /// Find a generic instance type with the given name and type args.
-    pub fn find_generic_instance(&self, name: &str, type_args: &[TypeId]) -> Option<TypeId> {
-        for (type_id, resolved) in self.all_types() {
-            if let ResolvedType::GenericInstance {
-                def,
-                type_args: gargs,
-            } = resolved
-                && self.def_name(*def) == name
-                && gargs == type_args
-            {
-                return Some(type_id);
-            }
-        }
-        None
+    /// The interned instance of `def` at `type_args`, if one exists.
+    pub fn find_generic_instance(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
+        let spelling = ResolvedType::GenericInstance {
+            def,
+            type_args: type_args.to_vec(),
+        };
+        self.intern_map.get(&spelling).copied()
     }
 
     pub fn make_enum(&mut self, def: DefId) -> TypeId {
@@ -2973,12 +2964,29 @@ impl TypeTable {
     ) {
         self.assoc_type_resolutions
             .entry(AssocTypeKey {
-                receiver: concrete_id,
+                receiver: self.assoc_receiver(concrete_id),
                 trait_decl: trait_ref.decl,
                 assoc_name,
             })
             .or_default()
             .insert(trait_ref.args, resolved_id);
+    }
+
+    fn assoc_receiver(&self, id: TypeId) -> AssocReceiver {
+        let args =
+            |type_args: &[TypeId]| type_args.iter().map(|a| self.assoc_receiver(*a)).collect();
+        match self.get_unerased(id) {
+            ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            } if !type_args.is_empty() => AssocReceiver::Nominal(*def, args(type_args)),
+            ResolvedType::Ref(inner) => AssocReceiver::Ref(Box::new(self.assoc_receiver(*inner))),
+            ResolvedType::MutRef(inner) => {
+                AssocReceiver::MutRef(Box::new(self.assoc_receiver(*inner)))
+            }
+            _ => AssocReceiver::Other(id),
+        }
     }
 
     /// Resolve `<concrete_id as trait_key>::assoc_name` for a caller that knows
@@ -3005,7 +3013,7 @@ impl TypeTable {
         self.inheriting(concrete_id, |receiver| {
             self.assoc_type_resolutions
                 .get(&AssocTypeKey {
-                    receiver,
+                    receiver: self.assoc_receiver(receiver),
                     trait_decl: *trait_key,
                     assoc_name: assoc_name.to_string(),
                 })?
@@ -3056,6 +3064,7 @@ impl TypeTable {
     /// [`Self::resolve_assoc_type_of_trait`] instead.
     pub fn resolve_assoc_type(&self, concrete_id: TypeId, assoc_name: &str) -> Option<TypeId> {
         self.inheriting(concrete_id, |receiver| {
+            let receiver = self.assoc_receiver(receiver);
             one_assoc_answer(
                 self.assoc_type_resolutions
                     .iter()
@@ -3552,6 +3561,14 @@ impl TypeTable {
                     return *answer;
                 }
                 if !self.contains_type_param(substituted_base) {
+                    // An impl on the reference itself answers first.
+                    if let Some(resolved) = self.resolve_assoc_type_of_trait(
+                        substituted_base,
+                        &owning_trait,
+                        &assoc_name,
+                    ) {
+                        return resolved;
+                    }
                     // Associated types are inherited through references (mirrors
                     // method-call auto-deref), so peel `&`/`&mut` before
                     // projecting: a `D` inferred as `&mut MyDe` still projects
@@ -4538,9 +4555,7 @@ impl TypeTable {
                     .collect();
                 if resolved == *type_args {
                     base
-                } else if let Some(existing) =
-                    self.find_generic_instance(self.def_name(*def), &resolved)
-                {
+                } else if let Some(existing) = self.find_generic_instance(*def, &resolved) {
                     existing
                 } else {
                     id // Can't create new type, return original
@@ -6267,12 +6282,6 @@ pub struct TirFunction {
     /// checker does not propagate those requirements to callers.
     pub is_ambient: bool,
 
-    /// Effects from `#[benign(E)]`. The checker admits each one in the body
-    /// without a `with E` clause and never propagates it to callers. Unlike
-    /// `is_ambient`, only the listed effects are suppressed; the world import
-    /// for `E` is still required since the body references the operation.
-    pub benign_effects: Vec<EffectRef>,
-
     /// Inline hint from `#[inline]`, `#[inline(always)]`, or `#[inline(never)]` attributes.
     pub inline_hint: InlineHint,
 
@@ -6746,7 +6755,6 @@ impl TirFunction {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: false,
-            benign_effects: Vec::new(),
             inline_hint: InlineHint::Auto,
             compiler_item: None,
             export_name: None,

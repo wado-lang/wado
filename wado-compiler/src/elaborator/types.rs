@@ -304,6 +304,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A `with` clause names what is not an effect in scope.
+    UnknownEffect {
+        name: String,
+        span: Span,
+    },
+
     /// A bound writing `Self` where no declaration binds one.
     SelfInUnboundedBound {
         param: String,
@@ -1288,6 +1294,11 @@ impl TypeError {
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
+            TypeError::UnknownEffect { name, span } => (
+                Code::UnknownType,
+                format!("'{name}' is not a declared effect"),
+                *span,
+            ),
             TypeError::SelfInUnboundedBound { param, span } => (
                 Code::UnknownType,
                 format!(
@@ -3509,9 +3520,15 @@ impl<'a> TypeLookup<'a> {
         assoc_name: &str,
     ) -> Option<DefId> {
         self.decls?
-            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
-                self.declaration_at(Some(bound.id), &bound.name)
-            })
+            .bound_declaring_assoc_type(bounds, assoc_name, |bound| self.bound_decl(bound))
+    }
+
+    /// The declaration `bound` names: the referent a synthesised bound carries,
+    /// else what the walk recorded at its site.
+    pub(super) fn bound_decl(&self, bound: &ast::TraitBound) -> Option<DefId> {
+        bound
+            .resolved
+            .or_else(|| self.declaration_at(Some(bound.id), &bound.name))
     }
 
     /// The declaration a type reference names.
@@ -3519,17 +3536,12 @@ impl<'a> TypeLookup<'a> {
     /// The site decides: the walk answered for it once, in the module that
     /// wrote it, so an alias, a namespace prefix and a function-local `struct`
     /// all reach their own declaration with no vantage supplied here. A binder
-    /// is not a declaration and gets none. The spelling answers only where the
-    /// walk left nothing — `None` for a node the elaborator minted, and
-    /// `Unresolved` for a name it could not place, where this module's scope
-    /// is the same scope and so the same answer.
+    /// is not a declaration and gets none. The spelling answers only for a node
+    /// the elaborator minted, which carries no site.
     pub(super) fn declaration_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
-        match site.and_then(|site| self.resolutions.walked(site)) {
-            Some(Resolution::Def(def)) => Some(def),
-            // Neither is a declaration, and a projection's bare member name
-            // would reach whatever else this module calls that.
-            Some(Resolution::Binder(_) | Resolution::Projection(_)) => None,
-            Some(Resolution::Unresolved) | None => self.declaration(name),
+        match site {
+            Some(site) => self.resolutions.declared_if_walked(site),
+            None => self.declaration(name),
         }
     }
 

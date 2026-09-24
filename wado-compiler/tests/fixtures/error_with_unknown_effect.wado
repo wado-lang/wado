@@ -1,0 +1,28 @@
+// A `with` clause names effects wherever it is written. A name that reaches no
+// effect, or reaches a declaration that is not one, is an error at the clause.
+// `Stdout` reaches only a module that imports it.
+struct NotAnEffect { v: i32 }
+
+fn f() with NoSuchFn { }
+fn g(h: fn() with NoSuchFnType) { }
+trait Head with NoSuchHead { fn m(&self) -> i32; }
+trait Method with () { fn m(&self) -> i32 with NoSuchMethod; }
+fn n() with NotAnEffect { }
+fn o() with Stdout { }
+fn ok<effect E>(h: fn() with E) with E { h(); }
+
+export fn run() {
+}
+
+__DATA__
+{
+    "compile_error": ":8:17: analysis error: 'NoSuchHead' is not a declared effect",
+    "compile_errors_contains": [
+        "'NoSuchFn' is not a declared effect",
+        "'NoSuchFnType' is not a declared effect",
+        "'NoSuchMethod' is not a declared effect",
+        "'NotAnEffect' is not a declared effect",
+        "'Stdout' is not a declared effect"
+    ],
+    "compile_error_codes": ["UNKNOWN_TYPE"]
+}

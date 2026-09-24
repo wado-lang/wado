@@ -631,7 +631,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(param_name)?
             .clone();
         let (bound, declared) = bounds.iter().find_map(|bound| {
-            let decl = self.trait_decl_at(bound.id, &bound.name)?;
+            let decl = self.trait_decl_at(bound.id)?;
             if decl != trait_ {
                 return None;
             }
@@ -763,19 +763,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             |site| self.decl_key_at(site, struct_name),
         ) {
             return self.tysys.resolutions.defs().module(def).clone();
-        }
-        // A newtype or `flags` type this walk interned: its `ResolvedType`
-        // carries the declaration, so the module comes off that.
-        if let Some(type_id) = self.lookup_newtype(struct_name) {
-            let declared = match self.tysys.type_table.borrow().get(type_id).clone() {
-                ResolvedType::Newtype { def, .. } | ResolvedType::Flags { def } => {
-                    Some(self.tysys.type_table.borrow().def_module(def).clone())
-                }
-                _ => None,
-            };
-            if let Some(module_source) = declared {
-                return module_source;
-            }
         }
         self.current_module_source.clone()
     }

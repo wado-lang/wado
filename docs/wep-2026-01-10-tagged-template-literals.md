@@ -492,8 +492,8 @@ serial advances on read, so a template nested inside a hole mints its own
 - `solver_bridge`: `ReflectTemplate` joins `REFLECT`; every template shape
   lowers under the one `DeclKey::TemplateShape` head with its hole types as
   the arguments, and `state_reflect_facts` states it visible from every module.
-- `trait_query`: `OnBoundTrait::ReflectTemplate`, `classify_on_bound_trait`,
-  and `reflect_members_visible` answering true.
+- `trait_query`: `OnBoundTrait::ReflectTemplate`, `on_bound_of`, and
+  `reflect_members_visible` answering true.
 - The seal list in `orchestration.rs` names `ReflectTemplate`.
 
 ### Synthesis (`synthesis/traits.rs`, `synthesis/template.rs`)

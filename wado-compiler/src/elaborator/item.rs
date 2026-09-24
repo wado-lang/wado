@@ -98,7 +98,6 @@ fn placeholder_function(name: String, span: Span) -> TirFunction {
         is_dispatch_wrapper: false,
         is_cm_export: false,
         is_ambient: false,
-        benign_effects: Vec::new(),
         inline_hint: tir::InlineHint::Auto,
         compiler_item: None,
         export_name: None,
@@ -645,10 +644,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             if !self.tysys.is_impl_target_param(impl_declared_params, name) {
                 // A name the block does not declare has to be a type the module
                 // does; otherwise it names nothing at all.
-                if !self
-                    .tysys
-                    .is_known_type_name_in(&self.current_module_source, name)
-                {
+                if !self.names_type_at(Some(named.id), name) {
                     let _ = self.emit(TypeError::UndeclaredImplTypeParam {
                         name: name.clone(),
                         span: named.span,
@@ -1657,6 +1653,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }))
             .collect();
 
+        // The effect check reads a requirement's `with` off its sites; these
+        // calls report and link them.
+        if let ast::TraitHead::Fixed {
+            effects,
+            effect_ids,
+            ..
+        } = &trait_decl.head
+        {
+            scope.resolve_effects(effects, effect_ids);
+        }
         let mut methods: hashmap::IndexMap<String, TraitMethod> = hashmap::IndexMap::default();
         for method in &trait_decl.methods {
             scope.reject_declaration_attrs_on_requirement(&trait_decl.name, method);
@@ -1665,6 +1671,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .annotate_ctx
                 .trait_ctx
                 .install_effect_params(&method.type_params);
+            if !method.effects_inherited {
+                method_scope.resolve_effects(&method.effects, &method.effect_ids);
+            }
             method_scope.register_generic_params(&method.type_params, next_slot);
             // Only slot-consuming parameters. A `fn`-bound one registers as
             // its bound's function type, so admitting it here put a

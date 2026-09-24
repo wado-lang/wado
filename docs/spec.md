@@ -5212,7 +5212,9 @@ fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E { ... }
 fn both(f: fn() with (Stdout, Stderr), x: i32) { ... }
 ```
 
-Every row member is an effect.
+Every row member is an effect: an effect parameter, or an `interface` or
+resource in scope where the row is written. Like any other name, it reaches no
+declaration the module has not imported or declared.
 
 ### Importing Effect Operations
 

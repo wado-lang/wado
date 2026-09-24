@@ -50,17 +50,17 @@ use crate::hashmap::IndexMap;
 
 use crate::ast::{self, AstId, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility};
 use crate::compiler_host::{CompilerHost, Diagnostic};
+use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::item::OperationOwner;
 use crate::elaborator::method_lookup::ImplParamSlots;
 use crate::elaborator::reify::default_impl_methods;
 use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
-use crate::elaborator::trait_query::SelfBinding;
+use crate::elaborator::trait_query::{OnBoundTrait, SelfBinding};
 use crate::elaborator::types::FunctionContext;
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
-use crate::loader::resolve_use_decl_source;
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, Receiver, RefKind};
@@ -1231,12 +1231,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The declaration a written reference names, keyed on the site that wrote it,
     /// so an alias, a namespace prefix and a function-local item each reach their
-    /// own. `name` is read only where the site reaches nothing.
+    /// own. `name` is read only for a node no walk reached: CM binding
+    /// synthesis mints types that carry a spelling and nothing else.
     pub(crate) fn decl_key_at(&self, site: AstId, name: &str) -> Option<DefId> {
-        self.tysys
-            .resolutions
-            .declared_if_walked(site)
-            .or_else(|| self.decl_key_in(&self.home_module(site), name))
+        match self.tysys.resolutions.walked(site) {
+            Some(_) => self.tysys.resolutions.declared(site),
+            None => self.decl_key_in(&self.home_module(site), name),
+        }
+    }
+
+    /// Whether `name` names a type where it is written: a primitive, or a type
+    /// declaration the site reaches. No site reads the frame's scope.
+    pub(crate) fn names_type_at(&self, site: Option<AstId>, name: &str) -> bool {
+        TypeTable::primitive_by_name(name).is_some()
+            || site
+                .map_or_else(
+                    || self.decl_key_or_local(name),
+                    |site| self.tysys.resolutions.declared_if_walked(site),
+                )
+                .is_some_and(|def| self.tysys.resolutions.defs().kind(def).is_type())
     }
 
     /// The declaration indexes, for a caller holding a spelling whose reference
@@ -1341,14 +1354,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.pending_synthesis_requests.push(req);
     }
 
-    fn classify_from_marker(&mut self, trait_type: &ast::Type) -> Option<tir::SynthTrait> {
-        use crate::compiler_item::CompilerItem;
-        let base = trait_type.head_base_name()?;
-        {
-            let tt = self.tysys.type_table.borrow();
-            if tt.compiler_items().trait_name_opt(CompilerItem::From) != Some(base) {
-                return None;
-            }
+    fn classify_from_marker(
+        &mut self,
+        trait_type: &ast::Type,
+        marked: Option<DefId>,
+    ) -> Option<tir::SynthTrait> {
+        if marked.is_none() || marked != self.tysys.compiler_trait_def(CompilerItem::From) {
+            return None;
         }
         if let ast::Type::Generic(generic) = trait_type
             && generic.args.len() == 1
@@ -1360,17 +1372,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    fn classify_on_bound_marker(&self, trait_type: &ast::Type) -> Option<String> {
-        let base = trait_type.head_base_name()?;
-        self.tysys
-            .classify_on_bound_trait(&self.type_lookup(), base)
-            .map(|_| base.to_string())
+    /// The trait a marker `impl Trait for T;` names at its head.
+    fn marker_trait(&self, trait_type: &ast::Type) -> Option<DefId> {
+        head_site(trait_type).and_then(|site| self.tysys.resolutions.declared(site))
     }
 
     fn record_explicit_derive_request(
         &mut self,
         trait_type: &ast::Type,
-        trait_name: &str,
+        trait_: DefId,
+        on_bound: OnBoundTrait,
         target_type_id: TypeId,
         target_type_name: &str,
         span: Span,
@@ -1382,7 +1393,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             &self.annotate_ctx,
             &self.type_lookup(),
             target_type_id,
-            trait_name,
+            on_bound,
         ) {
             let module_source = self
                 .tysys
@@ -1404,27 +1415,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
         let receiver = Receiver::Type(self.tysys.fq_receiver_head(target_type_id));
-        // The marker's own site says which trait it names, so an already-present
-        // impl is recognised by declaration rather than by a spelling another
-        // module's trait can share.
-        let requested =
-            head_site(trait_type).and_then(|site| self.tysys.resolutions.declared(site));
-        if requested.is_some_and(|trait_| {
-            self.tysys.has_real_trait_impl_for_type(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                Some(target_type_id),
-                &receiver,
-                trait_,
-            )
-        }) {
+        if self.tysys.has_real_trait_impl_for_type(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            Some(target_type_id),
+            &receiver,
+            trait_,
+        ) {
             return;
         }
         let reason = self.tysys.trait_unimpl_reason_chain(
             &self.annotate_ctx,
             &self.type_lookup(),
             target_type_id,
-            trait_name,
+            trait_,
+            trait_type.head_base_name().unwrap_or_default(),
         );
         let _ = self.emit(types::TypeError::ExplicitDeriveNotEligible {
             trait_name: self.get_type_name_full(trait_type),
@@ -1442,16 +1447,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let Some(trait_type) = &impl_block.trait_type else {
             return;
         };
-        if let Some(trait_name) = self.classify_on_bound_marker(trait_type) {
+        let marked = self.marker_trait(trait_type);
+        if let Some((trait_, on_bound)) =
+            marked.and_then(|trait_| Some((trait_, self.tysys.on_bound_of(trait_)?)))
+        {
             let target_type_id = self.resolve_type(&impl_block.ty);
             self.record_explicit_derive_request(
                 trait_type,
-                &trait_name,
+                trait_,
+                on_bound,
                 target_type_id,
                 struct_name,
                 impl_block.span,
             );
-        } else if let Some(trait_ref) = self.classify_from_marker(trait_type) {
+        } else if let Some(trait_ref) = self.classify_from_marker(trait_type, marked) {
             let target_type_id = self.resolve_type(&impl_block.ty);
             let type_params: Vec<_> = self
                 .annotate_ctx
@@ -1468,9 +1477,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 span: impl_block.span,
             });
         } else {
-            let is_display = trait_type
-                .head_base_name()
-                .is_some_and(|base| self.tysys.is_display_trait(&self.type_lookup(), base));
+            let is_display = marked.is_some_and(|trait_| self.tysys.is_display_trait_of(trait_));
             let _ = self.emit(types::TypeError::UnsupportedSynthesisTrait {
                 trait_name: self.get_type_name_full(trait_type),
                 type_name: struct_name.to_string(),
@@ -1664,74 +1671,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.lookup_struct_fields_of_decl(def)
     }
 
-    /// Build effect name → declaring module map for a module.
-    ///
-    /// Three sources, applied in *increasing* precedence — each overwrites the
-    /// last, so the one written last here is the one that answers:
-    ///
-    /// 1. `use { Iface::{f} }`, which names an interface without importing it,
-    ///    so the `use` declaration is the only record of what `Iface` means;
-    /// 2. the module's explicit imports, read from the symbol table where the
-    ///    analyzer already resolved aliases and re-export chains;
-    /// 3. the module's own `interface` / `resource` declarations, which win
-    ///    over any import of the name.
-    ///
-    /// The order is what the third clause requires, and stating it as a list
-    /// of decreasing precedence read the other way round.
-    ///
-    /// An import earns an entry by *being* an effect or a resource, asked of
-    /// the declaration. Guessing from the spelling — the `PascalCase` test this
-    /// replaces — admitted every imported struct and let a same-named one
-    /// answer for an effect it has nothing to do with.
-    fn build_effect_sources(
-        interner: &mut ModuleSourceInterner,
-        module: &Module,
-        module_source: &ModuleSource,
-        entry: Option<&ModuleSource>,
-        invocations: &InvocationIndex,
-        symbols: &SymbolTable,
-    ) -> IndexMap<String, ModuleSource> {
-        let mut sources = IndexMap::default();
-        for item in &module.items {
-            let Item::Use(use_decl) = item else {
-                continue;
-            };
-            let mut interfaces = use_decl.items.iter().filter_map(|use_item| match use_item {
-                ast::UseItem::InterfaceFunctions { interface_name, .. } => Some(interface_name),
-                ast::UseItem::Simple { .. }
-                | ast::UseItem::Wildcard
-                | ast::UseItem::Namespace { .. } => None,
-            });
-            if let Some(first) = interfaces.next() {
-                // `entry` must be threaded so identities match the loader
-                // (see `name::resolve_local_identity`). Wasm-asset imports
-                // resolve to `ModuleSource::Wasm`, matching the loader.
-                let source =
-                    resolve_use_decl_source(interner, module_source, use_decl, entry, invocations);
-                for interface_name in std::iter::once(first).chain(interfaces) {
-                    sources.insert(interface_name.clone(), source.clone());
-                }
-            }
-        }
-        for (local_name, sym) in symbols.imports_in(module_source) {
-            if matches!(sym.kind, SymbolKind::Effect(_) | SymbolKind::Resource(_)) {
-                sources.insert(local_name.to_string(), sym.module_source().clone());
-            }
-        }
-        for item in &module.items {
-            match item {
-                Item::Interface(effect_decl) => {
-                    sources.insert(effect_decl.name.clone(), module_source.clone());
-                }
-                Item::Resource(resource_decl) => {
-                    sources.insert(resource_decl.name.clone(), module_source.clone());
-                }
-                _ => {}
-            }
-        }
-        sources
-    }
-
     /// Canonical impl-target key for a type named at a use site, for the impl
     /// indexes.
     ///
@@ -1749,20 +1688,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// A default taken in a module declaring the same name is where the two
     /// come apart.
     ///
-    /// A binder answers nothing, so `Self::` / `T::` falls through to the
-    /// spelling, by then the concrete name the rewrite produced.
+    /// `Self::` / `T::` carries no site, so it answers from the spelling, by
+    /// then the concrete name the rewrite produced.
     pub(crate) fn impl_target_at(
         &self,
         site: Option<AstId>,
         type_name: &str,
     ) -> trait_env::ImplTargetKey {
         let defs = self.tysys.resolutions.defs();
-        site.and_then(|site| self.tysys.resolutions.declared_if_walked(site))
-            .or_else(|| self.decl_key_or_local(type_name))
-            .map_or_else(
-                || trait_env::ImplTargetKey::of_undeclared(&self.current_module_source, type_name),
-                |def| trait_env::ImplTargetKey::of_decl(defs, def),
-            )
+        site.map_or_else(
+            || self.decl_key_or_local(type_name),
+            |site| self.tysys.resolutions.declared_if_walked(site),
+        )
+        .map_or_else(
+            || trait_env::ImplTargetKey::of_undeclared(&self.current_module_source, type_name),
+            |def| trait_env::ImplTargetKey::of_decl(defs, def),
+        )
     }
 
     /// Impl-target key for a receiver whose `TypeId` is known. The type
@@ -1847,12 +1788,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Resolve AST effect names (strings) to TIR `EffectRefs` with module source information.
+    /// Resolve a `with` clause's effect names to TIR `EffectRef`s.
     ///
-    /// `effect_ids` is a parallel slice with `(AstId, Span)` of each effect-name identifier
-    /// occurrence. When non-empty, use→def edges are recorded so LSP jump-to-definition
-    /// works on effect references in `with` clauses. An empty slice skips recording
-    /// (used by synthetic/internal effect lists with no source identifiers).
+    /// `effect_ids` is parallel to `effects`: each written name's site, which
+    /// the resolve walk answered. A synthesised list carries no walked sites.
     pub(crate) fn resolve_effects(
         &mut self,
         effects: &[String],
@@ -1861,69 +1800,46 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         effects
             .iter()
             .enumerate()
-            .map(|(i, name)| {
-                let use_id = effect_ids.get(i).map(|(id, _)| *id);
-                if let Some(&decl_id) = self.annotate_ctx.trait_ctx.effect_params.get(name) {
-                    if let Some(use_id) = use_id {
-                        self.record_reference(use_id, decl_id);
-                    }
-                    tir::EffectRef::Param { name: name.clone() }
-                } else if let Some(def) = self.decl_key_or_local(name).filter(|def| {
-                    self.tysys.trait_env.effect_decl_index.contains(def)
-                        || self.tysys.trait_env.resource_decl_index.contains(def)
-                }) {
-                    if let Some(use_id) = use_id {
-                        let decl_ast = self.tysys.resolutions.defs().ast_id(def);
-                        self.record_reference_to_def(use_id, decl_ast);
-                    }
-                    let defs = self.tysys.resolutions.defs();
-                    tir::EffectRef::Concrete {
-                        name: defs.name(def).to_string(),
-                        module_source: defs.module(def).clone(),
-                    }
-                } else if let Some(source) = self.sem.imports.effect_sources.get(name).cloned() {
-                    // Identity is the declaration, so two `with Stdout` clauses
-                    // — one importing from `core:cli`, one from `wasi:cli` —
-                    // and a `with Out` aliasing either name one effect.
-                    let declared = self
-                        .symbols
-                        .lookup_in_module(&source, name)
-                        .map(|sym| {
-                            if let Some(use_id) = use_id {
-                                self.record_reference_to_def(use_id, sym.defined_at);
-                            }
-                            (sym.name.clone(), sym.module_source().clone())
-                        })
-                        .unwrap_or_else(|| (name.clone(), source.clone()));
-                    tir::EffectRef::Concrete {
-                        name: declared.0,
-                        module_source: declared.1,
-                    }
-                } else {
-                    if let Some(use_id) = use_id {
-                        self.record_item_reference_by_name(use_id, name);
-                    }
-                    // Fallback: resolve via the import-aware symbol table so that
-                    // prelude-defined effects/resources (e.g. `Future`, `Stream`)
-                    // canonicalise to their defining module rather than the
-                    // current module. Falls through to `current_module_source`
-                    // only when no symbol exists (genuinely-local declaration).
-                    let declared = self
-                        .symbol_named(&self.current_module_source, name)
-                        .map(|sym| {
-                            if let Some(use_id) = use_id {
-                                self.record_reference_to_def(use_id, sym.defined_at);
-                            }
-                            (sym.name.clone(), sym.module_source().clone())
-                        })
-                        .unwrap_or_else(|| (name.clone(), self.current_module_source.clone()));
-                    tir::EffectRef::Concrete {
-                        name: declared.0,
-                        module_source: declared.1,
-                    }
+            .map(|(i, name)| match effect_ids.get(i) {
+                Some(&(site, span)) if self.tysys.resolutions.walked(site).is_some() => {
+                    self.resolve_effect_at(site, span, name)
                 }
+                _ => self.resolve_unsited_effect(name),
             })
             .collect()
+    }
+
+    fn resolve_effect_at(&mut self, site: AstId, span: Span, name: &str) -> tir::EffectRef {
+        if let Some(&binder) = self.annotate_ctx.trait_ctx.effect_params.get(name) {
+            self.record_reference(site, binder);
+        } else if let Some(def) = self.tysys.resolutions.declared(site) {
+            let decl_ast = self.tysys.resolutions.defs().ast_id(def);
+            self.record_reference_to_def(site, decl_ast);
+        }
+        self.tysys.effect_at(site, name).unwrap_or_else(|| {
+            let _ = self.emit(TypeError::UnknownEffect {
+                name: name.to_string(),
+                span,
+            });
+            tir::EffectRef::Concrete {
+                name: name.to_string(),
+                module_source: self.current_module_source.clone(),
+            }
+        })
+    }
+
+    /// A synthesised effect name, read in the frame the AST was written in. The
+    /// hole a trait head leaves is a parameter wherever a method inherits it.
+    fn resolve_unsited_effect(&self, name: &str) -> tir::EffectRef {
+        if name == ast::EFFECT_HOLE || self.annotate_ctx.trait_ctx.effect_params.contains_key(name)
+        {
+            return tir::EffectRef::Param {
+                name: name.to_string(),
+            };
+        }
+        self.decl_key_or_local(name)
+            .and_then(|def| self.tysys.effect_decl(def))
+            .unwrap_or_else(|| panic!("a synthesised `with {name}` names no effect"))
     }
 
     /// Record use→def edges for each imported name in `use { a, b as c } from "..."`
@@ -1962,14 +1878,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// ([`Self::annotate_module_bodies`]).
     pub fn annotate_module_decls(&mut self, module: &'a Module, module_source: ModuleSource) {
         self.current_module_source = module_source.clone();
-        self.sem.imports.effect_sources = Self::build_effect_sources(
-            &mut self.interner.borrow_mut(),
-            module,
-            &module_source,
-            Some(&self.entry_module_source),
-            &self.invocations,
-            self.symbols,
-        );
 
         // Record use→def edges for names that appear inside `use { ... }` specifiers.
         // These power LSP jump-to-definition when the cursor is on an imported

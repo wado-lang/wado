@@ -10,7 +10,7 @@ use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
-use crate::defs::{DefId, DefKind};
+use crate::defs::DefId;
 use crate::elaborator::sem::types::{HandlerBindingFacts, HandlerEffectEntry};
 use crate::elaborator::trait_env::{ImplHeader, ImplTargetKey};
 use crate::hashmap;
@@ -98,61 +98,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         effect_ty: &ast::Type,
         ctx: &mut FunctionContext,
     ) {
-        // Resolve the effect name. Use `resolve_effects` so that LSP
-        // jump-to-def edges are recorded just like in `with (E1, E2)`
-        // function signatures.
-        let interface_name = self.get_type_name(effect_ty);
-        let effect_ids = effect_ty
-            .id()
-            .map(|id| vec![(id, effect_ty.span())])
-            .unwrap_or_default();
-        let mut resolved_effects = self.resolve_effects(&[interface_name], &effect_ids);
-        let effect = resolved_effects.pop();
         // The `with` clause names the effect in this module, and the walk
         // answered for that site — so the declaration comes from the site
         // rather than from asking a module about a spelling.
-        let effect_decl = effect_ty
-            .id()
-            .and_then(|id| self.tysys.resolutions.declared(id));
+        let interface_name = self.get_type_name(effect_ty);
+        let site = effect_ty.id();
+        let effect_decl = site.and_then(|id| self.tysys.resolutions.declared(id));
+        if let (Some(site), Some(def)) = (site, effect_decl) {
+            let decl_ast = self.tysys.resolutions.defs().ast_id(def);
+            self.record_reference_to_def(site, decl_ast);
+        }
+        let effect = site.and_then(|id| self.tysys.effect_at(id, &interface_name));
         // An effect declares its own parameter defaults, and a `with` clause
         // writes no argument for them.
         let effect_trait =
             effect_decl.map(|def| FqTraitName::declared(self.tysys.resolutions.defs(), def));
 
-        // The name must point at an actual effect or resource
-        // declaration, not a regular trait or arbitrary identifier. Both
-        // kinds are installable as handlers (see WEP 2026-04-11): the
-        // `with` clause keeps the same syntax, only the dispatch wrapper
-        // shape differs (resources don't declare themselves as effects on
-        // the wrapper). Param effects (generic `<effect E>`) are still
-        // rejected for installation: you cannot install a handler for a
-        // polymorphic effect parameter.
-        if let Some(eff) = &effect {
-            match eff {
-                EffectRef::Concrete { name, .. } => {
-                    // Ask the declaration what it is, rather than building a
-                    // key and probing two indexes to find out which it belongs
-                    // to.
-                    let handles = effect_decl.is_some_and(|def| {
-                        matches!(
-                            self.tysys.resolutions.defs().kind(def),
-                            DefKind::Effect | DefKind::Resource
-                        )
-                    });
-                    if !handles {
-                        let _ = self.emit(TypeError::NotAnEffect {
-                            name: name.clone(),
-                            span: effect_ty.span(),
-                        });
-                    }
-                }
-                EffectRef::Param { name } => {
-                    let _ = self.emit(TypeError::GenericEffectParamNotInstallable {
-                        name: name.clone(),
-                        span: effect_ty.span(),
-                    });
-                }
+        // Both an effect and a resource are installable as handlers (see WEP
+        // 2026-04-11); a polymorphic effect parameter is not.
+        match &effect {
+            None => {
+                let _ = self.emit(TypeError::NotAnEffect {
+                    name: interface_name,
+                    span: effect_ty.span(),
+                });
             }
+            Some(EffectRef::Param { name }) => {
+                let _ = self.emit(TypeError::GenericEffectParamNotInstallable {
+                    name: name.clone(),
+                    span: effect_ty.span(),
+                });
+            }
+            Some(EffectRef::Concrete { .. }) => {}
         }
 
         // Resolve the handler value expression in the outer scope.

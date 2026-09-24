@@ -16,11 +16,6 @@ pub(crate) struct ModuleImports {
     /// resolved("...")` so `helper::foo` paths in identifiers resolve
     /// against the namespace's module.
     pub(crate) namespace_imports: IndexMap<String, ModuleSource>,
-    /// Effect name → module-source map built from import declarations and
-    /// local `interface` / `resource` declarations. Consulted by
-    /// [`super::super::Elaborator::resolve_effects`] and by reify's
-    /// `reify_effects` when resolving effect references in `with` clauses.
-    pub(crate) effect_sources: IndexMap<String, ModuleSource>,
 }
 
 impl ModuleImports {

@@ -1,0 +1,28 @@
+// Two modules each declare `Show` and implement it for one receiver, which
+// neither of them declares. A call through a type parameter bounded by one
+// `Show` must reach that trait's impl.
+//
+// The index saying which module holds an impl keyed the trait by its bare
+// name, so both impls filed under one `Show` and the second bound's dispatch
+// was sent to the first trait's module.
+
+use { P } from "./sub/cross_module_same_name_trait_bound_dispatch_p.wado";
+use { Show as ShowA } from "./sub/cross_module_same_name_trait_bound_dispatch_a.wado";
+use { Show as ShowB } from "./sub/cross_module_same_name_trait_bound_dispatch_b.wado";
+
+fn via_a<T: ShowA>(t: &T) -> i32 {
+    return ShowA::show(t);
+}
+
+fn via_b<T: ShowB>(t: &T) -> i32 {
+    return ShowB::show(t);
+}
+
+test "a bound dispatches to its own trait's impl" {
+    let p = P { v: 10 };
+    assert via_a(&p) == 11;
+    assert via_b(&p) == 12;
+}
+
+__DATA__
+{"test": {}}

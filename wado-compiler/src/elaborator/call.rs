@@ -1429,7 +1429,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // If prefix is a known type (struct/enum/newtype/flags) with no matching
             // static method, emit a compile error.
-            else if self.tysys.is_known_type_name(prefix) {
+            else if self.names_type_at(receiver_site, prefix) {
                 return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
             }
             // Namespace import: `use ns from "..."` then `ns::Type::method()`

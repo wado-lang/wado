@@ -766,6 +766,16 @@ impl Receiver {
         }
     }
 
+    /// The declaration this receiver names, or `None` for a reference or a head
+    /// no module declares.
+    #[must_use]
+    pub fn def(&self) -> Option<DefId> {
+        match self {
+            Receiver::Type(fq) => fq.head().def(),
+            Receiver::Ref(_) => None,
+        }
+    }
+
     /// Whether this receiver names a declaration, whose type arguments stand
     /// one per declared parameter. A tuple, a reference or a projection spreads
     /// its parts over that list instead.

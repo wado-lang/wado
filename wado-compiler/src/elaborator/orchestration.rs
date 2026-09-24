@@ -1034,25 +1034,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             CompilerItem::Ref,
             CompilerItem::RefMut,
         ] {
-            let Some(sealed_name) = type_table
-                .borrow()
-                .compiler_items()
-                .trait_name_opt(sealed_item)
-                .map(str::to_string)
-            else {
-                continue;
-            };
-            // The sealed trait is the *stdlib* declaration of that name. A
-            // user trait sharing the name is a different declaration and
-            // resolves to a different key, so it needs no exemption here.
-            let Some(sealed_key) = trait_env.stdlib_trait_decl_key(&sealed_name) else {
-                continue;
+            let (sealed_name, sealed) = {
+                let tt = type_table.borrow();
+                let items = tt.compiler_items();
+                let (Some(name), Some(def)) = (
+                    items.trait_name_opt(sealed_item),
+                    items.trait_def(sealed_item),
+                ) else {
+                    continue;
+                };
+                (name.to_string(), def)
             };
             for header in trait_env.impl_headers.values() {
                 if !is_user_local(&header.module) {
                     continue;
                 }
-                if header.trait_key() == Some(&sealed_key) {
+                if header.trait_def() == Some(sealed) {
                     let _ = logger.error_in(
                         &header.module,
                         TypeError::SealedTraitImpl {
@@ -1194,8 +1191,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let all_resource_types = Rc::new(all_resource_types);
         let all_generic_newtypes = Rc::new(all_generic_newtypes);
 
-        // Pre-compute the global known type names cache once (shared across all modules)
-        let known_type_names_cache = {
+        // Every type name the program declares anywhere: the validator below
+        // rejects only a name no module declares. Scope is the resolver's.
+        let known_type_names = {
             let mut cache = IndexSet::default();
             for info in all_struct_fields.values() {
                 cache.insert(info.name.clone());
@@ -1221,111 +1219,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             cache
         };
 
-        // Per-module *visible* type names: each module's own declared types,
-        // plus the auto-imported prelude, the primitives, and any types the
-        // module explicitly `use`s. Unlike `known_type_names_cache` (a global
-        // union of every module's types), this is not polluted by type names
-        // from unrelated modules, so it correctly tells a free impl type
-        // parameter (`E` in the prelude's `impl Result<T, E>`) apart from a
-        // concrete instantiation argument (`u8` in `impl List<u8>`) even when
-        // a *user* module declares a type named `E`. It is always a subset of
-        // the global cache, so it can only remove false positives.
-        let module_visible_types: IndexMap<ModuleSource, IndexSet<String>> = {
-            // Own-declared type names per module.
-            let mut local: IndexMap<ModuleSource, IndexSet<String>> = IndexMap::default();
-            for info in all_struct_fields.values() {
-                local
-                    .entry(info.module_source.clone())
-                    .or_default()
-                    .insert(info.name.clone());
-            }
-            for def in all_variant_cases.keys() {
-                let defs = resolutions.defs();
-                local
-                    .entry(defs.module(*def).clone())
-                    .or_default()
-                    .insert(defs.name(*def).to_string());
-            }
-            for def in all_enum_cases.keys() {
-                let defs = resolutions.defs();
-                local
-                    .entry(defs.module(*def).clone())
-                    .or_default()
-                    .insert(defs.name(*def).to_string());
-            }
-            for def in all_flags_cases.keys() {
-                let defs = resolutions.defs();
-                local
-                    .entry(defs.module(*def).clone())
-                    .or_default()
-                    .insert(defs.name(*def).to_string());
-            }
-            for def in all_newtypes.keys() {
-                let defs = resolutions.defs();
-                local
-                    .entry(defs.module(*def).clone())
-                    .or_default()
-                    .insert(defs.name(*def).to_string());
-            }
-            for def in all_generic_newtypes.keys() {
-                let defs = resolutions.defs();
-                local
-                    .entry(defs.module(*def).clone())
-                    .or_default()
-                    .insert(defs.name(*def).to_string());
-            }
-
-            // The prelude is auto-imported into every module, so its types are
-            // visible everywhere.
-            let is_auto_visible =
-                |ms: &ModuleSource| ms.is_prelude() || ms.is_core_rt() || ms.is_core_builtin();
-            let mut prelude_types: IndexSet<String> = IndexSet::default();
-            for (ms, names) in &local {
-                if is_auto_visible(ms) {
-                    prelude_types.extend(names.iter().cloned());
-                }
-            }
-
-            let defs = resolutions.defs();
-            let mut visible: IndexMap<ModuleSource, IndexSet<String>> = IndexMap::default();
-            for ms in modules.keys() {
-                let mut set: IndexSet<String> = IndexSet::default();
-                for prim in PrimitiveType::all_primitive_names() {
-                    set.insert(prim.to_string());
-                }
-                if let Some(own) = local.get(ms) {
-                    set.extend(own.iter().cloned());
-                }
-                set.extend(prelude_types.iter().cloned());
-                // The import tier alone: cases ride a tier only value position
-                // consults, so this one holds exactly the names asked for here.
-                for (local_name, def) in resolutions.imports_in(ms) {
-                    if local
-                        .get(defs.module(def))
-                        .is_some_and(|s| s.contains(defs.name(def)))
-                    {
-                        set.insert(local_name.to_string());
-                    }
-                }
-                visible.insert(ms.clone(), set);
-            }
-            visible
-        };
-
         // Validate type names in struct fields, variant payloads, and newtype definitions.
         // At this point all type names from all modules are known, so any unrecognized
         // Named type is truly undefined. This catches undefined types that would silently
         // become UNKNOWN in static pre-resolution.
-        // Resource type names are kept separate from known_type_names_cache because
-        // adding them would break is_known_type_name() used in impl block type parameter
-        // inference (e.g., `impl Request { ... }` would stop recognizing Request's methods).
         let resource_type_names: IndexSet<String> = all_resource_types
             .values()
             .map(|info| info.name.clone())
             .collect();
         Self::validate_type_definitions(
             modules,
-            &known_type_names_cache,
+            &known_type_names,
             &resource_type_names,
             logger,
             &stdlib_set,
@@ -1426,8 +1330,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             cm_interface_registry,
             builtin_registry: Rc::new(builtin_registry),
             included_files,
-            known_type_names_cache: Rc::new(known_type_names_cache),
-            module_visible_types: Rc::new(module_visible_types),
+            modules: Rc::new(modules.keys().cloned().collect()),
             loaded_module_func_indices: Rc::new(loaded_module_func_indices),
             unavailable: Rc::new(unavailable),
             // Assembled by `build_tir_from_state` between the decl and body

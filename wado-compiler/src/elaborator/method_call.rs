@@ -1411,7 +1411,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // type namespaces stay the author's.
         let head = self.written_head(&static_call.target_type);
         if let Some(head) = &head
-            && let Some(dispatch) = self.reflect_dispatch_of(&head.name, &static_call.method)
+            && let Some(dispatch) = self.reflect_dispatch_of(head.site, &static_call.method)
         {
             let [self_ty_ast] = head.args else {
                 let _ = self.emit(TypeError::UnknownFunction {

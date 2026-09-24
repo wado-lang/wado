@@ -29,8 +29,8 @@ use crate::ast::Visibility;
 use crate::defs::DefId;
 use crate::escape::unescape_template_segment;
 use crate::name::{
-    DeclName, FqTraitName, case_construct_helper_name, case_extract_helper_name,
-    field_get_helper_name, hole_get_helper_name,
+    FqTraitName, case_construct_helper_name, case_extract_helper_name, field_get_helper_name,
+    hole_get_helper_name,
 };
 use crate::synthesis::common;
 use crate::synthesis::common::{locals_from_params, option_some, relocate_synthetic_locals};
@@ -262,7 +262,6 @@ fn make_trait_method(
         is_dispatch_wrapper: false,
         is_cm_export: false,
         is_ambient: false,
-        benign_effects: Vec::new(),
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,
@@ -4439,22 +4438,21 @@ fn resolve_impl_module_via_env(
 ) -> ModuleSource {
     let resolved = tt.get(type_id).clone();
 
-    let candidate_name: Option<String> = match &resolved {
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
-            RefKind::from_resolved(&resolved).map(|k| k.prefix().to_string())
-        }
-        ResolvedType::Primitive(p) => Some(p.as_str().to_string()),
-        ResolvedType::Unit => Some(TypeTable::UNIT_TYPE_NAME.to_string()),
-        ResolvedType::Struct { .. }
-        | ResolvedType::Enum { .. }
-        | ResolvedType::Variant { .. }
-        | ResolvedType::Newtype { .. }
-        | ResolvedType::Flags { .. }
-        | ResolvedType::GenericInstance { .. }
-        | ResolvedType::GenericResource { .. } => tt.nominal_head(type_id).map(|(n, _)| n),
-        ResolvedType::BuiltinArray(_) => Some(TypeTable::ARRAY_TYPE_NAME.to_string()),
-        _ => None,
-    };
+    let indexed = matches!(
+        resolved,
+        ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_)
+            | ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::BuiltinArray(_)
+    );
 
     let type_module: Option<ModuleSource> = match &resolved {
         ResolvedType::Struct { .. }
@@ -4470,10 +4468,11 @@ fn resolve_impl_module_via_env(
         _ => None,
     };
 
-    if let Some(name) = candidate_name.as_deref()
+    if indexed
+        && let Some(trait_) = trait_name.canonical()
         && let Some(m) = trait_env.impl_module_for(
-            ImplReceiver::Declared(&DeclName::new(name)),
-            trait_name.base_name(),
+            ImplReceiver::Of(&tt.impl_receiver_key(type_id)),
+            trait_,
             type_module.as_ref(),
         )
     {

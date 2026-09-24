@@ -114,9 +114,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // materialized for an impl in another module does not share.
         self.tysys
             .trait_env
-            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
-                self.trait_decl_at(bound.id, &bound.name)
-            })
+            .bound_declaring_assoc_type(bounds, assoc_name, |bound| self.trait_decl_at(bound.id))
     }
 
     /// The identity an impl header names: the trait, plus the arguments it
@@ -166,7 +164,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let declaring: Vec<&ScopedBound> = bounds
             .iter()
             .filter(|bound| {
-                self.trait_decl_at(bound.id, &bound.name)
+                self.trait_decl_at(bound.id)
                     .is_some_and(|decl| self.tysys.trait_env.declares_assoc_type(&decl, assoc_name))
             })
             .collect();
@@ -1016,7 +1014,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             |e| {
                 let mut out: Vec<FrameBound> = Vec::new();
                 for bound in bounds {
-                    let Some(decl) = e.trait_decl_at(bound.id, &bound.name) else {
+                    let Some(decl) = e.trait_decl_at(bound.id) else {
                         out.push((bound, Vec::new()));
                         continue;
                     };

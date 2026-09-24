@@ -1,7 +1,7 @@
 // `IntoIterator::Iter: Iterator<Item = Self::Item>` makes `C::Iter::Item` the
 // `C::Item` the frame already names. A bare `C: IntoIterator` binds nothing, so
 // the chain was left unanswered and `next()` disagreed with the signature.
-use { println } from "core:cli";
+use { println, Stdout } from "core:cli";
 
 fn firstv<C: IntoIterator>(c: C) -> Option<C::Item> {
     let mut it = c.into_iter();

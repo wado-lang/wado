@@ -10,8 +10,8 @@ use std::rc::Rc;
 
 use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
 use crate::attribute::{
-    self, ALLOC, AMBIENT, BENIGN, EXPORT_NAME, IMMEDIATE, INLINE, LINEAR_MEMORY, PARAM, RESULT,
-    RETAIN, SECRET, TRAP, WIRE,
+    self, ALLOC, AMBIENT, EXPORT_NAME, IMMEDIATE, INLINE, LINEAR_MEMORY, PARAM, RESULT, RETAIN,
+    SECRET, TRAP, WIRE,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -378,15 +378,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// `ModuleSource` interner. Shared with annotate so cross-pass
     /// references resolve to the same `ModuleSource` identity.
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
-    /// Names of the effect parameters (`<effect E>`) in scope for the
-    /// function / method currently being reified. `reify_effects` and
-    /// `apply_function_type_effects` consult this so an effect name that is a
-    /// param resolves to [`crate::tir::EffectRef::Param`] rather than a
-    /// `Concrete` effect — matching `Elaborator::resolve_effects`. Without
-    /// it a `fn(...) with E` parameter type would carry `Concrete { E }`,
-    /// which fails to unify with the enclosing function's recorded
-    /// `Param { E }` declared effect at indirect-call effect checks.
-    pub(crate) current_effect_param_names: Vec<String>,
     /// Active per-element annotation overlays for the tuple `for-of`(s)
     /// currently being unrolled, innermost last. While reifying element
     /// `i` of a tuple for-of, that element's [`super::sem::types::BodyFacts`]
@@ -449,25 +440,6 @@ pub(crate) struct CallSiteLocation {
 }
 
 impl<'a, H: CompilerHost> Reify<'a, H> {
-    /// The symbol `name` reaches from `module` — see
-    /// [`super::Elaborator::symbol_named`], which answers the same way from the
-    /// same tables, so annotate and reify cannot disagree about what a name
-    /// means.
-    pub(crate) fn symbol_named(&self, module: &ModuleSource, name: &str) -> Option<&'a Symbol> {
-        // Three recorded facts, in the order the scope stores them and none of
-        // them a walk: what this module `use`d under the name, what it declares
-        // itself, and what the prelude puts in scope everywhere. No spelling
-        // another module happens to share can steer any of them.
-        if let Some(def) = self.tysys.resolutions.imported_as(module, name) {
-            return self.symbols.get(&self.tysys.resolutions.defs().ast_id(def));
-        }
-        if let Some(symbol) = self.symbols.lookup_in_module(module, name) {
-            return Some(symbol);
-        }
-        let def = self.tysys.resolutions.prelude_decl(name)?;
-        self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
-    }
-
     /// The declaration a qualified path's *owner* segment names — see
     /// `Elaborator::qualified_owner_decl`, which answers the same way from the
     /// same table.
@@ -552,7 +524,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             current_module_source: ModuleSource::entry_point_uninitialized(),
             current_module_items: &[],
             interner,
-            current_effect_param_names: Vec::new(),
             tuple_overlay_stack: Vec::new(),
             tuple_overlay_visits: IndexMap::default(),
             emit_live,
@@ -649,40 +620,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Resolve an effect-name list into [`crate::tir::EffectRef`]s
-    /// for a function signature. Mirrors
-    /// [`super::Elaborator::resolve_effects`] without the use→def
-    /// recording side-effect (annotate already recorded the edges).
-    fn reify_effects(&self, effects: &[String]) -> Vec<EffectRef> {
-        effects
+    /// A function type's effects, read off the sites the resolve walk answered.
+    /// Annotate already reported a name that reaches no effect.
+    fn reify_effects(&self, ft: &ast::FunctionType) -> Vec<EffectRef> {
+        assert_eq!(ft.effects.len(), ft.effect_ids.len());
+        ft.effects
             .iter()
-            .map(|name| {
-                // Effect params in scope (`<effect E>`) become `Param`, matching
-                // `Elaborator::resolve_effects`; otherwise they would resolve to
-                // a `Concrete` effect and fail to unify with the recorded
-                // `Param` declared effect at effect checks.
-                if self.current_effect_param_names.iter().any(|p| p == name) {
-                    EffectRef::Param { name: name.clone() }
-                } else if let Some(source) = self.sem.imports.effect_sources.get(name).cloned() {
-                    let canonical = self
-                        .symbols
-                        .lookup_in_module(&source, name)
-                        .map(|sym| sym.module_source().clone())
-                        .unwrap_or_else(|| source.clone());
-                    EffectRef::Concrete {
+            .zip(&ft.effect_ids)
+            .map(|(name, &(site, _))| {
+                self.tysys
+                    .effect_at(site, name)
+                    .unwrap_or_else(|| EffectRef::Concrete {
                         name: name.clone(),
-                        module_source: canonical,
-                    }
-                } else {
-                    let canonical = self
-                        .symbol_named(&self.current_module_source, name)
-                        .map(|sym| sym.module_source().clone())
-                        .unwrap_or_else(|| self.current_module_source.clone());
-                    EffectRef::Concrete {
-                        name: name.clone(),
-                        module_source: canonical,
-                    }
-                }
+                        module_source: self.current_module_source.clone(),
+                    })
             })
             .collect()
     }
@@ -737,7 +688,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             }
             ast::Type::Function(ft) if !ft.effects.is_empty() => {
-                let effects = self.reify_effects(&ft.effects);
+                let effects = self.reify_effects(ft);
                 let rebuilt = match self.tysys.type_table.borrow().get(resolved) {
                     ResolvedType::Function {
                         is_mut,
@@ -1365,17 +1316,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ctx.task_return_type = self.declared_task_return(func, return_type);
         }
 
-        // Effect params (`<effect E>`) drive `Param` effect resolution in
-        // function-type params; publish them for the body walk.
-        let effect_param_names: Vec<String> = func
-            .type_params
-            .iter()
-            .filter(|p| p.is_effect)
-            .map(|p| p.name.clone())
-            .collect();
-        let saved_effect_param_names =
-            std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
-
         // Single source of truth: read the resolved param types
         // `resolve_function` recorded (in `func.params` order, with `<F: fn>`
         // bounds already realised), rather than re-resolving each here.
@@ -1414,8 +1354,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .body
             .as_ref()
             .map(|b| self.reify_block(b, &mut ctx, None));
-
-        self.current_effect_param_names = saved_effect_param_names;
 
         // Single source of truth: read the TIR type params `resolve_function`
         // projected (effect / `fn`-bound params filtered, dense indices,
@@ -1474,7 +1412,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: extract_is_ambient_attr(&func.attrs),
-            benign_effects: self.reify_effects(&extract_benign_effect_names(&func.attrs)),
             inline_hint: extract_inline_hint_attr(&func.attrs),
             compiler_item: extract_compiler_item(
                 &func.attrs,
@@ -1702,18 +1639,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                  impl method reify emits",
             );
 
-        // Method-level effect params (`<effect E>`) drive `Param` effect
-        // resolution in function-type params; publish them for the method
-        // body walk.
-        let effect_param_names: Vec<String> = func
-            .type_params
-            .iter()
-            .filter(|p| p.is_effect)
-            .map(|p| p.name.clone())
-            .collect();
-        let saved_effect_param_names =
-            std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
-
         // Single source of truth: the impl block's mangled struct name as
         // the elaborator computed it via `get_type_name(&impl_block.ty)`
         // (recorded on `ImplFacts::struct_name`). Reconstructing it from
@@ -1810,8 +1735,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .as_ref()
             .map(|b| self.reify_block(b, &mut ctx, None));
 
-        self.current_effect_param_names = saved_effect_param_names;
-
         // Single source of truth: read the method-level type params
         // `resolve_method` projected (effect / `fn`-bound params filtered,
         // dense indices, defaults resolved with the type-param scope alive),
@@ -1869,7 +1792,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: extract_is_ambient_attr(&func.attrs),
-            benign_effects: self.reify_effects(&extract_benign_effect_names(&func.attrs)),
             inline_hint: extract_inline_hint_attr(&func.attrs),
             compiler_item: extract_compiler_item(
                 &func.attrs,
@@ -1941,7 +1863,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: false,
-            benign_effects: Vec::new(),
             inline_hint: InlineHint::Auto,
             compiler_item: None,
             export_name: None,
@@ -10938,18 +10859,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 /// these need no recorded fact and no elaborator to run.
 fn extract_is_ambient_attr(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|a| a.name == AMBIENT)
-}
-
-/// Collect the effect names from every `#[benign(E, ...)]` attribute; multiple
-/// attributes and arguments accumulate. The caller resolves them to
-/// `EffectRef`s via `reify_effects`.
-fn extract_benign_effect_names(attrs: &[Attribute]) -> Vec<String> {
-    attrs
-        .iter()
-        .filter(|a| a.name == BENIGN)
-        .flat_map(|a| a.args.iter().map(AttrArg::as_str))
-        .map(str::to_string)
-        .collect()
 }
 
 fn extract_inline_hint_attr(attrs: &[Attribute]) -> tir::InlineHint {

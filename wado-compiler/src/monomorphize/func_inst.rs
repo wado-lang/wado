@@ -356,12 +356,10 @@ fn lookup_template_with_trait_fallback<'a, V>(
     if let Some(v) = generic_functions.get(&(module_hint.clone(), name.to_string())) {
         return Some(v);
     }
-    let trait_decl = info.and_then(LocalMethodName::trait_decl);
-    let trait_name = info.and_then(|i| i.base_trait_name());
-    if let Some(trait_name) = trait_name {
+    if let Some(trait_) = info.and_then(LocalMethodName::trait_decl) {
         for candidate in struct_candidates {
             if let Some(impl_module) =
-                trait_env.impl_module_for(candidate.as_receiver(), trait_name, type_module_hint)
+                trait_env.impl_module_for(candidate.as_receiver(), trait_, type_module_hint)
                 && let Some(v) = generic_functions.get(&(impl_module.clone(), name.to_string()))
             {
                 return Some(v);
@@ -369,11 +367,9 @@ fn lookup_template_with_trait_fallback<'a, V>(
         }
         // Blanket impls (`impl<I: Bound> Trait for I`) aren't keyed by struct
         // name — the receiver-type candidates above can't find them. Consult
-        // the blanket index by trait name so `bytes.into_iter()` resolves to
-        // the `IntoIterator` blanket in `core:prelude/traits`.
-        if let Some(trait_) = trait_decl
-            && let Some(impl_module) =
-                trait_env.blanket_impl_module_for_trait(trait_, type_module_hint)
+        // the blanket index by trait so `bytes.into_iter()` resolves to the
+        // `IntoIterator` blanket in `core:prelude/traits`.
+        if let Some(impl_module) = trait_env.blanket_impl_module_for_trait(trait_, type_module_hint)
             && blanket_receiver_satisfies(trait_env, trait_, impl_module, blanket_receiver)
             && let Some(v) = generic_functions.get(&(impl_module.clone(), name.to_string()))
         {
@@ -2164,7 +2160,6 @@ impl Monomorphizer {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: false,
-            benign_effects: Vec::new(),
             inline_hint: generic.inline_hint,
             compiler_item: generic.compiler_item,
             export_name: generic.export_name.clone(),
@@ -3262,7 +3257,6 @@ impl Monomorphizer {
         let Some(trait_fq) = info.trait_name.as_ref() else {
             return false;
         };
-        let trait_name = trait_fq.base_name();
         let Some(trait_) = trait_fq.canonical() else {
             return false;
         };
@@ -3280,7 +3274,7 @@ impl Monomorphizer {
         };
         let Some(ref_module) = self.functions.trait_env.impl_module_for(
             ImplReceiver::Of(&name::Receiver::Ref(ref_kind)),
-            trait_name,
+            trait_,
             None,
         ) else {
             return false;
@@ -4831,13 +4825,12 @@ fn try_lower_comparison(
         // `FuncInstState::impl_module` so both paths agree. `try_lower_comparison`
         // returns `None` for any operand type without a defining module, so the
         // unwrap below is total under its contract.
-        info.trait_name
-            .as_ref()
-            .and_then(|tn| {
+        info.trait_decl()
+            .and_then(|trait_| {
                 trait_env
                     .concrete_impl_module_for(
                         ImplReceiver::Instantiated(&info.mangled_struct_name()),
-                        tn.base_name(),
+                        trait_,
                         type_mod.as_ref(),
                     )
                     .cloned()

@@ -12,10 +12,10 @@ use crate::ast::{BinaryOp, Expr, Literal};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::resource_move_check::carries_affine_resource;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
 
 use super::trait_env::TraitEnv;
 use super::types::{
@@ -27,7 +27,7 @@ use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
 use crate::name::FqTypeName;
-use crate::resolve::Resolutions;
+use crate::resolve::{Resolution, Resolutions};
 
 /// Pipeline-wide type knowledge — the type arena, the cross-module decl
 /// indices, the registries, and the read-only caches built once at
@@ -83,22 +83,8 @@ pub(crate) struct TypeSystem {
     /// Key: `[module_source_display, raw_path]`, value: raw bytes.
     pub(crate) included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
 
-    /// Flat set of every name that resolves to a declared type
-    /// (primitive, struct, enum, variant, flags, newtype, resource).
-    /// Built globally during annotate; read-only afterwards. Powers fast
-    /// `is_known_type_name` lookups in the body walk.
-    pub(crate) known_type_names_cache: Rc<IndexSet<String>>,
-
-    /// Per-module *visible* type names: the type names each module can
-    /// actually resolve — its own declarations, the auto-imported prelude,
-    /// the primitives, and the types it explicitly `use`s. Always a subset
-    /// of [`Self::known_type_names_cache`]; unlike that global union it is
-    /// **not** polluted by type names from unrelated modules. This is what
-    /// distinguishes a free impl type parameter (`E` in the prelude's
-    /// `impl Result<T, E>`, which `core:prelude/types` cannot resolve) from
-    /// a concrete instantiation argument (`u8` in `impl List<u8>`), even
-    /// when a *user* module declares a type that happens to be named `E`.
-    pub(crate) module_visible_types: Rc<IndexMap<ModuleSource, IndexSet<String>>>,
+    /// Every module this compilation elaborates.
+    pub(crate) modules: Rc<Vec<ModuleSource>>,
 
     /// Per-module index from function name → position in `module.items`
     /// for O(1) lookup. Built globally during annotate; read-only
@@ -118,13 +104,6 @@ pub(crate) struct TypeSystem {
 }
 
 impl TypeSystem {
-    /// Check if a name refers to a known type (struct, variant, enum,
-    /// flags, newtype, or primitive). Uses the pre-built cache for O(1)
-    /// lookup instead of scanning all module maps.
-    pub(crate) fn is_known_type_name(&self, name: &str) -> bool {
-        self.known_type_names_cache.contains(name)
-    }
-
     /// The `TypeId` of each field of the struct `type_id` names, in declaration
     /// order, or `None` if it names no registered struct. Keyed by the type
     /// itself rather than a spelling of it, which is what every caller holds:
@@ -146,16 +125,27 @@ impl TypeSystem {
         )
     }
 
-    /// Whether `name` resolves to a declared type *from `module`'s perspective*
-    /// — its own declarations, the prelude, a primitive, or an explicit import.
-    /// Unlike the global union [`Self::is_known_type_name`], no unrelated module
-    /// can pollute it: a user type named `E` does not stop the prelude's
-    /// `impl Result<T, E>` treating `E` as free. Unknown modules use the union.
-    pub(crate) fn is_known_type_name_in(&self, module: &ModuleSource, name: &str) -> bool {
-        match self.module_visible_types.get(module) {
-            Some(visible) => visible.contains(name),
-            None => self.is_known_type_name(name),
+    /// The effect a `with`-clause name at a walked `site` refers to: a
+    /// parameter for a binder, the declaration for an `interface` or resource.
+    pub(crate) fn effect_at(&self, site: AstId, name: &str) -> Option<EffectRef> {
+        match self.resolutions.walked(site)? {
+            Resolution::Binder(_) => Some(EffectRef::Param {
+                name: name.to_string(),
+            }),
+            Resolution::Def(def) => self.effect_decl(def),
+            Resolution::Projection(_) | Resolution::Unresolved => None,
         }
+    }
+
+    /// `def` as an effect, when it declares an `interface` or a resource.
+    pub(crate) fn effect_decl(&self, def: DefId) -> Option<EffectRef> {
+        let is_effect = self.trait_env.effect_decl_index.contains(&def)
+            || self.trait_env.resource_decl_index.contains(&def);
+        let defs = self.resolutions.defs();
+        is_effect.then(|| EffectRef::Concrete {
+            name: defs.name(def).to_string(),
+            module_source: defs.module(def).clone(),
+        })
     }
 
     /// The `Type::Case` spelling of the case the resolve walk names at a bare

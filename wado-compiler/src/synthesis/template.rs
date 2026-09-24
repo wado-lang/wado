@@ -1327,10 +1327,10 @@ fn trait_impl_module(
     // every user-written `impl Trait for Type` block lives. This handles
     // cross-module impls like `impl Display for String` (defined in
     // `core:prelude/format`, not the module that declares `String`).
-    if let Some(trait_name) = local_name.base_trait_name()
+    if let Some(trait_) = local_name.trait_decl()
         && let Some(loc) = ctx.trait_env.impl_module_for(
             ImplReceiver::Of(local_name.receiver()),
-            trait_name,
+            trait_,
             type_module.as_ref(),
         )
     {

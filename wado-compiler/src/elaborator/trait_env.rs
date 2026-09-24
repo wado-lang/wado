@@ -457,7 +457,6 @@ pub(crate) enum BlanketReceiver {
 /// A bound written on a blanket impl's receiver parameter.
 #[derive(Clone, Debug)]
 pub(crate) struct BlanketBound {
-    pub(crate) name: String,
     /// The trait the bound's reference site names, with the arguments it
     /// writes for that trait's own parameters. `None` where the site reaches no
     /// declaration; no argument asks for the declared defaults.
@@ -674,12 +673,11 @@ pub(super) type ImplMethodIndex = IndexMap<ImplTargetKey, Vec<ImplMethodEntry>>;
 pub(super) type ResourceStaticMethodIndex =
     IndexMap<ImplTargetKey, Vec<(String, ModuleSource, DefId, usize)>>;
 
-/// `(type_name, trait_name)` → modules holding that `impl` block. Keyed by bare
-/// names rather than [`DefId`]: the multi-value `Vec` plus the caller's
-/// `type_module` hint already routes two modules' same-named receivers apart.
-/// Value blanket impls apply structurally, with no concrete receiver name, and
-/// live in `blanket_impls` instead.
-pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), Vec<ModuleSource>>;
+/// `(receiver spelling, trait)` → modules holding that `impl` block. The
+/// multi-value `Vec` plus the caller's `type_module` hint routes two modules'
+/// same-named receivers apart. Value blanket impls apply structurally, with no
+/// concrete receiver name, and live in `blanket_impls` instead.
+pub(crate) type TraitImplModuleIndex = IndexMap<(String, DefId), Vec<ModuleSource>>;
 
 /// Where each `impl <trait> for <type>` lives, reachable from both receiver
 /// namespaces.
@@ -697,34 +695,25 @@ pub struct ImplModuleIndex {
 }
 
 impl ImplModuleIndex {
-    fn get(&self, receiver: ImplReceiver<'_>, trait_name: &str) -> Option<&Vec<ModuleSource>> {
-        let key = |spelling: String| (spelling, trait_name.to_string());
+    fn get(&self, receiver: ImplReceiver<'_>, trait_: DefId) -> Option<&Vec<ModuleSource>> {
         match receiver {
-            ImplReceiver::Of(r) => {
-                let mangled = self.by_mangled.get(&key(r.head_key().into_string()));
-                // `record` writes both namespaces together, so for a receiver
-                // whose mangled key carries its module a miss is a real
-                // absence — falling through would reach another module's
-                // same-named type under the bare declared key.
-                if mangled.is_some() || r.is_module_qualified() {
-                    return mangled;
-                }
-                self.by_declared.get(&key(r.decl_key().into_string()))
+            ImplReceiver::Of(r) => self.by_mangled.get(&(r.head_key().into_string(), trait_)),
+            ImplReceiver::Instantiated(m) => self
+                .by_mangled
+                .get(&(m.as_mangled_str().to_string(), trait_)),
+            ImplReceiver::Declared(d) => {
+                self.by_declared.get(&(d.as_decl_str().to_string(), trait_))
             }
-            ImplReceiver::Instantiated(m) => {
-                self.by_mangled.get(&key(m.as_mangled_str().to_string()))
-            }
-            ImplReceiver::Declared(d) => self.by_declared.get(&key(d.as_decl_str().to_string())),
         }
     }
 
     /// Record `module` under both spellings of one receiver identity, so the
     /// two namespaces cannot drift apart.
-    pub fn record(&mut self, receiver: &name::Receiver, trait_name: &str, module: &ModuleSource) {
+    pub fn record(&mut self, receiver: &name::Receiver, trait_: DefId, module: &ModuleSource) {
         push_module(
             &mut self.by_mangled,
             receiver.head_key().into_string(),
-            trait_name,
+            trait_,
             module,
         );
         // A type parameter names no declaration, so it has no entry in the
@@ -735,7 +724,7 @@ impl ImplModuleIndex {
             push_module(
                 &mut self.by_declared,
                 receiver.decl_key().into_string(),
-                trait_name,
+                trait_,
                 module,
             );
         }
@@ -744,23 +733,18 @@ impl ImplModuleIndex {
     /// Record an impl on a generic head under its *instantiated* mangled
     /// receiver (`List<…/Token>`), distinct from the bare head. Mangled-only:
     /// the declaration namespace has no spelling for an instantiation.
-    pub fn record_instantiated(
-        &mut self,
-        mangled: String,
-        trait_name: &str,
-        module: &ModuleSource,
-    ) {
-        push_module(&mut self.by_mangled, mangled, trait_name, module);
+    pub fn record_instantiated(&mut self, mangled: String, trait_: DefId, module: &ModuleSource) {
+        push_module(&mut self.by_mangled, mangled, trait_, module);
     }
 }
 
 fn push_module(
     map: &mut TraitImplModuleIndex,
     receiver: String,
-    trait_name: &str,
+    trait_: DefId,
     module: &ModuleSource,
 ) {
-    let modules = map.entry((receiver, trait_name.to_string())).or_default();
+    let modules = map.entry((receiver, trait_)).or_default();
     if !modules.contains(module) {
         modules.push(module.clone());
     }
@@ -794,14 +778,10 @@ fn index_impl_modules(
         if concrete_only && !header.is_concrete() {
             continue;
         }
-        let Some(fq_trait) = header.fq_trait(resolutions) else {
+        let Some(trait_) = header.trait_def() else {
             continue;
         };
-        out.record(
-            &header.target.receiver(defs),
-            fq_trait.base_name(),
-            &header.module,
-        );
+        out.record(&header.target.receiver(defs), trait_, &header.module);
     }
     out
 }
@@ -857,10 +837,6 @@ pub struct TraitEnv {
     /// Transitive supertraits per trait declaration. See
     /// [`SupertraitClosureIndex`].
     supertrait_closures: SupertraitClosureIndex,
-    /// The same closures keyed by bare trait name, for names declared exactly
-    /// once. Prelude-implicit names (`Ord`, `Eq`, …) reach a query through no
-    /// import, so a scoped lookup cannot canonicalise them.
-    supertrait_closures_by_name: IndexMap<String, Vec<InheritedBound>>,
     /// Free-function type parameters keyed by `(declaring module, function
     /// name)`. Lets `lookup_function_type_params` read a callee's type params
     /// without scanning the module AST.
@@ -937,30 +913,25 @@ impl SynthesisedImpls {
     pub fn record_impl(
         &mut self,
         receiver: &name::Receiver,
-        trait_name: &str,
+        trait_: DefId,
         module: &ModuleSource,
         is_concrete: bool,
     ) {
         if is_concrete {
             self.concrete_trait_impl_modules
-                .record(receiver, trait_name, module);
+                .record(receiver, trait_, module);
         }
-        self.trait_impl_modules.record(receiver, trait_name, module);
+        self.trait_impl_modules.record(receiver, trait_, module);
     }
 
     /// Record a concrete impl on a generic head (`impl Tag for List<Token>`)
     /// under its instantiated receiver, so it does not collide with another
     /// module's `impl Tag for List<OtherToken>` on the shared head (#1348).
-    pub fn record_instantiation(
-        &mut self,
-        mangled: String,
-        trait_name: &str,
-        module: &ModuleSource,
-    ) {
+    pub fn record_instantiation(&mut self, mangled: String, trait_: DefId, module: &ModuleSource) {
         self.concrete_trait_impl_modules
-            .record_instantiated(mangled.clone(), trait_name, module);
+            .record_instantiated(mangled.clone(), trait_, module);
         self.trait_impl_modules
-            .record_instantiated(mangled, trait_name, module);
+            .record_instantiated(mangled, trait_, module);
     }
 }
 
@@ -1261,7 +1232,6 @@ impl TraitEnv {
                                 p.bounds
                                     .iter()
                                     .map(|b| BlanketBound {
-                                        name: b.name.clone(),
                                         trait_: resolutions.declared(b.id).map(|decl| {
                                             name::FqTraitName::declared(resolutions.defs(), decl)
                                                 .with_args(
@@ -1393,10 +1363,6 @@ impl TraitEnv {
                     resolutions,
                 ),
                 impl_headers,
-                supertrait_closures_by_name: index_closures_by_name(
-                    &trait_decl_headers,
-                    &supertrait_closures,
-                ),
                 trait_decl_headers,
                 supertrait_closures,
                 function_type_params,
@@ -1442,19 +1408,7 @@ impl TraitEnv {
     /// Written in `key`'s own parameter space, so a caller reading an argument
     /// resolves it through [`InheritedBound::via`] rather than here.
     fn supertrait_closure(&self, key: &DefId) -> &[InheritedBound] {
-        self.supertrait_closures.get(key).map_or_else(
-            || self.supertrait_closure_named(self.defs.name(*key)),
-            Vec::as_slice,
-        )
-    }
-
-    /// [`Self::supertrait_closure`] for a caller holding a bare name with no
-    /// import context to canonicalise it. Empty when the name is declared by
-    /// more than one module.
-    fn supertrait_closure_named(&self, name: &str) -> &[InheritedBound] {
-        self.supertrait_closures_by_name
-            .get(name)
-            .map_or(&[], Vec::as_slice)
+        self.supertrait_closures.get(key).map_or(&[], Vec::as_slice)
     }
 
     /// Keys of every impl block on `type_key`, in global build order —
@@ -1612,7 +1566,7 @@ impl TraitEnv {
         })
     }
 
-    /// The module defining `impl <trait_name> for <receiver>`, or `None` for a
+    /// The module defining `impl <trait_> for <receiver>`, or `None` for a
     /// blanket impl and for a receiver no concrete impl represents (an
     /// anonymous function type whose `Inspect` synthesis auto-derives
     /// per-module).
@@ -1624,14 +1578,14 @@ impl TraitEnv {
     pub(crate) fn impl_module_for(
         &self,
         receiver: ImplReceiver<'_>,
-        trait_name: &str,
+        trait_: DefId,
         type_module: Option<&ModuleSource>,
     ) -> Option<&ModuleSource> {
-        let ast = self.trait_impl_modules.get(receiver, trait_name);
+        let ast = self.trait_impl_modules.get(receiver, trait_);
         let syn = self
             .synthesised
             .as_ref()
-            .and_then(|s| s.trait_impl_modules.get(receiver, trait_name));
+            .and_then(|s| s.trait_impl_modules.get(receiver, trait_));
         pick_module_union(ast, syn, type_module)
     }
 
@@ -1808,26 +1762,15 @@ impl TraitEnv {
     pub(crate) fn concrete_impl_module_for(
         &self,
         receiver: ImplReceiver<'_>,
-        trait_name: &str,
+        trait_: DefId,
         type_module: Option<&ModuleSource>,
     ) -> Option<&ModuleSource> {
-        let ast = self.concrete_trait_impl_modules.get(receiver, trait_name);
+        let ast = self.concrete_trait_impl_modules.get(receiver, trait_);
         let syn = self
             .synthesised
             .as_ref()
-            .and_then(|s| s.concrete_trait_impl_modules.get(receiver, trait_name));
+            .and_then(|s| s.concrete_trait_impl_modules.get(receiver, trait_));
         pick_module_union(ast, syn, type_module)
-    }
-
-    /// The stdlib's declaration of `name`, as the key an `impl` header
-    /// resolves to. A compiler item (`Member`, `ReflectStruct`, …) is a
-    /// stdlib trait, so this is its identity — and a user trait sharing the
-    /// name is a different declaration, not an exemption to special-case.
-    pub(super) fn stdlib_trait_decl_key(&self, name: &str) -> Option<ImplTargetKey> {
-        self.trait_decl_headers
-            .keys()
-            .find(|def| self.defs.name(**def) == name && !is_user_local(self.defs.module(**def)))
-            .map(|def| ImplTargetKey::Decl(*def))
     }
 
     /// The digested declaration `key` identifies, or `None` when it names no
@@ -1882,20 +1825,6 @@ impl TraitEnv {
         key: &DefId,
     ) -> (&[ast::GenericParam], &[InheritedBound]) {
         (self.trait_decl_params(*key), self.supertrait_closure(key))
-    }
-
-    /// [`Self::supertrait_closure_declared`] for a bare name with no import
-    /// context. Empty when more than one module declares the name.
-    pub(super) fn supertrait_closure_declared_named(
-        &self,
-        name: &str,
-    ) -> (&[ast::GenericParam], &[InheritedBound]) {
-        let params = self
-            .trait_decl_headers
-            .iter()
-            .find(|(decl, _)| self.defs.name(**decl) == name)
-            .map_or(&[][..], |(_, header)| header.type_params.as_slice());
-        (params, self.supertrait_closure_named(name))
     }
 
     /// `key` or the supertrait of it declaring `assoc_name`, making
@@ -2351,26 +2280,6 @@ fn expand_supertraits(
 
     closures.insert(loc, closure.clone());
     closure
-}
-
-/// Re-key the closures by bare trait name, dropping any name more than one
-/// module declares — an ambiguous name must not silently pick a closure.
-fn index_closures_by_name(
-    headers: &IndexMap<DefId, TraitDeclHeader>,
-    closures: &SupertraitClosureIndex,
-) -> IndexMap<String, Vec<InheritedBound>> {
-    let mut by_name: IndexMap<String, Option<Vec<InheritedBound>>> = IndexMap::default();
-    for (loc, header) in headers {
-        let closure = closures.get(loc).cloned().unwrap_or_default();
-        by_name
-            .entry(header.name.clone())
-            .and_modify(|slot| *slot = None)
-            .or_insert(Some(closure));
-    }
-    by_name
-        .into_iter()
-        .filter_map(|(name, closure)| closure.map(|c| (name, c)))
-        .collect()
 }
 
 /// Report the cycle closed by the edge back to `stack[pos]`, attributing it to

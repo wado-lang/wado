@@ -78,10 +78,10 @@ impl FuncInstState {
         info: &LocalMethodName,
         type_module: Option<&ModuleSource>,
     ) -> Option<ModuleSource> {
-        let trait_name = info.base_trait_name()?;
+        let trait_ = info.trait_decl()?;
         if let Some(m) = self.trait_env.concrete_impl_module_for(
             ImplReceiver::Instantiated(&info.mangled_struct_name()),
-            trait_name,
+            trait_,
             type_module,
         ) {
             return Some(m.clone());
@@ -92,7 +92,7 @@ impl FuncInstState {
         // that never carried its declaring module is reachable only here.
         if let Some(m) = self.trait_env.concrete_impl_module_for(
             ImplReceiver::Of(info.receiver()),
-            trait_name,
+            trait_,
             type_module,
         ) {
             return Some(m.clone());
@@ -123,19 +123,18 @@ impl FuncInstState {
         info: &LocalMethodName,
         type_module: Option<&ModuleSource>,
     ) -> Option<ModuleSource> {
-        let trait_name = info.base_trait_name()?;
+        let trait_ = info.trait_decl()?;
         if let Some(m) = self.trait_env.impl_module_for(
             ImplReceiver::Instantiated(&info.mangled_struct_name()),
-            trait_name,
+            trait_,
             type_module,
         ) {
             return Some(m.clone());
         }
-        if let Some(m) = self.trait_env.impl_module_for(
-            ImplReceiver::Of(info.receiver()),
-            trait_name,
-            type_module,
-        ) {
+        if let Some(m) =
+            self.trait_env
+                .impl_module_for(ImplReceiver::Of(info.receiver()), trait_, type_module)
+        {
             return Some(m.clone());
         }
         None

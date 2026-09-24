@@ -1104,10 +1104,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(type_id) = found {
             return self.class_of_type(type_id);
         }
-        if self
-            .tysys
-            .is_known_type_name(self.tysys.resolutions.defs().name(def))
-        {
+        if self.tysys.resolutions.defs().kind(def).is_type() {
             return ArgClass::Head(FqTypeName::of_head(self.tysys.resolutions.defs(), def));
         }
         ArgClass::Opaque(OpaqueReason::Unresolved)

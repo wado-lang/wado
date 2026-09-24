@@ -1,0 +1,33 @@
+// An impl on a reference target registers its associated types under that
+// reference, so `T::Out` for `T = &Wrap<i32>` projects to the `i64` it wrote.
+// The projection read the pointee's registry only, and the unsubstituted
+// `T::Out` reached codegen.
+trait Kind with () {
+    type Out;
+    fn out(&self) -> Self::Out;
+}
+
+struct Wrap<A> {
+    a: A,
+}
+
+impl Kind for &Wrap<i32> {
+    type Out = i64;
+    fn out(&self) -> i64 {
+        return 40 as i64;
+    }
+}
+
+fn project<T: Kind>(t: &T) -> T::Out {
+    return t.out();
+}
+
+test "a reference impl's associated type projects through a bound" {
+    let w = Wrap { a: 7 };
+    let r = &w;
+    let n: i64 = project(&r);
+    assert n == 40;
+}
+
+__DATA__
+{"test": {}}

@@ -663,7 +663,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         known
             .get(&bound.id)
             .and_then(FqTraitName::canonical)
-            .or_else(|| self.trait_decl_at(bound.id, &bound.name))
+            .or_else(|| self.trait_decl_at(bound.id))
     }
 
     /// The transitive supertraits of the trait `bound` names, as declared.
@@ -790,10 +790,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> SelfBinding {
         SelfBinding {
             type_id: self.resolve_type(impl_type),
-            declaring_trait: trait_type.and_then(|t| {
-                let name = self.get_type_name(t);
-                self.trait_decl_at(t.id()?, &name)
-            }),
+            declaring_trait: trait_type.and_then(|t| self.trait_decl_at(t.id()?)),
         }
     }
 
@@ -878,8 +875,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         trait_type: &ast::Type,
         implementing: SelfBinding,
     ) {
-        let trait_name = self.get_type_name(trait_type);
-        let Some(trait_decl_type_params) = self.find_trait_decl_type_params(&trait_name) else {
+        let Some(trait_decl_type_params) = implementing
+            .declaring_trait
+            .and_then(|trait_| self.trait_decl_type_params_of(&trait_))
+        else {
             return;
         };
         let trait_args: &[ast::Type] = match trait_type {

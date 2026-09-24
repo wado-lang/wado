@@ -1,7 +1,7 @@
 //! `Reflect` and its five kinds: the `Trait::<T>::method()` form
 //! `resolve_static_method_call` routes to `T`'s synthesized `T^Trait::method`.
 
-use crate::ast;
+use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
@@ -348,7 +348,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// self-in-args, so only the callee and the argument list vary.
     fn record_reflect_dispatch(
         &mut self,
-        call_id: ast::AstId,
+        call_id: AstId,
         function_ref: FunctionRef,
         param_is_mut: Vec<bool>,
     ) {
@@ -855,57 +855,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         false
     }
 
-    /// Whether `prefix::method` names a `ReflectStruct` trait-qualified static call
-    /// (`ReflectStruct::<T>::type_name` / `members`). `prefix` must resolve to the
-    /// compiler's `ReflectStruct` trait *in this scope* — `classify_on_bound_trait`
-    /// applies the same module check `on_bound` dispatch uses, so a user type or
-    /// trait that happens to be named `ReflectStruct` is not hijacked. `method` is
-    /// matched through the compiler-item registry so a stdlib rename flows through.
-    fn is_reflect_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(OnBoundTrait::ReflectStruct)
-        {
+    /// Whether `Trait::method` names a `ReflectStruct` trait-qualified static call
+    /// (`ReflectStruct::<T>::type_name` / `members`). `method` is matched through
+    /// the compiler-item registry so a stdlib rename flows through.
+    fn is_reflect_trait_call(&self, trait_: Option<OnBoundTrait>, method: &str) -> bool {
+        if trait_ != Some(OnBoundTrait::ReflectStruct) {
             return false;
         }
         StructMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
     }
 
-    /// The resolver `prefix::method` routes to, or `None` when the prefix names
-    /// no reflection trait in this scope.
-    pub(super) fn reflect_dispatch_of(
-        &self,
-        prefix: &str,
-        method: &str,
-    ) -> Option<ReflectDispatch> {
-        if self.is_reflect_root_trait_call(prefix, method) {
+    /// The resolver `Trait::method` routes to, the trait being what the head at
+    /// `site` names; `None` when that is no reflection trait.
+    pub(super) fn reflect_dispatch_of(&self, site: AstId, method: &str) -> Option<ReflectDispatch> {
+        let trait_ = self
+            .tysys
+            .resolutions
+            .declared(site)
+            .and_then(|def| self.tysys.on_bound_of(def));
+        if self.is_reflect_root_trait_call(trait_, method) {
             return Some(ReflectDispatch::Root);
         }
-        if self.is_reflect_trait_call(prefix, method) {
+        if self.is_reflect_trait_call(trait_, method) {
             return Some(ReflectDispatch::Struct);
         }
-        if self.is_reflect_variant_trait_call(prefix, method) {
+        if self.is_reflect_variant_trait_call(trait_, method) {
             return Some(ReflectDispatch::Variant);
         }
-        if self.is_reflect_template_trait_call(prefix, method) {
+        if self.is_reflect_template_trait_call(trait_, method) {
             return Some(ReflectDispatch::Template);
         }
         [ScalarReflectSpec::ENUM, ScalarReflectSpec::FLAGS]
             .into_iter()
-            .find(|spec| self.is_reflect_scalar_trait_call(*spec, prefix, method))
+            .find(|spec| self.is_reflect_scalar_trait_call(*spec, trait_, method))
             .map(ReflectDispatch::Scalar)
     }
 
-    /// Whether `prefix::method` names one of `Reflect::<T>`'s members —
-    /// `type_name` or `wire_name_policy`. Same scope discipline as
-    /// [`Self::is_reflect_trait_call`].
-    fn is_reflect_root_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(OnBoundTrait::Reflect)
-        {
+    /// Whether `Trait::method` names one of `Reflect::<T>`'s members —
+    /// `type_name` or `wire_name_policy`.
+    fn is_reflect_root_trait_call(&self, trait_: Option<OnBoundTrait>, method: &str) -> bool {
+        if trait_ != Some(OnBoundTrait::Reflect) {
             return false;
         }
         let tt = self.tysys.type_table.borrow();
@@ -992,27 +981,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((base_name, module_source, type_args))
     }
 
-    /// Whether `prefix::method` names a `ReflectVariant` trait-qualified static
-    /// call. Same scope discipline as [`Self::is_reflect_trait_call`].
-    fn is_reflect_variant_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(OnBoundTrait::ReflectVariant)
-        {
+    /// Whether `Trait::method` names a `ReflectVariant` trait-qualified static
+    /// call.
+    fn is_reflect_variant_trait_call(&self, trait_: Option<OnBoundTrait>, method: &str) -> bool {
+        if trait_ != Some(OnBoundTrait::ReflectVariant) {
             return false;
         }
         VariantMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
     }
 
-    /// Whether `prefix::method` names a `ReflectTemplate` trait-qualified static
-    /// call. Same scope discipline as [`Self::is_reflect_trait_call`].
-    fn is_reflect_template_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(OnBoundTrait::ReflectTemplate)
-        {
+    /// Whether `Trait::method` names a `ReflectTemplate` trait-qualified static
+    /// call.
+    fn is_reflect_template_trait_call(&self, trait_: Option<OnBoundTrait>, method: &str) -> bool {
+        if trait_ != Some(OnBoundTrait::ReflectTemplate) {
             return false;
         }
         TemplateMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
@@ -1363,20 +1344,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Whether `prefix::method` names a member of the scalar-kind reflection
-    /// trait `spec` describes (`ReflectEnum` / `ReflectFlags`). Same scope
-    /// discipline as [`Self::is_reflect_trait_call`].
+    /// Whether `Trait::method` names a member of the scalar-kind reflection
+    /// trait `spec` describes (`ReflectEnum` / `ReflectFlags`).
     fn is_reflect_scalar_trait_call(
         &self,
         spec: ScalarReflectSpec,
-        prefix: &str,
+        trait_: Option<OnBoundTrait>,
         method: &str,
     ) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(spec.on_bound)
-        {
+        if trait_ != Some(spec.on_bound) {
             return false;
         }
         spec.methods(&self.tysys.type_table.borrow())

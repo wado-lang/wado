@@ -172,6 +172,9 @@ pub enum Resolution {
     /// scoped to the item that wrote it and named only from inside — so it gets
     /// no `DefId`.
     Binder(AstId),
+    /// `T::Assoc`, named by `T`'s binder: it reaches a declaration only once
+    /// `T` is a type.
+    Projection(AstId),
     Unresolved,
 }
 
@@ -193,11 +196,11 @@ whose local names are unambiguous within one module by construction), plus
 module-scoped name.
 
 `get` is total. A site the walk missed is a bug in the walk, not an absent answer a
-consumer improvises around, so it panics rather than returning `None`. The three
-cases stay distinct on purpose: reading `Unresolved` as `Binder` loses the
-diagnostic a name that reaches nothing deserves. `walked` keeps a fourth case
-apart from all three — a node no walk saw, which synthesis mints — because that
-is the only one for which some other source of truth is honest.
+consumer improvises around, so it panics rather than returning `None`. The cases
+stay distinct on purpose: reading `Unresolved` as `Binder` loses the diagnostic a
+name that reaches nothing deserves. `walked` keeps one more case apart from all
+of them — a node no walk saw, which synthesis mints — because that is the only
+one for which some other source of truth is honest.
 
 Type resolution carries the site with it: the head's `AstId` reaches
 `resolve_named_type` / `resolve_generic_type`, which read the declaration off
@@ -209,6 +212,13 @@ declarations with no vantage supplied.
 is: implementing a trait is naming it. A header's own reference site answers that
 position and only it, so every header carries a declaration and dispatch has no
 spelling to fall back to.
+
+A `with` clause is the same: each effect it names is a reference site, a trait
+head's and a function type's included. An effect parameter answers as its
+binder. A name reaching no `interface` or resource is rejected where it is
+written, however many modules declare an effect under it, so `with Stdout`
+needs `Stdout` in scope like any other name. Fixture:
+`error_with_unknown_effect.wado`.
 
 ### 4. Queries take identities, never a name beside one
 
@@ -350,10 +360,10 @@ own body carries is minted with the trait declaration's own `AstId`, and the wal
 answers for that node with the trait itself. No new id, no new table, and the
 bound resolves like any written one.
 
-Where no such node exists, the reference carries its referent directly:
-`ast::Type` gains a `Resolved(DefId)` variant, absent from parsed syntax and
-produced only by synthesis. Type resolution returns the declaration — no name to
-look up, no vantage to get wrong.
+Where no such node exists, the reference carries its referent directly. A
+rebuilt bound records it in `TraitBound::resolved`, which the parser leaves
+empty, and every reader takes it ahead of the site — no name to look up, no
+vantage to get wrong.
 
 ### 8. Mangled names are rendered once, never parsed
 
@@ -492,6 +502,8 @@ always to give the caller the reference site.
 The one scope, which every other entry exists by not being:
 
 - `Scopes::resolve`, `resolve_value`
+- `Resolutions::resolve_in` — the first, for a spelling no walk visits: an
+  attribute argument such as `#[benign(E)]`
 
 The three recorded facts the frame derivation is built from. Each is one tier,
 none is a scope, and none takes a vantage a caller could get wrong:
@@ -505,7 +517,6 @@ a sited entry point a caller with a reference site reaches instead.
 
 - `decl_key_or_local`, `TypeLookup::declaration` — for a rendered head
 - `namespace_member` — the `ns$Name` alias a namespace import registers
-- `scoped_trait_decl_key` — filtered to the trait index, for a bound's spelling
 - `bound_declaring_assoc_type` — which of a _binder's_ bounds declares a name.
   One algorithm on `TraitEnv`, reading each bound through the reference site its
   caller supplies, so a frame and a declaration-level resolver share it.
@@ -534,10 +545,11 @@ The Component Model boundary, permanent for the reason §9 gives:
 - `cm_decl_in` and `cm_decl`, which resolve a WIT name to its declaration.
 - `cm_decl_in_interface`, the same step taking the interface rather than the
   module: it asks the registry which module declares that interface, so a caller
-  holding an interface FQ supplies no vantage of its own.
-- `find_named_type_by_source` and `find_named_type_by_module_name`, the
-  `TypeTable` lookups behind them, which answer a `TypeId` for a Wado name in a
-  named module.
+  holding an interface FQ supplies no vantage of its own. A bundled `wasi:` /
+  `core:` interface is addressed by its module's path through
+  `cm_decl_in_module_named`, for a caller holding no `ModuleSource`.
+- `find_named_type_by_source` and `find_named_type_by_module_name`, which take
+  the same step and answer the `TypeId` the declaration was interned under.
 - `cm_decl_def`, codegen's entry to the same step, reading the `DefId` off the
   `TypeId` those two return.
 
@@ -671,7 +683,13 @@ to — a concrete impl records a resolution, a generic one a definition to
 substitute. Reading one of the two is what let a widening
 `impl<T> Mul for W<T>` satisfy `Mul<Output = T>`.
 
+The receiver side of that key is the target's declaration and arguments, a
+reference layer included, never the `TypeId` slot: a generic instance and the
+struct it monomorphizes to are two slots for one type. An impl on the reference
+itself answers before the reference is looked through.
+
 Fixtures: `assoc_type_per_trait_args.wado`,
+`reference_impl_assoc_type_projects.wado`,
 `impl_writes_default_trait_arg.wado`,
 `error_bound_needs_default_instantiation.wado`,
 `error_blanket_pinned_assoc_generic_impl.wado`.
@@ -887,15 +905,6 @@ What this admits is a body whose parameter is bound, at the instantiation being
 compiled, to a type the scrutinee's argument contradicts. The pattern is taken
 as matching, and nothing later rejects it.
 
-## Known gap: a reference impl's associated type is not projected
-
-An impl on a reference target (`impl Kind for &Wrap<i32>`) answers a trait
-bound, and its methods dispatch. Its associated types do not project: `T::Out`
-where `T` is that reference stays unresolved, so the binding the impl wrote is
-out of reach. What it admits is a reference impl that can carry methods but not
-an associated type, so a trait declaring one cannot be implemented on a
-reference to a generic head.
-
 ## Known gap: the operator paths compare an impl target by spelling
 
 `inherent_impl_type_args_match` decides whether a receiver reaches an impl, and
@@ -921,7 +930,17 @@ the two names differ. `impl Show for &Wrap<i32>` called directly on a
 `&Wrap<i32>` reports that `&i32` does not implement `Show`;
 `impl<T> Show for &Wrap<T>` reached inside a frame monomorphized for
 `&Wrap<i32>` reports that `Wrap<i32>` does not. The same generic impl called
-directly works, because both sides mint the same name.
+directly works, because both sides mint the same name. The pending fixture is
+`reference_impl_named_head_dispatch.wado`.
+
+## Known gap: a synthesised type carries only a spelling
+
+A synthesised bound carries its referent (§7); a synthesised `ast::Type` has no
+field to carry one. The Component Model binding synthesis builds types such as
+`Fields`, `Response` and `WaitableSet` whose nodes no walk visited, so
+`decl_key_at` answers them through the frame derivation. What it admits is §7's
+hazard at those nodes: the frame, not the synthesis, decides which declaration a
+spelling reaches.
 
 ## Known gap: a data declaration binds no `Self` for its own bounds
 
@@ -930,4 +949,5 @@ off. A `struct` or `variant` declaration does not, so
 `struct Wrap<O: Uses<Self::Item>>` is rejected where the same bound on
 `impl ... for Wrap<O>` is read. What it admits is a bound that can only be
 written on the impl, so a constraint the data declaration means to carry has to
-be restated at each impl that needs it.
+be restated at each impl that needs it. The pending fixture is
+`data_decl_bound_projects_off_self.wado`.

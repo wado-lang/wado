@@ -1,0 +1,53 @@
+#![TODO]
+// TODO: an impl on a reference to a named head has no name of its own
+// (`name::Receiver::Ref` spells the reference kind alone), so its definition
+// and its call sites mint two names for one method. See the WEP Declaration
+// Identity, "a reference impl target has no name of its own".
+trait Show with () {
+    fn show(&self) -> i32;
+}
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+struct Wrap<A> {
+    a: A,
+}
+
+impl Show for &Wrap<i32> {
+    fn show(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl<T> Tag for &Wrap<T> {
+    fn tag(&self) -> i32 {
+        return 2;
+    }
+}
+
+fn tag_it<T: Tag>(t: &T) -> i32 {
+    return t.tag();
+}
+
+fn outer<U: Tag>(u: &U) -> i32 {
+    return tag_it(u);
+}
+
+test "a concrete reference impl, called directly" {
+    let w = Wrap { a: 7 };
+    let r = &w;
+    assert r.show() == 1;
+}
+
+test "a generic reference impl, reached inside a monomorphized frame" {
+    let w = Wrap { a: 7 };
+    let r = &w;
+    assert r.tag() == 2;
+    assert tag_it(&r) == 2;
+    assert outer(&r) == 2;
+}
+
+__DATA__
+{"test": {}}

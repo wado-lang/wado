@@ -407,8 +407,8 @@ pub trait AstVisitor: Sized {
     fn visit_id(&mut self, _id: AstId, _span: Span) {}
 
     /// A `with` clause's reference site, kept apart from [`Self::visit_id`]
-    /// because `effect_check` answers for it and the name resolver does not.
-    fn visit_effect_id(&mut self, id: AstId, span: Span) {
+    /// because it carries the effect name the site spells.
+    fn visit_effect_name(&mut self, _name: &str, id: AstId, span: Span) {
         self.visit_id(id, span);
     }
 
@@ -658,6 +658,16 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             v.visit_id(t.id, t.span);
             v.visit_generic_params(&t.type_params);
             v.visit_trait_bounds(&t.supertraits);
+            if let TraitHead::Fixed {
+                effects,
+                effect_ids,
+                ..
+            } = &t.head
+            {
+                for (name, (id, span)) in effects.iter().zip(effect_ids) {
+                    v.visit_effect_name(name, *id, *span);
+                }
+            }
             for assoc in &t.associated_types {
                 v.visit_id(assoc.id, assoc.span);
                 v.visit_trait_bounds(&assoc.bounds);
@@ -722,8 +732,8 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
     if let Some(ret) = &func.return_type {
         v.visit_type(ret);
     }
-    for (id, span) in &func.effect_ids {
-        v.visit_effect_id(*id, *span);
+    for (name, (id, span)) in func.effects.iter().zip(&func.effect_ids) {
+        v.visit_effect_name(name, *id, *span);
     }
     if let Some(body) = &func.body {
         v.visit_block(body);
@@ -1121,8 +1131,8 @@ fn walk_function_type<V: AstVisitor>(v: &mut V, ft: &FunctionType) {
         v.visit_type(p);
     }
     v.visit_type(&ft.return_type);
-    for (id, span) in &ft.effect_ids {
-        v.visit_effect_id(*id, *span);
+    for (name, (id, span)) in ft.effects.iter().zip(&ft.effect_ids) {
+        v.visit_effect_name(name, *id, *span);
     }
 }
 
@@ -4146,6 +4156,15 @@ impl TraitHead {
     /// Whether an impl of this trait chooses its own effects.
     pub fn is_open(&self) -> bool {
         matches!(self, TraitHead::Open { .. } | TraitHead::Undecided)
+    }
+
+    /// The sites of a `Fixed` head's effect names, parallel to what
+    /// [`Self::inherited_effects`] answers.
+    pub fn effect_ids(&self) -> &[(AstId, Span)] {
+        match self {
+            TraitHead::Fixed { effect_ids, .. } => effect_ids,
+            TraitHead::Undecided | TraitHead::Pure { .. } | TraitHead::Open { .. } => &[],
+        }
     }
 
     /// The effects a method inherits when it declares none of its own.

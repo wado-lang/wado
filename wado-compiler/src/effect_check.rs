@@ -449,7 +449,6 @@ struct OwnedEffectData {
     resource_names: IndexSet<(ModuleSource, String)>,
     members: MemberTables,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
-    effect_by_name: IndexMap<String, EffectRef>,
     /// `#[cm]` FQ per interface declaration.
     interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>>,
     effect_by_cm_fq: IndexMap<String, EffectRef>,
@@ -506,17 +505,6 @@ impl OwnedEffectData {
         // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
         let closure = build_propagation_closure_sem(sem, state, &members);
 
-        // Name → resolved `EffectRef` for every declared effect / resource,
-        // used to resolve `#[benign(E)]` names and to canonicalise.
-        let mut effect_by_name: IndexMap<String, EffectRef> = IndexMap::default();
-        for key in closure.keys() {
-            if let EffectRef::Concrete { name, .. } = key {
-                effect_by_name
-                    .entry(name.clone())
-                    .or_insert_with(|| key.clone());
-            }
-        }
-
         // An empty entry is meaningful: the method exists and grants nothing.
         // A declaration has no body, so `fn_effects` holds nothing for it.
         let mut trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>> =
@@ -535,22 +523,30 @@ impl OwnedEffectData {
                     open_traits.insert((src.clone(), trait_decl.name.clone()));
                 }
                 for method in &trait_decl.methods {
+                    let sites = if method.effects_inherited {
+                        trait_decl.head.effect_ids()
+                    } else {
+                        &method.effect_ids
+                    };
                     let effects = method
                         .effects
                         .iter()
-                        .map(|name| {
+                        .enumerate()
+                        .map(|(i, name)| {
                             // A name the trait or the method declares as an
                             // effect parameter stands for whatever the impl
                             // brings, so it never resolves to a declaration.
                             if declares_effect_param(trait_decl, method, name) {
                                 return EffectRef::Param { name: name.clone() };
                             }
-                            effect_named_in(name, src, sem, &closure, &effect_by_name).unwrap_or(
-                                EffectRef::Concrete {
+                            // The elaborator reported a name reaching no effect.
+                            sites
+                                .get(i)
+                                .and_then(|&(site, _)| effect_at(sem, site, &closure))
+                                .unwrap_or_else(|| EffectRef::Concrete {
                                     name: name.clone(),
                                     module_source: src.clone(),
-                                },
-                            )
+                                })
                         })
                         .collect();
                     trait_method_effects.insert(
@@ -639,7 +635,6 @@ impl OwnedEffectData {
             resource_names,
             members,
             closure,
-            effect_by_name,
             interface_cm_fq,
             effect_by_cm_fq,
             provided_import_fqs,
@@ -659,7 +654,6 @@ impl OwnedEffectData {
             resource_names: &self.resource_names,
             members: &self.members,
             closure: &self.closure,
-            effect_by_name: &self.effect_by_name,
             interface_cm_fq: &self.interface_cm_fq,
             effect_by_cm_fq: &self.effect_by_cm_fq,
             provided_import_fqs: &self.provided_import_fqs,
@@ -692,8 +686,6 @@ struct EffectIndex<'a> {
     members: &'a MemberTables,
     /// Effect → implied resources propagation closure.
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
-    /// Declared effect / resource name → resolved `EffectRef` (`#[benign]`).
-    effect_by_name: &'a IndexMap<String, EffectRef>,
     /// Interface declaration → its `#[cm]` FQ, for resolving a direct `E::op()`
     /// callee to its effect and FQ.
     interface_cm_fq: &'a IndexMap<(ModuleSource, String), Option<String>>,
@@ -734,7 +726,6 @@ fn binding_granted_effects(
     sem: &Semantics,
     annotations: Option<&TypeAnnotations>,
     index: &EffectIndex,
-    module_source: &ModuleSource,
     binding: &EffectHandlerBinding,
 ) -> Vec<EffectRef> {
     // One fact per walk that reached the binding. A handler installed in a
@@ -767,13 +758,7 @@ fn binding_granted_effects(
         .effect
         .as_ref()
         .and_then(|ty| match ty {
-            ast::Type::Named(named) => effect_named_in(
-                &named.name,
-                module_source,
-                sem,
-                index.closure,
-                index.effect_by_name,
-            ),
+            ast::Type::Named(named) => effect_at(sem, named.id, index.closure),
             _ => None,
         })
         .into_iter()
@@ -878,12 +863,8 @@ fn check_impl_effect_conformance(
         if declared_by_trait.iter().any(EffectRef::is_param) {
             continue;
         }
-        let allowed: IndexSet<EffectRef> = declared_by_trait
-            .iter()
-            .map(|effect| canonicalize_effect(effect, index.closure, index.effect_by_name))
-            .collect();
+        let allowed: IndexSet<&EffectRef> = declared_by_trait.iter().collect();
         for effect in declared {
-            let effect = &canonicalize_effect(effect, index.closure, index.effect_by_name);
             if effect.is_param() || allowed.contains(effect) {
                 continue;
             }
@@ -945,19 +926,12 @@ fn check_function_effects_sem(
     }
     // `#[benign(E)]` admits `E` in the body without a `with E` clause.
     for name in benign_effect_names(&func.attrs) {
-        if let Some(effect) =
-            effect_named_in(&name, module, sem, index.closure, index.effect_by_name)
-        {
+        if let Some(effect) = effect_named_in(&name, module, sem, index.closure) {
             current.insert(effect);
         }
     }
-    // Canonicalise before expanding so the closure keys (built from the
-    // declarations, i.e. canonical) match, then expand: a function holding
-    // `Stdout` may call operations that internally need `Stream`, etc.
-    let current: IndexSet<EffectRef> = current
-        .iter()
-        .map(|effect| canonicalize_effect(effect, index.closure, index.effect_by_name))
-        .collect();
+    // A function holding `Stdout` may call operations that internally need
+    // `Stream`, etc.
     let current = expand_through_closure(&current, index.closure);
 
     // Parameter name → type id (aligned with the recorded signature types),
@@ -976,7 +950,6 @@ fn check_function_effects_sem(
         current,
         param_types,
         module: module.source_path(),
-        module_source: module.clone(),
         out,
     };
     ast::walk_block(&mut walker, body);
@@ -1071,56 +1044,40 @@ fn build_propagation_closure_sem(
     direct
 }
 
-/// The effect a name written in `module` refers to. An attribute argument and a
-/// `with` clause type carry a spelling, so the declaration it reaches decides —
-/// the module's own first, then what it imported, aliases and all.
+/// `def` as an effect, when the propagation closure knows it as one.
+fn effect_of_def(
+    sem: &Semantics,
+    def: DefId,
+    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
+) -> Option<EffectRef> {
+    let defs = sem.resolutions()?.defs();
+    let effect = EffectRef::Concrete {
+        name: defs.name(def).to_string(),
+        module_source: defs.module(def).clone(),
+    };
+    closure.contains_key(&effect).then_some(effect)
+}
+
+/// The effect the `with`-clause name at `site` refers to.
+fn effect_at(
+    sem: &Semantics,
+    site: AstId,
+    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
+) -> Option<EffectRef> {
+    let def = sem.resolutions()?.declared_if_walked(site)?;
+    effect_of_def(sem, def, closure)
+}
+
+/// The effect an attribute argument written in `module` refers to. It has no
+/// reference site, so the module's scope decides.
 fn effect_named_in(
     name: &str,
     module: &ModuleSource,
     sem: &Semantics,
     closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
-    effect_by_name: &IndexMap<String, EffectRef>,
 ) -> Option<EffectRef> {
-    let local = EffectRef::Concrete {
-        name: name.to_string(),
-        module_source: module.clone(),
-    };
-    if closure.contains_key(&local) {
-        return Some(local);
-    }
-    if let Some(resolutions) = sem.resolutions()
-        && let Some(def) = resolutions.imported_as(module, name)
-    {
-        let defs = resolutions.defs();
-        let imported = EffectRef::Concrete {
-            name: defs.name(def).to_string(),
-            module_source: defs.module(def).clone(),
-        };
-        if closure.contains_key(&imported) {
-            return Some(imported);
-        }
-    }
-    effect_by_name.get(name).cloned()
-}
-
-/// The declaration an effect reference names. One the closure knows already is;
-/// a spelling it does not — a re-export seen from the recording module —
-/// resolves through the by-name index. Effect parameters pass through.
-fn canonicalize_effect(
-    effect: &EffectRef,
-    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
-    effect_by_name: &IndexMap<String, EffectRef>,
-) -> EffectRef {
-    if closure.contains_key(effect) {
-        return effect.clone();
-    }
-    match effect {
-        EffectRef::Concrete { name, .. } => effect_by_name
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| effect.clone()),
-        EffectRef::Param { .. } => effect.clone(),
-    }
+    let def = sem.resolutions()?.resolve_in(module, name)?;
+    effect_of_def(sem, def, closure)
 }
 
 /// Expand an effect set through the propagation closure.
@@ -1316,7 +1273,6 @@ struct SemEffectWalker<'a> {
     /// `references` edge or recorded expression type at the call site).
     param_types: IndexMap<String, TypeId>,
     module: String,
-    module_source: ModuleSource,
     out: &'a mut Vec<EffectError>,
 }
 
@@ -1595,23 +1551,11 @@ impl SemEffectWalker<'_> {
     /// host-leaf effect set — empty for a purely-computational component, so its
     /// operations need no `with`. Returns empty for a non-effect-op callee.
     fn binding_granted_effects(&self, binding: &EffectHandlerBinding) -> Vec<EffectRef> {
-        binding_granted_effects(
-            self.sem,
-            self.annotations,
-            self.index,
-            &self.module_source,
-            binding,
-        )
+        binding_granted_effects(self.sem, self.annotations, self.index, binding)
     }
 
     fn report_missing(&mut self, effects: &[EffectRef], callee: &str, span: Span) {
         for effect in effects {
-            // Canonicalise: `EffectRef::Concrete.module_source` reflects the
-            // recording module's import perspective (a user `with Stdout`
-            // records `Stdout` against the entry module, while stdlib records
-            // it against `wasi:cli`), so compare through the declaration's
-            // canonical form rather than by raw `module_source`.
-            let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
             if effect.is_param() {
                 // An undetermined parameter stands for whatever the callee
                 // brings, so only a caller with one of its own forwards it.
@@ -1626,10 +1570,9 @@ impl SemEffectWalker<'_> {
                 }
                 continue;
             }
-            if self.current.contains(&effect) {
+            if self.current.contains(effect) {
                 continue;
             }
-            let effect = &effect;
             let kind = match effect {
                 EffectRef::Concrete {
                     name,
@@ -1924,12 +1867,11 @@ impl PurityWalker<'_> {
 
     /// Whether any of `effects` is one no enclosing `with … do` installs.
     fn unanswered(&self, effects: &[EffectRef]) -> bool {
-        effects.iter().any(|effect| {
-            let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
-            // A `Param` left after resolution stands for effects no handler
-            // here can have installed, so it is unanswered like any other.
-            effect.is_param() || !self.granted.contains(&effect)
-        })
+        // A `Param` left after resolution stands for effects no handler here
+        // can have installed, so it is unanswered like any other.
+        effects
+            .iter()
+            .any(|effect| effect.is_param() || !self.granted.contains(effect))
     }
 
     fn flag_if_effectful(
@@ -2039,13 +1981,7 @@ impl AstVisitor for PurityWalker<'_> {
                     .handlers
                     .iter()
                     .flat_map(|binding| {
-                        binding_granted_effects(
-                            self.sem,
-                            self.annotations,
-                            self.index,
-                            self.module_source,
-                            binding,
-                        )
+                        binding_granted_effects(self.sem, self.annotations, self.index, binding)
                     })
                     .filter(|effect| self.granted.insert(effect.clone()))
                     .collect();

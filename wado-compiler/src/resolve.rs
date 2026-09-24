@@ -18,7 +18,7 @@ use crate::token::Span;
 
 /// What a reference site refers to.
 ///
-/// The three cases stay distinct on purpose: reading [`Self::Unresolved`] as a
+/// The cases stay distinct on purpose: reading [`Self::Unresolved`] as a
 /// binder loses the diagnostic a name that reaches nothing deserves.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Resolution {
@@ -334,6 +334,13 @@ impl Resolutions {
             .copied()
     }
 
+    /// The declaration `name` refers to as written in `module`, for a spelling
+    /// no walk visits — an attribute argument. A reference site reads its own.
+    #[must_use]
+    pub fn resolve_in(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
+        self.scopes.resolve(module, name)
+    }
+
     /// Every declaration `module` may name — what each name it can write
     /// reaches, through the one scope order: its `use` imports, then its own
     /// (including what its `pub use` re-exports reach), then the prelude's.
@@ -377,24 +384,15 @@ impl Resolutions {
     }
 
     /// The whole answer for a site the walk reached, `None` for a node it
-    /// never saw.
-    ///
-    /// The three cases stay apart for a caller that must tell "this names a
-    /// binder" from "this names nothing" from "no walk saw this node" — the
-    /// last being the only one for which any other source of truth is honest.
+    /// never saw — the only case for which any other source of truth is honest.
     #[must_use]
     pub fn walked(&self, site: AstId) -> Option<Resolution> {
         self.refs.get(&site).copied()
     }
 
-    /// The answer for a reference site, or `None` when the site was never
-    /// walked — a coverage hole rather than an unresolved name.
+    /// The answer for a reference site. Total: the walk reaches every site and
+    /// a name reaching nothing is [`Resolution::Unresolved`]; panics otherwise.
     #[must_use]
-    /// Total: every reference site has an answer, because the walk reaches
-    /// every one and a name that reaches nothing is [`Resolution::Unresolved`]
-    /// rather than a missing entry. A caller therefore has no "no answer" case
-    /// to write a fallback for — which is the point, since that fallback is
-    /// where a spelling used to be re-resolved.
     pub fn get(&self, site: AstId) -> Resolution {
         self.refs.get(&site).copied().unwrap_or_else(|| {
             panic!("every reference site is resolved before elaboration, {site:?} was not")
@@ -1001,9 +999,19 @@ impl AstVisitor for Resolver<'_> {
                     self.visit_type(p);
                 }
                 self.visit_type(&ft.return_type);
+                for (name, (id, span)) in ft.effects.iter().zip(&ft.effect_ids) {
+                    self.visit_effect_name(name, *id, *span);
+                }
             }
             Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => {}
         }
+    }
+
+    /// An effect parameter, the `_` a signature's hole mints included, is a
+    /// binder; any other effect name resolves like a type name.
+    fn visit_effect_name(&mut self, name: &str, id: AstId, _span: Span) {
+        let answer = self.resolve_name(name);
+        self.record(id, answer);
     }
 }
 
