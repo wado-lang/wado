@@ -593,12 +593,17 @@ the chain's `else` and is emitted last (`fallback_last`), which
 `open_decision_branch` asserts.
 
 Where the follow set overlaps another alternative's first set the lookahead
-cannot separate them and they share a tournament branch, an empty alternative
-included — it scans as epsilon, so it wins only where nothing longer does.
-That is where Gale still parts from ANTLR4, which picks the lowest-indexed
-alternative that lets the rule complete rather than the longest scan: the
-`#[TODO]` in `driver_cst_empty_alt_mid_test.wado`, resolvable only by the
-follow-aware decision the ATN simulator makes.
+cannot separate them. A longest scan would pick wrong there, since an empty
+alternative scans as epsilon, while ANTLR4 picks the lowest-indexed alternative
+that lets the rule complete. So such a group is decided by the ATN simulator,
+on the parse side and in the scan alike (`GroupOp.atn_site`,
+`ScanGroupElement.atn_site`). Fixture `empty_alt_mid.g4`.
+
+A rule's nullable alternative is admitted by the rule's FOLLOW in the same way
+(`RuleOverlap.end_follow`). An at-end conflict whose branch tokens cannot follow
+the rule is settled statically: those tokens dispatch to the alternatives that
+continue, and the rule's FOLLOW to the lowest one that ends. One whose tokens
+can follow it goes to the simulator. Fixture `nullable_first_alt.g4`.
 
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
@@ -898,19 +903,24 @@ ANTLR4 replaced it with a runtime ALL(\*) simulator). Gale keeps the
 static compiled fast path for every decision static prediction already
 resolves and routes only the residual cold sites through the simulator.
 
-**The simulator decides exactly three parser sites; everything else keeps
+**The simulator decides exactly four parser sites; everything else keeps
 the compiled fast path:**
 
 1. A **left-recursive rule's loop entry**, where precedence — not a
    distinct lookahead token — decides whether to keep climbing or return
    to the caller. A rule is routed here when an ATOM alternative's operand
    competes with the loop for a shared delimiter (`'between' expr 'and' expr`
-   against `expr 'and' expr`; fixture `lr_between.g4`). The same shape inside
-   an LR alternative (SQLite's `expr NOT? BETWEEN expr AND expr`) is **not**
-   routed here: it would need the mid-alternative operand at ANTLR4's `expr[0]`
-   and the loop entry deciding per token, which makes the whole rule ATN-class
-   — measured far too expensive for a hot expression rule (TODO.md has the
-   numbers). Fixture `lr_mid_operand.g4` pins that divergence as `#[TODO]`.
+   against `expr 'and' expr`; fixture `lr_between.g4`). Its mid operand is
+   ANTLR4's `expr[0]`, and the entry runs the full simulator whenever the
+   caller mandates the lookahead token an enter edge also admits. The same
+   shape inside an LR alternative (SQLite's `expr NOT? BETWEEN expr AND expr`)
+   is **not** routed here, since a hot expression rule cannot pay for that
+   (`perf.md`). It stays static: the mid operand also drops to `expr[0]`, and
+   each loop entry scans the operator's suffix and checks that the enclosing
+   alternative's continuation is still there (`lr_cont`). A trailing operand
+   forwards its caller's continuation and keeps ANTLR4's precedence. Fixture
+   `lr_mid_operand.g4`; one level of that continuation is all the gate sees
+   (TODO.md).
 2. A **non-greedy `??`**, whose enter-or-skip choice is taken at runtime;
    several `??` in one rule decide independently. Both emit walkers route it
    here — the surface-element walker from `RepeatElement.non_greedy`, the
@@ -931,13 +941,18 @@ the compiled fast path:**
    longer pick is either correct or fails a parse that had no valid
    reading, so the conflict stays on the tournament and the grammar needs
    no simulator. A rule reachable only past a `.` / `~X` (whose follow set
-   can't be enumerated) routes conservatively. Every other multi-alt
-   ambiguity keeps the tournament, whose longest-match matches ANTLR4
-   across the corpus. Regression fixtures: `tests/grammars/ll_longest_vs_context.g4`,
-   `ll_at_end_nullable_gap.g4` and `ll_opaque_at_end_context.g4` (routed to
-   the simulator), `ll_at_end_follow_disjoint.g4` and
-   `ll_opaque_at_end_gap.g4` (stay on the tournament),
-   `ll_optional_non_greedy_multi.g4`.
+   can't be enumerated) routes conservatively. A caller's scan of such a
+   rule asks the simulator too, with the parse's caller stack
+   (`ATN_STACK`), so the scan ends where the parse will. Every other
+   multi-alt ambiguity keeps the tournament, whose longest-match matches
+   ANTLR4 across the corpus. Regression fixtures:
+   `tests/grammars/ll_longest_vs_context.g4`, `ll_at_end_nullable_gap.g4` and
+   `ll_opaque_at_end_context.g4` (routed to the simulator),
+   `ll_at_end_follow_disjoint.g4` and `ll_opaque_at_end_gap.g4` (stay on the
+   tournament), `ll_optional_non_greedy_multi.g4`.
+4. A **group whose nullable alternative competes** with another for the
+   tokens that follow the group (see "A nullable alternative is admitted by
+   what follows the group" above).
 
 Two more sites _would_ belong here on correctness grounds and are left out on
 cost — the ambiguous decisions of the section above: an ambiguous greedy `rule?`
