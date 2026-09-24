@@ -57,23 +57,33 @@ impl HeapState {
     }
 
     /// The effective version a read of `root.field` sees: the max of every
-    /// generation that could have invalidated it. `root` is `None` when the
-    /// receiver is not a determinable bare `Local`, so per-slot / per-local
-    /// precision does not apply — only `field_global` and `default`.
+    /// generation that could have invalidated it. With no known `root`, that is
+    /// every generation that could have touched `field` under any root.
     fn version_of(&self, root: Option<u32>, field: u32, root_escaped: bool) -> HeapVersion {
         let mut v = self.default_version;
         if let Some(&fg) = self.field_global.get(&field) {
             v = v.max(fg);
         }
-        if root_escaped {
-            v = v.max(self.escaped_version);
-        }
-        if let Some(r) = root {
-            if let Some(&pl) = self.per_local.get(&r) {
-                v = v.max(pl);
+        match root {
+            Some(r) => {
+                if root_escaped {
+                    v = v.max(self.escaped_version);
+                }
+                if let Some(&pl) = self.per_local.get(&r) {
+                    v = v.max(pl);
+                }
+                if let Some(&ps) = self.per_slot.get(&(r, field)) {
+                    v = v.max(ps);
+                }
             }
-            if let Some(&ps) = self.per_slot.get(&(r, field)) {
-                v = v.max(ps);
+            None => {
+                v = v.max(self.escaped_version);
+                v = self.per_local.values().fold(v, |acc, &pl| acc.max(pl));
+                v = self
+                    .per_slot
+                    .iter()
+                    .filter(|((_, f), _)| *f == field)
+                    .fold(v, |acc, (_, &ps)| acc.max(ps));
             }
         }
         v
@@ -802,14 +812,18 @@ impl<'a> Builder<'a> {
 
     /// The bare-`Local` root of a (possibly nested) field-access place, or
     /// `None` if the receiver is not rooted in a `Local` (a call result, an
-    /// index, a deref, …). `a.b.f` roots at `a`.
+    /// index, a deref, …). `a.b.f`, `(a as T).f` and `{ …; a }.f` root at `a`.
     fn receiver_root(&self, recv_expr: ExprId) -> Option<u32> {
         match &self.body.exprs[recv_expr].kind {
             ExprKind::Local { index, .. } => Some(*index),
-            ExprKind::FieldAccess { expr, .. } => {
+            ExprKind::FieldAccess { expr, .. } | ExprKind::Cast { expr, .. } => {
                 expr.as_expr().and_then(|e| self.receiver_root(e))
             }
-            _ => None,
+            _ => self
+                .body
+                .block_yield(recv_expr)
+                .and_then(|tail| tail.as_expr())
+                .and_then(|e| self.receiver_root(e)),
         }
     }
 
@@ -2420,6 +2434,26 @@ mod tests {
             unreachable!("int_lit yields a pool value")
         };
         assert_eq!(body.values.type_of(v), Some(TypeTable::I32));
+    }
+
+    /// A read whose receiver has no known root may be any root's, so every
+    /// bump that could reach its field must move its version.
+    #[test]
+    fn unknown_root_read_sees_every_bump_of_its_field() {
+        let mut heap = HeapState::new();
+        let bumps: [fn(&mut HeapState); 3] = [
+            |h| h.bump_slot(3, 0),
+            |h| h.bump_local(5),
+            HeapState::bump_escaped,
+        ];
+        for bump in bumps {
+            let before = heap.version_of(None, 0, false);
+            bump(&mut heap);
+            assert_ne!(heap.version_of(None, 0, false), before);
+        }
+        let before = heap.version_of(None, 0, false);
+        heap.bump_slot(3, 1);
+        assert_eq!(heap.version_of(None, 0, false), before);
     }
 
     /// `f(); a + b`, where locals `a` (0) and `b` (1) are both mutably escaped:
