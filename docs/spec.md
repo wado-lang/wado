@@ -1513,7 +1513,7 @@ fn normalize(mut s: String) -> String {
 }
 ```
 
-The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function. References (`&T`, `&mut T`) are the exception: they share state with the caller. An affine resource is never copied: passing it moves it. This applies uniformly to primitives, structs, `String`, and `List<T>`. Inside the callee, both reassignment (`p = new_value`) and in-place mutations — field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`) — operate on the callee's local copy and are not visible to the caller. To let the callee mutate the caller's value, declare the parameter as `&mut T` and pass a `&mut`-reference at the call site.
+The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function. References (`&T`, `&mut T`) are the exception: they share state with the caller. An affine resource is never copied: passing it moves it. This applies uniformly to primitives, structs, `String`, and `List<T>`. Inside the callee, reassignment (`p = new_value`) and in-place mutation operate on the callee's local copy and are not visible to the caller. In-place mutation covers field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`). To let the callee mutate the caller's value, declare the parameter as `&mut T` and pass a `&mut`-reference at the call site.
 
 ```wado
 fn countdown(mut n: i32) with Stdout {
@@ -4095,7 +4095,7 @@ The explicit marker `impl Serialize for T;` still works — write it to force th
 
 ### Bound-Driven Eq / Ord
 
-`Eq` / `Ord` derive the same on-demand way: the impl for `T` is synthesized only where a `==` / `<` call site, a bound, or an explicit marker needs it — not for every declared type.
+`Eq` / `Ord` derive the same on-demand way: the impl for `T` is synthesized only where a `==` / `<` call site, a bound, or an explicit marker needs it. It is not synthesized for every declared type.
 
 The explicit marker `impl Eq for T;` / `impl Ord for T;` is a hard guarantee, not just a request: a compile error, with a reason chain, at the marker's own span if any field or case is ineligible:
 
@@ -4110,7 +4110,7 @@ impl Eq for Handler;
 
 `${x:?}` / `${x:#?}` (`Inspect`, plainly or indented) work for every type — no bound needed.
 
-`${x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one. So do the prelude's sequences, tuples and ranges, where their elements allow it. Any other struct or variant needs a hand-written `impl Display`; otherwise `${x}` is a compile error and `${x:?}` gives its debug form. So `T: Display` certifies a real string representation — e.g. `String::push_display` takes any `Display`. `${x:#}` runs the same `Display` with `Formatter.alternate` set; an impl that ignores the flag renders identically.
+`${x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one. So do the prelude's sequences, tuples and ranges, where their elements allow it. Any other struct or variant needs a hand-written `impl Display`; otherwise `${x}` is a compile error and `${x:?}` gives its debug form. So `T: Display` certifies a real string representation. For example, `String::push_display` takes any `Display`. `${x:#}` runs the same `Display` with `Formatter.alternate` set; an impl that ignores the flag renders identically.
 
 ```wado
 fn describe<T>(v: &T) -> String { return `${v:?}`; }         // any type
@@ -4323,11 +4323,11 @@ Module paths are validated before loading to provide clear error messages:
 
 Namespace Resolution (a namespace is reserved iff the compiler bundles it):
 
-1. Bundled namespaces `core:` / `wasi:` / `web:` — resolved from embedded stdlib.
+1. Bundled namespaces `core:` / `wasi:` / `web:`: resolved from the embedded stdlib.
 
-2. Open coordinates `<ns>:<pkg>` (any other namespace) — resolved from a `[dependencies]` entry in `wado.toml` or an inline `with` source. An undeclared coordinate is an error.
+2. Open coordinates `<ns>:<pkg>` (any other namespace): resolved from a `[dependencies]` entry in `wado.toml` or an inline `with` source. An undeclared coordinate is an error.
 
-3. Library aliases `lib:<nick>` — indirection (rename, short name, multiple majors, or a dependency with no public coordinate), resolved via `wado.toml` or an inline `with`.
+3. Library aliases `lib:<nick>`: resolved via `wado.toml` or an inline `with`. An alias renames a dependency, shortens its name, tells two major versions apart, or names a dependency with no public coordinate.
 
 4. Remote modules (`http://` or `https://`): fetched by the host. Not yet implemented; see [WEP: Module Loader Design](./wep-2026-01-24-module-loader.md).
 
@@ -5033,7 +5033,7 @@ Beyond a name, parameters and a return type, an operation declares nothing else.
 
 #### Async Operations
 
-An operation that maps to a WIT `async func` is declared `async fn`, and its return type must be `AsyncCall<T>`. A call starts the operation and returns the `AsyncCall<T>` at once. The caller takes the result with `.wait()`, which blocks until the operation finishes, or cancels it with `.cancel()`.
+An operation that maps to a WIT `async func` is declared `async fn`, and its return type must be `AsyncCall<T>`. How a caller waits on the result is in [Async Imports](#async-imports).
 
 ```wado
 // From wasi:http
@@ -5042,13 +5042,9 @@ pub interface Client {
     #[cm("wasi:http/client@0.3.0#send")]
     async fn send(request: Request) -> AsyncCall<Result<Response, ErrorCode>>;
 }
-
-fn fetch(request: Request) -> Result<Response, ErrorCode> with Client {
-    return Client::send(request).wait();
-}
 ```
 
-A function that calls an async operation is not itself async: `async` marks only the operation, and the `export async fn` of a world export (see [`task return`](#task-return-statement)).
+A function that calls an async operation is not itself async. `async` marks only the operation, and the `export async fn` of a world export (see [`task return`](#task-return-statement)).
 
 ### Effect Declaration in Functions
 
