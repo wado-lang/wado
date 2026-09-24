@@ -60,7 +60,8 @@ impl Iterator for Children {
     }
 }
 
-fn is_ascii_whitespace(c: char) -> bool {
+// Infra's ASCII whitespace leaves out the VT that `char::is_ascii_whitespace` counts.
+fn is_infra_whitespace(c: char) -> bool {
     return c matches { '\t' | '\n' | '\u{C}' | '\r' | ' ' };
 }
 
@@ -70,14 +71,14 @@ fn is_valid_element_local_name(name: &String) -> bool {
         return false;
     };
     if first.is_ascii_alphabetic() {
-        return !name.chars().any(|c| is_ascii_whitespace(c) || c matches { '\0' | '/' | '>' });
+        return !chars.any(|c| is_infra_whitespace(c) || c matches { '\0' | '/' | '>' });
     }
     let in_name = |c: char| c matches { ':' | '_' } || c as u32 >= 0x80;
     return in_name(first) && chars.all(|c| in_name(c) || c.is_ascii_alphanumeric() || c matches { '-' | '.' });
 }
 
 fn is_valid_attribute_local_name(name: &String) -> bool {
-    return !name.is_empty() && !name.chars().any(|c| is_ascii_whitespace(c) || c matches { '\0' | '/' | '=' | '>' });
+    return !name.is_empty() && !name.chars().any(|c| is_infra_whitespace(c) || c matches { '\0' | '/' | '=' | '>' });
 }
 
 fn class_of(content: &Content) -> f64 {
@@ -117,7 +118,7 @@ fn strip_and_collapse_ascii_whitespace(text: &String) -> String {
     let mut out = "";
     let mut gap = false;
     for let c of text.chars() {
-        if is_ascii_whitespace(c) {
+        if is_infra_whitespace(c) {
             gap = !out.is_empty();
         } else {
             if gap {
@@ -341,7 +342,10 @@ impl SurfaceDom {
     }
 
     fn title_index(&self) -> i32 {
-        return self.first_inclusive_descendant_where(DOCUMENT_INDEX, |n| n.content matches { Element(name) && name == "title" });
+        return self.first_inclusive_descendant_where(
+            DOCUMENT_INDEX,
+            |n| n.content matches { Element(name) && name == "title" },
+        );
     }
 
     fn replace_all_text(&mut self, index: i32, text: String) {
@@ -402,7 +406,8 @@ impl Document for SurfaceDom {
     }
 
     fn get_element_by_id(&mut self, this: &Document, element_id: String) -> Option<Element> {
-        resume self.element(self.first_inclusive_descendant_where(DOCUMENT_INDEX, |n| !element_id.is_empty() && n.attributes.get("id") == Option::Some(element_id)));
+        resume self.element(self.first_inclusive_descendant_where(DOCUMENT_INDEX, |n| !element_id.is_empty()
+            && n.attributes.get("id") == Option::Some(element_id)));
     }
 
     fn title(&mut self, this: &Document) -> String {
