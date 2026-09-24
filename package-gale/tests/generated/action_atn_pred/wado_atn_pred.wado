@@ -566,6 +566,7 @@ pub struct TreeBuilder {
     alt: List<i32>,
     open: List<i32>,
     last_finished: i32,
+    error_row: i32,
 }
 
 impl TreeBuilder {
@@ -577,6 +578,7 @@ impl TreeBuilder {
             alt: List::with_capacity(rows),
             open: [],
             last_finished: -1,
+            error_row: -1,
         };
     }
 
@@ -626,6 +628,9 @@ impl TreeBuilder {
         if self.last_finished >= checkpoint {
             self.last_finished += 1;
         }
+        if self.error_row >= checkpoint {
+            self.error_row += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -638,6 +643,9 @@ impl TreeBuilder {
         }
         if self.last_finished >= checkpoint {
             self.last_finished = -1;
+        }
+        if self.error_row > checkpoint {
+            self.error_row = checkpoint;
         }
     }
 
@@ -670,13 +678,20 @@ impl TreeBuilder {
         self.open.push(row);
     }
 
-    pub fn has_token_since(&self, row: i32) -> bool {
-        for let mut r = row; r < self.tag.len(); r += 1 {
+    pub fn mark_error(&mut self) {
+        self.error_row = self.tag.len();
+    }
+
+    pub fn in_error_mode(&self) -> bool {
+        if self.error_row < 0 {
+            return false;
+        }
+        for let mut r = self.error_row; r < self.tag.len(); r += 1 {
             if self.tag[r] matches { Tok } {
-                return true;
+                return false;
             }
         }
-        return false;
+        return true;
     }
 
     pub fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
@@ -970,7 +985,7 @@ pub struct AtnSim {
     pub cont_neg_label: List<i32> = [],
     pub state_cont_first_open: List<bool> = [],
     pub state_collapse_to: List<i32> = [],
-    pub state_call_prec: List<i32> = [],
+    pub state_call_prec: List<i32>,
 }
 
 fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
@@ -1052,6 +1067,14 @@ pub fn atn_decode(bytes: &ByteList) -> AtnSim {
         p += 2;
     }
 
+    let mut state_call_prec = List::filled(nstates, 0);
+    for let mut j = 0; j < ntrans_total; j += 1 {
+        if tr_kind[j] == ATN_TR_RULE {
+            assert tr_follow[j] >= 0, "a rule transition returns to a follow state";
+            state_call_prec[tr_follow[j]] = tr_prec[j];
+        }
+    }
+
     return AtnSim {
         state_kind,
         state_tr_start,
@@ -1063,6 +1086,7 @@ pub fn atn_decode(bytes: &ByteList) -> AtnSim {
         tr_prec,
         decision_state,
         rule_start,
+        state_call_prec,
     };
 }
 
@@ -1451,7 +1475,7 @@ fn atn_state_pr_key(state: i32, pr: i32) -> i64 {
 }
 
 pub fn atn_invocation_prec(sim: &AtnSim, rstk: &List<i32>, k: i32) -> i32 {
-    if k < 0 || rstk[k] < 0 || sim.state_call_prec.is_empty() {
+    if k < 0 || rstk[k] < 0 {
         return 0;
     }
     return sim.state_call_prec[rstk[k]];
@@ -1828,6 +1852,9 @@ pub global TK_ERROR: i32 = 2;
 pub global TK_LIT_c: i32 = 3;
 pub global TK_LIT_a: i32 = 4;
 pub global TK_LIT_b: i32 = 5;
+pub global TK_LIT_k: i32 = 6;
+pub global TK_LIT_x: i32 = 7;
+pub global TK_LIT_y: i32 = 8;
 
 struct Lexer {
     chars: List<char>,
@@ -1869,6 +1896,24 @@ fn try_lit_b(chars: &List<char>, start: i32) -> i32 {
     return pos + 1;
 }
 
+fn try_lit_k(chars: &List<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'k' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_x(chars: &List<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'x' { return -1; }
+    return pos + 1;
+}
+
+fn try_lit_y(chars: &List<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'y' { return -1; }
+    return pos + 1;
+}
+
 pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
@@ -1895,6 +1940,18 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             'c' => {
                 end = try_lit_c(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_c; }
+            },
+            'k' => {
+                end = try_lit_k(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_k; }
+            },
+            'x' => {
+                end = try_lit_x(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_x; }
+            },
+            'y' => {
+                end = try_lit_y(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_y; }
             },
             _ => {},
         }
@@ -1926,6 +1983,9 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_LIT_c => "'c'",
         TK_LIT_a => "'a'",
         TK_LIT_b => "'b'",
+        TK_LIT_k => "'k'",
+        TK_LIT_x => "'x'",
+        TK_LIT_y => "'y'",
         _ => "Unknown",
     };
 }
@@ -1940,8 +2000,10 @@ pub global RK_CTXDROP: NodeKind = 6;
 pub global RK_CD: NodeKind = 7;
 pub global RK_ALLFALSE: NodeKind = 8;
 pub global RK_AF: NodeKind = 9;
+pub global RK_SCANNED: NodeKind = 10;
+pub global RK_XG: NodeKind = 11;
 
-global RULE_NAMES: List<String> = ["takes", "xt", "rejects", "xr", "ctxkeep", "ck", "ctxdrop", "cd", "allfalse", "af"];
+global RULE_NAMES: List<String> = ["takes", "xt", "rejects", "xr", "ctxkeep", "ck", "ctxdrop", "cd", "allfalse", "af", "scanned", "xg"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1970,7 +2032,6 @@ struct Parser {
     max_errors: i32,
     site: i32,
     sites: List<i32>,
-    err_row: i32,
     atn: AtnState,
     atn_ret_pending: i32,
     b: TreeBuilder,
@@ -1989,7 +2050,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1, atn: AtnState::new(), atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], atn: AtnState::new(), atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
     }
 
     fn emit(&mut self, s: String) {
@@ -2132,19 +2193,15 @@ impl Parser {
     fn commit_pending(&mut self) {
         let Some(d) = self.pending else { return; };
         self.pending = null;
-        if self.in_error_mode() { return; }
         let mut diag = d;
         self.b.push_open_rule_names(&RULE_NAMES, &mut diag.rule_stack);
+        self.report(diag);
+    }
+
+    fn report(&mut self, diag: Diagnostic) {
+        if self.b.in_error_mode() { return; }
         self.diagnostics.push(diag);
-        self.note_error();
-    }
-
-    fn in_error_mode(&self) -> bool {
-        return self.err_row >= 0 && !self.b.has_token_since(self.err_row);
-    }
-
-    fn note_error(&mut self) {
-        self.err_row = self.b.checkpoint();
+        self.b.mark_error();
     }
 
     fn resync_set(&self, base: &List<i32>) -> List<i32> {
@@ -2220,9 +2277,7 @@ impl Parser {
 
     fn report_extraneous(&mut self, names: &List<i32>, recovery: RecoveryAction) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
-        if self.in_error_mode() { return; }
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));
-        self.note_error();
+        self.report(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));
     }
 
     fn report_missing(&mut self, kind: i32) {
@@ -2231,14 +2286,12 @@ impl Parser {
         let at_eof = found == TK_EOF;
         let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };
         let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };
-        self.diagnostics.push(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
-        self.note_error();
+        self.report(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
     }
 
     fn report_unexpected(&mut self, kind: i32) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));
-        self.note_error();
+        self.report(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));
     }
 
     fn peek_start(&self) -> i32 {
@@ -2270,7 +2323,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32, sync: &List<i32>, rest_nullable: bool = true, may_end_rule: bool = false) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &List<i32>, may_end_rule: bool) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -2303,7 +2356,7 @@ impl Parser {
             return _syn;
         }
         if !sync.is_empty() {
-            if !rest_nullable && self.kinds[self.pos] == TK_EOF {
+            if !may_end_rule && self.kinds[self.pos] == TK_EOF {
                 self.fail_on_kind(kind);
                 return self.pos;
             }
@@ -2394,11 +2447,49 @@ struct CdVals {
     mode: i32 = 0,
 }
 
+fn scan_xg(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let start = pos;
+    let mut pos = pos;
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    scan_alts: {
+        if alt_kind == TK_LIT_a {
+            let mut _atn_disabled: List<i32> = [];
+            if !(( false )) { _atn_disabled.push(0); }
+            let _atn_alt = atn_predict_with_stack(&ATN_SIM, 10, &atn.stack, tokens, pos, TK_EOF, 0, &_atn_disabled);
+            if _atn_alt == 1 {
+                pos = start + 1;
+                try_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_b { break try_1; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_c { break try_1; }
+                    pos += 1;
+                    break scan_alts;
+                }
+                return -1;
+            }
+            if _atn_alt == 0 {
+                pos = start + 1;
+                try_0: {
+                    if !(( false )) { break try_0; }
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_b { break try_0; }
+                    pos += 1;
+                    break scan_alts;
+                }
+                return -1;
+            }
+            return -1;
+        } else {
+            return -1;
+        }
+    }
+    return pos;
+}
+
 fn _parse_takes__inner(p: &mut Parser) -> () {
     p.site = 0;
-    p.atn_ret_pending = 24;
+    p.atn_ret_pending = 28;
     _parse_xt(p);
-    p.expect(TK_LIT_c, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     return;
 }
 
@@ -2420,7 +2511,7 @@ fn _parse_takes(p: &mut Parser) -> () {
 fn _parse_xt__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
     p.expect(TK_LIT_b, &SYNC_1, false);
-    p.expect(TK_LIT_c, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("abc"); 
     }
@@ -2441,7 +2532,7 @@ fn _parse_xt__inner_scan_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) ->
 
 fn _parse_xt__inner_alt_0(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
-    p.expect(TK_LIT_b, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("ab"); 
     }
@@ -2498,9 +2589,9 @@ fn _parse_xt(p: &mut Parser) -> () {
 
 fn _parse_rejects__inner(p: &mut Parser) -> () {
     p.site = 1;
-    p.atn_ret_pending = 45;
+    p.atn_ret_pending = 49;
     _parse_xr(p);
-    p.expect(TK_LIT_c, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     return;
 }
 
@@ -2522,7 +2613,7 @@ fn _parse_rejects(p: &mut Parser) -> () {
 fn _parse_xr__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
     p.expect(TK_LIT_b, &SYNC_1, false);
-    p.expect(TK_LIT_c, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("abc"); 
     }
@@ -2543,7 +2634,7 @@ fn _parse_xr__inner_scan_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) ->
 
 fn _parse_xr__inner_alt_0(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
-    p.expect(TK_LIT_b, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("ab"); 
     }
@@ -2600,9 +2691,9 @@ fn _parse_xr(p: &mut Parser) -> () {
 
 fn _parse_ctxkeep__inner(p: &mut Parser) -> () {
     p.site = 2;
-    p.atn_ret_pending = 66;
+    p.atn_ret_pending = 70;
     _parse_ck(p);
-    p.expect(TK_LIT_c, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     return;
 }
 
@@ -2625,7 +2716,7 @@ fn _parse_ck__inner_alt_1(p: &mut Parser, vals: CkVals = CkVals {}) -> CkVals {
     let mut vals = vals;
     p.expect(TK_LIT_a, &SYNC_0, false);
     p.expect(TK_LIT_b, &SYNC_1, false);
-    p.expect(TK_LIT_c, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("abc"); 
     }
@@ -2646,7 +2737,7 @@ fn _parse_ck__inner_scan_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) ->
 fn _parse_ck__inner_alt_0(p: &mut Parser, vals: CkVals = CkVals {}) -> CkVals {
     let mut vals = vals;
     p.expect(TK_LIT_a, &SYNC_0, false);
-    p.expect(TK_LIT_b, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("ab"); 
     }
@@ -2708,9 +2799,9 @@ fn _parse_ck(p: &mut Parser) -> CkVals {
 
 fn _parse_ctxdrop__inner(p: &mut Parser) -> () {
     p.site = 3;
-    p.atn_ret_pending = 87;
+    p.atn_ret_pending = 91;
     _parse_cd(p);
-    p.expect(TK_LIT_c, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     return;
 }
 
@@ -2733,7 +2824,7 @@ fn _parse_cd__inner_alt_1(p: &mut Parser, vals: CdVals = CdVals {}) -> CdVals {
     let mut vals = vals;
     p.expect(TK_LIT_a, &SYNC_0, false);
     p.expect(TK_LIT_b, &SYNC_1, false);
-    p.expect(TK_LIT_c, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("abc"); 
     }
@@ -2754,7 +2845,7 @@ fn _parse_cd__inner_scan_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) ->
 fn _parse_cd__inner_alt_0(p: &mut Parser, vals: CdVals = CdVals {}) -> CdVals {
     let mut vals = vals;
     p.expect(TK_LIT_a, &SYNC_0, false);
-    p.expect(TK_LIT_b, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("ab"); 
     }
@@ -2816,9 +2907,9 @@ fn _parse_cd(p: &mut Parser) -> CdVals {
 
 fn _parse_allfalse__inner(p: &mut Parser) -> () {
     p.site = 4;
-    p.atn_ret_pending = 108;
+    p.atn_ret_pending = 112;
     _parse_af(p);
-    p.expect(TK_LIT_c, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     return;
 }
 
@@ -2840,7 +2931,7 @@ fn _parse_allfalse(p: &mut Parser) -> () {
 fn _parse_af__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
     p.expect(TK_LIT_b, &SYNC_1, false);
-    p.expect(TK_LIT_c, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("abc"); 
     }
@@ -2861,7 +2952,7 @@ fn _parse_af__inner_scan_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) ->
 
 fn _parse_af__inner_alt_0(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
-    p.expect(TK_LIT_b, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("ab"); 
     }
@@ -2918,6 +3009,227 @@ fn _parse_af(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
+fn _parse_scanned__inner_alt_0(p: &mut Parser) -> () {
+    p.site = 5;
+    p.atn_ret_pending = 133;
+    _parse_xg(p);
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
+    if p.peek_kind() == TK_LIT_c {
+        p.take();
+    }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    loop {
+        if p.recovering { break; }
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_k { break rep_scan; }
+            pos += 1;
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
+        p.expect(TK_LIT_k, &SYNC_4, false);
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+    }
+    p.expect(TK_LIT_x, &EMPTY_SYNC, true);
+    if !p.speculating {
+         p.emit("x"); 
+    }
+    return;
+}
+
+fn _parse_scanned__inner_scan_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    atn.stack.push(133);
+    pos = scan_xg(tokens, pos, atn);
+    atn.stack.pop();
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos] == TK_LIT_c {
+        pos += 1;
+    }
+    while pos < tokens.len() && tokens[pos] == TK_LIT_k {
+        pos += 1;
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_x { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn _parse_scanned__inner_alt_1(p: &mut Parser) -> () {
+    p.site = 6;
+    p.atn_ret_pending = 147;
+    _parse_xg(p);
+    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { p.sync_enter(&SYNC_5, &EXPECTED_5); }
+    if p.peek_kind() == TK_LIT_c {
+        p.take();
+    }
+    if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { p.sync_enter(&SYNC_6, &EXPECTED_6); }
+    loop {
+        if p.recovering { break; }
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_k { break rep_scan; }
+            pos += 1;
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
+        p.expect(TK_LIT_k, &SYNC_6, false);
+        if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { p.sync_back(&SYNC_6, &EXPECTED_6); }
+    }
+    p.expect(TK_LIT_y, &EMPTY_SYNC, true);
+    if !p.speculating {
+         p.emit("y"); 
+    }
+    return;
+}
+
+fn _parse_scanned__inner_scan_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    atn.stack.push(147);
+    pos = scan_xg(tokens, pos, atn);
+    atn.stack.pop();
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos] == TK_LIT_c {
+        pos += 1;
+    }
+    while pos < tokens.len() && tokens[pos] == TK_LIT_k {
+        pos += 1;
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_y { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn _parse_scanned__inner(p: &mut Parser) -> () {
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    let kind = p.peek_kind();
+    if kind == TK_LIT_a {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        let _sd_p_0 = _parse_scanned__inner_scan_0(_sd_tokens, _sd_pos, &mut p.atn);
+        let _sd_p_1 = _parse_scanned__inner_scan_1(_sd_tokens, _sd_pos, &mut p.atn);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_best_i == 0 {
+            return _parse_scanned__inner_alt_0(p);
+        }
+        return _parse_scanned__inner_alt_1(p);
+    }
+    p.no_viable(
+        "no alternative of scanned matches",
+        p.peek_span(),
+        &EXPECTED_2,
+    );
+    return;
+}
+
+fn _parse_scanned(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _atn_ret = p.atn_ret_pending;
+    p.atn_ret_pending = -1;
+    p.atn.stack.push(_atn_ret);
+    p.sites.push(p.site);
+    let _start = p.peek_start();
+    p.b.start_node(RK_SCANNED, _start);
+    _parse_scanned__inner(p);
+    if p.recovering { let _ = p.recover_rule(RK_SCANNED, "scanned", -1); }
+    p.b.finish_node(p.last_end());
+    p.atn.stack.pop();
+    p.sites.pop();
+}
+
+fn _parse_xg__inner_alt_1(p: &mut Parser) -> () {
+    p.expect(TK_LIT_a, &SYNC_0, false);
+    p.expect(TK_LIT_b, &SYNC_1, false);
+    p.expect(TK_LIT_c, &EMPTY_SYNC, true);
+    if !p.speculating {
+         p.emit("abc"); 
+    }
+    return;
+}
+
+fn _parse_xg__inner_scan_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_b { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_c { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn _parse_xg__inner_alt_0(p: &mut Parser) -> () {
+    p.expect(TK_LIT_a, &SYNC_0, false);
+    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
+    if !p.speculating {
+         p.emit("ab"); 
+    }
+    return;
+}
+
+fn _parse_xg__inner_scan_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    if !(( false )) { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_b { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn _parse_xg__inner(p: &mut Parser) -> () {
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    let kind = p.peek_kind();
+    if kind == TK_LIT_a {
+        let mut _atn_disabled: List<i32> = [];
+        if !(pred_20(p)) { _atn_disabled.push(0); }
+        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 10, &p.atn.stack, &p.kinds, p.pos, TK_EOF, 0, &_atn_disabled);
+        if _atn_alt < 0 {
+            p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
+            return;
+        }
+        if _atn_alt == 1 {
+            return _parse_xg__inner_alt_1(p);
+        }
+        return _parse_xg__inner_alt_0(p);
+    }
+    p.no_viable(
+        "no alternative of xg matches",
+        p.peek_span(),
+        &EXPECTED_2,
+    );
+    return;
+}
+
+fn _parse_xg(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _atn_ret = p.atn_ret_pending;
+    p.atn_ret_pending = -1;
+    p.atn.stack.push(_atn_ret);
+    p.sites.push(p.site);
+    let _start = p.peek_start();
+    p.b.start_node(RK_XG, _start);
+    _parse_xg__inner(p);
+    if p.recovering { let _ = p.recover_rule(RK_XG, "xg", -1); }
+    p.b.finish_node(p.last_end());
+    p.atn.stack.pop();
+    p.sites.pop();
+}
+
 fn pred_1(p: &Parser) -> bool {
     return  true ;
 }
@@ -2934,6 +3246,10 @@ fn pred_16(p: &Parser) -> bool {
     return  false ;
 }
 
+fn pred_20(p: &Parser) -> bool {
+    return  false ;
+}
+
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
     let tokens = tokenize(input);
@@ -2941,9 +3257,7 @@ fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Par
     p.max_errors = max_errors;
     entry(&mut p);
     if p.recovering && p.diagnostics.len() < max_errors {
-        if let Some(d) = p.pending {
-            p.diagnostics.push(d);
-        }
+        p.commit_pending();
     }
     merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);
     resolve_positions(&mut p.diagnostics, p.tokens.chars);
@@ -2994,9 +3308,17 @@ pub fn parse_af<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseRes
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_af(p));
 }
 
-global CALL_FOLLOW_SETS: List<List<i32>> = [[8]];
-global CALL_FOLLOW: List<i32> = [0, 0, 0, 0, 0];
-global CALL_FOLLOW_ENDS: List<bool> = [false, false, false, false, false];
+pub fn parse_scanned<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_scanned(p));
+}
+
+pub fn parse_xg<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_xg(p));
+}
+
+global CALL_FOLLOW_SETS: List<List<i32>> = [[8], [200], [328]];
+global CALL_FOLLOW: List<i32> = [0, 0, 0, 0, 0, 1, 2];
+global CALL_FOLLOW_ENDS: List<bool> = [false, false, false, false, false, false, false];
 
 fn token_display_name(kind: i32) -> String {
     return match kind {
@@ -3006,8 +3328,8 @@ fn token_display_name(kind: i32) -> String {
 }
 
 fn _token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(6);
-    for let mut k = 0; k < 6; k += 1 {
+    let mut v: List<String> = List::with_capacity(9);
+    for let mut k = 0; k < 9; k += 1 {
         v.push(token_display_name(k));
     }
     return v;
@@ -3040,6 +3362,14 @@ global SYNC_0: List<i32> = [32];
 global SYNC_1: List<i32> = [8];
 global SYNC_2: List<i32> = [16];
 global EXPECTED_2: List<i32> = [TK_LIT_a];
+global SYNC_3: List<i32> = [200];
+global EXPECTED_3: List<i32> = [TK_LIT_c, TK_LIT_k, TK_LIT_x];
+global SYNC_4: List<i32> = [192];
+global EXPECTED_4: List<i32> = [TK_LIT_k, TK_LIT_x];
+global SYNC_5: List<i32> = [328];
+global EXPECTED_5: List<i32> = [TK_LIT_c, TK_LIT_k, TK_LIT_y];
+global SYNC_6: List<i32> = [320];
+global EXPECTED_6: List<i32> = [TK_LIT_k, TK_LIT_y];
 
-global ATN_SIM: AtnSim = atn_decode(&b"\x0a\x00\x05\x00\x7d\x00\x00\x00\x02\x00\x04\x00\x06\x00\x08\x00\x0a\x00\x0c\x00\x0e\x00\x10\x00\x12\x00\x1b\x00\x30\x00\x45\x00\x5a\x00\x6f\x00\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x15\x00\x1c\x00\x2a\x00\x31\x00\x3f\x00\x46\x00\x54\x00\x5b\x00\x69\x00\x70\x00\x17\x00\x02\x00\x18\x00\x03\x00\x1a\x00\x1b\x00\x16\x00\x1e\x00\x23\x00\x04\x00\x1f\x00\x20\x00\x21\x00\x22\x00\x1d\x00\x24\x00\x25\x00\x26\x00\x27\x00\x28\x00\x29\x00\x1d\x00\x2c\x00\x06\x00\x2d\x00\x07\x00\x2f\x00\x30\x00\x2b\x00\x33\x00\x38\x00\x08\x00\x34\x00\x35\x00\x36\x00\x37\x00\x32\x00\x39\x00\x3a\x00\x3b\x00\x3c\x00\x3d\x00\x3e\x00\x32\x00\x41\x00\x0a\x00\x42\x00\x0b\x00\x44\x00\x45\x00\x40\x00\x48\x00\x4d\x00\x0c\x00\x49\x00\x4a\x00\x4b\x00\x4c\x00\x47\x00\x4e\x00\x4f\x00\x50\x00\x51\x00\x52\x00\x53\x00\x47\x00\x56\x00\x0e\x00\x57\x00\x0f\x00\x59\x00\x5a\x00\x55\x00\x5d\x00\x62\x00\x10\x00\x5e\x00\x5f\x00\x60\x00\x61\x00\x5c\x00\x63\x00\x64\x00\x65\x00\x66\x00\x67\x00\x68\x00\x5c\x00\x6b\x00\x12\x00\x6c\x00\x13\x00\x6e\x00\x6f\x00\x6a\x00\x72\x00\x77\x00\x14\x00\x73\x00\x74\x00\x75\x00\x76\x00\x71\x00\x78\x00\x79\x00\x7a\x00\x7b\x00\x7c\x00\x7d\x00\x71\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x2e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x43\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x58\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x6d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
+global ATN_SIM: AtnSim = atn_decode(&b"\x0c\x00\x0b\x00\xad\x00\x00\x00\x02\x00\x04\x00\x06\x00\x08\x00\x0a\x00\x0c\x00\x0e\x00\x10\x00\x12\x00\x14\x00\x16\x00\x1f\x00\x34\x00\x49\x00\x5e\x00\x73\x00\x81\x00\x86\x00\x8a\x00\x94\x00\x98\x00\x9f\x00\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x04\x05\x01\x01\x06\x09\x01\x01\x07\x01\x01\x01\x01\x01\x04\x05\x01\x01\x06\x09\x01\x01\x07\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x01\x00\x00\x00\x00\x01\x00\x00\x01\x00\x00\x04\x00\x00\x00\x00\x01\x00\x00\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x19\x00\x20\x00\x2e\x00\x35\x00\x43\x00\x4a\x00\x58\x00\x5f\x00\x6d\x00\x74\x00\x82\x00\xa0\x00\x1b\x00\x02\x00\x1c\x00\x03\x00\x1e\x00\x1f\x00\x1a\x00\x22\x00\x27\x00\x04\x00\x23\x00\x24\x00\x25\x00\x26\x00\x21\x00\x28\x00\x29\x00\x2a\x00\x2b\x00\x2c\x00\x2d\x00\x21\x00\x30\x00\x06\x00\x31\x00\x07\x00\x33\x00\x34\x00\x2f\x00\x37\x00\x3c\x00\x08\x00\x38\x00\x39\x00\x3a\x00\x3b\x00\x36\x00\x3d\x00\x3e\x00\x3f\x00\x40\x00\x41\x00\x42\x00\x36\x00\x45\x00\x0a\x00\x46\x00\x0b\x00\x48\x00\x49\x00\x44\x00\x4c\x00\x51\x00\x0c\x00\x4d\x00\x4e\x00\x4f\x00\x50\x00\x4b\x00\x52\x00\x53\x00\x54\x00\x55\x00\x56\x00\x57\x00\x4b\x00\x5a\x00\x0e\x00\x5b\x00\x0f\x00\x5d\x00\x5e\x00\x59\x00\x61\x00\x66\x00\x10\x00\x62\x00\x63\x00\x64\x00\x65\x00\x60\x00\x67\x00\x68\x00\x69\x00\x6a\x00\x6b\x00\x6c\x00\x60\x00\x6f\x00\x12\x00\x70\x00\x13\x00\x72\x00\x73\x00\x6e\x00\x76\x00\x7b\x00\x14\x00\x77\x00\x78\x00\x79\x00\x7a\x00\x75\x00\x7c\x00\x7d\x00\x7e\x00\x7f\x00\x80\x00\x81\x00\x75\x00\x84\x00\x92\x00\x16\x00\x85\x00\x17\x00\x87\x00\x89\x00\x88\x00\x8b\x00\x8a\x00\x88\x00\x8d\x00\x8c\x00\x90\x00\x8e\x00\x8f\x00\x8b\x00\x91\x00\x83\x00\x93\x00\x17\x00\x95\x00\x97\x00\x96\x00\x99\x00\x98\x00\x96\x00\x9b\x00\x9a\x00\x9e\x00\x9c\x00\x9d\x00\x99\x00\x9f\x00\x83\x00\xa2\x00\xa7\x00\x18\x00\xa3\x00\xa4\x00\xa5\x00\xa6\x00\xa1\x00\xa8\x00\xa9\x00\xaa\x00\xab\x00\xac\x00\xad\x00\xa1\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x32\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x47\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x71\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x86\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x94\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
 

@@ -9,6 +9,7 @@ use {
     canonicalize_empty_alt_groups,
     alias_parser_literals,
     assign_atn_call_sites,
+    assign_atn_leaf_sites,
     assign_atn_decisions,
     assign_action_ids,
     find_lexer_rule,
@@ -135,6 +136,7 @@ pub fn canonicalize_for_analysis(grammar: &mut Grammar) -> TokenKinds {
     // return states) is keyed consistently. Runs after canonicalization (the
     // numbered shape is the post-canonicalization one) and before lowering.
     assign_atn_call_sites(grammar);
+    assign_atn_leaf_sites(grammar);
     // Must run after `assign_atn_call_sites` (its `Repeat` / `Group` rebuild
     // would otherwise reset the freshly stamped decision-site ids).
     assign_atn_decisions(grammar);

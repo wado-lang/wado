@@ -20,6 +20,11 @@ my     : 'y' ;
 mw     : 'w' ;
 expr   : e ;
 e      : e '+' e | INT | '(' e ')' ;
+quiet  : mid 'end' ;
+mid    : pair ';' ;
+pair   : 'a' 'b' ;
+trail  : grpend 'end' ;
+grpend : 'x' ('y' 'v' | 'w') ;
 
 INT : [0-9]+ ;
 Z   : 'z' ;

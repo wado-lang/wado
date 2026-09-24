@@ -8,8 +8,8 @@
 //! closing tests).
 
 use { build_atn, build_token_kinds, atn_blob_bytes, Atn } from "./atn.wado";
-use { atn_decode, AtnSim, ATN_BLOCK_START, ATN_BLOCK_END, ATN_STAR_LOOP_ENTRY } from "./runtime/atn.wado";
-use { AtnState, atn_predict_once, atn_predict_with_stack } from "./runtime/atn_predict.wado";
+use { atn_decode, AtnSim, ATN_BLOCK_START, ATN_BLOCK_END, ATN_STAR_LOOP_ENTRY, ATN_TR_RULE } from "./runtime/atn.wado";
+use { AtnState, atn_invocation_prec, atn_predict_once, atn_predict_with_stack } from "./runtime/atn_predict.wado";
 use { atn_lr_loop_decision, atn_with_lr_tables } from "./runtime/atn_lr.wado";
 use { Span } from "./runtime/lex.wado";
 use { Token } from "./g4/token.wado";
@@ -324,6 +324,23 @@ test "precedence pruning gates LR loop-entry enter alts by min_prec" {
     // the exit edge survives → exit alt (2).
     let hi = atn_predict_with_stack(&sim, d, &empty, &to_kinds(&toks), 0, eof, 2);
     assert hi == 2, `min_prec 2 should prune '+' and exit (2), got ${hi}`;
+}
+
+// A frame's restore precedence is the ATN's, not an LR-only table's: a
+// simulator without them still pops a self-ref operand at its own precedence.
+test "a decoded ATN restores each rule call's precedence" {
+    let sim = atn_decode(&atn_blob_bytes(&build_atn(&parse(LR_G4).unwrap())));
+    let mut raised = 0;
+    for let mut j = 0; j < sim.tr_kind.len(); j += 1 {
+        if sim.tr_kind[j] == ATN_TR_RULE {
+            let frame: List<i32> = [sim.tr_follow[j]];
+            assert atn_invocation_prec(&sim, &frame, 0) == sim.tr_prec[j];
+            if sim.tr_prec[j] > 0 {
+                raised += 1;
+            }
+        }
+    }
+    assert raised > 0, "the grammar calls a self-ref operand at a raised precedence";
 }
 
 // P4.4: the dedicated LR loop-entry decision (`atn_lr_loop_decision`) — the

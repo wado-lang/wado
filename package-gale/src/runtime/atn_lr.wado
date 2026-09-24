@@ -23,7 +23,6 @@ pub fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
         atn_compute_first_nullable(&mut out);
         atn_compute_state_cont(&mut out);
         atn_compute_collapse(&mut out);
-        atn_compute_call_prec(&mut out);
     }
     return out;
 }
@@ -32,16 +31,6 @@ fn atn_compute_collapse(sim: &mut AtnSim) {
     let nstates = sim.state_kind.len();
     for let mut st = 0; st < nstates; st += 1 {
         sim.state_collapse_to.push(atn_lr_entry_reached(sim, st));
-    }
-}
-
-fn atn_compute_call_prec(sim: &mut AtnSim) {
-    sim.state_call_prec = List::filled(sim.state_kind.len(), 0);
-    for let mut j = 0; j < sim.tr_kind.len(); j += 1 {
-        if sim.tr_kind[j] == ATN_TR_RULE {
-            assert sim.tr_follow[j] >= 0, "a rule transition returns to a follow state";
-            sim.state_call_prec[sim.tr_follow[j]] = sim.tr_prec[j];
-        }
     }
 }
 

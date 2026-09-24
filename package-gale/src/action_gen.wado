@@ -788,36 +788,33 @@ fn body_needs_no_translator<S: AsStrSlice>(text: S, ctx: &GenContext) -> bool {
         || ctx.has_parser_superclass() && body_is_base_calls_only(text, ctx.parser_superclass_name());
 }
 
-/// Emit the `disabled_alts` seed for an ATN-routed decision: each gated alt is
-/// pushed to `_atn_disabled` when its `gate_condition_for` condition is false,
-/// so the simulator never seeds it (both `p` and the seeded `vals` the
-/// condition may read are in scope here). Returns the `, &_atn_disabled`
-/// argument suffix, or `""` when no alt is gated.
-pub fn emit_atn_disabled_seed(
-    w: &mut CodeWriter,
+/// The gates an ATN-routed decision disables alternatives by: each gated alt of
+/// `amb_alts` with its condition, as the parse or a scan can evaluate it.
+pub fn atn_decision_gates(
     amb_alts: &List<i32>,
     alts: &List<Alternative>,
     ctx: &GenContext,
-) -> String {
-    if !ctx.emit_actions() {
-        return String::new();
-    }
+    in_scan: bool,
+) -> List<[i32, String]> {
     let mut gates: List<[i32, String]> = [];
+    if !ctx.emit_actions() {
+        return gates;
+    }
     for let idx of amb_alts {
+        if in_scan {
+            let cond = alt_scan_gate_conditions(&alts[*idx], ctx);
+            if !cond.is_empty() {
+                gates.push([*idx, cond]);
+            }
+            continue;
+        }
         for let a of &alts[*idx].actions {
             if let Some(cond) = gate_condition_for(a, ctx) {
                 gates.push([*idx, cond]);
             }
         }
     }
-    if gates.is_empty() {
-        return String::new();
-    }
-    w.line("let mut _atn_disabled: List<i32> = [];");
-    for let g of &gates {
-        w.line(`if !(${g.1}) { _atn_disabled.push(${g.0}); }`);
-    }
-    return String::from(", &_atn_disabled");
+    return gates;
 }
 
 /// An alt's gateable alt-initial predicate conditions, translated, in grammar

@@ -952,6 +952,8 @@ pub struct TokenRefElement {
     /// the `generate()` path so FIRST-set analysis carries the integer, not the
     /// name. -1 until resolved (or for an unresolved reference).
     pub kind_id: i32 = -1,
+    /// Unique terminal id, assigned by `assign_atn_leaf_sites`; -1 until then.
+    pub atn_leaf_site: i32 = -1,
 }
 
 impl TokenRefElement {
@@ -976,6 +978,8 @@ pub struct LiteralElement {
     /// `const_name` global's value). Resolved once by `resolve_kind_ids`; -1
     /// until resolved. See `TokenRefElement::kind_id`.
     pub kind_id: i32 = -1,
+    /// See `TokenRefElement::atn_leaf_site`.
+    pub atn_leaf_site: i32 = -1,
 }
 
 impl LiteralElement {
@@ -1769,12 +1773,19 @@ pub fn assign_atn_call_sites(grammar: &mut Grammar) {
     stamp_parser_elements(grammar, StampMode::CallSites);
 }
 
+/// Assign every parser-rule terminal an `atn_leaf_site` id, which `build_atn`
+/// records as `leaf_site -> the state after the match`.
+pub fn assign_atn_leaf_sites(grammar: &mut Grammar) {
+    stamp_parser_elements(grammar, StampMode::LeafSites);
+}
+
 /// Which id a single traversal of the parser element tree assigns: the
-/// `RuleRef` call-site id, the `Repeat`/`Group` decision id, or the retained
-/// action ids (alt actions + arg-actions). One walk, one mode.
+/// `RuleRef` call-site id, the `Repeat`/`Group` decision id, the terminal leaf
+/// id, or the retained action ids (alt actions + arg-actions). One walk, one mode.
 enum StampMode {
     CallSites,
     Decisions,
+    LeafSites,
     ActionIds,
 }
 
@@ -1816,7 +1827,7 @@ fn stamp_element(elem: &Element, mode: StampMode, next: &mut i32) -> Element {
                     *next += 1;
                 },
                 ActionIds => arg = stamp_action_source_opt(rr.arg_action, next),
-                Decisions => {
+                Decisions | LeafSites => {
                 },
             }
             Element::RuleRef(RuleRefElement { ..rr, atn_call_site: call_site, arg_action: arg });
@@ -1856,6 +1867,22 @@ fn stamp_element(elem: &Element, mode: StampMode, next: &mut i32) -> Element {
         Not(n) => Element::Not(NotElement {
             element: stamp_element(&n.element, mode, next),
         }),
+        TokenRef(t) => {
+            let mut site = t.atn_leaf_site;
+            if mode matches { LeafSites } {
+                site = *next;
+                *next += 1;
+            }
+            Element::TokenRef(TokenRefElement { ..t, atn_leaf_site: site });
+        },
+        Literal(l) => {
+            let mut site = l.atn_leaf_site;
+            if mode matches { LeafSites } {
+                site = *next;
+                *next += 1;
+            }
+            Element::Literal(LiteralElement { ..l, atn_leaf_site: site });
+        },
         _ => *elem,
     };
 }

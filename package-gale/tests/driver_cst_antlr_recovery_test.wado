@@ -71,3 +71,15 @@ test "a terminal missing at the end of a rule is inserted where EOF follows" {
     assert_tree(&rec::parse_loop("x y z"), "(loop x y z <missing '!'>)");
     assert_tree(&rec::parse_loop("x y"), "(loop x y <missing '!'>)");
 }
+
+test "a terminal missing at the end of a trailing group is inserted against the rules under way" {
+    assert_tree(&rec::parse_trail("x y end"), "(trail (grpend x y <missing 'v'>) end)");
+}
+test "no error is reported again until a token matches" {
+    let r = rec::parse_quiet("a z end");
+    assert_tree(&r, "(quiet (mid (pair a z) <missing ';'>) end)");
+    assert r.diagnostics.len() == 1, `${r.diagnostics.len()} diagnostics`;
+    let t = rec::parse_trail("x y");
+    assert_tree(&t, "(trail (grpend x y) <missing 'end'>)");
+    assert t.diagnostics.len() == 1, `${t.diagnostics.len()} diagnostics`;
+}

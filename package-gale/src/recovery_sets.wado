@@ -20,6 +20,10 @@ pub struct RecoverySets {
     pub call_follow: List<List<i32>>,
     /// Indexed by `atn_call_site`: whether the caller may end after the call.
     pub call_follow_ends: List<bool>,
+    /// Indexed by `atn_leaf_site`: what may follow the terminal inside its rule.
+    pub leaf_follow: List<List<i32>>,
+    /// Indexed by `atn_leaf_site`: whether the rule may end after the terminal.
+    pub leaf_follow_ends: List<bool>,
     /// Indexed by `atn_decision`: before the first entry into the subrule.
     pub decision_entry: List<Option<List<i32>>>,
     /// Indexed by `atn_decision`: after an iteration of a `*` / `+`.
@@ -29,7 +33,15 @@ pub struct RecoverySets {
 }
 
 pub fn empty_recovery_sets() -> RecoverySets {
-    return RecoverySets { call_follow: [], call_follow_ends: [], decision_entry: [], decision_back: [], rule_entry: [] };
+    return RecoverySets {
+        call_follow: [],
+        call_follow_ends: [],
+        leaf_follow: [],
+        leaf_follow_ends: [],
+        decision_entry: [],
+        decision_back: [],
+        rule_entry: [],
+    };
 }
 
 struct LocalNext {
@@ -100,6 +112,24 @@ impl Walker {
         }
     }
 
+    /// What may follow each of `states` inside its rule, and whether the rule may
+    /// end there; a `-1` state has neither.
+    fn follows(&mut self, atn: &Atn, states: &List<i32>) -> [List<List<i32>>, List<bool>] {
+        let mut kinds: List<List<i32>> = [];
+        let mut ends: List<bool> = [];
+        for let s of states {
+            if *s < 0 {
+                kinds.push([]);
+                ends.push(false);
+                continue;
+            }
+            let next = self.local_next(atn, *s);
+            kinds.push(bits_to_kinds(&next.bits, atn.num_tokens));
+            ends.push(next.reaches_end);
+        }
+        return [kinds, ends];
+    }
+
     /// `null` where the rule may end instead: what comes next is the caller's.
     fn expected(&mut self, atn: &Atn, from: i32) -> Option<List<i32>> {
         let next = self.local_next(atn, from);
@@ -138,18 +168,8 @@ pub fn recovery_sets(atn: &Atn, eof: i32) -> RecoverySets {
     };
     w.settle_rule_first(atn);
 
-    let mut call_follow: List<List<i32>> = [];
-    let mut call_follow_ends: List<bool> = [];
-    for let ret of &atn.call_site_returns {
-        if *ret < 0 {
-            call_follow.push([]);
-            call_follow_ends.push(false);
-            continue;
-        }
-        let next = w.local_next(atn, *ret);
-        call_follow.push(bits_to_kinds(&next.bits, atn.num_tokens));
-        call_follow_ends.push(next.reaches_end);
-    }
+    let [call_follow, call_follow_ends] = w.follows(atn, &atn.call_site_returns);
+    let [leaf_follow, leaf_follow_ends] = w.follows(atn, &atn.leaf_site_states);
 
     let mut decision_entry: List<Option<List<i32>>> = [];
     let mut decision_back: List<Option<List<i32>>> = [];
@@ -174,7 +194,15 @@ pub fn recovery_sets(atn: &Atn, eof: i32) -> RecoverySets {
         let d = rule_body_decision(atn, r);
         rule_entry.push(if d < 0 { null } else { w.expected(atn, atn.decision_state[d]) });
     }
-    return RecoverySets { call_follow, call_follow_ends, decision_entry, decision_back, rule_entry };
+    return RecoverySets {
+        call_follow,
+        call_follow_ends,
+        leaf_follow,
+        leaf_follow_ends,
+        decision_entry,
+        decision_back,
+        rule_entry,
+    };
 }
 
 /// The state a `+` loop-back re-enters its body at: its one edge not to the

@@ -39,7 +39,7 @@ pub struct AtnSim {
     pub cont_neg_label: List<i32> = [],
     pub state_cont_first_open: List<bool> = [],
     pub state_collapse_to: List<i32> = [],
-    pub state_call_prec: List<i32> = [],
+    pub state_call_prec: List<i32>,
 }
 
 fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
@@ -121,6 +121,14 @@ pub fn atn_decode(bytes: &ByteList) -> AtnSim {
         p += 2;
     }
 
+    let mut state_call_prec = List::filled(nstates, 0);
+    for let mut j = 0; j < ntrans_total; j += 1 {
+        if tr_kind[j] == ATN_TR_RULE {
+            assert tr_follow[j] >= 0, "a rule transition returns to a follow state";
+            state_call_prec[tr_follow[j]] = tr_prec[j];
+        }
+    }
+
     return AtnSim {
         state_kind,
         state_tr_start,
@@ -132,5 +140,6 @@ pub fn atn_decode(bytes: &ByteList) -> AtnSim {
         tr_prec,
         decision_state,
         rule_start,
+        state_call_prec,
     };
 }

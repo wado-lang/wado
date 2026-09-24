@@ -569,6 +569,7 @@ pub struct TreeBuilder {
     alt: List<i32>,
     open: List<i32>,
     last_finished: i32,
+    error_row: i32,
 }
 
 impl TreeBuilder {
@@ -580,6 +581,7 @@ impl TreeBuilder {
             alt: List::with_capacity(rows),
             open: [],
             last_finished: -1,
+            error_row: -1,
         };
     }
 
@@ -629,6 +631,9 @@ impl TreeBuilder {
         if self.last_finished >= checkpoint {
             self.last_finished += 1;
         }
+        if self.error_row >= checkpoint {
+            self.error_row += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -641,6 +646,9 @@ impl TreeBuilder {
         }
         if self.last_finished >= checkpoint {
             self.last_finished = -1;
+        }
+        if self.error_row > checkpoint {
+            self.error_row = checkpoint;
         }
     }
 
@@ -673,13 +681,20 @@ impl TreeBuilder {
         self.open.push(row);
     }
 
-    pub fn has_token_since(&self, row: i32) -> bool {
-        for let mut r = row; r < self.tag.len(); r += 1 {
+    pub fn mark_error(&mut self) {
+        self.error_row = self.tag.len();
+    }
+
+    pub fn in_error_mode(&self) -> bool {
+        if self.error_row < 0 {
+            return false;
+        }
+        for let mut r = self.error_row; r < self.tag.len(); r += 1 {
             if self.tag[r] matches { Tok } {
-                return true;
+                return false;
             }
         }
-        return false;
+        return true;
     }
 
     pub fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
@@ -1057,7 +1072,7 @@ pub struct AtnSim {
     pub cont_neg_label: List<i32> = [],
     pub state_cont_first_open: List<bool> = [],
     pub state_collapse_to: List<i32> = [],
-    pub state_call_prec: List<i32> = [],
+    pub state_call_prec: List<i32>,
 }
 
 fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
@@ -1139,6 +1154,14 @@ pub fn atn_decode(bytes: &ByteList) -> AtnSim {
         p += 2;
     }
 
+    let mut state_call_prec = List::filled(nstates, 0);
+    for let mut j = 0; j < ntrans_total; j += 1 {
+        if tr_kind[j] == ATN_TR_RULE {
+            assert tr_follow[j] >= 0, "a rule transition returns to a follow state";
+            state_call_prec[tr_follow[j]] = tr_prec[j];
+        }
+    }
+
     return AtnSim {
         state_kind,
         state_tr_start,
@@ -1150,6 +1173,7 @@ pub fn atn_decode(bytes: &ByteList) -> AtnSim {
         tr_prec,
         decision_state,
         rule_start,
+        state_call_prec,
     };
 }
 
@@ -2864,7 +2888,6 @@ struct Parser {
     max_errors: i32,
     site: i32,
     sites: List<i32>,
-    err_row: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
 }
@@ -2880,7 +2903,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
     fn supersedes_pending(&self, start: i32) -> bool {
@@ -2936,19 +2959,15 @@ impl Parser {
     fn commit_pending(&mut self) {
         let Some(d) = self.pending else { return; };
         self.pending = null;
-        if self.in_error_mode() { return; }
         let mut diag = d;
         self.b.push_open_rule_names(&RULE_NAMES, &mut diag.rule_stack);
+        self.report(diag);
+    }
+
+    fn report(&mut self, diag: Diagnostic) {
+        if self.b.in_error_mode() { return; }
         self.diagnostics.push(diag);
-        self.note_error();
-    }
-
-    fn in_error_mode(&self) -> bool {
-        return self.err_row >= 0 && !self.b.has_token_since(self.err_row);
-    }
-
-    fn note_error(&mut self) {
-        self.err_row = self.b.checkpoint();
+        self.b.mark_error();
     }
 
     fn resync_set(&self, base: &List<i32>) -> List<i32> {
@@ -3024,9 +3043,7 @@ impl Parser {
 
     fn report_extraneous(&mut self, names: &List<i32>, recovery: RecoveryAction) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
-        if self.in_error_mode() { return; }
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));
-        self.note_error();
+        self.report(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));
     }
 
     fn report_missing(&mut self, kind: i32) {
@@ -3035,14 +3052,12 @@ impl Parser {
         let at_eof = found == TK_EOF;
         let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };
         let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };
-        self.diagnostics.push(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
-        self.note_error();
+        self.report(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
     }
 
     fn report_unexpected(&mut self, kind: i32) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));
-        self.note_error();
+        self.report(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));
     }
 
     fn peek_start(&self) -> i32 {
@@ -3074,7 +3089,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32, sync: &List<i32>, rest_nullable: bool = true, may_end_rule: bool = false) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &List<i32>, may_end_rule: bool) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -3107,7 +3122,7 @@ impl Parser {
             return _syn;
         }
         if !sync.is_empty() {
-            if !rest_nullable && self.kinds[self.pos] == TK_EOF {
+            if !may_end_rule && self.kinds[self.pos] == TK_EOF {
                 self.fail_on_kind(kind);
                 return self.pos;
             }
@@ -4656,7 +4671,7 @@ fn _parse_grammar_spec__inner(p: &mut Parser) -> () {
         _parse_mode_spec(p, 0);
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    p.expect(TK_EOF, &EMPTY_SYNC, true, true);
+    p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
 }
 
@@ -4676,7 +4691,7 @@ fn _parse_grammar_decl__inner(p: &mut Parser) -> () {
     _parse_grammar_type(p);
     p.site = 5;
     _parse_identifier(p);
-    p.expect(TK_SEMI, &EMPTY_SYNC, true, true);
+    p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;
 }
 
@@ -4696,12 +4711,12 @@ fn _parse_grammar_type__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_LEXER {
         p.take();
-        p.expect(TK_GRAMMAR, &EMPTY_SYNC, true, true);
+        p.expect(TK_GRAMMAR, &EMPTY_SYNC, true);
         return;
     }
     if kind == TK_PARSER {
         p.take();
-        p.expect(TK_GRAMMAR, &EMPTY_SYNC, true, true);
+        p.expect(TK_GRAMMAR, &EMPTY_SYNC, true);
         return;
     }
     if kind == TK_GRAMMAR {
@@ -4776,7 +4791,7 @@ fn _parse_prequel_construct(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_options_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_OPTIONS, &SYNC_4, false);
-    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { p.sync_enter(&SYNC_5, &EXPECTED_5); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -4799,10 +4814,10 @@ fn _parse_options_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if rep_scan_pos < 0 { break; }
         p.site = 11;
         _parse_option(p, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        p.expect(TK_SEMI, &EMPTY_SYNC);
-        if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { p.sync_back(&SYNC_5, &EXPECTED_5); }
+        p.expect(TK_SEMI, &SYNC_4, false);
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
-    p.expect(TK_RBRACE, &EMPTY_SYNC, true, true);
+    p.expect(TK_RBRACE, &EMPTY_SYNC, true);
     return;
 }
 
@@ -4820,7 +4835,7 @@ fn _parse_options_spec(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_option__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 12;
     _parse_identifier(p);
-    p.expect(TK_ASSIGN, &SYNC_6, false);
+    p.expect(TK_ASSIGN, &SYNC_2, false);
     p.site = 13;
     _parse_option_value(p, follow);
     return;
@@ -4864,7 +4879,7 @@ fn _parse_option_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            p.expect(TK_DOT, &SYNC_7, false);
+            p.expect(TK_DOT, &SYNC_2, false);
             p.site = 15;
             _parse_identifier(p);
         }
@@ -4886,7 +4901,7 @@ fn _parse_option_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of optionValue matches",
         p.peek_span(),
-        &EXPECTED_6,
+        &EXPECTED_5,
     );
     return;
 }
@@ -4903,10 +4918,10 @@ fn _parse_option_value(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_delegate_grammars__inner(p: &mut Parser) -> () {
-    p.expect(TK_IMPORT, &SYNC_7, false);
+    p.expect(TK_IMPORT, &SYNC_2, false);
     p.site = 17;
     _parse_delegate_grammar(p);
-    if !kind_set_has(&SYNC_8, p.kinds[p.pos]) { p.sync_enter(&SYNC_8, &EXPECTED_8); }
+    if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { p.sync_enter(&SYNC_6, &EXPECTED_6); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -4927,12 +4942,12 @@ fn _parse_delegate_grammars__inner(p: &mut Parser) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_COMMA, &SYNC_7, false);
+        p.expect(TK_COMMA, &SYNC_2, false);
         p.site = 18;
         _parse_delegate_grammar(p);
-        if !kind_set_has(&SYNC_8, p.kinds[p.pos]) { p.sync_back(&SYNC_8, &EXPECTED_8); }
+        if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { p.sync_back(&SYNC_6, &EXPECTED_6); }
     }
-    p.expect(TK_SEMI, &EMPTY_SYNC, true, true);
+    p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;
 }
 
@@ -4957,7 +4972,7 @@ fn _parse_delegate_grammar__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
 fn _parse_delegate_grammar__inner_alt_0(p: &mut Parser) -> () {
     p.site = 19;
     _parse_identifier(p);
-    p.expect(TK_ASSIGN, &SYNC_7, false);
+    p.expect(TK_ASSIGN, &SYNC_2, false);
     p.site = 20;
     _parse_identifier(p);
     return;
@@ -5028,12 +5043,12 @@ fn _parse_delegate_grammar(p: &mut Parser) -> () {
 
 fn _parse_tokens_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_TOKENS, &SYNC_4, false);
-    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { p.sync_enter(&SYNC_5, &EXPECTED_5); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_1(p.peek_kind()) {
         p.site = 22;
         _parse_id_list(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
-    p.expect(TK_RBRACE, &EMPTY_SYNC, true, true);
+    p.expect(TK_RBRACE, &EMPTY_SYNC, true);
     return;
 }
 
@@ -5050,12 +5065,12 @@ fn _parse_tokens_spec(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_channels_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_CHANNELS, &SYNC_4, false);
-    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { p.sync_enter(&SYNC_5, &EXPECTED_5); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_1(p.peek_kind()) {
         p.site = 23;
         _parse_id_list(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
-    p.expect(TK_RBRACE, &EMPTY_SYNC, true, true);
+    p.expect(TK_RBRACE, &EMPTY_SYNC, true);
     return;
 }
 
@@ -5110,7 +5125,7 @@ fn _parse_id_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_COMMA, &SYNC_7, false);
+        p.expect(TK_COMMA, &SYNC_2, false);
         p.site = 25;
         _parse_identifier(p);
     }
@@ -5132,7 +5147,7 @@ fn _parse_id_list(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_action___inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_AT, &SYNC_9, false);
+    p.expect(TK_AT, &SYNC_2, false);
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -5147,7 +5162,7 @@ fn _parse_action___inner(p: &mut Parser, follow: i64 = 0) -> () {
     if opt_scan_pos >= 0 {
         p.site = 26;
         _parse_action_scope_name(p);
-        p.expect(TK_COLONCOLON, &EMPTY_SYNC);
+        p.expect(TK_COLONCOLON, &SYNC_2, false);
     }
     p.site = 27;
     _parse_identifier(p);
@@ -5186,7 +5201,7 @@ fn _parse_action_scope_name__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of actionScopeName matches",
         p.peek_span(),
-        &EXPECTED_9,
+        &EXPECTED_8,
     );
     return;
 }
@@ -5207,19 +5222,19 @@ fn _parse_action_block(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_ACTION_BLOCK, _start);
-    p.expect(TK_ACTION, &EMPTY_SYNC, true, true);
+    p.expect(TK_ACTION, &EMPTY_SYNC, true);
     if p.recovering { let _ = p.recover_rule(RK_ACTION_BLOCK, "actionBlock", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
 }
 
 fn _parse_arg_action_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_BEGIN_ARGUMENT, &SYNC_10, false);
-    if !kind_set_has(&SYNC_10, p.kinds[p.pos]) { p.sync_enter(&SYNC_10, &EXPECTED_10); }
+    p.expect(TK_BEGIN_ARGUMENT, &SYNC_9, false);
+    if !kind_set_has(&SYNC_9, p.kinds[p.pos]) { p.sync_enter(&SYNC_9, &EXPECTED_9); }
     while p.peek_kind() == TK_ARGUMENT_CONTENT {
-        p.expect(TK_ARGUMENT_CONTENT, &EMPTY_SYNC);
+        p.expect(TK_ARGUMENT_CONTENT, &SYNC_9, false);
     }
-    p.expect(TK_END_ARGUMENT, &EMPTY_SYNC, true, true);
+    p.expect(TK_END_ARGUMENT, &EMPTY_SYNC, true);
     return;
 }
 
@@ -5235,10 +5250,10 @@ fn _parse_arg_action_block(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_mode_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_MODE, &SYNC_7, false);
+    p.expect(TK_MODE, &SYNC_2, false);
     p.site = 30;
     _parse_identifier(p);
-    p.expect(TK_SEMI, &SYNC_11, true, true);
+    p.expect(TK_SEMI, &SYNC_2, true);
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -5376,7 +5391,7 @@ fn _parse_rule_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of ruleSpec matches",
         p.peek_span(),
-        &EXPECTED_12,
+        &EXPECTED_10,
     );
     return;
 }
@@ -5398,28 +5413,28 @@ fn _parse_parser_rule_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 35;
         _parse_rule_modifiers(p, FOLLOW_MASK_10);
     }
-    p.expect(TK_RULE_REF, &SYNC_13, false);
-    if !kind_set_has(&SYNC_14, p.kinds[p.pos]) { p.sync_enter(&SYNC_14, &EXPECTED_14); }
+    p.expect(TK_RULE_REF, &SYNC_11, false);
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
     if p.peek_kind() == TK_BEGIN_ARGUMENT {
         p.site = 36;
         _parse_arg_action_block(p, 0);
     }
-    if !kind_set_has(&SYNC_14, p.kinds[p.pos]) { p.sync_enter(&SYNC_14, &EXPECTED_14); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
     if p.peek_kind() == TK_RETURNS {
         p.site = 37;
         _parse_rule_returns(p, 0);
     }
-    if !kind_set_has(&SYNC_14, p.kinds[p.pos]) { p.sync_enter(&SYNC_14, &EXPECTED_14); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
     if p.peek_kind() == TK_THROWS {
         p.site = 38;
         _parse_throws_spec(p, 0);
     }
-    if !kind_set_has(&SYNC_14, p.kinds[p.pos]) { p.sync_enter(&SYNC_14, &EXPECTED_14); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
     if p.peek_kind() == TK_LOCALS {
         p.site = 39;
         _parse_locals_spec(p, 0);
     }
-    if !kind_set_has(&SYNC_14, p.kinds[p.pos]) { p.sync_enter(&SYNC_14, &EXPECTED_14); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -5449,12 +5464,12 @@ fn _parse_parser_rule_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         p.site = 40;
         _parse_rule_prequel(p, 0);
-        if !kind_set_has(&SYNC_14, p.kinds[p.pos]) { p.sync_back(&SYNC_14, &EXPECTED_14); }
+        if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_back(&SYNC_11, &EXPECTED_11); }
     }
-    p.expect(TK_COLON, &SYNC_15, false);
+    p.expect(TK_COLON, &SYNC_12, false);
     p.site = 41;
     _parse_rule_block(p, FOLLOW_MASK_2);
-    p.expect(TK_SEMI, &SYNC_16, true, true);
+    p.expect(TK_SEMI, &SYNC_2, true);
     p.site = 42;
     _parse_exception_group(p, follow);
     return;
@@ -5522,7 +5537,7 @@ fn _parse_exception_group(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_exception_handler__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_CATCH, &SYNC_17, false);
+    p.expect(TK_CATCH, &SYNC_2, false);
     p.site = 45;
     _parse_arg_action_block(p, (FOLLOW_MASK_9 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.site = 46;
@@ -5542,7 +5557,7 @@ fn _parse_exception_handler(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_finally_clause__inner(p: &mut Parser) -> () {
-    p.expect(TK_FINALLY, &SYNC_18, false);
+    p.expect(TK_FINALLY, &SYNC_2, false);
     p.site = 47;
     _parse_action_block(p);
     return;
@@ -5575,7 +5590,7 @@ fn _parse_rule_prequel__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of rulePrequel matches",
         p.peek_span(),
-        &EXPECTED_19,
+        &EXPECTED_13,
     );
     return;
 }
@@ -5592,7 +5607,7 @@ fn _parse_rule_prequel(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_rule_returns__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_RETURNS, &SYNC_17, false);
+    p.expect(TK_RETURNS, &SYNC_2, false);
     p.site = 50;
     _parse_arg_action_block(p, follow);
     return;
@@ -5610,7 +5625,7 @@ fn _parse_rule_returns(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_throws_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_THROWS, &SYNC_7, false);
+    p.expect(TK_THROWS, &SYNC_2, false);
     p.site = 51;
     _parse_qualified_identifier(p, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     loop {
@@ -5634,7 +5649,7 @@ fn _parse_throws_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_COMMA, &SYNC_7, false);
+        p.expect(TK_COMMA, &SYNC_2, false);
         p.site = 52;
         _parse_qualified_identifier(p, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     }
@@ -5653,7 +5668,7 @@ fn _parse_throws_spec(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_locals_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_LOCALS, &SYNC_17, false);
+    p.expect(TK_LOCALS, &SYNC_2, false);
     p.site = 53;
     _parse_arg_action_block(p, follow);
     return;
@@ -5671,7 +5686,7 @@ fn _parse_locals_spec(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_rule_action__inner(p: &mut Parser) -> () {
-    p.expect(TK_AT, &SYNC_7, false);
+    p.expect(TK_AT, &SYNC_2, false);
     p.site = 54;
     _parse_identifier(p);
     p.site = 55;
@@ -5742,7 +5757,7 @@ fn _parse_rule_modifiers(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_rule_modifier__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_20, p.kinds[p.pos]) { p.sync_alts(&SYNC_20, &EXPECTED_20); }
+    if !kind_set_has(&SYNC_14, p.kinds[p.pos]) { p.sync_alts(&SYNC_14, &EXPECTED_14); }
     let kind = p.peek_kind();
     if _kind_set_5(kind) {
         p.take();
@@ -5751,7 +5766,7 @@ fn _parse_rule_modifier__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of ruleModifier matches",
         p.peek_span(),
-        &EXPECTED_20,
+        &EXPECTED_14,
     );
     return;
 }
@@ -5808,7 +5823,7 @@ fn _parse_rule_alt_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_OR, &SYNC_21);
+        p.expect(TK_OR, &SYNC_2, true);
         p.site = 59;
         _parse_labeled_alt(p, follow);
     }
@@ -5849,20 +5864,20 @@ fn _parse_labeled_alt(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_lexer_rule_spec__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
     if p.peek_kind() == TK_FRAGMENT {
         p.take();
     }
-    p.expect(TK_TOKEN_REF, &SYNC_22, false);
-    if !kind_set_has(&SYNC_14, p.kinds[p.pos]) { p.sync_enter(&SYNC_14, &EXPECTED_14); }
+    p.expect(TK_TOKEN_REF, &SYNC_11, false);
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
     if p.peek_kind() == TK_OPTIONS {
         p.site = 62;
         _parse_options_spec(p, FOLLOW_MASK_12);
     }
-    p.expect(TK_COLON, &SYNC_23, false);
+    p.expect(TK_COLON, &SYNC_12, false);
     p.site = 63;
     _parse_lexer_rule_block(p, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_SEMI, &EMPTY_SYNC, true, true);
+    p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;
 }
 
@@ -5918,7 +5933,7 @@ fn _parse_lexer_alt_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_OR, &SYNC_24);
+        p.expect(TK_OR, &SYNC_2, true);
         p.site = 66;
         _parse_lexer_alt(p, follow);
     }
@@ -5969,7 +5984,7 @@ fn _parse_lexer_alt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of lexerAlt matches",
         p.peek_span(),
-        &EXPECTED_24,
+        &EXPECTED_16,
     );
     return;
 }
@@ -6032,7 +6047,7 @@ fn _parse_lexer_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of lexerElements matches",
         p.peek_span(),
-        &EXPECTED_25,
+        &EXPECTED_17,
     );
     return;
 }
@@ -6080,7 +6095,7 @@ fn _parse_lexer_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of lexerElement matches",
         p.peek_span(),
-        &EXPECTED_25,
+        &EXPECTED_17,
     );
     return;
 }
@@ -6097,10 +6112,10 @@ fn _parse_lexer_element(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_lexer_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_LPAREN, &SYNC_26, false);
+    p.expect(TK_LPAREN, &SYNC_18, false);
     p.site = 75;
     _parse_lexer_alt_list(p, (FOLLOW_MASK_13 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_RPAREN, &EMPTY_SYNC, true, true);
+    p.expect(TK_RPAREN, &EMPTY_SYNC, true);
     return;
 }
 
@@ -6116,7 +6131,7 @@ fn _parse_lexer_block(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_lexer_commands__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_RARROW, &SYNC_27, false);
+    p.expect(TK_RARROW, &SYNC_2, false);
     p.site = 76;
     _parse_lexer_command(p);
     loop {
@@ -6140,7 +6155,7 @@ fn _parse_lexer_commands__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_COMMA, &SYNC_27, false);
+        p.expect(TK_COMMA, &SYNC_2, false);
         p.site = 77;
         _parse_lexer_command(p);
     }
@@ -6161,10 +6176,10 @@ fn _parse_lexer_commands(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_lexer_command__inner_alt_0(p: &mut Parser) -> () {
     p.site = 78;
     _parse_lexer_command_name(p);
-    p.expect(TK_LPAREN, &SYNC_28, false);
+    p.expect(TK_LPAREN, &SYNC_2, false);
     p.site = 79;
     _parse_lexer_command_expr(p);
-    p.expect(TK_RPAREN, &EMPTY_SYNC, true, true);
+    p.expect(TK_RPAREN, &EMPTY_SYNC, true);
     return;
 }
 
@@ -6217,7 +6232,7 @@ fn _parse_lexer_command__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of lexerCommand matches",
         p.peek_span(),
-        &EXPECTED_27,
+        &EXPECTED_19,
     );
     return;
 }
@@ -6248,7 +6263,7 @@ fn _parse_lexer_command_name__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of lexerCommandName matches",
         p.peek_span(),
-        &EXPECTED_27,
+        &EXPECTED_19,
     );
     return;
 }
@@ -6279,7 +6294,7 @@ fn _parse_lexer_command_expr__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of lexerCommandExpr matches",
         p.peek_span(),
-        &EXPECTED_28,
+        &EXPECTED_20,
     );
     return;
 }
@@ -6319,7 +6334,7 @@ fn _parse_alt_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_OR, &SYNC_29);
+        p.expect(TK_OR, &SYNC_2, true);
         p.site = 84;
         _parse_alternative(p, follow);
     }
@@ -6389,7 +6404,7 @@ fn _parse_alternative__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of alternative matches",
         p.peek_span(),
-        &EXPECTED_29,
+        &EXPECTED_21,
     );
     return;
 }
@@ -6500,7 +6515,7 @@ fn _parse_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of element matches",
         p.peek_span(),
-        &EXPECTED_30,
+        &EXPECTED_22,
     );
     return;
 }
@@ -6517,10 +6532,10 @@ fn _parse_element(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_predicate_options__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_LT, &SYNC_7, false);
+    p.expect(TK_LT, &SYNC_2, false);
     p.site = 94;
     _parse_predicate_option(p, 0);
-    if !kind_set_has(&SYNC_31, p.kinds[p.pos]) { p.sync_enter(&SYNC_31, &EXPECTED_31); }
+    if !kind_set_has(&SYNC_23, p.kinds[p.pos]) { p.sync_enter(&SYNC_23, &EXPECTED_23); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -6541,12 +6556,12 @@ fn _parse_predicate_options__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_COMMA, &SYNC_7, false);
+        p.expect(TK_COMMA, &SYNC_2, false);
         p.site = 95;
         _parse_predicate_option(p, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-        if !kind_set_has(&SYNC_31, p.kinds[p.pos]) { p.sync_back(&SYNC_31, &EXPECTED_31); }
+        if !kind_set_has(&SYNC_23, p.kinds[p.pos]) { p.sync_back(&SYNC_23, &EXPECTED_23); }
     }
-    p.expect(TK_GT, &EMPTY_SYNC, true, true);
+    p.expect(TK_GT, &EMPTY_SYNC, true);
     return;
 }
 
@@ -6564,7 +6579,7 @@ fn _parse_predicate_options(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_predicate_option__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 97;
     _parse_identifier(p);
-    p.expect(TK_ASSIGN, &SYNC_32, false);
+    p.expect(TK_ASSIGN, &SYNC_2, false);
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_ACTION {
@@ -6573,7 +6588,7 @@ fn _parse_predicate_option__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     } else if _kind_set_23(grp_kind) {
         p.take();
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_32);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_24);
     }
     return;
 }
@@ -6635,8 +6650,8 @@ fn _parse_predicate_option(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_labeled_element__inner(p: &mut Parser) -> () {
     p.site = 99;
     _parse_identifier(p);
-    if !kind_set_has(&SYNC_33, p.kinds[p.pos]) { p.sync_alts(&SYNC_33, &EXPECTED_33); }
-    p.expect_set(&SYNC_33, &EXPECTED_33);
+    if !kind_set_has(&SYNC_25, p.kinds[p.pos]) { p.sync_alts(&SYNC_25, &EXPECTED_25); }
+    p.expect_set(&SYNC_25, &EXPECTED_25);
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let grp_kind = p.peek_kind();
     if _kind_set_13(grp_kind) {
@@ -6646,7 +6661,7 @@ fn _parse_labeled_element__inner(p: &mut Parser) -> () {
         p.site = 101;
         _parse_block(p, 0);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_34);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_26);
     }
     return;
 }
@@ -6701,7 +6716,7 @@ fn _parse_block_suffix(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_35, p.kinds[p.pos]) { p.sync_alts(&SYNC_35, &EXPECTED_35); }
+    if !kind_set_has(&SYNC_27, p.kinds[p.pos]) { p.sync_alts(&SYNC_27, &EXPECTED_27); }
     let kind = p.peek_kind();
     if kind == TK_QUESTION {
         p.take();
@@ -6727,7 +6742,7 @@ fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of ebnfSuffix matches",
         p.peek_span(),
-        &EXPECTED_35,
+        &EXPECTED_27,
     );
     return;
 }
@@ -6807,7 +6822,7 @@ fn _parse_lexer_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of lexerAtom matches",
         p.peek_span(),
-        &EXPECTED_36,
+        &EXPECTED_28,
     );
     return;
 }
@@ -6849,7 +6864,7 @@ fn _parse_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of atom matches",
         p.peek_span(),
-        &EXPECTED_37,
+        &EXPECTED_29,
     );
     return;
 }
@@ -6866,7 +6881,7 @@ fn _parse_atom(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_wildcard__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_DOT, &SYNC_38, true, true);
+    p.expect(TK_DOT, &SYNC_2, true);
     if p.peek_kind() == TK_LT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.site = 113;
         _parse_element_options(p, follow);
@@ -6886,21 +6901,21 @@ fn _parse_wildcard(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_not_set__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_NOT, &SYNC_39, false);
+    p.expect(TK_NOT, &SYNC_2, false);
     p.site = 114;
     _parse_set_element(p, follow);
     return;
 }
 
 fn _parse_not_set__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_NOT, &SYNC_40, false);
+    p.expect(TK_NOT, &SYNC_2, false);
     p.site = 115;
     _parse_block_set(p, follow);
     return;
 }
 
 fn _parse_not_set__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_41, p.kinds[p.pos]) { p.sync_alts(&SYNC_41, &EXPECTED_41); }
+    if !kind_set_has(&SYNC_30, p.kinds[p.pos]) { p.sync_alts(&SYNC_30, &EXPECTED_30); }
     let kind = p.peek_kind();
     if kind == TK_NOT {
         p.pos += 1;
@@ -6915,7 +6930,7 @@ fn _parse_not_set__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of notSet matches",
         p.peek_span(),
-        &EXPECTED_41,
+        &EXPECTED_30,
     );
     return;
 }
@@ -6932,10 +6947,10 @@ fn _parse_not_set(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_block_set__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_LPAREN, &SYNC_39, false);
+    p.expect(TK_LPAREN, &SYNC_2, false);
     p.site = 116;
     _parse_set_element(p, 0);
-    if !kind_set_has(&SYNC_42, p.kinds[p.pos]) { p.sync_enter(&SYNC_42, &EXPECTED_42); }
+    if !kind_set_has(&SYNC_31, p.kinds[p.pos]) { p.sync_enter(&SYNC_31, &EXPECTED_31); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -6956,12 +6971,12 @@ fn _parse_block_set__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_OR, &SYNC_39, false);
+        p.expect(TK_OR, &SYNC_2, false);
         p.site = 117;
         _parse_set_element(p, (FOLLOW_MASK_19 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-        if !kind_set_has(&SYNC_42, p.kinds[p.pos]) { p.sync_back(&SYNC_42, &EXPECTED_42); }
+        if !kind_set_has(&SYNC_31, p.kinds[p.pos]) { p.sync_back(&SYNC_31, &EXPECTED_31); }
     }
-    p.expect(TK_RPAREN, &EMPTY_SYNC, true, true);
+    p.expect(TK_RPAREN, &EMPTY_SYNC, true);
     return;
 }
 
@@ -6977,7 +6992,7 @@ fn _parse_block_set(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_set_element__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_STRING_LITERAL, &SYNC_38, true, true);
+    p.expect(TK_STRING_LITERAL, &SYNC_2, true);
     if p.peek_kind() == TK_LT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.site = 119;
         _parse_element_options(p, follow);
@@ -7043,7 +7058,7 @@ fn _parse_set_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of setElement matches",
         p.peek_span(),
-        &EXPECTED_39,
+        &EXPECTED_32,
     );
     return;
 }
@@ -7060,8 +7075,8 @@ fn _parse_set_element(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_LPAREN, &SYNC_43, false);
-    if !kind_set_has(&SYNC_44, p.kinds[p.pos]) { p.sync_enter(&SYNC_44, &EXPECTED_44); }
+    p.expect(TK_LPAREN, &SYNC_33, false);
+    if !kind_set_has(&SYNC_33, p.kinds[p.pos]) { p.sync_enter(&SYNC_33, &EXPECTED_33); }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -7082,12 +7097,12 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        if !kind_set_has(&SYNC_14, p.kinds[p.pos]) { p.sync_enter(&SYNC_14, &EXPECTED_14); }
+        if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
         if p.peek_kind() == TK_OPTIONS {
             p.site = 121;
             _parse_options_spec(p, 0);
         }
-        if !kind_set_has(&SYNC_14, p.kinds[p.pos]) { p.sync_enter(&SYNC_14, &EXPECTED_14); }
+        if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -7117,13 +7132,13 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             p.site = 122;
             _parse_rule_action(p);
-            if !kind_set_has(&SYNC_14, p.kinds[p.pos]) { p.sync_back(&SYNC_14, &EXPECTED_14); }
+            if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_back(&SYNC_11, &EXPECTED_11); }
         }
-        p.expect(TK_COLON, &EMPTY_SYNC);
+        p.expect(TK_COLON, &SYNC_18, false);
     }
     p.site = 123;
     _parse_alt_list(p, (FOLLOW_MASK_13 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_RPAREN, &EMPTY_SYNC, true, true);
+    p.expect(TK_RPAREN, &EMPTY_SYNC, true);
     return;
 }
 
@@ -7139,7 +7154,7 @@ fn _parse_block(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_ruleref__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_RULE_REF, &SYNC_45, true, true);
+    p.expect(TK_RULE_REF, &SYNC_2, true);
     if p.peek_kind() == TK_BEGIN_ARGUMENT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.site = 124;
         _parse_arg_action_block(p, follow);
@@ -7163,9 +7178,9 @@ fn _parse_ruleref(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_character_range__inner(p: &mut Parser) -> () {
-    p.expect(TK_STRING_LITERAL, &SYNC_46, false);
-    p.expect(TK_RANGE, &SYNC_47, false);
-    p.expect(TK_STRING_LITERAL, &EMPTY_SYNC, true, true);
+    p.expect(TK_STRING_LITERAL, &SYNC_34, false);
+    p.expect(TK_RANGE, &SYNC_35, false);
+    p.expect(TK_STRING_LITERAL, &EMPTY_SYNC, true);
     return;
 }
 
@@ -7181,7 +7196,7 @@ fn _parse_character_range(p: &mut Parser) -> () {
 }
 
 fn _parse_terminal_def__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_48, p.kinds[p.pos]) { p.sync_alts(&SYNC_48, &EXPECTED_48); }
+    if !kind_set_has(&SYNC_36, p.kinds[p.pos]) { p.sync_alts(&SYNC_36, &EXPECTED_36); }
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
         p.take();
@@ -7202,7 +7217,7 @@ fn _parse_terminal_def__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of terminalDef matches",
         p.peek_span(),
-        &EXPECTED_48,
+        &EXPECTED_36,
     );
     return;
 }
@@ -7219,10 +7234,10 @@ fn _parse_terminal_def(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_element_options__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_LT, &SYNC_7, false);
+    p.expect(TK_LT, &SYNC_2, false);
     p.site = 128;
     _parse_element_option(p, 0);
-    if !kind_set_has(&SYNC_31, p.kinds[p.pos]) { p.sync_enter(&SYNC_31, &EXPECTED_31); }
+    if !kind_set_has(&SYNC_23, p.kinds[p.pos]) { p.sync_enter(&SYNC_23, &EXPECTED_23); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -7243,12 +7258,12 @@ fn _parse_element_options__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_COMMA, &SYNC_7, false);
+        p.expect(TK_COMMA, &SYNC_2, false);
         p.site = 129;
         _parse_element_option(p, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-        if !kind_set_has(&SYNC_31, p.kinds[p.pos]) { p.sync_back(&SYNC_31, &EXPECTED_31); }
+        if !kind_set_has(&SYNC_23, p.kinds[p.pos]) { p.sync_back(&SYNC_23, &EXPECTED_23); }
     }
-    p.expect(TK_GT, &EMPTY_SYNC, true, true);
+    p.expect(TK_GT, &EMPTY_SYNC, true);
     return;
 }
 
@@ -7266,7 +7281,7 @@ fn _parse_element_options(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_element_option__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 131;
     _parse_identifier(p);
-    p.expect(TK_ASSIGN, &SYNC_49, false);
+    p.expect(TK_ASSIGN, &SYNC_2, false);
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let grp_kind = p.peek_kind();
     if _kind_set_1(grp_kind) {
@@ -7275,7 +7290,7 @@ fn _parse_element_option__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     } else if _kind_set_23(grp_kind) {
         p.take();
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_49);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_37);
     }
     return;
 }
@@ -7396,7 +7411,7 @@ fn _parse_qualified_identifier__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_DOT, &SYNC_7, false);
+        p.expect(TK_DOT, &SYNC_2, false);
         p.site = 134;
         _parse_identifier(p);
     }
@@ -7421,9 +7436,7 @@ fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Par
     p.max_errors = max_errors;
     entry(&mut p);
     if p.recovering && p.diagnostics.len() < max_errors {
-        if let Some(d) = p.pending {
-            p.diagnostics.push(d);
-        }
+        p.commit_pending();
     }
     merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);
     resolve_positions(&mut p.diagnostics, p.tokens.chars);
@@ -7897,75 +7910,54 @@ global EXPECTED_1: List<i32> = [TK_GRAMMAR, TK_LEXER, TK_PARSER];
 global SYNC_2: List<i32> = [570425304, 84965811];
 global EXPECTED_2: List<i32> = [TK_ACTION, TK_AT, TK_BEGIN_ARGUMENT, TK_CATCH, TK_CHANNELS, TK_DOT, TK_FINALLY, TK_FRAGMENT, TK_GRAMMAR, TK_IMPORT, TK_INT, TK_LEXER, TK_LEXER_CHAR_SET, TK_LOCALS, TK_LPAREN, TK_LT, TK_MODE, TK_NOT, TK_OPTIONS, TK_OR, TK_PARSER, TK_PLUS, TK_POUND, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC, TK_QUESTION, TK_RARROW, TK_RETURNS, TK_RULE_REF, TK_STAR, TK_STRING_LITERAL, TK_THROWS, TK_TOKENS, TK_TOKEN_REF];
 global EXPECTED_3: List<i32> = [TK_AT, TK_CHANNELS, TK_IMPORT, TK_OPTIONS, TK_TOKENS];
-global SYNC_4: List<i32> = [i32::MIN, 83886080];
-global SYNC_5: List<i32> = [-1577058344, 84965811];
-global EXPECTED_5: List<i32> = [TK_ACTION, TK_AT, TK_BEGIN_ARGUMENT, TK_CATCH, TK_CHANNELS, TK_DOT, TK_FINALLY, TK_FRAGMENT, TK_GRAMMAR, TK_IMPORT, TK_INT, TK_LEXER, TK_LEXER_CHAR_SET, TK_LOCALS, TK_LPAREN, TK_LT, TK_MODE, TK_NOT, TK_OPTIONS, TK_OR, TK_PARSER, TK_PLUS, TK_POUND, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC, TK_QUESTION, TK_RARROW, TK_RBRACE, TK_RETURNS, TK_RULE_REF, TK_STAR, TK_STRING_LITERAL, TK_THROWS, TK_TOKENS, TK_TOKEN_REF];
-global SYNC_6: List<i32> = [152, 83886080];
-global EXPECTED_6: List<i32> = [TK_ACTION, TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_4: List<i32> = [-1577058344, 84965811];
+global EXPECTED_4: List<i32> = [TK_ACTION, TK_AT, TK_BEGIN_ARGUMENT, TK_CATCH, TK_CHANNELS, TK_DOT, TK_FINALLY, TK_FRAGMENT, TK_GRAMMAR, TK_IMPORT, TK_INT, TK_LEXER, TK_LEXER_CHAR_SET, TK_LOCALS, TK_LPAREN, TK_LT, TK_MODE, TK_NOT, TK_OPTIONS, TK_OR, TK_PARSER, TK_PLUS, TK_POUND, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC, TK_QUESTION, TK_RARROW, TK_RBRACE, TK_RETURNS, TK_RULE_REF, TK_STAR, TK_STRING_LITERAL, TK_THROWS, TK_TOKENS, TK_TOKEN_REF];
+global EXPECTED_5: List<i32> = [TK_ACTION, TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_6: List<i32> = [402653184];
+global EXPECTED_6: List<i32> = [TK_COMMA, TK_SEMI];
 global SYNC_7: List<i32> = [0, 83886080];
 global EXPECTED_7: List<i32> = [TK_RULE_REF, TK_TOKEN_REF];
-global SYNC_8: List<i32> = [402653184];
-global EXPECTED_8: List<i32> = [TK_COMMA, TK_SEMI];
-global SYNC_9: List<i32> = [24576, 83886080];
-global EXPECTED_9: List<i32> = [TK_LEXER, TK_PARSER, TK_RULE_REF, TK_TOKEN_REF];
-global SYNC_10: List<i32> = [0, 655360];
-global EXPECTED_10: List<i32> = [TK_ARGUMENT_CONTENT, TK_END_ARGUMENT];
-global SYNC_11: List<i32> = [4096, 67108864];
-global EXPECTED_11: List<i32> = [TK_FRAGMENT, TK_TOKEN_REF];
-global EXPECTED_12: List<i32> = [TK_FRAGMENT, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC, TK_RULE_REF, TK_TOKEN_REF];
-global SYNC_13: List<i32> = [37224768, 4096];
-global SYNC_14: List<i32> = [603979736, 84965811];
-global EXPECTED_14: List<i32> = [TK_ACTION, TK_AT, TK_BEGIN_ARGUMENT, TK_CATCH, TK_CHANNELS, TK_COLON, TK_DOT, TK_FINALLY, TK_FRAGMENT, TK_GRAMMAR, TK_IMPORT, TK_INT, TK_LEXER, TK_LEXER_CHAR_SET, TK_LOCALS, TK_LPAREN, TK_LT, TK_MODE, TK_NOT, TK_OPTIONS, TK_OR, TK_PARSER, TK_PLUS, TK_POUND, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC, TK_QUESTION, TK_RARROW, TK_RETURNS, TK_RULE_REF, TK_STAR, TK_STRING_LITERAL, TK_THROWS, TK_TOKENS, TK_TOKEN_REF];
-global SYNC_15: List<i32> = [805306512, 83912962];
-global SYNC_16: List<i32> = [12582912];
-global SYNC_17: List<i32> = [64];
-global SYNC_18: List<i32> = [128];
-global EXPECTED_19: List<i32> = [TK_AT, TK_OPTIONS];
-global SYNC_20: List<i32> = [462848];
-global EXPECTED_20: List<i32> = [TK_FRAGMENT, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC];
-global SYNC_21: List<i32> = [536871056, 83912706];
-global SYNC_22: List<i32> = [33554688];
-global SYNC_23: List<i32> = [805306512, 68176129];
-global SYNC_24: List<i32> = [536871056, 68175873];
-global EXPECTED_24: List<i32> = [TK_ACTION, TK_DOT, TK_LEXER_CHAR_SET, TK_LPAREN, TK_NOT, TK_RARROW, TK_STRING_LITERAL, TK_TOKEN_REF];
-global EXPECTED_25: List<i32> = [TK_ACTION, TK_DOT, TK_LEXER_CHAR_SET, TK_LPAREN, TK_NOT, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_26: List<i32> = [1610612880, 68176129];
-global SYNC_27: List<i32> = [16777216, 83886080];
-global EXPECTED_27: List<i32> = [TK_MODE, TK_RULE_REF, TK_TOKEN_REF];
-global SYNC_28: List<i32> = [8, 83886080];
-global EXPECTED_28: List<i32> = [TK_INT, TK_RULE_REF, TK_TOKEN_REF];
-global SYNC_29: List<i32> = [536871056, 83904514];
-global EXPECTED_29: List<i32> = [TK_ACTION, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
-global EXPECTED_30: List<i32> = [TK_ACTION, TK_DOT, TK_LPAREN, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_31: List<i32> = [134217728, 4];
-global EXPECTED_31: List<i32> = [TK_COMMA, TK_GT];
-global SYNC_32: List<i32> = [152];
-global EXPECTED_32: List<i32> = [TK_ACTION, TK_INT, TK_STRING_LITERAL];
-global SYNC_33: List<i32> = [0, 72];
-global EXPECTED_33: List<i32> = [TK_ASSIGN, TK_PLUS_ASSIGN];
-global EXPECTED_34: List<i32> = [TK_DOT, TK_LPAREN, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_35: List<i32> = [0, 176];
-global EXPECTED_35: List<i32> = [TK_PLUS, TK_QUESTION, TK_STAR];
-global EXPECTED_36: List<i32> = [TK_DOT, TK_LEXER_CHAR_SET, TK_NOT, TK_STRING_LITERAL, TK_TOKEN_REF];
-global EXPECTED_37: List<i32> = [TK_DOT, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_38: List<i32> = [0, 2];
-global SYNC_39: List<i32> = [16, 68157440];
-global EXPECTED_39: List<i32> = [TK_LEXER_CHAR_SET, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_40: List<i32> = [536870912];
-global SYNC_41: List<i32> = [0, 16384];
-global EXPECTED_41: List<i32> = [TK_NOT];
-global SYNC_42: List<i32> = [1073741824, 256];
-global EXPECTED_42: List<i32> = [TK_OR, TK_RPAREN];
-global SYNC_43: List<i32> = [1644167568, 83908866];
-global SYNC_44: List<i32> = [1677721560, 84965811];
-global EXPECTED_44: List<i32> = [TK_ACTION, TK_AT, TK_BEGIN_ARGUMENT, TK_CATCH, TK_CHANNELS, TK_COLON, TK_DOT, TK_FINALLY, TK_FRAGMENT, TK_GRAMMAR, TK_IMPORT, TK_INT, TK_LEXER, TK_LEXER_CHAR_SET, TK_LOCALS, TK_LPAREN, TK_LT, TK_MODE, TK_NOT, TK_OPTIONS, TK_OR, TK_PARSER, TK_PLUS, TK_POUND, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC, TK_QUESTION, TK_RARROW, TK_RETURNS, TK_RPAREN, TK_RULE_REF, TK_STAR, TK_STRING_LITERAL, TK_THROWS, TK_TOKENS, TK_TOKEN_REF];
-global SYNC_45: List<i32> = [64, 2];
-global SYNC_46: List<i32> = [0, 1024];
-global SYNC_47: List<i32> = [16];
-global SYNC_48: List<i32> = [16, 67108864];
-global EXPECTED_48: List<i32> = [TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_49: List<i32> = [24, 83886080];
-global EXPECTED_49: List<i32> = [TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global EXPECTED_8: List<i32> = [TK_LEXER, TK_PARSER, TK_RULE_REF, TK_TOKEN_REF];
+global SYNC_9: List<i32> = [0, 655360];
+global EXPECTED_9: List<i32> = [TK_ARGUMENT_CONTENT, TK_END_ARGUMENT];
+global EXPECTED_10: List<i32> = [TK_FRAGMENT, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC, TK_RULE_REF, TK_TOKEN_REF];
+global SYNC_11: List<i32> = [603979736, 84965811];
+global EXPECTED_11: List<i32> = [TK_ACTION, TK_AT, TK_BEGIN_ARGUMENT, TK_CATCH, TK_CHANNELS, TK_COLON, TK_DOT, TK_FINALLY, TK_FRAGMENT, TK_GRAMMAR, TK_IMPORT, TK_INT, TK_LEXER, TK_LEXER_CHAR_SET, TK_LOCALS, TK_LPAREN, TK_LT, TK_MODE, TK_NOT, TK_OPTIONS, TK_OR, TK_PARSER, TK_PLUS, TK_POUND, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC, TK_QUESTION, TK_RARROW, TK_RETURNS, TK_RULE_REF, TK_STAR, TK_STRING_LITERAL, TK_THROWS, TK_TOKENS, TK_TOKEN_REF];
+global SYNC_12: List<i32> = [838860760, 84965811];
+global EXPECTED_13: List<i32> = [TK_AT, TK_OPTIONS];
+global SYNC_14: List<i32> = [462848];
+global EXPECTED_14: List<i32> = [TK_FRAGMENT, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC];
+global SYNC_15: List<i32> = [4096, 67108864];
+global EXPECTED_15: List<i32> = [TK_FRAGMENT, TK_TOKEN_REF];
+global EXPECTED_16: List<i32> = [TK_ACTION, TK_DOT, TK_LEXER_CHAR_SET, TK_LPAREN, TK_NOT, TK_RARROW, TK_STRING_LITERAL, TK_TOKEN_REF];
+global EXPECTED_17: List<i32> = [TK_ACTION, TK_DOT, TK_LEXER_CHAR_SET, TK_LPAREN, TK_NOT, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_18: List<i32> = [1644167128, 84965811];
+global EXPECTED_19: List<i32> = [TK_MODE, TK_RULE_REF, TK_TOKEN_REF];
+global EXPECTED_20: List<i32> = [TK_INT, TK_RULE_REF, TK_TOKEN_REF];
+global EXPECTED_21: List<i32> = [TK_ACTION, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global EXPECTED_22: List<i32> = [TK_ACTION, TK_DOT, TK_LPAREN, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_23: List<i32> = [134217728, 4];
+global EXPECTED_23: List<i32> = [TK_COMMA, TK_GT];
+global EXPECTED_24: List<i32> = [TK_ACTION, TK_INT, TK_STRING_LITERAL];
+global SYNC_25: List<i32> = [0, 72];
+global EXPECTED_25: List<i32> = [TK_ASSIGN, TK_PLUS_ASSIGN];
+global EXPECTED_26: List<i32> = [TK_DOT, TK_LPAREN, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_27: List<i32> = [0, 176];
+global EXPECTED_27: List<i32> = [TK_PLUS, TK_QUESTION, TK_STAR];
+global EXPECTED_28: List<i32> = [TK_DOT, TK_LEXER_CHAR_SET, TK_NOT, TK_STRING_LITERAL, TK_TOKEN_REF];
+global EXPECTED_29: List<i32> = [TK_DOT, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_30: List<i32> = [0, 16384];
+global EXPECTED_30: List<i32> = [TK_NOT];
+global SYNC_31: List<i32> = [1073741824, 256];
+global EXPECTED_31: List<i32> = [TK_OR, TK_RPAREN];
+global EXPECTED_32: List<i32> = [TK_LEXER_CHAR_SET, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_33: List<i32> = [1677721560, 84965811];
+global EXPECTED_33: List<i32> = [TK_ACTION, TK_AT, TK_BEGIN_ARGUMENT, TK_CATCH, TK_CHANNELS, TK_COLON, TK_DOT, TK_FINALLY, TK_FRAGMENT, TK_GRAMMAR, TK_IMPORT, TK_INT, TK_LEXER, TK_LEXER_CHAR_SET, TK_LOCALS, TK_LPAREN, TK_LT, TK_MODE, TK_NOT, TK_OPTIONS, TK_OR, TK_PARSER, TK_PLUS, TK_POUND, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC, TK_QUESTION, TK_RARROW, TK_RETURNS, TK_RPAREN, TK_RULE_REF, TK_STAR, TK_STRING_LITERAL, TK_THROWS, TK_TOKENS, TK_TOKEN_REF];
+global SYNC_34: List<i32> = [0, 1024];
+global SYNC_35: List<i32> = [16];
+global SYNC_36: List<i32> = [16, 67108864];
+global EXPECTED_36: List<i32> = [TK_STRING_LITERAL, TK_TOKEN_REF];
+global EXPECTED_37: List<i32> = [TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
 
 global FOLLOW_SETS: List<List<i32>> = [[268435456], [134217728], [0, 83886080], [i32::MIN], [128], [0, 16777216], [33554432], [1073741824], [536871056, 83904512], [0, 256], [16, 68157440]];
 global FOLLOW_MASK_2: i64 = 1;

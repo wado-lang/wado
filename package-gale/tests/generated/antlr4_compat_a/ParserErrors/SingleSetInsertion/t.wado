@@ -563,6 +563,7 @@ pub struct TreeBuilder {
     alt: List<i32>,
     open: List<i32>,
     last_finished: i32,
+    error_row: i32,
 }
 
 impl TreeBuilder {
@@ -574,6 +575,7 @@ impl TreeBuilder {
             alt: List::with_capacity(rows),
             open: [],
             last_finished: -1,
+            error_row: -1,
         };
     }
 
@@ -623,6 +625,9 @@ impl TreeBuilder {
         if self.last_finished >= checkpoint {
             self.last_finished += 1;
         }
+        if self.error_row >= checkpoint {
+            self.error_row += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -635,6 +640,9 @@ impl TreeBuilder {
         }
         if self.last_finished >= checkpoint {
             self.last_finished = -1;
+        }
+        if self.error_row > checkpoint {
+            self.error_row = checkpoint;
         }
     }
 
@@ -667,13 +675,20 @@ impl TreeBuilder {
         self.open.push(row);
     }
 
-    pub fn has_token_since(&self, row: i32) -> bool {
-        for let mut r = row; r < self.tag.len(); r += 1 {
+    pub fn mark_error(&mut self) {
+        self.error_row = self.tag.len();
+    }
+
+    pub fn in_error_mode(&self) -> bool {
+        if self.error_row < 0 {
+            return false;
+        }
+        for let mut r = self.error_row; r < self.tag.len(); r += 1 {
             if self.tag[r] matches { Tok } {
-                return true;
+                return false;
             }
         }
-        return false;
+        return true;
     }
 
     pub fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
@@ -1059,7 +1074,6 @@ struct Parser {
     max_errors: i32,
     site: i32,
     sites: List<i32>,
-    err_row: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
 }
@@ -1075,7 +1089,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
     fn supersedes_pending(&self, start: i32) -> bool {
@@ -1131,19 +1145,15 @@ impl Parser {
     fn commit_pending(&mut self) {
         let Some(d) = self.pending else { return; };
         self.pending = null;
-        if self.in_error_mode() { return; }
         let mut diag = d;
         self.b.push_open_rule_names(&RULE_NAMES, &mut diag.rule_stack);
+        self.report(diag);
+    }
+
+    fn report(&mut self, diag: Diagnostic) {
+        if self.b.in_error_mode() { return; }
         self.diagnostics.push(diag);
-        self.note_error();
-    }
-
-    fn in_error_mode(&self) -> bool {
-        return self.err_row >= 0 && !self.b.has_token_since(self.err_row);
-    }
-
-    fn note_error(&mut self) {
-        self.err_row = self.b.checkpoint();
+        self.b.mark_error();
     }
 
     fn resync_set(&self, base: &List<i32>) -> List<i32> {
@@ -1219,9 +1229,7 @@ impl Parser {
 
     fn report_extraneous(&mut self, names: &List<i32>, recovery: RecoveryAction) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
-        if self.in_error_mode() { return; }
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));
-        self.note_error();
+        self.report(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));
     }
 
     fn report_missing(&mut self, kind: i32) {
@@ -1230,14 +1238,12 @@ impl Parser {
         let at_eof = found == TK_EOF;
         let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };
         let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };
-        self.diagnostics.push(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
-        self.note_error();
+        self.report(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
     }
 
     fn report_unexpected(&mut self, kind: i32) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));
-        self.note_error();
+        self.report(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));
     }
 
     fn peek_start(&self) -> i32 {
@@ -1269,7 +1275,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32, sync: &List<i32>, rest_nullable: bool = true, may_end_rule: bool = false) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &List<i32>, may_end_rule: bool) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -1302,7 +1308,7 @@ impl Parser {
             return _syn;
         }
         if !sync.is_empty() {
-            if !rest_nullable && self.kinds[self.pos] == TK_EOF {
+            if !may_end_rule && self.kinds[self.pos] == TK_EOF {
                 self.fail_on_kind(kind);
                 return self.pos;
             }
@@ -1389,7 +1395,7 @@ fn _parse_a__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
     p.expect_set(&SYNC_0, &EXPECTED_0);
-    p.expect(TK_LIT_d, &EMPTY_SYNC, true, true);
+    p.expect(TK_LIT_d, &EMPTY_SYNC, true);
     return;
 }
 
@@ -1411,9 +1417,7 @@ fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Par
     p.max_errors = max_errors;
     entry(&mut p);
     if p.recovering && p.diagnostics.len() < max_errors {
-        if let Some(d) = p.pending {
-            p.diagnostics.push(d);
-        }
+        p.commit_pending();
     }
     merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);
     resolve_positions(&mut p.diagnostics, p.tokens.chars);

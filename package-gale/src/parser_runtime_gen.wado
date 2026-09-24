@@ -177,9 +177,7 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     // deepest error in `p.pending`. Surface it as one diagnostic; the partial
     // tree (open nodes folded by each wrapper's `finish_node`) is still returned.
     w.begin("if p.recovering && p.diagnostics.len() < max_errors");
-    w.begin("if let Some(d) = p.pending");
-    w.line("p.diagnostics.push(d);");
-    w.end();
+    w.line("p.commit_pending();");
     w.end();
     w.line("merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);");
     w.line("resolve_positions(&mut p.diagnostics, p.tokens.chars);");
@@ -267,26 +265,21 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     cp.emit_begin(w);
     w.line("let Some(d) = self.pending else { return; };");
     w.line("self.pending = null;");
-    w.line("if self.in_error_mode() { return; }");
     w.line("let mut diag = d;");
     w.line("self.b.push_open_rule_names(&RULE_NAMES, &mut diag.rule_stack);");
+    w.line("self.report(diag);");
+    w.end();
+    w.blank();
+
+    // ANTLR4's error recovery mode: once an error is reported, the next one
+    // waits for a token to match.
+    let mut rp = FnSpec::new("report");
+    rp.set_receiver("&mut self");
+    rp.add_param("diag", "Diagnostic");
+    rp.emit_begin(w);
+    w.line("if self.b.in_error_mode() { return; }");
     w.line("self.diagnostics.push(diag);");
-    w.line("self.note_error();");
-    w.end();
-    w.blank();
-
-    let mut em = FnSpec::new("in_error_mode");
-    em.set_receiver("&self");
-    em.set_return_type("bool");
-    em.emit_begin(w);
-    w.line("return self.err_row >= 0 && !self.b.has_token_since(self.err_row);");
-    w.end();
-    w.blank();
-
-    let mut ne = FnSpec::new("note_error");
-    ne.set_receiver("&mut self");
-    ne.emit_begin(w);
-    w.line("self.err_row = self.b.checkpoint();");
+    w.line("self.b.mark_error();");
     w.end();
     w.blank();
 
@@ -416,11 +409,9 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     rsy.add_param("recovery", "RecoveryAction");
     rsy.emit_begin(w);
     emit_diag_prologue(w);
-    w.line("if self.in_error_mode() { return; }");
     w.line(
-        "self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));",
+        "self.report(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));",
     );
-    w.line("self.note_error();");
     w.end();
     w.blank();
 }
@@ -476,9 +467,6 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // rule resynchronises on: a call stamps `site`, its entry pushes it.
     s.add_field("site", "i32");
     s.add_field("sites", "List<i32>");
-    // Builder row of the last reported error; recovery reports nothing new
-    // until a token has matched since, as a cascade would otherwise repeat it.
-    s.add_field("err_row", "i32");
     // Current recursive-descent depth, used only to indent trace output.
     if trace {
         s.add_field("trace_depth", "i32");
@@ -535,7 +523,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     f.emit_begin(w);
     w.line("let kinds = tokens.kinds.to_array();");
     let mut init = String::from(
-        "tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1",
+        "tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: []",
     );
     if trace {
         init.push_str(", trace_depth: 0");
@@ -862,9 +850,8 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line("let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };");
     w.line("let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };");
     w.line(
-        "self.diagnostics.push(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));",
+        "self.report(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));",
     );
-    w.line("self.note_error();");
     w.end();
     w.blank();
 
@@ -875,9 +862,8 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     run.emit_begin(w);
     emit_diag_prologue(w);
     w.line(
-        "self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));",
+        "self.report(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));",
     );
-    w.line("self.note_error();");
     w.end();
     w.blank();
 
@@ -943,8 +929,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     f7.set_receiver("&mut self");
     f7.add_param("kind", "i32");
     f7.add_param("sync", "&List<i32>");
-    f7.add_param_spec(ParamSpec { name: "rest_nullable", type_str: "bool", default_value: Option::Some("true") });
-    f7.add_param_spec(ParamSpec { name: "may_end_rule", type_str: "bool", default_value: Option::Some("false") });
+    f7.add_param("may_end_rule", "bool");
     f7.set_return_type("i32");
     // Fragment recovery descends into rule entries, so `expect` reaches the
     // parse fns and must carry the base effect they declare.
@@ -992,13 +977,13 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line("self.b.missing(_syn);");
     w.line("return _syn;");
     w.end();
-    // Neither match nor a single-token edit fits. If the rule's FIRST-of-rest
-    // (`sync`) is known, skip the offending run into a lossless `<error>`
-    // region and resync to it, then continue; otherwise fail the rule.
+    // Neither match nor a single-token edit fits. Skip the offending run into a
+    // lossless `<error>` region and resync to what may follow in the rule, then
+    // continue; with nothing to follow, fail the rule.
     w.begin("if !sync.is_empty()");
     // Nothing to resync onto at EOF: the missing terminal completes the
     // construct only where the input may end after it.
-    w.begin("if !rest_nullable && self.kinds[self.pos] == TK_EOF");
+    w.begin("if !may_end_rule && self.kinds[self.pos] == TK_EOF");
     w.line("self.fail_on_kind(kind);");
     w.line("return self.pos;");
     w.end();

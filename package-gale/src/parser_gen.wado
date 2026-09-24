@@ -152,10 +152,10 @@ use {
     alt_vals_arg,
     emit_alt_helper_exit,
     ambiguous_group_predicate_gated,
+    atn_decision_gates,
     call_arg_suffix,
     current_rule_emits_vals,
     emit_arg_stores,
-    emit_atn_disabled_seed,
     emit_no_viable_return,
     emit_span_capture,
     gen_action_body,
@@ -1896,9 +1896,8 @@ fn gen_scan_partition_body<S: AsStrSlice>(
         return;
     }
     if plan.atn_dec >= 0 {
-        w.line(
-            `let _atn_alt = atn_predict_once(&ATN_SIM, ${plan.atn_dec}, ${ctx.atn_state_arg()}, tokens, pos, TK_EOF, 0);`,
-        );
+        let gates = atn_decision_gates(&all_idx, &ctx.parser_rules()[ctx.current_rule_index()].alternatives, ctx, true);
+        gen_atn_body_pick(w, plan.atn_dec, &gates, "tokens", "pos", ctx);
         for let mut k = 0; k < all_idx.len(); k += 1 {
             w.begin(`if _atn_alt == ${all_idx[k]}`);
             gen_scan_sole_candidate(w, all_idx[k], k < guarded_count, scan_alts, ctx, plan, base_name, guard_tokens);
@@ -2152,14 +2151,13 @@ fn scan_rule_call_stmt(rc: &ScanRuleCallElement, ctx: &mut GenContext) -> String
 /// A scan's rule call. The callee's simulation sees the caller's continuation, as
 /// the parse side's entry wrapper pushes it; popping before any fail check never leaks it.
 fn gen_scan_rule_call(w: &mut CodeWriter, rc: &ScanRuleCallElement, ctx: &mut GenContext) {
-    let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
-    if push_ret >= 0 {
-        w.line(`${ctx.atn_stack_place()}.push(${push_ret});`);
+    if !ctx.needs_scan_atn() {
+        w.line(&scan_rule_call_stmt(rc, ctx));
+        return;
     }
+    w.line(`${ctx.atn_stack_place()}.push(${ctx.atn_call_site_return(rc.atn_call_site)});`);
     w.line(&scan_rule_call_stmt(rc, ctx));
-    if push_ret >= 0 {
-        w.line(`${ctx.atn_stack_place()}.pop();`);
-    }
+    w.line(`${ctx.atn_stack_place()}.pop();`);
 }
 
 /// Op-driven scan emitter where failure sets `pos = -1` rather than
@@ -3981,12 +3979,7 @@ fn gen_alt_elements(
             };
             gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
         } else if op_is_leaf(op) {
-            // The rule's FIRST-of-rest at this position is the sync set `expect`
-            // inserts a missing terminal against (a recovery-only edit; on valid
-            // input the leaf matches and `sync` is never read).
-            let sync = ctx.first_of_elements_from(elements, i + 1);
-            let rest_nullable = ctx.tail_is_nullable_deep(elements, i + 1);
-            gen_op_leaf(w, op, ctx, &mut name_counts, &sync, proven, rest_nullable, rest_nullable);
+            gen_op_leaf(w, op, ctx, &mut name_counts, proven);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
@@ -4038,13 +4031,7 @@ fn gen_elements_with_non_greedy(
             let follow = inner_walker_follow_for_repeat(rep, rep_op, elements, i, outer_follow, ctx);
             gen_op_repeat_with_follow_override(w, rep, rep_op, ctx, name_counts, &follow);
         } else if op_is_leaf(op) {
-            // Same FIRST-of-rest sync as `gen_alt_elements`, so a missing leaf
-            // inside a group / single-alt body is inserted in place rather than
-            // only deleted-or-unwound (recovery quality is uniform with the
-            // top-level sequence).
-            let sync = ctx.first_of_elements_from(elements, i + 1);
-            let rest_nullable = ctx.tail_is_nullable_deep(elements, i + 1);
-            gen_op_leaf(w, op, ctx, name_counts, &sync, proven, rest_nullable);
+            gen_op_leaf(w, op, ctx, name_counts, proven);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
         } else if let Group(g_op) = op {
@@ -4239,40 +4226,20 @@ fn gen_op_leaf(
     op: &Op,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
-    sync: &List<String> = &EMPTY_SYNC,
     proven: &List<String> = &EMPTY_SYNC,
-    rest_nullable: bool = true,
-    may_end_rule: bool = false,
 ) {
     if leaf_is_proven(op, proven) {
         gen_op_leaf_taken(w, op, ctx, name_counts);
         return;
     }
-    assert !may_end_rule || rest_nullable, "a leaf the rule may end after has a nullable rest";
-    // Where the rest of the sequence needs a token EOF is not, the input cannot
-    // end after this one, so `expect` does not complete it there.
-    let ends = if may_end_rule {
-        ", true, true";
-    } else if rest_nullable || sync.is_empty() {
-        "";
-    } else {
-        ", false";
-    };
-    // The Parser's `expect` / `match_*` append the matched token to the builder
-    // and return the token index. `sync` is the rule's FIRST-of-rest at this
-    // position — the set `expect` inserts a missing terminal against, passed by
-    // reference as an interned `&SYNC_<id>` global (`&EMPTY_SYNC` when empty, the
-    // default for callers outside a plain sequence — they only delete / panic).
     sync_name_counts_for_op_leaf(op, name_counts);
     return match *op {
-        Token(t) => {
-            let sync_ref = sync_set_ref(ctx, sync);
-            w.line(`${leaf_binding(ctx, &t.dedup_base, &t.field)}p.expect(${t.kind}, ${sync_ref}${ends});`);
-        },
-        Literal(l) => {
-            let sync_ref = sync_set_ref(ctx, sync);
-            w.line(`${leaf_binding(ctx, &l.dedup_base, &l.field)}p.expect(${l.kind}, ${sync_ref}${ends});`);
-        },
+        Token(t) => w.line(
+            `${leaf_binding(ctx, &t.dedup_base, &t.field)}${expect_call(&t.kind, t.atn_leaf_site, ctx)};`,
+        ),
+        Literal(l) => w.line(
+            `${leaf_binding(ctx, &l.dedup_base, &l.field)}${expect_call(&l.kind, l.atn_leaf_site, ctx)};`,
+        ),
         RuleCall(r) => {
             // One callee per rule; the caller's continuation is
             // threaded at runtime via `follow_arg` rather than selecting a
@@ -4306,6 +4273,15 @@ fn gen_op_leaf(
     };
 }
 
+/// `p.expect(kind, …)` for terminal `leaf_site`. A missing terminal is inserted
+/// where the token after it can follow it in its rule or, past the rule's end,
+/// in the rules under way.
+fn expect_call<S: AsStrSlice>(kind: S, leaf_site: i32, ctx: &mut GenContext) -> String {
+    let [follow, ends] = ctx.leaf_follow(leaf_site);
+    assert ends || !follow.is_empty(), "a terminal the rule cannot end after has a successor";
+    return `p.expect(${kind}, ${sync_set_ref(ctx, &follow)}, ${ends})`;
+}
+
 // === GIR-op body emission ===
 // Under the emitter the alt body is emitted from the lowered ops (no
 // surface elements, no typed fields): leaves go through `gen_op_leaf` (the
@@ -4336,7 +4312,7 @@ fn gen_op(
         Repeat(r) => gen_repeat_body(w, &r, ctx, nc),
         Group(g) => gen_group_body(w, &g, ctx, nc, null, proven),
         ListLabel(ll) => gen_op(w, &ll.inner, ctx, nc, proven),
-        _ => gen_op_leaf(w, op, ctx, nc, &EMPTY_SYNC, proven),
+        _ => gen_op_leaf(w, op, ctx, nc, proven),
     }
 }
 
@@ -5183,7 +5159,7 @@ fn gen_op_inner_for_storable_repeat(
     let op = &rep_op.body;
     let unwrapped_elem = peel_repeat_body_label(elem);
     return match rep_op.body_shape {
-        LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts, &EMPTY_SYNC, proven),
+        LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts, proven),
         StorableGroup => gen_op_storable_group_inner(
             w,
             op,
@@ -5278,14 +5254,7 @@ fn gen_op_dispatch_element(
     proven: &List<String> = &EMPTY_SYNC,
 ) {
     match op {
-        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => gen_op_leaf(
-            w,
-            op,
-            ctx,
-            name_counts,
-            &EMPTY_SYNC,
-            proven,
-        ),
+        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => gen_op_leaf(w, op, ctx, name_counts, proven),
         Repeat(rep_op) => {
             let rep = if let Repeat(r) = elem {
                 r;
@@ -6292,13 +6261,15 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     match elem {
         TokenRef(t) => {
             let field_name = dedup_name(&t.field_name, name_counts);
-            w.line(`${leaf_binding(ctx, &t.field_name, &field_name)}p.expect(TK_${t.name}, &EMPTY_SYNC);`);
+            w.line(
+                `${leaf_binding(ctx, &t.field_name, &field_name)}${expect_call(`TK_${t.name}`, t.atn_leaf_site, ctx)};`,
+            );
         },
         Literal(l) => {
             let const_name = l.const_name;
             let base = literal_field_name(&l.text);
             let field_name = dedup_name(&base, name_counts);
-            w.line(`${leaf_binding(ctx, &base, &field_name)}p.expect(${const_name}, &EMPTY_SYNC);`);
+            w.line(`${leaf_binding(ctx, &base, &field_name)}${expect_call(&const_name, l.atn_leaf_site, ctx)};`);
         },
         // Per-call-site FOLLOW args are baked on `RuleCallOp.follow_arg`
         // by lower and consumed by the op-driven walkers; this surface arm
@@ -6709,7 +6680,7 @@ fn gen_optional_present<S: AsStrSlice, S1: AsStrSlice>(
     let guard = if gate_expr.is_empty() { cond.to_string() } else { `${cond} && !${gate_expr}` };
     w.begin(`if ${guard}`);
     let mut nc: List<[String, i32]> = [];
-    gen_op_leaf(w, body, ctx, &mut nc, &EMPTY_SYNC, proven);
+    gen_op_leaf(w, body, ctx, &mut nc, proven);
     w.end();
 }
 
@@ -8370,6 +8341,31 @@ fn gen_group_branch_body(
     gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts);
 }
 
+/// `let _atn_alt`: the simulator's pick at rule-body decision `dec`, with each
+/// alternative whose gate is false disabled. The parse and a scan both pick here.
+fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
+    w: &mut CodeWriter,
+    dec: i32,
+    gates: &List<[i32, String]>,
+    tokens: S,
+    pos: S1,
+    ctx: &GenContext,
+) {
+    if gates.is_empty() {
+        w.line(
+            `let _atn_alt = atn_predict_once(&ATN_SIM, ${dec}, ${ctx.atn_state_arg()}, ${tokens}, ${pos}, TK_EOF, 0);`,
+        );
+        return;
+    }
+    w.line("let mut _atn_disabled: List<i32> = [];");
+    for let g of gates {
+        w.line(`if !(${g.1}) { _atn_disabled.push(${g.0}); }`);
+    }
+    w.line(
+        `let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${dec}, &${ctx.atn_stack_place()}, ${tokens}, ${pos}, TK_EOF, 0, &_atn_disabled);`,
+    );
+}
+
 /// The simulator's pick of a contested group's alternative, over `tokens` at `pos`.
 fn group_atn_predict_call<S: AsStrSlice, S1: AsStrSlice>(atn_dec: i32, tokens: S, pos: S1, ctx: &GenContext) -> String {
     return `atn_predict_once(&ATN_SIM, ${atn_dec}, ${ctx.atn_state_arg()}, ${tokens}, ${pos}, TK_EOF, ${atn_prec_arg(
@@ -9003,14 +8999,11 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                 let amb_rule = ctx.current_rule_index();
                 let route_via_atn = ambiguous_node_routes_via_atn(a, rule_display, ctx);
                 if route_via_atn {
-                    let dec = ctx.atn_rule_body_decision(amb_rule);
-                    let disabled_arg = emit_atn_disabled_seed(w, &a.alts, alts, ctx);
-                    w.line(
-                        `let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${dec}, &${ctx.atn_stack_place()}, &p.kinds, p.pos, TK_EOF, 0${disabled_arg});`,
-                    );
+                    let gates = atn_decision_gates(&a.alts, alts, ctx, false);
+                    gen_atn_body_pick(w, ctx.atn_rule_body_decision(amb_rule), &gates, "&p.kinds", "p.pos", ctx);
                     // A seed can exclude every alt (`_atn_alt == -1`), which the
                     // index dispatch would otherwise route to its last alt.
-                    if !disabled_arg.is_empty() {
+                    if !gates.is_empty() {
                         w.begin("if _atn_alt < 0");
                         w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
                         emit_no_viable_return(w, ctx);

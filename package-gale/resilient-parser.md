@@ -146,12 +146,15 @@ terminal recovers in place via a `recovering` flag rather than unwinding a
 
 **Recovery — error-token edits (done).**
 
-- `expect(kind, sync)` recovers locally: delete a spurious terminal
-  (`<skip>`, `ExtraToken`), insert a missing one when the current token
-  continues the rule (`<missing>`, `MissingToken`, `sync` = static
-  FIRST-of-rest), or skip an unrecoverable run into a lossless `<error>`
-  (`K_ERROR`) region and resync to a `sync` token. A no-sync mismatch fails
-  the rule, which recovers at its entry as above.
+- `expect(kind, sync, may_end_rule)` recovers locally: delete a spurious
+  terminal (`<skip>`, `ExtraToken`), insert a missing one when the current
+  token can follow it (`<missing>`, `MissingToken`), or skip an unrecoverable
+  run into a lossless `<error>` (`K_ERROR`) region and resync to a `sync`
+  token. `sync` is what the ATN says may follow the terminal inside its rule;
+  where the rule may end after it, the rules under way count too. A no-sync
+  mismatch fails the rule, which recovers at its entry as above.
+- After a reported error, the next one is reported only once a token has
+  matched, as in ANTLR4's error recovery mode.
 - Scan-gated `*`/`+` loops over a RuleRef body enter a malformed element when
   its FIRST token is present, so the broken element lands in the tree with its
   repair edits.

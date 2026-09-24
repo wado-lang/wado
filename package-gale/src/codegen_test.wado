@@ -1675,7 +1675,7 @@ test "at-end-conflict multi-alt rule routes through the ATN simulator" {
     let mut g = parse(AT_END_CONFLICT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_x__inner(");
-    assert str_contains(&body, "let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&body, "let _atn_alt = atn_predict_once(&ATN_SIM,");
     assert str_contains(&body, "if _atn_alt ==");
     assert !str_contains(&body, "_sd_best_i");
 }
@@ -1692,7 +1692,7 @@ test "FOLLOW-disjoint at-end conflict keeps the static tournament" {
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_x__inner(");
     assert str_contains(&body, "_sd_best_i");
-    assert !str_contains(&body, "atn_predict_with_stack");
+    assert !str_contains(&body, "atn_predict");
     assert !str_contains(&output, "global ATN_SIM");
 }
 
@@ -1708,7 +1708,7 @@ test "at-end conflict routes through the ATN when a nullable rule hides the call
     let mut g = parse(AT_END_NULLABLE_GAP_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_x__inner(");
-    assert str_contains(&body, "let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&body, "let _atn_alt = atn_predict_once(&ATN_SIM,");
     assert !str_contains(&body, "_sd_best_i");
 }
 
@@ -1723,7 +1723,7 @@ test "wildcard caller suffix keeps the at-end conflict on the ATN" {
     let mut g = parse(AT_END_WILDCARD_FOLLOW_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_x__inner(");
-    assert str_contains(&body, "let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&body, "let _atn_alt = atn_predict_once(&ATN_SIM,");
     assert !str_contains(&body, "_sd_best_i");
 }
 
@@ -1992,7 +1992,7 @@ test "a nullable alternative the caller can follow contends with the one it foll
     let mut g = parse(NULLABLE_BUT_SELECTABLE_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_r__inner(");
-    assert count_substr(&body, "atn_predict_with_stack(") == 1, `the contested lookahead is not simulated: ${body}`;
+    assert count_substr(&body, "let _atn_alt = ") == 1, `the contested lookahead is not simulated: ${body}`;
 }
 
 test "a wildcard behind a nullable prefix still makes its alternative open-ended" {

@@ -773,6 +773,14 @@ impl GenContext {
         return &self.recovery;
     }
 
+    /// What may follow terminal `leaf_site` inside its rule, as `TK_*` names,
+    /// and whether the rule may end after it.
+    pub fn leaf_follow(&self, leaf_site: i32) -> [List<String>, bool] {
+        let r = &self.recovery;
+        assert leaf_site >= 0 && leaf_site < r.leaf_follow.len(), `terminal ${leaf_site} has an ATN state`;
+        return [self.token_kinds.names_of(&r.leaf_follow[leaf_site]), r.leaf_follow_ends[leaf_site]];
+    }
+
     /// What a subrule expects on entry, as `TK_*` names; `null` where its
     /// rule may end there instead, or the site names no decision.
     pub fn decision_entry_expect(&self, site: i32) -> Option<List<String>> {
@@ -927,20 +935,6 @@ impl GenContext {
             return -1;
         }
         return self.atn_rule_body_decision(rule);
-    }
-
-    /// The exact ATN return state to push onto the caller stack before a scan
-    /// rule call (from `Atn.call_site_returns`), or -1 when the grammar has no
-    /// scan-side ATN routing. Every scan rule call brackets with this push/pop
-    /// — mirroring the parse side, where the rule-entry wrapper pushes every
-    /// call's return state — so an ATN-class LR rule scanned from any caller
-    /// (not only its own self-ref operand) sees the caller's mandatory
-    /// continuation (e.g. `between`'s `'and'`).
-    pub fn scan_atn_push_return(&self, atn_call_site: i32) -> i32 {
-        if !self.needs_scan_atn() {
-            return -1;
-        }
-        return self.atn_call_site_return(atn_call_site);
     }
 
     /// Enable trace instrumentation in the generated parser (the

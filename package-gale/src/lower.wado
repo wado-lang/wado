@@ -3170,19 +3170,7 @@ fn lower_op<S: AsStrSlice>(
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> Op {
     return match *elem {
-        TokenRef(t) => Op::Token(TokenOp {
-            kind: `TK_${t.name}`,
-            field: dedup_name(&t.field_name, name_counts),
-            dedup_base: t.field_name,
-        }),
-        Literal(l) => {
-            let base = literal_field_name(&l.text);
-            Op::Literal(LiteralOp {
-                kind: l.const_name,
-                field: dedup_name(&base, name_counts),
-                dedup_base: base,
-            });
-        },
+        TokenRef(_) | Literal(_) => lower_token_only_leaf(elem, name_counts),
         RuleRef(r) => Op::RuleCall(RuleCallOp {
             target_name: r.name,
             target_snake: r.snake_name,
@@ -3634,6 +3622,7 @@ fn lower_token_only_leaf(elem: &Element, counts: &mut List<[String, i32]>) -> Op
             kind: `TK_${t.name}`,
             field: dedup_name(&t.field_name, counts),
             dedup_base: t.field_name,
+            atn_leaf_site: t.atn_leaf_site,
         }),
         Literal(l) => {
             let base = literal_field_name(&l.text);
@@ -3641,6 +3630,7 @@ fn lower_token_only_leaf(elem: &Element, counts: &mut List<[String, i32]>) -> Op
                 kind: l.const_name,
                 field: dedup_name(&base, counts),
                 dedup_base: base,
+                atn_leaf_site: l.atn_leaf_site,
             });
         },
         _ => panic("lower_token_only_leaf: classifier permitted non-token leaf"),

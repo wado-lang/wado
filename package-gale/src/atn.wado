@@ -98,6 +98,9 @@ pub struct Atn {
     /// the runtime "unique exit-first BlockStart" search. Empty when decision
     /// sites were not assigned (`assign_atn_decisions` not run).
     pub decision_sites: List<i32>,
+    /// Compile-time `atn_leaf_site -> the state after the terminal matches`,
+    /// `-1` for an id no segment took. Not serialized.
+    pub leaf_site_states: List<i32> = [],
 }
 
 /// The loop-entry (`STAR_LOOP_ENTRY`) decision number for parser rule
@@ -178,6 +181,7 @@ struct AtnBuilder {
     num_tokens: i32,
     call_site_returns: List<i32>,
     decision_sites: List<i32>,
+    leaf_site_states: List<i32> = [],
 }
 
 impl AtnBuilder {
@@ -195,6 +199,14 @@ impl AtnBuilder {
             return;
         }
         sparse_set(&mut self.call_site_returns, call_site, return_state);
+    }
+
+    fn record_leaf_site(&mut self, leaf_site: i32, after: i32) {
+        if leaf_site < 0 {
+            return;
+        }
+        assert leaf_site >= self.leaf_site_states.len() || self.leaf_site_states[leaf_site] < 0, "a terminal is built once";
+        sparse_set(&mut self.leaf_site_states, leaf_site, after);
     }
 
     /// Allocate a fresh decision number and bind it to `state`.
@@ -320,6 +332,7 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar) -> Atn {
         num_tokens: b.num_tokens,
         call_site_returns: b.call_site_returns,
         decision_sites: b.decision_sites,
+        leaf_site_states: b.leaf_site_states,
     };
 }
 
@@ -736,8 +749,8 @@ fn build_sequence(
 /// Build a single element, returning its `[entry, exit]` state pair.
 fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &TreeMap<String, i32>) -> [i32, i32] {
     return match *elem {
-        TokenRef(t) => atom_segment(b, b.kind_of(`TK_${t.name}`), rule),
-        Literal(l) => atom_segment(b, b.kind_of(&l.const_name), rule),
+        TokenRef(t) => leaf_segment(b, b.kind_of(`TK_${t.name}`), rule, t.atn_leaf_site),
+        Literal(l) => leaf_segment(b, b.kind_of(&l.const_name), rule, l.atn_leaf_site),
         Wildcard(_) => {
             let from = b.new_state(ATN_BASIC, rule);
             let to = b.new_state(ATN_BASIC, rule);
@@ -777,10 +790,11 @@ fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &Tre
 /// `entry --Atom(kind)--> exit`. A `kind` of -1 (unresolved token) still
 /// produces a transition so the ATN stays structurally complete; the
 /// simulator simply never matches it.
-fn atom_segment(b: &mut AtnBuilder, kind: i32, rule: i32) -> [i32, i32] {
+fn leaf_segment(b: &mut AtnBuilder, kind: i32, rule: i32, leaf_site: i32) -> [i32, i32] {
     let from = b.new_state(ATN_BASIC, rule);
     let to = b.new_state(ATN_BASIC, rule);
     b.add_trans(from, AtnTransition { kind: ATN_TR_ATOM, target: to, label: kind });
+    b.record_leaf_site(leaf_site, to);
     return [from, to];
 }
 
