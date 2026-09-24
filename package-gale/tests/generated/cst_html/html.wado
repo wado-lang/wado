@@ -647,6 +647,47 @@ impl TreeBuilder {
         let _ = self.open.pop();
     }
 
+    pub fn innermost_open(&self) -> i32 {
+        if self.open.is_empty() {
+            return -1;
+        }
+        return self.open[self.open.len() - 1];
+    }
+
+    pub fn node_kind(&self, row: i32) -> NodeKind {
+        return self.a[row] as NodeKind;
+    }
+
+    pub fn resume_node(&mut self, row: i32, end: i32) {
+        while self.innermost_open() > row {
+            self.finish_node(end);
+        }
+        if self.innermost_open() == row {
+            return;
+        }
+        assert self.last_finished == row && self.tag[self.tag.len() - 1] matches { Close }, "resume_node: a node no longer open is the last one closed";
+        self.truncate(self.tag.len() - 1);
+        self.open.push(row);
+    }
+
+    pub fn has_token_since(&self, row: i32) -> bool {
+        for let mut r = row; r < self.tag.len(); r += 1 {
+            if self.tag[r] matches { Tok } {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            let kind = self.a[self.open[i]];
+            if kind != K_ERROR as i32 {
+                out.push(rule_names[kind]);
+            }
+        }
+    }
+
     pub fn token(&mut self, idx: i32) {
         self.push_row(EventTag::Tok, idx, 0);
     }
@@ -1873,6 +1914,9 @@ struct Parser {
     recovering: bool,
     speculating: bool,
     max_errors: i32,
+    site: i32,
+    sites: List<i32>,
+    err_row: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
 }
@@ -1888,7 +1932,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
     fn supersedes_pending(&self, start: i32) -> bool {
@@ -1912,8 +1956,7 @@ impl Parser {
 
     fn fail_on_kind(&mut self, kind: i32) {
         if self.supersedes_pending(self.tokens.starts[self.pos]) {
-            let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };
-            self.fail_on_token("got", &([kind] as List<i32>), code);
+            self.fail_expecting(&([kind] as List<i32>));
         }
         self.recovering = true;
     }
@@ -1928,9 +1971,114 @@ impl Parser {
         }
     }
 
-    fn report_extra(&mut self, kind: i32) {
+    fn recover_rule(&mut self, rule: NodeKind, name: String, row: i32) -> bool {
+        if self.speculating || self.diagnostics.len() >= self.max_errors {
+            self.push_rule_stack(name);
+            return false;
+        }
+        let node = if row < 0 { self.b.innermost_open() } else { row };
+        self.b.resume_node(node, self.last_end());
+        assert self.b.node_kind(node) == rule, "recover_rule: the resumed node is the failed rule's";
+        self.commit_pending();
+        self.recovering = false;
+        self.skip_until(&self.resync_set(&[]));
+        return true;
+    }
+
+    fn commit_pending(&mut self) {
+        let Some(d) = self.pending else { return; };
+        self.pending = null;
+        if self.in_error_mode() { return; }
+        let mut diag = d;
+        self.b.push_open_rule_names(&RULE_NAMES, &mut diag.rule_stack);
+        self.diagnostics.push(diag);
+        self.note_error();
+    }
+
+    fn in_error_mode(&self) -> bool {
+        return self.err_row >= 0 && !self.b.has_token_since(self.err_row);
+    }
+
+    fn note_error(&mut self) {
+        self.err_row = self.b.checkpoint();
+    }
+
+    fn resync_set(&self, base: &List<i32>) -> List<i32> {
+        let mut set = *base;
+        for let s of &self.sites {
+            if *s < 0 { continue; }
+            let f = &CALL_FOLLOW_SETS[CALL_FOLLOW[*s]];
+            while set.len() < f.len() { set.push(0); }
+            for let mut i = 0; i < f.len(); i += 1 { set[i] = set[i] | f[i]; }
+        }
+        return set;
+    }
+
+    fn follows_rules_under_way(&self, k: i32) -> bool {
+        for let mut i = self.sites.len() - 1; i >= 0; i -= 1 {
+            let s = self.sites[i];
+            if s < 0 { return i == 0 && k == TK_EOF; }
+            if kind_set_has(&CALL_FOLLOW_SETS[CALL_FOLLOW[s]], k) { return true; }
+            if !CALL_FOLLOW_ENDS[s] { return false; }
+        }
+        return k == TK_EOF;
+    }
+
+    fn skip_until(&mut self, set: &List<i32>) {
+        loop {
+            let k = self.kinds[self.pos];
+            if k == TK_EOF || kind_set_has(set, k) { break; }
+            self.skip_one();
+        }
+    }
+
+    fn skip_one(&mut self) {
+        let _sk = self.advance();
+        self.tokens.mark_skipped(_sk);
+        self.b.skip(_sk);
+    }
+
+    fn sync_delete(&mut self, expected: &List<i32>, names: &List<i32>) -> bool {
+        if self.speculating || self.kinds[self.pos] == TK_EOF || !kind_set_has(expected, self.peek_at(1)) {
+            return false;
+        }
+        self.report_extraneous(names, RecoveryAction::Deleted);
+        self.skip_one();
+        return true;
+    }
+
+    fn sync_enter(&mut self, expected: &List<i32>, names: &List<i32>) {
+        if !self.recovering && !self.sync_delete(expected, names) {
+            self.fail_expecting(names);
+        }
+    }
+
+    fn sync_alts(&mut self, expected: &List<i32>, names: &List<i32>) {
+        if !self.recovering && !self.sync_delete(expected, names) {
+            self.no_viable("no viable alternative", self.peek_span(), names);
+        }
+    }
+
+    fn sync_back(&mut self, expected: &List<i32>, names: &List<i32>) {
+        if self.recovering || self.kinds[self.pos] == TK_EOF { return; }
+        if self.speculating {
+            self.fail_expecting(names);
+            return;
+        }
+        self.report_extraneous(names, RecoveryAction::SkippedTo);
+        self.skip_until(&self.resync_set(expected));
+    }
+
+    fn fail_expecting(&mut self, names: &List<i32>) {
+        let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };
+        self.fail_on_token("got", names, code);
+    }
+
+    fn report_extraneous(&mut self, names: &List<i32>, recovery: RecoveryAction) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::Deleted));
+        if self.in_error_mode() { return; }
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));
+        self.note_error();
     }
 
     fn report_missing(&mut self, kind: i32) {
@@ -1939,12 +2087,14 @@ impl Parser {
         let at_eof = found == TK_EOF;
         let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };
         let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };
-        self.diagnostics.push(Diagnostic::error(code, `missing ${token_kind_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
+        self.diagnostics.push(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
+        self.note_error();
     }
 
     fn report_unexpected(&mut self, kind: i32) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
         self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));
+        self.note_error();
     }
 
     fn peek_start(&self) -> i32 {
@@ -1976,7 +2126,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32, sync: &List<i32>) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &List<i32>, rest_nullable: bool = true, may_end_rule: bool = false) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -1992,10 +2142,8 @@ impl Parser {
             return self.pos;
         }
         if self.peek_at(1) == kind {
-            self.report_extra(kind);
-            let _sk = self.advance();
-            self.tokens.mark_skipped(_sk);
-            self.b.skip(_sk);
+            self.report_extraneous(&[kind], RecoveryAction::Deleted);
+            self.skip_one();
             if kind == TK_EOF {
                 self.b.token(self.pos);
                 return self.pos;
@@ -2004,22 +2152,24 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        if kind_set_has(sync, self.kinds[self.pos]) {
+        if kind_set_has(sync, self.kinds[self.pos]) || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos]) {
             self.report_missing(kind);
             let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
             self.b.missing(_syn);
             return _syn;
         }
         if !sync.is_empty() {
+            if !rest_nullable && self.kinds[self.pos] == TK_EOF {
+                self.fail_on_kind(kind);
+                return self.pos;
+            }
             self.report_unexpected(kind);
             if self.kinds[self.pos] != TK_EOF {
                 self.b.start_error(self.tokens.span_at(self.pos).start);
                 loop {
                     let _k = self.kinds[self.pos];
                     if _k == TK_EOF || _k == kind || kind_set_has(sync, _k) { break; }
-                    let _sk = self.advance();
-                    self.tokens.mark_skipped(_sk);
-                    self.b.skip(_sk);
+                    self.skip_one();
                 }
                 self.b.finish_node(self.last_end());
             }
@@ -2336,6 +2486,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let _rec_sav = p.recovering;
                 let _rec_spec = p.speculating;
                 p.speculating = true;
+                p.site = 0;
                 _parse_scriptlet_or_sea_ws(p);
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
@@ -2344,6 +2495,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             break;
         }
+        p.site = 0;
         _parse_scriptlet_or_sea_ws(p);
     }
     if p.peek_kind() == TK_XML && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -2396,6 +2548,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let _rec_sav = p.recovering;
                 let _rec_spec = p.speculating;
                 p.speculating = true;
+                p.site = 1;
                 _parse_scriptlet_or_sea_ws(p);
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
@@ -2404,6 +2557,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             break;
         }
+        p.site = 1;
         _parse_scriptlet_or_sea_ws(p);
     }
     if p.peek_kind() == TK_DTD && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -2447,6 +2601,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let _rec_sav = p.recovering;
                 let _rec_spec = p.speculating;
                 p.speculating = true;
+                p.site = 2;
                 _parse_scriptlet_or_sea_ws(p);
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
@@ -2455,6 +2610,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             break;
         }
+        p.site = 2;
         _parse_scriptlet_or_sea_ws(p);
     }
     loop {
@@ -2476,6 +2632,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let _rec_sav = p.recovering;
                 let _rec_spec = p.speculating;
                 p.speculating = true;
+                p.site = 3;
                 _parse_html_elements(p, 0);
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
@@ -2484,6 +2641,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             break;
         }
+        p.site = 3;
         _parse_html_elements(p, 0);
     }
     return;
@@ -2491,16 +2649,17 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_html_document(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
+    p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_HTML_DOCUMENT, _start);
     _parse_html_document__inner(p, follow);
+    if p.recovering { let _ = p.recover_rule(RK_HTML_DOCUMENT, "htmlDocument", -1); }
     p.b.finish_node(p.last_end());
-    if p.recovering {
-        p.push_rule_stack("htmlDocument");
-    }
+    p.sites.pop();
 }
 
 fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser) -> () {
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         p.take();
@@ -2516,16 +2675,17 @@ fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser) -> () {
 
 fn _parse_scriptlet_or_sea_ws(p: &mut Parser) -> () {
     if p.recovering { return; }
+    p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_SCRIPTLET_OR_SEA_WS, _start);
     _parse_scriptlet_or_sea_ws__inner(p);
+    if p.recovering { let _ = p.recover_rule(RK_SCRIPTLET_OR_SEA_WS, "scriptletOrSeaWs", -1); }
     p.b.finish_node(p.last_end());
-    if p.recovering {
-        p.push_rule_stack("scriptletOrSeaWs");
-    }
+    p.sites.pop();
 }
 
 fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -2544,6 +2704,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let _rec_sav = p.recovering;
                 let _rec_spec = p.speculating;
                 p.speculating = true;
+                p.site = 4;
                 _parse_html_misc(p);
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
@@ -2552,8 +2713,11 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             break;
         }
+        p.site = 4;
         _parse_html_misc(p);
+        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_back(&SYNC_1, &EXPECTED_1); }
     }
+    p.site = 5;
     _parse_html_element(p, follow);
     loop {
         if p.recovering { break; }
@@ -2574,6 +2738,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let _rec_sav = p.recovering;
                 let _rec_spec = p.speculating;
                 p.speculating = true;
+                p.site = 6;
                 _parse_html_misc(p);
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
@@ -2582,6 +2747,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             break;
         }
+        p.site = 6;
         _parse_html_misc(p);
     }
     return;
@@ -2589,20 +2755,22 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_html_elements(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
+    p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_HTML_ELEMENTS, _start);
     _parse_html_elements__inner(p, follow);
+    if p.recovering { let _ = p.recover_rule(RK_HTML_ELEMENTS, "htmlElements", -1); }
     p.b.finish_node(p.last_end());
-    if p.recovering {
-        p.push_rule_stack("htmlElements");
-    }
+    p.sites.pop();
 }
 
 fn _parse_html_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_TAG_OPEN {
         p.take();
-        p.expect(TK_TAG_NAME, &SYNC_1);
+        p.expect(TK_TAG_NAME, &SYNC_2, false);
+        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -2621,6 +2789,7 @@ fn _parse_html_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let _rec_sav = p.recovering;
                     let _rec_spec = p.speculating;
                     p.speculating = true;
+                    p.site = 7;
                     _parse_html_attribute(p, 0);
                     p.speculating = _rec_spec;
                     p.recovering = _rec_sav;
@@ -2629,8 +2798,11 @@ fn _parse_html_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 }
                 break;
             }
+            p.site = 7;
             _parse_html_attribute(p, 0);
+            if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_back(&SYNC_3, &EXPECTED_3); }
         }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_alts(&SYNC_4, &EXPECTED_4); }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_TAG_CLOSE {
             p.take();
@@ -2651,16 +2823,17 @@ fn _parse_html_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 opt_scan_pos = pos;
             }
             if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+                p.site = 8;
                 _parse_html_content(p, FOLLOW_MASK_0);
-                p.expect(TK_TAG_OPEN, &SYNC_2);
-                p.expect(TK_TAG_SLASH, &SYNC_3);
-                p.expect(TK_TAG_NAME, &SYNC_4);
+                p.expect(TK_TAG_OPEN, &SYNC_5, false);
+                p.expect(TK_TAG_SLASH, &SYNC_6, false);
+                p.expect(TK_TAG_NAME, &SYNC_7, false);
                 p.expect(TK_TAG_CLOSE, &EMPTY_SYNC);
             }
         } else if grp_kind == TK_TAG_SLASH_CLOSE {
             p.take();
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_5);
+            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_4);
         }
         return;
     }
@@ -2669,34 +2842,37 @@ fn _parse_html_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
         return;
     }
     if kind == TK_SCRIPT_OPEN {
+        p.site = 9;
         _parse_script(p);
         return;
     }
     if kind == TK_STYLE_OPEN {
+        p.site = 10;
         _parse_style(p);
         return;
     }
     p.no_viable(
         "no alternative of htmlElement matches",
         p.peek_span(),
-        &EXPECTED_6,
+        &EXPECTED_8,
     );
     return;
 }
 
 fn _parse_html_element(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
+    p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_HTML_ELEMENT, _start);
     _parse_html_element__inner(p, follow);
+    if p.recovering { let _ = p.recover_rule(RK_HTML_ELEMENT, "htmlElement", -1); }
     p.b.finish_node(p.last_end());
-    if p.recovering {
-        p.push_rule_stack("htmlElement");
-    }
+    p.sites.pop();
 }
 
 fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if _kind_set_6(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+        p.site = 11;
         _parse_html_chardata(p);
     }
     loop {
@@ -2735,17 +2911,21 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
+        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
         let grp_kind = p.peek_kind();
         if _kind_set_4(grp_kind) {
+            p.site = 12;
             _parse_html_element(p, follow);
         } else if grp_kind == TK_CDATA {
             p.take();
         } else if _kind_set_5(grp_kind) {
+            p.site = 13;
             _parse_html_comment(p);
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_7);
+            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_9);
         }
         if _kind_set_6(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+            p.site = 14;
             _parse_html_chardata(p);
         }
     }
@@ -2754,17 +2934,17 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_html_content(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
+    p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_HTML_CONTENT, _start);
     _parse_html_content__inner(p, follow);
+    if p.recovering { let _ = p.recover_rule(RK_HTML_CONTENT, "htmlContent", -1); }
     p.b.finish_node(p.last_end());
-    if p.recovering {
-        p.push_rule_stack("htmlContent");
-    }
+    p.sites.pop();
 }
 
 fn _parse_html_attribute__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_TAG_NAME, &SYNC_8);
+    p.expect(TK_TAG_NAME, &SYNC_10, true, true);
     if (p.peek_kind() == TK_TAG_EQUALS && p.peek_at(1) == TK_ATTVALUE_VALUE) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
         p.expect(TK_ATTVALUE_VALUE, &EMPTY_SYNC);
@@ -2774,16 +2954,17 @@ fn _parse_html_attribute__inner(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_html_attribute(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
+    p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_HTML_ATTRIBUTE, _start);
     _parse_html_attribute__inner(p, follow);
+    if p.recovering { let _ = p.recover_rule(RK_HTML_ATTRIBUTE, "htmlAttribute", -1); }
     p.b.finish_node(p.last_end());
-    if p.recovering {
-        p.push_rule_stack("htmlAttribute");
-    }
+    p.sites.pop();
 }
 
 fn _parse_html_chardata__inner(p: &mut Parser) -> () {
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_alts(&SYNC_11, &EXPECTED_11); }
     let kind = p.peek_kind();
     if _kind_set_6(kind) {
         p.take();
@@ -2792,25 +2973,27 @@ fn _parse_html_chardata__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of htmlChardata matches",
         p.peek_span(),
-        &EXPECTED_9,
+        &EXPECTED_11,
     );
     return;
 }
 
 fn _parse_html_chardata(p: &mut Parser) -> () {
     if p.recovering { return; }
+    p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_HTML_CHARDATA, _start);
     _parse_html_chardata__inner(p);
+    if p.recovering { let _ = p.recover_rule(RK_HTML_CHARDATA, "htmlChardata", -1); }
     p.b.finish_node(p.last_end());
-    if p.recovering {
-        p.push_rule_stack("htmlChardata");
-    }
+    p.sites.pop();
 }
 
 fn _parse_html_misc__inner(p: &mut Parser) -> () {
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if _kind_set_5(kind) {
+        p.site = 15;
         _parse_html_comment(p);
         return;
     }
@@ -2821,23 +3004,24 @@ fn _parse_html_misc__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of htmlMisc matches",
         p.peek_span(),
-        &EXPECTED_10,
+        &EXPECTED_12,
     );
     return;
 }
 
 fn _parse_html_misc(p: &mut Parser) -> () {
     if p.recovering { return; }
+    p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_HTML_MISC, _start);
     _parse_html_misc__inner(p);
+    if p.recovering { let _ = p.recover_rule(RK_HTML_MISC, "htmlMisc", -1); }
     p.b.finish_node(p.last_end());
-    if p.recovering {
-        p.push_rule_stack("htmlMisc");
-    }
+    p.sites.pop();
 }
 
 fn _parse_html_comment__inner(p: &mut Parser) -> () {
+    if !kind_set_has(&SYNC_13, p.kinds[p.pos]) { p.sync_alts(&SYNC_13, &EXPECTED_13); }
     let kind = p.peek_kind();
     if _kind_set_5(kind) {
         p.take();
@@ -2846,54 +3030,56 @@ fn _parse_html_comment__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of htmlComment matches",
         p.peek_span(),
-        &EXPECTED_11,
+        &EXPECTED_13,
     );
     return;
 }
 
 fn _parse_html_comment(p: &mut Parser) -> () {
     if p.recovering { return; }
+    p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_HTML_COMMENT, _start);
     _parse_html_comment__inner(p);
+    if p.recovering { let _ = p.recover_rule(RK_HTML_COMMENT, "htmlComment", -1); }
     p.b.finish_node(p.last_end());
-    if p.recovering {
-        p.push_rule_stack("htmlComment");
-    }
+    p.sites.pop();
 }
 
 fn _parse_script__inner(p: &mut Parser) -> () {
-    p.expect(TK_SCRIPT_OPEN, &SYNC_12);
-    p.expect_set(&SYNC_12, &EXPECTED_12);
+    p.expect(TK_SCRIPT_OPEN, &SYNC_14, false);
+    if !kind_set_has(&SYNC_14, p.kinds[p.pos]) { p.sync_alts(&SYNC_14, &EXPECTED_14); }
+    p.expect_set(&SYNC_14, &EXPECTED_14);
     return;
 }
 
 fn _parse_script(p: &mut Parser) -> () {
     if p.recovering { return; }
+    p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_SCRIPT, _start);
     _parse_script__inner(p);
+    if p.recovering { let _ = p.recover_rule(RK_SCRIPT, "script", -1); }
     p.b.finish_node(p.last_end());
-    if p.recovering {
-        p.push_rule_stack("script");
-    }
+    p.sites.pop();
 }
 
 fn _parse_style__inner(p: &mut Parser) -> () {
-    p.expect(TK_STYLE_OPEN, &SYNC_13);
-    p.expect_set(&SYNC_13, &EXPECTED_13);
+    p.expect(TK_STYLE_OPEN, &SYNC_15, false);
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_alts(&SYNC_15, &EXPECTED_15); }
+    p.expect_set(&SYNC_15, &EXPECTED_15);
     return;
 }
 
 fn _parse_style(p: &mut Parser) -> () {
     if p.recovering { return; }
+    p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_STYLE, _start);
     _parse_style__inner(p);
+    if p.recovering { let _ = p.recover_rule(RK_STYLE, "style", -1); }
     p.b.finish_node(p.last_end());
-    if p.recovering {
-        p.push_rule_stack("style");
-    }
+    p.sites.pop();
 }
 
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
@@ -2960,10 +3146,21 @@ pub fn parse_style<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> Parse
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_style(p));
 }
 
+global CALL_FOLLOW_SETS: List<List<i32>> = [[34815], [40959], [512], []];
+global CALL_FOLLOW: List<i32> = [0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 0, 0, 0, 0, 3];
+global CALL_FOLLOW_ENDS: List<bool> = [true, true, true, true, false, true, true, false, false, true, true, true, true, true, true, true];
+
+fn token_display_name(kind: i32) -> String {
+    return match kind {
+        TK_TAG_OPEN => "'<'",
+        _ => token_kind_name(kind),
+    };
+}
+
 fn _token_names() -> List<String> {
     let mut v: List<String> = List::with_capacity(25);
     for let mut k = 0; k < 25; k += 1 {
-        v.push(token_kind_name(k));
+        v.push(token_display_name(k));
     }
     return v;
 }
@@ -3045,22 +3242,30 @@ fn _kind_set_13(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [96];
 global EXPECTED_0: List<i32> = [TK_SCRIPTLET, TK_SEA_WS];
-global SYNC_1: List<i32> = [38912];
-global SYNC_2: List<i32> = [8192];
-global SYNC_3: List<i32> = [32768];
-global SYNC_4: List<i32> = [2048];
-global EXPECTED_5: List<i32> = [TK_TAG_CLOSE, TK_TAG_SLASH_CLOSE];
-global EXPECTED_6: List<i32> = [TK_SCRIPTLET, TK_SCRIPT_OPEN, TK_STYLE_OPEN, TK_TAG_OPEN];
-global EXPECTED_7: List<i32> = [TK_CDATA, TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT, TK_SCRIPTLET, TK_SCRIPT_OPEN, TK_STYLE_OPEN, TK_TAG_OPEN];
-global SYNC_8: List<i32> = [16384];
-global EXPECTED_9: List<i32> = [TK_HTML_TEXT, TK_SEA_WS];
-global EXPECTED_10: List<i32> = [TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT, TK_SEA_WS];
-global EXPECTED_11: List<i32> = [TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT];
-global SYNC_12: List<i32> = [393216];
-global EXPECTED_12: List<i32> = [TK_SCRIPT_BODY, TK_SCRIPT_SHORT_BODY];
-global SYNC_13: List<i32> = [1572864];
-global EXPECTED_13: List<i32> = [TK_STYLE_BODY, TK_STYLE_SHORT_BODY];
+global SYNC_1: List<i32> = [34815];
+global EXPECTED_1: List<i32> = [TK_CDATA, TK_DTD, TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT, TK_HTML_TEXT, TK_SCRIPTLET, TK_SCRIPT_OPEN, TK_SEA_WS, TK_STYLE_OPEN, TK_TAG_NAME, TK_TAG_OPEN, TK_XML];
+global SYNC_2: List<i32> = [38912];
+global SYNC_3: List<i32> = [40959];
+global EXPECTED_3: List<i32> = [TK_CDATA, TK_DTD, TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT, TK_HTML_TEXT, TK_SCRIPTLET, TK_SCRIPT_OPEN, TK_SEA_WS, TK_STYLE_OPEN, TK_TAG_CLOSE, TK_TAG_NAME, TK_TAG_OPEN, TK_TAG_SLASH_CLOSE, TK_XML];
+global SYNC_4: List<i32> = [6144];
+global EXPECTED_4: List<i32> = [TK_TAG_CLOSE, TK_TAG_SLASH_CLOSE];
+global SYNC_5: List<i32> = [8192];
+global SYNC_6: List<i32> = [32768];
+global SYNC_7: List<i32> = [2048];
+global EXPECTED_8: List<i32> = [TK_SCRIPTLET, TK_SCRIPT_OPEN, TK_STYLE_OPEN, TK_TAG_OPEN];
+global EXPECTED_9: List<i32> = [TK_CDATA, TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT, TK_SCRIPTLET, TK_SCRIPT_OPEN, TK_STYLE_OPEN, TK_TAG_OPEN];
+global SYNC_10: List<i32> = [16384];
+global SYNC_11: List<i32> = [1088];
+global EXPECTED_11: List<i32> = [TK_HTML_TEXT, TK_SEA_WS];
+global EXPECTED_12: List<i32> = [TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT, TK_SEA_WS];
+global SYNC_13: List<i32> = [3];
+global EXPECTED_13: List<i32> = [TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT];
+global SYNC_14: List<i32> = [393216];
+global EXPECTED_14: List<i32> = [TK_SCRIPT_BODY, TK_SCRIPT_SHORT_BODY];
+global SYNC_15: List<i32> = [1572864];
+global EXPECTED_15: List<i32> = [TK_STYLE_BODY, TK_STYLE_SHORT_BODY];
 
 global FOLLOW_SETS: List<List<i32>> = [[512], [8192], [32768], [2048]];
 global FOLLOW_MASK_0: i64 = 67305985;

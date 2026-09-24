@@ -1225,8 +1225,7 @@ impl Parser {
 
     fn fail_on_kind(&mut self, kind: i32) {
         if self.supersedes_pending(self.tokens.starts[self.pos]) {
-            let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };
-            self.fail_on_token("got", &([kind] as List<i32>), code);
+            self.fail_expecting(&([kind] as List<i32>));
         }
         self.recovering = true;
     }
@@ -1284,6 +1283,16 @@ impl Parser {
         return set;
     }
 
+    fn follows_rules_under_way(&self, k: i32) -> bool {
+        for let mut i = self.sites.len() - 1; i >= 0; i -= 1 {
+            let s = self.sites[i];
+            if s < 0 { return i == 0 && k == TK_EOF; }
+            if kind_set_has(&CALL_FOLLOW_SETS[CALL_FOLLOW[s]], k) { return true; }
+            if !CALL_FOLLOW_ENDS[s] { return false; }
+        }
+        return k == TK_EOF;
+    }
+
     fn skip_until(&mut self, set: &List<i32>) {
         loop {
             let k = self.kinds[self.pos];
@@ -1309,7 +1318,7 @@ impl Parser {
 
     fn sync_enter(&mut self, expected: &List<i32>, names: &List<i32>) {
         if !self.recovering && !self.sync_delete(expected, names) {
-            self.fail_at_decision(names);
+            self.fail_expecting(names);
         }
     }
 
@@ -1322,14 +1331,14 @@ impl Parser {
     fn sync_back(&mut self, expected: &List<i32>, names: &List<i32>) {
         if self.recovering || self.kinds[self.pos] == TK_EOF { return; }
         if self.speculating {
-            self.fail_at_decision(names);
+            self.fail_expecting(names);
             return;
         }
         self.report_extraneous(names, RecoveryAction::SkippedTo);
         self.skip_until(&self.resync_set(expected));
     }
 
-    fn fail_at_decision(&mut self, names: &List<i32>) {
+    fn fail_expecting(&mut self, names: &List<i32>) {
         let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };
         self.fail_on_token("got", names, code);
     }
@@ -1347,7 +1356,7 @@ impl Parser {
         let at_eof = found == TK_EOF;
         let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };
         let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };
-        self.diagnostics.push(Diagnostic::error(code, `missing ${token_kind_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
+        self.diagnostics.push(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
         self.note_error();
     }
 
@@ -1386,7 +1395,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32, sync: &List<i32>, rest_nullable: bool = true) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &List<i32>, rest_nullable: bool = true, may_end_rule: bool = false) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -1412,7 +1421,7 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        if kind_set_has(sync, self.kinds[self.pos]) {
+        if kind_set_has(sync, self.kinds[self.pos]) || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos]) {
             self.report_missing(kind);
             let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
             self.b.missing(_syn);
@@ -1507,7 +1516,7 @@ fn _parse_file___inner(p: &mut Parser, follow: i64 = 0) -> () {
     let para = _parse_para(p, FOLLOW_MASK_0);
     p.site = 1;
     let para_2 = _parse_para(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC, true, true);
     if !p.speculating {
         p.emit(`${p.rule_string_tree()}\n`);
     }
@@ -1529,7 +1538,7 @@ fn _parse_para__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 2;
     _parse_para_content(p, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
     p.expect(TK_NL, &SYNC_0, false);
-    p.expect(TK_NL, &EMPTY_SYNC);
+    p.expect(TK_NL, &EMPTY_SYNC, true, true);
     return;
 }
 
@@ -1616,7 +1625,7 @@ fn _parse_s(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    p.expect(TK_LIT_s, &EMPTY_SYNC);
+    p.expect(TK_LIT_s, &EMPTY_SYNC, true, true);
     if p.recovering { let _ = p.recover_rule(RK_S, "s", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -1660,11 +1669,20 @@ pub fn parse_s<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResu
 
 global CALL_FOLLOW_SETS: List<List<i32>> = [[19], [4], [1]];
 global CALL_FOLLOW: List<i32> = [0, 1, 2];
+global CALL_FOLLOW_ENDS: List<bool> = [false, false, false];
+
+fn token_display_name(kind: i32) -> String {
+    return match kind {
+        TK_NL => "'\\n'",
+        TK_X => "'x'",
+        _ => token_kind_name(kind),
+    };
+}
 
 fn _token_names() -> List<String> {
     let mut v: List<String> = List::with_capacity(5);
     for let mut k = 0; k < 5; k += 1 {
-        v.push(token_kind_name(k));
+        v.push(token_display_name(k));
     }
     return v;
 }

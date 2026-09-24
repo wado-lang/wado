@@ -644,6 +644,47 @@ impl TreeBuilder {
         let _ = self.open.pop();
     }
 
+    pub fn innermost_open(&self) -> i32 {
+        if self.open.is_empty() {
+            return -1;
+        }
+        return self.open[self.open.len() - 1];
+    }
+
+    pub fn node_kind(&self, row: i32) -> NodeKind {
+        return self.a[row] as NodeKind;
+    }
+
+    pub fn resume_node(&mut self, row: i32, end: i32) {
+        while self.innermost_open() > row {
+            self.finish_node(end);
+        }
+        if self.innermost_open() == row {
+            return;
+        }
+        assert self.last_finished == row && self.tag[self.tag.len() - 1] matches { Close }, "resume_node: a node no longer open is the last one closed";
+        self.truncate(self.tag.len() - 1);
+        self.open.push(row);
+    }
+
+    pub fn has_token_since(&self, row: i32) -> bool {
+        for let mut r = row; r < self.tag.len(); r += 1 {
+            if self.tag[r] matches { Tok } {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            let kind = self.a[self.open[i]];
+            if kind != K_ERROR as i32 {
+                out.push(rule_names[kind]);
+            }
+        }
+    }
+
     pub fn token(&mut self, idx: i32) {
         self.push_row(EventTag::Tok, idx, 0);
     }
@@ -1050,7 +1091,11 @@ impl AtnKeyMap {
 
     fn with_slots(slots: i32) -> AtnKeyMap {
         assert slots & slots - 1 == 0, "slot count is a power of two";
-        return AtnKeyMap { keys: List::filled(slots, -1 as i64), vals: List::filled(slots, -1), used: [] };
+        return AtnKeyMap {
+            keys: List::filled(slots, -1 as i64),
+            vals: List::filled(slots, -1),
+            used: [],
+        };
     }
 
     fn clear(&mut self) {
@@ -1332,7 +1377,12 @@ struct ClosureScratch {
 
 impl ClosureScratch {
     fn new() -> ClosureScratch {
-        return ClosureScratch { cset: CfgSet::new(), rset: CfgSet::new(), work: [], expanded: [] };
+        return ClosureScratch {
+            cset: CfgSet::new(),
+            rset: CfgSet::new(),
+            work: [],
+            expanded: [],
+        };
     }
 }
 
@@ -1347,9 +1397,7 @@ fn atn_closure(
     scratch.rset.clear();
     scratch.expanded.clear();
     scratch.work.clear();
-    for let mut i = 0; i < seeds.len(); i += 1 {
-        scratch.work.push(seeds[i]);
-    }
+    scratch.work.extend(seeds);
     let mut guard = 0;
     while let Some(c) = scratch.work.pop() {
         guard += 1;
@@ -1437,8 +1485,7 @@ fn atn_collapse_into_caller_loop(
     let edges = &arena.edges[cur.pctx];
     let mut collapses = false;
     for let mut i = 0; i < edges.len(); i += 1 {
-        let e = &edges[i];
-        if e.0 >= 0 && sim.state_collapse_to[e.0] == cur.state && cur.pr >= e.1 {
+        if atn_edge_collapses(sim, &edges[i], cur) {
             collapses = true;
             break;
         }
@@ -1449,7 +1496,7 @@ fn atn_collapse_into_caller_loop(
     let mut kept: List<[i32, i32, i32]> = [];
     for let mut i = 0; i < edges.len(); i += 1 {
         let e = &edges[i];
-        if e.0 >= 0 && sim.state_collapse_to[e.0] == cur.state && cur.pr >= e.1 {
+        if atn_edge_collapses(sim, e, cur) {
             work.push(AtnConfig { state: cur.state, alt: cur.alt, pctx: e.2, rs: cur.rs, pr: e.1 });
         } else {
             kept.push(*e);
@@ -1462,6 +1509,10 @@ fn atn_collapse_into_caller_loop(
         return CTX_EMPTY;
     }
     return arena.intern_edges(&kept);
+}
+
+fn atn_edge_collapses(sim: &AtnSim, e: &[i32, i32, i32], cur: &AtnConfig) -> bool {
+    return e.0 >= 0 && sim.state_collapse_to[e.0] == cur.state && cur.pr >= e.1;
 }
 
 fn atn_pop(
@@ -1892,7 +1943,9 @@ pub fn atn_lr_loop_decision(
     let exit_alt = c - 1;
     let mut enter = -1;
     for let mut j = 0; j < c; j += 1 {
-        if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE && sim.tr_prec[s + j] >= min_prec && atn_state_cont_admits(sim, sim.tr_target[s + j], t, eof) {
+        if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE
+            && sim.tr_prec[s + j] >= min_prec
+            && atn_state_cont_admits(sim, sim.tr_target[s + j], t, eof) {
             enter = j;
             break;
         }
@@ -2123,6 +2176,9 @@ struct Parser {
     recovering: bool,
     speculating: bool,
     max_errors: i32,
+    site: i32,
+    sites: List<i32>,
+    err_row: i32,
     atn_ret_pending: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -2139,7 +2195,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1, atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
     fn supersedes_pending(&self, start: i32) -> bool {
@@ -2163,8 +2219,7 @@ impl Parser {
 
     fn fail_on_kind(&mut self, kind: i32) {
         if self.supersedes_pending(self.tokens.starts[self.pos]) {
-            let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };
-            self.fail_on_token("got", &([kind] as List<i32>), code);
+            self.fail_expecting(&([kind] as List<i32>));
         }
         self.recovering = true;
     }
@@ -2179,9 +2234,114 @@ impl Parser {
         }
     }
 
-    fn report_extra(&mut self, kind: i32) {
+    fn recover_rule(&mut self, rule: NodeKind, name: String, row: i32) -> bool {
+        if self.speculating || self.diagnostics.len() >= self.max_errors {
+            self.push_rule_stack(name);
+            return false;
+        }
+        let node = if row < 0 { self.b.innermost_open() } else { row };
+        self.b.resume_node(node, self.last_end());
+        assert self.b.node_kind(node) == rule, "recover_rule: the resumed node is the failed rule's";
+        self.commit_pending();
+        self.recovering = false;
+        self.skip_until(&self.resync_set(&[]));
+        return true;
+    }
+
+    fn commit_pending(&mut self) {
+        let Some(d) = self.pending else { return; };
+        self.pending = null;
+        if self.in_error_mode() { return; }
+        let mut diag = d;
+        self.b.push_open_rule_names(&RULE_NAMES, &mut diag.rule_stack);
+        self.diagnostics.push(diag);
+        self.note_error();
+    }
+
+    fn in_error_mode(&self) -> bool {
+        return self.err_row >= 0 && !self.b.has_token_since(self.err_row);
+    }
+
+    fn note_error(&mut self) {
+        self.err_row = self.b.checkpoint();
+    }
+
+    fn resync_set(&self, base: &List<i32>) -> List<i32> {
+        let mut set = *base;
+        for let s of &self.sites {
+            if *s < 0 { continue; }
+            let f = &CALL_FOLLOW_SETS[CALL_FOLLOW[*s]];
+            while set.len() < f.len() { set.push(0); }
+            for let mut i = 0; i < f.len(); i += 1 { set[i] = set[i] | f[i]; }
+        }
+        return set;
+    }
+
+    fn follows_rules_under_way(&self, k: i32) -> bool {
+        for let mut i = self.sites.len() - 1; i >= 0; i -= 1 {
+            let s = self.sites[i];
+            if s < 0 { return i == 0 && k == TK_EOF; }
+            if kind_set_has(&CALL_FOLLOW_SETS[CALL_FOLLOW[s]], k) { return true; }
+            if !CALL_FOLLOW_ENDS[s] { return false; }
+        }
+        return k == TK_EOF;
+    }
+
+    fn skip_until(&mut self, set: &List<i32>) {
+        loop {
+            let k = self.kinds[self.pos];
+            if k == TK_EOF || kind_set_has(set, k) { break; }
+            self.skip_one();
+        }
+    }
+
+    fn skip_one(&mut self) {
+        let _sk = self.advance();
+        self.tokens.mark_skipped(_sk);
+        self.b.skip(_sk);
+    }
+
+    fn sync_delete(&mut self, expected: &List<i32>, names: &List<i32>) -> bool {
+        if self.speculating || self.kinds[self.pos] == TK_EOF || !kind_set_has(expected, self.peek_at(1)) {
+            return false;
+        }
+        self.report_extraneous(names, RecoveryAction::Deleted);
+        self.skip_one();
+        return true;
+    }
+
+    fn sync_enter(&mut self, expected: &List<i32>, names: &List<i32>) {
+        if !self.recovering && !self.sync_delete(expected, names) {
+            self.fail_expecting(names);
+        }
+    }
+
+    fn sync_alts(&mut self, expected: &List<i32>, names: &List<i32>) {
+        if !self.recovering && !self.sync_delete(expected, names) {
+            self.no_viable("no viable alternative", self.peek_span(), names);
+        }
+    }
+
+    fn sync_back(&mut self, expected: &List<i32>, names: &List<i32>) {
+        if self.recovering || self.kinds[self.pos] == TK_EOF { return; }
+        if self.speculating {
+            self.fail_expecting(names);
+            return;
+        }
+        self.report_extraneous(names, RecoveryAction::SkippedTo);
+        self.skip_until(&self.resync_set(expected));
+    }
+
+    fn fail_expecting(&mut self, names: &List<i32>) {
+        let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };
+        self.fail_on_token("got", names, code);
+    }
+
+    fn report_extraneous(&mut self, names: &List<i32>, recovery: RecoveryAction) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::Deleted));
+        if self.in_error_mode() { return; }
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));
+        self.note_error();
     }
 
     fn report_missing(&mut self, kind: i32) {
@@ -2190,12 +2350,14 @@ impl Parser {
         let at_eof = found == TK_EOF;
         let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };
         let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };
-        self.diagnostics.push(Diagnostic::error(code, `missing ${token_kind_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
+        self.diagnostics.push(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
+        self.note_error();
     }
 
     fn report_unexpected(&mut self, kind: i32) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
         self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));
+        self.note_error();
     }
 
     fn peek_start(&self) -> i32 {
@@ -2227,7 +2389,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32, sync: &List<i32>) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &List<i32>, rest_nullable: bool = true, may_end_rule: bool = false) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -2243,10 +2405,8 @@ impl Parser {
             return self.pos;
         }
         if self.peek_at(1) == kind {
-            self.report_extra(kind);
-            let _sk = self.advance();
-            self.tokens.mark_skipped(_sk);
-            self.b.skip(_sk);
+            self.report_extraneous(&[kind], RecoveryAction::Deleted);
+            self.skip_one();
             if kind == TK_EOF {
                 self.b.token(self.pos);
                 return self.pos;
@@ -2255,22 +2415,24 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        if kind_set_has(sync, self.kinds[self.pos]) {
+        if kind_set_has(sync, self.kinds[self.pos]) || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos]) {
             self.report_missing(kind);
             let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
             self.b.missing(_syn);
             return _syn;
         }
         if !sync.is_empty() {
+            if !rest_nullable && self.kinds[self.pos] == TK_EOF {
+                self.fail_on_kind(kind);
+                return self.pos;
+            }
             self.report_unexpected(kind);
             if self.kinds[self.pos] != TK_EOF {
                 self.b.start_error(self.tokens.span_at(self.pos).start);
                 loop {
                     let _k = self.kinds[self.pos];
                     if _k == TK_EOF || _k == kind || kind_set_has(sync, _k) { break; }
-                    let _sk = self.advance();
-                    self.tokens.mark_skipped(_sk);
-                    self.b.skip(_sk);
+                    self.skip_one();
                 }
                 self.b.finish_node(self.last_end());
             }
@@ -2344,9 +2506,10 @@ impl Parser {
 }
 
 fn _parse_stat__inner(p: &mut Parser) -> () {
+    p.site = 0;
     p.atn_ret_pending = 8;
     _parse_expr(p);
-    p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
+    p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true, true);
     return;
 }
 
@@ -2355,17 +2518,18 @@ fn _parse_stat(p: &mut Parser) -> () {
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
     ATN_STACK.push(_atn_ret);
+    p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_STAT, _start);
     _parse_stat__inner(p);
+    if p.recovering { let _ = p.recover_rule(RK_STAT, "stat", -1); }
     p.b.finish_node(p.last_end());
     ATN_STACK.pop();
-    if p.recovering {
-        p.push_rule_stack("stat");
-    }
+    p.sites.pop();
 }
 
 fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_ID {
         p.take();
@@ -2373,9 +2537,11 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     }
     if kind == TK_LIT_between {
         p.take();
+        p.site = 5;
         p.atn_ret_pending = 20;
         _parse_expr(p);
-        p.expect(TK_LIT_and, &SYNC_0);
+        p.expect(TK_LIT_and, &SYNC_0, false);
+        p.site = 6;
         p.atn_ret_pending = 24;
         _parse_expr(p, 1);
         return;
@@ -2401,12 +2567,14 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         if _atn_alt == 0 {
             p.b.start_node_at(_cp, RK_EXPR, _start);
             p.expect(TK_LIT_and, &EMPTY_SYNC);
+            p.site = 2;
             p.atn_ret_pending = 32;
             _parse_expr(p, 3);
             p.b.finish_node(p.last_end());
         } else if _atn_alt == 1 {
             p.b.start_node_at(_cp, RK_EXPR, _start);
             p.expect(TK_LIT_or, &EMPTY_SYNC);
+            p.site = 4;
             p.atn_ret_pending = 37;
             _parse_expr(p, 2);
             p.b.finish_node(p.last_end());
@@ -2425,11 +2593,12 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> () {
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
     ATN_STACK.push(_atn_ret);
+    p.sites.push(p.site);
+    let _row = p.b.checkpoint();
     _parse_expr__inner(p, min_prec);
+    if p.recovering && p.recover_rule(RK_EXPR, "expr", _row) { p.b.finish_node(p.last_end()); }
     ATN_STACK.pop();
-    if p.recovering {
-        p.push_rule_stack("expr");
-    }
+    p.sites.pop();
 }
 
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
@@ -2460,10 +2629,18 @@ pub fn parse_expr<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseR
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expr(p));
 }
 
+global CALL_FOLLOW_SETS: List<List<i32>> = [[16], [], [96], [32]];
+global CALL_FOLLOW: List<i32> = [0, 1, 2, 1, 2, 3, 2];
+global CALL_FOLLOW_ENDS: List<bool> = [false, false, true, false, true, false, true];
+
+fn token_display_name(kind: i32) -> String {
+    return token_kind_name(kind);
+}
+
 fn _token_names() -> List<String> {
     let mut v: List<String> = List::with_capacity(8);
     for let mut k = 0; k < 8; k += 1 {
-        v.push(token_kind_name(k));
+        v.push(token_display_name(k));
     }
     return v;
 }
