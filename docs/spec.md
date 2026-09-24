@@ -3187,7 +3187,6 @@ The unit of coherence is a package — all source files compiled together from t
 | A `[dependencies]` package                          | Foreign        |
 | `core:*` (standard library)                         | Foreign        |
 | `wasi:*` (WASI interfaces)                          | Foreign        |
-| `web:*` (Web API bindings)                          | Foreign        |
 | A Wasm asset (`with { type: "wasm" }` or `"wat"`)   | Foreign        |
 | Remote URL                                          | Foreign        |
 
@@ -4313,13 +4312,7 @@ Module paths are validated before loading to provide clear error messages:
 
 Namespace Resolution (a namespace is reserved iff the compiler bundles it):
 
-<<<<<<< HEAD
-1. Bundled namespaces `core:` / `wasi:` — resolved from embedded stdlib.
-||||||| 03599b7966
-1. Bundled namespaces `core:` / `wasi:` / `web:` — resolved from embedded stdlib.
-=======
-1. Bundled namespaces `core:` / `wasi:` / `web:`: resolved from the embedded stdlib.
->>>>>>> origin/main
+1. Bundled namespaces `core:` / `wasi:`: resolved from the embedded stdlib.
 
 2. Open coordinates `<ns>:<pkg>` (any other namespace): resolved from a `[dependencies]` entry in `wado.toml` or an inline `with` source. An undeclared coordinate is an error.
 
@@ -4424,7 +4417,7 @@ An inline `with` source and a `wado.toml` entry for the same specifier are mutua
 | `.wado` files               | Optional                 | Type inferred from Wado source |
 | `.wasm` files               | Required                 | `type: "wasm"`                 |
 | `.wat` files                | Required                 | `type: "wat"`                  |
-| `core:*`, `wasi:*`, `web:*` | Not applicable           | Bundled namespace handling     |
+| `core:*`, `wasi:*` | Not applicable           | Bundled namespace handling     |
 | `https:` URLs               | Required for non-`.wado` | Must specify content type      |
 | CM / `lib:` deps            | Optional                 | Type inferred from package     |
 
@@ -5578,44 +5571,16 @@ The representation follows from the linearity. An affine resource crosses the Co
 `resource Child extends Parent` declares that a child handle is usable wherever the parent is. Both resources must declare `linearity = "unrestricted"`, because an upcast copies the handle and an affine one may not be copied. Single inheritance only, and a cycle is an error.
 
 ```wado
-<<<<<<< HEAD
-#[cm("web:dom/event-target", linearity = "unrestricted", classes = "0..=1")]
-resource EventTarget {
-    #[cm("web:dom/event-target#add-event-listener")]
-    #[cm_params("self", "kind")]
-    fn add_event_listener(&self, kind: String);
-||||||| 03599b7966
-#[cm("web:dom/event-target", linearity = "unrestricted")]
-resource EventTarget {
-    #[cm("web:dom/event-target#add-event-listener")]
-    #[cm_params("self", "kind")]
-    fn add_event_listener(&self, kind: String);
-=======
-#[cm("example:ui/target", linearity = "unrestricted")]
+#[cm("example:ui/target", linearity = "unrestricted", classes = "0..=1")]
 resource Target {
     #[cm("example:ui/target#add-listener")]
     fn add_listener(&self, kind: String);
->>>>>>> origin/main
 }
 
-<<<<<<< HEAD
-#[cm("web:dom/node", linearity = "unrestricted", classes = "1..=1")]
-resource Node extends EventTarget {
-    #[cm("web:dom/node#text-content")]
-    #[cm_params("self")]
-    fn text_content(&self) -> Option<String>;
-||||||| 03599b7966
-#[cm("web:dom/node", linearity = "unrestricted")]
-resource Node extends EventTarget {
-    #[cm("web:dom/node#text-content")]
-    #[cm_params("self")]
-    fn text_content(&self) -> Option<String>;
-=======
-#[cm("example:ui/widget", linearity = "unrestricted")]
+#[cm("example:ui/widget", linearity = "unrestricted", classes = "1..=1")]
 resource Widget extends Target {
     #[cm("example:ui/widget#label")]
     fn label(&self) -> Option<String>;
->>>>>>> origin/main
 }
 
 fn use_it(w: Widget) {
@@ -5627,20 +5592,10 @@ fn use_it(w: Widget) {
 Rules:
 
 - The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet. `&mut T`, container elements (`List<T>`, `Option<T>`, …) and function types are invariant.
-<<<<<<< HEAD
 - Narrowing back to a child is never implicit. It is written as a type pattern (below), which tests the class the host tagged the handle with.
 - `classes = "lo..=hi"` numbers those classes: a resource's own is `lo`, and the resources extending it hold the rest. A child's range lies past its parent's own class inside the parent's, siblings share none, and an `extends` tree declares `classes` on every resource or on none. A type pattern narrows only to a resource that declares them.
 - `==` and `!=` compare two handles when one type extends the other. The host hands out one handle per object, so equal handles name one object. An unrestricted resource is `Eq`, so a type holding one derives `Eq` too. There is no ordering.
-- A child may not redeclare a method it inherits, and a name reachable through both the chain and a trait impl is ambiguous — write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
-||||||| 03599b7966
-- Narrowing back to a child is never implicit. It is written as a type pattern (below), which asks the host whether the handle really is one.
-- `==` and `!=` compare two handles when one type extends the other, and ask the host whether both name one object. There is no ordering.
-- A child may not redeclare a method it inherits, and a name reachable through both the chain and a trait impl is ambiguous — write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
-=======
-- Narrowing back to a child is never implicit. It is written as a type pattern (below), which asks the host whether the handle really is one.
-- `==` and `!=` compare two handles when one type extends the other, and ask the host whether both name one object. There is no ordering.
 - A child may not redeclare a method it inherits. A name reachable through both the chain and a trait impl is ambiguous: write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
->>>>>>> origin/main
 - Static methods (no `&self`) are not inherited, and `Self` in an inherited method names the resource that declares it.
 - A generic resource takes no part in `extends`.
 
@@ -6066,16 +6021,8 @@ Component Model interop: The compiler automatically converts between Wado conven
 - WASI: WebAssembly System Interface
 - CM: Wasm Component Model
 - module: a Wado file
-<<<<<<< HEAD
-- project: a collection of modules
-- Wado standard library: consists of `core:` and `wasi:`
-||||||| 03599b7966
-- project: a collection of modules
-- Wado standard library: consists of `core:`, `wasi:` and `web:`
-=======
 - package: a collection of modules, described by one `wado.toml`
-- Wado standard library: consists of `core:`, `wasi:` and `web:`
->>>>>>> origin/main
+- Wado standard library: consists of `core:` and `wasi:`
 - effect: the concept; e.g., "the `Stdout` effect"
 - effect interface: the declaration (`interface Stdout { ... }`); synonyms in literature: "effect signature", "effect type"
 - operation: a function in an effect interface; synonym: "effect operation"
