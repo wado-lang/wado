@@ -8,6 +8,8 @@
 //! every field on every opaque call; a "writes no field" summary propagated up
 //! the call graph would remove that cliff for thin forwarding wrappers.
 
+use cranelift_entity::EntityRef;
+
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
@@ -18,7 +20,8 @@ use crate::nir_package::NirPackage;
 use crate::nir_visitor::NirRefVisitor;
 use crate::optimize::alias::bound_value;
 use crate::optimize::arena_query::is_local;
-use crate::optimize::heap_effect::{Effect, HeapEffects, HeapFrame};
+use crate::optimize::gate::FunctionGate;
+use crate::optimize::heap_effect::{Effect, HeapEffects, HeapEffectsCache, HeapFrame};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -40,17 +43,24 @@ struct FuncUsageEntry {
 /// Maps each function (by module + name) to its usage info.
 type FieldUsageCache = IndexMap<FuncId, FuncUsageEntry>;
 
-pub fn scalarize_hot_fields(project: &mut NirPackage) -> bool {
+pub fn scalarize_hot_fields(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    heap: &mut HeapEffectsCache,
+) -> bool {
     // Phase 1: Build field usage cache (immutable access to all functions)
     let cache = build_field_usage_cache(project);
 
     // Phase 2: Run scalarization (mutable access)
     let type_table = project.type_table.borrow();
-    let effects = HeapEffects::new(project, &type_table);
+    let effects = heap.effects(project, &type_table, gate);
     let mut changed = false;
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
-        changed |= scalarize_function(&mut func, &type_table, &cache, &effects);
+        if scalarize_function(&mut func, &type_table, &cache, &effects) {
+            gate.mark_changed(FuncId::new(i));
+            changed = true;
+        }
     }
     changed
 }

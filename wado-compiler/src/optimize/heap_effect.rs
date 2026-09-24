@@ -1,15 +1,16 @@
-//! Which GC-heap objects a call may read or write: [`HeapEffects`] summarises
-//! each function over the call graph, [`HeapFrame`] the objects of one body.
+//! Which GC-heap objects a call may read or write: [`HeapEffectsCache`]
+//! summarises each function over the call graph, [`HeapFrame`] one body's objects.
 
 use std::cell::{OnceCell, RefCell};
 use std::rc::Rc;
 
 use cranelift_entity::EntityRef;
 
+use crate::graph::strongly_connected_components;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::is_closure_call_name;
-use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
@@ -18,6 +19,7 @@ use crate::tir::{
 };
 
 use super::arena_query::holds_reference;
+use super::gate::FunctionGate;
 
 /// A set of heap object types, keyed by [`TypeTable::type_key`]; `any` stands
 /// for every type.
@@ -226,21 +228,56 @@ enum Callee {
     Opaque,
 }
 
-/// The call-graph-wide summaries every [`HeapFrame`] reads.
-pub(super) struct HeapEffects<'t> {
-    type_table: &'t TypeTable,
+/// One function as the solver sees it, taken when its gate edit count was
+/// `edit`.
+struct FunctionEntry {
+    edit: u64,
+    callee: Callee,
+    closure: bool,
+    /// The functions its reachable calls name.
+    calls: IndexSet<usize>,
+    calls_indirect: bool,
+}
+
+impl FunctionEntry {
+    fn of(f: &NirFunction, project: &NirPackage, edit: u64) -> Self {
+        let mut calls = IndexSet::default();
+        let mut calls_indirect = false;
+        if let Some(body) = &f.body {
+            body.for_each_reachable_node(|node| {
+                let NodeRef::Expr(e) = node else { return };
+                if let ExprKind::Call { func_id, .. } = &body.exprs[e].kind {
+                    calls.insert(func_id.index());
+                }
+                calls_indirect |= matches!(body.exprs[e].kind, ExprKind::IndirectCall { .. });
+            });
+        }
+        Self {
+            edit,
+            callee: classify_callee(f, project),
+            closure: f.body.is_some() && is_closure_call_name(&f.name),
+            calls,
+            calls_indirect,
+        }
+    }
+
+    /// What a caller reads of this entry besides its summary.
+    fn shape(&self) -> (std::mem::Discriminant<Callee>, bool) {
+        (std::mem::discriminant(&self.callee), self.closure)
+    }
+}
+
+/// What the summaries read of the types beyond the type table, which only
+/// grows while they are kept.
+#[derive(Default, PartialEq)]
+struct Layouts {
     struct_fields: IndexMap<(String, ModuleSource), Vec<TypeId>>,
     /// Every array type by its element, for the backing array a `List<T>` hides.
     arrays_of: IndexMap<TypeKey, Vec<TypeKey>>,
-    callees: Vec<Callee>,
-    summaries: Vec<Summary>,
-    /// The join over every closure body, which is what an indirect call runs.
-    indirect: Summary,
-    reach_memo: RefCell<IndexMap<TypeKey, Rc<TypeSet>>>,
 }
 
-impl<'t> HeapEffects<'t> {
-    pub(super) fn new(project: &NirPackage, type_table: &'t TypeTable) -> Self {
+impl Layouts {
+    fn of(project: &NirPackage, type_table: &TypeTable) -> Self {
         let struct_fields = project
             .structs
             .iter()
@@ -260,92 +297,226 @@ impl<'t> HeapEffects<'t> {
                     .push(type_table.type_key(id));
             }
         }
-        let callees = project
-            .functions
-            .iter()
-            .map(|f| classify_callee(&f.borrow(), project))
-            .collect();
-        let mut effects = Self {
-            type_table,
+        Self {
             struct_fields,
             arrays_of,
-            callees,
-            summaries: vec![Summary::default(); project.functions.len()],
-            indirect: Summary::default(),
-            reach_memo: RefCell::default(),
-        };
-        effects.solve(project);
-        effects
+        }
+    }
+}
+
+/// The call-graph-wide summaries, kept across passes and re-solved only where
+/// a body changed since: entries are keyed by one [`FunctionGate`]'s edit counts.
+#[derive(Default)]
+pub(super) struct HeapEffectsCache {
+    gate: Option<u64>,
+    layouts: Layouts,
+    functions: Vec<FunctionEntry>,
+    summaries: Vec<Summary>,
+    /// The join over every closure body, which is what an indirect call runs.
+    indirect: Summary,
+    reach_memo: RefCell<IndexMap<TypeKey, Rc<TypeSet>>>,
+    /// Where `assert_one_settled` resumes its rotation.
+    #[cfg(debug_assertions)]
+    cursor: usize,
+}
+
+impl HeapEffectsCache {
+    /// The summaries of `project` as it stands, every rewrite since the last
+    /// call having been reported to `gate`.
+    pub(super) fn effects<'t>(
+        &'t mut self,
+        project: &NirPackage,
+        type_table: &'t TypeTable,
+        gate: &FunctionGate,
+    ) -> HeapEffects<'t> {
+        self.refresh(project, type_table, gate);
+        HeapEffects {
+            type_table,
+            cache: self,
+        }
     }
 
-    /// The least fixpoint over the call graph: a function is re-summarised
-    /// whenever a callee's summary grows.
-    fn solve(&mut self, project: &NirPackage) {
+    fn refresh(&mut self, project: &NirPackage, type_table: &TypeTable, gate: &FunctionGate) {
+        let layouts = Layouts::of(project, type_table);
         let len = project.functions.len();
-        let mut callers: Vec<Vec<usize>> = vec![Vec::new(); len];
-        let mut indirect_callers: Vec<usize> = Vec::new();
-        let mut closure_bodies: Vec<usize> = Vec::new();
-        for (i, f) in project.functions.iter().enumerate() {
-            let f = f.borrow();
-            let Some(body) = &f.body else { continue };
-            if is_closure_call_name(&f.name) {
-                closure_bodies.push(i);
-            }
-            let mut calls_indirect = false;
-            body.for_each_reachable_node(|node| {
-                let NodeRef::Expr(e) = node else { return };
-                if let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
-                    && let Some(c) = callers.get_mut(func_id.index())
-                    && c.last() != Some(&i)
-                {
-                    c.push(i);
-                }
-                calls_indirect |= matches!(body.exprs[e].kind, ExprKind::IndirectCall { .. });
-            });
-            if calls_indirect {
-                indirect_callers.push(i);
-            }
-        }
-        let mut queued = vec![false; len];
-        let mut worklist: Vec<usize> = Vec::new();
-        for i in (0..len).rev() {
-            if matches!(self.callees[i], Callee::Body) {
-                queued[i] = true;
-                worklist.push(i);
-            }
-        }
-        while let Some(i) = worklist.pop() {
-            queued[i] = false;
-            let summary = {
-                let f = project.functions[i].borrow();
-                let body = f.body.as_ref().expect("queued functions have bodies");
-                let params: Vec<u32> = f.params.iter().map(|p| p.local_index).collect();
-                HeapFrame::new(self, body, &params).summary(self, body)
+        if self.gate != Some(gate.id()) || self.layouts != layouts || self.functions.len() > len {
+            *self = Self {
+                gate: Some(gate.id()),
+                layouts,
+                ..Self::default()
             };
-            if summary == self.summaries[i] {
+        }
+        let mut edited = vec![false; len];
+        // Whether a node's answer to its callers moved; the last is the indirect one.
+        let mut moved = vec![false; len + 1];
+        for i in 0..len {
+            let edit = gate.edits(FuncId::new(i));
+            if self.functions.get(i).is_some_and(|e| e.edit == edit) {
                 continue;
             }
-            self.summaries[i] = summary;
-            let mut requeue = callers[i].clone();
-            if closure_bodies.contains(&i) {
-                let mut indirect = Summary::default();
-                for &c in &closure_bodies {
-                    indirect.join(&self.summaries[c]);
-                }
-                if indirect != self.indirect {
-                    self.indirect = indirect;
-                    requeue.extend(indirect_callers.iter().copied());
+            edited[i] = true;
+            let entry = FunctionEntry::of(&project.functions[i].borrow(), project, edit);
+            if let Some(old) = self.functions.get_mut(i) {
+                moved[i] = old.shape() != entry.shape();
+                *old = entry;
+            } else {
+                moved[i] = true;
+                self.functions.push(entry);
+                self.summaries.push(Summary::default());
+            }
+        }
+        if edited.contains(&true) {
+            self.solve(project, type_table, &edited, &mut moved);
+        }
+        #[cfg(debug_assertions)]
+        self.assert_one_settled(project, type_table);
+    }
+
+    /// The least fixpoint over the call graph, one component at a time, callees
+    /// first; a component whose inputs all stand is the fixpoint already.
+    fn solve(
+        &mut self,
+        project: &NirPackage,
+        type_table: &TypeTable,
+        edited: &[bool],
+        moved: &mut [bool],
+    ) {
+        let indirect = self.functions.len();
+        let successors = self.successors();
+        let components = strongly_connected_components(&successors);
+        let mut component_of = vec![0; successors.len()];
+        for (c, members) in components.iter().enumerate() {
+            for &n in members {
+                component_of[n] = c;
+            }
+        }
+        let mut callers_within: Vec<Vec<usize>> = vec![Vec::new(); successors.len()];
+        for (n, callees) in successors.iter().enumerate() {
+            for &s in callees {
+                if component_of[s] == component_of[n] {
+                    callers_within[s].push(n);
                 }
             }
-            for c in requeue {
-                if !queued[c] {
-                    queued[c] = true;
-                    worklist.push(c);
+        }
+        let mut queued = vec![false; successors.len()];
+        for members in &components {
+            let stale = members
+                .iter()
+                .any(|&n| (n != indirect && edited[n]) || successors[n].iter().any(|&s| moved[s]));
+            if !stale {
+                continue;
+            }
+            let before: Vec<Summary> = members
+                .iter()
+                .map(|&n| std::mem::take(self.summary_mut(n)))
+                .collect();
+            let mut worklist = members.clone();
+            for &n in members {
+                queued[n] = true;
+            }
+            while let Some(n) = worklist.pop() {
+                queued[n] = false;
+                let summary = self.summarize(project, type_table, n);
+                if summary == *self.summary_mut(n) {
+                    continue;
                 }
+                *self.summary_mut(n) = summary;
+                for &m in &callers_within[n] {
+                    if !queued[m] {
+                        queued[m] = true;
+                        worklist.push(m);
+                    }
+                }
+            }
+            for (&n, before) in members.iter().zip(before) {
+                moved[n] |= *self.summary_mut(n) != before;
             }
         }
     }
 
+    /// Each node's callees, the node past the last function standing for what
+    /// every indirect call runs.
+    fn successors(&self) -> Vec<Vec<usize>> {
+        let indirect = self.functions.len();
+        let mut successors: Vec<Vec<usize>> = self
+            .functions
+            .iter()
+            .map(|f| match f.callee {
+                Callee::Body => f
+                    .calls
+                    .iter()
+                    .copied()
+                    .filter(|&c| c < indirect)
+                    .chain(f.calls_indirect.then_some(indirect))
+                    .collect(),
+                Callee::Builtin { .. } | Callee::Opaque => Vec::new(),
+            })
+            .collect();
+        successors.push(self.closure_bodies().collect());
+        successors
+    }
+
+    fn closure_bodies(&self) -> impl Iterator<Item = usize> + '_ {
+        (0..self.functions.len()).filter(|&i| self.functions[i].closure)
+    }
+
+    fn summary_mut(&mut self, n: usize) -> &mut Summary {
+        if n == self.functions.len() {
+            &mut self.indirect
+        } else {
+            &mut self.summaries[n]
+        }
+    }
+
+    /// What node `n` gives its callers, read against the summaries as they stand.
+    fn summarize(&self, project: &NirPackage, type_table: &TypeTable, n: usize) -> Summary {
+        if n == self.functions.len() {
+            let mut indirect = Summary::default();
+            for c in self.closure_bodies() {
+                indirect.join(&self.summaries[c]);
+            }
+            return indirect;
+        }
+        match self.functions[n].callee {
+            Callee::Body => {
+                let effects = HeapEffects {
+                    type_table,
+                    cache: self,
+                };
+                let f = project.functions[n].borrow();
+                let body = f.body.as_ref().expect("a `Callee::Body` has a body");
+                let params: Vec<u32> = f.params.iter().map(|p| p.local_index).collect();
+                HeapFrame::new(&effects, body, &params).summary(&effects, body)
+            }
+            Callee::Builtin { .. } | Callee::Opaque => Summary::default(),
+        }
+    }
+
+    /// A body rewritten without a report to the gate keeps a summary that no
+    /// longer answers for it. One node per refresh, rotating, keeps the check cheap.
+    #[cfg(debug_assertions)]
+    fn assert_one_settled(&mut self, project: &NirPackage, type_table: &TypeTable) {
+        let nodes = self.functions.len() + 1;
+        self.cursor %= nodes;
+        let n = self.cursor;
+        self.cursor += 1;
+        let summary = self.summarize(project, type_table, n);
+        assert!(
+            summary == *self.summary_mut(n),
+            "a heap-effect summary went stale: function {n} was rewritten without \
+             `FunctionGate::mark_changed`"
+        );
+    }
+}
+
+/// The call-graph-wide summaries every [`HeapFrame`] reads.
+#[derive(Clone, Copy)]
+pub(super) struct HeapEffects<'t> {
+    type_table: &'t TypeTable,
+    cache: &'t HeapEffectsCache,
+}
+
+impl HeapEffects<'_> {
     /// The heap object a value of `ty` is, or reaches first through its
     /// references: the key every access to it records.
     pub(super) fn object_key(&self, ty: TypeId) -> Option<TypeKey> {
@@ -451,14 +622,17 @@ impl<'t> HeapEffects<'t> {
     /// Every object type a value of `ty` may reach, itself included.
     pub(super) fn reach(&self, ty: TypeId) -> Rc<TypeSet> {
         let key = self.type_table.type_key(ty);
-        if let Some(hit) = self.reach_memo.borrow().get(&key) {
+        if let Some(hit) = self.cache.reach_memo.borrow().get(&key) {
             return Rc::clone(hit);
         }
         let mut out = TypeSet::default();
         let mut seen = IndexSet::default();
         self.reach_into(ty, &mut seen, &mut out);
         let out = Rc::new(out);
-        self.reach_memo.borrow_mut().insert(key, Rc::clone(&out));
+        self.cache
+            .reach_memo
+            .borrow_mut()
+            .insert(key, Rc::clone(&out));
         out
     }
 
@@ -498,6 +672,8 @@ impl<'t> HeapEffects<'t> {
                 {
                     out.insert(tt.type_key(ty));
                     for &array in self
+                        .cache
+                        .layouts
                         .arrays_of
                         .get(&tt.type_key(*element))
                         .into_iter()
@@ -602,7 +778,11 @@ impl<'t> HeapEffects<'t> {
         } else {
             return None;
         };
-        self.struct_fields.get(&key).map(Vec::as_slice)
+        self.cache
+            .layouts
+            .struct_fields
+            .get(&key)
+            .map(Vec::as_slice)
     }
 
     /// The type of field `field` of the struct `ty` names, where it is known.
@@ -1717,8 +1897,9 @@ enum Target<'s> {
 fn call_parts<'s>(effects: &'s HeapEffects, body: &Body, e: ExprId) -> (Target<'s>, Vec<Operand>) {
     match &body.exprs[e].kind {
         ExprKind::Call { func_id, args, .. } => {
-            let target = match effects.callees.get(func_id.index()) {
-                Some(Callee::Body) => Target::Summary(&effects.summaries[func_id.index()]),
+            let cache = effects.cache;
+            let target = match cache.functions.get(func_id.index()).map(|f| &f.callee) {
+                Some(Callee::Body) => Target::Summary(&cache.summaries[func_id.index()]),
                 Some(Callee::Builtin { declaration, array }) => Target::Builtin {
                     declaration,
                     array: *array,
@@ -1728,7 +1909,7 @@ fn call_parts<'s>(effects: &'s HeapEffects, body: &Body, e: ExprId) -> (Target<'
             (target, args.iter().map(|a| a.expr).collect())
         }
         ExprKind::IndirectCall { callee, args } => (
-            Target::Summary(&effects.indirect),
+            Target::Summary(&effects.cache.indirect),
             std::iter::once(*callee)
                 .chain(args.iter().copied())
                 .collect(),

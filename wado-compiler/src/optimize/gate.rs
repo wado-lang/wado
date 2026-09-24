@@ -6,7 +6,10 @@
 //!
 //! Every loop pass is optional, the IR being valid without it, so an imprecise
 //! gate costs optimization quality and never correctness. When in doubt, the
-//! propagation marks dirty.
+//! propagation marks dirty. The exception is [`FunctionGate::edits`]: the
+//! heap-effect summaries trust it, so a pass reports every body it rewrites.
+
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use cranelift_entity::EntityRef;
 
@@ -96,10 +99,17 @@ impl CallGraph {
 
 /// Per-function dirty-set gate. See the module docs.
 pub struct FunctionGate {
+    id: u64,
     revision: Vec<u64>,
+    /// How often each function's own body was reported changed; unlike
+    /// `revision`, never bumped for a neighbour.
+    edits: Vec<u64>,
     watermarks: [Vec<u64>; GatedPass::COUNT],
     graph: CallGraph,
 }
+
+/// Tells one gate's edit counts from another's.
+static NEXT_GATE_ID: AtomicU64 = AtomicU64::new(0);
 
 impl FunctionGate {
     /// Build the gate for one optimizer run. Every function starts dirty
@@ -107,11 +117,29 @@ impl FunctionGate {
     /// everything.
     pub fn new(project: &NirPackage) -> Self {
         let n = project.functions.len();
+        Self::with_graph(n, CallGraph::build(project))
+    }
+
+    fn with_graph(n: usize, graph: CallGraph) -> Self {
         Self {
+            id: NEXT_GATE_ID.fetch_add(1, Ordering::Relaxed),
             revision: vec![1; n],
+            edits: vec![0; n],
             watermarks: std::array::from_fn(|_| vec![0; n]),
-            graph: CallGraph::build(project),
+            graph,
         }
+    }
+
+    /// Which gate this is, so a count taken from one is never read against
+    /// another's.
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+
+    /// How many changes to `func`'s own body have been reported; a function
+    /// the gate has not yet seen has none.
+    pub fn edits(&self, func: FuncId) -> u64 {
+        self.edits.get(func.index()).copied().unwrap_or(0)
     }
 
     /// Grow the side-tables to cover `len` functions. A pass may add functions
@@ -124,6 +152,7 @@ impl FunctionGate {
     fn ensure(&mut self, len: usize) {
         while self.revision.len() < len {
             self.revision.push(1);
+            self.edits.push(0);
             for w in &mut self.watermarks {
                 w.push(0);
             }
@@ -165,6 +194,7 @@ impl FunctionGate {
         self.ensure(func.index() + 1);
         let i = func.index();
         self.revision[i] += 1;
+        self.edits[i] += 1;
         for &c in &self.graph.callers[i] {
             self.revision[c.index()] += 1;
         }
@@ -274,11 +304,7 @@ mod tests {
             callees[caller].push(FuncId::new(callee));
             callers[callee].push(FuncId::new(caller));
         }
-        FunctionGate {
-            revision: vec![1; n],
-            watermarks: std::array::from_fn(|_| vec![0; n]),
-            graph: CallGraph { callees, callers },
-        }
+        FunctionGate::with_graph(n, CallGraph { callees, callers })
     }
 
     #[test]

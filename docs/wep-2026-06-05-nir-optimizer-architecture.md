@@ -180,6 +180,14 @@ Every loop pass is an optimization, so an imprecise gate costs optimization
 quality, never correctness. The same one-sided argument covers the
 interprocedural over-approximation.
 
+The heap-effect summaries are the exception. Several passes read them, so they
+are held across the loop rather than rebuilt by each reader. Each function also
+carries an edit count, bumped only when its own body is reported changed, and
+the summaries are keyed by it. A reader re-solves only the call-graph
+components that hold a function edited since, or that call one whose summary
+moved. A stale summary is unsound rather than imprecise, so every pass reports
+each body it rewrites. A debug build re-checks one summary on each read.
+
 ## Soundness invariants
 
 - Substitution soundness. An operand is repointed from `a` to `b` only when the
