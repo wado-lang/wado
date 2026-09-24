@@ -32,8 +32,8 @@ test "the app renders a heading" {
 ```
 
 `SurfaceDom` is the DOM's API surface with no browser engine behind it: no
-layout, style or scripting. It holds a tree, text, attributes and an input's
-value. A call it does not answer traps, and so does an insertion the DOM standard rejects with a
+layout, style or scripting. It holds a tree, text, attributes, an input's
+value and the document's title. A call it does not answer traps, and so does an insertion the DOM standard rejects with a
 `HierarchyRequestError`.
 
 A server renders a page by serializing it. `dom.to_html()` gives the whole

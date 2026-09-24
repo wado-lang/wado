@@ -275,6 +275,30 @@ test "a script's text is not escaped" {
     };
 }
 
+test "a document's title is a title element in the head" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        assert doc.title() == "";
+        doc.set_title("  Hello \n  Wado ");
+        assert doc.title() == "Hello Wado";
+        doc.set_title("Again");
+        assert doc.title() == "Again";
+    };
+    assert dom.to_html() == "<!DOCTYPE html><html><head><title>Again</title></head><body></body></html>";
+}
+
+test "a title set without a head is dropped" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let html = doc.document_element().unwrap();
+        html.remove_child(html.first_child().unwrap());
+        doc.set_title("Lost");
+        assert doc.title() == "";
+    };
+}
+
 test "the document serializes with its doctype" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {

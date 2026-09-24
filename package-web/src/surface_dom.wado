@@ -66,6 +66,23 @@ fn escape(text: &String, in_attribute: bool, out: &mut String) {
     }
 }
 
+fn strip_and_collapse_ascii_whitespace(text: &String) -> String {
+    let mut out = "";
+    let mut gap = false;
+    for let c of text.chars() {
+        if c matches { '\t' | '\n' | '\u{C}' | '\r' | ' ' } {
+            gap = !out.is_empty();
+        } else {
+            if gap {
+                out.push(' ');
+                gap = false;
+            }
+            out.push(c);
+        }
+    }
+    return out;
+}
+
 /// A document of `<!DOCTYPE html><html><head></head><body></body></html>`, as
 /// `createHTMLDocument()` makes, and the window holding it.
 pub struct SurfaceDom {
@@ -270,19 +287,33 @@ impl SurfaceDom {
         }
     }
 
-    fn find_id(&self, index: i32, id: &String) -> i32 {
-        if self.nodes[index].attributes.get("id") == Option::Some(*id) {
+    // The first node in tree order, from `index` down, that `accept` takes.
+    fn find(&self, index: i32, accept: &fn(&SurfaceNode) -> bool) -> i32 {
+        if (*accept)(&self.nodes[index]) {
             return index;
         }
         let mut child = self.nodes[index].first_child;
         while child != NO_NODE {
-            let found = self.find_id(child, id);
+            let found = self.find(child, accept);
             if found != NO_NODE {
                 return found;
             }
             child = self.nodes[child].next_sibling;
         }
         return NO_NODE;
+    }
+
+    fn title_index(&self) -> i32 {
+        return self.find(DOCUMENT_INDEX, &|n| n.content matches { Element(name) && name == "title" });
+    }
+
+    fn replace_all_text(&mut self, index: i32, text: String) {
+        self.remove_children(index);
+        if !text.is_empty() {
+            // The slice has no `Text`, so a text node carries `Node`'s class.
+            let node = self.push(NODE_CLASS, Content::Text(text));
+            self.append(index, node);
+        }
     }
 
     fn child_named(&self, parent: i32, local_name: String) -> i32 {
@@ -296,12 +327,12 @@ impl SurfaceDom {
         return NO_NODE;
     }
 
-    fn body_index(&self) -> i32 {
+    fn html_child(&self, local_name: String) -> i32 {
         let html = self.child_named(DOCUMENT_INDEX, "html");
         if html == NO_NODE {
             return NO_NODE;
         }
-        return self.child_named(html, "body");
+        return self.child_named(html, local_name);
     }
 }
 
@@ -333,7 +364,7 @@ impl Document for SurfaceDom {
     }
 
     fn body(&mut self, this: &Document) -> Option<HtmlElement> {
-        let body = self.body_index();
+        let body = self.html_child("body");
         if body == NO_NODE {
             resume null;
         } else {
@@ -342,7 +373,35 @@ impl Document for SurfaceDom {
     }
 
     fn get_element_by_id(&mut self, this: &Document, element_id: String) -> Option<Element> {
-        resume self.element(self.find_id(DOCUMENT_INDEX, &element_id));
+        resume self.element(self.find(DOCUMENT_INDEX, &|n| n.attributes.get("id") == Option::Some(element_id)));
+    }
+
+    fn title(&mut self, this: &Document) -> String {
+        let title = self.title_index();
+        let mut text = "";
+        if title != NO_NODE {
+            let mut child = self.nodes[title].first_child;
+            while child != NO_NODE {
+                if let Text(data) = self.nodes[child].content {
+                    text.push_str(&data);
+                }
+                child = self.nodes[child].next_sibling;
+            }
+        }
+        resume strip_and_collapse_ascii_whitespace(&text);
+    }
+
+    fn set_title(&mut self, this: &Document, value: String) {
+        let mut title = self.title_index();
+        let head = self.html_child("head");
+        if title == NO_NODE && head != NO_NODE {
+            title = self.create("title");
+            self.append(head, title);
+        }
+        if title != NO_NODE {
+            self.replace_all_text(title, value);
+        }
+        resume ();
     }
 
     ..trap
@@ -415,14 +474,7 @@ impl Node for SurfaceDom {
             Document | Window | Doctype => {
             },
             Text(_) => self.nodes[index].content = Content::Text(text),
-            Element(_) => {
-                self.remove_children(index);
-                if !text.is_empty() {
-                    // The slice has no `Text`, so a text node carries `Node`'s class.
-                    let node = self.push(NODE_CLASS, Content::Text(text));
-                    self.append(index, node);
-                }
-            },
+            Element(_) => self.replace_all_text(index, text),
         }
         resume ();
     }
