@@ -1,0 +1,32 @@
+// A call reaching an `#[unavailable]` declaration checks no argument against
+// it, but a fault inside an argument is still reported, on every call shape.
+struct File {}
+
+impl File {
+    #[unavailable("gone")]
+    pub fn open(&self, n: i32);
+
+    #[unavailable("gone too")]
+    pub fn make(n: i32);
+}
+
+#[unavailable("never")]
+fn old(n: i32);
+
+export fn run() {
+    let f = File {};
+    old(missing_a);
+    f.open(missing_b);
+    File::make(missing_c);
+}
+
+__DATA__
+{
+    "compile_error": "unknown identifier 'missing_a'",
+    "compile_error_count": 6,
+    "compile_errors_contains": [
+        "unknown identifier 'missing_a'",
+        "unknown identifier 'missing_b'",
+        "unknown identifier 'missing_c'"
+    ]
+}

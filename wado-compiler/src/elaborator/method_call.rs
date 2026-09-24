@@ -266,10 +266,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The receiver's fault is reported where it arose; only the arguments
         // can still say something new.
         if base_type_id == TypeTable::ERROR {
-            for arg in args_ast {
-                self.resolve_expr(arg, ctx, None);
-            }
-            return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
+            let error = self.resolve_args_without_callee(args_ast, ctx);
+            return MethodCallOutcome::no_dispatch(error);
         }
 
         // The handle argument-directed selection classifies through (WEP
@@ -623,7 +621,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(def) = dispatched_method_def
             && self.report_unavailable(def, span)
         {
-            return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
+            let error = self.resolve_args_without_callee(args_ast, ctx);
+            return MethodCallOutcome::no_dispatch(error);
         }
 
         // Before anything counts slots, since a pack's arguments are one per

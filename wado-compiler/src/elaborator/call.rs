@@ -323,9 +323,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.global_type_in(name, &self.home_module(site))
     }
 
-    /// The value a bare callee names — a binding first, so shadowing wins, else
-    /// a global — with the binding it came from; `None` where it names none.
-    /// Records the use→def edge `resolve_ident` would, which it bypasses.
+    /// Resolves the arguments of a call no callee will check, so a fault inside
+    /// one is still reported, and answers the call's type: `ERROR`.
+    pub(super) fn resolve_args_without_callee(
+        &mut self,
+        args: &[ast::Expr],
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        for arg in args {
+            self.resolve_expr(arg, ctx, None);
+        }
+        TypeTable::ERROR
+    }
+
+    /// The value a bare callee names, a binding before a global, with the
+    /// binding it came from and its use→def edge recorded; `None` if none.
     pub(super) fn callee_value(
         &mut self,
         ident: &ast::IdentExpr,
@@ -671,29 +683,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
 
-            // A binding whose initializer already reported keeps the one
-            // diagnostic its fault earned; calling it says nothing new.
-            if value_ty == TypeTable::ERROR {
-                for arg in &call.args {
-                    self.resolve_expr(arg, ctx, None);
-                }
-                return TypeTable::ERROR;
+            // Not "unknown function": the name is a value. A binding whose
+            // initializer already reported keeps the one diagnostic it earned.
+            if value_ty != TypeTable::ERROR {
+                let type_name = self.tysys.type_table.borrow().type_name(value_ty);
+                let _ = self.emit(TypeError::CalleeNotCallable {
+                    type_name,
+                    span: call.callee.span(),
+                });
             }
-
-            // Names a binding that is not a function — a clear
-            // not-callable diagnostic, not the misleading "unknown
-            // function 'x'" from the named-function lookup below.
-            let type_name = self.tysys.type_table.borrow().type_name(value_ty);
-            let _ = self.emit(TypeError::CalleeNotCallable {
-                type_name,
-                span: call.callee.span(),
-            });
-            // Still resolve the arguments so errors inside them are
-            // reported rather than masked by the callee error.
-            for arg in &call.args {
-                self.resolve_expr(arg, ctx, None);
-            }
-            return TypeTable::ERROR;
+            return self.resolve_args_without_callee(&call.args, ctx);
         }
 
         // Indirect call on a non-identifier callee. Any expression whose
