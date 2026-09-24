@@ -749,15 +749,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         site: Option<AstId>,
         struct_name: &str,
     ) -> ModuleSource {
-        // i128 / u128 are structs in `prelude/int128.wado`, not primitives, so
-        // this answers `None` for them and they take the walk below.
-        if let Some(module) = ModuleSource::of_primitive_name(struct_name) {
-            return module;
+        let Some(def) = self.decl_key_at(site, struct_name) else {
+            return self.current_module_source.clone();
+        };
+        let defs = self.tysys.resolutions.defs();
+        // A primitive's methods live apart from its declaration.
+        match defs.primitive(def) {
+            Some(primitive) => ModuleSource::of_primitive(primitive),
+            None => defs.module(def).clone(),
         }
-        if let Some(def) = self.decl_key_at(site, struct_name) {
-            return self.tysys.resolutions.defs().module(def).clone();
-        }
-        self.current_module_source.clone()
     }
 
     /// Look up method info based on receiver type and method name.
@@ -1893,7 +1893,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let mut found_traits: Vec<TraitMethodMatch> = self.materialize_matches(
             named,
-            type_key,
             method_name,
             receiver_type_args,
             receiver_type_id,
@@ -1935,7 +1934,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn materialize_matches(
         &mut self,
         named: &[Option<DefId>],
-        type_key: &ImplTargetKey,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
@@ -1951,20 +1949,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     receiver_type_args,
                     receiver_type_id,
                 )),
-                // A template is registered under its mangled head, so the
-                // probe is in that namespace, not the declaration one.
                 None => {
                     if let Some(recv_id) = receiver_type_id {
-                        found.extend(
-                            self.try_auto_derived_method_match(
-                                type_key
-                                    .receiver(self.tysys.resolutions.defs())
-                                    .head_key()
-                                    .as_mangled_str(),
-                                method_name,
-                                recv_id,
-                            ),
-                        );
+                        found.extend(self.try_auto_derived_method_match(method_name, recv_id));
                     }
                 }
             }

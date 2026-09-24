@@ -2952,7 +2952,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     return type_table.make_type_param(named.name.clone(), index as u32);
                 }
 
-                if let Some(primitive) = TypeTable::primitive_by_name(&named.name) {
+                if let Some(primitive) =
+                    def.and_then(|def| TypeTable::primitive_of_decl(lookup.resolutions.defs(), def))
+                {
                     return primitive;
                 }
 

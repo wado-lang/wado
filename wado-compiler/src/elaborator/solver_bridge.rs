@@ -3,10 +3,10 @@
 
 use crate::ast::Type;
 use crate::compiler_item::CompilerItem;
-use crate::defs::{DefId, DefTable};
+use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, RefKind, TypeHead, is_builtin_shape_decl};
+use crate::name::{FqTraitName, FqTypeName, RefKind, TypeHead};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
@@ -15,10 +15,9 @@ use crate::trait_solver::{
     TraitDeclId, TypeDeclId, TypeDef, candidates, derive, holds_with_args, rank,
 };
 
-use super::trait_env::{BlanketReceiver, ImplHeader, written_arg_nodes};
+use super::trait_env::{BlanketReceiver, ImplHeader, ImplTargetKey, written_arg_nodes};
 use super::trait_query::{OnBoundTrait, primitive_has_operator};
 use super::tysys::TypeSystem;
-use crate::defs::DefKind;
 use crate::elaborator::scope;
 use crate::elaborator::types::TypeLookup;
 use crate::resolve::Resolutions;
@@ -99,13 +98,13 @@ impl Lowering {
         TypeDeclId(intern(&mut self.decls, DeclKey::Builtin(name.to_string())))
     }
 
-    /// The head a written type reaching `def` lowers under, keyed as
-    /// `ImplTargetKey::of_decl` keys it.
+    /// The head a written type reaching `def` lowers under, keyed as the impl
+    /// index keys it.
     fn head_of(&mut self, defs: &DefTable, def: DefId) -> TypeDeclId {
-        if is_builtin_shape_decl(defs, def) {
-            self.builtin(defs.name(def))
-        } else {
-            self.type_decl(def)
+        match ImplTargetKey::of_decl(defs, def) {
+            ImplTargetKey::Builtin(name) => self.builtin(&name),
+            ImplTargetKey::Decl(def) => self.type_decl(def),
+            key => unreachable!("a declaration keys as itself or a builtin, not {key:?}"),
         }
     }
 
@@ -255,10 +254,8 @@ impl Lowering {
                 is_mut: matches!(ty, Type::MutReference(_)),
                 inner: Box::new(self.ast_type(inner, param, resolutions, self_type)?),
             }),
-            // `impl Greet for geo::Tag` names a declaration like any other; a
-            // qualified spelling is never a builtin shape.
             Type::NamespacedGeneric(generic) => {
-                let head = self.type_decl(resolutions.declared(generic.id)?);
+                let head = self.head_of(resolutions.defs(), resolutions.declared(generic.id)?);
                 let args = generic
                     .args
                     .iter()
@@ -547,7 +544,6 @@ fn representative(
     tuple: Option<DefId>,
     key: &DeclKey,
 ) -> Option<ResolvedType> {
-    use crate::defs::DefKind;
     match key {
         // The tuple declaration registers no type of its own; an instance of
         // it is what a tuple type is.

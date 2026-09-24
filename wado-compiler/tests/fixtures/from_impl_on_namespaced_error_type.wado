@@ -1,0 +1,29 @@
+// `?` converts into the error type the signature names, not a local type that
+// shares its name.
+use errs from "./sub/from_impl_on_namespaced_error_dep.wado";
+
+struct AppError {
+    code: i32,
+}
+
+impl From<ParseIntError> for AppError {
+    fn from(e: ParseIntError) -> AppError {
+        return AppError { code: 2 };
+    }
+}
+
+fn parse_remote(s: String) -> Result<i32, errs::AppError> {
+    return Result::Ok(i32::from_str(s)?);
+}
+
+fn parse_local(s: String) -> Result<i32, AppError> {
+    return Result::Ok(i32::from_str(s)?);
+}
+
+test "each ? picks the From impl of its own target" {
+    assert parse_remote("x").unwrap_err().code == 1;
+    assert parse_local("x").unwrap_err().code == 2;
+}
+
+__DATA__
+{}

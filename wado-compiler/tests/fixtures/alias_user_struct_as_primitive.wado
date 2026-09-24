@@ -1,0 +1,13 @@
+// A user struct imported as `u8` is that struct wherever the name is written.
+use { Foo as u8 } from "./sub/alias_user_struct_as_primitive_dep.wado";
+
+fn take(x: u8) -> i32 {
+    return x.v;
+}
+
+test "an alias named u8 names the struct" {
+    assert take(u8 { v: 7 }) == 7;
+}
+
+__DATA__
+{}

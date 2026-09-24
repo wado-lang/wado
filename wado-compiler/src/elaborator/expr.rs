@@ -10,7 +10,7 @@ use crate::ast::{
 };
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
+use crate::name::{DeclName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
     FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeTable,
 };
@@ -5193,7 +5193,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             !tt.contains_infer_var(target_type) && !tt.contains_infer_var(from_type),
             "`From` conversion recorded over an unsolved type"
         );
-        let target_name = tt.type_name(target_type);
+        let target_name = DeclName::new(&tt.type_name(target_type));
         let from_name = tt.fq_type_name(from_type);
         let from_trait_name = tt.compiler_trait_fq(CompilerItem::From);
         drop(tt);
@@ -5203,11 +5203,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let from_trait = from_trait_name.clone().with_args(vec![from_name.clone()]);
         // The receiver the method name is built from — the same value reify
         // puts on the call's `method_info`, so the two cannot drift.
-        let target_receiver = self.qualified_receiver_name(&target_name);
+        let target_receiver = self.tysys.fq_receiver_head(target_type);
         let method_name = MethodName::format_local(&target_receiver, Some(&from_trait), "from");
 
         // The block that provides the `From` impl, and where its body lives.
-        let (impl_def, module_source) = self.find_from_impl(&target_name, &from_name);
+        let (impl_def, module_source) =
+            self.find_from_impl(&self.impl_target_of(target_type, &target_name), &from_name);
 
         let key = caller_id;
         self.sem.types.from_call_facts.insert(
@@ -5229,10 +5230,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// wrote it. No block where the synthesis pass mints the impl later.
     fn find_from_impl(
         &self,
-        target_name: &str,
+        target: &ImplTargetKey,
         from_name: &FqTypeName,
     ) -> (Option<DefId>, ModuleSource) {
-        let keys = self.impl_keys_of_from(&self.impl_target(target_name), from_name);
+        let keys = self.impl_keys_of_from(target, from_name);
         // The current module wins a tie.
         let defs = self.tysys.resolutions.defs();
         keys.iter()

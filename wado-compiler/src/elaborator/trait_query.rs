@@ -335,9 +335,8 @@ impl TypeSystem {
         Some((item, trait_name, self.auto_derive_return_type(item)))
     }
 
-    /// Mirror of [`Self::auto_derive_by_method`] for operator dispatch, which
-    /// already knows the trait: its compiler item and fixed return type, or
-    /// `None` when `trait_` is not an auto-derived trait.
+    /// [`Self::auto_derive_by_method`] for operator dispatch, which knows the
+    /// trait: its compiler item and return type, if `trait_` is auto-derived.
     pub(super) fn auto_derive_by_trait(&self, trait_: DefId) -> Option<(CompilerItem, TypeId)> {
         let item = self.compiler_item_of_trait(trait_)?;
         Self::AUTO_DERIVED_METHODS
@@ -3276,7 +3275,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// method ↔ trait table is [`TypeSystem::auto_derive_by_method`].
     pub(super) fn try_auto_derived_method_match(
         &mut self,
-        struct_name: &str,
         method_name: &str,
         receiver_type_id: TypeId,
     ) -> Option<TraitMethodMatch> {
@@ -3329,15 +3327,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inherent_visibility: None,
             defaults_module: None,
         };
-        // The receiver's declaration names the module the derived impl belongs
-        // to; `auto_derive_eligible_kind` above already established it is one.
+        // A shape no module declares (an anonymous struct, a tuple) derives
+        // where it is used.
         let impl_module_source = self
             .tysys
             .type_table
             .borrow()
             .nominal_def(derive_id)
             .map_or_else(
-                || self.declaring_module_of(struct_name),
+                || self.current_module_source.clone(),
                 |def| self.tysys.resolutions.defs().module(def).clone(),
             );
         // The auto-derived trait is a compiler item, so it is named by the

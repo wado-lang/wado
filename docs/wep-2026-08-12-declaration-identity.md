@@ -712,11 +712,23 @@ same way, through the declaration its head resolves to. A user struct named
 `List` is that struct, and an import aliased `Option` is what it aliases, in a
 signature, a field type and a lowering alike.
 
+A builtin shape is recognised by its declaration too: a primitive, `()`, `!`,
+`Array` and the tuple family are the prelude's `BuiltinType` declarations. A
+user struct imported as `u8` or `Array` is that struct. A WASI resource is its
+declaration, so a user struct named `Fields` keeps its own methods.
+
 Fixtures: `error_user_trait_does_not_capture_add.wado`,
 `error_user_trait_does_not_capture_index.wado`,
 `user_trait_method_survives_relowering.wado`,
 `eq_ord_manual_impl_wins.wado`, `alias_named_prelude_generic.wado`,
-`alias_named_prelude_generic_field.wado`, `no_prelude_user_list_struct.wado`.
+`alias_named_prelude_generic_field.wado`, `no_prelude_user_list_struct.wado`,
+`no_prelude_user_array_struct.wado`, `alias_user_struct_as_array.wado`,
+`alias_user_struct_as_primitive.wado`,
+`namespaced_prelude_array_impl_bound.wado`,
+`resource_named_like_aliased_struct.wado`,
+`user_struct_named_like_wasi_resource.wado`,
+`from_impl_on_namespaced_error_type.wado`,
+`alias_generic_concrete_impl.wado`.
 
 ## Impl target arguments
 

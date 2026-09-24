@@ -57,7 +57,7 @@ pub use types::{
     LiftContext, cm_discriminant_byte_size, cm_flags_byte_size, cm_type_to_type_id,
     flatten_param_type,
 };
-use types::{flat_types_from_ast_type, flat_types_from_type_id};
+use types::{Boundary, flat_types_from_ast_type, flat_types_from_type_id};
 
 /// Build a `(module_source, name)` set for every effect/resource declared in
 /// the loaded TIR modules. The CM binding synthesizer uses this to attach the
@@ -1020,7 +1020,7 @@ fn validate_exports_representable(
 }
 
 /// A `#[cm]` operation a user module declares crosses the boundary in the
-/// other direction, so its signature is held to what an export's is.
+/// other direction, so its signature needs a representation as an export's does.
 fn validate_imports_representable(project: &Package) -> Result<(), String> {
     let tt = entry_type_table(project);
     let tt = tt.borrow();
@@ -1045,6 +1045,7 @@ fn validate_imports_representable(project: &Package) -> Result<(), String> {
             signature_representable(
                 op.params.iter().map(|p| p.type_id),
                 result,
+                Boundary::Import,
                 &tt,
                 &project.tir_modules,
             )
@@ -1063,6 +1064,7 @@ fn validate_boundary_representable(
     signature_representable(
         user_func.params.iter().map(|p| p.type_id),
         user_func.return_type,
+        Boundary::Export,
         tt,
         tir_modules,
     )
@@ -1074,11 +1076,12 @@ fn validate_boundary_representable(
 fn signature_representable(
     params: impl Iterator<Item = TypeId>,
     result: TypeId,
+    boundary: Boundary,
     tt: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
 ) -> Result<(), String> {
     params.chain(std::iter::once(result)).try_for_each(|tid| {
-        types::check_cm_boundary_representable(tid, tt, tir_modules, &mut Vec::new())
+        types::check_cm_boundary_representable(tid, boundary, tt, tir_modules, &mut Vec::new())
     })
 }
 

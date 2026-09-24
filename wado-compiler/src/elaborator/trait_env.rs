@@ -106,21 +106,14 @@ pub(crate) enum ImplTargetKey {
     /// impl out of the bucket of a type that happens to share the parameter's
     /// name. The module is the impl's own — the parameter is scoped to it.
     TypeParam(ModuleSource, String),
-    /// A shape no module declares — the tuple family (`[..T]`), a function
-    /// type. It reaches no declaration by name, so no module qualifies it, and
-    /// a definition and a lookup agree without either knowing where the other
-    /// stood. A primitive is *not* here: `i32` and `()` are `internal type`
-    /// declarations and resolve like any other name.
+    /// A builtin shape: a primitive, `Array`, the tuple family, a function type.
+    /// Every mangler spells it bare, so a definition and a lookup agree on it.
     Builtin(String),
 }
 
 impl ImplTargetKey {
-    /// The key for a declaration already identified.
-    ///
-    /// The one place the builtin decision is made, mirroring
-    /// [`name::FqTypeName::of_head`]: a shape every mangler spells bare drops
-    /// its declaration, so a definition reached through a written head and a
-    /// lookup reached through a resolved type land on the same key.
+    /// The key for a declaration already identified. A builtin shape drops its
+    /// declaration, as in [`name::FqTypeName::of_head`].
     pub(crate) fn of_decl(defs: &DefTable, def: DefId) -> Self {
         if name::is_builtin_shape_decl(defs, def) {
             return ImplTargetKey::Builtin(defs.name(def).to_string());
@@ -128,11 +121,8 @@ impl ImplTargetKey {
         ImplTargetKey::Decl(def)
     }
 
-    /// The key for a head that reaches no declaration — a shape every mangler
-    /// spells bare, or a name that resolves to nothing.
-    ///
-    /// The one path that produces a key from a spelling, and it is reachable
-    /// only where there is no declaration to produce one from.
+    /// The key for a head that reaches no declaration: a builtin shape spelled
+    /// bare, or a name that resolves to nothing.
     pub(crate) fn of_undeclared(module: &ModuleSource, name: &str) -> Self {
         if name::is_builtin_shape_name(name) {
             return ImplTargetKey::Builtin(name.to_string());
@@ -866,8 +856,7 @@ impl SynthesisedImpls {
     }
 
     /// Record a concrete impl on a generic head (`impl Tag for List<Token>`)
-    /// under its instantiated receiver, so it does not collide with another
-    /// module's `impl Tag for List<OtherToken>` on the shared head (#1348).
+    /// under its instantiated receiver, apart from the shared head (#1348).
     pub fn record_instantiation(&mut self, mangled: String, trait_: DefId, module: &ModuleSource) {
         self.concrete_trait_impl_modules
             .record_instantiated(mangled.clone(), trait_, module);

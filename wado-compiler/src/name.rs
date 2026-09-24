@@ -2522,12 +2522,8 @@ mod tests {
     }
 }
 
-/// Whether `name` names a builtin shape — one no module declares, so every
-/// mangler spells it the same way wherever it appears. See
-/// [`FqTypeName::builtin`].
-///
-/// An instantiated shape is its head: `Array<u8>` and `[]<A,B>` are as
-/// module-less as the heads they instantiate.
+/// Whether `name` spells a builtin shape, instantiated or not (`Array<u8>`).
+/// See [`FqTypeName::builtin`].
 #[must_use]
 pub fn is_builtin_shape_name(name: &str) -> bool {
     fn head_of(name: &str) -> &str {
@@ -2760,15 +2756,8 @@ impl FqTypeName {
         Self::of_head_kind(TypeHead::Tuple).with_args(elems)
     }
 
-    /// A builtin shape — a primitive, `()`, `!`, the raw GC `Array`, a
-    /// reference, a function type. No module declares one, and every mangler
-    /// spells it bare.
-    ///
-    /// The tuple head is spelled `[a,b]`, never `[]<a,b>`, so it becomes
-    /// [`TypeHead::Tuple`] here rather than depending on every caller to reach
-    /// for [`Self::tuple`]. `of_head` routes a written `[]` through this, and
-    /// so does `ImplTargetKey::of_decl` for the tuple family's declaration:
-    /// one spelling, whichever side asks.
+    /// A builtin shape, spelled bare by every mangler: a primitive, `()`, `!`,
+    /// `Array`, a reference, a function type. The tuple head becomes [`TypeHead::Tuple`].
     #[must_use]
     pub fn builtin(name: &str) -> Self {
         if name == TUPLE_TYPE_NAME {

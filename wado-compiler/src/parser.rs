@@ -2162,9 +2162,8 @@ impl Parser {
         Ok((effects, !parenthesized))
     }
 
-    /// Parse a declaration's `with` clause. Nothing follows the row but the
-    /// body or `;`, so a comma after a bare effect is a missing paren; in type
-    /// position that comma belongs to the enclosing list.
+    /// Parse a declaration's `with` clause, where a comma after a bare effect is
+    /// a missing paren; in type position it belongs to the enclosing list.
     fn parse_with_clause(&mut self) -> ParseResult<Vec<EffectName>> {
         let (effects, bare) = self.parse_effect_row()?;
         if bare && self.check(&TokenKind::Comma) {

@@ -65,7 +65,7 @@ use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, Receiver, RefKind};
 use crate::name::{
-    DeclName, FqTraitName, FqTypeName, global_name, is_builtin_shape_name, namespace_member_alias,
+    DeclName, FqTraitName, FqTypeName, global_name, namespace_member_alias,
 };
 use crate::resolve::Resolution;
 use crate::symbol::{Symbol, SymbolKind, SymbolTable, VariableSymbol};
@@ -1131,7 +1131,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         match self.decl_key_or_local(written) {
             Some(def) => FqTypeName::of_head(self.tysys.resolutions.defs(), def),
-            None if is_builtin_shape_name(written) => FqTypeName::builtin(written),
             // A name that reaches no declaration at all: it names a shape or
             // nothing, and the writing module is the only vantage left.
             None => FqTypeName::shape(&self.current_module_source, written),
@@ -1203,13 +1202,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .declared_or(site, || self.decl_key_or_local(name))
     }
 
-    /// Whether `name` names a type where it is written: a primitive, or a type
-    /// declaration.
+    /// Whether `name` names a type declaration where it is written.
     pub(crate) fn names_type_at(&self, site: Option<AstId>, name: &str) -> bool {
-        TypeTable::primitive_by_name(name).is_some()
-            || self
-                .decl_key_at(site, name)
-                .is_some_and(|def| self.tysys.resolutions.defs().kind(def).is_type())
+        self.decl_key_at(site, name)
+            .is_some_and(|def| self.tysys.resolutions.defs().kind(def).is_type())
+    }
+
+    /// The primitive type `name` reaches where it is written, by declaration.
+    pub(crate) fn primitive_at(&self, site: Option<AstId>, name: &str) -> Option<TypeId> {
+        self.decl_key_at(site, name)
+            .and_then(|def| TypeTable::primitive_of_decl(self.tysys.resolutions.defs(), def))
     }
 
     /// The declaration `name` reaches where the AST under resolution was written,

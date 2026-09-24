@@ -933,6 +933,7 @@ fn rewrite_calls_in_expr(
     // Check if this is a resource method call that should be rewritten to target a binding
     if let Some((receiver, func, _)) = expr.kind.as_method_call()
         && let Some(method_info) = func.method_info.clone()
+        && method_info.cm_name.is_some()
     {
         // The adapter map is keyed by the declared `Resource::method`, the same
         // key `EffectCallCollector` inserted under.
@@ -1096,6 +1097,7 @@ fn rewrite_calls_in_expr(
     // Check if this is a resource static Call (with method_info) that should be rewritten to target a binding
     if let TirExprKind::Call { func, .. } = &expr.kind
         && let Some(info) = func.method_info.as_ref()
+        && info.cm_name.is_some()
     {
         // Keyed as the registry declares it — `Resource::method`, no module.
         let func_name = DeclPath::method_of(&info.receiver_decl_name(), &info.method_name);
@@ -1281,9 +1283,11 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                     }
                 }
                 // WASI resource static method calls (e.g. `Response::new`).
-                // The registry keys on the declared `Resource::method`, so the
-                // receiver reaches it by its declaration name.
-                if let Some(info) = func.method_info.as_ref() {
+                // The registry keys on the declared `Resource::method`; the
+                // `#[cm]` the callee declares is what makes it that method.
+                if let Some(info) = func.method_info.as_ref()
+                    && info.cm_name.is_some()
+                {
                     let qualified =
                         DeclPath::method_of(&info.receiver_decl_name(), &info.method_name);
                     if self
@@ -1307,7 +1311,9 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                 let Some((receiver, func, _)) = kind.as_method_call() else {
                     return;
                 };
-                if let Some(method_info) = func.method_info.clone() {
+                if let Some(method_info) = func.method_info.clone()
+                    && method_info.cm_name.is_some()
+                {
                     // The registry keys on the declared `Resource::method`, as
                     // the `Call` arm above does — a mangled head carries the
                     // declaring module the registry never stores, and would

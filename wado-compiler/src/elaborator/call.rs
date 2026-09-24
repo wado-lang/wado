@@ -263,8 +263,7 @@ impl CalleeIdentKind<'_> {
         }
     }
 
-    /// The reference site of the callee itself, which says which declaration a
-    /// bare `name(…)` means. `Rewritten` is synthesised from an already-resolved
+    /// The callee's reference site. `Rewritten` is synthesised from a resolved
     /// `Self::` / `T::` prefix, so no walk saw it.
     fn callee_site(&self) -> Option<ast::AstId> {
         self.as_is().map(|ident| ident.id)

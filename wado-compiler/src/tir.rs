@@ -16,7 +16,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{AstId, RestClause, Visibility};
 use crate::compiler_item::CompilerItems;
-use crate::defs::{DefId, DefTable};
+use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
     FqTraitName, FqTypeName, LocalMethodName, RefKind, TEMPLATE_SHAPE_PREFIX, TUPLE_TYPE_NAME,
@@ -934,6 +934,14 @@ impl TypeTable {
             "!" => Some(Self::NEVER),
             _ => PrimitiveType::from_name(name).map(Self::primitive_type_id),
         }
+    }
+
+    /// The type `def` declares where it is a primitive, `()` or `!`.
+    pub fn primitive_of_decl(defs: &DefTable, def: DefId) -> Option<TypeId> {
+        if defs.kind(def) != DefKind::BuiltinType {
+            return None;
+        }
+        Self::primitive_by_name(defs.name(def))
     }
 
     /// Reserved `GenericInstance` base name of the built-in tuple. Not a

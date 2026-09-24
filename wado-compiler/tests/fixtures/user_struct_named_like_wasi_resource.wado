@@ -1,0 +1,18 @@
+// A user struct named like a WASI resource (`Fields`) keeps its own static
+// method; only a `#[cm]` callee is rewritten to a canonical import.
+struct Fields {
+    n: i32,
+}
+
+impl Fields {
+    fn new() -> Fields {
+        return Fields { n: 7 };
+    }
+}
+
+test "Fields::new calls the user's method" {
+    assert Fields::new().n == 7;
+}
+
+__DATA__
+{}

@@ -453,9 +453,8 @@ struct OwnedEffectData {
     /// Each interface declaration's effect and `#[cm]` FQ.
     interfaces: IndexMap<DefId, (EffectRef, Option<String>)>,
     effect_by_cm_fq: IndexMap<String, EffectRef>,
-    /// CM interface FQs the consumer satisfies with a provider component; a
-    /// reconstructed host-leaf import in this set is discharged (composition-
-    /// relative — it bottoms out at a fused sibling, not the host).
+    /// CM interface FQs the consumer satisfies with a provider component, which
+    /// discharge a reconstructed host-leaf import.
     provided_import_fqs: IndexSet<String>,
     resolutions: Rc<Resolutions>,
 }
@@ -718,11 +717,7 @@ fn binding_granted_effects(
 }
 
 /// What a direct call of an operation `owner` declares demands of its caller.
-///
-/// Empty where it demands nothing: `owner` is no interface, or a user-defined
-/// effect, whose operation an installed handler answers and whose dispatch with
-/// none traps — a runtime outcome, not a demand on the position. A purely
-/// computational component's operation demands nothing either.
+/// A user-defined effect demands nothing: an unhandled dispatch traps at runtime.
 fn operation_requirements(
     sem: &Semantics,
     index: &EffectIndex,
@@ -1808,9 +1803,8 @@ impl PurityWalker<'_> {
         }
     }
 
-    /// Flags a call of an operation whose dispatch demands a capability the
-    /// position does not hold. An operation declares no `with` clause, so only
-    /// its owner says so.
+    /// Flags a call of an operation whose owner demands a capability the
+    /// position does not hold.
     fn flag_if_operation(&mut self, owner: Option<DefId>, op: &str, span: Span) {
         // An operation declares no effect parameters, so there is nothing for
         // the arguments to resolve.

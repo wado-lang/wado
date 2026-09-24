@@ -674,7 +674,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return type_id;
         }
 
-        if let Some(primitive) = TypeTable::primitive_by_name(name) {
+        if let Some(primitive) = self.primitive_at(site, name) {
             return primitive;
         }
 

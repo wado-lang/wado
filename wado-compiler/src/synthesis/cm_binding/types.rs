@@ -561,16 +561,33 @@ pub(super) fn is_wasm_flat_type(type_id: TypeId) -> bool {
 /// itself: WIT has no recursive types, and synthesis would inline one forever.
 pub(super) fn check_cm_boundary_representable(
     type_id: TypeId,
+    boundary: Boundary,
     type_table: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     visited: &mut Vec<TypeId>,
 ) -> Result<(), String> {
     let names = CmStdlibNames::from_type_table(type_table);
-    check_cm_boundary_representable_inner(type_id, type_table, tir_modules, &names, visited)
+    check_cm_boundary_representable_inner(
+        type_id,
+        boundary,
+        type_table,
+        tir_modules,
+        &names,
+        visited,
+    )
+}
+
+/// Which way a signature crosses: an import also carries a borrowed handle,
+/// and spells a payload-less `result` arm as the empty tuple.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Boundary {
+    Export,
+    Import,
 }
 
 fn check_cm_boundary_representable_inner(
     type_id: TypeId,
+    boundary: Boundary,
     type_table: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     names: &CmStdlibNames,
@@ -594,7 +611,14 @@ fn check_cm_boundary_representable_inner(
     // Container shapes resolve through the type-table accessors regardless of
     // their declaring module, keeping this free of source-prefix branching.
     let recurse = |tid, visited: &mut Vec<TypeId>| {
-        check_cm_boundary_representable_inner(tid, type_table, tir_modules, names, visited)
+        check_cm_boundary_representable_inner(
+            tid,
+            boundary,
+            type_table,
+            tir_modules,
+            names,
+            visited,
+        )
     };
     let result = (|visited: &mut Vec<TypeId>| {
         if let Some(inner) = type_table.as_option(type_id) {
@@ -604,7 +628,7 @@ fn check_cm_boundary_representable_inner(
             return recurse(elem, visited);
         }
         if let Some(elems) = type_table.as_tuple(type_id) {
-            if elems.is_empty() {
+            if elems.is_empty() && boundary == Boundary::Export {
                 return Err(
                     "the empty tuple `[]` has no Component Model representation — a `tuple` \
                      carries at least one type, and `()` is the type that carries none"
@@ -728,6 +752,10 @@ fn check_cm_boundary_representable_inner(
             R::Newtype { base_type, .. } => {
                 let base = *base_type;
                 recurse(base, visited)
+            }
+            R::Ref(inner) | R::MutRef(inner) if boundary == Boundary::Import => {
+                let inner = *inner;
+                recurse(inner, visited)
             }
             // These never carry a CM value at a concrete export boundary
             // (diverging/never, closures, reactive cells, raw GC arrays,

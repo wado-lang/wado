@@ -928,7 +928,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // name is "Array" (matching `impl Array<T>`'s registration).
             ResolvedType::BuiltinArray(elem) => {
                 let arg_name = self.tysys.type_table.borrow().fq_type_name(elem);
-                let base = self.qualified_receiver_name(TypeTable::ARRAY_TYPE_NAME);
+                let base = FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME);
                 let mangled = base.clone().with_args(vec![arg_name.clone()]);
                 (mangled, base, vec![arg_name], Some(vec![elem]))
             }
@@ -3537,7 +3537,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let mangled = MethodName::format_local(&base_fq, None, method_name);
                     (base_name, base_fq, mangled)
                 } else if let Some(base_name) = base_name {
-                    let base_fq = self.qualified_receiver_name(&base_name);
+                    // Only a flags type, whose base is the `u32` it lowers to.
+                    let base_fq = FqTypeName::builtin(&base_name);
                     let mangled = MethodName::format_local(&base_fq, None, method_name);
                     (base_name, base_fq, mangled)
                 } else {

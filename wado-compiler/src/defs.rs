@@ -9,6 +9,7 @@ use crate::ast::{AstId, AstVisitor, ImplBlock, Item, Module, Stmt, Visibility, w
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::TUPLE_TYPE_NAME;
+use crate::primitive::PrimitiveType;
 use crate::symbol::{SymbolKind, SymbolTable};
 use crate::token::Span;
 
@@ -505,6 +506,15 @@ impl DefTable {
     #[must_use]
     pub fn kind(&self, def: DefId) -> DefKind {
         self.get(def).kind
+    }
+
+    /// The primitive `def` declares, if it declares one.
+    #[must_use]
+    pub fn primitive(&self, def: DefId) -> Option<PrimitiveType> {
+        if self.kind(def) != DefKind::BuiltinType {
+            return None;
+        }
+        PrimitiveType::from_name(self.name(def))
     }
 
     #[must_use]
