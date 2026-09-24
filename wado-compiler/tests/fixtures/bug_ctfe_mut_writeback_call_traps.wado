@@ -1,0 +1,26 @@
+// A call writing through a `&mut` parameter hands its write back only once its
+// body has run to the end. `f` traps on its `return`, so the write it made
+// before that must not surface as a completed call.
+use { println, Stdout } from "core:cli";
+
+fn f(x: &mut i32) -> i32 {
+    *x = 5;
+    let z = 0;
+    return 10 / z;
+}
+
+fn g() -> i32 {
+    let mut x = 1;
+    f(&mut x);
+    return x;
+}
+
+export fn run() with Stdout {
+    println(`${g()}`);
+}
+
+__DATA__
+{
+    "stdout": "",
+    "trapped": true
+}
