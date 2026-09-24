@@ -933,31 +933,30 @@ impl<'a> Emitter<'a> {
                     self.classify_resolved(*inner)
                 }
             }
+            ResolvedType::GenericInstance { def, type_args }
+                if TypeTable::is_tuple_type(self.types.def_name(*def)) =>
+            {
+                CmShape::Tuple(type_args.clone())
+            }
             ResolvedType::GenericInstance { def, type_args } => {
-                let is = |item| self.types.is_compiler_item_type(id, item);
-                match type_args.as_slice() {
-                    _ if TypeTable::is_tuple_type(self.types.def_name(*def)) => {
-                        CmShape::Tuple(type_args.clone())
-                    }
-                    [arg] if is(CompilerItem::Option) => CmShape::Option(*arg),
-                    [arg] if is(CompilerItem::List) => CmShape::List(*arg),
-                    [key, value] if is(CompilerItem::TreeMap) => CmShape::Map(*key, *value),
-                    [ok, err] if is(CompilerItem::Result) => CmShape::Result {
+                match (self.types.compiler_type_item(*def), type_args.as_slice()) {
+                    (Some(CompilerItem::Option), [arg]) => CmShape::Option(*arg),
+                    (Some(CompilerItem::List), [arg]) => CmShape::List(*arg),
+                    (Some(CompilerItem::TreeMap), [key, value]) => CmShape::Map(*key, *value),
+                    (Some(CompilerItem::Result), [ok, err]) => CmShape::Result {
                         ok: self.non_unit(*ok),
                         err: self.non_unit(*err),
                     },
-                    [arg] if is(CompilerItem::AsyncCall) => self.classify_resolved(*arg),
+                    (Some(CompilerItem::AsyncCall), [arg]) => self.classify_resolved(*arg),
                     _ => CmShape::Leaf,
                 }
             }
-            ResolvedType::GenericResource { type_args, .. } => {
+            ResolvedType::GenericResource { def, type_args } => {
                 let elem = type_args.first().copied();
-                if self.types.is_compiler_item_type(id, CompilerItem::Future) {
-                    CmShape::Future(elem)
-                } else if self.types.is_compiler_item_type(id, CompilerItem::Stream) {
-                    CmShape::Stream(elem)
-                } else {
-                    CmShape::Leaf
+                match self.types.compiler_type_item(*def) {
+                    Some(CompilerItem::Future) => CmShape::Future(elem),
+                    Some(CompilerItem::Stream) => CmShape::Stream(elem),
+                    _ => CmShape::Leaf,
                 }
             }
             _ => CmShape::Leaf,

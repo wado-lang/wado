@@ -706,10 +706,17 @@ A type that merely erases to a scalar — a newtype, `flags`, an `enum` — is i
 own declaration, so an impl it writes outranks the erased form's instruction.
 Only a primitive _is_ the instruction.
 
+A type the compiler builds or lowers itself — `Option`, `Stream`, `Future`,
+`Array`, `List`, `String`, `Result`, `Box`, `AsyncCall` — is recognised the
+same way, through the declaration its head resolves to. A user struct named
+`List` is that struct, and an import aliased `Option` is what it aliases, in a
+signature, a field type and a lowering alike.
+
 Fixtures: `error_user_trait_does_not_capture_add.wado`,
 `error_user_trait_does_not_capture_index.wado`,
 `user_trait_method_survives_relowering.wado`,
-`eq_ord_manual_impl_wins.wado`.
+`eq_ord_manual_impl_wins.wado`, `alias_named_prelude_generic.wado`,
+`alias_named_prelude_generic_field.wado`, `no_prelude_user_list_struct.wado`.
 
 ## Impl target arguments
 

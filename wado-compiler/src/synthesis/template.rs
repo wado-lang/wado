@@ -1092,18 +1092,20 @@ pub(crate) fn ranked_value_blanket<'a>(
 
 /// The reflection trait `bound` names, or `None` for any other bound.
 fn reflect_bound_item(bound: &BlanketBound, tt: &TypeTable) -> Option<CompilerItem> {
-    let declared = bound.decl().map(|decl| tt.defs().ast_id(decl))?;
-    let items = tt.compiler_items();
-    [
-        CompilerItem::Reflect,
-        CompilerItem::ReflectStruct,
-        CompilerItem::ReflectVariant,
-        CompilerItem::ReflectEnum,
-        CompilerItem::ReflectFlags,
-        CompilerItem::ReflectNewtype,
-    ]
-    .into_iter()
-    .find(|item| items.trait_decl(*item) == Some(declared))
+    let declared = tt.defs().ast_id(bound.decl()?);
+    tt.compiler_items()
+        .trait_item_of_decl(declared)
+        .filter(|item| {
+            matches!(
+                item,
+                CompilerItem::Reflect
+                    | CompilerItem::ReflectStruct
+                    | CompilerItem::ReflectVariant
+                    | CompilerItem::ReflectEnum
+                    | CompilerItem::ReflectFlags
+                    | CompilerItem::ReflectNewtype
+            )
+        })
 }
 
 /// Whether a blanket derives *over reflection* — at least one of its

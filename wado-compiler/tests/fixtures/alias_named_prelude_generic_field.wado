@@ -1,0 +1,12 @@
+// A field type written through an alias spelled like a prelude generic names
+// what it aliases, in a plain struct and a generic one read from another module.
+use { make, make_generic } from "./sub/alias_named_prelude_generic_field_holder.wado";
+
+test "an aliased field type resolves to its target" {
+    let h = make();
+    assert h.y.a == "y";
+    assert h.z.a == 3;
+    let g = make_generic();
+    assert g.x.a == 1;
+    assert g.y.a == "g";
+}

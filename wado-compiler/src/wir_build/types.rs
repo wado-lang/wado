@@ -511,13 +511,18 @@ fn register_raw_array_type(
     }
 }
 
+/// Whether `s` is an instance of the compiler's `Box<T>`.
+fn is_box_instance(s: &NirStruct, type_table: &TypeTable) -> bool {
+    s.monomorph_info.is_some()
+        && s.def
+            .decl()
+            .is_some_and(|def| type_table.compiler_item_def(CompilerItem::Box) == Some(def))
+}
+
 fn register_box_structs(ctx: &mut WirContext<'_>) {
     let type_table = &*ctx.package.type_table.borrow();
     for s in &ctx.package.structs {
-        if s.monomorph_info
-            .as_ref()
-            .is_some_and(|info| info.generic_name == "Box")
-        {
+        if is_box_instance(s, type_table) {
             register_struct(ctx, s, type_table, &s.module_source);
         }
     }
@@ -747,14 +752,8 @@ fn register_mono_library_types(ctx: &mut WirContext<'_>) {
         if s.module_source == *entry_source {
             continue;
         }
-        if s.monomorph_info.is_some() {
-            // Skip Box<T> (already registered in Phase 0)
-            if s.monomorph_info
-                .as_ref()
-                .is_some_and(|info| info.generic_name == "Box")
-            {
-                continue;
-            }
+        // A `Box<T>` was registered in Phase 0.
+        if s.monomorph_info.is_some() && !is_box_instance(s, type_table) {
             register_struct(ctx, s, type_table, &s.module_source);
         }
     }
@@ -782,13 +781,7 @@ fn register_mono_entry_types(ctx: &mut WirContext<'_>) {
         if s.module_source != *entry_source {
             continue;
         }
-        if s.monomorph_info.is_some() {
-            if s.monomorph_info
-                .as_ref()
-                .is_some_and(|info| info.generic_name == "Box")
-            {
-                continue;
-            }
+        if s.monomorph_info.is_some() && !is_box_instance(s, type_table) {
             register_struct(ctx, s, type_table, &s.module_source);
         }
     }

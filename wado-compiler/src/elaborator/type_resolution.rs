@@ -4,7 +4,6 @@ use std::hash::Hash;
 
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
-use crate::compiler_item::CompilerItem;
 use crate::hashmap;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -741,30 +740,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_generic_type_at(Some(site), name, args, span)
     }
 
-    /// How the compiler builds the type `def` declares, for the generic heads
-    /// it builds a type of its own for.
-    fn compiler_built_generic(&self, def: DefId) -> Option<fn(&mut TypeTable, TypeId) -> TypeId> {
-        let built: [(CompilerItem, fn(&mut TypeTable, TypeId) -> TypeId); 6] = [
-            (CompilerItem::Option, TypeTable::make_option),
-            (CompilerItem::Stream, TypeTable::make_stream),
-            (
-                CompilerItem::StreamWritable,
-                TypeTable::make_stream_writable,
-            ),
-            (CompilerItem::Future, TypeTable::make_future),
-            (
-                CompilerItem::FutureWritable,
-                TypeTable::make_future_writable,
-            ),
-            (CompilerItem::Array, TypeTable::make_builtin_array),
-        ];
-        let tt = self.tysys.type_table.borrow();
-        built
-            .into_iter()
-            .find(|(item, _)| tt.compiler_item_def(*item) == Some(def))
-            .map(|(_, make)| make)
-    }
-
     fn resolve_generic_type_at(
         &mut self,
         site: Option<AstId>,
@@ -773,7 +748,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> TypeId {
         let def = self.decl_key_at(site, name);
-        if let Some(make) = def.and_then(|def| self.compiler_built_generic(def)) {
+        let builder =
+            def.and_then(|def| self.tysys.type_table.borrow().compiler_generic_builder(def));
+        if let Some(make) = builder {
             let [arg] = args else {
                 let _ = self.emit(TypeError::ArgumentCountMismatch {
                     expected: 1,

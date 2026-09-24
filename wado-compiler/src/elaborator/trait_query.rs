@@ -1054,12 +1054,6 @@ impl TypeSystem {
         self.type_table.borrow().is_reflect_eligible(type_id)
     }
 
-    /// The declaration a synthesis-driving trait names, from the compiler-item
-    /// registry rather than the spelling that classified it.
-    pub(super) fn synth_trait_key(&self, on_bound: OnBoundTrait) -> Option<DefId> {
-        self.compiler_trait_def(on_bound.compiler_item())
-    }
-
     /// Which [`OnBoundTrait`] `trait_` is, by identity.
     pub(super) fn on_bound_of(&self, trait_: DefId) -> Option<OnBoundTrait> {
         OnBoundTrait::of_compiler_item(self.compiler_item_of_trait(trait_)?)
@@ -1444,7 +1438,7 @@ impl TypeSystem {
                 && self.structural_conformance(ctx, scope, resolved, tr, trait_)
                     == StructuralConformance::Holds
             {
-                if let Some(key) = self.synth_trait_key(tr) {
+                if let Some(key) = self.compiler_trait_def(tr.compiler_item()) {
                     self.type_table
                         .borrow_mut()
                         .record_bound_driven_synth_request_for(type_id, &module_source, &key);
@@ -1464,7 +1458,7 @@ impl TypeSystem {
                 .map(|d| self.type_table.borrow().def_name(d).to_string())
             && self.auto_derive_default_struct_type(scope, &name).is_some()
         {
-            if let Some(key) = on_bound.and_then(|t| self.synth_trait_key(t)) {
+            if let Some(key) = on_bound.and_then(|t| self.compiler_trait_def(t.compiler_item())) {
                 let module_source = self
                     .type_table
                     .borrow()
@@ -1493,7 +1487,7 @@ impl TypeSystem {
             // A declaration's impl is synthesized in the module walk; an
             // instance's is minted on request, so record one here.
             if matches!(resolved, ResolvedType::GenericInstance { .. })
-                && let Some(key) = self.synth_trait_key(bound)
+                && let Some(key) = self.compiler_trait_def(bound.compiler_item())
             {
                 let (_, module_source) = self
                     .type_table
@@ -1963,7 +1957,7 @@ impl TypeSystem {
         let Some(module_source) = subject else {
             return false;
         };
-        let Some(key) = self.synth_trait_key(on_bound) else {
+        let Some(key) = self.compiler_trait_def(on_bound.compiler_item()) else {
             return false;
         };
         let head = {

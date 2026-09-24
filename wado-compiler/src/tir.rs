@@ -2070,7 +2070,6 @@ impl TypeTable {
     /// By declaration identity: a name match also answers for a user type.
     #[must_use]
     pub fn wide_int_item(&self, type_id: TypeId) -> Option<CompilerItem> {
-        use crate::compiler_item::CompilerItem;
         let ResolvedType::Struct {
             def: StructDef::Decl(def),
             ..
@@ -2078,10 +2077,29 @@ impl TypeTable {
         else {
             return None;
         };
-        let def = *def;
-        [CompilerItem::I128, CompilerItem::U128]
-            .into_iter()
-            .find(|item| self.compiler_item_def(*item) == Some(def))
+        self.compiler_type_item(*def)
+            .filter(|item| matches!(item, CompilerItem::I128 | CompilerItem::U128))
+    }
+
+    /// Which compiler item declares the type `def`; `None` for a trait.
+    #[must_use]
+    pub fn compiler_type_item(&self, def: DefId) -> Option<CompilerItem> {
+        self.compiler_items.type_item_of_decl(self.defs.ast_id(def))
+    }
+
+    /// How the compiler builds an application of `def`, for the generic heads
+    /// it builds a type of its own for.
+    #[must_use]
+    pub fn compiler_generic_builder(&self, def: DefId) -> Option<fn(&mut Self, TypeId) -> TypeId> {
+        match self.compiler_type_item(def)? {
+            CompilerItem::Option => Some(Self::make_option),
+            CompilerItem::Stream => Some(Self::make_stream),
+            CompilerItem::StreamWritable => Some(Self::make_stream_writable),
+            CompilerItem::Future => Some(Self::make_future),
+            CompilerItem::FutureWritable => Some(Self::make_future_writable),
+            CompilerItem::Array => Some(Self::make_builtin_array),
+            _ => None,
+        }
     }
 
     /// The compiler trait item as a mangled method name embeds it — named by
@@ -2268,13 +2286,19 @@ impl TypeTable {
 
     /// If `type_id` is a `AsyncCall<T>` `GenericInstance`, return `T`.
     pub fn as_async_call(&self, type_id: TypeId) -> Option<TypeId> {
-        if let ResolvedType::GenericInstance { type_args, .. } = self.get(type_id)
-            && type_args.len() == 1
-            && self.is_compiler_item_type(type_id, CompilerItem::AsyncCall)
-        {
-            return Some(type_args[0]);
+        self.single_arg_of(type_id, CompilerItem::AsyncCall)
+    }
+
+    /// The one argument of an instance of the compiler generic `item`.
+    fn single_arg_of(&self, type_id: TypeId, item: CompilerItem) -> Option<TypeId> {
+        match self.get(type_id) {
+            ResolvedType::GenericInstance { type_args, .. }
+                if type_args.len() == 1 && self.is_compiler_item_type(type_id, item) =>
+            {
+                Some(type_args[0])
+            }
+            _ => None,
         }
-        None
     }
 
     /// If `type_id` is a `GenericResource`, return `(name, module_source, type_args)`.
@@ -2292,28 +2316,12 @@ impl TypeTable {
 
     /// The `T` of a compiler `Box<T>` instance.
     pub fn as_box(&self, type_id: TypeId) -> Option<TypeId> {
-        match self.get(type_id) {
-            ResolvedType::GenericInstance { type_args, .. }
-                if type_args.len() == 1
-                    && self.is_compiler_item_type(type_id, CompilerItem::Box) =>
-            {
-                Some(type_args[0])
-            }
-            _ => None,
-        }
+        self.single_arg_of(type_id, CompilerItem::Box)
     }
 
     /// Check if a type is `Option<T>`, returning the inner type if so.
     pub fn as_option(&self, type_id: TypeId) -> Option<TypeId> {
-        let ResolvedType::GenericInstance { type_args, .. } = self.get(type_id) else {
-            return None;
-        };
-        if type_args.len() != 1 {
-            return None;
-        }
-        let inner = type_args[0];
-        self.is_compiler_item_type(type_id, CompilerItem::Option)
-            .then_some(inner)
+        self.single_arg_of(type_id, CompilerItem::Option)
     }
 
     /// `Result<T, E>`'s two arguments, keyed by the declaration the registry
@@ -3925,14 +3933,8 @@ impl TypeTable {
     /// Also unwraps Ref/MutRef types to check the inner type.
     pub fn as_list(&self, id: TypeId) -> Option<TypeId> {
         match self.get(id) {
-            ResolvedType::GenericInstance { type_args, .. }
-                if type_args.len() == 1 && self.is_list(id) =>
-            {
-                Some(type_args[0])
-            }
-            // Unwrap references and check the inner type
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_list(*inner),
-            _ => None,
+            _ => self.single_arg_of(id, CompilerItem::List),
         }
     }
 

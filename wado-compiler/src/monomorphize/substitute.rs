@@ -4,6 +4,7 @@
 //! `rewrite_type_id` (rewriting `GenericInstance` to concrete struct types),
 //! and `rewrite_types_in_module` (applying rewrites across a module).
 
+use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     ResolvedType, TirExpr, TirExprKind, TirModule, TirPattern, TirStmt, TirStmtKind, TypeId,
@@ -131,26 +132,20 @@ impl Monomorphizer {
         }
     }
 
-    /// Collect all `GenericInstance` types from the type table
-    /// Only collects types whose base struct is in `valid_struct_names`
+    /// Queue every concrete `GenericInstance` of a struct in `valid_structs`,
+    /// which keeps a library module from instantiating the entry module's.
     pub fn collect_instantiation_sites(
         &mut self,
         type_table: &TypeTable,
-        valid_struct_names: &IndexSet<String>,
+        valid_structs: &IndexSet<DefId>,
     ) {
         for id in type_table.iter_type_ids() {
             if let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) {
+                if type_args.is_empty() || type_table.is_list(id) || !valid_structs.contains(def) {
+                    continue;
+                }
                 let name = &type_table.def_name(*def).to_string();
                 let module_source = &type_table.def_module(*def).clone();
-                if type_args.is_empty() || type_table.is_list(id) {
-                    continue;
-                }
-
-                // Only collect if the struct is in our valid set
-                // This prevents library modules from trying to instantiate entry module's structs
-                if !valid_struct_names.contains(name) {
-                    continue;
-                }
 
                 // Only process if all type args are concrete (no TypeParams)
                 let all_concrete = type_args

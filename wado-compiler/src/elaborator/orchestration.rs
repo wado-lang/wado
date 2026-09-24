@@ -2980,115 +2980,95 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     TypeTable::UNKNOWN
                 }
             }
-            Type::Generic(generic) => match generic.name.as_str() {
-                "Option" if !generic.args.is_empty() => {
-                    let inner = Self::resolve_type_static_with_params(
-                        &generic.args[0],
+            Type::Generic(generic) => {
+                let head = lookup.declaration_at(Some(generic.id), &generic.name);
+                // Arity is the elaborator's to report, where the same head
+                // resolves again with a span to report it at.
+                if let Some(make) = head.and_then(|def| type_table.compiler_generic_builder(def))
+                    && let [arg] = generic.args.as_slice()
+                {
+                    let elem =
+                        Self::resolve_type_static_with_params(arg, type_table, lookup, type_params);
+                    return make(type_table, elem);
+                }
+                let mut type_args: Vec<TypeId> = generic
+                    .args
+                    .iter()
+                    .map(|arg| {
+                        Self::resolve_type_static_with_params(arg, type_table, lookup, type_params)
+                    })
+                    .collect();
+                // An argument the site left out takes its declared default,
+                // the same as in `type_resolution`; otherwise a field type
+                // here would carry a half-applied instantiation.
+                if let Some((slots, defaults)) =
+                    head.and_then(|def| lookup.type_args_with_defaults(def, generic.args.len()))
+                {
+                    Self::fill_declared_defaults(
+                        &mut type_args,
+                        &slots,
+                        &defaults,
                         type_table,
                         lookup,
-                        type_params,
                     );
-                    type_table.make_option(inner)
                 }
-                // `Array<T>` is the user-facing spelling of the raw GC array
-                // builtin (`ResolvedType::BuiltinArray`); mirror the elaborator's
-                // `resolve_generic_type` "Array" arm so struct field types
-                // resolved through this static pre-pass match.
-                _ if generic.name == TypeTable::ARRAY_TYPE_NAME && !generic.args.is_empty() => {
-                    let elem = Self::resolve_type_static_with_params(
-                        &generic.args[0],
+                // A generic newtype (`type MyArray<T> = List<T>`)
+                // resolves to a `Newtype` over the instantiated base,
+                // mirroring `type_resolution`. Without this it
+                // falls through to `UNKNOWN`, the newtype's inherited
+                // base methods (`MyArray<i32>::len` → `List<i32>::len`)
+                // never resolve, and monomorphization can't reach them.
+                let Some(head) = head else {
+                    return TypeTable::UNKNOWN;
+                };
+                if let Some(gn_info) = lookup.generic_newtype_of(head).cloned() {
+                    // Resolved against the newtype's own parameters, then
+                    // the site's arguments substituted into it: a base
+                    // spelling `T::Assoc` names no type until `T` is one.
+                    let slots: Vec<ParamSlot> =
+                        gn_info.type_params.iter().map(ParamSlot::from).collect();
+                    let base = Self::resolve_type_static_with_params(
+                        &gn_info.base_type_ast,
                         type_table,
                         lookup,
-                        type_params,
+                        &slots,
                     );
-                    type_table.make_builtin_array(elem)
+                    let substitution = positional_substitution(&type_args);
+                    let base_type_id = type_table.substitute_type_params(base, &substitution);
+                    // The head is the declaration this reference site
+                    // resolved to, not the rendered `MyArray<i32>` a
+                    // display spelling shows; the arguments sit beside it.
+                    return type_table.make_newtype_instance(head, type_args, base_type_id);
                 }
-                _ => {
-                    let head = lookup.declaration_at(Some(generic.id), &generic.name);
-                    let mut type_args: Vec<TypeId> = generic
-                        .args
-                        .iter()
-                        .map(|arg| {
-                            Self::resolve_type_static_with_params(
-                                arg,
-                                type_table,
-                                lookup,
-                                type_params,
-                            )
-                        })
-                        .collect();
-                    // An argument the site left out takes its declared default,
-                    // the same as in `type_resolution`; otherwise a field type
-                    // here would carry a half-applied instantiation.
-                    if let Some((slots, defaults)) =
-                        head.and_then(|def| lookup.type_args_with_defaults(def, generic.args.len()))
-                    {
-                        Self::fill_declared_defaults(
-                            &mut type_args,
-                            &slots,
-                            &defaults,
-                            type_table,
-                            lookup,
-                        );
-                    }
-                    // A generic newtype (`type MyArray<T> = List<T>`)
-                    // resolves to a `Newtype` over the instantiated base,
-                    // mirroring `type_resolution`. Without this it
-                    // falls through to `UNKNOWN`, the newtype's inherited
-                    // base methods (`MyArray<i32>::len` → `List<i32>::len`)
-                    // never resolve, and monomorphization can't reach them.
-                    let Some(head) = head else {
-                        return TypeTable::UNKNOWN;
-                    };
-                    if let Some(gn_info) = lookup.generic_newtype_of(head).cloned() {
-                        // Resolved against the newtype's own parameters, then
-                        // the site's arguments substituted into it: a base
-                        // spelling `T::Assoc` names no type until `T` is one.
-                        let slots: Vec<ParamSlot> =
-                            gn_info.type_params.iter().map(ParamSlot::from).collect();
-                        let base = Self::resolve_type_static_with_params(
-                            &gn_info.base_type_ast,
-                            type_table,
-                            lookup,
-                            &slots,
-                        );
-                        let substitution = positional_substitution(&type_args);
-                        let base_type_id = type_table.substitute_type_params(base, &substitution);
-                        // The head is the declaration this reference site
-                        // resolved to, not the rendered `MyArray<i32>` a
-                        // display spelling shows; the arguments sit beside it.
-                        return type_table.make_newtype_instance(head, type_args, base_type_id);
-                    }
-                    // A generic resource (`Stream<u8>`, `Future<T>`) must
-                    // resolve to a `GenericResource`, not a
-                    // `GenericInstance` — otherwise the resource-store
-                    // inference (effect_check `signature_resources`) does
-                    // not see the resource a signature implies, and
-                    // `consume(rx: Stream<u8>)` fails with
-                    // `missing resource 'Stream'`.
-                    if lookup.resource_type_of(head).is_some() {
-                        return type_table.intern(ResolvedType::GenericResource {
-                            def: head,
-                            type_args,
-                        });
-                    }
-                    // A generic application `Name<args...>` may name a
-                    // struct, a variant (`Result<T, E>`), or an enum. The
-                    // `Type::Named` arm above already checks all three; the
-                    // generic arm must too, otherwise generic variants /
-                    // enums resolve to `UNKNOWN`. `make_generic_instance`
-                    // is name-based, so the same call shape works for every
-                    // kind.
-                    if lookup.struct_fields_of(head).is_some()
-                        || lookup.variant_cases_of(head).is_some()
-                        || lookup.enum_cases_of(head).is_some()
-                    {
-                        type_table.make_generic_instance(head, type_args)
-                    } else {
-                        TypeTable::UNKNOWN
-                    }
+                // A generic resource (`Stream<u8>`, `Future<T>`) must
+                // resolve to a `GenericResource`, not a
+                // `GenericInstance` — otherwise the resource-store
+                // inference (effect_check `signature_resources`) does
+                // not see the resource a signature implies, and
+                // `consume(rx: Stream<u8>)` fails with
+                // `missing resource 'Stream'`.
+                if lookup.resource_type_of(head).is_some() {
+                    return type_table.intern(ResolvedType::GenericResource {
+                        def: head,
+                        type_args,
+                    });
                 }
-            },
+                // A generic application `Name<args...>` may name a
+                // struct, a variant (`Result<T, E>`), or an enum. The
+                // `Type::Named` arm above already checks all three; the
+                // generic arm must too, otherwise generic variants /
+                // enums resolve to `UNKNOWN`. `make_generic_instance`
+                // is name-based, so the same call shape works for every
+                // kind.
+                if lookup.struct_fields_of(head).is_some()
+                    || lookup.variant_cases_of(head).is_some()
+                    || lookup.enum_cases_of(head).is_some()
+                {
+                    type_table.make_generic_instance(head, type_args)
+                } else {
+                    TypeTable::UNKNOWN
+                }
+            }
             Type::Reference(inner) => {
                 let inner_type =
                     Self::resolve_type_static_with_params(inner, type_table, lookup, type_params);

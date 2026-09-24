@@ -1795,6 +1795,8 @@ pub struct CompilerItems {
     /// Recognising a compiler item is on the hot trait-query path, so it is a
     /// lookup rather than a scan.
     trait_by_decl: hashmap::IndexMap<AstId, CompilerItem>,
+    /// The inverse of [`CompilerItems::decl`] for every other kind.
+    type_by_decl: hashmap::IndexMap<AstId, CompilerItem>,
 }
 
 impl Default for CompilerItems {
@@ -1830,6 +1832,7 @@ impl CompilerItems {
         Self {
             items: vec![None; CompilerItem::COUNT],
             trait_by_decl: hashmap::IndexMap::default(),
+            type_by_decl: hashmap::IndexMap::default(),
         }
     }
 
@@ -1891,8 +1894,16 @@ impl CompilerItems {
                 new_module: resolved.module_source().clone(),
             }),
             None => {
-                if let Resolved::Trait { decl, .. } = &resolved {
-                    self.trait_by_decl.insert(*decl, item);
+                let inverse = match &resolved {
+                    Resolved::Trait { .. } => &mut self.trait_by_decl,
+                    _ => &mut self.type_by_decl,
+                };
+                if let Some(decl) = resolved.decl() {
+                    let previous = inverse.insert(decl, item);
+                    assert!(
+                        previous.is_none(),
+                        "`{item}` and `{previous:?}` name one declaration"
+                    );
                 }
                 self.items[idx] = Some(resolved);
                 Ok(())
@@ -2046,6 +2057,12 @@ impl CompilerItems {
     #[must_use]
     pub fn trait_item_of_decl(&self, decl: AstId) -> Option<CompilerItem> {
         self.trait_by_decl.get(&decl).copied()
+    }
+
+    /// Which compiler item `decl` declares, for every kind but a trait.
+    #[must_use]
+    pub fn type_item_of_decl(&self, decl: AstId) -> Option<CompilerItem> {
+        self.type_by_decl.get(&decl).copied()
     }
 
     /// The declaring node of a [`CompilerItemKind::Variant`] item.

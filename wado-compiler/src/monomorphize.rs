@@ -259,11 +259,11 @@ impl Monomorphizer {
         &mut self,
         type_table: &RefCell<TypeTable>,
         generic_structs: &IndexMap<(String, ModuleSource), TirStruct>,
-        valid_struct_names: &IndexSet<String>,
+        valid_structs: &IndexSet<DefId>,
     ) -> Vec<TirStruct> {
         let mut new_structs = Vec::new();
         loop {
-            self.collect_instantiation_sites(&type_table.borrow(), valid_struct_names);
+            self.collect_instantiation_sites(&type_table.borrow(), valid_structs);
             if self.structs.pending.is_empty() {
                 break;
             }
@@ -346,30 +346,20 @@ impl Monomorphizer {
         // Store in module for later phases
         module.generic_structs.clone_from(&generic_structs);
 
-        // The names instantiation sites spell — the *declared* ones. The map
-        // is keyed by storage spelling, which for a function-local generic
-        // struct carries a disambiguator no site writes, so keying the filter
-        // off the keys dropped every local generic before it could become
-        // pending. `drain_pending_structs` disambiguates by identity once a
-        // site is admitted.
-        let valid_struct_names: IndexSet<String> = {
-            let tt = module.type_table.borrow();
-            generic_structs
-                .values()
-                .map(|s| {
-                    s.def
-                        .decl()
-                        .map_or_else(|| s.name.clone(), |d| tt.def_name(d).to_string())
-                })
-                .collect()
-        };
+        // The declarations an instantiation site may name. The map is keyed by
+        // storage spelling, which for a function-local generic struct carries
+        // a disambiguator no site writes.
+        let valid_structs: IndexSet<DefId> = generic_structs
+            .values()
+            .filter_map(|s| s.def.decl())
+            .collect();
 
         // Phase 2-4: Collect and instantiate structs iteratively
         // This is done in a loop because instantiating a struct (like TreeMap<String,i32>)
         // may create new GenericInstance types in its fields (like BTreeNode<String,i32>)
         // that also need to be instantiated.
         let new_structs =
-            self.drain_pending_structs(&module.type_table, &generic_structs, &valid_struct_names);
+            self.drain_pending_structs(&module.type_table, &generic_structs, &valid_structs);
         module.structs.extend(new_structs);
 
         // Phase 5: Remove generic structs from the concrete struct list
@@ -495,11 +485,8 @@ impl Monomorphizer {
             // batch. `collect_instantiation_sites` scans the type table —
             // doing it per-function would be `O(N · |type_table|)` and is
             // the source of the historical compiler-time regression.
-            let new_structs = self.drain_pending_structs(
-                &module.type_table,
-                &generic_structs,
-                &valid_struct_names,
-            );
+            let new_structs =
+                self.drain_pending_structs(&module.type_table, &generic_structs, &valid_structs);
             if !new_structs.is_empty() {
                 made_progress = true;
                 self.alias_canonical_keys(&mut module.type_table.borrow_mut());
