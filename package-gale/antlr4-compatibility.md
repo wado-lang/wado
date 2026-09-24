@@ -1228,7 +1228,7 @@ When the descriptor extractor surfaces a previously-unseen failure:
    - Genuine compiler bug surfaced en route → write a minimum
      reproducible fixture under `wado-compiler/tests/fixtures/`
      **before** marking the descriptor (per the project rule in the
-     top-level `CLAUDE.md`).
+     top-level `AGENTS.md`).
 4. **Re-run the wrapper** so the generated test picks up the new
    triage state.
 
@@ -1247,7 +1247,7 @@ Once a Gale gap is fixed:
 When a descriptor extraction or test run surfaces a compiler bug
 (parser ICE, optimizer mis-translation, codegen crash) en route to
 exercising a `.g4`, follow the project rule from the top-level
-`CLAUDE.md`: write a minimum reproducible fixture under
+`AGENTS.md`: write a minimum reproducible fixture under
 `wado-compiler/tests/fixtures/` first, fix the underlying compiler
 issue, _then_ update the descriptor triage. The `optimizer-debug`
 agent skill (`.claude/skills/optimizer-debug/`) documents the

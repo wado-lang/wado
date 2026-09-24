@@ -739,7 +739,7 @@ fn include_str_path_definition() {
 // falls into `file_path_definition` because `Literal::IncludeStr` stores only
 // the path string and the matcher keys off the entire literal span. This test
 // pins the behaviour so narrowing the match to the path literal (see TODO in
-// wado-lsp/CLAUDE.md) is a deliberate change.
+// wado-lsp/AGENTS.md) is a deliberate change.
 #[test]
 fn include_str_macro_name_currently_jumps_to_file() {
     futures::executor::block_on(async {

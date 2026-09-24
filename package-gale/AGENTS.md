@@ -45,7 +45,7 @@ The first rule is enforced: `permissions.deny` covers the Read tool, `.claude/ho
 
 - No backtracking on the accept path — parser or lexer. Disambiguate with static k-token lookahead; a decision static prediction cannot resolve in depth 5 routes to the runtime ATN simulator, never a try-fail-retry loop. The one exception decides nothing: the repeat-exit probe re-parses a failed element under `speculating` to record where the error is, and rolls back all but the message. Mechanics, soundness invariants, and ATN escalation: [`antlr4-compatibility.md`](./antlr4-compatibility.md) (Prediction & codegen design).
 - Keep generated code byte-identical for grammars that do not use a feature (actions, FOLLOW gates, ATN) — gate every emit site on the feature.
-- A compiler bug is P0 (top-level `CLAUDE.md`): write a minimal `wado-compiler/tests/fixtures/` repro first, then fix.
+- A compiler bug is P0 (top-level `AGENTS.md`): write a minimal `wado-compiler/tests/fixtures/` repro first, then fix.
 
 ## Debugging tools
 
