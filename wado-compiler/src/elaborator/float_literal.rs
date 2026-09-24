@@ -88,8 +88,8 @@ impl FloatLiteralError {
     }
 }
 
-/// `repr` in `format`'s bits, rounded to nearest even from the literal's exact
-/// value, which a radix prefix spells as an integer of any width.
+/// The unsigned literal `repr` in `format`'s bits, rounded to nearest even from
+/// its exact value, which a radix prefix spells as an integer of any width.
 pub(crate) fn float_literal_bits(
     repr: &str,
     format: FloatFormat,
@@ -102,7 +102,8 @@ pub(crate) fn float_literal_bits(
         Some((digits, radix)) => {
             radix_to_decimal(digits, radix).ok_or(FloatLiteralError::Invalid)?
         }
-        None => clean,
+        None if clean.starts_with(|c: char| c.is_ascii_digit()) => clean,
+        None => return Err(FloatLiteralError::Invalid),
     };
     let approx: f64 = exact.parse().map_err(|_| FloatLiteralError::Invalid)?;
     if approx.is_infinite() {
@@ -287,6 +288,19 @@ mod tests {
             Some("340282366920938463463374607431768211456")
         );
         assert_eq!(radix_to_decimal("12", 2), None);
+    }
+
+    #[test]
+    fn only_an_unsigned_literal_spelling_is_read() {
+        for text in ["-1.5", "+1.5", "nan", "+nan", "inf", ".5", ""] {
+            for format in [FloatFormat::F64, FloatFormat::F32, FloatFormat::F16] {
+                assert_eq!(
+                    float_literal_bits(text, format),
+                    Err(FloatLiteralError::Invalid),
+                    "{text}"
+                );
+            }
+        }
     }
 
     #[test]

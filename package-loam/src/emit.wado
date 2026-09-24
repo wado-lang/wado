@@ -4,7 +4,7 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved } from "lib:wadopoet";
 use { Axis, Shape } from "./shape.wado";
-use { Graph, Node, Rank, ValueInfo, element_of, static_extents } from "./graph.wado";
+use { Graph, KERNEL_ELEMENT, Node, Rank, ValueInfo, element_of, static_extents } from "./graph.wado";
 use { constant_value, gemm_options, has_bias, transpose_perm } from "./infer.wado";
 
 /// A boundary tensor whose element type the kernels have no arithmetic for.
@@ -136,10 +136,6 @@ pub fn emit(graph: &Graph, shapes: &TreeMap<String, Shape>) -> Result<String, Em
     emit_forward(&mut w, graph, shapes, &names, &held)?;
     return Result::Ok(w.to_string());
 }
-
-/// The one element type the kernels have arithmetic for. Everything a node
-/// produces is in it, and a boundary held in another is converted past it.
-global KERNEL_ELEMENT: String = "f32";
 
 /// What each boundary tensor is held in, and where an element type no kernel
 /// reaches stops the build. A node's own output is f32, so only these are kept.

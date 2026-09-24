@@ -3865,13 +3865,17 @@ impl TypeTable {
     /// The fixed-width primitive a sequence type (`Array<T>`, `List<T>`, or a
     /// newtype over either) reads from little-endian data; `None` for the rest.
     pub fn packed_element(&self, seq: TypeId) -> Option<PrimitiveType> {
-        let head = self.representation_head(seq);
-        let elem = match self.get(head) {
-            ResolvedType::BuiltinArray(elem) => *elem,
-            _ => self.as_list(head)?,
-        };
-        self.primitive_head(elem)
+        self.primitive_head(self.seq_element(seq)?)
             .filter(|p| p.data_width().is_some())
+    }
+
+    /// The element type of `Array<T>`, `List<T>`, or a newtype over either.
+    pub fn seq_element(&self, seq: TypeId) -> Option<TypeId> {
+        let head = self.representation_head(seq);
+        match self.get(head) {
+            ResolvedType::BuiltinArray(elem) => Some(*elem),
+            _ => self.as_list(head),
+        }
     }
 
     /// Check if a type is `List<T>` and return the element type if so.

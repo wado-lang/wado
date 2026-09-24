@@ -8322,11 +8322,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .and_then(FloatFormat::of)
     }
 
-    /// Whether `func` reads little-endian elements out of bytes:
-    /// `builtin::array_new_data` or `List::from_le_bytes`.
-    fn reads_le_bytes(&self, func: &tir::FunctionRef) -> bool {
+    /// Whether `func` reads `result`'s elements out of bytes as their raw bits:
+    /// `builtin::array_new_data`, or `List::from_le_bytes` over a prelude impl.
+    fn reads_le_bytes(&self, func: &tir::FunctionRef, result: TypeId) -> bool {
         if func.module_source.is_builtin() {
             return func.name == ARRAY_NEW_DATA;
+        }
+        if !self.reads_prelude_le_bytes(result) {
+            return false;
         }
         let tt = self.tysys.type_table.borrow();
         let items = tt.compiler_items();
@@ -8345,6 +8348,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     && info.method_name == *name
                     && info.receiver == Receiver::Type(owner.clone())
             })
+    }
+
+    /// Whether `seq`'s element answers `FromLeBytes` with its primitive's own
+    /// impl, rather than one a newtype over it writes.
+    fn reads_prelude_le_bytes(&self, seq: TypeId) -> bool {
+        let Some(elem) = self.tysys.type_table.borrow().seq_element(seq) else {
+            return false;
+        };
+        let trait_ = self
+            .tysys
+            .compiler_trait_def(CompilerItem::FromLeBytes)
+            .expect("the prelude declares `FromLeBytes`");
+        self.tysys.own_impl_link(elem, trait_).is_none_or(|link| {
+            matches!(
+                self.tysys.type_table.borrow().get(link),
+                ResolvedType::Primitive(_)
+            )
+        })
     }
 
     /// A call reading `T`s out of a byte literal, as that literal typed as the
@@ -8368,7 +8389,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .borrow()
             .packed_element(result)?
             .data_width()?;
-        (bytes.len() % width == 0 && self.reads_le_bytes(func))
+        (bytes.len() % width == 0 && self.reads_le_bytes(func, result))
             .then(|| TirExpr::new(TirExprKind::BytesLiteral(bytes.clone()), result, span))
     }
 

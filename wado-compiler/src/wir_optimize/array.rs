@@ -23,6 +23,17 @@ pub(crate) enum ConstOperand {
 }
 
 impl ConstOperand {
+    /// The operand a constant instruction is.
+    pub(crate) fn of(instr: &WirInstr) -> Self {
+        match instr {
+            WirInstr::I32Const(v) => Self::I32(*v),
+            WirInstr::I64Const(v) => Self::I64(*v),
+            WirInstr::F32Const(_) => Self::F32,
+            WirInstr::F64Const(_) => Self::F64,
+            other => panic!("[WIR] packed array element is not a constant: {other:?}"),
+        }
+    }
+
     /// Encoded size: the `T.const` opcode byte plus its immediate — signed
     /// LEB128 for the integer forms, a fixed 4 / 8 bytes for the float ones.
     pub(crate) fn encoded_bytes(self) -> usize {
@@ -148,16 +159,7 @@ impl WirMutVisitor for PromoteConstantArrays<'_> {
 fn fixed_operand_bytes(elements: &[WirInstr]) -> usize {
     elements
         .iter()
-        .map(|e| {
-            let operand = match e {
-                WirInstr::I32Const(v) => ConstOperand::I32(*v),
-                WirInstr::I64Const(v) => ConstOperand::I64(*v),
-                WirInstr::F32Const(_) => ConstOperand::F32,
-                WirInstr::F64Const(_) => ConstOperand::F64,
-                other => panic!("[WIR] packed array element is not a constant: {other:?}"),
-            };
-            operand.encoded_bytes()
-        })
+        .map(|e| ConstOperand::of(e).encoded_bytes())
         .sum()
 }
 

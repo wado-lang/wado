@@ -403,11 +403,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if *arg == expected {
                 continue;
             }
-            let is_numeric = {
-                let tt = self.tysys.type_table.borrow();
-                tt.is_integer(expected) || tt.is_float(expected) || tt.is_half(expected)
-            };
-            if !is_numeric {
+            if !is_numeric_literal_target(&self.tysys.type_table.borrow(), expected) {
                 continue;
             }
             // try_coerce_numeric_literal records `expression_types` for

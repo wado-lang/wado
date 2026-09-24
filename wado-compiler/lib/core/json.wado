@@ -1763,20 +1763,19 @@ impl JsonDeserializer {
     /// Parses an f64 directly from `self.input` using fpfmt, without an
     /// intermediate String allocation.
     pub fn parse_f64_direct(&mut self) -> Result<f64, DeserializeError> {
-        return self.parse_f64_with_lead(self.peek_after_whitespace());
-    }
-
-    fn parse_f64_with_lead(&mut self, lead: i32) -> Result<f64, DeserializeError> {
-        let n = &mut self.scratch;
-        self.scan_number_into(lead, n)?;
-        return Result::Ok(scanned_to_f64(n, &self.input));
+        return Result::Ok(f64::from_bits(self.parse_float_bits(&BINARY64)?));
     }
 
     /// `parse_f64_direct`, rounded once into f32 rather than through f64.
     pub fn parse_f32_direct(&mut self) -> Result<f32, DeserializeError> {
+        return Result::Ok(f32::from_bits(self.parse_float_bits(&BINARY32)? as u32));
+    }
+
+    /// The next number token rounded once into `format`, as its bits.
+    fn parse_float_bits(&mut self, format: &BinaryFormat) -> Result<u64, DeserializeError> {
         let n = &mut self.scratch;
         self.scan_number_into(self.peek_after_whitespace(), n)?;
-        return Result::Ok(f32::from_bits(scanned_to_bits(n, &self.input, &BINARY32) as u32));
+        return Result::Ok(scanned_to_bits(n, &self.input, format));
     }
 
     /// Skips a string token without allocating. Shares `scan_string_run` with

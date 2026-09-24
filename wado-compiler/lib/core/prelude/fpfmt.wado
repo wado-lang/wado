@@ -140,9 +140,8 @@ pub struct PmHiLo {
 // Small pow10 tables: decompose 10^p into coarse (every 27th power) * fine (0..=26)
 // in place of a 696-entry table of 128-bit values.
 
-// The coarse factors, 192 bits each (most significant word first), rounded up.
-// A 128-bit coarse factor would leave the product up to 3 units above the
-// ceiling of 10^p, and `uscale` tolerates one.
+// The coarse factors, 192 bits each, most significant word first, rounded up:
+// at 128 bits the product lands up to 3 units above ⌈10^p⌉, `uscale` takes 1.
 global POW10_COARSE: List<u64> = [
     0x8049a4ac0c5811ae, 0x205b896d777d6278, 0xac261e9f5141430c, 0xcf42894a5dce35ea, 0x52064cac828675b9,
     0x475f2b7d7df1ad7b, 0xa76c582338ed2621, 0xaf2af2b80af6f24e, 0x657c8f4d43323a37, 0x873e4f75e2224e68,

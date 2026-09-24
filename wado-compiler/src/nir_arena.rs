@@ -9,7 +9,7 @@ use std::ops::ControlFlow;
 use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
 use crate::canonical::CmCallTarget;
-use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, non_nan_float};
+use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, non_nan_float, truncate_int};
 use crate::hashmap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -222,7 +222,7 @@ impl PackedData {
         self.bytes.is_empty()
     }
 
-    fn width(&self) -> usize {
+    pub fn width(&self) -> usize {
         self.elem.data_width().expect("checked at construction")
     }
 
@@ -233,11 +233,19 @@ impl PackedData {
             return None;
         }
         let elements = self
-            .bytes
-            .chunks_exact(self.width())
-            .map(|chunk| self.element(chunk))
+            .element_bits()
+            .map(|bits| self.element(bits))
             .collect::<Option<Vec<_>>>()?;
         Value::seq(type_id, elements)
+    }
+
+    /// Each element's bits, zero-extended.
+    pub fn element_bits(&self) -> impl Iterator<Item = u64> + '_ {
+        self.bytes.chunks_exact(self.width()).map(|chunk| {
+            let mut raw = [0u8; 8];
+            raw[..chunk.len()].copy_from_slice(chunk);
+            u64::from_le_bytes(raw)
+        })
     }
 
     /// The array `elements` spell, the inverse of [`Self::to_value`]. `None`
@@ -262,28 +270,15 @@ impl PackedData {
         Some(Self::new(bytes, elem))
     }
 
-    fn element(&self, chunk: &[u8]) -> Option<Value> {
-        let mut raw = [0u8; 8];
-        raw[..chunk.len()].copy_from_slice(chunk);
-        let bits = u64::from_le_bytes(raw);
+    fn element(&self, bits: u64) -> Option<Value> {
         let prim = self.elem;
-        let int = |value: u64| Some(Value::Int { value, prim });
         match prim {
             PrimitiveType::F32 => non_nan_float(f64::from(f32::from_bits(bits as u32)), prim),
             PrimitiveType::F64 => non_nan_float(f64::from_bits(bits), prim),
-            PrimitiveType::I8 => int(i64::from(bits as u8 as i8).cast_unsigned()),
-            PrimitiveType::I16 => int(i64::from(bits as u16 as i16).cast_unsigned()),
-            PrimitiveType::I32 => int(i64::from(bits as u32 as i32).cast_unsigned()),
-            PrimitiveType::I64
-            | PrimitiveType::U8
-            | PrimitiveType::U16
-            | PrimitiveType::U32
-            | PrimitiveType::U64
-            | PrimitiveType::F16
-            | PrimitiveType::Bf16 => int(bits),
-            PrimitiveType::Bool | PrimitiveType::Char | PrimitiveType::V128 => {
-                unreachable!("checked at construction")
-            }
+            _ => Some(Value::Int {
+                value: truncate_int(bits, prim),
+                prim,
+            }),
         }
     }
 }

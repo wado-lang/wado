@@ -53,11 +53,15 @@ pub struct Element {
     pub width: i32,
 }
 
+/// The one element type the kernels have arithmetic for. Everything a node
+/// produces is in it, and a boundary held in another is converted past it.
+pub global KERNEL_ELEMENT: String = "f32";
+
 /// `dtype`'s element, or `None` for one no kernel reaches, whose payload is not
 /// read. Half precision is held and widened, never computed.
 pub fn element_of(dtype: &String) -> Option<Element> {
     return match dtype.as_str_slice() {
-        "float" => Option::Some(Element { primitive: "f32", width: 4 }),
+        "float" => Option::Some(Element { primitive: KERNEL_ELEMENT, width: 4 }),
         "float16" => Option::Some(Element { primitive: "f16", width: 2 }),
         "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2 }),
         _ => null,

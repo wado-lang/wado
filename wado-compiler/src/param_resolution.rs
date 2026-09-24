@@ -561,6 +561,8 @@ mod tests {
         assert!(f64("NaN").is_some_and(f64::is_nan));
         assert_eq!(f64("forty-two"), None);
         assert_eq!(f64("1e400"), None);
+        assert_eq!(f64("--1.5"), None);
+        assert_eq!(parse_lenient_float("-+nan", FloatFormat::F32), None);
     }
 
     #[test]

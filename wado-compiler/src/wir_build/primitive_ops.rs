@@ -12,7 +12,7 @@ use crate::wir::{WirInstr, WirType};
 
 use super::translate::FunctionTranslator;
 use crate::nir_arena::{Operand, PackedData};
-use crate::wir_build::packed_array_is_eager;
+use crate::wir_build::{packed_array_is_eager, packed_element_consts};
 
 /// Classification of a TIR primitive type by the Wasm numeric type family
 /// it is represented as, together with signedness for integer types.
@@ -74,8 +74,8 @@ impl PrimitiveKind {
 }
 
 impl FunctionTranslator<'_, '_> {
-    /// A constant array as WIR: short bytes as a const `array.new_fixed<u8>`,
-    /// which a global may run eagerly, anything else as `array.new_data`.
+    /// A constant array as WIR: a const `array.new_fixed`, which a global may run
+    /// eagerly, where the elements encode smaller inline, else `array.new_data`.
     pub(super) fn translate_packed_array(&self, data: &PackedData, type_id: TypeId) -> WirInstr {
         let array_type_id = if data.as_bytes().is_some() {
             self.ctx
@@ -97,11 +97,7 @@ impl FunctionTranslator<'_, '_> {
             self.ctx.package.string_inline_max_bytes,
             self.force_fixed_string_repr,
         ) {
-            let elements = data
-                .bytes
-                .iter()
-                .map(|&x| WirInstr::I32Const(i32::from(x)))
-                .collect();
+            let elements = packed_element_consts(data).collect();
             WirInstr::ArrayNewFixed {
                 type_id: array_type_id,
                 elements,

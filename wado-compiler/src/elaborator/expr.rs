@@ -5375,6 +5375,8 @@ impl LiteralOrdValue {
         match (self, other) {
             (LiteralOrdValue::Int(a), LiteralOrdValue::Int(b)) => a > b,
             (LiteralOrdValue::Float(a), LiteralOrdValue::Float(b)) => a > b,
+            (LiteralOrdValue::Int(a), LiteralOrdValue::Float(b)) => *a as f64 > *b,
+            (LiteralOrdValue::Float(a), LiteralOrdValue::Int(b)) => *a > *b as f64,
             (LiteralOrdValue::Char(a), LiteralOrdValue::Char(b)) => a > b,
             _ => false, // different kinds — type mismatch error handles this
         }
@@ -5387,26 +5389,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn extract_literal_ord_value(expr: &Expr) -> Option<LiteralOrdValue> {
         match expr {
             Expr::Literal(lit) => match &lit.value {
-                Literal::Number(s) => {
-                    let s = s.replace('_', "");
-                    if s.contains('.') {
-                        s.parse::<f64>().ok().map(LiteralOrdValue::Float)
-                    } else if s.starts_with("0x") || s.starts_with("0X") {
-                        i128::from_str_radix(&s[2..], 16)
-                            .ok()
-                            .map(LiteralOrdValue::Int)
-                    } else if s.starts_with("0b") || s.starts_with("0B") {
-                        i128::from_str_radix(&s[2..], 2)
-                            .ok()
-                            .map(LiteralOrdValue::Int)
-                    } else if s.starts_with("0o") || s.starts_with("0O") {
-                        i128::from_str_radix(&s[2..], 8)
-                            .ok()
-                            .map(LiteralOrdValue::Int)
-                    } else {
-                        s.parse::<i128>().ok().map(LiteralOrdValue::Int)
-                    }
+                Literal::Number(s) if util::is_float_only_literal(s) => {
+                    float_literal_bits(s, FloatFormat::F64)
+                        .ok()
+                        .map(|bits| LiteralOrdValue::Float(f64::from_bits(bits)))
                 }
+                Literal::Number(s) => util::parse_i128_literal(s).ok().map(LiteralOrdValue::Int),
                 Literal::Char(s) => unescape_char(s)
                     .ok()
                     .map(|c| LiteralOrdValue::Char(c as u32)),
