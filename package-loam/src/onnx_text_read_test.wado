@@ -167,15 +167,18 @@ test "inline values that disagree with the shape name the tensor" {
     assert e == "W: 2 elements for a shape of 3 or more";
 }
 
-test "inline half values name themselves rather than rounding twice" {
-    let e = read(
+test "inline half values round once into their own type" {
+    let g = read(
         `agraph (float16[2] X) => (float16[2] Y)
-        <float16[2] W = {1.0, -2.5}>
+        <float16[2] W = {1.0, 0.0001221299171447754}, bfloat16[1] B = {-2.5}>
         {
             Y = Add(X, W)
         }`,
-    ).unwrap_err();
-    assert e == "W: inline float16 values are not read";
+    ).unwrap();
+    // The second value sits just above the midpoint of 0x0800 and 0x0801, which
+    // an f32 holds exactly, so rounding through f32 would land on 0x0800.
+    assert g.initializers[0].data == Option::Some(b"\x00\x3c\x01\x08");
+    assert g.initializers[1].data == Option::Some(b"\x20\xc0");
 }
 
 test "a syntax error comes back with its position" {
