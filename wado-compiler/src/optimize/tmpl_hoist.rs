@@ -25,6 +25,7 @@ use crate::token::Span;
 
 use super::arena_query::{is_local, stmt_mentions_local};
 use super::gate::{FunctionGate, GatedPass};
+use super::heap_effect::{HeapEffects, Kept};
 use crate::name::TEMPLATE_RESULT_LOCAL;
 use crate::nir_value_graph::ValueKind;
 use crate::tir::ResolvedType;
@@ -95,6 +96,8 @@ impl TmplIdents {
 pub fn hoist_template_buffers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.clone();
     let idents = TmplIdents::resolve(project);
+    let heap_types = type_table.borrow();
+    let effects = HeapEffects::new(project, &heap_types);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::TmplHoist, len, |fid| {
@@ -103,8 +106,11 @@ pub fn hoist_template_buffers(project: &mut NirPackage, gate: &mut FunctionGate)
             return false;
         }
         let rule = TmplHoistRule {
-            type_table: &type_table,
-            idents: &idents,
+            cx: HoistCx {
+                type_table: &type_table,
+                idents: &idents,
+                heap: &effects,
+            },
             applied: Cell::new(false),
         };
         let NirFunction { body, locals, .. } = &mut *func;
@@ -117,9 +123,35 @@ pub fn hoist_template_buffers(project: &mut NirPackage, gate: &mut FunctionGate)
 /// Standalone-session rule whose single `apply_block` performs the whole-
 /// function template-buffer hoist at the body root.
 pub(super) struct TmplHoistRule<'a> {
+    cx: HoistCx<'a>,
+    applied: Cell<bool>,
+}
+
+/// What the escape scan asks of the heap: which values share storage.
+trait Sharing {
+    /// What `call` keeps of each argument; see [`HeapEffects::kept_args`].
+    fn kept_args(&self, body: &Body, call: ExprId) -> Vec<(Operand, Kept)>;
+    /// Whether a value of `ty` may hold heap storage it shares with its source.
+    fn holds_heap(&self, ty: TypeId) -> bool;
+}
+
+impl Sharing for HeapEffects<'_> {
+    fn kept_args(&self, body: &Body, call: ExprId) -> Vec<(Operand, Kept)> {
+        HeapEffects::kept_args(self, body, call)
+    }
+
+    fn holds_heap(&self, ty: TypeId) -> bool {
+        !self.reach(ty).is_empty()
+    }
+}
+
+type HeapView<'a> = &'a dyn Sharing;
+
+/// What the hoist walk reads besides the body.
+struct HoistCx<'a> {
     type_table: &'a RefCell<TypeTable>,
     idents: &'a TmplIdents,
-    applied: Cell<bool>,
+    heap: HeapView<'a>,
 }
 
 impl Rule for TmplHoistRule<'_> {
@@ -131,7 +163,7 @@ impl Rule for TmplHoistRule<'_> {
             return false;
         }
         let root = engine.body.root;
-        hoist_in_block(engine, root, self.type_table, self.idents)
+        hoist_in_block(engine, root, &self.cx)
     }
 }
 
@@ -140,12 +172,7 @@ impl Rule for TmplHoistRule<'_> {
 /// `for_each_child` walk — and hoist template buffers out of each loop found.
 /// The hoisted `let`s land immediately before the loop statement in its
 /// containing block.
-fn hoist_in_block(
-    engine: &mut Engine,
-    block: BlockId,
-    type_table: &RefCell<TypeTable>,
-    idents: &TmplIdents,
-) -> bool {
+fn hoist_in_block(engine: &mut Engine, block: BlockId, cx: &HoistCx) -> bool {
     let mut changed = false;
     let mut new_stmts: Vec<StmtId> = Vec::new();
 
@@ -153,9 +180,9 @@ fn hoist_in_block(
         if let StmtKind::Loop { body } = &engine.body.stmts[s].kind {
             let lb = *body;
             // Recurse into the loop body first (for nested loops).
-            changed |= hoist_in_block(engine, lb, type_table, idents);
+            changed |= hoist_in_block(engine, lb, cx);
             // Try to hoist template buffers out of this loop.
-            let hoist_stmts = hoist_tmpl_from_loop(engine, lb, type_table, idents);
+            let hoist_stmts = hoist_tmpl_from_loop(engine, lb, cx);
             if !hoist_stmts.is_empty() {
                 changed = true;
                 new_stmts.extend(hoist_stmts);
@@ -165,7 +192,7 @@ fn hoist_in_block(
             let mut blocks = Vec::new();
             nearest_child_blocks(engine.body, NodeRef::Stmt(s), &mut blocks);
             for b in blocks {
-                changed |= hoist_in_block(engine, b, type_table, idents);
+                changed |= hoist_in_block(engine, b, cx);
             }
         }
         new_stmts.push(s);
@@ -227,33 +254,21 @@ struct FmtCandidate {
 
 /// Scan a loop body for `$tmpl` labeled blocks and hoist their buffer allocations.
 /// Returns hoisting statements to prepend before the loop.
-fn hoist_tmpl_from_loop(
-    engine: &mut Engine,
-    loop_body: BlockId,
-    type_table: &RefCell<TypeTable>,
-    idents: &TmplIdents,
-) -> Vec<StmtId> {
+fn hoist_tmpl_from_loop(engine: &mut Engine, loop_body: BlockId, cx: &HoistCx) -> Vec<StmtId> {
     // Phase 1: Collect all Let bindings whose value is a $tmpl LabeledBlock,
     // and check if the bound variable escapes (used as a non-self argument).
-    let escaping_locals = collect_escaping_locals(engine.body, loop_body);
+    let escaping_locals = collect_escaping_locals(engine.body, loop_body, cx.heap);
 
     // Phase 2: Transform safe $tmpl blocks
     let mut hoist_stmts = Vec::new();
-    transform_stmts_in_block(
-        engine,
-        loop_body,
-        &escaping_locals,
-        &mut hoist_stmts,
-        type_table,
-        idents,
-    );
+    transform_stmts_in_block(engine, loop_body, &escaping_locals, &mut hoist_stmts, cx);
     hoist_stmts
 }
 
 /// Collect local indices that "escape" `block` — locals whose value may flow
 /// out of the loop iteration. See [`EscapeScan`].
-fn collect_escaping_locals(body: &Body, block: BlockId) -> IndexSet<u32> {
-    let mut scan = EscapeScan::new(body);
+fn collect_escaping_locals(body: &Body, block: BlockId, heap: HeapView) -> IndexSet<u32> {
+    let mut scan = EscapeScan::new(body, heap);
     scan.scan_block(block);
     scan.finish()
 }
@@ -264,21 +279,24 @@ fn collect_escaping_locals(body: &Body, block: BlockId) -> IndexSet<u32> {
 /// the outer `let`, escape-checked separately) and Formatter `buf:` field
 /// linkage (normalized to the hoisted buffer by `extract_fmt_candidates`; a
 /// non-hoisted Formatter still only holds the buffer within the iteration).
-fn template_buf_escapes(body: &Body, tmpl_block: BlockId, buf_local_index: u32) -> bool {
-    let mut scan = EscapeScan::new(body);
+fn template_buf_escapes(
+    body: &Body,
+    tmpl_block: BlockId,
+    buf_local_index: u32,
+    heap: HeapView,
+) -> bool {
+    let mut scan = EscapeScan::new(body, heap);
     scan.exempt_break = body.blocks[tmpl_block].stmts.last().copied();
     scan.exempt_buf_fields = true;
     scan.scan_block(tmpl_block);
     scan.finish().contains(&buf_local_index)
 }
 
-/// Escape analysis for the template-buffer hoist. A local escapes when its value
-/// reaches a position that may store it past the iteration, at which point the
-/// whole value-result chain is marked ([`for_each_chain_local`]); the chain stops
-/// at a call result or fresh literal. `let t = <chain>` records an alias edge
-/// instead, resolved in [`Self::finish`]. A `FieldAccess` base is not on it.
+/// Escape analysis for the template-buffer hoist: the locals whose value, or
+/// what shares its storage ([`for_each_chain_local`]), may outlive the iteration.
 struct EscapeScan<'a> {
     body: &'a Body,
+    heap: HeapView<'a>,
     escaping: IndexSet<u32>,
     /// `(target, source)` per `let target = …source-chain…` binding.
     alias_edges: Vec<(u32, u32)>,
@@ -291,9 +309,10 @@ struct EscapeScan<'a> {
 }
 
 impl<'a> EscapeScan<'a> {
-    fn new(body: &'a Body) -> Self {
+    fn new(body: &'a Body, heap: HeapView<'a>) -> Self {
         Self {
             body,
+            heap,
             escaping: IndexSet::default(),
             alias_edges: Vec::new(),
             exempt_break: None,
@@ -319,7 +338,7 @@ impl<'a> EscapeScan<'a> {
 
     fn mark_chain(&mut self, op: Operand) {
         let body = self.body;
-        for_each_chain_local(body, op, &mut |local| {
+        for_each_chain_local(body, op, self.heap, &mut |local| {
             self.escaping.insert(local);
         });
     }
@@ -338,7 +357,7 @@ impl<'a> EscapeScan<'a> {
             } => {
                 let target = *local_index;
                 let value = *value;
-                for_each_chain_local(body, value, &mut |source| {
+                for_each_chain_local(body, value, self.heap, &mut |source| {
                     self.alias_edges.push((target, source));
                 });
                 self.scan_operand(value);
@@ -392,23 +411,14 @@ impl<'a> EscapeScan<'a> {
     fn scan_expr(&mut self, e: ExprId) {
         let body = self.body;
         match &body.exprs[e].kind {
-            // Function call: args escape. A method's receiver (`self`) does
-            // not, so it is scanned without being marked.
-            ExprKind::Call {
-                args, has_receiver, ..
-            } => {
-                for (i, arg) in args.iter().enumerate() {
-                    if !(*has_receiver && i == 0) {
-                        self.mark_chain(arg.expr);
+            // What a call keeps in its result follows the chain; what it
+            // stores escapes.
+            ExprKind::Call { .. } | ExprKind::IndirectCall { .. } => {
+                for (arg, kept) in self.heap.kept_args(body, e) {
+                    if kept.stored {
+                        self.mark_chain(arg);
                     }
-                    self.scan_operand(arg.expr);
-                }
-            }
-            ExprKind::IndirectCall { callee, args } => {
-                self.scan_operand(*callee);
-                for arg in args {
-                    self.mark_chain(*arg);
-                    self.scan_operand(*arg);
+                    self.scan_operand(arg);
                 }
             }
             ExprKind::CmRawCall { args, .. } => {
@@ -510,65 +520,87 @@ impl<'a> EscapeScan<'a> {
     }
 }
 
-/// Visit every local whose value may *be* the result of `op`: the bare local,
-/// and locals reachable through the value-result chain — `&`/`&mut`/casts,
-/// block tails, `if` branch tails, `match` arm bodies, `switch` arm tails,
-/// labeled-block break values. Calls and fresh aggregate literals produce new
-/// values and end the chain; a `FieldAccess` base is deliberately excluded
-/// (see [`EscapeScan`]).
-fn for_each_chain_local(body: &Body, op: Operand, f: &mut impl FnMut(u32)) {
+/// Visit every local whose storage the result of `op` may share: through a
+/// reference, a cast, a branch or block value, a kept call argument, a heap field.
+fn for_each_chain_local(body: &Body, op: Operand, heap: HeapView, f: &mut impl FnMut(u32)) {
     if let Some(e) = op.as_expr() {
-        for_each_chain_local_expr(body, e, f);
+        for_each_chain_local_expr(body, e, heap, f);
     }
 }
 
-fn for_each_chain_local_expr(body: &Body, e: ExprId, f: &mut impl FnMut(u32)) {
+fn for_each_chain_local_expr(body: &Body, e: ExprId, heap: HeapView, f: &mut impl FnMut(u32)) {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => f(*index),
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            for_each_chain_local(body, *inner, f);
+            for_each_chain_local(body, *inner, heap, f);
+        }
+        ExprKind::FieldAccess { expr: inner, .. } => {
+            if heap.holds_heap(body.exprs[e].type_id) {
+                for_each_chain_local(body, *inner, heap, f);
+            }
+        }
+        ExprKind::Call { .. } | ExprKind::IndirectCall { .. } => {
+            for (arg, k) in heap.kept_args(body, e) {
+                if k.in_result {
+                    for_each_chain_local(body, arg, heap, f);
+                }
+            }
         }
         ExprKind::If {
             then_branch,
             else_branch,
             ..
         } => {
-            for_each_block_tail_chain(body, *then_branch, f);
+            for_each_block_tail_chain(body, *then_branch, heap, f);
             if let Some(eb) = else_branch {
-                for_each_block_tail_chain(body, *eb, f);
+                for_each_block_tail_chain(body, *eb, heap, f);
             }
         }
         ExprKind::Match { arms, .. } => {
             for arm in arms {
-                for_each_chain_local(body, arm.body, f);
+                for_each_chain_local(body, arm.body, heap, f);
             }
         }
         ExprKind::Switch { arms, default, .. } => {
             for arm in arms {
-                for_each_block_tail_chain(body, *arm, f);
+                for_each_block_tail_chain(body, *arm, heap, f);
             }
-            for_each_block_tail_chain(body, *default, f);
+            for_each_block_tail_chain(body, *default, heap, f);
         }
         ExprKind::LabeledBlock { label, block, .. } => {
             // The block's value is any `break label: v` under it, plus its
             // tail expression.
             for_each_label_break_value(body, NodeRef::Block(*block), label, &mut |v| {
-                for_each_chain_local(body, v, f);
+                for_each_chain_local(body, v, heap, f);
             });
-            for_each_block_tail_chain(body, *block, f);
+            for_each_block_tail_chain(body, *block, heap, f);
         }
-        // Every other kind (calls, literals, field access, …) produces a new
-        // value — or is a deliberate chain stop — so the chain ends here.
-        _ => {}
+        ExprKind::CmRawCall { .. }
+        | ExprKind::Assign { .. }
+        | ExprKind::StructLiteral { .. }
+        | ExprKind::TupleLiteral { .. }
+        | ExprKind::ArrayLiteral { .. }
+        | ExprKind::VariantConstruct { .. }
+        | ExprKind::GlobalVarSet { .. }
+        | ExprKind::Index { .. }
+        | ExprKind::Binary { .. }
+        | ExprKind::VariantTag { .. }
+        | ExprKind::VariantTest { .. }
+        | ExprKind::VariantPayload { .. }
+        | ExprKind::ClosureToCanonical { .. }
+        | ExprKind::GlobalVarGet { .. }
+        | ExprKind::PackedArray(_)
+        | ExprKind::Dead
+        | ExprKind::EnumConstruct { .. } => {}
     }
 }
 
 /// Chain-visit the tail expression statement of `block`, if any.
-fn for_each_block_tail_chain(body: &Body, block: BlockId, f: &mut impl FnMut(u32)) {
+fn for_each_block_tail_chain(body: &Body, block: BlockId, heap: HeapView, f: &mut impl FnMut(u32)) {
     if let Some(s) = body.blocks[block].stmts.last()
         && let StmtKind::Expr(op) = &body.stmts[*s].kind
     {
-        for_each_chain_local(body, *op, f);
+        for_each_chain_local(body, *op, heap, f);
     }
 }
 
@@ -612,11 +644,10 @@ fn transform_stmts_in_block(
     block: BlockId,
     escaping_locals: &IndexSet<u32>,
     hoist_stmts: &mut Vec<StmtId>,
-    type_table: &RefCell<TypeTable>,
-    idents: &TmplIdents,
+    cx: &HoistCx,
 ) {
     for s in engine.body.blocks[block].stmts.clone() {
-        transform_stmt(engine, s, escaping_locals, hoist_stmts, type_table, idents);
+        transform_stmt(engine, s, escaping_locals, hoist_stmts, cx);
     }
 }
 
@@ -625,8 +656,7 @@ fn transform_stmt(
     s: StmtId,
     escaping_locals: &IndexSet<u32>,
     hoist_stmts: &mut Vec<StmtId>,
-    type_table: &RefCell<TypeTable>,
-    idents: &TmplIdents,
+    cx: &HoistCx,
 ) {
     // `let x = $tmpl: { ... }` — the only statement shape that can hoist.
     let let_info = if let StmtKind::Let {
@@ -651,10 +681,17 @@ fn transform_stmt(
         };
         if let Some((tb_label, tb)) = tmpl_block
             && !escaping_locals.contains(&local_index)
-            && let Some(candidate) = extract_tmpl_candidate(engine.body, tb, &tb_label, idents)
-            && !template_buf_escapes(engine.body, tb, candidate.buf_local_index)
+            && let Some(candidate) = extract_tmpl_candidate(engine.body, tb, &tb_label, cx.idents)
+            && !template_buf_escapes(engine.body, tb, candidate.buf_local_index, cx.heap)
         {
-            transform_tmpl_block(engine, tb, &candidate, hoist_stmts, type_table, idents);
+            transform_tmpl_block(
+                engine,
+                tb,
+                &candidate,
+                hoist_stmts,
+                cx.type_table,
+                cx.idents,
+            );
             // The hoisted String is reused; skip deep copy so `s` aliases `$tmpl_buf`.
             // This is a non-id field on `Let` and does not affect the engine's
             // parent map / use index, so the in-place write is safe.
@@ -667,7 +704,7 @@ fn transform_stmt(
             return;
         }
         // Recurse into the value expression
-        transform_expr(engine, ve, escaping_locals, hoist_stmts, type_table, idents);
+        transform_expr(engine, ve, escaping_locals, hoist_stmts, cx);
         return;
     }
 
@@ -693,33 +730,19 @@ fn transform_stmt(
     };
     match shape {
         Shape::Expr(e) | Shape::Break(e) => {
-            transform_expr(engine, e, escaping_locals, hoist_stmts, type_table, idents);
+            transform_expr(engine, e, escaping_locals, hoist_stmts, cx);
         }
         Shape::If(cond, tb, eb) => {
             if let Some(cond) = cond {
-                transform_expr(
-                    engine,
-                    cond,
-                    escaping_locals,
-                    hoist_stmts,
-                    type_table,
-                    idents,
-                );
+                transform_expr(engine, cond, escaping_locals, hoist_stmts, cx);
             }
-            transform_stmts_in_block(engine, tb, escaping_locals, hoist_stmts, type_table, idents);
+            transform_stmts_in_block(engine, tb, escaping_locals, hoist_stmts, cx);
             if let Some(eb) = eb {
-                transform_stmts_in_block(
-                    engine,
-                    eb,
-                    escaping_locals,
-                    hoist_stmts,
-                    type_table,
-                    idents,
-                );
+                transform_stmts_in_block(engine, eb, escaping_locals, hoist_stmts, cx);
             }
         }
         Shape::Labeled(b) => {
-            transform_stmts_in_block(engine, b, escaping_locals, hoist_stmts, type_table, idents);
+            transform_stmts_in_block(engine, b, escaping_locals, hoist_stmts, cx);
         }
         Shape::None => {}
     }
@@ -730,8 +753,7 @@ fn transform_expr(
     e: ExprId,
     escaping_locals: &IndexSet<u32>,
     hoist_stmts: &mut Vec<StmtId>,
-    type_table: &RefCell<TypeTable>,
-    idents: &TmplIdents,
+    cx: &HoistCx,
 ) {
     // Mirror the original's restricted arm set: $tmpl in non-Let contexts is
     // not hoisted, so only these shapes recurse.
@@ -770,34 +792,20 @@ fn transform_expr(
     match walk {
         Walk::Exprs(v) => {
             for id in v {
-                transform_expr(engine, id, escaping_locals, hoist_stmts, type_table, idents);
+                transform_expr(engine, id, escaping_locals, hoist_stmts, cx);
             }
         }
         Walk::CondBlocks(cond, tb, eb) => {
             if let Some(cond) = cond {
-                transform_expr(
-                    engine,
-                    cond,
-                    escaping_locals,
-                    hoist_stmts,
-                    type_table,
-                    idents,
-                );
+                transform_expr(engine, cond, escaping_locals, hoist_stmts, cx);
             }
-            transform_stmts_in_block(engine, tb, escaping_locals, hoist_stmts, type_table, idents);
+            transform_stmts_in_block(engine, tb, escaping_locals, hoist_stmts, cx);
             if let Some(eb) = eb {
-                transform_stmts_in_block(
-                    engine,
-                    eb,
-                    escaping_locals,
-                    hoist_stmts,
-                    type_table,
-                    idents,
-                );
+                transform_stmts_in_block(engine, eb, escaping_locals, hoist_stmts, cx);
             }
         }
         Walk::Block(b) => {
-            transform_stmts_in_block(engine, b, escaping_locals, hoist_stmts, type_table, idents);
+            transform_stmts_in_block(engine, b, escaping_locals, hoist_stmts, cx);
         }
         Walk::None => {}
     }
@@ -1735,6 +1743,45 @@ mod tests {
         assert!(!references_local(&b, e, IDX));
     }
 
+    /// A [`Sharing`] answering `kept` for every argument of every call, and
+    /// `fields_share` for every field.
+    struct Stub {
+        kept: Kept,
+        fields_share: bool,
+    }
+
+    impl Sharing for Stub {
+        fn kept_args(&self, body: &Body, call: ExprId) -> Vec<(Operand, Kept)> {
+            match &body.exprs[call].kind {
+                ExprKind::Call { args, .. } => args.iter().map(|a| (a.expr, self.kept)).collect(),
+                other => panic!("not a call: {other:?}"),
+            }
+        }
+
+        fn holds_heap(&self, _ty: TypeId) -> bool {
+            self.fields_share
+        }
+    }
+
+    fn kept_as(kept: Kept) -> Stub {
+        Stub {
+            kept,
+            fields_share: false,
+        }
+    }
+
+    fn field_of(body: &mut Body, base: ExprId) -> ExprId {
+        body.exprs.push(ExprNode {
+            kind: ExprKind::FieldAccess {
+                expr: base.into(),
+                field_index: 0,
+                field_name: "repr".to_string(),
+            },
+            type_id: TypeId(0),
+            span: Span::default(),
+        })
+    }
+
     fn block_of(body: &mut Body, stmts: Vec<StmtId>) -> BlockId {
         body.blocks.push(BlockNode {
             stmts,
@@ -1764,12 +1811,11 @@ mod tests {
         })
     }
 
-    /// The value chain follows `if` branch tails (the shape
-    /// `out.push(if c { s } else { t })` escapes through) but stops at a call
-    /// result — a `$value_copy$…` wrapper severs the alias, keeping copied
-    /// escapes hoistable.
+    /// The chain follows `if` tails, and a call result only where the call
+    /// keeps the argument: `s.as_str_slice()` does, a `$value_copy$…` does not.
     #[test]
-    fn chain_follows_if_tails_and_stops_at_calls() {
+    fn chain_follows_if_tails_and_kept_call_args() {
+        let fresh = kept_as(Kept::default());
         let mut b = Body::empty();
         let l7 = local(&mut b, 7);
         let l8 = local(&mut b, 8);
@@ -1788,7 +1834,7 @@ mod tests {
             span: Span::default(),
         });
         let mut seen = Vec::new();
-        for_each_chain_local_expr(&b, if_expr, &mut |l| seen.push(l));
+        for_each_chain_local_expr(&b, if_expr, &fresh, &mut |l| seen.push(l));
         seen.sort_unstable();
         assert_eq!(
             seen,
@@ -1799,14 +1845,45 @@ mod tests {
         let arg = local(&mut b, 7);
         let call = call_with(&mut b, arg);
         let mut seen = Vec::new();
-        for_each_chain_local_expr(&b, call, &mut |l| seen.push(l));
-        assert!(seen.is_empty(), "a call result is a new value");
+        for_each_chain_local_expr(&b, call, &fresh, &mut |l| seen.push(l));
+        assert!(seen.is_empty(), "a fresh call result is a new value");
+
+        let in_result = kept_as(Kept {
+            in_result: true,
+            stored: false,
+        });
+        let mut seen = Vec::new();
+        for_each_chain_local_expr(&b, call, &in_result, &mut |l| seen.push(l));
+        assert_eq!(seen, vec![7], "a kept argument is part of the result");
+    }
+
+    /// `&s.repr` shares `s`'s storage, so it chains to `s`; `s.used` is a copy.
+    #[test]
+    fn chain_follows_a_field_only_where_it_shares_storage() {
+        let mut b = Body::empty();
+        let l7 = local(&mut b, 7);
+        let field = field_of(&mut b, l7);
+        let r = unary(&mut b, NirUnaryOp::Ref, field);
+        let mut seen = Vec::new();
+        for_each_chain_local_expr(&b, r, &kept_as(Kept::default()), &mut |l| seen.push(l));
+        assert!(seen.is_empty(), "a scalar field is a copy");
+
+        let shares = Stub {
+            kept: Kept::default(),
+            fields_share: true,
+        };
+        for_each_chain_local_expr(&b, r, &shares, &mut |l| seen.push(l));
+        assert_eq!(seen, vec![7], "a heap field shares its base's storage");
     }
 
     /// `let t = s; foo(t)` escapes `s` through the alias edge; an alias whose
     /// target never escapes leaves the source hoistable.
     #[test]
     fn escape_propagates_through_alias_lets() {
+        let stored = kept_as(Kept {
+            in_result: false,
+            stored: true,
+        });
         let mut b = Body::empty();
         let l7 = local(&mut b, 7);
         let alias = let_stmt(&mut b, 1, l7);
@@ -1814,7 +1891,7 @@ mod tests {
         let call = call_with(&mut b, t_use);
         let call_stmt = expr_stmt(&mut b, call);
         let blk = block_of(&mut b, vec![alias, call_stmt]);
-        let escaping = collect_escaping_locals(&b, blk);
+        let escaping = collect_escaping_locals(&b, blk, &stored);
         assert!(escaping.contains(&1));
         assert!(
             escaping.contains(&7),
@@ -1825,7 +1902,7 @@ mod tests {
         let l7 = local(&mut b, 7);
         let alias = let_stmt(&mut b, 1, l7);
         let blk = block_of(&mut b, vec![alias]);
-        let escaping = collect_escaping_locals(&b, blk);
+        let escaping = collect_escaping_locals(&b, blk, &stored);
         assert!(
             !escaping.contains(&7),
             "an alias that never escapes must not mark its source"

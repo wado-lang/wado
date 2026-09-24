@@ -1,0 +1,27 @@
+// A template buffer that a call keeps in its result escapes where that result
+// is stored, so it is not hoisted out of the loop and reused.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut direct: List<StrSlice> = [];
+    let mut aliased: List<StrSlice> = [];
+    for let mut i = 0; i < builtin::black_box(3); i += 1 {
+        let s = `item${i}`;
+        direct.push(s.as_str_slice());
+        let t = `elem${i}`;
+        let v = t.as_str_slice();
+        aliased.push(v);
+    }
+    for let v of direct {
+        println(v.to_string());
+    }
+    for let v of aliased {
+        println(v.to_string());
+    }
+}
+
+__DATA__
+{
+    "stdout": "item0\nitem1\nitem2\nelem0\nelem1\nelem2\n"
+}

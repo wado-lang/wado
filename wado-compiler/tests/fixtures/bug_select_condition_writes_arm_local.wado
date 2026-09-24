@@ -1,0 +1,20 @@
+// `select` evaluates both arms before its condition, so lowering an `if` to one
+// reorders the condition after the arms. A condition that writes a local an arm
+// reads must keep the branch: the arm reads the value the condition wrote.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut x = builtin::black_box(1);
+    let k = builtin::black_box(3);
+    let r = if (match k { 3 => { x = x + 10; true }, _ => false }) { x } else { x + 1 };
+    println(`${r}`);
+
+    let mut y = builtin::black_box(1);
+    let s = if (b: { y = y + 20; break b: y > 5; }) { y } else { y + 1 };
+    println(`${s}`);
+}
+
+__DATA__
+{
+    "stdout": "11\n21\n"
+}

@@ -17,6 +17,7 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::NirRefVisitor;
 use crate::optimize::alias::bound_value;
+use crate::optimize::heap_effect::{Effect, HeapEffects, HeapFrame};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -44,10 +45,11 @@ pub fn scalarize_hot_fields(project: &mut NirPackage) -> bool {
 
     // Phase 2: Run scalarization (mutable access)
     let type_table = project.type_table.borrow();
+    let effects = HeapEffects::new(project, &type_table);
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        changed |= scalarize_function(&mut func, &type_table, &cache);
+        changed |= scalarize_function(&mut func, &type_table, &cache, &effects);
     }
     changed
 }
@@ -252,6 +254,7 @@ fn scalarize_function(
     func: &mut NirFunction,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
+    effects: &HeapEffects,
 ) -> bool {
     if func.body.is_none() {
         return false;
@@ -264,8 +267,20 @@ fn scalarize_function(
     // whose address is taken anywhere in the function (read-only, over
     // the arena body) so loop-level scalarization can refuse those
     // candidates.
-    let aliases = collect_function_aliases(func.body.as_ref().unwrap(), type_table);
-    let analysis = HfsAnalysis { aliases: &aliases };
+    let body = func.body.as_ref().unwrap();
+    let loop_sites = loop_sites(body);
+    if loop_sites.is_empty() {
+        return false;
+    }
+    let aliases = collect_function_aliases(body, type_table);
+    let params: Vec<u32> = func.params.iter().map(|p| p.local_index).collect();
+    let frame = HeapFrame::new(effects, body, &params);
+    let analysis = HfsAnalysis {
+        aliases: &aliases,
+        effects,
+        frame: &frame,
+        loop_sites,
+    };
     let mut local_count = func.local_count();
     let mut locals = func.locals.clone();
     let changed = {
@@ -290,6 +305,88 @@ fn scalarize_function(
 /// to keep the per-loop work linear in the loop body's size.
 struct HfsAnalysis<'a> {
     aliases: &'a FnAliases,
+    effects: &'a HeapEffects<'a>,
+    frame: &'a HeapFrame,
+    /// Every node of each loop body, as it stood before any loop was
+    /// rewritten: the sites [`HeapFrame`] recorded its accesses at.
+    loop_sites: IndexMap<BlockId, IndexSet<NodeRef>>,
+}
+
+impl HfsAnalysis<'_> {
+    /// Whether the loop reaches field `field` of the object `local` holds other
+    /// than through `local.field` itself, which the scalar replaces.
+    fn field_reached_besides(
+        &self,
+        body: &Body,
+        loop_body: BlockId,
+        local: u32,
+        local_type: TypeId,
+        field: u32,
+    ) -> bool {
+        let Some(key) = self.effects.object_key(local_type) else {
+            return false;
+        };
+        let sites = &self.loop_sites[&loop_body];
+        self.frame.accessed_besides(
+            false,
+            |site| sites.contains(&site),
+            (key, field),
+            local,
+            |receiver| is_local(body, receiver, local),
+        )
+    }
+
+    /// Whether `call` may reach `c`'s object other than through an argument
+    /// naming `c`, which the field-usage cache answers for.
+    fn call_reaches_besides(
+        &self,
+        body: &Body,
+        call: ExprId,
+        effect: Effect,
+        c: &ScalarizeCandidate,
+        type_table: &TypeTable,
+    ) -> bool {
+        let Some(key) = self.effects.object_key(c.local_type_id) else {
+            return false;
+        };
+        self.frame.call_may_besides(
+            self.effects,
+            body,
+            call,
+            effect,
+            key,
+            c.local_index,
+            |arg| extract_gc_local_index_operand(body, arg, type_table) == Some(c.local_index),
+        )
+    }
+}
+
+fn is_local(body: &Body, op: Operand, local: u32) -> bool {
+    op.as_expr().is_some_and(
+        |e| matches!(body.exprs[e].kind, ExprKind::Local { index, .. } if index == local),
+    )
+}
+
+/// The nodes of every loop body in `body`, by the loop's body block.
+fn loop_sites(body: &Body) -> IndexMap<BlockId, IndexSet<NodeRef>> {
+    let mut loops = Vec::new();
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Loop { body: lb } = &body.stmts[s].kind
+        {
+            loops.push(*lb);
+        }
+    });
+    loops
+        .into_iter()
+        .map(|lb| {
+            let mut sites = IndexSet::default();
+            body.for_each_live_node_under(NodeRef::Block(lb), |n| {
+                sites.insert(n);
+            });
+            (lb, sites)
+        })
+        .collect()
 }
 
 /// Walk the function body finding loops, recursing into nested blocks first,
@@ -491,6 +588,10 @@ fn scalarize_loop(
         if !is_gc_heap_type(info.local_type_id, type_table) {
             continue;
         }
+        if analysis.field_reached_besides(body, loop_body, local_idx, info.local_type_id, field_idx)
+        {
+            continue;
+        }
 
         candidates.push(ScalarizeCandidate {
             local_index: local_idx,
@@ -549,6 +650,7 @@ fn scalarize_loop(
         local_count,
         type_table,
         cache,
+        analysis,
     );
     let post_stmts: Vec<StmtId> = Vec::new();
 
@@ -1165,11 +1267,13 @@ fn compute_deferrable_candidates(
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
     cache: &FieldUsageCache,
+    analysis: &HfsAnalysis,
 ) -> Vec<bool> {
     let mut scan = CallTouchedScan {
         candidates,
         type_table,
         cache,
+        analysis,
         touched: IndexSet::default(),
     };
     scan.visit_node(body, NodeRef::Block(block));
@@ -1187,6 +1291,7 @@ struct CallTouchedScan<'a> {
     candidates: &'a [ScalarizeCandidate],
     type_table: &'a TypeTable,
     cache: &'a FieldUsageCache,
+    analysis: &'a HfsAnalysis<'a>,
     touched: IndexSet<(u32, u32)>,
 }
 
@@ -1204,6 +1309,7 @@ impl NirRefVisitor for CallTouchedScan<'_> {
                     self.candidates,
                     self.type_table,
                     self.cache,
+                    self.analysis,
                     &mut sync,
                 );
                 self.touched.extend(sync.write_back.iter().copied());
@@ -1241,6 +1347,7 @@ struct WalkCtx<'a> {
     candidates: &'a [ScalarizeCandidate],
     type_table: &'a TypeTable,
     cache: &'a FieldUsageCache,
+    analysis: &'a HfsAnalysis<'a>,
     locals: &'a mut Vec<NirLocal>,
     local_count: &'a mut u32,
     /// Per-type free pool of `$hfs_call_*` temp local indices. Each call
@@ -1323,14 +1430,17 @@ fn process_loop_body(
     local_count: &mut u32,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
+    analysis: &HfsAnalysis,
 ) {
-    let deferrable = compute_deferrable_candidates(body, block, candidates, type_table, cache);
+    let deferrable =
+        compute_deferrable_candidates(body, block, candidates, type_table, cache, analysis);
     let entry = entry_states_for(candidates, &deferrable);
     let mut states = entry.clone();
     let mut ctx = WalkCtx {
         candidates,
         type_table,
         cache,
+        analysis,
         locals,
         local_count,
         temp_pool: IndexMap::default(),
@@ -2464,6 +2574,7 @@ fn compute_call_field_effects(body: &Body, call: ExprId, ctx: &WalkCtx) -> CallF
         ctx.candidates,
         ctx.type_table,
         ctx.cache,
+        ctx.analysis,
         &mut sync,
     );
     let mut read_required = Vec::new();
@@ -2515,8 +2626,23 @@ fn accumulate_call_sync(
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
     cache: &FieldUsageCache,
+    analysis: &HfsAnalysis,
     result: &mut SyncFields,
 ) {
+    if matches!(
+        body.exprs[call].kind,
+        ExprKind::Call { .. } | ExprKind::IndirectCall { .. }
+    ) {
+        for c in candidates {
+            let place = (c.local_index, c.field_index);
+            if analysis.call_reaches_besides(body, call, Effect::Read, c, type_table) {
+                result.write_back.insert(place);
+            }
+            if analysis.call_reaches_besides(body, call, Effect::Write, c, type_table) {
+                result.re_read.insert(place);
+            }
+        }
+    }
     match &body.exprs[call].kind {
         ExprKind::Call { func_id, args, .. } => {
             let callee_id = *func_id;

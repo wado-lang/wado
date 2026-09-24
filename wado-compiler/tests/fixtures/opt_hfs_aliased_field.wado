@@ -1,0 +1,114 @@
+// A field kept in a local across a loop stays in step with every other way
+// the loop reaches it: an aliasing parameter, a containing object, a closure,
+// a global, or a reference into the object.
+
+use { println, Stdout } from "core:cli";
+
+struct C {
+    n: i32,
+    m: i32,
+}
+
+struct H {
+    inner: C,
+    k: i32,
+}
+
+global mut G: C = C { n: 0, m: 0 };
+
+#[inline(never)]
+fn through_param(a: &mut C, b: &mut C) {
+    for let mut i = 0; i < 3; i += 1 {
+        a.n = a.n + 1;
+        b.n = b.n + 10;
+        a.n = a.n + 0;
+        b.n = b.n + 0;
+    }
+}
+
+#[inline(never)]
+fn touch(h: &mut H) {
+    h.inner.n = h.inner.n * 2;
+}
+
+#[inline(never)]
+fn through_container(h: &mut H, c: &mut C) {
+    for let mut i = 0; i < 3; i += 1 {
+        c.n = c.n + 1;
+        c.n = c.n + 0;
+        touch(h);
+        c.n = c.n + 0;
+    }
+}
+
+#[inline(never)]
+fn through_closure(c: &mut C, mut f: fn mut()) {
+    for let mut i = 0; i < 3; i += 1 {
+        c.n = c.n + 1;
+        c.n = c.n + 0;
+        f();
+        c.n = c.n + 0;
+    }
+}
+
+#[inline(never)]
+fn poke() {
+    G.n = G.n * 2;
+}
+
+#[inline(never)]
+fn through_global(c: &mut C) {
+    for let mut i = 0; i < 3; i += 1 {
+        c.n = c.n + 1;
+        c.n = c.n + 0;
+        poke();
+        c.n = c.n + 0;
+    }
+}
+
+#[inline(never)]
+fn through_direct_read() -> i32 {
+    let mut h = H { inner: C { n: 0, m: 0 }, k: 0 };
+    let c = &mut h.inner;
+    let mut total = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        c.n = c.n + 1;
+        c.n = c.n + 0;
+        total += h.inner.n;
+        c.n = c.n + 0;
+    }
+    return total * 100 + h.inner.n;
+}
+
+export fn run() with Stdout {
+    let mut a = C { n: 0, m: 0 };
+    through_param(&mut a, &mut a);
+    println(`${a.n}`);
+
+    let mut h = H { inner: C { n: 0, m: 0 }, k: 0 };
+    through_container(&mut h, &mut h.inner);
+    println(`${h.inner.n}`);
+
+    let mut c = C { n: 0, m: 0 };
+    through_closure(&mut c, || { c.n = c.n * 2; });
+    println(`${c.n}`);
+
+    through_global(&mut G);
+    println(`${G.n}`);
+
+    let mut o = H { inner: C { n: 0, m: 0 }, k: 0 };
+    let r = &mut o.inner;
+    for let mut i = 0; i < 3; i += 1 {
+        r.n = r.n + 1;
+        r.n = r.n + 0;
+        touch(&mut o);
+        r.n = r.n + 0;
+    }
+    println(`${o.inner.n}`);
+    println(`${through_direct_read()}`);
+}
+
+__DATA__
+{
+    "stdout": "33\n14\n14\n14\n14\n603\n"
+}

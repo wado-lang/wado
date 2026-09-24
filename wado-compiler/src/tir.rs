@@ -6517,6 +6517,14 @@ impl BuiltinDeclarations {
         self.0.get(&key(call.name))
     }
 
+    /// Everything `call` declared, or `None` where there is no snapshot.
+    pub fn declaration<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> Option<&BuiltinDeclaration> {
+        self.get(call.into())
+    }
+
     /// Whether `call` names a body-less declaration that stated a convention or
     /// a retention — the calls that answer from a declaration rather than from
     /// the fixpoint.

@@ -189,6 +189,21 @@ impl ModRef {
         false
     }
 
+    /// True iff `self` and `other` may write the same state, so the one that
+    /// runs last decides what stays (an output dependence).
+    pub fn may_write_same(&self, other: &ModRef) -> bool {
+        let self_writes_shared =
+            !self.global_writes.is_empty() || self.heap.writes || self.memory.writes;
+        let other_writes_shared =
+            !other.global_writes.is_empty() || other.heap.writes || other.memory.writes;
+        (self.calls && (other.calls || other_writes_shared))
+            || (other.calls && self_writes_shared)
+            || !self.local_writes.is_disjoint(&other.local_writes)
+            || !self.global_writes.is_disjoint(&other.global_writes)
+            || (self.heap.writes && other.heap.writes)
+            || (self.memory.writes && other.memory.writes)
+    }
+
     fn accumulate_operand(&mut self, body: &Body, op: Operand, scope: &mut AccumScope<'_>) {
         match op {
             Operand::Expr(e) => self.accumulate_expr(body, e, scope),
@@ -604,11 +619,8 @@ impl ModRef {
     }
 }
 
-/// Can `expr_mr` move past an intervening `int_mr`, while `candidate` is being
-/// eliminated by the rewrite? All must hold: the intervening transfers control
-/// linearly, does not read `candidate`, and does not `may_trap` alongside the
-/// expression (the observable trap location would move); and neither side's
-/// writes clobber the other's reads (Bernstein's conditions).
+/// Whether `expr_mr` may move past `int_mr` while `candidate` is eliminated:
+/// Bernstein's conditions, linear control, and no trap that would move.
 pub(super) fn can_move_past(expr_mr: &ModRef, int_mr: &ModRef, candidate: u32) -> bool {
     if !matches!(int_mr.control, Control::Linear) {
         return false;
@@ -625,7 +637,7 @@ pub(super) fn can_move_past(expr_mr: &ModRef, int_mr: &ModRef, candidate: u32) -
     if expr_mr.may_clobber(int_mr) {
         return false;
     }
-    true
+    !expr_mr.may_write_same(int_mr)
 }
 
 // ---------------------------------------------------------------------------

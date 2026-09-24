@@ -27,6 +27,7 @@ mod elide_local;
 mod extract;
 mod field_scalarize;
 mod gate;
+mod heap_effect;
 mod identity_cast;
 mod if_chain_to_match;
 mod inline;

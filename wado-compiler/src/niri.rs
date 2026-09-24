@@ -30,7 +30,8 @@ pub enum Lattice {
     /// No information yet. Default for un-bound locals and for node kinds the
     /// engine does not evaluate.
     Unevaluated,
-    /// Provably reduces to this value.
+    /// Provably reduces to this value, with no trap or effect on the way: every
+    /// consumer may delete the node that denotes it.
     Const(Value),
     /// Cannot be a reusable constant: a `let mut` binding, a runtime-only
     /// result, or a fold over `NonConst` operands.

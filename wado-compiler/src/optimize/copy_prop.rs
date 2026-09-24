@@ -4,7 +4,7 @@
 //! the safety gates. Runs as a [`Rule`] whose `apply_block` fires at the body
 //! root and drives the analyse/substitute fixpoint to convergence in one shot.
 
-use std::cell::Cell;
+use std::cell::{Cell, OnceCell};
 
 use cranelift_entity::EntityRef;
 
@@ -25,6 +25,7 @@ use super::value_copy::mutation::MutationOracle;
 use crate::optimize::arena_query::{
     bare_promoted_local, buried_promoted_reads, promoted_local_reads, reachable_nodes,
 };
+use crate::optimize::heap_effect::{HeapEffects, HeapFrame, field_path};
 use crate::optimize::value_copy::mutation::build_param_mut;
 
 #[derive(Debug, Clone)]
@@ -240,6 +241,37 @@ struct AnalysisCtx<'a> {
     copy_value_id: Option<FuncId>,
     aliases: MutRefAliases,
     scans: IndexMap<BlockId, BlockScan>,
+    effects: &'a HeapEffects<'a>,
+    params: Vec<u32>,
+    frame: OnceCell<HeapFrame>,
+}
+
+impl AnalysisCtx<'_> {
+    /// Whether a store through another handle, or a call, in `stmts` may put a
+    /// new object on the place `projection` names, which starts at `root`.
+    fn projection_replaced(
+        &self,
+        body: &Body,
+        root: u32,
+        projection: ExprId,
+        stmts: &[StmtId],
+    ) -> bool {
+        let Some((_, path)) = field_path(body, projection) else {
+            return true;
+        };
+        let mut between: IndexSet<NodeRef> = IndexSet::default();
+        for &s in stmts {
+            body.for_each_live_node_under(NodeRef::Stmt(s), |n| {
+                between.insert(n);
+            });
+        }
+        let frame = self
+            .frame
+            .get_or_init(|| HeapFrame::new(self.effects, body, &self.params));
+        frame.place_replaced(self.effects, body, root, &path, |site| {
+            between.contains(&site)
+        })
+    }
 }
 
 /// Per-block mutation / read positions, keyed by the block's own statement
@@ -399,13 +431,21 @@ fn analyze_block(body: &Body, block: BlockId, result: &mut AnalysisResult, ctx: 
             // the precise capture-at-binding condition — see `refproj_scope_stable`.
             let scan = ctx.scans.get(&block).expect("block was scanned");
             binding.source_scope_stable = match &binding.source {
-                CopySource::RefProjection { root_local, .. } => refproj_scope_stable(
-                    *root_local,
-                    binding.target_local,
-                    k,
-                    &scan.mut_indices,
-                    &scan.first_read,
-                ),
+                CopySource::RefProjection {
+                    root_local,
+                    projection,
+                    ..
+                } => {
+                    refproj_scope_stable(
+                        *root_local,
+                        binding.target_local,
+                        k,
+                        &scan.mut_indices,
+                        &scan.first_read,
+                    ) && scan.first_read.get(&binding.target_local).is_none_or(|&u| {
+                        !ctx.projection_replaced(body, *root_local, *projection, &stmts[k + 1..=u])
+                    })
+                }
                 _ => match binding.source.local_index() {
                     Some(src) => {
                         // A target read at or before the binding is a
@@ -857,6 +897,7 @@ fn propagate_at_root(
     oracle: &MutationOracle<'_>,
     copy_value_id: Option<FuncId>,
     param_count: usize,
+    effects: &HeapEffects<'_>,
 ) -> bool {
     let mut ever_changed = false;
     loop {
@@ -868,6 +909,9 @@ fn propagate_at_root(
             copy_value_id,
             aliases,
             scans,
+            effects,
+            params: (0..param_count as u32).collect(),
+            frame: OnceCell::new(),
         };
         let analysis = analyze_function_body(engine.body, &ctx);
         if analysis.bindings.is_empty() {
@@ -931,6 +975,7 @@ pub(super) struct CopyPropRule<'a> {
     /// Locals `0..param_count` are the function's parameters (external
     /// storage the `&mut`-alias map treats as rooting no function local).
     param_count: usize,
+    effects: &'a HeapEffects<'a>,
     applied: Cell<bool>,
 }
 
@@ -948,6 +993,7 @@ impl Rule for CopyPropRule<'_> {
             &self.oracle,
             self.copy_value_id,
             self.param_count,
+            self.effects,
         )
     }
 }
@@ -956,6 +1002,7 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
     let copy_value_id = project.builtin_func_id("copy_value");
     let type_table = project.type_table.borrow();
     let param_mut = build_param_mut(project);
+    let effects = HeapEffects::new(project, &type_table);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::CopyProp, len, |fid| {
@@ -968,6 +1015,7 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
             oracle: MutationOracle::new(&param_mut),
             copy_value_id,
             param_count: func.params.len(),
+            effects: &effects,
             applied: Cell::new(false),
         };
         let NirFunction {
