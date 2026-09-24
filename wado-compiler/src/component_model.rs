@@ -1983,12 +1983,12 @@ impl CmInterfaceRegistry {
         // Collect resource types from this module
         for item in &module.items {
             if let Item::Resource(resource) = item {
-                // Use the #[cm] fragment as the CM name (preserves acronym casing like DNS, TLS)
-                let cm_name = cm_attr_cm_name(&resource.attrs, &resource.name);
                 let source_interface = Self::cm_source_interface(&resource.attrs);
                 if !scope.admits(&source_interface) {
                     continue;
                 }
+                // Use the #[cm] fragment as the CM name (preserves acronym casing like DNS, TLS)
+                let cm_name = cm_attr_cm_name(&resource.attrs, &resource.name);
                 // An unrestricted resource is erased at the boundary, which sees
                 // the universal handle, a copyable `u32`, so it registers as a
                 // newtype and every `own`/`borrow` path passes it by.
@@ -2017,12 +2017,12 @@ impl CmInterfaceRegistry {
         // Collect struct types from this module (e.g., DnsErrorPayload -> DNS-error-payload)
         for item in &module.items {
             if let Item::Struct(struct_def) = item {
-                // Use the #[cm] fragment as the CM name (preserves acronym casing)
-                let cm_name = cm_attr_cm_name(&struct_def.attrs, &struct_def.name);
                 let source_interface = Self::cm_source_interface(&struct_def.attrs);
                 if !scope.admits(&source_interface) {
                     continue;
                 }
+                // Use the #[cm] fragment as the CM name (preserves acronym casing)
+                let cm_name = cm_attr_cm_name(&struct_def.attrs, &struct_def.name);
                 let fields: Vec<(String, Type)> = struct_def
                     .fields
                     .iter()
@@ -2053,12 +2053,12 @@ impl CmInterfaceRegistry {
         for item in &module.items {
             if let Item::Flags(flags_def) = item {
                 let attrs = flags_def.attributes.as_deref().unwrap_or(&[]);
-                // Use the #[cm] fragment as the CM name (preserves acronym casing)
-                let cm_name = cm_attr_cm_name(attrs, &flags_def.name);
                 let source_interface = Self::cm_source_interface(attrs);
                 if !scope.admits(&source_interface) {
                     continue;
                 }
+                // Use the #[cm] fragment as the CM name (preserves acronym casing)
+                let cm_name = cm_attr_cm_name(attrs, &flags_def.name);
                 // Use per-member #[cm] attr for CM name
                 let member_names: Vec<String> = flags_def
                     .flags
@@ -2078,6 +2078,10 @@ impl CmInterfaceRegistry {
         // Collect enum types from this module
         for item in &module.items {
             if let Item::Enum(enum_def) = item {
+                let source_interface = Self::cm_source_interface(&enum_def.attrs);
+                if !scope.admits(&source_interface) {
+                    continue;
+                }
                 // Use the #[cm] fragment as the CM name (preserves acronym casing)
                 let cm_name = cm_attr_cm_name(&enum_def.attrs, &enum_def.name);
                 // Use per-case #[cm] attr for CM name
@@ -2086,13 +2090,6 @@ impl CmInterfaceRegistry {
                     .iter()
                     .map(|c| cm_attr_cm_name(&c.attrs, &c.name))
                     .collect();
-
-                // Extract interface path from #[cm] attribute if present
-                // Format: #[cm("wasi:sockets/types@0.3.0-rc-2025-09-16#error-code")]
-                let source_interface = Self::cm_source_interface(&enum_def.attrs);
-                if !scope.admits(&source_interface) {
-                    continue;
-                }
                 register_unique(
                     &mut self.enums,
                     "enum",
@@ -2106,12 +2103,12 @@ impl CmInterfaceRegistry {
         // Collect variant types from this module (e.g., HeaderError)
         for item in &module.items {
             if let Item::Variant(variant_def) = item {
-                // Use the #[cm] fragment as the CM name (preserves acronym casing)
-                let cm_name = cm_attr_cm_name(&variant_def.attrs, &variant_def.name);
                 let source_interface = Self::cm_source_interface(&variant_def.attrs);
                 if !scope.admits(&source_interface) {
                     continue;
                 }
+                // Use the #[cm] fragment as the CM name (preserves acronym casing)
+                let cm_name = cm_attr_cm_name(&variant_def.attrs, &variant_def.name);
                 // Store both CM and Wado names for each case
                 let cases: Vec<CmVariantCase> = variant_def
                     .cases
