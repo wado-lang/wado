@@ -176,6 +176,17 @@ test "inline values that disagree with the shape name the tensor" {
     assert e == "W: 2 elements for a shape of 3 or more";
 }
 
+test "a zero extent after a larger one still means no elements" {
+    let g = read(
+        `agraph (float[2] X) => (float[2] Y)
+        <float[3, 0] W = {}>
+        {
+            Y = Identity(X)
+        }`,
+    ).unwrap();
+    assert g.initializers[0].data == Option::Some(b"");
+}
+
 test "inline half values are bit patterns, as ONNX's parser reads them" {
     let g = read(
         `agraph (float16[2] X) => (float16[2] Y)

@@ -258,10 +258,6 @@ zeroes, which is all `Eq` needs. `Ord` would take the sign-magnitude key
 `f32`'s own uses, computed on sixteen bits. Nothing measured has asked for
 either.
 
-No associated constants. `f16::MAX` and the other finite ones could now be
-written as literals and are not declared. `NAN` and the infinities have no
-literal, so a constant initializer cannot spell them.
-
 A half precision tensor cannot be part of a component's public API, so a Loam
 module that exports one has to widen it or hand out its bytes.
 
