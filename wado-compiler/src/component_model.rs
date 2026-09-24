@@ -671,25 +671,6 @@ pub fn one_per_cm_name<'a>(
         .collect()
 }
 
-/// A stable key for an AST type, ignoring spans.
-fn type_key(ty: &Type) -> String {
-    match ty {
-        Type::Named(n) => n.name.clone(),
-        Type::Reference(inner) => format!("&{}", type_key(inner)),
-        Type::MutReference(inner) => format!("&mut {}", type_key(inner)),
-        Type::Generic(g) => format!("{}:{}", g.name, type_keys(&g.args)),
-        Type::NamespacedGeneric(g) => {
-            format!("{}::{}:{}", g.namespace, g.name, type_keys(&g.args))
-        }
-        Type::Tuple(elems) => format!("[{}]", type_keys(elems)),
-        _ => format!("{ty:?}"),
-    }
-}
-
-fn type_keys(types: &[Type]) -> String {
-    types.iter().map(type_key).collect::<Vec<_>>().join(",")
-}
-
 /// Information about a CM function from an interface method
 #[derive(Debug, Clone)]
 pub struct CmFunctionInfo {
@@ -742,18 +723,18 @@ impl CmFunctionInfo {
         format!("{}#{}", self.interface_path, self.wasi_func_name)
     }
 
-    /// The CM parameter names and every type, span-insensitive.
-    fn signature_key(&self) -> (bool, Vec<(&str, String)>, Option<String>) {
+    /// The CM parameter names and every type's [`CmInterfaceRegistry::type_key`].
+    fn signature_key(
+        &self,
+        registry: &CmInterfaceRegistry,
+    ) -> (bool, Vec<(&str, String)>, Option<String>) {
         let params = self
             .params
             .iter()
-            .map(|(_, cm_name, ty)| (cm_name.as_str(), type_key(ty)))
+            .map(|(_, cm_name, ty)| (cm_name.as_str(), registry.type_key(ty)))
             .collect();
-        (
-            self.is_async,
-            params,
-            self.return_type.as_ref().map(type_key),
-        )
+        let ret = self.return_type.as_ref().map(|ty| registry.type_key(ty));
+        (self.is_async, params, ret)
     }
 
     /// Whether `canon lower` requires the Memory canonical option.
@@ -1884,6 +1865,32 @@ impl CmInterfaceRegistry {
     #[must_use]
     pub fn source_interface(&self, named: &NamedType) -> Option<String> {
         self.source_interfaces.get(named.id)
+    }
+
+    /// A span-insensitive key for `ty`, which names a CM type by its declaring
+    /// interface as well, so same-named types from two interfaces stay apart.
+    fn type_key(&self, ty: &Type) -> String {
+        let keys = |types: &[Type]| {
+            types
+                .iter()
+                .map(|ty| self.type_key(ty))
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        match ty {
+            Type::Named(n) => match self.source_interface(n) {
+                Some(source) => format!("{source}#{}", n.name),
+                None => n.name.clone(),
+            },
+            Type::Reference(inner) => format!("&{}", self.type_key(inner)),
+            Type::MutReference(inner) => format!("&mut {}", self.type_key(inner)),
+            Type::Generic(g) => format!("{}:{}", g.name, keys(&g.args)),
+            Type::NamespacedGeneric(g) => {
+                format!("{}::{}:{}", g.namespace, g.name, keys(&g.args))
+            }
+            Type::Tuple(elems) => format!("[{}]", keys(elems)),
+            _ => format!("{ty:?}"),
+        }
     }
 
     /// Record the interface a reference site resolves to.
@@ -3462,7 +3469,7 @@ impl CmInterfaceRegistry {
                      rename one of the interfaces"
                 ));
             }
-            if func_info.signature_key() != bound.signature_key() {
+            if func_info.signature_key(self) != bound.signature_key(self) {
                 return Err(format!(
                     "two `{key}` bind `{path}` with different signatures: make them agree"
                 ));
@@ -4580,7 +4587,7 @@ impl CmTypeGen {
                         cm_interface_registry,
                         resource_exports,
                     );
-                    let key = type_key(&generic.args[0]);
+                    let key = cm_interface_registry.type_key(&generic.args[0]);
                     let idx = self.define_list(sink, elem_cm, &key);
                     ComponentValType::Type(idx)
                 }
@@ -4599,8 +4606,8 @@ impl CmTypeGen {
                     );
                     let key = format!(
                         "{},{}",
-                        type_key(&generic.args[0]),
-                        type_key(&generic.args[1])
+                        cm_interface_registry.type_key(&generic.args[0]),
+                        cm_interface_registry.type_key(&generic.args[1])
                     );
                     let idx = self.define_map(sink, key_cm, value_cm, &key);
                     ComponentValType::Type(idx)
@@ -4630,8 +4637,8 @@ impl CmTypeGen {
                     };
                     let key = format!(
                         "{},{}",
-                        type_key(&generic.args[0]),
-                        type_key(&generic.args[1])
+                        cm_interface_registry.type_key(&generic.args[0]),
+                        cm_interface_registry.type_key(&generic.args[1])
                     );
                     let idx = self.define_result(sink, ok_type, err_type, &key);
                     ComponentValType::Type(idx)
@@ -4643,7 +4650,7 @@ impl CmTypeGen {
                         cm_interface_registry,
                         resource_exports,
                     );
-                    let key = type_key(&generic.args[0]);
+                    let key = cm_interface_registry.type_key(&generic.args[0]);
                     let idx = self.define_option(sink, inner_cm, &key);
                     ComponentValType::Type(idx)
                 }
@@ -4657,7 +4664,7 @@ impl CmTypeGen {
                             cm_interface_registry,
                             resource_exports,
                         );
-                        (Some(cm), type_key(&generic.args[0]))
+                        (Some(cm), cm_interface_registry.type_key(&generic.args[0]))
                     };
                     let idx = self.define_stream(sink, elem, &key);
                     ComponentValType::Type(idx)
@@ -4672,7 +4679,7 @@ impl CmTypeGen {
                             cm_interface_registry,
                             resource_exports,
                         );
-                        (Some(cm), type_key(&generic.args[0]))
+                        (Some(cm), cm_interface_registry.type_key(&generic.args[0]))
                     };
                     let idx = self.define_future(sink, inner, &key);
                     ComponentValType::Type(idx)
@@ -4697,7 +4704,8 @@ impl CmTypeGen {
                     .iter()
                     .map(|e| self.ast_type_to_cm(sink, e, cm_interface_registry, resource_exports))
                     .collect();
-                let idx = self.define_tuple(sink, cm_elems, &type_keys(elems));
+                let key = cm_interface_registry.type_key(ty);
+                let idx = self.define_tuple(sink, cm_elems, &key);
                 ComponentValType::Type(idx)
             }
             _ => panic!("unsupported type for CM instance: {ty:?}"),
