@@ -1,8 +1,7 @@
 //! Reify — AST + [`super::sem::ModuleSemantics`] → [`crate::tir::TirModule`].
 //! The mechanical half of the annotate/reify split (WEP 2026-05-26): every
 //! TIR-shaping decision is already recorded on `ModuleSemantics`, so this walker
-//! only reads them — never re-running inference, resolution, or dispatch. Its
-//! `FunctionContext` must land the same locals, at the same indices, annotate did.
+//! only reads them — never re-running inference, resolution, or dispatch.
 
 use super::sig::AssocConstSig;
 use std::rc::Rc;
@@ -5717,19 +5716,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
             ctx,
         );
-        let call = after_default_bindings(
-            prelude,
-            TirExpr::new(
-                TirExprKind::Call {
-                    type_args: dispatch.type_args,
-                    func: Box::new(dispatch.function_ref),
-                    args,
-                    has_receiver: false,
-                },
-                recorded_type,
-                span,
-            ),
+        let call = TirExpr::new(
+            TirExprKind::Call {
+                type_args: dispatch.type_args,
+                func: Box::new(dispatch.function_ref),
+                args,
+                has_receiver: false,
+            },
+            recorded_type,
+            span,
         );
+        let call = Self::hoist_block(call, prelude);
         if stmts.is_empty() {
             return call;
         }
@@ -5997,25 +5994,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Fill omitted fields from `base.field` (not defaults), evaluating a
         // non-trivial `base` once via a `$base_N` temporary.
-        let mut spread_binding: Option<(u32, String, TirExpr)> = None;
+        let mut base_binding = Vec::new();
         if let Some(spread) = struct_lit.spreads.first() {
             let base_expr = self.reify_expr(&spread.expr, ctx, Some(struct_type));
-            let base_type = base_expr.type_id;
-            let base_ref = if matches!(base_expr.kind, TirExprKind::Local { .. }) {
-                base_expr
-            } else {
-                let tmp_name = format!("$base_{}", ctx.fresh_serial());
-                let tmp_idx = ctx.add_local(tmp_name.clone(), base_type, false, None);
-                spread_binding = Some((tmp_idx, tmp_name.clone(), base_expr));
-                TirExpr::new(
-                    TirExprKind::Local {
-                        index: tmp_idx,
-                        name: tmp_name,
-                    },
-                    base_type,
-                    struct_lit.span,
-                )
-            };
+            let base_ref = self.hoist_once(ctx, base_expr, "$base", &mut base_binding);
             for (name, field_index, raw_ty, _default) in &decl_fields {
                 if provided.contains(name) {
                     continue;
@@ -6079,33 +6061,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             struct_lit.span,
         );
 
-        match spread_binding {
-            None => literal,
-            Some((idx, name, value)) => {
-                use crate::tir::{TirBlock, TirStmt, TirStmtKind};
-                let type_id = value.type_id;
-                let stmts = vec![
-                    TirStmt::new(
-                        TirStmtKind::Let {
-                            name,
-                            local_index: idx,
-                            value,
-                            is_mut: false,
-                            is_reactive: false,
-                            type_id,
-                            skip_value_copy: false,
-                        },
-                        struct_lit.span,
-                    ),
-                    TirStmt::new(TirStmtKind::Expr(literal), struct_lit.span),
-                ];
-                TirExpr::new(
-                    TirExprKind::Block(TirBlock::new(stmts, struct_lit.span)),
-                    struct_type,
-                    struct_lit.span,
-                )
-            }
-        }
+        Self::hoist_block(literal, base_binding)
     }
 
     /// Bind each collected impure sub-piece to a `let $caN = …;` in `prelude`
@@ -7926,23 +7882,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if matches!(expr.kind, TirExprKind::Local { .. }) {
             return expr;
         }
-        let span = expr.span;
-        let type_id = expr.type_id;
         let name = format!("{prefix}_{}", ctx.fresh_serial());
-        let index = ctx.add_local(name.clone(), type_id, false, None);
-        stmts.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: name.clone(),
-                local_index: index,
-                value: expr,
-                is_mut: false,
-                is_reactive: false,
-                type_id,
-                skip_value_copy: false,
-            },
-            span,
-        ));
-        TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
+        bind_to_local(ctx, name, expr, stmts)
+    }
+
+    /// [`Self::hoist_once`] for a receiver, so it runs ahead of the arguments
+    /// bound after it. A place stays in its slot: it is where `&mut self` writes.
+    fn bind_receiver_ahead(
+        &mut self,
+        ctx: &mut FunctionContext,
+        receiver: TirExpr,
+        stmts: &mut Vec<TirStmt>,
+    ) -> TirExpr {
+        if is_source_place(&receiver, self.tysys.type_table.borrow().compiler_items()) {
+            return receiver;
+        }
+        self.hoist_once(ctx, receiver, "$recv", stmts)
     }
 
     /// `value` inside the block holding the [`Self::hoist_once`] temporaries it
@@ -8064,19 +8019,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
             // Replay the production `Call`'s exact type args (method-level;
             // impl args ride along in `function_ref.monomorph_info`).
-            return after_default_bindings(
-                prelude,
-                TirExpr::new(
-                    TirExprKind::Call {
-                        type_args: dispatch.type_args,
-                        func: Box::new(dispatch.function_ref),
-                        args,
-                        has_receiver: false,
-                    },
-                    recorded_type,
-                    static_call.span,
-                ),
+            let call = TirExpr::new(
+                TirExprKind::Call {
+                    type_args: dispatch.type_args,
+                    func: Box::new(dispatch.function_ref),
+                    args,
+                    has_receiver: false,
+                },
+                recorded_type,
+                static_call.span,
             );
+            return Self::hoist_block(call, prelude);
         }
 
         // Variant constructor in turbofish form (`Option::<T>::Some(x)`,
@@ -8205,14 +8158,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Pad `args` with reified default values for the trailing `func_params`
-    /// the call omitted. `func_params` is the callee's `(name, default)` list in
-    /// declaration order, `callee_module` its defining module (for the
-    /// perspective swap), and `call_span` the call site (for location literals).
-    /// An absent `param_types` entry means no expected type.
-    ///
-    /// Answers the `let`s binding the slots a default names, which run ahead
-    /// of the call: see [`after_default_bindings`].
+    /// Pad `args` with the defaults the call omitted, and answer the `let`s that
+    /// must run ahead of it, for [`Self::hoist_block`].
     fn reify_apply_param_defaults(
         &mut self,
         args: &mut Vec<CallArg>,
@@ -8287,18 +8234,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // ahead of what a default reads, in the order the call spells them.
             if named.contains(&true) {
                 for (arg, (name, _)) in args.iter_mut().zip(func_params) {
-                    // Only a place receiver writes through to the caller.
-                    if name == RECEIVER
-                        && is_source_place(
-                            &arg.expr,
-                            self.tysys.type_table.borrow().compiler_items(),
-                        )
-                    {
-                        continue;
-                    }
                     let unbound = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, arg.expr.span);
                     let value = std::mem::replace(&mut arg.expr, unbound);
-                    arg.expr = bind_default_slot(ctx, name, value, &mut prelude);
+                    arg.expr = if name == RECEIVER {
+                        self.bind_receiver_ahead(ctx, value, &mut prelude)
+                    } else {
+                        bind_to_local(ctx, name.clone(), value, &mut prelude)
+                    };
                 }
             }
             for (i, named) in named.iter().enumerate().skip(args.len()) {
@@ -8314,7 +8256,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     self.settle_packs_in_default(&mut resolved, expected);
                 }
                 if *named {
-                    resolved = bind_default_slot(ctx, name, resolved, &mut prelude);
+                    resolved = bind_to_local(ctx, name.clone(), resolved, &mut prelude);
                 }
                 // `CallArg::is_mut` says the callee may write the caller's
                 // storage through this slot. A default is a value synthesized
@@ -8544,19 +8486,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // so re-deriving from `generic_instantiations` (which is the flat
             // impl+method list) would mangle `Container<i32>::make` as
             // `Container::make<i32>` and miss the monomorphized instance.
-            return after_default_bindings(
-                prelude,
-                TirExpr::new(
-                    TirExprKind::Call {
-                        type_args: dispatch.type_args,
-                        func: Box::new(dispatch.function_ref),
-                        args: arg_exprs,
-                        has_receiver: false,
-                    },
-                    recorded_type,
-                    span,
-                ),
+            let call = TirExpr::new(
+                TirExprKind::Call {
+                    type_args: dispatch.type_args,
+                    func: Box::new(dispatch.function_ref),
+                    args: arg_exprs,
+                    has_receiver: false,
+                },
+                recorded_type,
+                span,
             );
+            return Self::hoist_block(call, prelude);
         }
 
         // `Type::from(x)` with no explicit `From` impl — reflexive and
@@ -8784,24 +8724,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ctx,
             );
 
-            return after_default_bindings(
-                prelude,
-                TirExpr::new(
-                    TirExprKind::Call {
-                        func: Box::new(tir::FunctionRef {
-                            module_source: callee_module,
-                            name: callee_name,
-                            monomorph_info: None,
-                            method_info: None,
-                        }),
-                        type_args,
-                        args,
-                        has_receiver: false,
-                    },
-                    recorded_type,
-                    span,
-                ),
+            let call = TirExpr::new(
+                TirExprKind::Call {
+                    func: Box::new(tir::FunctionRef {
+                        module_source: callee_module,
+                        name: callee_name,
+                        monomorph_info: None,
+                        method_info: None,
+                    }),
+                    type_args,
+                    args,
+                    has_receiver: false,
+                },
+                recorded_type,
+                span,
             );
+            return Self::hoist_block(call, prelude);
         }
 
         // Qualified-callee `Type::method` shapes that don't flow through
@@ -9089,17 +9027,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             method_call.span,
             ctx,
         );
-        // The receiver runs ahead of the arguments the defaults bound. Only a
-        // place receiver writes through to the caller, and it stays in its slot.
-        let raw_receiver = if prelude.is_empty()
-            || is_source_place(
-                &raw_receiver,
-                self.tysys.type_table.borrow().compiler_items(),
-            ) {
+        let raw_receiver = if prelude.is_empty() {
             raw_receiver
         } else {
             let mut bound = Vec::new();
-            let receiver = bind_default_slot(ctx, RECEIVER, raw_receiver, &mut bound);
+            let receiver = self.bind_receiver_ahead(ctx, raw_receiver, &mut bound);
             bound.append(&mut prelude);
             prelude = bound;
             receiver
@@ -9146,17 +9078,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         } else {
             dispatch.return_type
         };
-        after_default_bindings(
-            prelude,
-            build_tir_method_call(
-                adjusted_receiver,
-                dispatch.function_ref,
-                type_args,
-                args,
-                result_type,
-                method_call.span,
-            ),
-        )
+        let call = build_tir_method_call(
+            adjusted_receiver,
+            dispatch.function_ref,
+            type_args,
+            args,
+            result_type,
+            method_call.span,
+        );
+        Self::hoist_block(call, prelude)
     }
 
     /// Resolve a field access to `(index, canonical_name, field_type)` against
@@ -11521,56 +11451,29 @@ impl AstVisitor for SpelledNames {
     }
 }
 
-/// Bind `value` once, ahead of the call, to a local a default names the slot
-/// by, and answer the read of it the call passes instead. The receiver no
-/// default can name takes a name of its own.
-fn bind_default_slot(
+/// Bind `value` to a new local `name` (the `let` pushed onto `stmts`), and
+/// answer the read of it.
+fn bind_to_local(
     ctx: &mut FunctionContext,
-    param: &str,
+    name: String,
     value: TirExpr,
-    prelude: &mut Vec<TirStmt>,
+    stmts: &mut Vec<TirStmt>,
 ) -> TirExpr {
-    let name = if param == RECEIVER {
-        format!("$recv_{}", ctx.fresh_serial())
-    } else {
-        param.to_string()
-    };
     let (type_id, span) = (value.type_id, value.span);
-    let local_index = ctx.add_local(name.clone(), type_id, false, None);
-    prelude.push(TirStmt::new(
+    let index = ctx.add_local(name.clone(), type_id, false, None);
+    stmts.push(TirStmt::new(
         TirStmtKind::Let {
             name: name.clone(),
-            local_index,
+            local_index: index,
+            value,
             is_mut: false,
             is_reactive: false,
             type_id,
-            value,
             skip_value_copy: false,
         },
         span,
     ));
-    TirExpr::new(
-        TirExprKind::Local {
-            index: local_index,
-            name,
-        },
-        type_id,
-        span,
-    )
-}
-
-/// `call`, run after the `let`s its defaults bound, where there are any.
-fn after_default_bindings(mut prelude: Vec<TirStmt>, call: TirExpr) -> TirExpr {
-    if prelude.is_empty() {
-        return call;
-    }
-    let (type_id, span) = (call.type_id, call.span);
-    prelude.push(TirStmt::new(TirStmtKind::Expr(call), span));
-    TirExpr::new(
-        TirExprKind::Block(TirBlock::new(prelude, span)),
-        type_id,
-        span,
-    )
+    TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
 }
 
 fn ast_unary_op_to_tir(op: ast::UnaryOp) -> TirUnaryOp {
