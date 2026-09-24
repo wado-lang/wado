@@ -1101,27 +1101,26 @@ impl AtnState {
         };
     }
 
-    fn question_hash(&self, decision: i32, pos: i32, min_prec: i32) -> i64 {
+    fn question_hash(&self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> i64 {
         let mut h: i64 = 1469598103934665603;
         h = (h ^ decision as i64) * 1099511628211;
         h = (h ^ pos as i64) * 1099511628211;
         h = (h ^ min_prec as i64) * 1099511628211;
-        for let mut i = 0; i < self.stack.len(); i += 1 {
+        for let mut i = 0; i < depth; i += 1 {
             h = (h ^ self.stack[i] as i64 + 2) * 1099511628211;
         }
         return h & 4611686018427387903;
     }
 
-    fn asks(&self, verdict: i32, decision: i32, pos: i32, min_prec: i32) -> bool {
+    fn asks(&self, verdict: i32, decision: i32, pos: i32, min_prec: i32, depth: i32) -> bool {
         let s = self.verdict_start[verdict];
-        let n = self.stack.len();
         if self.verdict_keys[s] != decision
             || self.verdict_keys[s + 1] != pos
             || self.verdict_keys[s + 2] != min_prec
-            || self.verdict_keys[s + 3] != n {
+            || self.verdict_keys[s + 3] != depth {
             return false;
         }
-        for let mut i = 0; i < n; i += 1 {
+        for let mut i = 0; i < depth; i += 1 {
             if self.verdict_keys[s + 4 + i] != self.stack[i] {
                 return false;
             }
@@ -1129,22 +1128,28 @@ impl AtnState {
         return true;
     }
 
-    fn recorded_verdict(&self, h: i64, decision: i32, pos: i32, min_prec: i32) -> i32 {
+    fn recorded_verdict(&self, h: i64, decision: i32, pos: i32, min_prec: i32, depth: i32) -> i32 {
         let mut v = self.verdict_index.get(h);
-        while v >= 0 && !self.asks(v, decision, pos, min_prec) {
+        while v >= 0 && !self.asks(v, decision, pos, min_prec, depth) {
             v = self.verdict_next[v];
         }
         return v;
     }
 
-    fn record_verdict(&mut self, h: i64, decision: i32, pos: i32, min_prec: i32, alt: i32) {
+    pub fn record_verdict(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32, alt: i32) {
+        let h = self.question_hash(decision, pos, min_prec, depth);
+        if self.recorded_verdict(h, decision, pos, min_prec, depth) >= 0 {
+            return;
+        }
         let v = self.verdict_start.len();
         self.verdict_start.push(self.verdict_keys.len());
         self.verdict_keys.push(decision);
         self.verdict_keys.push(pos);
         self.verdict_keys.push(min_prec);
-        self.verdict_keys.push(self.stack.len());
-        self.verdict_keys.extend(&self.stack);
+        self.verdict_keys.push(depth);
+        for let mut i = 0; i < depth; i += 1 {
+            self.verdict_keys.push(self.stack[i]);
+        }
         self.verdict_alt.push(alt);
         self.verdict_next.push(self.verdict_index.get(h));
         self.verdict_index.set(h, v);
@@ -1442,7 +1447,7 @@ fn atn_state_pr_key(state: i32, pr: i32) -> i64 {
     return (state + 2) as i64 * CFG_KEY_PR_SLOT as i64 + (pr + 2) as i64;
 }
 
-fn atn_invocation_prec(sim: &AtnSim, rstk: &List<i32>, k: i32) -> i32 {
+pub fn atn_invocation_prec(sim: &AtnSim, rstk: &List<i32>, k: i32) -> i32 {
     if k < 0 || rstk[k] < 0 || sim.state_call_prec.is_empty() {
         return 0;
     }
@@ -1748,13 +1753,13 @@ pub fn atn_predict_once(
     eof: i32,
     min_prec: i32 = 0,
 ) -> i32 {
-    let h = atn.question_hash(decision, pos, min_prec);
-    let v = atn.recorded_verdict(h, decision, pos, min_prec);
+    let depth = atn.stack.len();
+    let v = atn.recorded_verdict(atn.question_hash(decision, pos, min_prec, depth), decision, pos, min_prec, depth);
     if v >= 0 {
         return atn.verdict_alt[v];
     }
     let alt = atn_predict_with_stack(sim, decision, &atn.stack, tokens, pos, eof, min_prec);
-    atn.record_verdict(h, decision, pos, min_prec, alt);
+    atn.record_verdict(decision, pos, min_prec, depth, alt);
     return alt;
 }
 
