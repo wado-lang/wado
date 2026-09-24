@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790228613456,
+  "lastUpdate": 1790244357102,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59149,6 +59149,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1c849b3d8193ddc6614d83687223c4528c9c032b"
         },
         "date": 1790228612703,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 239681,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0d4091b256d905ab09237a954818c6947072fea3",
+          "message": "Merge pull request #2144 from wado-lang/claude/wado-compiler-docs-cleanup-a4x17z\n\ndocs: make compiler.md and optimizer.md a map of the code, and bring spec.md in line with the compiler",
+          "timestamp": "2026-09-24T18:47:44+09:00",
+          "tree_id": "0fd95d1a0231c73945e1d81a74611ae1b0963afd",
+          "url": "https://github.com/wado-lang/wado/commit/0d4091b256d905ab09237a954818c6947072fea3"
+        },
+        "date": 1790244356515,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
