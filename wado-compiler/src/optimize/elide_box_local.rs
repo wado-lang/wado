@@ -320,6 +320,11 @@ fn find_use_site(
     field_name: &str,
     inner_mr: &ModRef,
 ) -> Option<usize> {
+    let site = UseSite {
+        candidate,
+        field_name,
+        init: inner_mr,
+    };
     let mut k = from;
     while k < stmts.len() {
         let stmt = stmts[k];
@@ -327,10 +332,7 @@ fn find_use_site(
             k += 1;
             continue;
         }
-        if matches!(
-            walk_stmt_for_leftmost(body, stmt, candidate, field_name),
-            LeftmostWalk::Found
-        ) {
+        if matches!(walk_stmt_for_leftmost(body, stmt, &site), LeftmostWalk::Found) {
             return Some(k);
         }
         let int_mr = ModRef::of_stmt(body, stmt);
@@ -358,28 +360,33 @@ enum LeftmostWalk {
     Blocked,
 }
 
-fn walk_stmt_for_leftmost(
-    body: &Body,
-    stmt: StmtId,
+/// The `candidate.field_name` read the initializer moves to, and what the
+/// initializer does.
+struct UseSite<'a> {
     candidate: u32,
-    field_name: &str,
-) -> LeftmostWalk {
+    field_name: &'a str,
+    init: &'a ModRef,
+}
+
+fn walk_stmt_for_leftmost(body: &Body, stmt: StmtId, site: &UseSite<'_>) -> LeftmostWalk {
     match &body.stmts[stmt].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            match value.as_expr().map_or(LeftmostWalk::Blocked, |ve| {
-                walk_expr_for_leftmost(body, ve, candidate, field_name)
-            }) {
+            match value
+                .as_expr()
+                .map_or(LeftmostWalk::Blocked, |ve| walk_expr_for_leftmost(body, ve, site))
+            {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
         }
-        StmtKind::Expr(e) => e.as_expr().map_or(LeftmostWalk::Pure, |e| {
-            walk_expr_for_leftmost(body, e, candidate, field_name)
-        }),
+        StmtKind::Expr(e) => e
+            .as_expr()
+            .map_or(LeftmostWalk::Pure, |e| walk_expr_for_leftmost(body, e, site)),
         StmtKind::Return { value: Some(v) } | StmtKind::Break { value: Some(v), .. } => {
-            match v.as_expr().map_or(LeftmostWalk::Blocked, |ve| {
-                walk_expr_for_leftmost(body, ve, candidate, field_name)
-            }) {
+            match v
+                .as_expr()
+                .map_or(LeftmostWalk::Blocked, |ve| walk_expr_for_leftmost(body, ve, site))
+            {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
@@ -393,32 +400,32 @@ fn walk_stmt_for_leftmost(
     }
 }
 
-fn walk_operand_for_leftmost(
-    body: &Body,
-    op: Operand,
-    candidate: u32,
-    field_name: &str,
-) -> LeftmostWalk {
+fn walk_operand_for_leftmost(body: &Body, op: Operand, site: &UseSite<'_>) -> LeftmostWalk {
     // A promoted constant is a pure leaf.
-    op.as_expr().map_or(LeftmostWalk::Pure, |e| {
-        walk_expr_for_leftmost(body, e, candidate, field_name)
-    })
+    op.as_expr()
+        .map_or(LeftmostWalk::Pure, |e| walk_expr_for_leftmost(body, e, site))
 }
 
-fn walk_expr_for_leftmost(
-    body: &Body,
-    expr: ExprId,
-    candidate: u32,
-    field_name: &str,
-) -> LeftmostWalk {
+/// A subtree evaluated ahead of the field read now runs before the initializer,
+/// so it stays pure only while the initializer writes nothing it reads.
+fn walk_expr_for_leftmost(body: &Body, expr: ExprId, site: &UseSite<'_>) -> LeftmostWalk {
+    match walk_expr_shape(body, expr, site) {
+        LeftmostWalk::Pure if site.init.may_clobber(&ModRef::of_expr(body, expr)) => {
+            LeftmostWalk::Blocked
+        }
+        walked => walked,
+    }
+}
+
+fn walk_expr_shape(body: &Body, expr: ExprId, site: &UseSite<'_>) -> LeftmostWalk {
     if let ExprKind::FieldAccess {
         expr: inner,
         field_name: fname,
         ..
     } = &body.exprs[expr].kind
-        && fname == field_name
+        && fname == site.field_name
         && let Some(ExprKind::Local { index, .. }) = inner.as_expr().map(|ie| &body.exprs[ie].kind)
-        && *index == candidate
+        && *index == site.candidate
     {
         return LeftmostWalk::Found;
     }
@@ -431,26 +438,24 @@ fn walk_expr_for_leftmost(
 
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
-            match walk_assign_target(body, target, candidate, field_name) {
+            match walk_assign_target(body, target, site) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 LeftmostWalk::Blocked => LeftmostWalk::Blocked,
-                LeftmostWalk::Pure => {
-                    match walk_operand_for_leftmost(body, value, candidate, field_name) {
-                        LeftmostWalk::Found => LeftmostWalk::Found,
-                        _ => LeftmostWalk::Blocked,
-                    }
-                }
+                LeftmostWalk::Pure => match walk_operand_for_leftmost(body, value, site) {
+                    LeftmostWalk::Found => LeftmostWalk::Found,
+                    _ => LeftmostWalk::Blocked,
+                },
             }
         }
         ExprKind::GlobalVarSet { value, .. } => {
-            match walk_operand_for_leftmost(body, *value, candidate, field_name) {
+            match walk_operand_for_leftmost(body, *value, site) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
         }
         ExprKind::Call { args, .. } => {
             let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-            walk_children_observable(body, args.into_iter(), candidate, field_name)
+            walk_children_observable(body, args.into_iter(), site)
         }
         ExprKind::IndirectCall { callee, args } => {
             let children: Vec<ExprId> = callee
@@ -458,11 +463,11 @@ fn walk_expr_for_leftmost(
                 .into_iter()
                 .chain(args.iter().filter_map(|o| o.as_expr()))
                 .collect();
-            walk_children_observable(body, children.into_iter(), candidate, field_name)
+            walk_children_observable(body, children.into_iter(), site)
         }
         ExprKind::CmRawCall { args, .. } => {
             let args: Vec<ExprId> = args.iter().filter_map(|o| o.as_expr()).collect();
-            walk_children_observable(body, args.into_iter(), candidate, field_name)
+            walk_children_observable(body, args.into_iter(), site)
         }
 
         ExprKind::Binary { left, right, op } => {
@@ -477,15 +482,13 @@ fn walk_expr_for_leftmost(
             // the op itself is observable (`Div` / `Mod`).
             match op {
                 NirBinaryOp::And | NirBinaryOp::Or => {
-                    match walk_operand_for_leftmost(body, left, candidate, field_name) {
+                    match walk_operand_for_leftmost(body, left, site) {
                         LeftmostWalk::Found => LeftmostWalk::Found,
                         LeftmostWalk::Blocked => LeftmostWalk::Blocked,
-                        LeftmostWalk::Pure => {
-                            match walk_operand_for_leftmost(body, right, candidate, field_name) {
-                                LeftmostWalk::Pure => LeftmostWalk::Pure,
-                                _ => LeftmostWalk::Blocked,
-                            }
-                        }
+                        LeftmostWalk::Pure => match walk_operand_for_leftmost(body, right, site) {
+                            LeftmostWalk::Pure => LeftmostWalk::Pure,
+                            _ => LeftmostWalk::Blocked,
+                        },
                     }
                 }
                 _ => finish_leftmost(
@@ -494,26 +497,21 @@ fn walk_expr_for_leftmost(
                     walk_children_pure(
                         body,
                         [left, right].into_iter().filter_map(Operand::as_expr),
-                        candidate,
-                        field_name,
+                        site,
                     ),
                 ),
             }
         }
-        ExprKind::Unary { expr: inner, .. } => finish_leftmost(
-            body,
-            expr,
-            walk_operand_for_leftmost(body, *inner, candidate, field_name),
-        ),
+        ExprKind::Unary { expr: inner, .. } => {
+            finish_leftmost(body, expr, walk_operand_for_leftmost(body, *inner, site))
+        }
         ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => finish_leftmost(
-            body,
-            expr,
-            walk_operand_for_leftmost(body, *inner, candidate, field_name),
-        ),
+        | ExprKind::VariantPayload { expr: inner, .. } => {
+            finish_leftmost(body, expr, walk_operand_for_leftmost(body, *inner, site))
+        }
         ExprKind::Index { expr: inner, index } => {
             let (inner, index) = (*inner, *index);
             finish_leftmost(
@@ -522,40 +520,33 @@ fn walk_expr_for_leftmost(
                 walk_children_pure(
                     body,
                     [inner, index].into_iter().filter_map(Operand::as_expr),
-                    candidate,
-                    field_name,
+                    site,
                 ),
             )
         }
         ExprKind::StructLiteral { fields, .. } => {
             let fields: Vec<ExprId> = fields.iter().filter_map(|f| f.value.as_expr()).collect();
-            finish_leftmost(
-                body,
-                expr,
-                walk_children_pure(body, fields.into_iter(), candidate, field_name),
-            )
+            finish_leftmost(body, expr, walk_children_pure(body, fields.into_iter(), site))
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             let elements: Vec<ExprId> = elements.iter().filter_map(|o| o.as_expr()).collect();
             finish_leftmost(
                 body,
                 expr,
-                walk_children_pure(body, elements.into_iter(), candidate, field_name),
+                walk_children_pure(body, elements.into_iter(), site),
             )
         }
         ExprKind::VariantConstruct { payload, .. } => finish_leftmost(
             body,
             expr,
             match *payload {
-                Some(p) => walk_operand_for_leftmost(body, p, candidate, field_name),
+                Some(p) => walk_operand_for_leftmost(body, p, site),
                 None => LeftmostWalk::Pure,
             },
         ),
-        ExprKind::ClosureToCanonical { functor, .. } => finish_leftmost(
-            body,
-            expr,
-            walk_operand_for_leftmost(body, *functor, candidate, field_name),
-        ),
+        ExprKind::ClosureToCanonical { functor, .. } => {
+            finish_leftmost(body, expr, walk_operand_for_leftmost(body, *functor, site))
+        }
 
         ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
@@ -581,42 +572,33 @@ fn finish_leftmost(body: &Body, expr: ExprId, walked: LeftmostWalk) -> LeftmostW
     }
 }
 
-fn walk_assign_target(
-    body: &Body,
-    target: ExprId,
-    candidate: u32,
-    field_name: &str,
-) -> LeftmostWalk {
+fn walk_assign_target(body: &Body, target: ExprId, site: &UseSite<'_>) -> LeftmostWalk {
     match &body.exprs[target].kind {
         ExprKind::Local { .. } => LeftmostWalk::Pure,
-        ExprKind::FieldAccess { expr, .. } => {
-            walk_operand_for_leftmost(body, *expr, candidate, field_name)
-        }
+        ExprKind::FieldAccess { expr, .. } => walk_operand_for_leftmost(body, *expr, site),
         ExprKind::Index { expr, index } => {
             let (expr, index) = (*expr, *index);
             walk_children_pure(
                 body,
                 [expr, index].into_iter().filter_map(Operand::as_expr),
-                candidate,
-                field_name,
+                site,
             )
         }
         ExprKind::Unary {
             op: NirUnaryOp::Deref,
             expr,
-        } => walk_operand_for_leftmost(body, *expr, candidate, field_name),
-        _ => walk_expr_for_leftmost(body, target, candidate, field_name),
+        } => walk_operand_for_leftmost(body, *expr, site),
+        _ => walk_expr_for_leftmost(body, target, site),
     }
 }
 
 fn walk_children_pure(
     body: &Body,
     children: impl Iterator<Item = ExprId>,
-    candidate: u32,
-    field_name: &str,
+    site: &UseSite<'_>,
 ) -> LeftmostWalk {
     for c in children {
-        match walk_expr_for_leftmost(body, c, candidate, field_name) {
+        match walk_expr_for_leftmost(body, c, site) {
             LeftmostWalk::Found => return LeftmostWalk::Found,
             LeftmostWalk::Blocked => return LeftmostWalk::Blocked,
             LeftmostWalk::Pure => {}
@@ -642,10 +624,9 @@ fn observable_propagate(child: LeftmostWalk) -> LeftmostWalk {
 fn walk_children_observable(
     body: &Body,
     children: impl Iterator<Item = ExprId>,
-    candidate: u32,
-    field_name: &str,
+    site: &UseSite<'_>,
 ) -> LeftmostWalk {
-    match walk_children_pure(body, children, candidate, field_name) {
+    match walk_children_pure(body, children, site) {
         LeftmostWalk::Found => LeftmostWalk::Found,
         _ => LeftmostWalk::Blocked,
     }
@@ -680,7 +661,13 @@ mod tests {
     ) -> LeftmostWalk {
         let mut body = Body::empty();
         let id = build(&mut body);
-        walk_expr_for_leftmost(&body, id, candidate, field_name)
+        let init = ModRef::default();
+        let site = UseSite {
+            candidate,
+            field_name,
+            init: &init,
+        };
+        walk_expr_for_leftmost(&body, id, &site)
     }
 
     fn ty() -> TypeId {
