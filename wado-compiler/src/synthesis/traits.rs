@@ -3716,7 +3716,7 @@ fn generate_flags_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
 }
 
 /// Generate auto-derived `Eq` for the unrestricted resources in a module: the
-/// host interns handles, so the `f64`s compare.
+/// host interns handles, so their bits compare.
 fn generate_handle_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     let eq_trait_name = module
         .type_table
@@ -3742,7 +3742,7 @@ fn generate_handle_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '
             ref_handle_type,
             &eq_trait_name,
             resource.span,
-            |handle| common::cast(handle, TypeTable::U64),
+            common::handle_bits,
         );
         generated_functions.push(Rc::new(RefCell::new(func)));
         ctx.record_impl(receiver, &eq_key);

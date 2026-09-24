@@ -152,11 +152,24 @@ pub fn cast(expr: TirExpr, target_type: TypeId) -> TirExpr {
     )
 }
 
+/// An unrestricted resource handle as the `u64` bits it is in the guest.
+pub fn handle_bits(handle: TirExpr) -> TirExpr {
+    let span = handle.span;
+    TirExpr::new(
+        TirExprKind::Cast {
+            expr: Box::new(handle),
+            target_type: TypeTable::U64,
+        },
+        TypeTable::U64,
+        span,
+    )
+}
+
 /// The `f64` an unrestricted handle is outside the guest: its bits, reinterpreted.
 pub fn handle_to_f64(handle: TirExpr) -> TirExpr {
     builtin_call(
         "f64_reinterpret_i64",
-        vec![cast(handle, TypeTable::I64)],
+        vec![handle_bits(handle)],
         TypeTable::F64,
     )
 }

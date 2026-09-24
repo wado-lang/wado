@@ -79,7 +79,7 @@ use crate::name::{
 };
 use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
-use crate::synthesis::common::{handle_from_f64, handle_to_f64};
+use crate::synthesis::common::{handle_bits, handle_from_f64, handle_to_f64};
 use crate::tir::{
     EffectRef, StructDef, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
@@ -265,19 +265,6 @@ enum Identity {
     Reference,
     /// An unrestricted resource handle, which the host interns.
     Handle,
-}
-
-/// An unrestricted resource handle as the `u64` bits it is in the guest.
-fn handle_bits(handle: TirExpr) -> TirExpr {
-    let span = handle.span;
-    TirExpr::new(
-        TirExprKind::Cast {
-            expr: Box::new(handle),
-            target_type: TypeTable::U64,
-        },
-        TypeTable::U64,
-        span,
-    )
 }
 
 /// Cast a `from` result to the newtype the literal targeted, where it targeted
