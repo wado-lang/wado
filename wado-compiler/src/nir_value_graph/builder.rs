@@ -64,27 +64,23 @@ impl HeapState {
         if let Some(&fg) = self.field_global.get(&field) {
             v = v.max(fg);
         }
-        match root {
-            Some(r) => {
-                if root_escaped {
-                    v = v.max(self.escaped_version);
-                }
-                if let Some(&pl) = self.per_local.get(&r) {
-                    v = v.max(pl);
-                }
-                if let Some(&ps) = self.per_slot.get(&(r, field)) {
-                    v = v.max(ps);
-                }
-            }
-            None => {
-                v = v.max(self.escaped_version);
-                v = self.per_local.values().fold(v, |acc, &pl| acc.max(pl));
-                v = self
-                    .per_slot
-                    .iter()
-                    .filter(|((_, f), _)| *f == field)
-                    .fold(v, |acc, (_, &ps)| acc.max(ps));
-            }
+        let Some(r) = root else {
+            v = v.max(self.escaped_version);
+            v = self.per_local.values().fold(v, |acc, &pl| acc.max(pl));
+            return self
+                .per_slot
+                .iter()
+                .filter(|((_, f), _)| *f == field)
+                .fold(v, |acc, (_, &ps)| acc.max(ps));
+        };
+        if root_escaped {
+            v = v.max(self.escaped_version);
+        }
+        if let Some(&pl) = self.per_local.get(&r) {
+            v = v.max(pl);
+        }
+        if let Some(&ps) = self.per_slot.get(&(r, field)) {
+            v = v.max(ps);
         }
         v
     }
@@ -822,7 +818,7 @@ impl<'a> Builder<'a> {
             _ => self
                 .body
                 .block_yield(recv_expr)
-                .and_then(|tail| tail.as_expr())
+                .and_then(Operand::as_expr)
                 .and_then(|e| self.receiver_root(e)),
         }
     }
