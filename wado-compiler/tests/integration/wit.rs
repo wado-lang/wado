@@ -223,7 +223,7 @@ fn full_scope_reconstructs_resource_methods_and_reparses() {
 }
 
 /// An unrestricted resource has no CM handle type: one interface per Wado type,
-/// every handle position the same opaque `u32`, and nothing naming the
+/// every handle position the same `f64`, and nothing naming the
 /// `extends` relation. See `docs/wep-2026-04-28-resource-inheritance.md`.
 #[test]
 fn full_scope_reconstructs_an_interface_per_unrestricted_wado_type() {
@@ -239,11 +239,11 @@ fn full_scope_reconstructs_an_interface_per_unrestricted_wado_type() {
     );
     assert!(text.contains("package web:dom {"), "\n{text}");
     assert!(
-        text.contains("append-child: func(self: u32, node: u32) -> u32;"),
-        "a handle is the same opaque u32 in every position\n{text}"
+        text.contains("append-child: func(self: f64, node: f64) -> f64;"),
+        "a handle is the same f64 in every position\n{text}"
     );
     assert!(
-        text.contains("set-id: func(self: u32, value: string);"),
+        text.contains("set-id: func(self: f64, value: string);"),
         "\n{text}"
     );
     assert!(
@@ -258,7 +258,7 @@ fn full_scope_reconstructs_an_interface_per_unrestricted_wado_type() {
 }
 
 /// A handle in an exported signature is resolved from the type table, not from
-/// the CM registry, and is the same opaque `u32` there.
+/// the CM registry, and is the same `f64` there.
 #[test]
 fn an_exported_signature_renders_a_handle_as_the_universal_one() {
     let text = emit(
@@ -266,7 +266,7 @@ fn an_exported_signature_renders_a_handle_as_the_universal_one() {
          export fn relabel(el: Element, id: String) -> Element { el.set_id(id); return el; }",
     );
     assert!(
-        text.contains("relabel: func(el: u32, id: string) -> u32;"),
+        text.contains("relabel: func(el: f64, id: string) -> f64;"),
         "\n{text}"
     );
     assert!(
