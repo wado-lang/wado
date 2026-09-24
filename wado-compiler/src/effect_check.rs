@@ -15,8 +15,8 @@ use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTabl
 use crate::token::Span;
 
 use crate::ast::{
-    self, AstId, AstVisitor, Attribute, CmImport, EffectHandlerBinding, Expr, Function, ImplBlock,
-    Item, Stmt, cm_import_of,
+    self, AstId, AstVisitor, Attribute, Block, CmImport, EffectHandlerBinding, Expr, Function,
+    ImplBlock, Item, Pattern, Stmt, cm_import_of,
 };
 use crate::compiler_host::Diagnostic;
 use crate::defs::{DefId, DefKind};
@@ -255,12 +255,7 @@ fn collect_resource_refs(
         ResolvedType::Resource { def } | ResolvedType::GenericResource { def, .. } => {
             // A `resource Child extends Parent` value is usable wherever the
             // parent is, so holding it holds every ancestor too.
-            for ancestor in tt.resource_chain(*def) {
-                out.insert(EffectRef::Concrete {
-                    name: tt.def_name(ancestor).to_string(),
-                    module_source: tt.def_module(ancestor).clone(),
-                });
-            }
+            out.extend(resource_chain_effects(tt, *def));
             if let ResolvedType::GenericResource { type_args, .. } = ty {
                 for ta in type_args {
                     collect_resource_refs(*ta, tt, members, out, visited);
@@ -303,6 +298,14 @@ fn collect_resource_refs(
         // AssocTypeProjection, Unknown, Error — no resource refs.
         _ => {}
     }
+}
+
+/// The effects of resource `def` and every resource it extends, nearest first.
+fn resource_chain_effects(tt: &TypeTable, def: DefId) -> impl Iterator<Item = EffectRef> + '_ {
+    tt.resource_chain(def).map(|ancestor| EffectRef::Concrete {
+        name: tt.def_name(ancestor).to_string(),
+        module_source: tt.def_module(ancestor).clone(),
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -881,7 +884,10 @@ fn check_function_effects_sem(
     current.extend(benign);
     // A function holding `Stdout` may call operations that internally need
     // `Stream`, etc.
-    let current = expand_through_closure(&current, index.closure);
+    let mut current = expand_through_closure(&current, index.closure);
+    if let Some(ann) = annotations {
+        add_narrowed_resources(body, ann, &sem.types, index.closure, &mut current);
+    }
 
     // Parameter name → type id (aligned with the recorded signature types),
     // for resolving indirect calls through function-typed parameters.
@@ -1048,6 +1054,68 @@ fn add_signature_resources(
     }
     if let Some(&task_return) = annotations.function_task_returns.get(&fn_key) {
         collect_resource_refs(task_return, type_table, members, out, &mut visited);
+    }
+}
+
+/// Union into `held` the resources the body's type patterns narrow to. A
+/// narrowing hands out a held ancestor's handle, as an operation returning it would.
+fn add_narrowed_resources(
+    body: &Block,
+    annotations: &TypeAnnotations,
+    type_table: &TypeTable,
+    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
+    held: &mut IndexSet<EffectRef>,
+) {
+    let mut sites = TypePatternSites::default();
+    ast::walk_block(&mut sites, body);
+    let mut targets: Vec<DefId> = sites
+        .0
+        .into_iter()
+        .flat_map(|id| annotations.all(|facts| &facts.pattern_ascriptions, id))
+        .filter_map(|&target| match type_table.get(target) {
+            ResolvedType::Resource { def } => Some(*def),
+            _ => None,
+        })
+        .collect();
+    // A grant expands through the closure, which may hold another target's ancestor.
+    loop {
+        let pending = targets.len();
+        targets.retain(|&target| {
+            let narrows_held = resource_chain_effects(type_table, target)
+                .skip(1)
+                .any(|ancestor| held.contains(&ancestor));
+            if narrows_held {
+                let granted = resource_chain_effects(type_table, target).collect();
+                held.extend(expand_through_closure(&granted, closure));
+            }
+            !narrows_held
+        });
+        if targets.len() == pending {
+            return;
+        }
+    }
+}
+
+/// The ids a body's type patterns are recorded under: each `p: T`, and each
+/// `let … else` whose annotation is one.
+#[derive(Default)]
+struct TypePatternSites(Vec<AstId>);
+
+impl AstVisitor for TypePatternSites {
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        if let Stmt::Let(let_stmt) = stmt
+            && let_stmt.else_block.is_some()
+        {
+            self.0.push(let_stmt.id);
+        }
+        ast::walk_stmt(self, stmt);
+    }
+
+    fn visit_pattern(&mut self, pat: &Pattern) {
+        if let Pattern::Typed { id, .. } = pat {
+            self.0.push(*id);
+        }
+        ast::walk_pattern(self, pat);
     }
 }
 

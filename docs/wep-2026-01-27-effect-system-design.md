@@ -326,6 +326,18 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
 This is the Wado analogue of Scala 3 Caprese's capture inference: a capability named in the signature does not need to be repeated in the capture set. Unlike Caprese, Wado has no subtyping on effect sets — inference only unions, never narrows.
 
+A [narrowing](./wep-2026-04-28-resource-inheritance.md#narrowing-is-a-pattern) is inferred the same way. A type pattern `p: R` in a function holding a resource `R` extends hands out that resource's handle as an `R`, as an operation returning `R` would, so `R` and what propagates from it are held in the function's body:
+
+```wado
+// `n: Node` holds Node; the arm narrows it, so HtmlInputElement is held too.
+fn describe(n: Node) -> String {
+    return match n {
+        input: HtmlInputElement => input.value(),
+        _ => "",
+    };
+}
+```
+
 Limitations — these require separate work and are pinned by `#![TODO]` fixtures today:
 
 - Closure body effects (`effect_propagation_indirect.wado`): a closure body that uses `Stream::new()` assigned to a declared `fn() with Stdout` cannot be rescued, because the closure's signature doesn't name `Stream`. Requires effect-set propagation-closure equivalence at the closure-typing site.
