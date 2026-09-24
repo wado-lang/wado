@@ -348,6 +348,12 @@ fn wrap<T>(value: T) -> i32 {
 
 So do local newtypes: `type N<T> = List<T>;`.
 
+A function body may also declare `enum`, `variant` and `flags` items, and
+`impl`/`trait` blocks that give a local type methods.
+
+Not yet implemented. See
+[WEP: Local Item Definitions](./wep-2026-07-09-local-item-definitions.md).
+
 ### Global Variables
 
 Global variables are module-level state. Unlike local variables (`let`), they
