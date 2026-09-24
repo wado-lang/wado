@@ -754,12 +754,7 @@ impl<'a> LibTypeBinder<'a> {
     ) -> Self {
         let defs = resolutions.defs();
         let mut interfaces: hashmap::IndexMap<DefId, String> = published
-            .map(|item| {
-                let def = defs
-                    .of_ast_id(item.id())
-                    .expect("a module-level declaration has a DefId");
-                (def, fq.to_string())
-            })
+            .map(|item| (defs.def_at(item.id()), fq.to_string()))
             .collect();
         let items = modules.values().flat_map(|module| &module.items);
         for (def, source) in cm_bound_defs(items, defs) {
@@ -807,7 +802,7 @@ fn lib_sig_uses_named_type(ty: &ast::Type) -> bool {
     use crate::ast::Type;
     ty.any(&mut |ty| {
         matches!(ty, Type::Named(named)
-            if named.name != "()" && wado_primitive_name_to_cm(&named.name).is_none())
+            if !ty.is_unit() && wado_primitive_name_to_cm(&named.name).is_none())
     })
 }
 
@@ -1338,37 +1333,34 @@ fn compile_after_load<H: CompilerHost>(
                 .expect("an analysis with a CM registry has resolutions");
             (fq, registry, resolutions)
         });
-    let lib_entry_module = match lib_analysis {
-        Some((fq, registry, resolutions)) => {
-            let entry = sem.modules.get(&sem.entry_module_source);
-            let published = entry
-                .into_iter()
-                .flat_map(|module| &module.items)
-                .filter(|item| lib_type_decl_name(item).is_some())
-                .chain(
-                    lib_surface
-                        .submodule_type_decls
-                        .iter()
-                        .map(|(_, item)| item),
-                );
-            let binder = LibTypeBinder::new(resolutions, registry, fq, &sem.modules, published);
-            let mut entry = entry.cloned();
-            for item in entry.iter_mut().flat_map(|module| &mut module.items) {
-                binder.bind_item(item);
-            }
-            for (_, item) in &mut lib_surface.submodule_type_decls {
-                binder.bind_item(item);
-            }
-            for export in &mut lib_surface.submodule_exports {
-                binder.bind_export(export);
-            }
-            for decl in &mut lib_surface.submodule_interfaces {
-                binder.bind_interface(decl);
-            }
-            entry
+    let lib_entry_module = lib_analysis.and_then(|(fq, registry, resolutions)| {
+        let entry = sem.modules.get(&sem.entry_module_source);
+        let published = entry
+            .into_iter()
+            .flat_map(|module| &module.items)
+            .filter(|item| lib_type_decl_name(item).is_some())
+            .chain(
+                lib_surface
+                    .submodule_type_decls
+                    .iter()
+                    .map(|(_, item)| item),
+            );
+        let binder = LibTypeBinder::new(resolutions, registry, fq, &sem.modules, published);
+        let mut entry = entry.cloned();
+        for item in entry.iter_mut().flat_map(|module| &mut module.items) {
+            binder.bind_item(item);
         }
-        None => None,
-    };
+        for (_, item) in &mut lib_surface.submodule_type_decls {
+            binder.bind_item(item);
+        }
+        for export in &mut lib_surface.submodule_exports {
+            binder.bind_export(export);
+        }
+        for decl in &mut lib_surface.submodule_interfaces {
+            binder.bind_interface(decl);
+        }
+        entry
+    });
 
     let mut lib_world_info =
         synth_world_fq

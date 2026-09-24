@@ -287,8 +287,7 @@ pub fn cm_type_to_type_id(
             "f64" => TypeTable::F64,
             "bool" => TypeTable::BOOL,
             "char" => TypeTable::CHAR,
-            // Unit type written as a named type "()"
-            "()" => TypeTable::UNIT,
+            TypeTable::UNIT_TYPE_NAME => TypeTable::UNIT,
             // Resource/enum/variant types - look up the already-resolved TypeId.
             //
             // The type's own `source_interface` leads: a package holds several
@@ -1024,7 +1023,7 @@ fn flatten_export_type_inner(
             "i64" | "u64" => out.push(cm_abi::CmValType::I64),
             "f32" => out.push(cm_abi::CmValType::F32),
             "f64" => out.push(cm_abi::CmValType::F64),
-            "()" => {} // unit — no values
+            TypeTable::UNIT_TYPE_NAME => {}
             _ => {
                 // Check if it's a variant type defined in TIR modules
                 if let Some(variant_decl) = find_variant_decl(&named.name, tir_modules) {

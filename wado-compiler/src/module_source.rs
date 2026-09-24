@@ -694,8 +694,8 @@ impl ModuleSource {
         matches!(self, Self::Binding { .. })
     }
 
-    /// Whether the program declares this module itself, rather than the stdlib,
-    /// a component dependency's binding or a Wasm asset, each binding its own types.
+    /// Whether this is Wado source that binds its CM types through `#[cm]`, as a
+    /// dependency or Kiln-generated module does and the stdlib or a Wasm asset does not.
     #[must_use]
     pub fn is_program(&self) -> bool {
         !self.is_core() && !self.is_binding() && !self.is_wasm_asset()

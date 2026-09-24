@@ -769,28 +769,11 @@ impl CmFunctionInfo {
         registry: &CmInterfaceRegistry,
         seen: &mut IndexSet<String>,
     ) -> bool {
-        match ty {
-            Type::Named(named) => {
-                named.name == "String" || Self::cm_named_requires_memory(named, registry, seen)
-            }
-            Type::Generic(g) => {
-                matches!(g.name.as_str(), "Stream" | "List" | "TreeMap")
-                    || g.args
-                        .iter()
-                        .any(|arg| Self::cm_type_requires_memory(arg, registry, seen))
-            }
-            Type::Tuple(elems) => elems
-                .iter()
-                .any(|elem| Self::cm_type_requires_memory(elem, registry, seen)),
-            Type::Reference(inner) | Type::MutReference(inner) => {
-                Self::cm_type_requires_memory(inner, registry, seen)
-            }
-            Type::NamespacedGeneric(_)
-            | Type::Function(_)
-            | Type::TypePackSpread(..)
-            | Type::Infer(_)
-            | Type::Error(_) => false,
-        }
+        ty.any(&mut |ty| {
+            Self::type_itself_requires_memory(ty)
+                || matches!(ty, Type::Named(named)
+                    if Self::cm_named_requires_memory(named, registry, seen))
+        })
     }
 
     /// Whether the CM record or variant `named` refers to needs memory. Uses
@@ -833,15 +816,18 @@ impl CmFunctionInfo {
     /// Whether a parameter type requires Memory + Realloc in canon lower: a
     /// string, a list or a stream anywhere in it, `option<string>` included.
     fn type_requires_memory(ty: &Type) -> bool {
+        ty.any(&mut Self::type_itself_requires_memory)
+    }
+
+    /// Whether `ty` is a string, a list or a stream, not looking inside it.
+    fn type_itself_requires_memory(ty: &Type) -> bool {
         match ty {
-            Type::Generic(g) => {
-                matches!(g.name.as_str(), "Stream" | "List" | "TreeMap")
-                    || g.args.iter().any(Self::type_requires_memory)
-            }
+            Type::Generic(g) => matches!(g.name.as_str(), "Stream" | "List" | "TreeMap"),
             Type::Named(named) => named.name == "String",
-            Type::Tuple(elems) => elems.iter().any(Self::type_requires_memory),
-            Type::Reference(inner) | Type::MutReference(inner) => Self::type_requires_memory(inner),
             Type::NamespacedGeneric(_)
+            | Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
             | Type::Function(_)
             | Type::TypePackSpread(..)
             | Type::Infer(_)
@@ -1545,10 +1531,7 @@ pub fn cm_bound_defs<'i>(
         .into_iter()
         .filter_map(|item| {
             let (_, source) = cm_definition(item)?;
-            let def = defs
-                .of_ast_id(item.id())
-                .expect("a module-level declaration has a DefId");
-            Some((def, source))
+            Some((defs.def_at(item.id()), source))
         })
         .collect()
 }
@@ -1717,21 +1700,17 @@ impl UserCmTypeBinder<'_> {
     }
 
     fn bind_item(&self, item: &mut Item, sources: &mut SourceInterfaceBatch) -> Result<(), String> {
-        let item_id = item.id();
-        let declares_cm = || {
-            let def = self
-                .resolutions
-                .defs()
-                .of_ast_id(item_id)
-                .expect("a module-level declaration has a DefId");
-            self.bound.contains_key(&def)
-        };
+        let declares_cm = self
+            .resolutions
+            .defs()
+            .of_ast_id(item.id())
+            .is_some_and(|def| self.bound.contains_key(&def));
         try_for_each_signed_type(item, &mut |site, ty| {
             let crosses = match site.signer {
-                Signer::Declaration => declares_cm(),
+                Signer::Declaration => declares_cm,
                 Signer::Function => world_import_of(site.attrs).is_some(),
                 Signer::InterfaceOperation => cm_import_of(site.attrs).is_some(),
-                Signer::ResourceMethod => declares_cm() && cm_import_of(site.attrs).is_some(),
+                Signer::ResourceMethod => declares_cm && cm_import_of(site.attrs).is_some(),
             };
             self.bind_type(ty, site.label, crosses, sources)
         })
@@ -1904,12 +1883,8 @@ pub fn bind_type_names<E>(
         .try_for_each(|ty| bind_type_names(ty, resolutions, leaf))
 }
 
-/// Collect the source interface of every named-type reference reachable from
-/// `module` whose identifier is in `local_names`.
-///
-/// References whose name is not in `local_names` are intentionally left
-/// unanswered — those are primitives (`String`, `bool`, `i32`, ...), generic
-/// type parameters, or names the stdlib never declares.
+/// The source interface of every named type `module` signs whose name is in
+/// `local_names`, the rest being primitives, type parameters or foreign names.
 fn collect_named_type_sources(
     module: &mut ast::Module,
     local_names: &IndexMap<String, String>,
@@ -1917,53 +1892,18 @@ fn collect_named_type_sources(
     let mut sources = SourceInterfaceBatch::default();
     for item in &mut module.items {
         let Ok(()) = try_for_each_signed_type(item, &mut |_, ty| {
-            walk_type(&mut sources, ty, local_names);
+            let _ = ty.any(&mut |ty| {
+                if let Type::Named(n) = ty
+                    && let Some(source) = local_names.get(&n.name)
+                {
+                    sources.entry(n.id).or_insert_with(|| source.clone());
+                }
+                false
+            });
             Ok::<(), Infallible>(())
         });
     }
     sources
-}
-
-/// Recursively descend into a Wado `Type` and answer for every named leaf whose
-/// identifier appears in `local_names`.
-fn walk_type(
-    sources: &mut SourceInterfaceBatch,
-    ty: &ast::Type,
-    local_names: &IndexMap<String, String>,
-) {
-    use crate::ast::Type;
-    match ty {
-        Type::Named(n) => {
-            if let Some(source) = local_names.get(&n.name) {
-                sources.entry(n.id).or_insert_with(|| source.clone());
-            }
-        }
-        Type::Generic(g) => {
-            for arg in &g.args {
-                walk_type(sources, arg, local_names);
-            }
-        }
-        Type::NamespacedGeneric(g) => {
-            for arg in &g.args {
-                walk_type(sources, arg, local_names);
-            }
-        }
-        Type::Function(f) => {
-            for p in &f.params {
-                walk_type(sources, p, local_names);
-            }
-            walk_type(sources, &f.return_type, local_names);
-        }
-        Type::Tuple(elems) => {
-            for e in elems {
-                walk_type(sources, e, local_names);
-            }
-        }
-        Type::Reference(inner) | Type::MutReference(inner) => {
-            walk_type(sources, inner, local_names);
-        }
-        _ => {}
-    }
 }
 
 impl CmInterfaceRegistry {
@@ -3120,45 +3060,24 @@ impl CmInterfaceRegistry {
     }
 
     /// The CM resources `ty` references at any depth, as
-    /// `(declaring_interface, wado_name)`, asking `emitting` first. One walker:
-    /// a second one drifts, and the shape it forgets loses an import where
-    /// nothing looks.
+    /// `(declaring_interface, wado_name)`, asking `emitting` first.
     pub fn resources_in_type(
         &self,
         ty: &Type,
         emitting: Option<&str>,
         out: &mut IndexSet<(String, String)>,
     ) {
-        match ty {
-            Type::Named(named) => {
-                if let Some(source) = self.cm_source_of_named_type(named, emitting)
-                    && self
-                        .get_resource_cm_name_by_source(&source, &named.name)
-                        .is_some()
-                {
-                    out.insert((source, named.name.clone()));
-                }
+        let _ = ty.any(&mut |ty| {
+            if let Type::Named(named) = ty
+                && let Some(source) = self.cm_source_of_named_type(named, emitting)
+                && self
+                    .get_resource_cm_name_by_source(&source, &named.name)
+                    .is_some()
+            {
+                out.insert((source, named.name.clone()));
             }
-            Type::Generic(g) => {
-                for arg in &g.args {
-                    self.resources_in_type(arg, emitting, out);
-                }
-            }
-            Type::NamespacedGeneric(g) => {
-                for arg in &g.args {
-                    self.resources_in_type(arg, emitting, out);
-                }
-            }
-            Type::Tuple(elems) => {
-                for elem in elems {
-                    self.resources_in_type(elem, emitting, out);
-                }
-            }
-            Type::Reference(inner) | Type::MutReference(inner) => {
-                self.resources_in_type(inner, emitting, out);
-            }
-            Type::Function(_) | Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => {}
-        }
+            false
+        });
     }
 
     /// The CM resources every signature of `funcs` references, as
@@ -3629,10 +3548,10 @@ impl CmInterfaceRegistry {
 
         self.used_names.insert(local_name.clone());
 
-        // Register in effect -> func map
-        let qualified_name = format!("{interface_name}::{method_name}");
-        self.effect_to_func
-            .insert(qualified_name, func_info.clone());
+        self.effect_to_func.insert(
+            DeclPath::method_of(&DeclName::new(interface_name), method_name).into_string(),
+            func_info.clone(),
+        );
 
         // Register in interface -> functions map
         self.interfaces
@@ -3817,7 +3736,7 @@ impl CmInterfaceRegistry {
                     out.push(CmValType::I32);
                     out.push(CmValType::I32);
                 }
-                "()" => {}
+                TypeTable::UNIT_TYPE_NAME => {}
                 name => {
                     if let Some(source) = self.resolve_cm_source_for(named) {
                         if let Some(fields) = self
@@ -4989,29 +4908,7 @@ fn is_param_type_supported_with_types(
 ) -> bool {
     match ty {
         Type::Named(named) => {
-            let name = named.name.as_str();
-            // Check primitives and unit type
-            // Unit type () is parsed as Named("()"), not Tuple([])
-            // Resource types are passed as borrow<resource> in CM (i32 handle in core wasm)
-            // Struct types (records) like Instant are also supported as params
-            matches!(
-                name,
-                "i8" | "i16"
-                    | "i32"
-                    | "i64"
-                    | "u8"
-                    | "u16"
-                    | "u32"
-                    | "u64"
-                    | "f32"
-                    | "f64"
-                    | "bool"
-                    | "char"
-                    | "String"
-                    | "()"
-            ) || enums.contains(name)
-                || resources.contains(name)
-                || structs.contains(name)
+            ty.is_unit() || is_supported_type_name(&named.name, enums, resources, structs)
         }
         Type::Generic(generic) => {
             matches!(
@@ -5034,6 +4931,20 @@ fn is_param_type_supported_with_types(
     }
 }
 
+/// Whether `name` is a CM primitive or one of the known enums, resources and
+/// records.
+fn is_supported_type_name(
+    name: &str,
+    enums: &IndexSet<&str>,
+    resources: &IndexSet<&str>,
+    structs: &IndexSet<&str>,
+) -> bool {
+    wado_primitive_name_to_cm(name).is_some()
+        || enums.contains(name)
+        || resources.contains(name)
+        || structs.contains(name)
+}
+
 /// Whether `ty` names the empty tuple anywhere. The shape predicates accept a
 /// generic without judging its arguments, so `[]` would otherwise ride past.
 fn mentions_empty_tuple(ty: &Type) -> bool {
@@ -5053,27 +4964,7 @@ fn is_return_type_supported_with_types(
 ) -> bool {
     match ty {
         Type::Named(named) => {
-            let name = named.name.as_str();
-            // Check primitives, enums, resources, structs, and unit type
-            // Unit type () is parsed as Named("()"), not Tuple([])
-            matches!(
-                name,
-                "i8" | "i16"
-                    | "i32"
-                    | "i64"
-                    | "u8"
-                    | "u16"
-                    | "u32"
-                    | "u64"
-                    | "f32"
-                    | "f64"
-                    | "bool"
-                    | "char"
-                    | "String"
-                    | "()"
-            ) || enums.contains(name)
-                || resources.contains(name)
-                || structs.contains(name)
+            ty.is_unit() || is_supported_type_name(&named.name, enums, resources, structs)
         }
         Type::Generic(generic) => {
             match generic.name.as_str() {

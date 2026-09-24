@@ -826,7 +826,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 (lifted, 1)
             }
             "char" => (local_ref(flat_param_locals[0], "$p", TypeTable::CHAR), 1),
-            "()" => {
+            TypeTable::UNIT_TYPE_NAME => {
                 let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span());
                 (unit, 0)
             }

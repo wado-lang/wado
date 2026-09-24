@@ -800,22 +800,9 @@ fn wado_type_to_cm_val_type(
             if let Some(&flags_idx) = flags_type_indices.get(&named.name) {
                 return ComponentValType::Type(flags_idx);
             }
-            match named.name.as_str() {
-                "i8" => ComponentValType::Primitive(PrimitiveValType::S8),
-                "i16" => ComponentValType::Primitive(PrimitiveValType::S16),
-                "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
-                "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
-                "u8" => ComponentValType::Primitive(PrimitiveValType::U8),
-                "u16" => ComponentValType::Primitive(PrimitiveValType::U16),
-                "u32" => ComponentValType::Primitive(PrimitiveValType::U32),
-                "u64" => ComponentValType::Primitive(PrimitiveValType::U64),
-                "f32" => ComponentValType::Primitive(PrimitiveValType::F32),
-                "f64" => ComponentValType::Primitive(PrimitiveValType::F64),
-                "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
-                "char" => ComponentValType::Primitive(PrimitiveValType::Char),
-                "String" => ComponentValType::Primitive(PrimitiveValType::String),
-                _ => panic!("unsupported Wado param type for CM: {}", named.name),
-            }
+            let prim = wado_primitive_name_to_cm(&named.name)
+                .unwrap_or_else(|| panic!("unsupported Wado param type for CM: {}", named.name));
+            ComponentValType::Primitive(prim)
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
             // borrow<resource> - WASI resource methods take self as &Resource
@@ -2424,37 +2411,23 @@ fn generate_cm_imports(
                 .cm_interface_registry
                 .declares_own_error_code(&interface_info.path);
 
-            /// Recursively collect Named types from a type tree.
-            fn collect_named_types(ty: &Type, out: &mut Vec<String>) {
-                match ty {
-                    Type::Named(named) if named.name != "()" => {
-                        if !out.contains(&named.name) {
-                            out.push(named.name.clone());
-                        }
-                    }
-                    Type::Generic(g) => {
-                        for arg in &g.args {
-                            collect_named_types(arg, out);
-                        }
-                    }
-                    Type::Tuple(elems) => {
-                        for elem in elems {
-                            collect_named_types(elem, out);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            // Collect all named types referenced in function signatures
+            let signature_types = cm_functions.iter().flat_map(|func| {
+                func.params
+                    .iter()
+                    .map(|(_, _, ty)| ty)
+                    .chain(&func.return_type)
+            });
             let mut referenced_types: Vec<String> = Vec::new();
-            for func in &cm_functions {
-                for (_, _, ty) in &func.params {
-                    collect_named_types(ty, &mut referenced_types);
-                }
-                if let Some(ret_ty) = &func.return_type {
-                    collect_named_types(ret_ty, &mut referenced_types);
-                }
+            for ty in signature_types {
+                let _ = ty.any(&mut |ty| {
+                    if let Type::Named(named) = ty
+                        && !ty.is_unit()
+                        && !referenced_types.contains(&named.name)
+                    {
+                        referenced_types.push(named.name.clone());
+                    }
+                    false
+                });
             }
 
             // Partition into enums, variants, and flags by querying this

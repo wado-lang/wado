@@ -494,6 +494,7 @@ mod tests {
     mod resolver_helpers {
         use super::super::*;
         use crate::ast::{AstId, GenericType, NamedType};
+        use crate::tir::TypeTable;
         use crate::token::Span;
 
         pub fn span() -> Span {
@@ -501,7 +502,7 @@ mod tests {
         }
 
         pub fn unit_named() -> Type {
-            Type::Named(NamedType::new(AstId::fresh(), "()".to_string(), span()))
+            named(TypeTable::UNIT_TYPE_NAME)
         }
 
         pub fn named(name: &str) -> Type {
