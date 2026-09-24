@@ -1024,29 +1024,12 @@ impl FunctionTranslator<'_, '_> {
                             expr: Box::new(cast_source(self)),
                             result_ty: payload_result_ty,
                         };
-                        if let PatKind::Binding {
-                            local_index,
-                            type_id,
-                            ..
-                        } = &arena.pats[*binding].kind
-                        {
-                            // Check the local's actual type (which may have been
-                            // promoted to Box<T> by the address-taken boxing pass)
-                            // rather than the pattern binding's original type_id.
-                            let local_type_id =
-                                if (*local_index as usize) < self.tir_func.locals.len() {
-                                    self.tir_func.locals[*local_index as usize].type_id
-                                } else {
-                                    *type_id
-                                };
-                            let binding_wir =
-                                self.ctx.type_id_to_wir_type(self.type_table, local_type_id);
+                        if let PatKind::Binding { local_index, .. } = &arena.pats[*binding].kind {
                             let payload_field_wir =
                                 self.get_case_payload_wir_type(&case_type_id, i);
                             self.emit_pattern_binding_set(
                                 *local_index,
-                                &binding_wir,
-                                Some(&payload_field_wir),
+                                &payload_field_wir,
                                 payload_get,
                                 instrs,
                             );
@@ -1118,18 +1101,9 @@ impl FunctionTranslator<'_, '_> {
                     };
                     match &arena.pats[*sub_pattern].kind {
                         PatKind::Binding { local_index, .. } => {
-                            let local_type_id =
-                                if (*local_index as usize) < self.tir_func.locals.len() {
-                                    self.tir_func.locals[*local_index as usize].type_id
-                                } else {
-                                    tuple_element_type(&element_types, i)
-                                };
-                            let binding_wir =
-                                self.ctx.type_id_to_wir_type(self.type_table, local_type_id);
                             self.emit_pattern_binding_set(
                                 *local_index,
-                                &binding_wir,
-                                Some(&field_result_ty),
+                                &field_result_ty,
                                 field_get,
                                 instrs,
                             );
@@ -1167,14 +1141,9 @@ impl FunctionTranslator<'_, '_> {
                     };
                     match &arena.pats[field.pattern].kind {
                         PatKind::Binding { local_index, .. } => {
-                            let binding_wir = self.ctx.type_id_to_wir_type(
-                                self.type_table,
-                                self.tir_func.locals[*local_index as usize].type_id,
-                            );
                             self.emit_pattern_binding_set(
                                 *local_index,
-                                &binding_wir,
-                                Some(&field_result_ty),
+                                &field_result_ty,
                                 field_get,
                                 instrs,
                             );
@@ -1242,11 +1211,15 @@ impl FunctionTranslator<'_, '_> {
     fn emit_pattern_binding_set(
         &self,
         local_index: u32,
-        binding_wir: &WirType,
-        source_wir: Option<&WirType>,
+        source_wir: &WirType,
         source: WirInstr,
         instrs: &mut Vec<WirInstr>,
     ) {
+        // The local's own type: boxing may have promoted it past the pattern's.
+        let binding_wir = &self.ctx.type_id_to_wir_type(
+            self.type_table,
+            self.tir_func.locals[local_index as usize].type_id,
+        );
         let needs_boxing = ref_binding_needs_boxing(binding_wir, source_wir);
         let value = if needs_boxing {
             let WirType::Ref {
@@ -1265,7 +1238,7 @@ impl FunctionTranslator<'_, '_> {
                 nullable: false,
                 ..
             }
-        ) && matches!(source_wir, Some(WirType::Ref { nullable: true, .. }))
+        ) && matches!(source_wir, WirType::Ref { nullable: true, .. })
         {
             WirInstr::RefAsNonNull(Box::new(source))
         } else {

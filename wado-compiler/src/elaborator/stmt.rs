@@ -1584,14 +1584,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .is_some_and(|(_m, _n, _ty, mutable)| !*mutable)
     }
 
-    /// Resolve a pattern in an if-pattern context with type information from the scrutinee.
-    /// Match ergonomics: if the scrutinee is `&T`, peels the reference and propagates
-    /// `ref_binding` so that identifier bindings get `&InnerType` instead of `InnerType`.
-    /// Bind a refutable pattern's variables into `ctx` and run the same
-    /// disambiguation / diagnostics as reify's pattern builder, returning the
-    /// bindings it introduced in declaration (pre-order). The body walk
-    /// only needs the binding side effects and facts — reify rebuilds the real
-    /// `TirPattern` independently — so no `TirPattern` node is assembled here.
+    /// Bind a refutable pattern's variables into `ctx`, returning them in
+    /// declaration order; reify builds the `TirPattern` from the same AST.
     pub(super) fn resolve_if_pattern(
         &mut self,
         pattern: &Pattern,
