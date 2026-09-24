@@ -6,9 +6,11 @@
 //! subset leaves out is skipped by `core:protobuf`, so a real model reads
 //! whatever else it carries.
 
+use { TreeMap } from "core:collections";
 use { from_bytes } from "core:protobuf";
 use {
     Attr,
+    BUILD_TIME_ELEMENT,
     ConstTensor,
     Dim,
     Graph,
@@ -18,6 +20,7 @@ use {
     bit_pattern,
     check_element_count,
     element_of,
+    integer_without_values,
     parameters,
     push_element,
 } from "./graph.wado";
@@ -289,17 +292,18 @@ fn read_value_info(vi: &ValueInfoProto) -> Result<ValueInfo, String> {
     return Result::Ok(ValueInfo { name: vi.name, dtype, rank });
 }
 
-/// An initializer as a `ValueInfo`: its name, type, extents and data.
-fn read_initializer(t: &TensorProto) -> Result<ValueInfo, String> {
+fn check_inline(t: &TensorProto) -> Result<(), String> {
     if let Some(entry) = t.external_data.first() {
         return Result::Err(`${t.name}: external data (${entry.key})`);
     }
     if t.data_location == DATA_LOCATION_EXTERNAL {
         return Result::Err(`${t.name}: external data`);
     }
-    let Some(dtype) = dtype_name(t.data_type) else {
-        return Result::Err(`${t.name}: element type ${t.data_type}`);
-    };
+    return Result::Ok(());
+}
+
+/// An initializer as a `ValueInfo`: its name, type, extents and data.
+fn read_initializer(t: &TensorProto, dtype: String) -> Result<ValueInfo, String> {
     let extents = extents_of(t)?;
     let mut dims: List<Dim> = [];
     for let e of extents {
@@ -311,6 +315,20 @@ fn read_initializer(t: &TensorProto) -> Result<ValueInfo, String> {
         rank: Rank::Dims(dims),
         data: payload(t, &dtype, &extents)?,
     });
+}
+
+/// An `int64` tensor's elements, from `raw_data` or the typed `int64_data`.
+fn integer_values(t: &TensorProto) -> Result<List<i64>, String> {
+    if t.raw_data.len() % 8 != 0 {
+        return Result::Err(`${t.name}: ${t.raw_data.len()} raw bytes is not whole int64 elements`);
+    }
+    let values = if t.raw_data.is_empty() { t.int64_data } else { List::<i64>::from_le_bytes(&t.raw_data) };
+    let extents = extents_of(t)?;
+    if values.is_empty() && check_element_count(&t.name, 0, &extents).is_err() {
+        return Result::Err(integer_without_values(&t.name));
+    }
+    check_element_count(&t.name, values.len(), &extents)?;
+    return Result::Ok(values);
 }
 
 /// A tensor's elements as little-endian bytes: `raw_data` as it stands, or the
@@ -434,14 +452,23 @@ pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     };
 
     let mut initializers: List<ValueInfo> = [];
+    let mut integers = TreeMap::<String, List<i64>>::new();
     for let t of graph.initializer {
-        initializers.push(read_initializer(&t)?);
+        check_inline(&t)?;
+        let Some(dtype) = dtype_name(t.data_type) else {
+            return Result::Err(`${t.name}: element type ${t.data_type}`);
+        };
+        if dtype == BUILD_TIME_ELEMENT {
+            integers[t.name] = integer_values(&t)?;
+        } else {
+            initializers.push(read_initializer(&t, dtype)?);
+        }
     }
     let mut declared: List<ValueInfo> = [];
     for let vi of graph.input {
         declared.push(read_value_info(&vi)?);
     }
-    let inputs = parameters(declared, &initializers);
+    let inputs = parameters(declared, &initializers, &integers);
     let mut outputs: List<ValueInfo> = [];
     for let vi of graph.output {
         outputs.push(read_value_info(&vi)?);
@@ -455,6 +482,7 @@ pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
         inputs,
         outputs,
         initializers,
+        integers,
         nodes,
     });
 }

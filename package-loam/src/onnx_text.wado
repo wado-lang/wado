@@ -5,8 +5,10 @@ use onnx from "../grammar/Onnx.g4"
         generator: { module: "../../package-gale/src/generator.wado" },
     };
 
+use { TreeMap } from "core:collections";
 use {
     Attr,
+    BUILD_TIME_ELEMENT,
     Dim,
     Graph,
     Node,
@@ -15,6 +17,7 @@ use {
     bit_pattern,
     check_element_count,
     element_of,
+    integer_without_values,
     parameters,
     push_element,
     static_extents,
@@ -43,6 +46,7 @@ fn read_graph(s: &onnx::CstStore, toks: &onnx::TokenStream, graph: i32) -> Resul
     let mut inputs: List<ValueInfo> = [];
     let mut outputs: List<ValueInfo> = [];
     let mut initializers: List<ValueInfo> = [];
+    let mut integers = TreeMap::<String, List<i64>>::new();
     let mut nodes: List<Node> = [];
     for let c of children(s, graph) {
         if !s.is_node(c) {
@@ -54,16 +58,24 @@ fn read_graph(s: &onnx::CstStore, toks: &onnx::TokenStream, graph: i32) -> Resul
         } else if kind == onnx::RK_OUTPUTS {
             outputs = read_value_infos(s, toks, c)?;
         } else if kind == onnx::RK_INITIALIZERS {
-            initializers = read_value_infos(s, toks, c)?;
+            for let vi of children_of_kind(s, c, onnx::RK_VALUE_INFO) {
+                let info = read_value_info(s, toks, vi)?;
+                if info.dtype == BUILD_TIME_ELEMENT {
+                    integers[info.name] = read_integers(s, toks, vi, &info)?;
+                } else {
+                    initializers.push(info);
+                }
+            }
         } else if kind == onnx::RK_NODES {
             nodes = read_nodes(s, toks, c)?;
         }
     }
     return Result::Ok(Graph {
         name: quotable_text(s, toks, name_node),
-        inputs: parameters(inputs, &initializers),
+        inputs: parameters(inputs, &initializers, &integers),
         outputs,
         initializers,
+        integers,
         nodes,
     });
 }
@@ -94,7 +106,7 @@ fn read_value_info(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32) -> Res
 }
 
 /// A value's inline elements as the little-endian bytes the protobuf form
-/// carries, each read as ONNX's parser reads it (`onnx/defs/parser.cc`).
+/// carries, where a kernel reaches its element type.
 fn read_constant_data(
     s: &onnx::CstStore,
     toks: &onnx::TokenStream,
@@ -103,6 +115,29 @@ fn read_constant_data(
     dtype: &String,
     rank: &Rank,
 ) -> Result<Option<ByteList>, String> {
+    let Some(element) = element_of(dtype) else {
+        return Result::Ok(null);
+    };
+    let Some(texts) = inline_texts(s, toks, vi, name, rank)? else {
+        return Result::Ok(null);
+    };
+    let width = element.width;
+    let mut bytes = ByteList::with_capacity(texts.len() * width);
+    for let text of texts {
+        push_element(&mut bytes, element_bits(name, &text, dtype, width)?, width);
+    }
+    return Result::Ok(Option::Some(bytes));
+}
+
+/// A value's inline elements as text, each as ONNX's parser reads it
+/// (`onnx/defs/parser.cc`), or `None` where the value is written without any.
+fn inline_texts(
+    s: &onnx::CstStore,
+    toks: &onnx::TokenStream,
+    vi: i32,
+    name: &String,
+    rank: &Rank,
+) -> Result<Option<List<String>>, String> {
     let Some(data) = first_child_of_kind(s, vi, onnx::RK_CONSTANT_DATA) else {
         return Result::Ok(null);
     };
@@ -111,21 +146,31 @@ fn read_constant_data(
     let Some(values) = first_child_of_kind(s, data, onnx::RK_TENSOR_VALUES) else {
         return Result::Err(`${name}: an initializer whose data lives in another file is not read`);
     };
-    let Some(element) = element_of(dtype) else {
-        return Result::Ok(null);
-    };
-    let width = element.width;
     let Some(extents) = static_extents(rank) else {
         return Result::Err(`${name}: inline values need every extent stated`);
     };
     let elements = children_of_kind(s, values, onnx::RK_TENSOR_ELEM);
     check_element_count(name, elements.len(), &extents)?;
-    let mut bytes = ByteList::with_capacity(elements.len() * width);
+    let mut texts: List<String> = [];
     for let e of elements {
-        let text = literal_text(toks, first_token(s, e));
-        push_element(&mut bytes, element_bits(name, &text, dtype, width)?, width);
+        texts.push(literal_text(toks, first_token(s, e)));
     }
-    return Result::Ok(Option::Some(bytes));
+    return Result::Ok(Option::Some(texts));
+}
+
+/// An initializer the build reads, as the integers its inline values spell.
+fn read_integers(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32, info: &ValueInfo) -> Result<List<i64>, String> {
+    let Some(texts) = inline_texts(s, toks, vi, &info.name, &info.rank)? else {
+        return Result::Err(integer_without_values(&info.name));
+    };
+    let mut values: List<i64> = [];
+    for let text of texts {
+        let Ok(v) = i64::from_str(&text) else {
+            return Result::Err(`${info.name}: ${text} is not an ${info.dtype}`);
+        };
+        values.push(v);
+    }
+    return Result::Ok(values);
 }
 
 /// An element's bits in `dtype`, `width` bytes wide. ONNX writes a half as the

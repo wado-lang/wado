@@ -161,6 +161,31 @@ test "an initializer's inline values are not mistaken for its name" {
     assert g.initializers[0].data == Option::Some(b"\x00\x00\x80\x3f\x00\x00\x20\xc0");
 }
 
+test "an int64 initializer is an integer the build reads, not a weight" {
+    let g = read(
+        `agraph (float[2, 3] X) => (float[6] Y)
+        <int64[1] S = {6}, float[2] W = {1.0, 2.0}>
+        {
+            Y = Reshape(X, S)
+        }`,
+    ).unwrap();
+    let want: List<i64> = [6];
+    assert g.integers.get("S") == Option::Some(want);
+    assert g.initializers.len() == 1;
+    assert g.initializers[0].name == "W";
+}
+
+test "an int64 initializer without inline values names itself" {
+    let e = read(
+        `agraph (float[2, 3] X) => (float[6] Y)
+        <int64[1] S>
+        {
+            Y = Reshape(X, S)
+        }`,
+    ).unwrap_err();
+    assert e == "S: an integer tensor is read at build time, so the graph must carry its values";
+}
+
 test "an initializer without inline values carries no data" {
     assert mlp().initializers[0].data matches { None };
 }

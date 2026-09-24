@@ -1,6 +1,8 @@
 //! The ONNX graph Loam reads, in the shape the rest of the package consumes.
 //! Dimensions are extents without identity, since an ONNX shape is positional.
 
+use { TreeMap } from "core:collections";
+
 /// One dimension as the model states it. `Unknown` is ONNX's `?`, a dimension
 /// the exporter left open and no symbol stands for.
 pub variant Dim {
@@ -137,6 +139,10 @@ impl Node {
     }
 }
 
+/// The element type of an initializer stage 0 reads at build time, as `Reshape`
+/// reads its target shape. No kernel computes in it, so it is never a weight.
+pub global BUILD_TIME_ELEMENT: String = "int64";
+
 /// `inputs` holds the parameters `forward` takes, so it never names an
 /// initializer: both readers pass theirs through `parameters` first.
 pub struct Graph {
@@ -144,19 +150,29 @@ pub struct Graph {
     pub inputs: List<ValueInfo>,
     pub outputs: List<ValueInfo>,
     pub initializers: List<ValueInfo>,
+    pub integers: TreeMap<String, List<i64>> = TreeMap::new(),
     pub nodes: List<Node>,
 }
 
+/// The message both readers give an integer initializer written without values.
+pub fn integer_without_values(tensor: &String) -> String {
+    return `${tensor}: an integer tensor is read at build time, so the graph must carry its values`;
+}
+
 /// The declared inputs that are parameters. An input an initializer also names
-/// is that weight's default, and Loam reads it from `Weights`.
-pub fn parameters(inputs: List<ValueInfo>, initializers: &List<ValueInfo>) -> List<ValueInfo> {
-    let mut weights: List<String> = [];
+/// is that initializer's default, and Loam reads it from the graph.
+pub fn parameters(
+    inputs: List<ValueInfo>,
+    initializers: &List<ValueInfo>,
+    integers: &TreeMap<String, List<i64>>,
+) -> List<ValueInfo> {
+    let mut named: List<String> = [];
     for let vi of *initializers {
-        weights.push(vi.name);
+        named.push(vi.name);
     }
     let mut kept: List<ValueInfo> = [];
     for let vi of inputs {
-        if !weights.contains_str(vi.name.as_str_slice()) {
+        if !named.contains_str(vi.name.as_str_slice()) && !integers.contains_key(vi.name) {
             kept.push(vi);
         }
     }
