@@ -1493,15 +1493,17 @@ impl TypeTable {
         let mut room = TEMPLATE_NAME_MAX_CHARS;
         let mut push = |text: &str| {
             for c in text.chars() {
-                if room == 0 {
+                let shown: String = if c.is_control() {
+                    c.escape_default().collect()
+                } else {
+                    c.into()
+                };
+                let width = shown.chars().count();
+                if width > room {
                     return false;
                 }
-                room -= 1;
-                if c.is_control() {
-                    name.extend(c.escape_default());
-                } else {
-                    name.push(c);
-                }
+                room -= width;
+                name.push_str(&shown);
             }
             true
         };

@@ -4,6 +4,7 @@
 //! [`TypeMismatchPayload`], then [`Elaborator::typecheck`] emitting the
 //! diagnostic. The last two each have a `_return` flavour where `UNIT` passes.
 
+use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::tir::{ResolvedType, TupleSlot, TypeId, TypeTable};
 use crate::token::Span;
@@ -370,26 +371,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `<H: CompilerHost>` plumbing to the `Elaborator` boundary so
     /// `TypeSystem` itself stays host-agnostic.
     pub(super) fn typecheck(&self, actual: TypeId, expected: TypeId, span: Span) {
-        if let Err(payload) = self.tysys.typecheck(actual, expected) {
-            // A template's type reaches a check only as a tag's argument.
-            let is_template = self
-                .tysys
-                .type_table
-                .borrow()
-                .template_shape_of_type(actual)
-                .is_some();
-            let _ = self.emit(if is_template {
+        self.typecheck_worded(actual, expected, span, |payload| TypeError::TypeMismatch {
+            expected: payload.expected,
+            found: payload.found,
+            span,
+        });
+    }
+
+    /// [`Self::typecheck`] on argument `i` of `call`. An argument no AST spells
+    /// is a tagged template's, so its mismatch is the tag's parameter at fault.
+    pub(super) fn typecheck_call_arg(
+        &self,
+        call: &ast::CallExpr,
+        i: usize,
+        actual: TypeId,
+        expected: TypeId,
+    ) {
+        match call.args.get(i) {
+            Some(arg) => self.typecheck(actual, expected, arg.span()),
+            None => self.typecheck_worded(actual, expected, call.span, |payload| {
                 TypeError::TagParamNotTemplate {
                     param: payload.expected,
-                    span,
+                    span: call.span,
                 }
-            } else {
-                TypeError::TypeMismatch {
-                    expected: payload.expected,
-                    found: payload.found,
-                    span,
-                }
-            });
+            }),
+        }
+    }
+
+    fn typecheck_worded(
+        &self,
+        actual: TypeId,
+        expected: TypeId,
+        span: Span,
+        mismatch: impl FnOnce(TypeMismatchPayload) -> TypeError,
+    ) {
+        if let Err(payload) = self.tysys.typecheck(actual, expected) {
+            let _ = self.emit(mismatch(payload));
             return;
         }
         self.reject_pack_layout_mismatch(actual, expected, span);

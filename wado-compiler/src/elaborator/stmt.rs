@@ -2107,14 +2107,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .map(|(n, _, t)| (n.as_str(), *t))
                         .collect();
 
-                    if first_names != alt_names {
-                        let fn_: Vec<&str> = first_names.iter().map(|(n, _)| *n).collect();
-                        let an: Vec<&str> = alt_names.iter().map(|(n, _)| *n).collect();
+                    // Over an ERROR scrutinee a bare case name reads as a
+                    // binding, so the names compare nothing.
+                    if scrutinee_type != TypeTable::ERROR && first_names != alt_names {
+                        let shown = |names: &[(&str, tir::TypeId)]| {
+                            if names.is_empty() {
+                                return "nothing".to_string();
+                            }
+                            let tt = self.tysys.type_table.borrow();
+                            names
+                                .iter()
+                                .map(|(n, ty)| format!("`{n}: {}`", tt.type_name(*ty)))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        };
                         let _ = self.emit(TypeError::InvalidPattern {
                             message: format!(
                                 "or-pattern alternatives must bind the same names with the same types: \
-                                 alternative 1 binds {:?}, but alternative {} binds {:?}",
-                                fn_, i + 1, an,
+                                 alternative 1 binds {}, but alternative {} binds {}",
+                                shown(&first_names),
+                                i + 1,
+                                shown(&alt_names),
                             ),
                             span,
                         });
@@ -3414,17 +3427,18 @@ fn mut_bindings_of(pattern: &Pattern) -> Pattern {
     }
 }
 
-/// The subpatterns a pattern reaches by checking the scrutinee's shape; `None`
-/// for one that checks no shape of its own.
+/// The subpatterns a pattern reaches through the scrutinee's shape; `None` for
+/// one whose own checks stay sound over an ERROR scrutinee.
 fn shape_checked_subpatterns(pattern: &Pattern) -> Option<Vec<&Pattern>> {
     match pattern {
         Pattern::Tuple(patterns, _) => Some(patterns.iter().collect()),
         Pattern::Struct { fields, .. } => Some(fields.iter().map(|f| &f.pattern).collect()),
         Pattern::Variant { bindings, .. } => Some(bindings.iter().collect()),
-        Pattern::Literal(_) | Pattern::Range { .. } => Some(Vec::new()),
         Pattern::Ident { .. }
         | Pattern::MutIdent { .. }
         | Pattern::Wildcard
+        | Pattern::Literal(_)
+        | Pattern::Range { .. }
         | Pattern::Or(_)
         | Pattern::Typed { .. }
         | Pattern::Error(_) => None,

@@ -346,17 +346,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if ident.name.contains("::") {
             return None;
         }
-        match ctx.lookup_or_capture(&ident.name) {
-            Some(var_ref) => {
-                self.record_reference_opt(ident.id, var_ref.defining_ast_id());
-                Some((var_ref.value_type(), Some(var_ref)))
-            }
-            None => {
-                let ty = self.global_var_type(ident.id, &ident.name)?;
-                self.record_item_reference_by_name(ident.id, &ident.name);
-                Some((ty, None))
-            }
+        if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
+            self.record_reference_opt(ident.id, var_ref.defining_ast_id());
+            return Some((var_ref.value_type(), Some(var_ref)));
         }
+        let ty = self.global_var_type(ident.id, &ident.name)?;
+        self.record_item_reference_by_name(ident.id, &ident.name);
+        Some((ty, None))
     }
 
     /// Walk a callee expression down to its *root place* identifier so
@@ -1264,11 +1260,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(&expected) = substituted.get(i)
                         && !self.is_unbound_type_param(expected)
                     {
-                        self.typecheck(
-                            *arg,
-                            expected,
-                            call.args.get(i).map_or(call.span, ast::Expr::span),
-                        );
+                        self.typecheck_call_arg(call, i, *arg, expected);
                     }
                 }
 
@@ -1970,11 +1962,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (i, arg) in args.iter_mut().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
                 self.pin_arg_hole_against(arg, expected);
-                self.typecheck(
-                    *arg,
-                    expected,
-                    call.args.get(i).map_or(call.span, ast::Expr::span),
-                );
+                self.typecheck_call_arg(call, i, *arg, expected);
             }
         }
         if !check_param_types.is_empty() {
@@ -2064,11 +2052,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = fn_params.get(i) {
-                self.typecheck(
-                    *arg,
-                    expected,
-                    call.args.get(i).map_or(call.span, ast::Expr::span),
-                );
+                self.typecheck_call_arg(call, i, *arg, expected);
             }
         }
 
