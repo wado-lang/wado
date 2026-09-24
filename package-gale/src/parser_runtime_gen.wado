@@ -541,7 +541,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         init.push_str(", trace_depth: 0");
     }
     if needs_atn {
-        init.push_str(", atn: AtnState { stack: [] }, atn_ret_pending: -1");
+        init.push_str(", atn: AtnState::new(), atn_ret_pending: -1");
     }
     init.push_str(", b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: []");
     if emit_actions {

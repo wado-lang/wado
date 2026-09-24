@@ -8,7 +8,7 @@ use {
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
 } from "./atn.wado";
-use { atn_predict_with_stack } from "./atn_predict.wado";
+use { AtnState, atn_predict_once } from "./atn_predict.wado";
 
 pub fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
     let mut out = sim;
@@ -224,7 +224,7 @@ fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
 
 pub fn atn_lr_loop_decision(
     sim: &AtnSim,
-    rule_stack: &List<i32>,
+    atn: &mut AtnState,
     decision: i32,
     tokens: &Array<i32>,
     pos: i32,
@@ -248,10 +248,10 @@ pub fn atn_lr_loop_decision(
     if enter < 0 {
         return exit_alt;
     }
-    if !atn_caller_mandates(sim, rule_stack, t, eof) {
+    if !atn_caller_mandates(sim, &atn.stack, t, eof) {
         return enter;
     }
-    return atn_predict_with_stack(sim, decision, rule_stack, tokens, pos, eof, min_prec);
+    return atn_predict_once(sim, decision, atn, tokens, pos, eof, min_prec);
 }
 
 fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -> bool {

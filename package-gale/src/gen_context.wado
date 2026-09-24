@@ -637,12 +637,18 @@ impl GenContext {
         return `${PARSER_HANDLE}.${ATN_STATE_HANDLE}`;
     }
 
+    /// The ATN state as an argument: the scan's borrow passed on, or a fresh
+    /// borrow of the parser's field.
+    pub fn atn_state_arg(&self) -> String {
+        return if self.in_scan_fn { ATN_STATE_HANDLE } else { `&mut ${self.atn_state_path()}` };
+    }
+
     /// The trailing arguments of a scan call for the parser state it borrows:
     /// the gate, then the ATN state. Empty where the scan borrows neither.
     pub fn scan_state_args(&self) -> String {
         let mut args = self.scan_gate_arg();
         if self.needs_scan_atn() {
-            args.push_str(if self.in_scan_fn { `, ${ATN_STATE_HANDLE}` } else { `, &mut ${self.atn_state_path()}` });
+            args.push_str(`, ${self.atn_state_arg()}`);
         }
         return args;
     }

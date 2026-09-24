@@ -972,7 +972,7 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
     let decl = lr_atn_alt_decl(lr_dispatch);
     w.begin("loop");
     w.line(
-        `${decl} = atn_lr_loop_decision(&ATN_SIM, &${ctx.atn_stack_place()}, ${decision}, tokens, pos, TK_EOF, min_prec);`,
+        `${decl} = atn_lr_loop_decision(&ATN_SIM, ${ctx.atn_state_arg()}, ${decision}, tokens, pos, TK_EOF, min_prec);`,
     );
     emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, fn_name, "tokens", "pos", /*parse_launched=*/ false, ctx);
     w.line("let _lr_pos0 = pos;");
@@ -1896,7 +1896,7 @@ fn gen_scan_partition_body<S: AsStrSlice>(
         return;
     }
     if plan.atn_dec >= 0 {
-        w.line(`let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${plan.atn_dec}, &${ctx.atn_stack_place()}, tokens, pos, TK_EOF, 0);`);
+        w.line(`let _atn_alt = atn_predict_once(&ATN_SIM, ${plan.atn_dec}, ${ctx.atn_state_arg()}, tokens, pos, TK_EOF, 0);`);
         for let mut k = 0; k < all_idx.len(); k += 1 {
             w.begin(`if _atn_alt == ${all_idx[k]}`);
             gen_scan_sole_candidate(w, all_idx[k], k < guarded_count, scan_alts, ctx, plan, base_name, guard_tokens);
@@ -4622,7 +4622,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
     w.begin("loop");
     w.line("if p.recovering { break; }");
     w.line(
-        `${lr_atn_alt_decl(lr_dispatch)} = atn_lr_loop_decision(&ATN_SIM, &${ctx.atn_stack_place()}, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
+        `${lr_atn_alt_decl(lr_dispatch)} = atn_lr_loop_decision(&ATN_SIM, ${ctx.atn_state_arg()}, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
     );
     emit_lr_atn_group_repick(
         w,
@@ -5458,7 +5458,7 @@ fn atn_optional_enter_cond(ctx: &GenContext, rep_op: &RepeatOp) -> String {
     if decision < 0 {
         return "true";
     }
-    return `atn_predict_with_stack(&ATN_SIM, ${decision}, &${ctx.atn_stack_place()}, &p.kinds, p.pos, TK_EOF, ${atn_prec_arg(
+    return `atn_predict_once(&ATN_SIM, ${decision}, ${ctx.atn_state_arg()}, &p.kinds, p.pos, TK_EOF, ${atn_prec_arg(
         ctx,
     )}) == 1`;
 }
@@ -8370,7 +8370,7 @@ fn gen_group_branch_body(
 
 /// The simulator's pick of a contested group's alternative, over `tokens` at `pos`.
 fn group_atn_predict_call<S: AsStrSlice, S1: AsStrSlice>(atn_dec: i32, tokens: S, pos: S1, ctx: &GenContext) -> String {
-    return `atn_predict_with_stack(&ATN_SIM, ${atn_dec}, &${ctx.atn_stack_place()}, ${tokens}, ${pos}, TK_EOF, ${atn_prec_arg(ctx)})`;
+    return `atn_predict_once(&ATN_SIM, ${atn_dec}, ${ctx.atn_state_arg()}, ${tokens}, ${pos}, TK_EOF, ${atn_prec_arg(ctx)})`;
 }
 
 global UNSCANNABLE_ALT: String = "group has an unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";

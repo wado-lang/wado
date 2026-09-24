@@ -347,9 +347,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         &RuntimeFeatures {
             emit_follow,
             atn_decode: ctx.needs_atn() || needs_latn,
-            // Several decision kinds route here, each on its own condition;
-            // the emitted parser is the one place they all meet.
-            atn_predict: ctx.needs_scan_atn() || body.contains("atn_predict_with_stack("),
+            atn_predict: ctx.needs_atn(),
             atn_lr: ctx.needs_lr_atn(),
             latn: needs_latn,
             highlight: emit_highlight,

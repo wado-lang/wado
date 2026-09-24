@@ -1082,6 +1082,73 @@ global CTX_UNKNOWN: i32 = 1;
 
 pub struct AtnState {
     pub stack: List<i32>,
+    verdict_index: AtnKeyMap,
+    verdict_next: List<i32>,
+    verdict_start: List<i32>,
+    verdict_alt: List<i32>,
+    verdict_keys: List<i32>,
+}
+
+impl AtnState {
+    pub fn new() -> AtnState {
+        return AtnState {
+            stack: [],
+            verdict_index: AtnKeyMap::new(),
+            verdict_next: [],
+            verdict_start: [],
+            verdict_alt: [],
+            verdict_keys: [],
+        };
+    }
+
+    fn question_hash(&self, decision: i32, pos: i32, min_prec: i32) -> i64 {
+        let mut h: i64 = 1469598103934665603;
+        h = (h ^ decision as i64) * 1099511628211;
+        h = (h ^ pos as i64) * 1099511628211;
+        h = (h ^ min_prec as i64) * 1099511628211;
+        for let mut i = 0; i < self.stack.len(); i += 1 {
+            h = (h ^ self.stack[i] as i64 + 2) * 1099511628211;
+        }
+        return h & 4611686018427387903;
+    }
+
+    fn asks(&self, verdict: i32, decision: i32, pos: i32, min_prec: i32) -> bool {
+        let s = self.verdict_start[verdict];
+        let n = self.stack.len();
+        if self.verdict_keys[s] != decision
+            || self.verdict_keys[s + 1] != pos
+            || self.verdict_keys[s + 2] != min_prec
+            || self.verdict_keys[s + 3] != n {
+            return false;
+        }
+        for let mut i = 0; i < n; i += 1 {
+            if self.verdict_keys[s + 4 + i] != self.stack[i] {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    fn recorded_verdict(&self, h: i64, decision: i32, pos: i32, min_prec: i32) -> i32 {
+        let mut v = self.verdict_index.get(h);
+        while v >= 0 && !self.asks(v, decision, pos, min_prec) {
+            v = self.verdict_next[v];
+        }
+        return v;
+    }
+
+    fn record_verdict(&mut self, h: i64, decision: i32, pos: i32, min_prec: i32, alt: i32) {
+        let v = self.verdict_start.len();
+        self.verdict_start.push(self.verdict_keys.len());
+        self.verdict_keys.push(decision);
+        self.verdict_keys.push(pos);
+        self.verdict_keys.push(min_prec);
+        self.verdict_keys.push(self.stack.len());
+        self.verdict_keys.extend(&self.stack);
+        self.verdict_alt.push(alt);
+        self.verdict_next.push(self.verdict_index.get(h));
+        self.verdict_index.set(h, v);
+    }
 }
 
 struct AtnKeyMap {
@@ -1672,6 +1739,25 @@ fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
 
 pub global ATN_NO_DISABLED: List<i32> = [];
 
+pub fn atn_predict_once(
+    sim: &AtnSim,
+    decision: i32,
+    atn: &mut AtnState,
+    tokens: &Array<i32>,
+    pos: i32,
+    eof: i32,
+    min_prec: i32 = 0,
+) -> i32 {
+    let h = atn.question_hash(decision, pos, min_prec);
+    let v = atn.recorded_verdict(h, decision, pos, min_prec);
+    if v >= 0 {
+        return atn.verdict_alt[v];
+    }
+    let alt = atn_predict_with_stack(sim, decision, &atn.stack, tokens, pos, eof, min_prec);
+    atn.record_verdict(h, decision, pos, min_prec, alt);
+    return alt;
+}
+
 pub fn atn_predict_with_stack(
     sim: &AtnSim,
     decision: i32,
@@ -1900,7 +1986,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1, atn: AtnState { stack: [] }, atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1, atn: AtnState::new(), atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
     }
 
     fn emit(&mut self, s: String) {
@@ -2306,7 +2392,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
             pos = start + 1;
             break scan_alts;
         } else if alt_kind == TK_ID {
-            let _atn_alt = atn_predict_with_stack(&ATN_SIM, 1, &atn.stack, tokens, pos, TK_EOF, 0);
+            let _atn_alt = atn_predict_once(&ATN_SIM, 1, atn, tokens, pos, TK_EOF, 0);
             if _atn_alt == 1 {
                 pos = start + 1;
                 try_1: {

@@ -1451,9 +1451,9 @@ ifStmt : 'if' 'y' statement ('else' statement)?? ;
     // ATN simulator (full context), not by a static first-set peek — so the
     // shape is still a single `Option<T>` if (not a `while` loop), but the
     // condition is the simulator call. The decision number is stamped at
-    // compile time (`atn_predict_with_stack`), retiring the old
+    // compile time (`atn_predict_once`), retiring the old
     // `atn_ng_optional_enter` exit-first BlockStart search.
-    assert str_contains(&body, "if atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&body, "if atn_predict_once(&ATN_SIM,");
     assert str_contains(&body, ") == 1");
     assert !str_contains(&body, "atn_ng_optional_enter(");
     assert !str_contains(&body, "if p.peek_kind() == TK_LIT_else");
@@ -1642,8 +1642,8 @@ test "non-greedy ?? inside a left-recursive rule threads min_prec" {
     // The atom fn carries `min_prec`, and the `??` enter check forwards it
     // to the simulator (stamped decision number, `== 1` for ENTER).
     assert str_contains(&output, "fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32");
-    assert str_contains(&output, ", &p.atn.stack, &p.kinds, p.pos, TK_EOF, min_prec) == 1");
-    assert str_contains(&output, "atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&output, ", &mut p.atn, &p.kinds, p.pos, TK_EOF, min_prec) == 1");
+    assert str_contains(&output, "atn_predict_once(&ATN_SIM,");
 }
 
 // Two non-greedy `??` in one rule must emit two distinct ATN decision numbers.
@@ -1657,8 +1657,8 @@ test "multiple ?? in a rule emit distinct ATN decision numbers" {
     let mut g = parse(TWO_QQ_CODEGEN_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_s__inner(");
-    assert str_contains(&body, "atn_predict_with_stack(&ATN_SIM, 0, &p.atn.stack, &p.kinds, p.pos, TK_EOF, 0) == 1");
-    assert str_contains(&body, "atn_predict_with_stack(&ATN_SIM, 1, &p.atn.stack, &p.kinds, p.pos, TK_EOF, 0) == 1");
+    assert str_contains(&body, "atn_predict_once(&ATN_SIM, 0, &mut p.atn, &p.kinds, p.pos, TK_EOF, 0) == 1");
+    assert str_contains(&body, "atn_predict_once(&ATN_SIM, 1, &mut p.atn, &p.kinds, p.pos, TK_EOF, 0) == 1");
     assert !str_contains(&body, "atn_ng_optional_enter(");
 }
 
