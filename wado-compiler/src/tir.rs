@@ -345,6 +345,9 @@ pub struct TemplateShape {
     pub holes: Vec<TemplateHole>,
 }
 
+/// How many characters of a template's text its type name shows.
+const TEMPLATE_NAME_MAX_CHARS: usize = 50;
+
 impl TemplateShape {
     /// The struct field holding hole `k`.
     #[must_use]
@@ -1475,13 +1478,54 @@ impl TypeTable {
     }
 
     /// The spelling an anonymous struct shows a reader —
-    /// `$anon_{x:i32,y:i32}`. The declaration namespace;
+    /// `$anon_{x:i32,y:i32}`, or a template's text. The declaration namespace;
     /// [`Self::anon_struct_mangle`] is what a key is built from.
     #[must_use]
     pub fn anon_struct_name(&self, id: AnonStructId) -> String {
-        self.render_shape(&self.anon_structs[id.0 as usize].shape, &|tt, ty| {
-            tt.type_name(ty)
-        })
+        match &self.anon_structs[id.0 as usize].shape {
+            AnonShape::Template(shape) => self.template_shape_name(shape),
+            shape @ (AnonShape::Fields(_) | AnonShape::Synthetic(_)) => {
+                self.render_shape(shape, &|tt, ty| tt.type_name(ty))
+            }
+        }
+    }
+
+    /// A template shape as its text, each hole spelled as its type and
+    /// specifier, cut to [`TEMPLATE_NAME_MAX_CHARS`] characters.
+    fn template_shape_name(&self, shape: &TemplateShape) -> String {
+        let mut name = String::from("`");
+        let mut room = TEMPLATE_NAME_MAX_CHARS;
+        let mut push = |text: &str| {
+            for c in text.chars() {
+                let shown: String = if c.is_control() {
+                    c.escape_default().collect()
+                } else {
+                    c.into()
+                };
+                let width = shown.chars().count();
+                if width > room {
+                    return false;
+                }
+                room -= width;
+                name.push_str(&shown);
+            }
+            true
+        };
+        let complete = shape.segments.iter().enumerate().all(|(k, segment)| {
+            push(segment)
+                && shape.holes.get(k).is_none_or(|hole| {
+                    let spec = hole
+                        .spec
+                        .as_ref()
+                        .map_or(String::new(), |s| format!(":{s}"));
+                    push(&format!("${{{}{spec}}}", self.type_name(hole.ty)))
+                })
+        });
+        if !complete {
+            name.push_str("...");
+        }
+        name.push('`');
+        name
     }
 
     /// [`Self::anon_struct_name`] in the mangled namespace: every field type is

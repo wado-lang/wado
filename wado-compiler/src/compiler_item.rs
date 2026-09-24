@@ -168,7 +168,7 @@ pub enum CompilerItem {
     /// `FlagsBit<T>` — the per-bit member struct minted by
     /// `ReflectFlags::members()` (WEP 2026-06-13 §3c).
     ReflectFlagsBit,
-    /// `Hole<T, V>` — the per-hole member struct minted by
+    /// `TemplateHole<T, V>` — the per-hole member struct minted by
     /// `ReflectTemplate::members()` (WEP 2026-01-10).
     ReflectTemplateHole,
     /// `Slice<T>` — the array reference view the byte-slice methods and
@@ -899,7 +899,7 @@ impl CompilerItem {
             Self::ReflectStructField => "struct_field",
             Self::ReflectEnumCase => "enum_case",
             Self::ReflectFlagsBit => "flags_bit",
-            Self::ReflectTemplateHole => "hole",
+            Self::ReflectTemplateHole => "template_hole",
             Self::Slice => "slice",
             Self::AsyncCall => "async_call",
             Self::Future => "future",

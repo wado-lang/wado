@@ -1670,7 +1670,7 @@ fn generate_template_reflect_impls(
     module.functions.extend(generated);
 }
 
-/// Build `Shape^ReflectTemplate::members()` as one `Hole` literal per hole —
+/// Build `Shape^ReflectTemplate::members()` as one `TemplateHole` literal per hole —
 /// `{ index, lit, raw, source, has_spec }` in the handle's declaration order.
 fn generate_template_members_fn(
     shape: &TemplateShape,

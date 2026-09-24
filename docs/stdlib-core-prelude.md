@@ -3075,6 +3075,187 @@ Encodes this character as UTF-8, returning the bytes.
 
 ## Structs
 
+### `pub struct VariantCase<T, P>`
+
+A case handle minted by `ReflectVariant::members()`: the payload type `P`
+is static, the case index is a value. `extract` / `construct` bridge a
+variant value and its payload in both directions.
+See WEP 2026-06-13 §3e.
+
+_Fields are private._
+
+#### `pub fn discriminant(&self) -> i32`
+
+The case's tag.
+
+#### `pub fn is_unit(&self) -> bool`
+
+Whether the case carries no payload.
+
+#### `pub fn holds(&self, v: &T) -> bool`
+
+Whether `v`'s live case is this case.
+
+#### `pub fn extract(&self, v: &T) -> P`
+
+The payload of this case in `v`. Traps unless `holds(v)`.
+
+#### `pub fn construct(&self, payload: P) -> T`
+
+Builds this case around `payload`.
+
+#### `pub fn make(&self) -> T`
+
+Builds this case with no payload. Traps unless `is_unit()`.
+
+#### `impl Member for VariantCase<T, P>`
+
+##### `fn name(&self) -> String`
+
+##### `fn wire_name_override(&self) -> Option<String>`
+
+#### `impl Inspect for VariantCase<T, P>`
+
+##### `fn inspect(&self, f: &mut Formatter)`
+
+### `pub struct EnumCase<T>`
+
+A case handle minted by `ReflectEnum::members()`: an enum case carries
+no payload, so the member holds the case value itself. `make` mints it and
+`holds` tests a value's live case. See WEP 2026-06-13 §3b.
+
+_Fields are private._
+
+#### `pub fn discriminant(&self) -> i32`
+
+The case's discriminant.
+
+#### `pub fn holds(&self, v: &T) -> bool`
+
+Whether `v` is this case.
+
+#### `pub fn make(&self) -> T`
+
+The enum value for this case.
+
+#### `impl Member for EnumCase<T>`
+
+##### `fn name(&self) -> String`
+
+##### `fn wire_name_override(&self) -> Option<String>`
+
+#### `impl Inspect for EnumCase<T>`
+
+##### `fn inspect(&self, f: &mut Formatter)`
+
+### `pub struct FlagsBit<T>`
+
+A bit handle minted by `ReflectFlags::members()`: the member holds the
+single-bit flags value. `set` mints it and `is_set` tests a value for the
+bit. See WEP 2026-06-13 §3c.
+
+_Fields are private._
+
+#### `pub fn bit(&self) -> u64`
+
+The member's bitmask, u64-normalized.
+
+#### `pub fn is_set(&self, v: &T) -> bool`
+
+Whether `v` has this bit set.
+
+#### `pub fn set(&self) -> T`
+
+The flags value with only this bit set.
+
+#### `impl Member for FlagsBit<T>`
+
+##### `fn name(&self) -> String`
+
+##### `fn wire_name_override(&self) -> Option<String>`
+
+#### `impl Inspect for FlagsBit<T>`
+
+##### `fn inspect(&self, f: &mut Formatter)`
+
+### `pub struct TemplateHole<T, V>`
+
+A hole handle minted by `ReflectTemplate::members()`: the literal text
+before the hole, the hole's source text and specifier presence are
+constants, and `get` / `fmt` reach the hole's value in a template.
+See WEP 2026-01-10.
+
+_Fields are private._
+
+#### `pub fn index(&self) -> i32`
+
+The hole's position in the template.
+
+#### `pub fn lit(&self) -> String`
+
+The literal text between the previous hole (or the start) and this
+one, escapes processed.
+
+#### `pub fn raw(&self) -> String`
+
+`lit()` with escapes preserved: `\n` is a backslash and an `n`.
+
+#### `pub fn source(&self) -> String`
+
+The hole's expression as written: `"user.name"`.
+
+#### `pub fn has_spec(&self) -> bool`
+
+Whether the hole wrote a `:spec`.
+
+#### `pub fn get(&self, t: &T) -> V`
+
+The hole's value in `t`.
+
+#### `pub fn fmt(&self, t: &T, f: &mut Formatter)`
+
+Renders the value as the untagged template would: the trait method
+the specifier's type selects (`Display::fmt` when it names none), on a
+`Formatter` carrying the specifier's settings over `f`'s buffer.
+
+### `pub struct StructField<T, F>`
+
+A field handle minted by `ReflectStruct::members()`: the field type `F` is
+static, and `get` reads the field's value out of a struct. See WEP 2026-06-13.
+
+_Fields are private._
+
+#### `pub fn index(&self) -> i32`
+
+The field's declaration index.
+
+#### `pub fn has_default(&self) -> bool`
+
+Whether the field declares a default value.
+
+#### `pub fn is_secret(&self) -> bool`
+
+Whether the field is marked `#[secret]`.
+
+#### `pub fn wire_number(&self) -> i32`
+
+The field's `#[wire(number = N)]`, or `0` where it carries none: a
+field number starts at 1, so zero is the format's own non-number.
+
+#### `pub fn get(&self, v: &T) -> F`
+
+The value of this field in `v`.
+
+#### `impl Member for StructField<T, F>`
+
+##### `fn name(&self) -> String`
+
+##### `fn wire_name_override(&self) -> Option<String>`
+
+#### `impl Inspect for StructField<T, F>`
+
+##### `fn inspect(&self, f: &mut Formatter)`
+
 ### `pub struct IterMap<I: Iterator, U>`
 
 Generic map iterator adapter that wraps any Iterator.

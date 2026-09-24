@@ -1,0 +1,35 @@
+// A reflect `members()` walks its handles as a pack, so the bound must bind
+// one: a concrete tuple (`Holes = [List<i32>]`) does not. The fault is the
+// bound; the loop over the failed call reports nothing more.
+struct P {
+    a: i32,
+}
+
+fn holes<T: ReflectTemplate<Holes = [List<i32>]>>(t: T) -> String {
+    let mut out = "";
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(h.lit());
+    }
+    return out;
+}
+
+fn fields<T: ReflectStruct<FieldTypes = [i32]>>(t: T) -> i32 {
+    let mut n = 0;
+    for let f of ReflectStruct::<T>::members() {
+        n += f.index();
+    }
+    return n;
+}
+
+export fn run() {
+    let l: List<i32> = [1];
+    let _ = holes`a ${l}`;
+    let _ = fields(P { a: 1 });
+}
+
+__DATA__
+{
+    "compile_error": "`ReflectTemplate::<T>::members()` needs `T` bound as `ReflectTemplate<Holes = [..V]>`",
+    "compile_errors_contains": ["`ReflectStruct::<T>::members()` needs `T` bound as `ReflectStruct<FieldTypes = [..F]>`"],
+    "compile_errors_not_contains": ["unknown function", "IntoIterator", "Iterator", "no method"]
+}

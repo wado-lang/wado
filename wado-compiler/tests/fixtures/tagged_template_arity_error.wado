@@ -1,12 +1,23 @@
 // A tag is called on one argument, the template; a function of another
-// arity reports the mismatch at the site (WEP 2026-01-10).
+// arity reports the mismatch at the site, and only that: it is still a
+// function (WEP 2026-01-10).
 fn two(a: i32, b: i32) -> i32 {
     return a + b;
 }
 
+fn tag<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T, extra: i32) -> String {
+    return format(t);
+}
+
 export fn run() {
     let _ = two`x`;
+    let x = 1;
+    let _ = tag`a ${x}`;
 }
 
 __DATA__
-{"compile_error": "expected 2 arguments, found 1"}
+{
+    "compile_error": "expected 2 arguments, found 1",
+    "compile_error_count": 2,
+    "compile_errors_not_contains": ["a template tag must name"]
+}

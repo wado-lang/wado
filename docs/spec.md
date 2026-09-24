@@ -2543,9 +2543,13 @@ escape must still be one the lexer knows even where the tag preserves it.
 
 A tag is an ordinary function whose one parameter is bound by `ReflectTemplate`,
 the reflected kind of a template literal. The compiler synthesizes one anonymous
-type per template shape — its segments, specifiers and hole types — holding one
-field per hole. The type is unnameable and reached only through the bound. The
-tag walks the holes with tuple `for-of`:
+type per template shape — its segments, specifiers, hole types and hole source
+texts — holding one field per hole. So `` tag`${a}` `` and `` tag`${b}` `` are
+two types, each instantiating the tag, even where `a` and `b` share a type. The
+type is unnameable and reached only through the bound; a diagnostic and
+`Reflect::type_name()` show it as its text with each hole spelled by type,
+`` `id = ${i32}` ``, cut at 50 characters. The tag walks the holes with tuple
+`for-of`:
 
 ```wado
 fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
@@ -2561,12 +2565,21 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
 }
 ```
 
-A hole handle answers `index()` (its position), `lit()` / `raw()` (the
-preceding segment, escapes processed or preserved), `get(&t)` (the value, `V`),
-`source()` (the expression text), `has_spec()`, and `fmt(&t, f)` (rendering as
-the untagged template would). `ReflectTemplate::<T>::tail()` and `raw_tail()`
-give the segment after the last hole. Every answer but `get` and `fmt` is a
-constant.
+A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0),
+`lit()` / `raw()` (the preceding segment, escapes processed or preserved),
+`get(&t)` (the value, `V`), `source()` (the expression text), `has_spec()`, and
+`fmt(&t, f)` (rendering as the untagged template would).
+`ReflectTemplate::<T>::tail()` and `raw_tail()` give the segment after the last
+hole. Every answer but `get` and `fmt` is a constant.
+
+`members()` walks a pack, so `Holes` is bound either as one (`[..V]`) or as the
+empty tuple (`()`, for a tag that reads only `tail()`). A concrete tuple
+(`Holes = [List<i32>]`) is an error at the call.
+
+A hole's type may not mention a type parameter of the enclosing item, since the
+shape is minted once rather than per instantiation. A generic body passes its
+tag a concrete value from its caller. The untagged template makes no shape, so
+`` `${v}` `` over a `v: X` is accepted where `` format`${v}` `` is not.
 
 Holes are evaluated once, left to right, before the tag runs. A tag may carry
 effects and return any type. Whether a call folds at compile time is the

@@ -1,0 +1,17 @@
+// A receiver whose expression already failed reports nothing more, through a
+// method chain or a loop over it. Its arguments still report their own faults.
+export fn run() {
+    let y = no_such_fn();
+    let z = y.foo().bar();
+    let _ = z.baz(no_such_arg);
+    for let q of y {
+        let _ = q.qux();
+    }
+}
+
+__DATA__
+{
+    "compile_error": "unknown function 'no_such_fn'",
+    "compile_errors_contains": ["no_such_arg"],
+    "compile_errors_not_contains": ["no method", "Iterator"]
+}

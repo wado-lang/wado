@@ -298,6 +298,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A template passed to a tag whose parameter it cannot satisfy.
+    TagParamNotTemplate {
+        param: String,
+        span: Span,
+    },
+
     /// Unknown type name
     UnknownType {
         name: String,
@@ -710,6 +716,16 @@ pub enum TypeError {
         assoc_name: String,
         expected: String,
         actual: String,
+        span: Span,
+    },
+
+    /// A reflect member called on a type parameter whose bound binds no pack
+    /// (`T: ReflectTemplate` without `Holes = [..V]`): the member reads one.
+    MissingReflectPackBound {
+        trait_name: String,
+        type_param: String,
+        method: String,
+        pack_bound: String,
         span: Span,
     },
 
@@ -1285,6 +1301,11 @@ impl TypeError {
                 format!("type mismatch: expected '{expected}', found '{found}'"),
                 *span,
             ),
+            TypeError::TagParamNotTemplate { param, span } => (
+                Code::TypeMismatch,
+                format!("a template tag's parameter must be bound by `ReflectTemplate`, not `{param}`"),
+                *span,
+            ),
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
@@ -1798,6 +1819,20 @@ impl TypeError {
                 Code::TraitBoundNotSatisfied,
                 format!(
                     "type '{type_name}' does not satisfy the associated type '{trait_name}::{assoc_name} = {expected}': it is '{actual}'"
+                ),
+                *span,
+            ),
+            TypeError::MissingReflectPackBound {
+                trait_name,
+                type_param,
+                method,
+                pack_bound,
+                span,
+            } => (
+                Code::TraitBoundNotSatisfied,
+                format!(
+                    "`{trait_name}::<{type_param}>::{method}()` needs `{type_param}` bound as \
+                     `{trait_name}<{pack_bound}>`"
                 ),
                 *span,
             ),

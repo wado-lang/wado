@@ -479,14 +479,14 @@ impl StructSpec {
     }
 }
 
-pub struct VariantCase {
+pub struct WadoVariantCase {
     pub name: String,
     pub payload: Option<String>,
 }
 
 pub struct VariantSpec {
     pub name: String,
-    cases: List<VariantCase>,
+    cases: List<WadoVariantCase>,
     visibility: Vis,
 }
 
@@ -496,12 +496,12 @@ impl VariantSpec {
     }
 
     pub fn add_case<S: AsStrSlice>(&mut self, name: S) -> &mut VariantSpec {
-        self.cases.push(VariantCase { name: name.to_string(), payload: null });
+        self.cases.push(WadoVariantCase { name: name.to_string(), payload: null });
         return self;
     }
 
     pub fn add_case_with_payload<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, payload: S1) -> &mut VariantSpec {
-        self.cases.push(VariantCase {
+        self.cases.push(WadoVariantCase {
             name: name.to_string(),
             payload: Option::<String>::Some(payload.to_string()),
         });

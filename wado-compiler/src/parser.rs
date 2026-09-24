@@ -643,7 +643,7 @@ impl Parser {
             Ok(self.advance())
         } else {
             Err(ParseError {
-                message: format!("expected {:?}, found {:?}", kind, self.peek_kind()),
+                message: format!("expected {kind}, found {}", self.peek_kind()),
                 span: self.peek().span,
             })
         }
@@ -673,7 +673,7 @@ impl Parser {
         }
 
         Err(ParseError {
-            message: format!("expected Gt, found {:?}", self.peek_kind()),
+            message: format!("expected `>`, found {}", self.peek_kind()),
             span: self.peek().span,
         })
     }
@@ -1072,7 +1072,7 @@ impl Parser {
             Ok((name, span))
         } else {
             Err(ParseError {
-                message: format!("expected identifier, found {:?}", self.peek_kind()),
+                message: format!("expected identifier, found {}", self.peek_kind()),
                 span: self.peek().span,
             })
         }
@@ -1095,7 +1095,7 @@ impl Parser {
         }
 
         Err(ParseError {
-            message: format!("expected field name, found {:?}", self.peek_kind()),
+            message: format!("expected field name, found {}", self.peek_kind()),
             span: self.peek().span,
         })
     }
@@ -1189,7 +1189,7 @@ impl Parser {
             TokenKind::World => self.parse_world_decl(visibility, attrs).map(Item::World),
             TokenKind::Global => self.parse_global_decl(visibility, attrs).map(Item::Global),
             _ => Err(ParseError {
-                message: format!("expected item, found {:?}", self.peek_kind()),
+                message: format!("expected item, found {}", self.peek_kind()),
                 span: self.peek().span,
             }),
         }
@@ -1802,7 +1802,7 @@ impl Parser {
             }
             other => Err(ParseError {
                 message: format!(
-                    "expected attribute value (string, number, bool, array, or object), got {other:?}"
+                    "expected attribute value (string, number, bool, array, or object), found {other}"
                 ),
                 span,
             }),
@@ -2201,7 +2201,7 @@ impl Parser {
         }
         Err(self.error_at_span(
             self.peek().span,
-            &format!("expected `;` or `}}`, found {:?}", self.peek_kind()),
+            &format!("expected `;` or `}}`, found {}", self.peek_kind()),
         ))
     }
 
@@ -3167,7 +3167,7 @@ impl Parser {
             } else {
                 Err(ParseError {
                     message: format!(
-                        "expected numeric literal after '-', found {:?}",
+                        "expected numeric literal after `-`, found {}",
                         self.peek_kind()
                     ),
                     span: self.peek().span,
@@ -3175,7 +3175,7 @@ impl Parser {
             }
         } else {
             Err(ParseError {
-                message: format!("expected pattern, found {:?}", self.peek_kind()),
+                message: format!("expected pattern, found {}", self.peek_kind()),
                 span: self.peek().span,
             })
         }
@@ -3226,7 +3226,7 @@ impl Parser {
                     } else {
                         return Err(ParseError {
                             message: format!(
-                                "expected field name in struct pattern, found {:?}",
+                                "expected field name in struct pattern, found {}",
                                 self.peek_kind()
                             ),
                             span: self.peek().span,
@@ -3844,7 +3844,10 @@ impl Parser {
                             } else {
                                 // Not a valid tuple field sequence
                                 return Err(ParseError {
-                                    message: format!("expected field name, found NumberLit({s:?})"),
+                                    message: format!(
+                                        "expected field name, found {}",
+                                        self.peek().kind
+                                    ),
                                     span: field_span,
                                 });
                             }
@@ -4322,7 +4325,7 @@ impl Parser {
                 span: start_span,
             }),
             _ => Err(ParseError {
-                message: format!("expected expression, found {:?}", self.peek_kind()),
+                message: format!("expected expression, found {}", self.peek_kind()),
                 span: start_span,
             }),
         }
@@ -4579,7 +4582,7 @@ impl Parser {
             return Err(self.error_at_span(
                 self.peek().span,
                 &format!(
-                    "expected `do` after handler bindings, found {:?}",
+                    "expected `do` after handler bindings, found {}",
                     self.peek_kind()
                 ),
             ));
@@ -6207,7 +6210,7 @@ impl Parser {
                 _ => {
                     return Err(ParseError {
                         message: format!(
-                            "expected 'import' or 'export' in world declaration, found {:?}",
+                            "expected `import` or `export` in world declaration, found {}",
                             self.peek_kind()
                         ),
                         span: self.peek().span,
