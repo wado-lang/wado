@@ -1967,7 +1967,9 @@ test "the overlap rule dispatch orders its fallback last too" {
     let mut g = parse(RULE_OVERLAP_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_x__inner(");
-    let empty_arm = find_substr(&body, "if true");
+    // The follow set is exact, so the empty alternative is also tested by name;
+    // its unconditional arm is still the last.
+    let empty_arm = find_substr(&body, "scope:");
     let a_arm = find_substr(&body, "if kind == TK_A");
     assert a_arm >= 0, `the A-led alternatives lost their arm: ${body}`;
     assert empty_arm >= 0, `the empty alternative lost its arm: ${body}`;
@@ -1983,17 +1985,14 @@ test "an optional over a wildcard has no first set to guard on" {
     assert count_substr(&body, "p.any()") > 0, `the wildcard body must still be emitted: ${body}`;
 }
 
-test "a nullable alternative with a first set keeps its index" {
-    // Nullable is not the same as untestable. `A?` can match nothing, but a
-    // lookahead of `a` selects it, so it is not the arm that goes last —
-    // demoting it lets `B` take the `b` that the rule's caller needs.
+test "a nullable alternative the caller can follow contends with the one it follows into" {
+    // `A?` can match nothing, and then the `b` belongs to the caller; `B` takes
+    // it itself. Which is right depends on what the caller has left, so the
+    // simulator decides rather than an arm order.
     let mut g = parse(NULLABLE_BUT_SELECTABLE_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_r__inner(");
-    let opt_arm = find_substr(&body, "scope:");
-    let b_arm = find_substr(&body, "kind == TK_B");
-    assert opt_arm >= 0, `the nullable alternative lost its arm: ${body}`;
-    assert b_arm < 0 || opt_arm < b_arm, `a nullable alternative is not the trailing arm: ${body}`;
+    assert count_substr(&body, "atn_predict_with_stack(") == 1, `the contested lookahead is not simulated: ${body}`;
 }
 
 test "a wildcard behind a nullable prefix still makes its alternative open-ended" {

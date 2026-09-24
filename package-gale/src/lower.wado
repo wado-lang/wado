@@ -2293,10 +2293,11 @@ fn lower_scan_group(
             });
         },
         SimpleCst => {
-            return lower_simple_cst_scan_group(alts, ctx, outer_follow, follow_is_exact);
+            let se = lower_simple_cst_scan_group(alts, ctx, outer_follow, follow_is_exact);
+            return with_scan_group_atn_site(se, g, outer_follow, follow_is_exact, ctx);
         },
         General => {
-            return lower_general_scan_group(
+            let se = lower_general_scan_group(
                 alts,
                 ctx,
                 outer_follow,
@@ -2304,8 +2305,46 @@ fn lower_scan_group(
                 enclosing_at_tail,
                 outer_suffix,
             );
+            return with_scan_group_atn_site(se, g, outer_follow, follow_is_exact, ctx);
         },
     }
+}
+
+fn with_scan_group_atn_site(
+    se: ScanElement,
+    g: &GroupElement,
+    outer_follow: &List<String>,
+    follow_is_exact: bool,
+    ctx: &mut GenContext,
+) -> ScanElement {
+    let Group(mut sg) = se else {
+        return se;
+    };
+    let admits = group_empty_alt_admits(&g.alternatives, outer_follow, follow_is_exact, ctx);
+    sg.atn_site = group_atn_site(g, &sg.alt_classes, &admits, ctx);
+    return ScanElement::Group(sg);
+}
+
+/// `g`'s decision site where its empty alternative shares a branch with another
+/// — both admit a token that can follow the group, so only the simulator can
+/// tell which one the rest of the input takes — or -1.
+fn group_atn_site(
+    g: &GroupElement,
+    classes: &List<AltClass>,
+    admits: &Option<EmptyAltAdmits>,
+    ctx: &mut GenContext,
+) -> i32 {
+    let Some(e) = admits else {
+        return -1;
+    };
+    for let branch of &compute_overlap_groups_of(classes) {
+        if branch.len() > 1 && branch.contains(&e.alt_index) {
+            ctx.mark_needs_atn();
+            ctx.mark_needs_scan_atn();
+            return g.atn_decision;
+        }
+    }
+    return -1;
 }
 
 fn lower_general_scan_group(
@@ -3235,10 +3274,11 @@ fn lower_group_op<S: AsStrSlice>(
             return lower_token_only_group(alts, name_counts, ctx);
         },
         SimpleCst => {
-            return lower_simple_cst_group(alts, name_counts, ctx, outer_follow, follow_is_exact);
+            let op = lower_simple_cst_group(alts, name_counts, ctx, outer_follow, follow_is_exact);
+            return with_group_atn_site(op, g, ctx);
         },
         General => {
-            return lower_general_group(
+            let op = lower_general_group(
                 alts,
                 name_counts,
                 rule_name,
@@ -3249,8 +3289,18 @@ fn lower_group_op<S: AsStrSlice>(
                 enclosing_at_tail,
                 outer_suffix,
             );
+            return with_group_atn_site(op, g, ctx);
         },
     }
+}
+
+fn with_group_atn_site(op: Op, g: &GroupElement, ctx: &mut GenContext) -> Op {
+    let Group(mut go) = op else {
+        return op;
+    };
+    go.atn_site = group_atn_site(g, &go.scan_group.alt_classes, &go.empty_alt_admits, ctx);
+    go.scan_group.atn_site = go.atn_site;
+    return Op::Group(go);
 }
 
 /// Single-element single-alt: `(e)` lowers to `e` with no struct of

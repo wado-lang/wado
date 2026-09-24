@@ -43,7 +43,7 @@ use {
     build_group_prediction_tree_from_order,
     group_prediction_order,
 } from "./prediction.wado";
-use { rule_overlap_groups } from "./parser_gen.wado";
+use { RuleOverlap, rule_overlap_groups } from "./parser_gen.wado";
 use { build_atn_with, dump_atn } from "./atn.wado";
 
 /// The `--atn` report: the surface-IR ATN the runtime simulator walks, built
@@ -248,7 +248,7 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
         },
     };
 
-    let [non_lr_indices, first_sets, groups] = rule_overlap_groups(surface, rule, ctx);
+    let RuleOverlap { non_lr_indices, first_sets, groups, end_follow } = rule_overlap_groups(surface, rule, ctx);
     if non_lr_indices.len() < 2 {
         return;
     }
@@ -262,7 +262,7 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
         // The order feeds both the tree and the group header below, so
         // compute it once and reuse it.
         let real_indices = group_prediction_order(group, &first_sets, &non_lr_indices);
-        let tree = build_group_prediction_tree_from_order(&surface.alternatives, &real_indices, ctx);
+        let tree = build_group_prediction_tree_from_order(&surface.alternatives, &real_indices, ctx, &end_follow);
 
         if !printed_header {
             out.push_str("  prediction:\n");

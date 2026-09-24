@@ -20467,26 +20467,34 @@ fn _parse_enum_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
     let kind = p.peek_kind();
     if _kind_set_36(kind) {
         if _kind_set_4(kind) {
-            let _sd_tokens = &p.kinds;
-            let _sd_pos = p.pos;
-            p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_0 = _parse_enum_expr_field__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
-            p.scan_gate.no_struct = p.no_struct;
-            let _sd_p_1 = scan_enum_expr_field_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
-            let mut _sd_best_i: i32 = -1;
-            let mut _sd_best_p: i32 = -1;
-            if _sd_p_0 > _sd_best_p {
-                _sd_best_p = _sd_p_0;
-                _sd_best_i = 0;
-            }
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
-            if _sd_best_i == 0 {
+            if p.peek_at(1) == TK_COLON {
+                return _parse_enum_expr_field__inner_alt_1(p, follow);
+            } else if _kind_set_67(p.peek_at(1)) {
                 return _parse_identifier(p);
+            } else {
+                let _sd_tokens = &p.kinds;
+                let _sd_pos = p.pos;
+                p.scan_gate.no_struct = p.no_struct;
+                let _sd_p_0 = _parse_enum_expr_field__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+                p.scan_gate.no_struct = p.no_struct;
+                let _sd_p_1 = scan_enum_expr_field_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+                let mut _sd_best_i: i32 = -1;
+                let mut _sd_best_p: i32 = -1;
+                if _sd_p_0 > _sd_best_p {
+                    _sd_best_p = _sd_p_0;
+                    _sd_best_i = 0;
+                }
+                if _sd_p_1 > _sd_best_p {
+                    _sd_best_p = _sd_p_1;
+                    _sd_best_i = 1;
+                }
+                if _sd_best_i >= 0 {
+                    if _sd_best_i == 0 {
+                        return _parse_identifier(p);
+                    }
+                    return _parse_enum_expr_field__inner_alt_1(p, follow);
+                }
             }
-            return _parse_enum_expr_field__inner_alt_1(p, follow);
         } else if kind == TK_INTEGER_LITERAL {
             return _parse_enum_expr_field__inner_alt_1(p, follow);
         }

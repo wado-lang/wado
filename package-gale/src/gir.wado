@@ -1034,6 +1034,9 @@ pub struct GroupOp {
     /// walkers partition alike (invariant 9); `null` where there is nothing to
     /// write, the caller's FOLLOW being the answer.
     pub empty_alt_admits: Option<EmptyAltAdmits>,
+    /// The group's ATN decision site where its empty alternative contends with
+    /// another on a token that can follow the group; -1 where lookahead decides.
+    pub atn_site: i32 = -1,
 }
 
 /// Lower-side classification of a Repeat's body op shape. Drives
@@ -1314,6 +1317,8 @@ pub struct ScanGroupElement {
     /// What each alt matches (parallel to `alts`), classified at lower time —
     /// the whole input to the partition both sides branch on (invariant 9).
     pub alt_classes: List<AltClass>,
+    /// `GroupOp.atn_site`, for the scan's copy of the decision.
+    pub atn_site: i32 = -1,
 }
 
 pub struct ScanOptionalLookaheadElement {

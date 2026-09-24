@@ -944,6 +944,7 @@ pub fn mark_gated_predicates(
     groups: &List<List<i32>>,
     first_sets: &List<List<String>>,
     non_lr_indices: &List<i32>,
+    end_follow: &List<String>,
     ctx: &mut GenContext,
 ) {
     if !ctx.emit_actions() {
@@ -959,7 +960,7 @@ pub fn mark_gated_predicates(
         if group.len() == 1 {
             mark_alt_gate_predicates(&rule.alternatives[non_lr_indices[group[0]]], ctx);
         } else {
-            let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx);
+            let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx, end_follow);
             let mut gated: List<i32> = [];
             collect_gated_ambiguous_alts(&tree, &rule.alternatives, rule, ctx, &mut gated);
             for let idx of &gated {

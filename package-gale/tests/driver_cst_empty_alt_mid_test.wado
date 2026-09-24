@@ -46,12 +46,9 @@ test "empty-alt: nothing to scan leaves the empty alternative" {
     assert_tree("m", "(s m x)");
 }
 
-#[TODO]
 test "empty-alt: a viable empty alternative outranks a longer later one" {
     // ANTLR4 picks the lowest-indexed alternative that lets the rule complete,
     // so the empty alternative (index 1) beats `B` (index 2) and `x` takes the
-    // `b`. Gale's tournament ranks the branch it shares by scan length, where
-    // `B` is longer — the k=1 limit, resolvable only by the follow-aware
-    // decision the ATN simulator makes.
+    // `b`. No lookahead separates them; the ATN simulator decides.
     assert_tree("m b", "(s m (x b))");
 }
