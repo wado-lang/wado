@@ -1,0 +1,112 @@
+// Each function calls the next twice from statement position, so splicing
+// every level in one round copies the leaf 2^16 times. The re-scan of a fresh
+// splice is capped, and this compiles in about a second instead of hours.
+
+use { println, Stdout } from "core:cli";
+
+fn f0(x: i32) -> i32 {
+    let a = f1(x);
+    let b = f1(x ^ 1);
+    return (a * 3 + b) % 10007;
+}
+
+fn f1(x: i32) -> i32 {
+    let a = f2(x);
+    let b = f2(x ^ 2);
+    return (a * 3 + b) % 10007;
+}
+
+fn f2(x: i32) -> i32 {
+    let a = f3(x);
+    let b = f3(x ^ 3);
+    return (a * 3 + b) % 10007;
+}
+
+fn f3(x: i32) -> i32 {
+    let a = f4(x);
+    let b = f4(x ^ 4);
+    return (a * 3 + b) % 10007;
+}
+
+fn f4(x: i32) -> i32 {
+    let a = f5(x);
+    let b = f5(x ^ 5);
+    return (a * 3 + b) % 10007;
+}
+
+fn f5(x: i32) -> i32 {
+    let a = f6(x);
+    let b = f6(x ^ 6);
+    return (a * 3 + b) % 10007;
+}
+
+fn f6(x: i32) -> i32 {
+    let a = f7(x);
+    let b = f7(x ^ 7);
+    return (a * 3 + b) % 10007;
+}
+
+fn f7(x: i32) -> i32 {
+    let a = f8(x);
+    let b = f8(x ^ 8);
+    return (a * 3 + b) % 10007;
+}
+
+fn f8(x: i32) -> i32 {
+    let a = f9(x);
+    let b = f9(x ^ 9);
+    return (a * 3 + b) % 10007;
+}
+
+fn f9(x: i32) -> i32 {
+    let a = f10(x);
+    let b = f10(x ^ 10);
+    return (a * 3 + b) % 10007;
+}
+
+fn f10(x: i32) -> i32 {
+    let a = f11(x);
+    let b = f11(x ^ 11);
+    return (a * 3 + b) % 10007;
+}
+
+fn f11(x: i32) -> i32 {
+    let a = f12(x);
+    let b = f12(x ^ 12);
+    return (a * 3 + b) % 10007;
+}
+
+fn f12(x: i32) -> i32 {
+    let a = f13(x);
+    let b = f13(x ^ 13);
+    return (a * 3 + b) % 10007;
+}
+
+fn f13(x: i32) -> i32 {
+    let a = f14(x);
+    let b = f14(x ^ 14);
+    return (a * 3 + b) % 10007;
+}
+
+fn f14(x: i32) -> i32 {
+    let a = f15(x);
+    let b = f15(x ^ 15);
+    return (a * 3 + b) % 10007;
+}
+
+fn f15(x: i32) -> i32 {
+    let a = f16(x);
+    let b = f16(x ^ 16);
+    return (a * 3 + b) % 10007;
+}
+
+fn f16(x: i32) -> i32 {
+    return x + 1;
+}
+
+export fn run() with Stdout {
+    println(`${f0(builtin::black_box(3))}`);
+}
+
+__DATA__
+{"stdout": "1865\n"}
