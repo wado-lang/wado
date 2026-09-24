@@ -555,7 +555,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name: eq_method,
                         impl_def: None,
                         impl_name: name.clone(),
-                        impl_type_id: None,
+                        receiver: FqTypeName::binder(&name),
                         self_kind: info.self_kind,
                         return_type: info.return_type,
                         param_types: info.param_types,
@@ -599,7 +599,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name: ord_method,
                         impl_def: None,
                         impl_name: name.clone(),
-                        impl_type_id: None,
+                        receiver: FqTypeName::binder(&name),
                         self_kind: info.self_kind,
                         return_type: info.return_type,
                         param_types: info.param_types,
@@ -670,7 +670,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(&rhs_class),
                 );
                 let mut impl_name = struct_name.clone();
-                let mut impl_type_id = left;
                 if admitted.is_empty() {
                     // The impl is read on the link that wrote it, so the right
                     // operand is read there too: `impl Add for Vec2`
@@ -688,7 +687,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         Some(&rhs_class),
                     );
                     impl_name.clone_from(&lookup_name);
-                    impl_type_id = lookup_type_id;
                 }
                 // Unique-or-error: several admitted impls are reported here,
                 // where the span is, and dispatch falls through to the
@@ -705,7 +703,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name: method_name.to_string(),
                         impl_def: Some(trait_info.impl_def),
                         impl_name,
-                        impl_type_id: Some(impl_type_id),
+                        receiver: trait_info.receiver,
                         self_kind: trait_info.self_kind,
                         return_type: trait_info.output_type,
                         param_types: trait_info.rhs_type.map(|t| vec![t]).unwrap_or_default(),
@@ -749,7 +747,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name: method_name.to_string(),
                         impl_def: None,
                         impl_name: name.clone(),
-                        impl_type_id: None,
+                        receiver: FqTypeName::binder(name),
                         self_kind: info.self_kind,
                         return_type,
                         param_types: info.param_types,
@@ -810,7 +808,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_name: shift_method.to_string(),
                     impl_def: None,
                     impl_name: name.clone(),
-                    impl_type_id: None,
+                    receiver: FqTypeName::binder(name),
                     self_kind: info.self_kind,
                     return_type,
                     param_types: info.param_types,
@@ -860,9 +858,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Find the shift trait implementation. `Shl` / `Shr` declare
                 // `rhs: u32` and take no trait argument, so there is nothing
                 // to select between.
-                let (trait_info_opt, (impl_name, impl_type_id)) = self
+                let (trait_info_opt, impl_name) = self
                     .find_arithmetic_trait_impl(&struct_name, left, trait_, method_name, None)
-                    .map(|info| (Some(info), (struct_name.clone(), left)))
+                    .map(|info| (Some(info), struct_name.clone()))
                     .unwrap_or_else(|| {
                         let info = self.find_arithmetic_trait_impl(
                             &lookup_name,
@@ -871,7 +869,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             method_name,
                             None,
                         );
-                        (info, (lookup_name.clone(), lookup_type_id))
+                        (info, lookup_name.clone())
                     });
                 if let Some(trait_info) = trait_info_opt {
                     // Shift traits declare `rhs: u32` (not `&Self`), so the
@@ -883,7 +881,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name: method_name.to_string(),
                         impl_def: Some(trait_info.impl_def),
                         impl_name,
-                        impl_type_id: Some(impl_type_id),
+                        receiver: trait_info.receiver,
                         self_kind: trait_info.self_kind,
                         return_type: trait_info.output_type,
                         param_types: trait_info.rhs_type.map(|t| vec![t]).unwrap_or_default(),
@@ -1179,7 +1177,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_name: method_name.to_string(),
                     impl_def: None,
                     impl_name: name.clone(),
-                    impl_type_id: None,
+                    receiver: FqTypeName::binder(name),
                     self_kind: info.self_kind,
                     return_type,
                     param_types: vec![],
@@ -1215,21 +1213,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.tysys
                         .trait_impl_base_lookup(&struct_name, expr_type, trait_);
                 let resolved = self
-                    .resolve_trait_method_for_op(
-                        &struct_name,
-                        expr_type,
-                        trait_,
-                        method_name,
-                        false,
-                        None,
-                    )
+                    .resolve_trait_method_for_op(&struct_name, expr_type, trait_, method_name, None)
                     .or_else(|| {
                         self.resolve_trait_method_for_op(
                             &lookup_name,
                             lookup_type_id,
                             trait_,
                             method_name,
-                            false,
                             None,
                         )
                     });
@@ -1937,7 +1927,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         rhs: Option<&ArgClass>,
     ) -> Option<ResolvedTraitMethod> {
         let trait_ = self.tysys.compiler_trait_def(item)?;
-        self.resolve_trait_method_for_op(struct_name, lookup_type_id, trait_, method, false, rhs)
+        self.resolve_trait_method_for_op(struct_name, lookup_type_id, trait_, method, rhs)
     }
 
     /// The `OperatorOrd` method an ordering operator reads, for a type that
@@ -2034,12 +2024,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             wrap_flags.push(wrap);
         }
 
-        // The receiver is named by the type whose impl matched; a type-param
-        // receiver names no declaration, so it stays a binder.
-        let receiver_fq = resolved.impl_type_id.map_or_else(
-            || FqTypeName::binder(&resolved.impl_name),
-            |id| self.tysys.fq_receiver_head(id),
-        );
+        let receiver_fq = resolved.receiver.clone();
         let mangled_method_name = MethodName::format_local(
             &receiver_fq,
             Some(&resolved.trait_name),

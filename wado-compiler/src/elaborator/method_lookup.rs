@@ -80,6 +80,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .impl_sig(r.0)
             .expect("the decl pass records every impl block's declaration facts")
     }
+
+    /// How `header`'s methods spell a `type_id` receiver in their names.
+    pub(super) fn impl_receiver(&self, header: &ImplHeader, type_id: TypeId) -> FqTypeName {
+        self.tysys
+            .fq_receiver_of_impl(type_id, self.impl_is_concrete_instantiation(&header.ty))
+    }
+
+    /// Whether `impl_ty` is written at an instantiation other than the one
+    /// `receiver_args` settle; `false` while any of them is still open.
+    pub(super) fn impl_at_other_instantiation(
+        &self,
+        impl_ty: &Type,
+        receiver_args: &[TypeId],
+    ) -> bool {
+        let settled = {
+            let table = self.tysys.type_table.borrow();
+            receiver_args.iter().all(|&arg| table.is_concrete(arg))
+        };
+        settled
+            && self.impl_is_concrete_instantiation(impl_ty)
+            && !self
+                .tysys
+                .trait_impl_type_args_match(impl_ty, receiver_args)
+    }
 }
 
 /// Inputs for [`Elaborator::infer_method_type_args`].
@@ -2990,6 +3014,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     output_type,
                     self_kind,
                     impl_module_source: header.module.clone(),
+                    receiver: s.impl_receiver(header, base_type_id),
                     // The *full* spelling (`Add<Feet>`), not the operator's
                     // base name: it is what the mangled method name
                     // discriminates instantiations on, exactly as the indexing
@@ -3082,6 +3107,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let impl_type_params = header.type_params.clone();
                 let impl_ty = header.ty.clone();
+                let receiver = s.impl_receiver(header, base_type_id);
                 if !concrete_type_args.is_empty()
                     && !s.tysys.check_impl_block_bounds(
                         &s.annotate_ctx,
@@ -3111,10 +3137,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(assoc_type_name)
                     .copied()
                     .unwrap_or(TypeTable::UNKNOWN);
-
-                let receiver = s
-                    .tysys
-                    .fq_receiver_of_impl(base_type_id, s.impl_is_concrete_instantiation(&impl_ty));
 
                 Some(IndexingTraitInfo {
                     method_def: method_header.def,

@@ -2981,10 +2981,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the name as its own type parameter (`impl<V: Bound> Trait for V`), which
     /// keys under that binder. Both are searched in the current module, only
     /// the declaration namespace outside it.
+    ///
+    /// A block written at another instantiation than `receiver_args` settle
+    /// (`impl Tr for Pair<i64, i32>` for a `Pair<i32, i64>`) is not one.
     pub(super) fn trait_impls_for_receiver(
         &self,
         struct_name: &str,
         target_hint: Option<&ImplTargetKey>,
+        receiver_args: &[TypeId],
     ) -> Vec<DefId> {
         let defs = self.tysys.resolutions.defs();
         let target = self.static_receiver_key(struct_name, target_hint);
@@ -3008,6 +3012,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let header = &env.impl_headers[key];
             header.is_trait_impl()
                 && self.impl_head_decl_name(header, defs.module(*key)) == declared_name
+                && !self.impl_at_other_instantiation(&header.ty, receiver_args)
         });
         keys
     }
@@ -3231,7 +3236,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> StaticArgSurvey {
         let mut survey = StaticArgSurvey::default();
-        for impl_def in self.trait_impls_for_receiver(recv.name, recv.key) {
+        let receiver_args = self
+            .receiver_declaring_args(recv.ty, recv.args)
+            .unwrap_or_default();
+        for impl_def in self.trait_impls_for_receiver(recv.name, recv.key, &receiver_args) {
             let Some(trait_decl) = self.tysys.signatures.impl_trait(impl_def) else {
                 continue;
             };
@@ -3790,6 +3798,8 @@ pub(super) struct StaticReceiver<'a> {
     /// every `Self`-typed parameter instantiates to `unknown`, which no
     /// argument admits.
     pub(super) ty: Option<TypeId>,
+    /// The type arguments the call carries, which [`Self::ty`] may not.
+    pub(super) args: &'a [TypeId],
     /// The trait a qualified spelling names; only its impls answer.
     pub(super) required_trait: Option<DefId>,
 }
@@ -3801,6 +3811,7 @@ impl<'a> StaticReceiver<'a> {
             name,
             key: None,
             ty: None,
+            args: &[],
             required_trait: None,
         }
     }

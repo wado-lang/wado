@@ -5202,14 +5202,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `From<SourceType>` as the trait segment disambiguates several `From`
         // impls on one target type.
         let from_trait = from_trait_name.clone().with_args(vec![from_name.clone()]);
-        // The receiver the method name is built from — the same value reify
-        // puts on the call's `method_info`, so the two cannot drift.
-        let target_receiver = self.tysys.fq_receiver_head(target_type);
-        let method_name = MethodName::format_local(&target_receiver, Some(&from_trait), "from");
 
         // The block that provides the `From` impl, and where its body lives.
-        let (impl_def, module_source) =
-            self.find_from_impl(&self.impl_target_of(target_type, &target_name), &from_name);
+        let (impl_def, module_source) = self.find_from_impl(target_type, &target_name, &from_name);
+        // The receiver the method name is built from — the same value reify
+        // puts on the call's `method_info`, so the two cannot drift.
+        let target_receiver = match impl_def {
+            Some(def) => self.impl_receiver(&self.tysys.trait_env.impl_headers[&def], target_type),
+            None => self.tysys.fq_receiver_head(target_type),
+        };
+        let method_name = MethodName::format_local(&target_receiver, Some(&from_trait), "from");
 
         let key = caller_id;
         self.sem.types.from_call_facts.insert(
@@ -5227,14 +5229,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type
     }
 
-    /// The `impl From<from_name> for target_name` block and the module that
+    /// The `impl From<from_name> for target_type` block and the module that
     /// wrote it. No block where the synthesis pass mints the impl later.
     fn find_from_impl(
         &self,
-        target: &ImplTargetKey,
+        target_type: TypeId,
+        target_name: &DeclName,
         from_name: &FqTypeName,
     ) -> (Option<DefId>, ModuleSource) {
-        let keys = self.impl_keys_of_from(target, from_name);
+        let target_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(target_type)
+            .unwrap_or_default();
+        let mut keys =
+            self.impl_keys_of_from(&self.impl_target_of(target_type, target_name), from_name);
+        keys.retain(|key| {
+            !self.impl_at_other_instantiation(
+                &self.tysys.trait_env.impl_headers[key].ty,
+                &target_args,
+            )
+        });
         // The current module wins a tie.
         let defs = self.tysys.resolutions.defs();
         keys.iter()

@@ -297,6 +297,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name,
             receiver_key,
             receiver_type,
+            receiver_args,
         ));
         candidates.extend(self.blanket_candidates(method_name, receiver_type));
         if let Some(required) = required_trait {
@@ -522,6 +523,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let recv = StaticReceiver {
             key: receiver_key,
             ty: query.receiver_type,
+            args: query.receiver_args,
             required_trait: query.required_trait,
             ..StaticReceiver::of(receiver_name)
         };
@@ -682,8 +684,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         target_hint: Option<&ImplTargetKey>,
         receiver_type: Option<TypeId>,
+        receiver_args: &[TypeId],
     ) -> Vec<Candidate> {
-        self.trait_impls_for_receiver(receiver_name, target_hint)
+        let receiver_args = self
+            .receiver_declaring_args(receiver_type, receiver_args)
+            .unwrap_or_default();
+        self.trait_impls_for_receiver(receiver_name, target_hint, &receiver_args)
             .into_iter()
             .filter_map(|impl_def| {
                 let header = &self.tysys.trait_env.impl_headers[&impl_def];
@@ -881,8 +887,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .is_some_and(|info| info.members.iter().any(|member| member.name == name))
     }
 
-    /// The resolution for a declaration already picked: its signature, read at
-    /// the receiver.
     /// The receiver's type arguments: the ones a call carries, else the ones
     /// its type holds. `None` where it brings neither.
     pub(super) fn receiver_declaring_args(
@@ -902,6 +906,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (!args.is_empty()).then_some(args)
     }
 
+    /// The resolution for a declaration already picked: its signature, read at
+    /// the receiver.
     fn callee_of_declaration(
         &mut self,
         def: DefId,

@@ -3111,7 +3111,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         lookup_type_id: TypeId,
         trait_: DefId,
         method_name: &str,
-        is_type_param: bool,
         rhs: Option<&ArgClass>,
     ) -> Option<ResolvedTraitMethod> {
         // `Eq` and `Ord` fix their return types whatever a user impl writes, and
@@ -3140,7 +3139,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None,
                 )
             });
-        let (info_trait_name, self_kind, param_types, return_type, impl_def) =
+        let (info_trait_name, self_kind, param_types, return_type, impl_def, receiver) =
             if let Some(info) = written {
                 let return_type = auto_derive.map_or(info.output_type, |(_, ty)| ty);
                 let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
@@ -3150,6 +3149,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_types,
                     return_type,
                     Some(info.impl_def),
+                    info.receiver,
                 )
             } else if let Some((item, return_type)) = auto_derive
                 && let Some(trait_) = self.tysys.compiler_trait(item)
@@ -3172,6 +3172,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     vec![ref_self_ty],
                     return_type,
                     None,
+                    self.tysys.fq_receiver_head(lookup_type_id),
                 )
             } else {
                 return None;
@@ -3184,11 +3185,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name: method_name.to_string(),
             impl_def,
             impl_name: struct_name.to_string(),
-            impl_type_id: (!is_type_param).then_some(lookup_type_id),
+            receiver,
             self_kind,
             return_type,
             param_types,
-            is_type_param_receiver: is_type_param,
+            is_type_param_receiver: false,
         })
     }
 

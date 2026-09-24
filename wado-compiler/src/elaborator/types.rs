@@ -3611,6 +3611,9 @@ pub(super) struct ArithmeticTraitInfo {
     pub(super) rhs_type: Option<TypeId>,
     /// Module that wrote the impl block — where the method body is registered.
     pub(super) impl_module_source: ModuleSource,
+    /// How to spell the receiver in the dispatched method's name, as
+    /// [`IndexingTraitInfo::receiver`] does.
+    pub(super) receiver: FqTypeName,
 }
 
 /// Complete, Self-substituted description of a trait method lookup, produced by
@@ -3637,10 +3640,9 @@ pub(super) struct ResolvedTraitMethod {
     /// newtypes this may be the ultimate base-type name when dispatch falls
     /// back to the base impl.
     pub(super) impl_name: String,
-    /// That type's `TypeId`, from which the receiver's fq name is read.
-    /// `None` when the receiver is a type parameter, which names no
-    /// declaration.
-    pub(super) impl_type_id: Option<TypeId>,
+    /// How the dispatched method's name spells its receiver: the matched
+    /// block's, or the binder where the receiver is a type parameter.
+    pub(super) receiver: FqTypeName,
     /// `self_kind` from the method signature (almost always `Ref`).
     pub(super) self_kind: ast::SelfKind,
     /// Return type of the method, with `Self` and impl type params
