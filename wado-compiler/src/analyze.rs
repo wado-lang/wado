@@ -62,6 +62,7 @@ use crate::symbol::{
     ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
     WorldExportSymbol, WorldImportSymbol, WorldSymbol,
 };
+use crate::syntax::{expression_keyword_name_message, is_expression_keyword};
 use crate::token::Span;
 
 /// Whether a module's functions may omit a body without naming what backs it.
@@ -148,6 +149,8 @@ pub enum AnalyzeError {
     },
     /// A function declared without a body where nothing supplies one.
     MissingFunctionBody { name: String, span: Span },
+    /// A declaration or import spelled like a keyword that begins an expression.
+    KeywordName { name: String, span: Span },
     /// An `#[unavailable]` that cannot report what it was written to report.
     MalformedUnavailable { fault: UnavailableFault, span: Span },
     /// Undefined symbol reference
@@ -256,6 +259,11 @@ impl AnalyzeError {
             AnalyzeError::MissingFunctionBody { name, span } => (
                 Code::MissingFunctionBody,
                 format!("function '{name}' has no body"),
+                *span,
+            ),
+            AnalyzeError::KeywordName { name, span } => (
+                Code::InvalidSyntax,
+                expression_keyword_name_message(name),
                 *span,
             ),
             AnalyzeError::MalformedUnavailable { fault, span } => (
@@ -429,6 +437,16 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         visibility: Visibility,
         span: Span,
     ) -> Option<AstId> {
+        if is_expression_keyword(name) {
+            let _ = self.logger.error_in(
+                module_source,
+                AnalyzeError::KeywordName {
+                    name: name.to_string(),
+                    span,
+                },
+            );
+            return None;
+        }
         if let Some(first) = self.symbols.defined_span_in_module(module_source, name) {
             let _ = self.logger.error_in(
                 module_source,
@@ -1043,6 +1061,15 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         local_name: &str,
         span: Span,
     ) -> Result<(), Bail> {
+        if is_expression_keyword(local_name) {
+            return self.logger.error_in(
+                module_source,
+                AnalyzeError::KeywordName {
+                    name: local_name.to_string(),
+                    span,
+                },
+            );
+        }
         let Some(declared) = self
             .symbols
             .defined_span_in_module(module_source, local_name)

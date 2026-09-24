@@ -38,6 +38,8 @@ pub(super) enum ArgClass {
     IntLit,
     FloatLit,
     StrLit,
+    /// `b"…"` / `#include_bytes`, which admit `List<u8>` and its newtypes.
+    BytesLit,
     NullLit,
     /// No type was produced; admits every parameter. The reason is carried so
     /// the ambiguity diagnostic can say what defeated selection.
@@ -327,6 +329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ArgClass::FloatLit => tt.is_float(param),
             ArgClass::StrLit => tt.base_type_name(tt.representation_head(param)) == "String",
+            ArgClass::BytesLit => tt.is_byte_list_representation(param),
             ArgClass::NullLit => tt.as_option(param).is_some(),
         }
     }
@@ -390,6 +393,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ArgClass::StrLit => {
                 "is a string literal, which admits `String` and its newtypes".to_string()
+            }
+            ArgClass::BytesLit => {
+                "is a byte-string literal, which admits `List<u8>` and its newtypes".to_string()
             }
             ArgClass::NullLit => "is `null`, which admits every `Option`".to_string(),
             ArgClass::Opaque(OpaqueReason::Closure) => {
@@ -479,11 +485,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Literal::Bool(_) => ArgClass::Exact(TypeTable::BOOL),
             ast::Literal::Unit => ArgClass::Exact(TypeTable::UNIT),
             ast::Literal::Null => ArgClass::NullLit,
-            // A `List<u8>` whatever the expected type says — the elaborator
-            // does not consult it here.
-            ast::Literal::Bytes(_) | ast::Literal::IncludeBytes(_) => {
-                ArgClass::Exact(self.tysys.type_table.borrow_mut().make_byte_list())
-            }
+            ast::Literal::Bytes(_) | ast::Literal::IncludeBytes(_) => ArgClass::BytesLit,
         }
     }
 
@@ -645,7 +647,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None => open,
                 }
             }
-            ArgClass::Head(_) | ArgClass::StrLit | ArgClass::NullLit | ArgClass::Opaque(_) => open,
+            ArgClass::Head(_)
+            | ArgClass::StrLit
+            | ArgClass::BytesLit
+            | ArgClass::NullLit
+            | ArgClass::Opaque(_) => open,
         }
     }
 
@@ -688,7 +694,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // this position alone.
             ArgClass::Exact(t) if !self.tysys.type_table.borrow().is_numeric(t) => open,
             ArgClass::IntLit | ArgClass::FloatLit | ArgClass::Exact(_) => class,
-            ArgClass::Head(_) | ArgClass::StrLit | ArgClass::NullLit | ArgClass::Opaque(_) => open,
+            ArgClass::Head(_)
+            | ArgClass::StrLit
+            | ArgClass::BytesLit
+            | ArgClass::NullLit
+            | ArgClass::Opaque(_) => open,
         }
     }
 
@@ -871,6 +881,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ArgClass::IntLit => Some(TypeTable::I32),
             ArgClass::FloatLit => Some(TypeTable::F64),
             ArgClass::StrLit => Some(self.get_string_struct_type()),
+            ArgClass::BytesLit => Some(self.tysys.type_table.borrow_mut().make_byte_list()),
             ArgClass::Head(_) | ArgClass::NullLit | ArgClass::Opaque(_) => None,
         }
     }

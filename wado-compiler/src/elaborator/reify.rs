@@ -6794,15 +6794,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a comparison chain `a < b < c …` into `(a < $m0) & ($m0 < c) …`
-    /// in a block binding each middle term once.
+    /// Reify a comparison chain `a < b < c …` into
+    /// `let $m0 = a; let $m1 = b; ($m0 < $m1) & ($m1 < c) …`: every operand
+    /// but the last is bound once, so all of them evaluate left to right.
     fn reify_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        use crate::tir::{TirBinaryOp, TirBlock, TirExprKind, TirStmtKind, TypeTable};
-
         assert!(
             chain.comparisons.len() >= 2,
             "the parser makes a single comparison a `Binary`"
@@ -6813,34 +6812,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let cmp0 = &chain.comparisons[0];
         let first_tir = self.reify_expr(&chain.first, ctx, None);
         let right0_tir = self.reify_expr(&cmp0.right, ctx, Some(first_tir.type_id));
+        let first_ref = Self::bind_chain_operand(0, first_tir, &mut stmts, chain.span, ctx);
+        let right0_ref = Self::bind_chain_operand(1, right0_tir, &mut stmts, chain.span, ctx);
 
-        // Bind first middle to `$m0`.
-        let m0_type = right0_tir.type_id;
-        let m0_name = "$m0".to_string();
-        let m0_index = ctx.add_local(m0_name.clone(), m0_type, false, None);
-        stmts.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: m0_name.clone(),
-                local_index: m0_index,
-                is_mut: false,
-                is_reactive: false,
-                type_id: m0_type,
-                value: right0_tir,
-                skip_value_copy: false,
-            },
-            chain.span,
-        ));
-        let m0_ref = TirExpr::new(
-            TirExprKind::Local {
-                index: m0_index,
-                name: m0_name,
-            },
-            m0_type,
-            chain.span,
-        );
-
-        let mut acc_tir = self.chain_comparison(cmp0.op, first_tir, m0_ref.clone(), cmp0.op_span);
-        let mut prev_tir = m0_ref;
+        let mut acc_tir =
+            self.chain_comparison(cmp0.op, first_ref, right0_ref.clone(), cmp0.op_span);
+        let mut prev_tir = right0_ref;
 
         let last_idx = chain.comparisons.len() - 1;
         for idx in 1..chain.comparisons.len() {
@@ -6849,29 +6826,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let right_tir = if idx == last_idx {
                 raw_right
             } else {
-                let m_type = raw_right.type_id;
-                let m_name = format!("$m{idx}");
-                let m_index = ctx.add_local(m_name.clone(), m_type, false, None);
-                stmts.push(TirStmt::new(
-                    TirStmtKind::Let {
-                        name: m_name.clone(),
-                        local_index: m_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: m_type,
-                        value: raw_right,
-                        skip_value_copy: false,
-                    },
-                    chain.span,
-                ));
-                TirExpr::new(
-                    TirExprKind::Local {
-                        index: m_index,
-                        name: m_name,
-                    },
-                    m_type,
-                    chain.span,
-                )
+                Self::bind_chain_operand(idx + 1, raw_right, &mut stmts, chain.span, ctx)
             };
             let next_prev = right_tir.clone();
             let cmp_tir = self.chain_comparison(cmp.op, prev_tir, right_tir, cmp.op_span);
@@ -6894,6 +6849,39 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TirExprKind::Block(TirBlock::new(stmts, chain.span)),
             TypeTable::BOOL,
             chain.span,
+        )
+    }
+
+    /// `let $mK = value;` pushed onto `stmts`, answered by a read of `$mK`.
+    fn bind_chain_operand(
+        idx: usize,
+        value: TirExpr,
+        stmts: &mut Vec<TirStmt>,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let type_id = value.type_id;
+        let name = format!("$m{idx}");
+        let local_index = ctx.add_local(name.clone(), type_id, false, None);
+        stmts.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: name.clone(),
+                local_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id,
+                value,
+                skip_value_copy: false,
+            },
+            span,
+        ));
+        TirExpr::new(
+            TirExprKind::Local {
+                index: local_index,
+                name,
+            },
+            type_id,
+            span,
         )
     }
 

@@ -598,12 +598,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else if let ast::Expr::StructLiteral(struct_lit) = ast_value {
                 // Handle implicit struct literal: let p: Point = { x: 1, y: 2 }
                 if struct_lit.name.is_none() {
-                    // Check if target type is a struct
-                    let target_resolved = self.tysys.type_table.borrow().get(target_type).clone();
                     // `resolve_expr` decides what an unnamed literal against a
                     // declared struct means. Deciding it a second time here is
                     // how the two spellings came to check different things.
-                    if let ResolvedType::Struct { .. } = target_resolved {
+                    let is_struct = matches!(
+                        self.tysys.type_table.borrow().get(target_type),
+                        ResolvedType::Struct { .. }
+                    );
+                    if is_struct || self.implicit_struct_target(Some(target_type)).is_some() {
                         (
                             self.resolve_expr(ast_value, ctx, Some(target_type)),
                             target_type,

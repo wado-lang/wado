@@ -1,0 +1,12 @@
+// `f64::NAN` and `f32::NAN` are the positive quiet NaN, so the total order
+// sorts them after `+Inf`, as it does any +NaN.
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    println(`${f64::NAN.to_bits():x} ${f64::NAN.cmp(&f64::INFINITY):?}`);
+    println(`${f32::NAN.to_bits():x} ${f32::NAN.cmp(&f32::INFINITY):?}`);
+    assert f64::NAN.is_nan() && f32::NAN.is_nan();
+}
+
+__DATA__
+{"stdout": "7ff8000000000000 Ordering::Greater\n7fc00000 Ordering::Greater\n"}

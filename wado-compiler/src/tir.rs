@@ -3897,6 +3897,16 @@ impl TypeTable {
         self.representation_head(a) == self.representation_head(b)
     }
 
+    /// Whether `id` is `List<u8>` or a newtype chain over it (`ByteList`): what
+    /// a byte-string literal coerces to.
+    pub fn is_byte_list_representation(&self, id: TypeId) -> bool {
+        let head = self.representation_head(id);
+        !matches!(
+            self.get(head),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) && self.as_list(head) == Some(TypeTable::U8)
+    }
+
     /// Check if a type is `List<T>` and return the element type if so.
     /// Also unwraps Ref/MutRef types to check the inner type.
     pub fn as_list(&self, id: TypeId) -> Option<TypeId> {

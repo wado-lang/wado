@@ -3604,12 +3604,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The struct declaration an unnamed literal's target names, or `None`
     /// where it declares none and the literal interns by its fields.
-    fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<DefId> {
+    pub(super) fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<DefId> {
         match *self.tysys.type_table.borrow().get(expected_type?) {
             ResolvedType::Struct {
                 def: StructDef::Decl(def),
                 ..
             } => Some(def),
+            ResolvedType::GenericInstance { def, .. } => {
+                self.lookup_struct_fields_of_decl(def).map(|_| def)
+            }
             _ => None,
         }
     }

@@ -489,13 +489,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if matches!(&lit.value, Literal::Bytes(_) | Literal::IncludeBytes(_))
         );
         if is_bytes_literal {
-            let list_u8 = self.tysys.type_table.borrow_mut().make_list(TypeTable::U8);
-            let base_id = self
+            if self
                 .tysys
                 .type_table
                 .borrow()
-                .representation_head(target_type);
-            if base_id == list_u8 {
+                .is_byte_list_representation(target_type)
+            {
                 if let Expr::Literal(lit) = expr
                     && let Literal::Bytes(raw) = &lit.value
                     && let Err(message) = unescape_bytes(raw)
@@ -550,13 +549,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // A key-value literal whose generic target builds from no pair array
-        // at all: say what is missing where it is written.
+        // at all: say what is missing where it is written. A target declaring
+        // a struct reads the literal as that struct instead.
         if let Expr::StructLiteral(struct_lit) = expr
             && struct_lit.name.is_none()
             && matches!(
                 self.tysys.type_table.borrow().get(target_type),
                 ResolvedType::GenericInstance { .. }
             )
+            && self.implicit_struct_target(Some(target_type)).is_none()
         {
             self.report_if_not_a_map_target(target_type, expr.span());
         }

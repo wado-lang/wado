@@ -1804,8 +1804,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `(a OP1 b) & (b OP2 c) [& (c OP3 d) …]`, which reify emits. The join is
     /// `&`, not `&&`: a chain evaluates every operand.
     ///
-    /// Middle terms appear in two comparisons each, so each is bound to a
-    /// `$mK` local — `foo() < bar() < baz()` calls `bar()` exactly once.
+    /// Every operand but the last is bound to a `$mK` local, so
+    /// `foo() < bar() < baz()` calls each once, left to right.
     pub(super) fn desugar_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
@@ -1832,8 +1832,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None,
         );
 
-        // Bind `right0` to `$m0` — it is reused by the next comparison.
-        self.bind_chain_middle(0, right0_tir, ctx);
+        self.bind_chain_operand(0, first_tir, ctx);
+        self.bind_chain_operand(1, right0_tir, ctx);
         let mut acc = self.resolve_binary_op(
             first_tir,
             cmp0.op,
@@ -1852,8 +1852,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // can't help).
             let right = self.resolve_expr(&cmp.right, ctx, Some(prev));
             if idx != last_idx {
-                // Tail operand: only one use, no binding needed.
-                self.bind_chain_middle(idx, right, ctx);
+                self.bind_chain_operand(idx + 1, right, ctx);
             }
             let cmp_type =
                 self.resolve_binary_op(prev, cmp.op, right, cmp.right.span(), cmp.op_span, None);
@@ -1875,10 +1874,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::BOOL
     }
 
-    /// Allocate a `$mK` local for a comparison-chain middle term. The `Let`
+    /// Allocate a `$mK` local for a comparison-chain operand. The `Let`
     /// binding itself is rebuilt by reify; the body walk needs only the
     /// `add_local` side effect (walk-order parity) and the local's type.
-    fn bind_chain_middle(&mut self, idx: usize, type_id: TypeId, ctx: &mut FunctionContext) {
+    fn bind_chain_operand(&mut self, idx: usize, type_id: TypeId, ctx: &mut FunctionContext) {
         let name = format!("$m{idx}");
         let _local_index = ctx.add_local(name, type_id, false, None);
     }

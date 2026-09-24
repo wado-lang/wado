@@ -26,6 +26,7 @@ use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
 use crate::lexer::{LexResult, lex_interpolation};
+use crate::syntax::expression_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
 
@@ -4659,7 +4660,19 @@ impl Parser {
         self.mark_contextual_keyword(start_span);
         self.advance(); // consume `resume` ident
         let id = self.alloc_ast_id();
-        let value = self.parse_expr()?;
+        let value_start = self.peek().span;
+        let value = self.parse_expr().map_err(|err| {
+            if err.span.start != value_start.start {
+                return err;
+            }
+            ParseError {
+                message: format!(
+                    "`resume` takes a value; {}",
+                    expression_keyword_name_message("resume")
+                ),
+                span: start_span,
+            }
+        })?;
         let span = start_span.merge(&value.span());
         Ok(Expr::Resume(Box::new(ResumeExpr { id, value, span })))
     }

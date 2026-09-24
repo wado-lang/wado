@@ -13,7 +13,7 @@ use crate::elaborator::written::binder_of;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::loader::resolve_use_decl_source;
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageId};
 use crate::name;
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::tir::TypeTable;
@@ -2034,7 +2034,8 @@ fn sited_impl_target_key(
     }
 }
 
-/// Returns `true` if the module source is a user-local module (part of the current package).
+/// Whether the module is user code — the root package or a dependency — which
+/// coherence checks, rather than the stdlib. Ownership is per package.
 pub(super) fn is_user_local(ms: &ModuleSource) -> bool {
     matches!(
         ms,
@@ -2781,21 +2782,24 @@ fn check_all_orphan_rules(
     resolve: ResolveWritten<'_>,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut violations = Vec::new();
-
-    let owned = |def: &&DefId| is_user_local(defs.module(**def));
-    let local = LocalDecls {
-        types: type_decl_index.iter().filter(owned).copied().collect(),
-        traits: decl_index.iter().filter(owned).copied().collect(),
-        tuple: type_decl_index
-            .iter()
-            .filter(owned)
-            .any(|def| defs.name(*def) == TypeTable::TUPLE_TYPE_NAME),
-    };
+    let mut by_package: IndexMap<PackageId, LocalDecls> = IndexMap::default();
 
     for header in impl_headers.values() {
         if !is_user_local(&header.module) {
             continue;
         }
+        let package = header.module.package_id();
+        let local: &LocalDecls = by_package.entry(package.clone()).or_insert_with(|| {
+            let owned = |def: &&DefId| defs.module(**def).package_id() == package;
+            LocalDecls {
+                types: type_decl_index.iter().filter(owned).copied().collect(),
+                traits: decl_index.iter().filter(owned).copied().collect(),
+                tuple: type_decl_index
+                    .iter()
+                    .filter(owned)
+                    .any(|def| defs.name(*def) == TypeTable::TUPLE_TYPE_NAME),
+            }
+        });
 
         let Some(trait_key) = header.trait_key() else {
             // Inherent impl: the orphan rule does not apply, but coherence does
@@ -2803,8 +2807,7 @@ fn check_all_orphan_rules(
             // two packages could add colliding methods to `String`. Use a trait
             // instead. `classify_position` looks through references and counts a
             // `LocalType` head as owned, and stdlib modules are skipped above.
-            if let PositionKind::ForeignType =
-                classify_position(&header.ty, header, &local, resolve)
+            if let PositionKind::ForeignType = classify_position(&header.ty, header, local, resolve)
             {
                 violations.push((
                     header.module.clone(),
@@ -2823,7 +2826,7 @@ fn check_all_orphan_rules(
         }
 
         // Foreign trait: apply RFC 2451 sequence check
-        if !check_orphan_rfc2451(header, &local, resolve) {
+        if !check_orphan_rfc2451(header, local, resolve) {
             violations.push((
                 header.module.clone(),
                 TypeError::OrphanViolation {

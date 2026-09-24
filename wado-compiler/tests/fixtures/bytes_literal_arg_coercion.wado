@@ -1,0 +1,27 @@
+// A byte-string literal coerces to any `List<u8>` newtype chain, so a method
+// taking `List<u8>`, `ByteList`, or a newtype over either accepts one, a
+// stream's `write` among them.
+use { println } from "core:cli";
+
+type Blob = ByteList;
+
+struct S { n: i32 }
+
+impl S {
+    fn take(&self, data: List<u8>) -> i32 { return data.len(); }
+    fn blob(&self, data: Blob) -> i32 { return data.len(); }
+    fn bytes(&self, data: ByteList) -> i32 { return data.len(); }
+}
+
+export fn run() with Stdout {
+    let s = S { n: 0 };
+    println(`${s.take(b"abcd")} ${s.blob(b"ab")} ${s.bytes(b"xyz")}`);
+
+    let [rx, tx] = Stream::<u8>::new();
+    rx.drop();
+    tx.write(b"hi\n");
+    tx.drop();
+}
+
+__DATA__
+{"stdout": "4 2 3\n"}
