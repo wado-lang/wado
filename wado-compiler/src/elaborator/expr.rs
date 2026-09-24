@@ -2997,7 +2997,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report the arms no value reaches. Coverage reads no types, so a
     /// type-pattern arm an earlier narrowing already takes is found by type.
     fn check_unreachable_arms(&self, arms: &[MatchArm], classified: &[(bool, Pat)]) {
-        let covered = exhaustiveness::unreachable_arms(
+        let reached = exhaustiveness::reached_arms(
             &classified.iter().map(|(g, p)| (*g, p)).collect::<Vec<_>>(),
         );
         let messages: Vec<(Span, String)> = classified
@@ -3007,7 +3007,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let message = self
                     .narrowed_past(&classified[..later], pattern)
                     .or_else(|| {
-                        covered.contains(&later).then(|| {
+                        (!reached[later]).then(|| {
                             "unreachable arm: the arms before it take every value it matches"
                                 .to_string()
                         })

@@ -30,14 +30,8 @@ use crate::unparse::unparse_type_into;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Resolve `use_decl.source` against `from`, recognising
-/// `with { type: "wat" | "wasm" }` attributes and routing them to the
-/// loader-synthesised wasm-asset module (`ModuleSource::Wasm`) instead
-/// of the regular Wado module-source resolution.
-///
-/// Returns `None` when the wasm asset path itself is malformed (e.g.
-/// `core:libm.wat` with no leading `./`); the caller emits the
-/// downstream `InvalidModulePath` diagnostic.
+/// The module `use_decl` imports from `from`, a Wasm asset where its `with`
+/// says so. `None` for a malformed asset path, which the caller reports.
 fn resolve_use_decl_module_source(
     interner: &mut ModuleSourceInterner,
     from: &ModuleSource,

@@ -89,6 +89,8 @@ type Row<'p> = Vec<&'p Pat>;
 trait MatrixRow<'p>: Sized {
     fn pats(&self) -> &[&'p Pat];
     fn with_pats(&self, pats: Row<'p>) -> Self;
+    /// This row behind a guard: it may take a value but covers none.
+    fn guarded(&self, pats: Row<'p>) -> Option<Self>;
 }
 
 impl<'p> MatrixRow<'p> for Row<'p> {
@@ -98,6 +100,10 @@ impl<'p> MatrixRow<'p> for Row<'p> {
 
     fn with_pats(&self, pats: Row<'p>) -> Self {
         pats
+    }
+
+    fn guarded(&self, _: Row<'p>) -> Option<Self> {
+        None
     }
 }
 
@@ -119,6 +125,14 @@ impl<'p> MatrixRow<'p> for ArmRow<'p> {
             arm: self.arm,
             guardless: self.guardless,
         }
+    }
+
+    fn guarded(&self, pats: Row<'p>) -> Option<Self> {
+        Some(Self {
+            pats,
+            arm: self.arm,
+            guardless: false,
+        })
     }
 }
 
@@ -154,9 +168,9 @@ pub(super) fn uncovered(patterns: &[&Pat]) -> Vec<Witness> {
     missing
 }
 
-/// The arms no value reaches: each index whose pattern the guardless arms
-/// before it already cover. A guarded arm covers nothing but may be unreachable.
-pub(super) fn unreachable_arms(arms: &[(bool, &Pat)]) -> Vec<usize> {
+/// Whether some value reaches each arm, past the guardless arms before it. A
+/// guarded arm covers nothing but may be unreachable.
+pub(super) fn reached_arms(arms: &[(bool, &Pat)]) -> Vec<bool> {
     let rows = arms
         .iter()
         .enumerate()
@@ -168,7 +182,7 @@ pub(super) fn unreachable_arms(arms: &[(bool, &Pat)]) -> Vec<usize> {
         .collect();
     let mut reached = vec![false; arms.len()];
     mark_reached(rows, &mut reached);
-    (0..arms.len()).filter(|&arm| !reached[arm]).collect()
+    reached
 }
 
 /// Marks each arm some value reaches: the first row taking it, and every
@@ -198,11 +212,11 @@ fn mark_reached(rows: Vec<ArmRow<'_>>, reached: &mut [bool]) {
 
 /// A column no constructor set describes, split by value: each row naming one
 /// with the wildcard rows around it, then the wildcard rows alone.
-fn open_groups<'p, R: MatrixRow<'p>>(rows: &[R]) -> Vec<Vec<R>> {
-    let is_wild = |i: &usize| matches!(rows[*i].pats()[0], Pat::Wild);
+fn open_groups<'p>(rows: &[ArmRow<'p>]) -> Vec<Vec<ArmRow<'p>>> {
+    let is_wild = |i: &usize| matches!(rows[*i].pats[0], Pat::Wild);
     let wild: Vec<usize> = (0..rows.len()).filter(is_wild).collect();
-    let tail = |i: usize| rows[i].with_pats(rows[i].pats()[1..].to_vec());
-    let mut groups: Vec<Vec<R>> = (0..rows.len())
+    let tail = |i: usize| rows[i].with_pats(rows[i].pats[1..].to_vec());
+    let mut groups: Vec<Vec<ArmRow<'p>>> = (0..rows.len())
         .filter(|i| !is_wild(i))
         .map(|named| {
             let (before, after) = wild.split_at(wild.partition_point(|&w| w < named));
@@ -271,7 +285,7 @@ fn signature<'p, R: MatrixRow<'p>>(rows: &[R]) -> Option<Vec<Ctor>> {
     let head = rows
         .iter()
         .map(|row| row.pats()[0])
-        .find(|p| !matches!(p, Pat::Wild))?;
+        .find(|p| !matches!(p, Pat::Wild | Pat::Opaque))?;
     match head {
         Pat::Case { cases, .. } => Some(
             (0..cases.len())
@@ -286,8 +300,10 @@ fn signature<'p, R: MatrixRow<'p>>(rows: &[R]) -> Option<Vec<Ctor>> {
         Pat::Product { fields, elements } => {
             Some(vec![Ctor::Product(fields.clone(), elements.len())])
         }
-        Pat::Int { domain: None, .. } | Pat::Narrow(_) | Pat::Opaque => None,
-        Pat::Wild | Pat::Or(_) => unreachable!("a head is expanded and not a wildcard"),
+        Pat::Int { domain: None, .. } | Pat::Narrow(_) => None,
+        Pat::Wild | Pat::Opaque | Pat::Or(_) => {
+            unreachable!("a head is expanded and names a constructor")
+        }
     }
 }
 
@@ -316,6 +332,14 @@ fn split_domain<'p, R: MatrixRow<'p>>(rows: &[R], domain: IntDomain) -> Vec<Ctor
 fn specialize_each<'p, R: MatrixRow<'p>>(rows: &[R], ctors: &[Ctor]) -> Vec<Vec<R>> {
     let mut out: Vec<Vec<R>> = std::iter::repeat_with(Vec::new).take(ctors.len()).collect();
     for row in rows {
+        if let Pat::Opaque = row.pats()[0] {
+            for (group, ctor) in out.iter_mut().zip(ctors) {
+                let mut pats = vec![&Pat::Wild; ctor.arity()];
+                pats.extend_from_slice(&row.pats()[1..]);
+                group.extend(row.guarded(pats));
+            }
+            continue;
+        }
         let reach = match row.pats()[0] {
             Pat::Case { index, .. } => {
                 let at = |c: &Ctor| match c {
