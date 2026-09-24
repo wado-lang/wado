@@ -232,7 +232,7 @@ fn panic_on_invalid_artifact<H: CompilerHost>(host: &H, invalid: &InvalidArtifac
 }
 
 /// [`report_without_span`], for a caller that stops at the first such error.
-fn bail_with<H: compiler_host::CompilerHost>(
+pub(crate) fn bail_with<H: compiler_host::CompilerHost>(
     logger: &Logger<'_, H>,
     code: compiler_host::Code,
     message: String,

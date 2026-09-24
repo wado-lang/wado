@@ -9,7 +9,8 @@ use std::sync::Arc;
 use crate::analyze::Analyzer;
 use crate::ast::{AstId, AstIdSpace, ImplBlock, Item, Module, SelfKind, Visibility};
 use crate::ast_index::AstIndex;
-use crate::compiler_host::{Code, CompilerHost, Diagnostic, LogLevel, Severity};
+use crate::bail_with;
+use crate::compiler_host::{Code, CompilerHost, LogLevel};
 use crate::component_model::{CmInterfaceRegistry, declares_cm_binding};
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
@@ -1248,27 +1249,18 @@ fn register_user_cm_modules<H: CompilerHost>(
     if modules.is_empty() {
         return Ok(());
     }
-    let report = |code: Code, message: String| {
-        let _ = logger.error(Diagnostic {
-            severity: Severity::Error,
-            code,
-            message,
-            span: None,
-        });
-        Bail
-    };
     let registry = Arc::make_mut(registry);
     for (source, module) in &modules {
         registry
             .register_user_cm_decls(module, source)
-            .map_err(|msg| report(Code::DuplicateDefinition, msg))?;
+            .map_err(|msg| bail_with(logger, Code::DuplicateDefinition, msg))?;
     }
     // Only once every module is registered: an `interface` naming a resource's
     // operations may sit in a module other than the one declaring it.
     for (_, module) in &modules {
         registry
             .validate_cm_function_names(module)
-            .map_err(|msg| report(Code::UnknownType, msg))?;
+            .map_err(|msg| bail_with(logger, Code::UnknownType, msg))?;
     }
     Ok(())
 }

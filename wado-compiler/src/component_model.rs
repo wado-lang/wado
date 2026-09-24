@@ -1281,9 +1281,8 @@ fn find_unique_source_with_prefix<'a>(
     find_unique_source_in_set(keys, name, &|src| src.starts_with(prefix))
 }
 
-/// The unique source interface registering `name` across every bundled CM
-/// namespace. A name declared by two of them is ambiguous — `None` — never
-/// silently the `wasi:` one.
+/// The unique source interface registering `name` across the bundled CM
+/// namespaces. A name two interfaces declare is ambiguous: `None`.
 fn find_unique_source_in_binding<'a>(
     keys: impl Iterator<Item = &'a (String, String)>,
     name: &str,
