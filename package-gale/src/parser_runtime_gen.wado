@@ -868,7 +868,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line("let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };");
     w.line("let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };");
     w.line(
-        "self.diagnostics.push(Diagnostic::error(code, `missing ${token_kind_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));",
+        "self.diagnostics.push(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));",
     );
     w.line("self.note_error();");
     w.end();

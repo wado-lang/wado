@@ -2997,16 +2997,15 @@ pub fn rule_overlap_groups(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut Gen
         first_sets.push(ctx.first_of_alt(&rule.alternatives[idx], &mut visiting));
     }
     let mut classes = alt_classes(&non_lr_indices, &rule.alternatives, &first_sets, ctx);
-    let end_follow: List<String> = if lowered_rule matches { MultiAlt(_) } {
+    // Prediction is predicate-blind, so a rule with a gate keeps deciding in the
+    // tournament that evaluates it.
+    let gated = non_lr_indices.iter_ref().any(|i: &i32| alt_has_gate(&rule.alternatives[*i], ctx));
+    let end_follow: List<String> = if lowered_rule matches { MultiAlt(_) } && !gated {
         ctx.rule_follow_for_probe(&rule.name);
     } else {
         [];
     };
-    let mut gated: List<bool> = [];
-    for let idx of &non_lr_indices {
-        gated.push(alt_has_gate(&rule.alternatives[*idx], ctx));
-    }
-    admit_rule_follow_into_nullable(&mut classes, &mut first_sets, &gated, &end_follow);
+    admit_rule_follow_into_nullable(&mut classes, &mut first_sets, &end_follow);
     let groups = compute_overlap_groups_of(&classes);
     return RuleOverlap { non_lr_indices, first_sets, groups, end_follow };
 }
@@ -3017,16 +3016,12 @@ pub fn rule_overlap_groups(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut Gen
 fn admit_rule_follow_into_nullable(
     classes: &mut List<AltClass>,
     first_sets: &mut List<List<String>>,
-    gated: &List<bool>,
     follow: &List<String>,
 ) {
     if follow.is_empty() {
         return;
     }
     for let mut i = 0; i < classes.len(); i += 1 {
-        if gated[i] {
-            continue;
-        }
         if let Nullable(tokens) = classes[i] {
             let mut admitted = tokens;
             dedup_append_arr(&mut admitted, follow);
@@ -9238,7 +9233,7 @@ fn follow_admitted_nullable_alt(
     }
     for let idx of non_lr_indices {
         let alt = &rule.alternatives[*idx];
-        if !alt_has_gate(alt, ctx) && alt_class_is_nullable(&alt_class_of(alt, ctx)) {
+        if alt_class_is_nullable(&alt_class_of(alt, ctx)) {
             return Option::Some(*idx);
         }
     }

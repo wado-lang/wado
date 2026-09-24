@@ -708,10 +708,10 @@ test "parse lr_mid_operand.g4" {
     assert g.name == "LrMidOperand";
     // s, e
     assert g.parser_rules.len() == 2;
-    // `e` is the LR rule: atom, `e 'and' e`, `e 'between' e 'and' e`.
+    // `e` is the LR rule: atom, `e 'and' e`, `e 'or' e`, `e 'between' e 'and' e`.
     assert g.parser_rules[1].name == "e";
-    assert g.parser_rules[1].alternatives.len() == 3;
-    assert g.parser_rules[1].alternatives[2].elements.len() == 5;
+    assert g.parser_rules[1].alternatives.len() == 4;
+    assert g.parser_rules[1].alternatives[3].elements.len() == 5;
 }
 
 test "parse lr_atn_mid_operand.g4" {
