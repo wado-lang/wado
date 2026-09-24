@@ -19,7 +19,11 @@ The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that c
 
 Entries state the symptom, how to reproduce it, and anything already measured — not a diagnosis or a proposed fix. A diagnosis written here reads as an instruction later, and two have been wrong: one would have broken compatibility if implemented as written, the other described a difference that did not exist.
 
-Empty right now.
+- [ ] **Recovery trees diverge from ANTLR4 where the edit is Gale's own.** Decision sync and rule-level resync follow ANTLR4 (`resilient-parser.md`, "Recovery"), pinned against the jar in `tests/driver_cst_antlr_recovery_test.wado`. Four places still differ:
+  - A terminal missing at the end of a rule is inserted only against its own sequence. On `loop : 'x' 'y'* '!'`, the input `x y` gives `(loop x y <missing '!'>)` in ANTLR4, which inserts against what can follow the rules under way. The `#[TODO]` test in that file pins it.
+  - The `<error>` region path skips mid-input where ANTLR4 fails the rule. On `tests/grammars/error_recovery.g4`, `let x = } } ;` gives `(item let x = (<error> <skip }> <skip }>) <missing ID> ;)`, and the jar gives `(single (item let x = } } ;) <EOF>)`. `driver_cst_error_recovery_test` pins Gale's tree.
+  - A scan-gated left-recursive loop does not enter an operand whose scan fails. On `e : e '+' e | INT | '(' e ')'`, the input `1 + z z` gives `(expr (e 1))`, and the jar gives `(expr (e (e 1) + (e z z)))`.
+  - A non-greedy loop has no loop-back sync, and a group the op walker emits has no entry sync.
 
 ### Pipeline and tooling correctness
 
@@ -35,14 +39,14 @@ A caller's scan evaluates a called rule's predicate only when it reads no parser
 
 ### Not Stage C, and blocked
 
-- Both remaining `[stage_c_todo]` entries are held by something other than action execution, so no amount of Stage C work closes them: `FullContextParsing/AmbiguityNoLoop` is ambiguity _reporting_ (its `@init` asks for `LL_EXACT_AMBIG_DETECTION`), and `ParseTrees/ExtraTokensAndAltLabels` is the recovery divergence its own triage line describes.
+- The one remaining `[stage_c_todo]` entry is held by something other than action execution, so no amount of Stage C work closes it: `FullContextParsing/AmbiguityNoLoop` is ambiguity _reporting_ (its `@init` asks for `LL_EXACT_AMBIG_DETECTION`).
 - `PredictionMode` / `dumpDFA` describe ANTLR's simulator rather than the grammar, so an action printing one is out of scope for good (`action.md`, "Runtime context API").
 - The ATN-class lexer path proper: predicates evaluated inside `latn_match` rather than refused, which needs a predicate transition in the blob and in the simulator. Do it when a grammar asks; the refusal above keeps the meantime honest.
 - java2wado numeric promotion: an `i32` token member (`$X.int` / `.type` / `.line` / `.pos` / `.index`) mixed with a wider value-channel field (`returns [long v]` / `[float]` / `[double]`) mismatches Wado's strict widths, since Wado has no implicit widening. Loud compile error, not silent; no corpus grammar hits it — lowest priority here. A proper fix threads Java's promotion rules through the translator.
 
 And the corpus side, which is extractor work rather than codegen work (see "Descriptor corpus" below):
 
-- The output-compare itself has landed across the parser categories (`FullContextParsing`, `LeftRecursion`, `ParseTrees`, `ParserErrors`, `ParserExec`, `SemPredEvalParser`, `Sets`), and lexer action output is compared by Stage A claim (d) instead. What is left is not more categories: 103 output-compare drivers are emitted, and the two `#[TODO]` among them are the `[stage_c_todo]` entries above.
+- The output-compare itself has landed across the parser categories (`FullContextParsing`, `LeftRecursion`, `ParseTrees`, `ParserErrors`, `ParserExec`, `SemPredEvalParser`, `Sets`), and lexer action output is compared by Stage A claim (d) instead. What is left is not more categories: 103 output-compare drivers are emitted, and the one `#[TODO]` among them is the `[stage_c_todo]` entry above.
 
 ## Descriptor corpus — coverage and re-triage
 

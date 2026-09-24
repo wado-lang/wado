@@ -12,8 +12,8 @@ use { strip_skip_markers } from "../../../support/tree_compare.wado";
 // Stage C claim: the generated parser's action-print output
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 //
-// The descriptor deletes a token, which ANTLR4 renders bare and Gale
-// wraps in `<skip …>`. `strip_skip_markers` drops the wrapper (not the
+// The descriptor's recovery consumes tokens, which ANTLR4 renders bare and
+// Gale wraps in `<skip …>`. `strip_skip_markers` drops the wrapper (not the
 // token) so the compare is over the recovery decision, not the marker.
 
 use t_ExtraTokensAndAltLabels from "../../grammars/ParseTrees/ExtraTokensAndAltLabels.g4"
@@ -24,8 +24,6 @@ use t_ExtraTokensAndAltLabels from "../../grammars/ParseTrees/ExtraTokensAndAltL
         },
     };
 
-// triage: recovery diverges, not just rendering: ANTLR4 deletes both extraneous `?` and keeps `(v ? a)`, Gale abandons `v` and prints `(s ${ v)`. The `<skip>` marker is already normalised away here, so this is the recovery decision itself.
-#[TODO]
 test "stage_c_output: ParseTrees/ExtraTokensAndAltLabels" {
     let input = "${ ? a ?}";
     let expected = "(s ${ (v ? a) ? })

@@ -131,19 +131,22 @@ untouched.
 
 ### Deleted terminals in parse trees
 
-A token deleted by single-token recovery prints as a bare child in ANTLR4 and
-as `<skip x>` in Gale. Like `<EOF>` this is a **rendering** difference over an
-identical tree, and both report the deletion outside the tree (ANTLR4 on the
-error stream, Gale as an `ExtraToken` diagnostic at the same position). Unlike
-`<EOF>` the divergence is Gale saying _more_, which is the point of the marker:
-it tells a recovered parse from a clean one at a glance.
+A token that recovery consumes prints as a bare child in ANTLR4 and as
+`<skip x>` in Gale. That covers single-token deletion, the run a loop skips
+after an iteration, and the resync a failed rule makes. Like `<EOF>` this is a
+**rendering** difference over an identical tree, and both report the recovery
+outside the tree (ANTLR4 on the error stream, Gale as a diagnostic at the same
+position). Unlike `<EOF>` the divergence is Gale saying _more_, which is the
+point of the marker: it tells a recovered parse from a clean one at a glance.
 
 So the normalisation runs the other way — the compare strips the wrapper from
-**Gale's** output, and only for descriptors whose own `[errors]` report an
-`extraneous input`. That gate is what keeps it honest: a deletion Gale invents
-has no counterpart in the expected tree, and deleting a _different_ token
-leaves different text behind. The compare asks exactly "did Gale delete what
-ANTLR4 deleted, in the same place".
+**Gale's** output, and only for descriptors whose own `[errors]` report a
+recovery that can consume input: `extraneous input`, `mismatched input`,
+`no viable alternative`, or a failed predicate's `rule …` message. That gate is
+what keeps it honest: a skip Gale invents on a clean descriptor has no
+counterpart in the expected tree, and skipping a _different_ token leaves
+different text behind. The compare asks exactly "did Gale consume what ANTLR4
+consumed, in the same place".
 
 `<missing X>` needs no normalisation — Gale's rendering already matches.
 
@@ -174,10 +177,10 @@ that should be fixed before Stage C lands.
 >   `[input]` triggers an error, Gale's generated parser/lexer also
 >   detects it: `g::parse(&input)` returns `Err` for Parser-type
 >   grammars, or `g::tokenize(&input)` produces at least one
->   `TK_ERROR` token for Lexer-type grammars. Gale does not (yet) do
->   ANTLR4-style error recovery, so this claim is the well-defined
->   "Gale noticed the error" check against the descriptor's canonical
->   bad input.
+>   `TK_ERROR` token for Lexer-type grammars. Gale's recovery follows
+>   ANTLR4's decision sync and rule resync but not yet all of its edits
+>   (`TODO.md`), so this claim is the well-defined "Gale noticed the
+>   error" check against the descriptor's canonical bad input.
 > - **(d)** For every Lexer-type descriptor whose `[output]` is a
 >   clean `Token.toString()` dump, `g::tokenize(&input)` rendered
 >   through `to_lexer_string(&tokens, &input, TK_EOF)` equals the
