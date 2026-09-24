@@ -70,11 +70,11 @@ enum ListMethodKind {
     /// Rewrite: N parallel calls, sharing the same (duplicable) index and
     /// projecting the T argument per field.
     IndexWriter,
-    /// `fn(i32) -> List<T>` (static, no receiver) — constructs a new container
-    /// with the given capacity (e.g., `with_capacity`).
+    /// `fn(i32) -> List<T>` (static, no receiver) that builds an empty list and
+    /// does nothing else (e.g., `with_capacity`; see [`builds_empty`]).
     ///
-    /// Rewrite: N parallel calls, one per field, each constructing an
-    /// `List<T_k>` with the same capacity.
+    /// Rewrite: N parallel calls to the same method, one per field, each
+    /// handed the same capacity.
     Constructor,
     /// `fn(Array<T>) -> List<T>` (static, no receiver) — builds the container
     /// from the array a `[e0, …]` literal denotes (WEP 2026-08-24).
@@ -183,8 +183,7 @@ struct MethodSig {
     /// retargeting) instead of reading the call node's `FunctionRef`.
     id_sigkeys: IndexMap<FuncId, SigKey>,
     /// Element type `T` and [`ListMethodKind`] → the [`SigKey`] of a
-    /// monomorphized `List<T>` method of that kind. Direct index so
-    /// [`find_sig_key_for_kind`] is a single lookup, not a per-call catalog scan.
+    /// monomorphized `List<T>` method of that kind, for [`field_constructor`].
     kind_index: IndexMap<(TypeId, ListMethodKind), SigKey>,
 }
 
@@ -213,9 +212,6 @@ struct Candidate {
     layout: ElementLayout,
     /// Span of the original let statement
     span: Span,
-    /// Form of the initializer — currently always a `Constructor` call whose
-    /// (duplicable) capacity expression is carried forward to build the
-    /// per-field `List<T_k>::with_capacity(...)` calls during rewrite.
     init: CandidateInit,
 }
 
@@ -232,18 +228,15 @@ enum ElementLayout {
     Struct { type_id: TypeId },
 }
 
-/// How the candidate was initialized.
-///
-/// Any List method classified as `Constructor` with a single duplicable
-/// capacity argument qualifies. The capacity expression (an arena `ExprId` in
-/// the live body) is deep-cloned once per decomposed field at rewrite time, so
-/// it must be side-effect-free.
-struct CandidateInit {
-    /// Capacity operand passed to each per-field `with_capacity(...)` call —
-    /// a skeleton subtree (cloned per field) or a promoted constant
-    /// (re-materialised per field). `None` for the `[]` literal, whose
-    /// capacity is zero and is materialised at rewrite time.
-    capacity: Option<Operand>,
+/// How the candidate was initialized, and so how each field's list is built.
+#[derive(Clone)]
+enum CandidateInit {
+    /// A `Constructor` call, repeated per field. Its capacity operand is cloned
+    /// per field, so it must be side-effect-free.
+    Constructor { method: SigKey, capacity: Operand },
+    /// The `[]` literal: each field's list is built by a `Constructor` of its
+    /// own element type, handed a capacity of zero.
+    EmptyLiteral,
 }
 
 /// Apply container SROA to all functions in the project.
@@ -414,8 +407,119 @@ fn build_method_catalog(
         id_sigkeys,
         kind_index,
     };
-    demote_element_reading_queries(project, type_table, &mut sig);
+    let ctfe_builtins = build_ctfe_builtin_map(project);
+    let builtin_ids = |wanted: CtfeBuiltin| -> IndexSet<FuncId> {
+        ctfe_builtins
+            .iter()
+            .filter_map(|(&id, &b)| (b == wanted).then_some(id))
+            .collect()
+    };
+    let array_len = builtin_ids(CtfeBuiltin::ArrayLen);
+    let array_new = builtin_ids(CtfeBuiltin::ArrayNew);
+    demote_element_reading_queries(project, type_table, &array_len, &mut sig);
+    demote_filling_constructors(project, &array_new, &mut sig);
     (catalog, sig)
+}
+
+/// The members of `kind` in `sig`, by id.
+fn members_of(sig: &MethodSig, kind: ListMethodKind) -> IndexSet<FuncId> {
+    sig.id_kinds
+        .iter()
+        .filter_map(|(&id, &k)| (k == kind).then_some(id))
+        .collect()
+}
+
+/// Shrink `holding` to the members whose `holds` stays true against what is
+/// left of it.
+fn greatest_fixpoint(
+    project: &NirPackage,
+    holding: &mut IndexSet<FuncId>,
+    holds: impl Fn(&NirFunction, &IndexSet<FuncId>) -> bool,
+) {
+    loop {
+        let failing: Vec<FuncId> = holding
+            .iter()
+            .copied()
+            .filter(|&id| !holds(&project.functions[id.index()].borrow(), holding))
+            .collect();
+        if failing.is_empty() {
+            return;
+        }
+        for id in failing {
+            holding.shift_remove(&id);
+        }
+    }
+}
+
+/// Unclassify every family of `candidates` one member of which is outside
+/// `holding`: the rewrite retargets a family member to its sibling of another
+/// element type, so the whole family must mean what the kind promises.
+fn demote_families(sig: &mut MethodSig, candidates: &IndexSet<FuncId>, holding: &IndexSet<FuncId>) {
+    let demoted: IndexSet<SigKey> = candidates
+        .iter()
+        .filter(|id| !holding.contains(*id))
+        .filter_map(|id| sig.id_sigkeys.get(id).cloned())
+        .collect();
+    let MethodSig {
+        id_kinds,
+        id_sigkeys,
+        kind_index,
+    } = sig;
+    id_kinds.retain(|id, _| id_sigkeys.get(id).is_none_or(|s| !demoted.contains(s)));
+    kind_index.retain(|_, s| !demoted.contains(s));
+}
+
+/// Unclassify every `Constructor`-shaped family one member of which does more
+/// than build an empty list: each field's list is built by its own call.
+fn demote_filling_constructors(
+    project: &NirPackage,
+    array_new: &IndexSet<FuncId>,
+    sig: &mut MethodSig,
+) {
+    let constructors = members_of(sig, ListMethodKind::Constructor);
+    let mut empty = constructors.clone();
+    greatest_fixpoint(project, &mut empty, |func, empty| {
+        builds_empty(func, array_new, empty)
+    });
+    demote_families(sig, &constructors, &empty);
+}
+
+/// Whether `func` only returns a fresh empty `List`: a literal whose length is
+/// `0` and whose backing array is new, or a call to another such function.
+fn builds_empty(
+    func: &NirFunction,
+    array_new: &IndexSet<FuncId>,
+    empty: &IndexSet<FuncId>,
+) -> bool {
+    let Some(body) = func.body.as_ref() else {
+        return false;
+    };
+    let [stmt] = body.blocks[body.root].stmts.as_slice() else {
+        return false;
+    };
+    let value = match &body.stmts[*stmt].kind {
+        StmtKind::Return { value: Some(value) } | StmtKind::Expr(value) => *value,
+        _ => return false,
+    };
+    let Some(e) = value.as_expr() else {
+        return false;
+    };
+    let pure_call = |func_id: &FuncId, args: &[ArenaCallArg], callees: &IndexSet<FuncId>| {
+        callees.contains(func_id) && args.iter().all(|a| is_pure_operand(body, a.expr))
+    };
+    match &body.exprs[e].kind {
+        ExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| {
+            if f.field_index == SeqField::Len.index() {
+                return body.operand_const_int(f.value) == Some(0);
+            }
+            match f.value.as_expr().map(|v| &body.exprs[v].kind) {
+                Some(ExprKind::Call { func_id, args, .. }) => pure_call(func_id, args, array_new),
+                _ => is_pure_operand(body, f.value),
+            }
+        }),
+        ExprKind::Call { func_id, args, .. } => pure_call(func_id, args, empty),
+        _ => false,
+    }
 }
 
 /// Unclassify every `Query`-shaped family one member of which reads more than
@@ -423,17 +527,10 @@ fn build_method_catalog(
 fn demote_element_reading_queries(
     project: &NirPackage,
     type_table: &TypeTable,
+    array_len: &IndexSet<FuncId>,
     sig: &mut MethodSig,
 ) {
-    let array_len: IndexSet<FuncId> = build_ctfe_builtin_map(project)
-        .into_iter()
-        .filter_map(|(id, b)| matches!(b, CtfeBuiltin::ArrayLen).then_some(id))
-        .collect();
-    let queries: IndexSet<FuncId> = sig
-        .id_kinds
-        .iter()
-        .filter_map(|(&id, &k)| (k == ListMethodKind::Query).then_some(id))
-        .collect();
+    let queries = members_of(sig, ListMethodKind::Query);
     let array_subjects = project.functions.iter().filter_map(|f| {
         let f = f.borrow();
         // A bodyless function's signature types may already be gone.
@@ -448,34 +545,10 @@ fn demote_element_reading_queries(
             .flatten()
     });
     let mut length_only: IndexSet<FuncId> = queries.iter().copied().chain(array_subjects).collect();
-    loop {
-        let failing: Vec<FuncId> = length_only
-            .iter()
-            .copied()
-            .filter(|&id| {
-                let func = project.functions[id.index()].borrow();
-                !reads_length_only(&func, &array_len, &length_only)
-            })
-            .collect();
-        if failing.is_empty() {
-            break;
-        }
-        for id in failing {
-            length_only.shift_remove(&id);
-        }
-    }
-    let demoted: IndexSet<SigKey> = queries
-        .iter()
-        .filter(|id| !length_only.contains(*id))
-        .filter_map(|id| sig.id_sigkeys.get(id).cloned())
-        .collect();
-    let MethodSig {
-        id_kinds,
-        id_sigkeys,
-        kind_index,
-    } = sig;
-    id_kinds.retain(|id, _| id_sigkeys.get(id).is_none_or(|s| !demoted.contains(s)));
-    kind_index.retain(|_, s| !demoted.contains(s));
+    greatest_fixpoint(project, &mut length_only, |func, length_only| {
+        reads_length_only(func, array_len, length_only)
+    });
+    demote_families(sig, &queries, &length_only);
 }
 
 /// Whether `func` reads its first parameter only for a length: a `used` field,
@@ -681,9 +754,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
                     all_scalar: c.all_scalar,
                     layout: c.layout.clone(),
                     span: c.span,
-                    init: CandidateInit {
-                        capacity: c.init.capacity,
-                    },
+                    init: c.init.clone(),
                 },
             )
         })
@@ -734,7 +805,7 @@ struct RewriteCtx<'a> {
 }
 
 /// Whether the catalog holds, for every per-field element type, the very
-/// method each observed use retargets to, and a `Constructor`.
+/// method each observed use and the initializer retarget to.
 ///
 /// `Query` dispatches to field 0, so only field 0 needs it.
 fn required_methods_available(
@@ -744,7 +815,7 @@ fn required_methods_available(
     catalog: &MethodCatalog,
 ) -> bool {
     for (fi, &t) in c.element_types.iter().enumerate() {
-        if find_sig_key_for_kind(sig, t, ListMethodKind::Constructor).is_none() {
+        if field_constructor(&c.init, t, sig).is_none_or(|key| !catalog.contains_key(&(t, key))) {
             return false;
         }
         for &(kind, callee) in used {
@@ -762,11 +833,15 @@ fn required_methods_available(
     true
 }
 
-/// The `SigKey` of a monomorphized `List<elem_ty>` method classified as `kind`,
-/// or `None` if no such method is monomorphized in this project. O(1) via the
-/// pre-built `(TypeId, ListMethodKind)` index.
-fn find_sig_key_for_kind(sig: &MethodSig, elem_ty: TypeId, kind: ListMethodKind) -> Option<SigKey> {
-    sig.kind_index.get(&(elem_ty, kind)).cloned()
+/// The `Constructor` family that builds the `List<elem_ty>` of one field.
+fn field_constructor(init: &CandidateInit, elem_ty: TypeId, sig: &MethodSig) -> Option<SigKey> {
+    match init {
+        CandidateInit::Constructor { method, .. } => Some(method.clone()),
+        CandidateInit::EmptyLiteral => sig
+            .kind_index
+            .get(&(elem_ty, ListMethodKind::Constructor))
+            .cloned(),
+    }
 }
 
 /// Collect candidate `let` bindings across the whole function body. The escape
@@ -915,19 +990,18 @@ fn recognize_init(
             cap.as_expr().map(|e| &body.exprs[e].kind),
             Some(ExprKind::ArrayLiteral { elements }) if elements.is_empty()
         );
-        return empty_literal.then_some(CandidateInit { capacity: None });
+        return empty_literal.then_some(CandidateInit::EmptyLiteral);
     }
     if kind != ListMethodKind::Constructor {
         return None;
     }
-    // The capacity expression is cloned once per per-field constructor
-    // call during rewrite, so it must be side-effect-free. A promoted constant
-    // is trivially duplicable.
+    // A promoted constant is trivially duplicable.
     if !cap.as_expr().is_none_or(|e| is_duplicable_expr(body, e)) {
         return None;
     }
-    Some(CandidateInit {
-        capacity: Some(cap),
+    Some(CandidateInit::Constructor {
+        method: sig_key_of_id(sig, *func_id)?,
+        capacity: cap,
     })
 }
 
@@ -1427,14 +1501,15 @@ impl Rewriter<'_, '_> {
             .expect("candidate data must exist for decomposed local");
         let arity = info.element_types.len();
         let span = info.span;
-        let capacity = info.init.capacity;
         for k in 0..arity {
             let field = ctx.field_map[&(local_index, k as u32)].clone();
-            let cap = match capacity {
-                Some(capacity) => clone_or_dup(engine, capacity),
-                None => engine.const_operand(ValueKind::Int(0, TypeTable::I32), TypeTable::I32),
+            let cap = match &info.init {
+                CandidateInit::Constructor { capacity, .. } => clone_or_dup(engine, *capacity),
+                CandidateInit::EmptyLiteral => {
+                    engine.const_operand(ValueKind::Int(0, TypeTable::I32), TypeTable::I32)
+                }
             };
-            let init = build_with_capacity_call(engine, &field, cap, span, ctx);
+            let init = build_constructor_call(engine, &field, &info.init, cap, span, ctx);
             let let_stmt = engine.alloc_stmt(
                 StmtKind::Let {
                     name: field.name,
@@ -1947,14 +2022,15 @@ fn field_method(field: &FieldList, sig: &SigKey, ctx: &RewriteCtx) -> FuncId {
 }
 
 /// Build a `List<T_k>::Constructor(cap)` NIR call — e.g. `with_capacity(cap)`.
-fn build_with_capacity_call(
+fn build_constructor_call(
     engine: &mut Engine,
     field: &FieldList,
+    init: &CandidateInit,
     cap: Operand,
     span: Span,
     ctx: &RewriteCtx,
 ) -> ExprId {
-    let sig = find_sig_key_for_kind(ctx.sig, field.elem_type, ListMethodKind::Constructor)
+    let sig = field_constructor(init, field.elem_type, ctx.sig)
         .expect("Constructor checked by required_methods_available");
     let func_id = field_method(field, &sig, ctx);
     engine.alloc_expr(
