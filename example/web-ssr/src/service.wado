@@ -1,0 +1,18 @@
+use { Request, Response, ErrorCode, FieldValue, Headers, Trailers } from "wasi:http";
+use { render_html } from "./app.wado";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let html = render_html(request.get_path_with_query().unwrap_or("/"));
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let headers = Headers::new();
+    headers.append("content-type", "text/html; charset=utf-8".bytes().collect() as FieldValue);
+    let [response, _tx_future] = Response::new(headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    body_tx.write_all(html.bytes().collect());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}

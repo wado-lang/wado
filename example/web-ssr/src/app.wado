@@ -1,0 +1,39 @@
+//! One page, built through the DOM: a browser builds it in its own document, and
+//! a server in a `SurfaceDom` it then serializes.
+
+use { Dom, SurfaceDom } from "wado-lang:web";
+
+pub fn render(path: String) with Dom {
+    let doc = Dom::document();
+    doc.set_title("Wado on the server");
+    let body = doc.body().unwrap();
+
+    let heading = doc.create_element("h1", null);
+    heading.set_text_content(Option::Some("Rendered by Wado"));
+    body.append_child(heading);
+
+    let note = doc.create_element("p", null);
+    note.set_text_content(Option::Some(`You asked for ${path}.`));
+    body.append_child(note);
+
+    let steps: List<String> = ["Build the page through the DOM", "Serialize it with to_html", "Send it"];
+    let list = doc.create_element("ol", null);
+    for let step of steps {
+        let item = doc.create_element("li", null);
+        item.set_text_content(Option::Some(step));
+        list.append_child(item);
+    }
+    body.append_child(list);
+}
+
+pub fn render_html(path: String) -> String {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        render(path);
+    };
+    return dom.to_html();
+}
+
+test "the page renders to HTML, its text escaped" {
+    assert render_html("/a?b=1&c=<2>") == "<!DOCTYPE html><html><head><title>Wado on the server</title></head><body><h1>Rendered by Wado</h1><p>You asked for /a?b=1&amp;c=&lt;2&gt;.</p><ol><li>Build the page through the DOM</li><li>Serialize it with to_html</li><li>Send it</li></ol></body></html>";
+}
