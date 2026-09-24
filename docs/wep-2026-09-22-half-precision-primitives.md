@@ -142,7 +142,9 @@ impl TryFrom<f32> for f16 { type Err = ConvertError; }
 impl TryFrom<f64> for f16 { type Err = ConvertError; }
 ```
 
-`bf16` carries the same set.
+`bf16` carries the same set. Both also carry the limits `f32` and `f64` do,
+under Rust's names: `MAX`, `MIN`, `MIN_POSITIVE`, `EPSILON`, `INFINITY`, `NAN`,
+`MANTISSA_DIGITS` and the rest.
 
 Everywhere else in the prelude `From` preserves a value, as `From<u8> for u128`
 does. So bit reinterpretation is not written as `From`. An

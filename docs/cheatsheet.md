@@ -1251,7 +1251,7 @@ let pi = f64::PI;
 let max = i32::MAX;
 ```
 
-Primitives provide built-in constants: `f64::PI`, `f64::INFINITY`, `f64::NAN`, `i32::MAX`, `i32::MIN`, etc. See [`core:prelude`](./stdlib-core-prelude.md).
+Primitives provide built-in constants: `f64::PI`, `f64::INFINITY`, `f64::NAN`, `f64::MAX`, `f64::EPSILON`, `i32::MAX`, `i32::MIN`, etc. Every float type, `f16` and `bf16` included, carries Rust's limits (`MAX`, `MIN`, `MIN_POSITIVE`, `EPSILON`, `MANTISSA_DIGITS`, …). See [`core:prelude`](./stdlib-core-prelude.md).
 
 ## Primitive Type Methods
 

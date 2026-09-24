@@ -1,0 +1,44 @@
+// Each float type's limits, checked against its IEEE 754 bit patterns.
+
+export fn run() {
+    assert f64::MAX.to_bits() == 0x7FEF_FFFF_FFFF_FFFF;
+    assert f64::MIN.to_bits() == 0xFFEF_FFFF_FFFF_FFFF;
+    assert f64::MIN_POSITIVE.to_bits() == 0x0010_0000_0000_0000;
+    assert f64::EPSILON == 1.0 / 4503599627370496.0;
+    assert f64::MANTISSA_DIGITS == 53 && f64::DIGITS == 15 && f64::RADIX == 2;
+    assert f64::MIN_EXP == -1021 && f64::MAX_EXP == 1024;
+    assert f64::MIN_10_EXP == -307 && f64::MAX_10_EXP == 308;
+
+    assert f32::MAX.to_bits() == 0x7F7F_FFFF;
+    assert f32::MIN.to_bits() == 0xFF7F_FFFF;
+    assert f32::MIN_POSITIVE.to_bits() == 0x0080_0000;
+    assert f32::EPSILON.to_bits() == 0x3400_0000;
+    assert f32::MANTISSA_DIGITS == 24 && f32::DIGITS == 6 && f32::RADIX == 2;
+    assert f32::MIN_EXP == -125 && f32::MAX_EXP == 128;
+    assert f32::MIN_10_EXP == -37 && f32::MAX_10_EXP == 38;
+
+    assert f16::MAX.to_bits() == 0x7BFF;
+    assert f16::MIN.to_bits() == 0xFBFF;
+    assert f16::MIN_POSITIVE.to_bits() == 0x0400;
+    assert f16::EPSILON.to_bits() == 0x1400;
+    assert f16::INFINITY.to_bits() == 0x7C00;
+    assert f16::NEG_INFINITY.to_bits() == 0xFC00;
+    assert f16::NAN.is_nan();
+    assert f16::MANTISSA_DIGITS == 11 && f16::DIGITS == 3 && f16::RADIX == 2;
+    assert f16::MIN_EXP == -13 && f16::MAX_EXP == 16;
+    assert f16::MIN_10_EXP == -4 && f16::MAX_10_EXP == 4;
+
+    assert bf16::MAX.to_bits() == 0x7F7F;
+    assert bf16::MIN.to_bits() == 0xFF7F;
+    assert bf16::MIN_POSITIVE.to_bits() == 0x0080;
+    assert bf16::EPSILON.to_bits() == 0x3C00;
+    assert bf16::INFINITY.to_bits() == 0x7F80;
+    assert bf16::NEG_INFINITY.to_bits() == 0xFF80;
+    assert bf16::NAN.is_nan();
+    assert bf16::MANTISSA_DIGITS == 8 && bf16::DIGITS == 2 && bf16::RADIX == 2;
+    assert bf16::MIN_EXP == -125 && bf16::MAX_EXP == 128;
+    assert bf16::MIN_10_EXP == -37 && bf16::MAX_10_EXP == 38;
+}
+
+__DATA__
+{}
