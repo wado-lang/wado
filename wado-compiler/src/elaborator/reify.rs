@@ -19,7 +19,7 @@ use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{
-    FqTypeName, IDENTITY_TEST_METHOD, INTERNAL_PREFIX, NARROWING_TEST_METHOD, Receiver,
+    DeclPath, FqTypeName, IDENTITY_TEST_METHOD, INTERNAL_PREFIX, NARROWING_TEST_METHOD, Receiver,
     global_init_function, global_name,
 };
 use crate::symbol::SymbolTable;
@@ -60,8 +60,7 @@ use crate::elaborator::sem::types::{
     SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
 };
 use crate::elaborator::stmt::{
-    collect_pattern_bindings_with_index, primitive_assoc_const_to_i128, primitive_int_bound,
-    remap_pattern_local,
+    collect_pattern_bindings_with_index, primitive_assoc_const_to_i128, remap_pattern_local,
 };
 use crate::elaborator::trait_query::{
     assoc_const_owner, assoc_const_owner_of_path, trait_sig_of_with,
@@ -9320,28 +9319,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return TirExpr::new(resolved.kind, type_id, ident.span);
         }
 
-        // 4b. Primitive associated constant (`i32::MAX`, `u8::MIN`, …) that
-        //     is not in `associated_constants`. This happens when reify is
-        //     walking a swapped-in callee module (a default-argument
-        //     expression — e.g. `max_output: i32 = i32::MAX`) whose
-        //     `ModuleSemantics` came from the stdlib snapshot, which does
-        //     not rehydrate `associated_constants`. The value is a compile
-        //     -time constant of the named primitive type, so emit it as a
-        //     typed integer literal directly.
-        if let Some((prefix, suffix)) = ident.name.split_once("::")
-            && !suffix.contains("::")
-            && let Some((value, prim_type)) = primitive_int_assoc_const(prefix, suffix)
-        {
-            return TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: value as u64,
-                    repr: value.to_string(),
-                },
-                prim_type,
-                ident.span,
-            );
-        }
-
         // 5. Free function reference — the ident names a function in
         //    the current module or imported via a `use` declaration.
         //    Emit `TirExprKind::FuncRef` with the recorded
@@ -10142,7 +10119,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ..
         } = endpoint
             && bindings.is_empty()
-            && primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name).is_none()
+            && primitive_assoc_const_to_i128(
+                variant_qualifier.as_ref(),
+                variant_name,
+                &self.tysys.resolutions,
+            )
+            .is_none()
             && let Some(AssocConstSig {
                 module: const_module,
                 ty: type_id,
@@ -10159,7 +10141,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 });
             }
         }
-        range_endpoint_to_i128(endpoint, is_unsigned)
+        range_endpoint_to_i128(endpoint, is_unsigned, &self.tysys.resolutions)
             .expect("annotate diagnoses a range endpoint that denotes no integer")
     }
 
@@ -10693,11 +10675,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// `R::method`, one of the host's `lang` predicates over `resource`'s handles.
     fn lang_predicate_ref(&self, resource: TypeId, method: &str) -> tir::FunctionRef {
-        let method_info = LocalMethodName::new(
+        let mut method_info = LocalMethodName::new(
             self.tysys.fq_receiver_of_impl(resource, false),
             None,
             method.to_string(),
         );
+        let binding = self
+            .tysys
+            .cm_interface_registry
+            .get_function(&DeclPath::method_of(
+                &method_info.receiver_decl_name(),
+                method,
+            ))
+            .expect("an unrestricted resource registers its `lang` predicates");
+        method_info.cm_name = Some(format!(
+            "{}#{}",
+            binding.interface_path, binding.wasi_func_name
+        ));
         let module_source = self
             .tysys
             .type_table
@@ -10886,21 +10880,6 @@ fn extract_allocator_tag_attr(attrs: &[Attribute]) -> Option<String> {
 /// instead of the effects inferred from its body.
 fn arg_is_unannotated_closure(arg: &ast::Expr) -> bool {
     matches!(arg, ast::Expr::Closure(c) if c.params.iter().any(|p| p.ty.is_none()))
-}
-
-/// Compile-time value and primitive `TypeId` for a primitive integer
-/// associated constant named `<prefix>::<suffix>` (e.g. `i32::MAX`).
-/// Returns `None` for non-primitive or unknown constants. Used by
-/// `reify_ident` to resolve such constants when they are not present in
-/// `associated_constants` — e.g. a default-argument expression reified
-/// under a stdlib-snapshot callee module whose `associated_constants` map
-/// was not rehydrated.
-fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, tir::TypeId)> {
-    use crate::tir::TypeTable;
-    Some((
-        primitive_int_bound(prefix, suffix)?,
-        TypeTable::primitive_by_name(prefix)?,
-    ))
 }
 
 /// Build the receiver node the recorded `(self_kind, is_ref_impl)` pair asks

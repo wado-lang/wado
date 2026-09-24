@@ -3173,9 +3173,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Pat {
         // Bad or empty bounds were reported where the pattern was resolved.
         let is_unsigned = self.exh_is_unsigned(scrutinee_type);
+        let resolutions = &self.tysys.resolutions;
         let (Some(start_val), Some(end_val)) = (
-            util::range_endpoint_to_i128(start, is_unsigned),
-            util::range_endpoint_to_i128(end, is_unsigned),
+            util::range_endpoint_to_i128(start, is_unsigned, resolutions),
+            util::range_endpoint_to_i128(end, is_unsigned, resolutions),
         ) else {
             return Pat::Wild;
         };

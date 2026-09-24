@@ -1084,12 +1084,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A name that is not a known type resolves to nothing, so it claims no
     /// head either.
     fn synth_named_type(&self, site: Option<ast::AstId>, name: &str) -> ArgClass {
-        if let Some(primitive) = self.primitive_at(site, name) {
-            return ArgClass::Exact(primitive);
-        }
         let Some(def) = self.decl_key_at(site, name) else {
             return ArgClass::Opaque(OpaqueReason::Unresolved);
         };
+        if let Some(primitive) = TypeTable::primitive_of_decl(self.tysys.resolutions.defs(), def) {
+            return ArgClass::Exact(primitive);
+        }
         let generic = self
             .lookup_struct_fields_of_decl(def)
             .is_some_and(|info| !info.type_param_type_ids.is_empty());

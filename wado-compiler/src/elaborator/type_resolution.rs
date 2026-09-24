@@ -674,11 +674,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return type_id;
         }
 
-        if let Some(primitive) = self.primitive_at(site, name) {
-            return primitive;
-        }
-
         if let Some(def) = self.decl_key_at(site, name) {
+            if let Some(primitive) =
+                TypeTable::primitive_of_decl(self.tysys.resolutions.defs(), def)
+            {
+                return primitive;
+            }
             if let Some(expected) = self.bare_generic_type_arity(def) {
                 // Every parameter declaring a default makes the bare name the
                 // defaulted instantiation; otherwise the site must write them.

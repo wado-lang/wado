@@ -1049,7 +1049,11 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
             v.visit_pattern(pattern);
             v.visit_type(ty);
         }
-        Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {}
+        Pattern::Range { start, end, .. } => {
+            v.visit_pattern(start);
+            v.visit_pattern(end);
+        }
+        Pattern::Literal(_) | Pattern::Wildcard | Pattern::Error(_) => {}
     }
 }
 

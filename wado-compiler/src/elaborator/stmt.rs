@@ -20,10 +20,12 @@ use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
+use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{
     GenericNewtypeInfo, ImplMemberKind, ParamSlot, RealTypeParams, StructFieldInfo,
 };
 use crate::name::{mangle_local_item_name, namespace_member_alias};
+use crate::resolve::Resolutions;
 use crate::symbol_notation::render;
 use crate::tir::{StructDef, TirTypeParam};
 use crate::{IndexMap, hashmap, tir};
@@ -2336,8 +2338,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .is_unsigned_int(scrutinee_type);
 
-        let start_val = util::range_endpoint_to_i128(start, is_unsigned);
-        let end_val = util::range_endpoint_to_i128(end, is_unsigned);
+        let resolutions = &self.tysys.resolutions;
+        let start_val = util::range_endpoint_to_i128(start, is_unsigned, resolutions);
+        let end_val = util::range_endpoint_to_i128(end, is_unsigned, resolutions);
 
         let (Some(start_val), Some(end_val)) = (start_val, end_val) else {
             let _ = self.emit(TypeError::InvalidPattern {
@@ -3527,34 +3530,15 @@ pub(super) fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) 
     }
 }
 
-/// Resolve a primitive type's builtin associated constant (`i32::MIN`,
-/// `u8::MAX`, …) to its `i128` value. Pure and `self`-free so both the
-/// elaborator's pattern lowering and the reify pass share one source of
-/// truth for the range-endpoint / const-pattern paths. Returns `None`
-/// for non-primitive qualifiers or unknown const names.
+/// A primitive integer's `MIN` / `MAX` written as a pattern (`i32::MIN`), its
+/// qualifier resolved at its own site. `None` for anything else.
 pub(super) fn primitive_assoc_const_to_i128(
     qualifier: Option<&Type>,
     const_name: &str,
+    resolutions: &Resolutions,
 ) -> Option<i128> {
-    let ty_name = match qualifier? {
-        Type::Named(named) => named.name.as_str(),
-        Type::Generic(generic) => generic.name.as_str(),
-        Type::NamespacedGeneric(namespaced) => namespaced.name.as_str(),
-        Type::Function(_)
-        | Type::Tuple(_)
-        | Type::Reference(_)
-        | Type::MutReference(_)
-        | Type::TypePackSpread(_, _)
-        | Type::Infer(_)
-        | Type::Error(_) => return None,
-    };
-    primitive_int_bound(ty_name, const_name)
-}
-
-/// The value of a primitive integer's `MIN` / `MAX`, keyed by the names both
-/// are written with. `None` for every other pair.
-pub(super) fn primitive_int_bound(ty_name: &str, const_name: &str) -> Option<i128> {
-    let (min, max) = PrimitiveType::from_name(ty_name)?.int_range()?;
+    let owner = assoc_const_owner(qualifier, resolutions)?;
+    let (min, max) = resolutions.defs().primitive(owner)?.int_range()?;
     match const_name {
         "MIN" => Some(min),
         "MAX" => Some(max),

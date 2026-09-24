@@ -1208,12 +1208,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .is_some_and(|def| self.tysys.resolutions.defs().kind(def).is_type())
     }
 
-    /// The primitive type `name` reaches where it is written, by declaration.
-    pub(crate) fn primitive_at(&self, site: Option<AstId>, name: &str) -> Option<TypeId> {
-        self.decl_key_at(site, name)
-            .and_then(|def| TypeTable::primitive_of_decl(self.tysys.resolutions.defs(), def))
-    }
-
     /// The declaration `name` reaches where the AST under resolution was written,
     /// for a caller with no reference site; one holding a site calls [`Self::decl_key_at`].
     pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<DefId> {
@@ -1599,8 +1593,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Name of a type whose identity is the name itself — a primitive, `()`,
-    /// `!` or the raw `Array<T>`.
+    /// The name the prelude declares a primitive, `()`, `!` or the raw
+    /// `Array<T>` under.
     fn builtin_type_name(&self, type_id: tir::TypeId) -> Option<String> {
         use crate::tir::ResolvedType;
         let tt = self.tysys.type_table.borrow();
@@ -1620,11 +1614,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// For a generic instance it is the *base* type's declaration — type
     /// arguments are dropped, so it cannot tell `Foo<A>` from `Foo<B>`.
     pub(crate) fn type_decl_key(&self, type_id: tir::TypeId) -> Option<DefId> {
-        // A builtin's identity is its name, and the name path already knows
-        // which module declares it. A second table answering here would be a
-        // second derivation, free to disagree with that one.
+        // No vantage: an import aliasing a builtin's name never steers the type.
         if let Some(name) = self.builtin_type_name(type_id) {
-            return self.decl_key_or_local(&name);
+            return self.tysys.resolutions.prelude_decl(&name);
         }
         let tt = self.tysys.type_table.borrow();
         tt.nominal_def(tt.peel_refs(type_id))
