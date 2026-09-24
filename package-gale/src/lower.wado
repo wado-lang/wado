@@ -1006,12 +1006,13 @@ fn lr_suffix_is_proper_prefix(rule: &ParserRule, short: &Alternative, long: &Alt
     return true;
 }
 
-/// The token constant name (`TK_X` / `LIT_x`) of a fixed-token element
-/// (`TokenRef` / `Literal`), or `null` for anything else.
+/// The token constant name (`TK_X` / `LIT_x`) of a fixed-token element,
+/// labeled or not, or `null` for anything else.
 fn fixed_token_const_name(elem: &Element) -> Option<String> {
     return match *elem {
         TokenRef(t) => Option::Some(`TK_${t.name}`),
         Literal(l) => Option::Some(l.const_name),
+        Label(lab) => fixed_token_const_name(&lab.element),
         _ => null,
     };
 }
@@ -1877,12 +1878,8 @@ fn compute_lr_conflict_min_prec(
 
     let mut fixed_tokens: List<String> = [];
     for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
-        let elem = &alt.elements[ei];
-        match *elem {
-            TokenRef(t) => fixed_tokens.push(`TK_${t.name}`),
-            Literal(l) => fixed_tokens.push(l.const_name),
-            _ => {
-            },
+        if let Some(t) = fixed_token_const_name(&alt.elements[ei]) {
+            fixed_tokens.push(t);
         }
     }
     if fixed_tokens.is_empty() {

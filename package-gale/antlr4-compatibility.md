@@ -920,10 +920,14 @@ the compiled fast path:**
    distinct lookahead token — decides whether to keep climbing or return
    to the caller. A rule is routed here when an ATOM alternative's operand
    competes with the loop for a shared delimiter (`'between' expr 'and' expr`
-   against `expr 'and' expr`; fixture `lr_between.g4`). Its mid operand is
-   ANTLR4's `expr[0]`. The loop takes a token an enter edge admits, unless
-   the caller can continue with that token too; then the full simulator
-   decides. The same shape inside an LR alternative (SQLite's
+   against `expr 'and' expr`; fixture `lr_between.g4`), or when one LR
+   alternative's suffix is a proper prefix of another's (`expr 'x' expr`
+   against `expr 'x' expr 'y' expr`; fixture `lr_shared_lead.g4`). Its mid
+   operand is ANTLR4's `expr[0]`. The loop takes a token an enter edge admits,
+   and the full simulator decides instead in two cases. One is a caller that
+   must take the token. The other is a caller's loop that can take it through
+   an alternative this operand's precedence excludes (`lr_atn_trailing.g4`).
+   The same shape inside an LR alternative (SQLite's
    `expr NOT? BETWEEN expr AND expr`) is **not** routed here, since a hot
    expression rule cannot pay for that (`perf.md`). It stays static: the mid
    operand also drops to `expr[0]`, and

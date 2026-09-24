@@ -418,7 +418,11 @@ fn build_lr_suffix<S: AsStrSlice>(
         let seg = if atn_class && element_is_self_ref(elem, rule_name) {
             // ANTLR4's `e[0]` mid operand and `e[p+1]` trailing one: the
             // simulator decides the climb, as `stamp_lr_self_ref_min_prec` has it.
-            let prec = if i + 1 < alt.elements.len() { 0 } else { lr_trailing_prec(lr_alt.own_prec, lr_alt.right_associative) };
+            let prec = if i + 1 < alt.elements.len() {
+                0;
+            } else {
+                lr_trailing_prec(lr_alt.own_prec, lr_alt.right_associative);
+            };
             self_ref_segment(b, r, prec, self_ref_call_site(elem));
         } else {
             // The LR loop can re-enter on an operator after the suffix, so the
