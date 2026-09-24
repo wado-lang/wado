@@ -428,7 +428,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if scope.reject_non_type_decl(id, name, span) {
                 return true;
             }
-            if scope.type_decl_at(Some(id), name).is_some() {
+            if scope.decl_key_at(Some(id), name).is_some() {
                 return false;
             }
             // A bare name has tiers the module scope does not hold, `Self` and

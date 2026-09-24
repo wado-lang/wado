@@ -774,7 +774,7 @@ impl TypeSystem {
     /// The trait a bound names, with the arguments it writes for that trait's
     /// own parameters, spelled the way the impl that answers it spells them.
     pub(super) fn bound_written(&self, bound: &ast::TraitBound) -> Option<FqTraitName> {
-        let decl = self.resolutions.declared(bound.id)?;
+        let decl = self.resolutions.bound_decl(bound)?;
         let named = FqTraitName::declared(self.resolutions.defs(), decl);
         if bound.type_args.is_empty() {
             return Some(named);
@@ -1778,8 +1778,7 @@ impl TypeSystem {
     }
 
     /// Which compiler item `trait_` is, or `None` for a trait the compiler does
-    /// not know. The one reverse lookup: the spelling answers for a user trait
-    /// that shares the name.
+    /// not know.
     pub(super) fn compiler_item_of_trait(&self, trait_: DefId) -> Option<CompilerItem> {
         let decl = self.resolutions.defs().ast_id(trait_);
         self.type_table

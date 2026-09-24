@@ -355,7 +355,7 @@ fn blanket_param_sources(
                 else {
                     return BlanketParamSource::Unresolved;
                 };
-                let Some(def) = resolutions.declared(bound.id) else {
+                let Some(def) = resolutions.bound_decl(bound) else {
                     return BlanketParamSource::Unresolved;
                 };
                 BlanketParamSource::Projection(def, assoc.name.clone())
@@ -1101,7 +1101,7 @@ impl TraitEnv {
                                 p.bounds
                                     .iter()
                                     .map(|b| BlanketBound {
-                                        trait_: resolutions.declared(b.id).map(|decl| {
+                                        trait_: resolutions.bound_decl(b).map(|decl| {
                                             name::FqTraitName::declared(resolutions.defs(), decl)
                                                 .with_args(
                                                     b.type_args
@@ -1188,7 +1188,7 @@ impl TraitEnv {
         // supertrait (`use { Base as B }; trait Extra: B`) keys on `Base`'s
         // declaration without the import scope being consulted a second time.
         let resolve_trait = |bound: &ast::TraitBound| {
-            let key = resolutions.declared(bound.id)?;
+            let key = resolutions.bound_decl(bound)?;
             decl_index.contains(&key).then_some(key)
         };
         let trait_impl_modules = index_impl_modules(&impl_headers, defs, false);
@@ -2388,12 +2388,12 @@ fn check_variadic_impl_overlap(
     impl_headers: &IndexMap<DefId, ImplHeader>,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut violations = Vec::new();
-    let mut groups: IndexMap<&ImplTargetKey, Vec<VariadicImpl<'_>>> = IndexMap::default();
+    let mut groups: IndexMap<DefId, Vec<VariadicImpl<'_>>> = IndexMap::default();
 
     for header in impl_headers.values() {
-        let Some(trait_key) = header.trait_key() else {
+        if header.trait_ty().is_none() {
             continue;
-        };
+        }
         let Some(target) = variadic_target(&header.ty) else {
             continue;
         };
@@ -2406,13 +2406,13 @@ fn check_variadic_impl_overlap(
             }
             continue;
         }
-        let ImplTargetKey::Decl(_) = trait_key else {
+        let Some(trait_) = header.trait_def() else {
             continue;
         };
-        groups.entry(trait_key).or_default().push(VariadicImpl {
+        groups.entry(trait_).or_default().push(VariadicImpl {
             module_source: &header.module,
             span: header.span,
-            trait_name: trait_key.display_name(defs).to_string(),
+            trait_name: defs.name(trait_).to_string(),
             trait_args: match header.trait_ty() {
                 Some(ast::Type::Generic(generic)) => &generic.args,
                 _ => &[],

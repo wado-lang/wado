@@ -220,13 +220,14 @@ module cannot capture the name. Fixture:
 `trait_head_effect_reaches_impl_module.wado`.
 
 An effect parameter (`<effect E>`) names that parameter. A type parameter names
-no effect. A name reaching no `interface` or
-resource is rejected where it is written, even when another module declares an
-effect of that name. So `with Stdout` needs `Stdout` in scope like any other
-name.
-`#[benign(E)]` is held to the same rule. Fixtures:
+no effect. A name reaching no `interface` or resource is rejected where it is
+written, even when another module declares an effect of that name. So
+`with Stdout` needs `Stdout` in scope like any other name. `#[benign(E)]` is
+held to the same rule, and so is a bare operation call: `use { E::{op} }` brings
+`op` into scope but not `E`, and the call still requires `E`. Fixtures:
 `error_with_unknown_effect.wado`, `error_with_type_param_effect.wado`,
-`error_benign_unknown_effect.wado`.
+`error_benign_unknown_effect.wado`,
+`error_with_bare_operation_import_missing_effect.wado`.
 
 ### 4. Queries take identities, never a name beside one
 

@@ -39,7 +39,7 @@ use crate::elaborator::trait_env::{
 };
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
 use crate::name::{DeclName, FqTraitName, unalias_namespace_member};
-use crate::resolve::Resolution;
+use crate::resolve::{Resolution, head_site};
 use crate::tir;
 use crate::unparse::unparse_type_into;
 
@@ -2069,7 +2069,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The synthesized function doesn't exist during resolution, so we generate the call inline.
         if static_call.method == "from"
             && args.len() == 1
-            && self.has_from_synthesis_request(&static_call.target_type, &args[0])
+            && self.has_from_synthesis_request(
+                &self.impl_target_at(
+                    head_site(&static_call.target_type),
+                    &get_type_name_static(&static_call.target_type),
+                ),
+                args[0],
+            )
         {
             return self.resolve_from_call(target_type_id, args[0], static_call.id);
         }
@@ -3056,28 +3062,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// so a call may name a conversion no impl block declares yet.
     pub(super) fn has_from_synthesis_request(
         &self,
-        target_type: &ast::Type,
-        arg_type_id: &tir::TypeId,
+        target: &ImplTargetKey,
+        arg_type_id: tir::TypeId,
     ) -> bool {
-        let target_name = get_type_name_static(target_type);
-        let arg_type_name = self.tysys.type_table.borrow().type_name(*arg_type_id);
-        let from_trait = self.tysys.compiler_trait_def(CompilerItem::From);
-        self.tysys.trait_env.impl_headers.values().any(|header| {
-            if !header.is_synthesize_request {
-                return false;
-            }
-            let Some(trait_type) = header.trait_ty() else {
-                return false;
-            };
-            if !header.trait_def().is_some_and(|t| from_trait == Some(t))
-                || get_type_name_static(&header.ty) != target_name
-            {
-                return false;
-            }
-            matches!(trait_type, ast::Type::Generic(generic)
-                if generic.args.len() == 1
-                    && self.get_type_name_full(&generic.args[0]) == arg_type_name)
-        })
+        let from = self.tysys.type_table.borrow().fq_type_name(arg_type_id);
+        self.impl_keys_of_from(target, &from)
+            .iter()
+            .any(|key| self.tysys.trait_env.impl_headers[key].is_synthesize_request)
     }
 
     /// Report why a static call's arguments matched no impl, when the

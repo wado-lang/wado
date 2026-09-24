@@ -515,23 +515,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn effect_operation_of(&self, ident: &ast::IdentExpr) -> Option<EffectOperation> {
         let resolutions = &self.tysys.resolutions;
         let defs = resolutions.defs();
-        let (decl, op) = match ident.owner_segment() {
-            Some(owner) => {
-                let decl = resolutions
-                    .declared(owner.id)
-                    .filter(|d| defs.kind(*d).is_effect())?;
-                let name = &ident.segments.last()?.name;
-                (
-                    decl,
-                    self.tysys.signatures.resource_method_sig(decl, name)?.def,
-                )
-            }
-            None => {
-                let op = resolutions.declared_if_walked(ident.id)?;
-                let decl = defs.parent(op).filter(|d| defs.kind(*d).is_effect())?;
-                self.tysys.signatures.method_sig(op)?;
-                (decl, op)
-            }
+        let (decl, op) = if let Some(owner) = ident.owner_segment() {
+            let decl = resolutions
+                .declared(owner.id)
+                .filter(|d| defs.kind(*d).is_effect())?;
+            let name = &ident.segments.last()?.name;
+            (
+                decl,
+                self.tysys.signatures.resource_method_sig(decl, name)?.def,
+            )
+        } else {
+            let op = resolutions.declared_if_walked(ident.id)?;
+            let decl = defs.parent(op).filter(|d| defs.kind(*d).is_effect())?;
+            self.tysys.signatures.method_sig(op)?;
+            (decl, op)
         };
         Some(EffectOperation { decl, op })
     }
@@ -1397,28 +1394,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow()
                         .type_id_of_decl(variant_info.defined_at);
                     let from_type = args[0];
-                    let from_type_name = self.tysys.type_table.borrow().type_name(from_type);
-                    let from_trait = self.tysys.compiler_trait_def(CompilerItem::From);
-                    // `impl From<X> for Prefix;` — a body-less derivation
-                    // request. Both the flag and the trait reference are
-                    // header facts, so the impls are reached by the target's
-                    // canonical key rather than by scanning one module's AST
-                    // for a matching written name.
-                    let matching_impl = self
-                        .tysys
-                        .trait_env
-                        .all_impl_keys(&self.impl_target(prefix))
-                        .iter()
-                        .filter_map(|key| self.tysys.trait_env.impl_headers.get(key))
-                        .any(|header| {
-                            header.is_synthesize_request
-                                && header.trait_def().is_some_and(|t| from_trait == Some(t))
-                                && matches!(header.trait_ty(), Some(ast::Type::Generic(generic))
-                                    if generic.args.len() == 1
-                                        && self.get_type_name_full(&generic.args[0])
-                                            == from_type_name)
-                        });
-                    if matching_impl {
+                    if self.has_from_synthesis_request(&self.impl_target(prefix), from_type) {
                         return self.resolve_from_call(target_type_id, from_type, call.id);
                     }
                 }
@@ -2110,9 +2086,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.get_builtin_return_type(builtin_name);
         }
 
-        if callee_module.is_effect_like()
-            && let Some(op) = effect_op
-        {
+        if let Some(op) = effect_op {
             return self
                 .effect_operation_sig(op)
                 .decl
@@ -3669,7 +3643,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // layout (a generic variant never becomes its own declaration, WEP
         // 2026-02-09) and reaches WIR build unregistered.
         if let Some(expected) = self
-            .type_decl_at(None, type_name)
+            .decl_key_at(None, type_name)
             .and_then(|def| self.bare_generic_type_arity(def))
             && self
                 .find_blanket_static_method(receiver_ty, method)

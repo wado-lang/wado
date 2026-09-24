@@ -373,7 +373,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if name == "Self" || self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
             return None;
         }
-        if let Some(def) = self.type_decl_at(Some(site), name) {
+        if let Some(def) = self.decl_key_at(Some(site), name) {
             return match self.tysys.resolutions.defs().kind(def) {
                 DefKind::Effect => Some("an interface"),
                 DefKind::Trait => Some("a trait"),
@@ -679,7 +679,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return primitive;
         }
 
-        if let Some(def) = self.type_decl_at(site, name) {
+        if let Some(def) = self.decl_key_at(site, name) {
             if let Some(expected) = self.bare_generic_type_arity(def) {
                 // Every parameter declaring a default makes the bare name the
                 // defaulted instantiation; otherwise the site must write them.
@@ -833,7 +833,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => {
                 // Which declaration the head names is the site's answer; the
                 // kind it turns out to be decides which shape is built.
-                let Some(def) = self.type_decl_at(site, name) else {
+                let Some(def) = self.decl_key_at(site, name) else {
                     return self.resolve_generic_type_out_of_scope(site, name, args, span);
                 };
                 let struct_info = self.lookup_struct_fields_of_decl(def).cloned();

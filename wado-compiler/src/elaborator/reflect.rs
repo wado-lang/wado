@@ -1586,15 +1586,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) {
             return None;
         }
-        let decl = self.tysys.resolutions.defs().ast_id(trait_);
-        let item = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_item_of_decl(decl)?;
-        let spec = match item {
-            CompilerItem::ReflectTemplate => {
+        let spec = match self.tysys.on_bound_of(trait_)? {
+            OnBoundTrait::ReflectTemplate => {
                 let holes = self.reflect_template_holes(subject)?;
                 return match assoc_name {
                     REFLECT_HOLES_ASSOC => {
@@ -1608,7 +1601,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => None,
                 };
             }
-            CompilerItem::ReflectStruct => {
+            OnBoundTrait::ReflectStruct => {
                 let members = self.reflect_struct_subject(subject)?.member_types;
                 return match assoc_name {
                     REFLECT_FIELD_TYPES_ASSOC => {
@@ -1628,7 +1621,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => None,
                 };
             }
-            CompilerItem::ReflectVariant => {
+            OnBoundTrait::ReflectVariant => {
                 let members = self.reflect_variant_subject(subject)?.member_types;
                 return match assoc_name {
                     REFLECT_CASE_PAYLOADS_ASSOC => {
@@ -1642,9 +1635,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => None,
                 };
             }
-            CompilerItem::ReflectEnum => ScalarReflectSpec::ENUM,
-            CompilerItem::ReflectFlags => ScalarReflectSpec::FLAGS,
-            _ => return None,
+            OnBoundTrait::ReflectEnum => ScalarReflectSpec::ENUM,
+            OnBoundTrait::ReflectFlags => ScalarReflectSpec::FLAGS,
+            OnBoundTrait::Eq
+            | OnBoundTrait::Ord
+            | OnBoundTrait::Serialize
+            | OnBoundTrait::Deserialize
+            | OnBoundTrait::WireNumbered
+            | OnBoundTrait::Default
+            | OnBoundTrait::Reflect
+            | OnBoundTrait::ReflectNewtype
+            | OnBoundTrait::Ref
+            | OnBoundTrait::RefMut
+            | OnBoundTrait::Inspect => return None,
         };
         if assoc_name != REFLECT_MEMBERS_ASSOC {
             return None;

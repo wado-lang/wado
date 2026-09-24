@@ -37,7 +37,7 @@ use crate::elaborator::sem::decls::FunctionSig;
 use crate::elaborator::sem::types::{
     AssignPlace, DesugarKind, FromCallFacts, GenericInstantiation, OperatorDispatch,
 };
-use crate::elaborator::trait_env::written_type_arg;
+use crate::elaborator::trait_env::{ImplTargetKey, written_type_arg};
 use crate::elaborator::types::{
     ImplMemberKind, RealTypeParams, StructFieldInfo, newtype_member_owner,
 };
@@ -5232,40 +5232,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_name: &str,
         from_name: &FqTypeName,
     ) -> (Option<DefId>, ModuleSource) {
-        let from_trait = self.tysys.compiler_trait_def(CompilerItem::From);
-        // Read off the impl headers: a block's trait reference and its
-        // argument are header facts, so the impls are reached by the target's
-        // canonical key rather than by scanning every module for one whose
-        // written target name matches.
-        let declares_from = |key: &DefId| -> bool {
-            self.tysys
-                .trait_env
-                .impl_headers
-                .get(key)
-                .is_some_and(|header| {
-                    header.trait_def().is_some_and(|t| from_trait == Some(t))
-                        && matches!(header.trait_ty(), Some(ast::Type::Generic(g))
-                        if g.args.first().is_some_and(|arg| {
-                            // The header's argument and the call's source type
-                            // are compared as the declarations they name, not
-                            // as the spellings each side wrote.
-                            written_type_arg(arg, &self.tysys.resolutions)
-                                == *from_name
-                        }))
-                })
-        };
-        let keys = self
-            .tysys
-            .trait_env
-            .all_impl_keys(&self.impl_target(target_name));
+        let keys = self.impl_keys_of_from(&self.impl_target(target_name), from_name);
         // The current module wins a tie.
         let defs = self.tysys.resolutions.defs();
         keys.iter()
-            .find(|key| *defs.module(**key) == self.current_module_source && declares_from(key))
-            .or_else(|| keys.iter().find(|key| declares_from(key)))
+            .find(|key| *defs.module(**key) == self.current_module_source)
+            .or_else(|| keys.first())
             .map(|key| (Some(*key), defs.module(*key).clone()))
             // The `From` impl may be synthesized later, so a miss is not an error.
             .unwrap_or_else(|| (None, self.current_module_source.clone()))
+    }
+
+    /// The `impl From<from> for …` blocks on `target`, a bodyless synthesis
+    /// request among them. The argument is compared by the declaration it names.
+    pub(super) fn impl_keys_of_from(
+        &self,
+        target: &ImplTargetKey,
+        from: &FqTypeName,
+    ) -> Vec<DefId> {
+        let from_trait = self.tysys.compiler_trait_def(CompilerItem::From);
+        let env = &self.tysys.trait_env;
+        env.all_impl_keys(target)
+            .into_iter()
+            .filter(|key| {
+                env.impl_headers.get(key).is_some_and(|header| {
+                    from_trait.is_some()
+                        && header.trait_def() == from_trait
+                        && matches!(header.trait_ty(), Some(ast::Type::Generic(g))
+                            if g.args.len() == 1
+                                && written_type_arg(&g.args[0], &self.tysys.resolutions) == *from)
+                })
+            })
+            .collect()
     }
 }
 

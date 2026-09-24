@@ -1064,10 +1064,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if !is_user_local(&header.module) {
                 continue;
             }
-            let Some(ImplTargetKey::Decl(decl_key)) = header.trait_key() else {
+            let Some(decl_key) = header.trait_def() else {
                 continue;
             };
-            let Some(decl) = trait_env.decl_header_of(decl_key) else {
+            let Some(decl) = trait_env.decl_header_of(&decl_key) else {
                 continue;
             };
             // A derivation request asks for an impl rather than writing one, so
@@ -1096,7 +1096,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // `T: Super`, so binding it here would record it where no
             // projection reads it (WEP 2026-07-27).
             for binding in &header.associated_types {
-                if !trait_env.declares_assoc_type(decl_key, &binding.name) {
+                if !trait_env.declares_assoc_type(&decl_key, &binding.name) {
                     let _ = logger.error_in(
                         &header.module,
                         TypeError::ImplAssocTypeNotInTrait {
@@ -2512,7 +2512,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                     }
                     other => {
-                        Self::validate_ast_type_names(other, known_type_names, type_params, logger)?
+                        Self::validate_ast_type_names(
+                            other,
+                            known_type_names,
+                            type_params,
+                            logger,
+                        )?;
                     }
                 }
                 for ty in &smc.type_args {
@@ -3224,8 +3229,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let Some(trait_key) = impl_block
                     .trait_type
                     .as_ref()
-                    .and_then(head_site)
-                    .and_then(|site| resolutions.declared(site))
+                    .and_then(|t| resolutions.head_decl(t))
                 else {
                     continue;
                 };

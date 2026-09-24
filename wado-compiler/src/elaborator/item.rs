@@ -33,7 +33,6 @@ use crate::elaborator::sig;
 use crate::elaborator::sig::{ImplSig, TraitMethod, TraitSig, own_params_of};
 use crate::elaborator::trait_env::get_type_name_static;
 use crate::name::{FqTraitName, test_function_name};
-use crate::resolve::head_site;
 use crate::tir::{ResolvedType, StructDef, TirTypeParam};
 use crate::{hashmap, tir};
 
@@ -924,8 +923,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         let trait_decl = impl_block
             .trait_type
             .as_ref()
-            .and_then(head_site)
-            .and_then(|site| scope.tysys.resolutions.declared(site));
+            .and_then(|t| scope.tysys.resolutions.head_decl(t));
         let impl_def = scope.def_at(impl_block.id);
         scope.sem.decls.impl_sigs.insert(
             impl_def,

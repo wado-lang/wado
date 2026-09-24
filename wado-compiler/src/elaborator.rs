@@ -244,7 +244,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The symbol `name` reaches from `module`, for a caller whose reference site
-    /// is not at hand — a mangled name, a synthesis target. No scope is run.
+    /// is not at hand — a mangled name, a synthesis target.
     pub(crate) fn symbol_named(&self, module: &ModuleSource, name: &str) -> Option<&'a Symbol> {
         let def = self.tysys.resolutions.resolve_in(module, name)?;
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
@@ -356,12 +356,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     pub(super) fn lookup_newtype_of_decl(&self, def: DefId) -> Option<TypeId> {
         self.type_lookup().newtype_of(def)
-    }
-
-    /// The declaration a *type* reference names; see
-    /// [`TypeLookup::declaration_at`].
-    pub(super) fn type_decl_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
-        self.type_lookup().declaration_at(site, name)
     }
 
     /// The module `node` was written in, which is the module it resolves in
@@ -1228,12 +1222,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
             return None;
         }
-        let frame = self
-            .annotate_ctx
-            .resolving_home
-            .as_ref()
-            .unwrap_or(&self.current_module_source);
-        self.tysys.resolutions.resolve_in(frame, name)
+        self.type_lookup().declaration(name)
     }
 
     /// The trait `bound` names; one naming no declaration keeps its spelling,
@@ -1690,10 +1679,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .iter()
             .map(|effect| {
                 self.effect_named_at(Some(effect.id), effect.span, &effect.name)
-                    .unwrap_or_else(|| {
-                        self.tysys
-                            .resolutions
-                            .effect_named(effect, &self.current_module_source)
+                    .unwrap_or_else(|| tir::EffectRef::Concrete {
+                        name: effect.name.clone(),
+                        module_source: self.current_module_source.clone(),
                     })
             })
             .collect()

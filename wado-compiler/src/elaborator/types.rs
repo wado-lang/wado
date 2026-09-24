@@ -1313,7 +1313,7 @@ impl TypeError {
             }
             TypeError::UnknownEffect { name, span } => (
                 Code::UnknownType,
-                format!("'{name}' is not a declared effect"),
+                format!("no effect named '{name}' is in scope"),
                 *span,
             ),
             TypeError::SelfInUnboundedBound { param, span } => (
@@ -3566,12 +3566,8 @@ impl<'a> TypeLookup<'a> {
             .declared_or(site, || self.declaration(name))
     }
 
-    /// Which declaration `name` names in the frame this view stands in — for a
-    /// caller holding a rendering. Not a scope: a name with a site goes through
-    /// [`Self::declaration_at`], which reads what the resolve pass recorded.
-    ///
-    /// The function-local items tried ahead of the indexes are the walk's own
-    /// position; a local item is visible only after its declaration statement.
+    /// Which declaration `name` names in the frame this view stands in, for a
+    /// caller holding a rendering; one with a site calls [`Self::declaration_at`].
     pub(super) fn declaration(&self, name: &str) -> Option<DefId> {
         let canon = canonical_ns_ref(self.namespace_imports, name);
         let name = canon.as_deref().unwrap_or(name);

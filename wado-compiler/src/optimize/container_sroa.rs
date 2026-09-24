@@ -25,8 +25,9 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query::{reachable_blocks, strip_one_value_copy};
 use super::gate::{FunctionGate, GatedPass};
+use crate::compiler_item::CompilerItem;
 use crate::lower::plan::value_copy;
-use crate::name::FqTraitName;
+use crate::name::{FqTraitName, LocalMethodName};
 use crate::nir::NirField;
 use crate::nir_value_graph::ValueKind;
 
@@ -87,12 +88,18 @@ enum ListMethodKind {
     Query,
 }
 
+/// Whether `info` is a method on the compiler's `List`.
+fn is_list_method(info: &LocalMethodName, type_table: &TypeTable) -> bool {
+    let list = type_table.compiler_item_def(CompilerItem::List);
+    list.is_some() && info.receiver().def() == list
+}
+
 /// Classify a `List` method into a [`ListMethodKind`] by signature shape, read
 /// against the element type its `monomorph_info` names.
 fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Option<ListMethodKind> {
     // Must be a method (instance or static) on `List`.
     let info = func.method_info.as_ref()?;
-    if info.receiver_decl_name() != "List" {
+    if !is_list_method(info, type_table) {
         return None;
     }
     // Must be a monomorphized instance so we know the concrete element type.
@@ -124,10 +131,8 @@ fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Opti
     let is_unit = |ty: TypeId| ty == TypeTable::UNIT;
     // Names the impl exactly, the receiver being `List<T>` already: a second
     // `From<Array<T>>` for it would overlap.
-    let is_from_impl = info
-        .trait_name
-        .as_ref()
-        .is_some_and(|t| t.base_name() == "From");
+    let from = type_table.compiler_items().trait_def(CompilerItem::From);
+    let is_from_impl = from.is_some() && info.trait_decl() == from;
     // Length-invariant query return types: i32 (len, capacity) or bool (is_empty).
     let is_query_return = |ty: TypeId| ty == TypeTable::I32 || ty == TypeTable::BOOL;
 
@@ -364,10 +369,7 @@ fn build_method_catalog(
         let Some(method_info) = &func.method_info else {
             continue;
         };
-        // Must be a method on List (by base struct name). The kind is still
-        // List-specific because the pass itself is List-specific — we only
-        // de-hardcode method *names*, not the container type.
-        if method_info.receiver_decl_name() != "List" {
+        if !is_list_method(method_info, type_table) {
             continue;
         }
         // Must be a monomorphized method (we need the concrete impl type arg).

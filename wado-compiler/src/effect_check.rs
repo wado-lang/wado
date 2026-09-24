@@ -450,8 +450,8 @@ struct OwnedEffectData {
     resource_names: IndexSet<(ModuleSource, String)>,
     members: MemberTables,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
-    /// `#[cm]` FQ per interface declaration.
-    interface_cm_fq: IndexMap<DefId, Option<String>>,
+    /// Each interface declaration's effect and `#[cm]` FQ.
+    interfaces: IndexMap<DefId, (EffectRef, Option<String>)>,
     effect_by_cm_fq: IndexMap<String, EffectRef>,
     /// CM interface FQs the consumer satisfies with a provider component; a
     /// reconstructed host-leaf import in this set is discharged (composition-
@@ -575,7 +575,7 @@ impl OwnedEffectData {
             }
         }
 
-        let mut interface_cm_fq: IndexMap<DefId, Option<String>> = IndexMap::default();
+        let mut interfaces: IndexMap<DefId, (EffectRef, Option<String>)> = IndexMap::default();
         // Restricted to closure keys, so a host-leaf import resolves to an
         // effect while a type-only interface (`wasi:cli/types`) resolves to
         // nothing.
@@ -587,15 +587,15 @@ impl OwnedEffectData {
                 };
                 let def = defs.def_at(decl.id);
                 let cm_fq = cm_import_of(&decl.attrs).map(CmImport::interface_path);
-                interface_cm_fq.insert(def, cm_fq.clone());
                 let key = resolutions
                     .effect_decl(def)
                     .expect("an interface is an effect");
                 if closure.contains_key(&key)
-                    && let Some(fq) = cm_fq
+                    && let Some(fq) = &cm_fq
                 {
-                    effect_by_cm_fq.entry(fq).or_insert(key);
+                    effect_by_cm_fq.entry(fq.clone()).or_insert(key.clone());
                 }
+                interfaces.insert(def, (key, cm_fq));
             }
         }
 
@@ -611,7 +611,7 @@ impl OwnedEffectData {
             resource_names,
             members,
             closure,
-            interface_cm_fq,
+            interfaces,
             effect_by_cm_fq,
             provided_import_fqs,
             resolutions: Rc::clone(&state.tysys.resolutions),
@@ -631,7 +631,7 @@ impl OwnedEffectData {
             resource_names: &self.resource_names,
             members: &self.members,
             closure: &self.closure,
-            interface_cm_fq: &self.interface_cm_fq,
+            interfaces: &self.interfaces,
             effect_by_cm_fq: &self.effect_by_cm_fq,
             provided_import_fqs: &self.provided_import_fqs,
             resolutions: &self.resolutions,
@@ -664,9 +664,8 @@ struct EffectIndex<'a> {
     members: &'a MemberTables,
     /// Effect → implied resources propagation closure.
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
-    /// Interface declaration → its `#[cm]` FQ, for resolving a direct `E::op()`
-    /// callee to its effect and FQ.
-    interface_cm_fq: &'a IndexMap<DefId, Option<String>>,
+    /// Interface declaration → its effect and `#[cm]` FQ.
+    interfaces: &'a IndexMap<DefId, (EffectRef, Option<String>)>,
     /// CM interface FQ → the effect it declares, for reconstructing a
     /// component's host-leaf imports into effects.
     effect_by_cm_fq: &'a IndexMap<String, EffectRef>,
@@ -675,24 +674,19 @@ struct EffectIndex<'a> {
     resolutions: &'a Resolutions,
 }
 
-/// The segment naming the interface in a dispatch path `[ns::]*E::op`: the one
-/// before the operation, so a namespace qualifier ahead of `E` does not stand in
-/// for it.
-fn interface_segment(callee: &Expr) -> Option<&ast::PathSegment> {
+/// The declaration owning what `callee` names: `E` in `[ns::]E::op` through its
+/// site, or the owner of an imported bare `op` through the operation's own.
+fn callee_owner(index: &EffectIndex, callee: &Expr) -> Option<DefId> {
     let Expr::Ident(ident) = callee else {
         return None;
     };
-    ident.owner_segment()
-}
-
-/// The `interface` the name at `site` declares, with its `#[cm]` FQ. `None`
-/// when the name declares anything else.
-fn interface_at<'a>(
-    index: &EffectIndex<'a>,
-    site: Option<AstId>,
-) -> Option<(DefId, &'a Option<String>)> {
-    let def = index.resolutions.declared(site?)?;
-    Some((def, index.interface_cm_fq.get(&def)?))
+    let resolutions = index.resolutions;
+    if let Some(owner) = ident.owner_segment() {
+        return resolutions.declared(owner.id);
+    }
+    resolutions
+        .defs()
+        .parent(resolutions.declared_if_walked(ident.id)?)
 }
 
 /// The effects `with E => h do` grants to its body.
@@ -738,20 +732,18 @@ fn binding_granted_effects(
         .collect()
 }
 
-/// What a direct `E::op()` call at `site` demands of its caller.
+/// What a direct call of an operation `owner` declares demands of its caller.
 ///
-/// Empty where it demands nothing: the site names no interface, or `E` is a
-/// user-defined effect, whose operation an installed handler answers and whose
-/// dispatch with none traps — a runtime outcome, not a demand on the position.
-/// A purely computational component's operation demands nothing either.
+/// Empty where it demands nothing: `owner` is no interface, or a user-defined
+/// effect, whose operation an installed handler answers and whose dispatch with
+/// none traps — a runtime outcome, not a demand on the position. A purely
+/// computational component's operation demands nothing either.
 fn operation_requirements(
     sem: &Semantics,
     index: &EffectIndex,
-    site: Option<AstId>,
+    owner: Option<DefId>,
 ) -> Vec<EffectRef> {
-    // The callee names its interface's declaration; the site says which one
-    // that is, so a same-named local `interface` cannot stand in for it.
-    let Some((def, cm_fq)) = interface_at(index, site) else {
+    let Some((effect, cm_fq)) = owner.and_then(|def| index.interfaces.get(&def)) else {
         return Vec::new();
     };
     let Some(fq) = cm_fq else {
@@ -769,12 +761,7 @@ fn operation_requirements(
             .filter_map(|leaf| index.effect_by_cm_fq.get(leaf).cloned())
             .collect();
     }
-    vec![
-        index
-            .resolutions
-            .effect_decl(def)
-            .expect("an interface is an effect"),
-    ]
+    vec![effect.clone()]
 }
 
 /// What the elaborator recorded about one `impl` block.
@@ -1190,7 +1177,6 @@ fn call_site_effects(
     }
     // Only a free function in this program dispatches through the path: a
     // method names its receiver, and a host binding is already the import.
-    let path_site = interface_segment(callee).map(|seg| seg.id);
     dispatches
         .into_iter()
         .map(|(func_ref, self_in_args)| {
@@ -1206,7 +1192,7 @@ fn call_site_effects(
                 name: callee_name(callee).to_string(),
                 declared: resolve_effect_params(sem, index, &effects, &params, is_method, args),
                 dispatched: if dispatches_through_path {
-                    operation_requirements(sem, index, path_site)
+                    operation_requirements(sem, index, callee_owner(index, callee))
                 } else {
                     Vec::new()
                 },
@@ -1843,10 +1829,10 @@ impl PurityWalker<'_> {
     /// Flags `Site::op(…)` when the dispatch demands a capability the position
     /// does not hold. An operation declares no `with` clause of its own, so
     /// nothing but the site says so.
-    fn flag_if_operation(&mut self, site: AstId, op: &str, span: Span) {
+    fn flag_if_operation(&mut self, owner: Option<DefId>, op: &str, span: Span) {
         // An operation declares no effect parameters, so there is nothing for
         // the arguments to resolve.
-        let required = operation_requirements(self.sem, self.index, Some(site));
+        let required = operation_requirements(self.sem, self.index, owner);
         if self.unanswered(&required) {
             self.flag(Impurity::Dispatch(op.to_string()), span);
         }
@@ -1878,11 +1864,11 @@ impl AstVisitor for PurityWalker<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {
-                if let Some(interface) = interface_segment(&call.callee)
-                    && let Expr::Ident(ident) = &call.callee
+                if let Expr::Ident(ident) = &call.callee
                     && let Some(op) = ident.segments.last()
                 {
-                    self.flag_if_operation(interface.id, &op.name, call.span);
+                    let owner = callee_owner(self.index, &call.callee);
+                    self.flag_if_operation(owner, &op.name, call.span);
                 }
                 self.flag_call(&call.callee, call.id, &call.args, call.span);
             }
@@ -1906,7 +1892,8 @@ impl AstVisitor for PurityWalker<'_> {
             }
             Expr::StaticMethodCall(static_call) => {
                 if let ast::Type::Named(named) = &static_call.target_type {
-                    self.flag_if_operation(named.id, &static_call.method, static_call.span);
+                    let owner = self.index.resolutions.declared(named.id);
+                    self.flag_if_operation(owner, &static_call.method, static_call.span);
                 }
                 for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
                     let effects = self.index.method_effects(&func_ref);
