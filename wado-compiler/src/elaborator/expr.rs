@@ -26,6 +26,7 @@ use super::types::{FunctionContext, TypeError, VarRef};
 use super::util;
 use crate::ast::{RangeExpr, Visibility};
 use crate::compiler_item::CompilerItem;
+use crate::const_eval::{Value, eval_cast, is_signed_int, prim_of};
 use crate::defs::DefId;
 use crate::elaborator::control_flow::{
     collect_unresolved_null_breaks, collect_unresolved_null_tails,
@@ -5381,12 +5382,48 @@ impl LiteralOrdValue {
             _ => false, // different kinds — type mismatch error handles this
         }
     }
+
+    /// The value as `const_eval` holds it; `None` past 64 bits.
+    fn to_const(&self) -> Option<Value> {
+        match *self {
+            LiteralOrdValue::Int(v) if v < 0 => Some(Value::Int {
+                value: i64::try_from(v).ok()? as u64,
+                prim: PrimitiveType::I64,
+            }),
+            LiteralOrdValue::Int(v) => Some(Value::Int {
+                value: u64::try_from(v).ok()?,
+                prim: PrimitiveType::U64,
+            }),
+            LiteralOrdValue::Float(value) => Some(Value::Float {
+                value,
+                prim: PrimitiveType::F64,
+            }),
+            LiteralOrdValue::Char(c) => char::from_u32(c).map(Value::Char),
+        }
+    }
+
+    fn from_const(value: Value) -> Option<Self> {
+        match value {
+            Value::Int { value, prim } if is_signed_int(prim) => {
+                Some(LiteralOrdValue::Int(i128::from(value as i64)))
+            }
+            Value::Int { value, .. } => Some(LiteralOrdValue::Int(i128::from(value))),
+            Value::Float { value, .. } => Some(LiteralOrdValue::Float(value)),
+            Value::Char(c) => Some(LiteralOrdValue::Char(c as u32)),
+            Value::Bool(_) => None,
+            Value::Null
+            | Value::Unit
+            | Value::Aggregate { .. }
+            | Value::Seq { .. }
+            | Value::Variant { .. } => unreachable!("`eval_cast` yields a scalar"),
+        }
+    }
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Extract a compile-time orderable value from a literal expression.
     /// Returns the value in its native representation to avoid precision loss.
-    fn extract_literal_ord_value(expr: &Expr) -> Option<LiteralOrdValue> {
+    fn extract_literal_ord_value(&self, expr: &Expr) -> Option<LiteralOrdValue> {
         match expr {
             Expr::Literal(lit) => match &lit.value {
                 Literal::Number(s) if util::is_float_only_literal(s) => {
@@ -5404,13 +5441,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => None,
             },
             Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => {
-                match Self::extract_literal_ord_value(&unary.expr)? {
+                match self.extract_literal_ord_value(&unary.expr)? {
                     LiteralOrdValue::Int(v) => Some(LiteralOrdValue::Int(-v)),
                     LiteralOrdValue::Float(v) => Some(LiteralOrdValue::Float(-v)),
                     LiteralOrdValue::Char(_) => None,
                 }
             }
-            Expr::Cast(cast) => Self::extract_literal_ord_value(&cast.expr),
+            Expr::Cast(cast) => {
+                let recorded = self.sem.types.expression_types.get(&expr.id()).copied()?;
+                let target = prim_of(recorded, &self.tysys.type_table.borrow())?;
+                let source = self.extract_literal_ord_value(&cast.expr)?.to_const()?;
+                LiteralOrdValue::from_const(eval_cast(source, target)?)
+            }
             _ => None,
         }
     }
@@ -5472,8 +5514,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check for reversed range literals (start > end)
-        if let Some(start_val) = Self::extract_literal_ord_value(&range.start)
-            && let Some(end_val) = Self::extract_literal_ord_value(&range.end)
+        if let Some(start_val) = self.extract_literal_ord_value(&range.start)
+            && let Some(end_val) = self.extract_literal_ord_value(&range.end)
         {
             let is_reversed = start_val.is_greater_than(&end_val);
             if is_reversed {
