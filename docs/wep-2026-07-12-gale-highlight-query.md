@@ -85,7 +85,7 @@ same channel as supplementary `.g4` grammars:
 ```wado
 use hl from "./JSON.g4" with {
     generator: {
-        module: "wado:gale",
+        module: "wado-lang:gale",
         inputs: ["./JSON.highlights.scm"],
     },
 };
