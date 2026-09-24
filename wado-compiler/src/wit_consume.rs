@@ -343,7 +343,8 @@ impl Builder {
     ) -> Option<Type> {
         let result = func.result.map(|r| self.map_type(resolve, r, fq));
         if is_async_func(func) {
-            return Some(self.generic("AsyncCall", vec![result.unwrap_or_else(unit)]));
+            let result = result.unwrap_or_else(|| self.unit());
+            return Some(self.generic("AsyncCall", vec![result]));
         }
         result
     }
@@ -566,11 +567,11 @@ impl Builder {
             CmShape::Result { ok, err } => {
                 let ok = match ok {
                     Some(t) => self.map_type(resolve, t, current_fq),
-                    None => unit(),
+                    None => self.unit(),
                 };
                 let err = match err {
                     Some(t) => self.map_type(resolve, t, current_fq),
-                    None => unit(),
+                    None => self.unit(),
                 };
                 self.generic("Result", vec![ok, err])
             }
@@ -623,7 +624,7 @@ impl Builder {
             self.errors.push(
                 "encountered an unnameable WIT leaf type while importing a component".to_string(),
             );
-            unit()
+            self.unit()
         }
     }
 
@@ -637,6 +638,10 @@ impl Builder {
             name: name.to_string(),
             span: syn(),
         })
+    }
+
+    fn unit(&mut self) -> Type {
+        self.named("()", None)
     }
 
     fn generic(&mut self, name: &str, args: Vec<Type>) -> Type {
@@ -712,10 +717,6 @@ fn interface_fq(resolve: &Resolve, iface_id: wit_parser::InterfaceId) -> String 
         Some(v) => format!("{}:{}/{}@{}", pkg.namespace, pkg.name, name, v),
         None => format!("{}:{}/{}", pkg.namespace, pkg.name, name),
     }
-}
-
-fn unit() -> Type {
-    Type::Tuple(Vec::new())
 }
 
 fn syn() -> Span {

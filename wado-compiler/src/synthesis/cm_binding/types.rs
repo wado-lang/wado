@@ -577,8 +577,8 @@ pub(super) fn check_cm_boundary_representable(
     )
 }
 
-/// Which way a signature crosses: an import also carries a borrowed handle,
-/// and spells a payload-less `result` arm as the empty tuple.
+/// Which way a signature crosses: an import also carries a borrowed resource
+/// handle.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Boundary {
     Export,
@@ -628,7 +628,7 @@ fn check_cm_boundary_representable_inner(
             return recurse(elem, visited);
         }
         if let Some(elems) = type_table.as_tuple(type_id) {
-            if elems.is_empty() && boundary == Boundary::Export {
+            if elems.is_empty() {
                 return Err(
                     "the empty tuple `[]` has no Component Model representation — a `tuple` \
                      carries at least one type, and `()` is the type that carries none"
@@ -755,12 +755,19 @@ fn check_cm_boundary_representable_inner(
             }
             R::Ref(inner) | R::MutRef(inner) if boundary == Boundary::Import => {
                 let inner = *inner;
-                recurse(inner, visited)
+                match type_table.get(type_table.representation_head(inner)) {
+                    R::Resource { .. } | R::GenericResource { .. } => recurse(inner, visited),
+                    _ => Err(format!(
+                        "a reference crosses a Component Model import only as a borrowed \
+                         resource handle, and `{}` borrows no resource",
+                        type_table.type_name(type_id)
+                    )),
+                }
             }
-            // These never carry a CM value at a concrete export boundary
-            // (diverging/never, closures, reactive cells, raw GC arrays,
-            // unmonomorphized type parameters, or unresolved/error types).
-            // Reject explicitly instead of silently lowering to i32.
+            // These never carry a CM value across a boundary (diverging/never,
+            // closures, reactive cells, raw GC arrays, unmonomorphized type
+            // parameters, or unresolved/error types). Reject explicitly
+            // instead of silently lowering to i32.
             R::Never
             | R::Ref(_)
             | R::MutRef(_)
