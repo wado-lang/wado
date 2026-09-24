@@ -79,7 +79,7 @@ use crate::format_spec::{FormatKind, TemplateFormatSpec};
 use crate::name::{
     LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
-    test_function_name,
+    minted_name, test_function_name,
 };
 use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
@@ -87,6 +87,7 @@ use crate::tir::{
     EffectRef, StructDef, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
 };
+use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 use crate::unparse::unparse_expr_source;
 use crate::{format_spec, hashmap};
@@ -7881,20 +7882,35 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn bind_receiver_ahead(
         &self,
         ctx: &mut FunctionContext,
-        mut receiver: TirExpr,
+        receiver: TirExpr,
+        stmts: &mut Vec<TirStmt>,
+    ) -> TirExpr {
+        if !self.is_source_place(&receiver) {
+            return Self::hoist_once(ctx, receiver, "$recv", stmts);
+        }
+        self.bind_subscripts_ahead(ctx, receiver, "$recv_index", stmts)
+    }
+
+    fn is_source_place(&self, expr: &TirExpr) -> bool {
+        is_source_place(expr, self.tysys.type_table.borrow().compiler_items())
+    }
+
+    /// `place` with each subscript [`Self::hoist_once`]d in order, so the place
+    /// itself stays where it is written.
+    fn bind_subscripts_ahead(
+        &self,
+        ctx: &mut FunctionContext,
+        mut place: TirExpr,
+        prefix: &str,
         stmts: &mut Vec<TirStmt>,
     ) -> TirExpr {
         let type_table = self.tysys.type_table.borrow();
-        let items = type_table.compiler_items();
-        if !is_source_place(&receiver, items) {
-            return Self::hoist_once(ctx, receiver, "$recv", stmts);
-        }
-        for subscript in source_place_subscripts_mut(&mut receiver, items) {
+        for subscript in source_place_subscripts_mut(&mut place, type_table.compiler_items()) {
             let unbound = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, subscript.span);
             let value = std::mem::replace(subscript, unbound);
-            *subscript = Self::hoist_once(ctx, value, "$recv_index", stmts);
+            *subscript = Self::hoist_once(ctx, value, prefix, stmts);
         }
-        receiver
+        place
     }
 
     /// `value` inside the block holding the [`Self::hoist_once`] temporaries it
@@ -8225,18 +8241,35 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         });
 
         let named = slots_named_by_defaults(args.len(), func_params);
+        let captured = names_captured_by_defaults(args.len(), func_params);
         let mut prelude = Vec::new();
+        let mut borrows = BorrowedPlaces::default();
         ctx.with_caller_bindings_hidden(|ctx| {
             // Once any slot is bound, every argument is, so each still runs
             // ahead of what a default reads, in the order the call spells them.
+            // A `&mut` place stays in the call for the callee's writes to reach
+            // it, and a default borrows it again unless a closure would hold it.
             if named.contains(&true) {
-                for (arg, (name, _)) in args.iter_mut().zip(func_params) {
+                for ((arg, (name, _)), named) in args.iter_mut().zip(func_params).zip(&named) {
                     let unbound = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, arg.expr.span);
                     let value = std::mem::replace(&mut arg.expr, unbound);
                     arg.expr = if name == RECEIVER {
                         self.bind_receiver_ahead(ctx, value, &mut prelude)
+                    } else if is_mut_borrow(&value)
+                        && self.is_source_place(&value)
+                        && !captured.contains(name)
+                    {
+                        let borrow =
+                            self.bind_subscripts_ahead(ctx, value, "$arg_index", &mut prelude);
+                        if *named {
+                            let what = minted_name(name, ctx.fresh_serial());
+                            let stand_in = ctx.add_local(what, borrow.type_id, false, None);
+                            ctx.name_local(name.clone(), stand_in);
+                            borrows.0.push((stand_in, borrow.clone()));
+                        }
+                        borrow
                     } else {
-                        bind_to_local(ctx, name.clone(), value, &mut prelude)
+                        bind_param_to_local(ctx, name, value, &mut prelude)
                     };
                 }
             }
@@ -8251,8 +8284,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(expected) = expected {
                     self.settle_packs_in_default(&mut resolved, expected);
                 }
+                borrows.visit_expr(&mut resolved);
                 if *named {
-                    resolved = bind_to_local(ctx, name.clone(), resolved, &mut prelude);
+                    resolved = bind_param_to_local(ctx, name, resolved, &mut prelude);
                 }
                 // A default is a value synthesized here, with no caller storage
                 // behind it for the callee to write.
@@ -11399,6 +11433,21 @@ fn slots_named_by_defaults(args_len: usize, params: &[(String, Option<ast::Expr>
     named
 }
 
+/// The names a closure spells in any default the call leaves to its declaration.
+fn names_captured_by_defaults(
+    args_len: usize,
+    params: &[(String, Option<ast::Expr>)],
+) -> IndexSet<String> {
+    let mut captured = ClosureSpelledNames::default();
+    for (_, default) in params.iter().skip(args_len) {
+        let Some(default) = default else {
+            break;
+        };
+        captured.visit_expr(default);
+    }
+    captured.0.0
+}
+
 /// Every name an expression spells as an identifier.
 #[derive(Default)]
 struct SpelledNames(IndexSet<String>);
@@ -11410,6 +11459,71 @@ impl AstVisitor for SpelledNames {
         }
         walk_expr(self, expr);
     }
+}
+
+/// Every name an expression spells inside a closure.
+#[derive(Default)]
+struct ClosureSpelledNames(SpelledNames);
+
+impl AstVisitor for ClosureSpelledNames {
+    fn visit_expr(&mut self, expr: &ast::Expr) {
+        if let ast::Expr::Closure(_) = expr {
+            self.0.visit_expr(expr);
+            return;
+        }
+        walk_expr(self, expr);
+    }
+}
+
+fn is_mut_borrow(expr: &TirExpr) -> bool {
+    matches!(
+        expr.kind,
+        TirExprKind::Unary {
+            op: TirUnaryOp::MutRef,
+            ..
+        }
+    )
+}
+
+/// The `&mut` borrows a call keeps in place, each with the local a default
+/// reads it through; [`TirMutVisitor::visit_expr`] reads the place again there.
+#[derive(Default)]
+struct BorrowedPlaces(Vec<(u32, TirExpr)>);
+
+impl TirMutVisitor for BorrowedPlaces {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        if let TirExprKind::Local { index, .. } = &expr.kind
+            && let Some((_, borrow)) = self.0.iter().find(|(local, _)| local == index)
+        {
+            let span = expr.span;
+            *expr = borrow.clone();
+            expr.span = span;
+            return;
+        }
+        // A closure body numbers its own locals, and none captures a stand-in:
+        // `names_captured_by_defaults` keeps those borrows bound.
+        if matches!(expr.kind, TirExprKind::Closure { .. }) {
+            return;
+        }
+        self.walk_expr(expr);
+    }
+}
+
+/// Bind an argument or default that a later default names, to a minted local
+/// the default reaches under the parameter's own name.
+fn bind_param_to_local(
+    ctx: &mut FunctionContext,
+    param: &str,
+    value: TirExpr,
+    stmts: &mut Vec<TirStmt>,
+) -> TirExpr {
+    let name = minted_name(param, ctx.fresh_serial());
+    let read = bind_to_local(ctx, name, value, stmts);
+    let TirExprKind::Local { index, .. } = &read.kind else {
+        unreachable!("`bind_to_local` answers the read of the local it binds")
+    };
+    ctx.name_local(param.to_string(), *index);
+    read
 }
 
 /// Bind `value` to a new local `name` (the `let` pushed onto `stmts`), and

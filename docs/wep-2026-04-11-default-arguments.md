@@ -172,17 +172,17 @@ and `default_field.wado` each carry one `test` block per row, named after the
 rule, and cross a module boundary in every one — the direction that can tell the
 declaration's scope from the taking site's.
 
-| What the default names                 | Fixture                                                                                   |
-| -------------------------------------- | ----------------------------------------------------------------------------------------- |
-| A private item of the declaring module | `default_arg_scope.wado`, `default_field.wado`                                            |
-| A private _type_ of that module        | `default_arg_scope.wado`                                                                  |
-| A variant case across the boundary     | `default_arg_scope.wado`, `default_field.wado` (issue #1486)                              |
-| That module's import alias (`ns::x`)   | `default_arg_scope.wado`, `default_field.wado`                                            |
-| An earlier parameter                   | `default_arg_scope.wado`, `default_arg_sites.wado`, `default_arg_earlier_param_once.wado` |
-| The declaration's own type parameter   | `default_arg_callee_type_param.wado`                                                      |
-| A location literal (call site)         | `default_arg_location_call_site.wado`                                                     |
-| A file literal (declaring file)        | `default_arg_scope.wado`                                                                  |
-| Nothing of the caller's                | `default_arg_scope.wado`                                                                  |
+| What the default names                 | Fixture                                                                                                                     |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| A private item of the declaring module | `default_arg_scope.wado`, `default_field.wado`                                                                              |
+| A private _type_ of that module        | `default_arg_scope.wado`                                                                                                    |
+| A variant case across the boundary     | `default_arg_scope.wado`, `default_field.wado` (issue #1486)                                                                |
+| That module's import alias (`ns::x`)   | `default_arg_scope.wado`, `default_field.wado`                                                                              |
+| An earlier parameter                   | `default_arg_scope.wado`, `default_arg_sites.wado`, `default_arg_earlier_param_once.wado`, `default_arg_mut_ref_place.wado` |
+| The declaration's own type parameter   | `default_arg_callee_type_param.wado`                                                                                        |
+| A location literal (call site)         | `default_arg_location_call_site.wado`                                                                                       |
+| A file literal (declaring file)        | `default_arg_scope.wado`                                                                                                    |
+| Nothing of the caller's                | `default_arg_scope.wado`                                                                                                    |
 
 A method's default is resolved where declared rather than where called:
 `default_arg_scope.wado`, "a method's default resolves where it is declared".
@@ -212,6 +212,19 @@ twice(next());          // → { let a = next(); twice(a, a + a) }
 The receiver runs first too. A receiver that is a place stays in its slot,
 because a `&mut self` method writes there. Only its subscripts are bound, so
 `v[i()].m(j())` still runs `i()` before `j()`. Any other receiver is bound whole.
+
+A `&mut` borrow of a place stays in its slot the same way, for the callee's
+writes to reach the place, and a default naming its parameter borrows the place
+again (`default_arg_mut_ref_place.wado`):
+
+```wado
+fn put(o: &mut Option<i32>, v: i32 = peek(o) + 1) { ... }
+
+put(&mut s.o);          // → put(&mut s.o, peek(&mut s.o) + 1)
+```
+
+A closure cannot hold such a borrow, so where a closure in a default names the
+parameter, the borrow is bound like any other argument.
 
 #### Interaction with Function Types
 
@@ -655,6 +668,11 @@ let resp = Fetch::fetch(url, init).read();
 A call that pins no type argument at all reports the parameter it could not
 infer, preceded by an `unknown function 'T::default'` from the default walk that
 had nothing to resolve against. The second diagnostic is the one to read.
+
+A closure in a default that names a `&mut` parameter holds the borrow in a
+local, so a call borrowing a field that holds a variant there is refused as a
+variable holding the detached copy past the borrow, where spelling the closure
+at the call (`|| peek(&s.o)`) is accepted.
 
 ## See Also
 

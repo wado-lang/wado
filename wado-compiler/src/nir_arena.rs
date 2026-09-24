@@ -12,7 +12,7 @@ use crate::canonical::CmCallTarget;
 use crate::hashmap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::name::{is_template_block, plain_block_label};
+use crate::name::{is_template_block, minted_name};
 use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::builder::ValueGraphBuild;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
@@ -336,14 +336,14 @@ pub enum ExprKind {
 impl ExprKind {
     /// A block no `break` names. `what` says which construct put the block
     /// there — the caller is the only one who knows — and the block id makes
-    /// the label unique within the body; [`plain_block_label`] spells it.
+    /// the label unique within the body; [`minted_name`] spells it.
     ///
     /// A serial alone would name the block without saying anything about it,
     /// which is what an unlabeled block already did.
     #[must_use]
     pub fn plain_block(block: BlockId, result_type: TypeId, what: &str) -> Self {
         Self::LabeledBlock {
-            label: plain_block_label(what, block.index()),
+            label: minted_name(what, block.index()),
             block,
             result_type,
             role: BlockRole::Plain,

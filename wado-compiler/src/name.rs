@@ -423,11 +423,11 @@ pub fn variant_return_field_local(field_name: &str, slot_local: &str) -> String 
     format!("{INTERNAL_PREFIX}vr_{field_name}_{slot_local}")
 }
 
-/// The label a block no `break` names carries: `what` says which construct put
-/// the block there, `id` makes it unique within the body.
+/// A local or label a construct mints for itself: `what` says which construct,
+/// `serial` makes it unique within the body.
 #[must_use]
-pub fn plain_block_label(what: &str, id: usize) -> String {
-    format!("{INTERNAL_PREFIX}{what}_{id}")
+pub fn minted_name(what: &str, serial: impl fmt::Display) -> String {
+    format!("{INTERNAL_PREFIX}{what}_{serial}")
 }
 
 /// Label the template-string synthesiser stamps on the block wrapping an
