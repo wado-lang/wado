@@ -323,7 +323,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         }
     }
     let mut named = TreeSet::<String>::new();
-    collect_referenced_names(&w.to_string(), &mut named);
+    collect_referenced_names(&w.to_string(), &["_kind_set_", "SYNC_", "EXPECTED_", "FOLLOW_MASK_"], &mut named);
     gen_kind_set_helpers(&mut w, &lowered, &ctx, &named);
     gen_sync_set_globals(&mut w, &ctx, &named);
     if emit_follow {

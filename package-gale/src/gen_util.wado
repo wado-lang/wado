@@ -28,18 +28,18 @@ fn is_ident_byte(b: u8) -> bool {
     return b == b'_' || b.is_ascii_alphanumeric();
 }
 
-/// Every name generated `text` calls: an identifier followed by `(` that is
-/// not the one a `fn` defines.
+/// Every free function generated `text` calls: an identifier followed by `(`
+/// that is neither a method nor the one a `fn` defines.
 pub fn collect_called_names(text: &String, out: &mut TreeSet<String>) {
-    collect_names(text, out, true);
+    collect_names(text, out, true, &[]);
 }
 
-/// Every identifier generated `text` names.
-pub fn collect_referenced_names(text: &String, out: &mut TreeSet<String>) {
-    collect_names(text, out, false);
+/// Every identifier generated `text` names that starts with one of `prefixes`.
+pub fn collect_referenced_names(text: &String, prefixes: &List<String>, out: &mut TreeSet<String>) {
+    collect_names(text, out, false, prefixes);
 }
 
-fn collect_names(text: &String, out: &mut TreeSet<String>, calls_only: bool) {
+fn collect_names(text: &String, out: &mut TreeSet<String>, calls_only: bool, prefixes: &List<String>) {
     let n = text.len();
     let mut i = 0;
     while i < n {
@@ -51,8 +51,15 @@ fn collect_names(text: &String, out: &mut TreeSet<String>, calls_only: bool) {
         while i < n && is_ident_byte(text.get_byte_unchecked(i)) {
             i += 1;
         }
+        if calls_only && start > 0 && text.get_byte_unchecked(start - 1) == b'.' {
+            continue;
+        }
+        let name = text.as_str_slice().slice(start, i);
+        if !prefixes.is_empty() && !prefixes.iter_ref().any(|p| name.starts_with(p)) {
+            continue;
+        }
         if !calls_only || i < n && text.get_byte_unchecked(i) == b'(' && !follows_fn_keyword(text, start) {
-            out.insert(text.as_str_slice().slice(start, i).to_string());
+            out.insert(name.to_string());
         }
     }
 }

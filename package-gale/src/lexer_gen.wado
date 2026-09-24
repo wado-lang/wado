@@ -3875,11 +3875,7 @@ fn keyword_elem_ends(
             return starts.iter_ref().filter(
                 |p| *p + cs.len() <= len
                     && (0..<cs.len()).all(
-                        |i| keyword_chars_in(kw, *p + i, &LeadingChars {
-                            ranges: folded_ranges(cs[i], cs[i], ci),
-                            negated: false,
-                            nullable: false,
-                        }, reading),
+                        |i| keyword_chars_admitted(kw, *p + i, reading, |c| in_folded_range(c, cs[i], cs[i], ci)),
                     ),
             ).map(|p| *p + cs.len()).collect();
         },
@@ -3934,7 +3930,24 @@ fn keyword_elem_ends(
                 frontier = fresh;
             }
         },
-        CharRange(_) | CharClass(_) | AnyChar | Not(_) => {
+        CharRange(pair) => {
+            return starts.iter_ref().filter(
+                |p| *p < len && keyword_chars_admitted(kw, *p, reading, |c| in_folded_range(c, pair.0, pair.1, ci)),
+            ).map(|p| *p + 1).collect();
+        },
+        CharClass(cc) => {
+            if cc.negated && ci {
+                return unread_keyword_ends(kw, reading, starts);
+            }
+            let admits = |c: char| cc.negated != cc.ranges.iter_ref().any(|r| in_folded_range(c, r.start, r.end, ci));
+            return starts.iter_ref().filter(|p| *p < len && keyword_chars_admitted(kw, *p, reading, admits)).map(
+                |p| *p + 1,
+            ).collect();
+        },
+        AnyChar => {
+            return starts.iter_ref().filter(|p| *p < len).map(|p| *p + 1).collect();
+        },
+        Not(_) => {
             let mut no_refs: List<String> = [];
             let Some(set) = lexer_elem_leading_chars(elem, all_rules, ci, false, &mut no_refs) else {
                 return unread_keyword_ends(kw, reading, starts);
@@ -3968,9 +3981,35 @@ fn unread_keyword_ends(kw: &KeywordInfo, reading: KeywordReading, starts: &List<
 /// Whether the chars `kw` accepts at `pos` are in `set`: every one when
 /// proving, any one otherwise.
 fn keyword_chars_in(kw: &KeywordInfo, pos: i32, set: &LeadingChars, reading: KeywordReading) -> bool {
+    return keyword_chars_admitted(
+        kw,
+        pos,
+        reading,
+        |c| set.negated != set.ranges.iter_ref().any(|r| c as i32 >= r.0 && c as i32 <= r.1),
+    );
+}
+
+/// Whether `admits` takes the chars `kw` accepts at `pos`: every one when
+/// proving, any one otherwise.
+fn keyword_chars_admitted(kw: &KeywordInfo, pos: i32, reading: KeywordReading, admits: fn(char) -> bool) -> bool {
     let accepts = keyword_accepts(kw, pos);
-    let in_set = |c: &char| set.negated != set.ranges.iter_ref().any(|r| *c as i32 >= r.0 && *c as i32 <= r.1);
-    return if reading matches { Proven } { accepts.iter_ref().all(in_set) } else { accepts.iter_ref().any(in_set) };
+    return if reading matches { Proven } {
+        accepts.iter_ref().all(|c| admits(*c))
+    } else {
+        accepts.iter_ref().any(|c| admits(*c))
+    };
+}
+
+/// Whether `c` is in `start..=end` as `folded_class` widens it.
+fn in_folded_range(c: char, start: char, end: char, ci: bool) -> bool {
+    if c >= start && c <= end {
+        return true;
+    }
+    if !ci || !c.is_ascii_alphabetic() {
+        return false;
+    }
+    let swapped = if c.is_ascii_lowercase() { c.to_ascii_uppercase() } else { c.to_ascii_lowercase() };
+    return swapped >= start && swapped <= end;
 }
 
 /// Decides whether a keyword candidate may use the classifier shortcut.
@@ -4047,8 +4086,10 @@ fn keyword_carrier_kinds(
             continue;
         }
         let kind = lexer_rule_token_kind(rule);
+        let try_call = build_rule_try_call(rule, lexer_rules, false, false, false, false, grammar_opts);
         let carries = keywords.iter_ref().any(
-            |kw| lexer_rule_matches_keyword(rule, lexer_rules, grammar_opts, kw, KeywordReading::Possible),
+            |kw| keyword_first_char_covered(kw, &try_call.first_chars, try_call.is_wildcard)
+                && lexer_rule_matches_keyword(rule, lexer_rules, grammar_opts, kw, KeywordReading::Possible),
         );
         if carries && !kinds.contains(&kind) {
             kinds.push(kind);
