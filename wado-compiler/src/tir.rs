@@ -1173,6 +1173,15 @@ impl TypeTable {
         self.unrestricted_resources.get(&def).copied().flatten()
     }
 
+    /// The classes a narrowing to the resource `target` tests.
+    #[must_use]
+    pub fn narrowing_classes(&self, target: TypeId) -> Option<HandleClasses> {
+        let ResolvedType::Resource { def } = self.get(target) else {
+            unreachable!("only a resource is narrowed to");
+        };
+        self.handle_classes(*def)
+    }
+
     /// Each class the resource tree holding `def` numbers, with the resource
     /// whose own class it is.
     pub fn handle_class_owners(&self, def: DefId) -> impl Iterator<Item = (u16, DefId)> {

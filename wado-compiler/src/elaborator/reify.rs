@@ -10750,15 +10750,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             other => panic!("annotate rejects a narrowing over {other:?}"),
         };
-        let (low, high) = {
-            let tt = self.tysys.type_table.borrow();
-            let ResolvedType::Resource { def } = tt.get(target) else {
-                unreachable!("annotate narrows only to a resource");
-            };
-            tt.handle_classes(*def)
-                .expect("annotate rejects a narrowing to a resource without classes")
-                .handle_bounds()
-        };
+        let (low, high) = self
+            .tysys
+            .type_table
+            .borrow()
+            .narrowing_classes(target)
+            .expect("annotate rejects a narrowing to a resource without classes")
+            .handle_bounds();
         let handle = || {
             handle_bits(TirExpr::new(
                 TirExprKind::Local {

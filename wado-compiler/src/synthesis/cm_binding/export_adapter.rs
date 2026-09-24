@@ -37,11 +37,12 @@ use super::lift::synthesize_lift_map;
 use super::lower::synthesize_lower_map_to_buffer;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
-    CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id,
-    cm_zero, coerce_flat_lift, coerce_flat_lower, compute_export_flat_param_types,
-    export_needs_param_lifting, field_access, find_struct_decl, find_variant_decl,
-    flat_types_from_ast_type, flat_types_from_type_id, flatten_export_type, struct_decl_of,
-    type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag, variant_test,
+    CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_from_type_id,
+    cm_val_type_to_type_id, cm_zero, coerce_flat_lift, coerce_flat_lower,
+    compute_export_flat_param_types, export_needs_param_lifting, field_access, find_struct_decl,
+    find_variant_decl, flat_types_from_ast_type, flat_types_from_type_id, flatten_export_type,
+    struct_decl_of, type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag,
+    variant_test,
 };
 use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
@@ -128,16 +129,16 @@ fn lower_to_flat_inner(
             }]
         }
         ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
-            let tt = ctx.type_table.borrow();
-            let scalar = tt.handle_scalar(type_id).expect("a resource is a handle");
-            let [cm_type] = flat_types_from_type_id(scalar, tir_modules, &tt)[..] else {
-                unreachable!("a handle is one scalar");
-            };
+            let scalar = ctx
+                .type_table
+                .borrow()
+                .handle_scalar(type_id)
+                .expect("a resource is a handle");
             let local = alloc_local(next_local, locals, scalar);
             stmts.push(let_stmt("$flat", local, scalar, value));
             vec![FlatLocal {
                 index: local,
-                cm_type,
+                cm_type: cm_val_type_from_type_id(scalar),
             }]
         }
         ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => {

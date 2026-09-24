@@ -945,8 +945,8 @@ pub(super) fn scalar_store_op(
     }
 }
 
-/// The load a one-value CM type that is none of the sized declarations reads
-/// back with, and the type it yields: [`scalar_store_op`]'s inverse.
+/// The load that reads back a one-value CM type with no sized declaration, and
+/// the type it yields. The inverse of [`scalar_store_op`].
 pub(super) fn handle_load_op(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,

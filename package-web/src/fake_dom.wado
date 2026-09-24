@@ -84,7 +84,8 @@ impl FakeDom {
         return self.nodes[index].class * HANDLE_CLASS_STRIDE + index as f64;
     }
 
-    fn index(&self, handle: f64) -> i32 {
+    fn index(&self, node: Node) -> i32 {
+        let handle = node as f64;
         let index = f64::fmod(handle, HANDLE_CLASS_STRIDE) as i32;
         assert index < self.nodes.len() && self.handle(index) == handle;
         return index;
@@ -272,7 +273,7 @@ impl Document for FakeDom {
 
 impl Node for FakeDom {
     fn node_type(&mut self, this: &Node) -> u16 {
-        resume match self.nodes[self.index(*this as f64)].content {
+        resume match self.nodes[self.index(*this)].content {
             Element(_) => 1,
             Text(_) => 3,
             Document => 9,
@@ -281,7 +282,7 @@ impl Node for FakeDom {
     }
 
     fn node_name(&mut self, this: &Node) -> String {
-        resume match self.nodes[self.index(*this as f64)].content {
+        resume match self.nodes[self.index(*this)].content {
             Element(name) => name.to_ascii_uppercase(),
             Text(_) => "#text",
             Document => "#document",
@@ -290,35 +291,35 @@ impl Node for FakeDom {
     }
 
     fn parent_node(&mut self, this: &Node) -> Option<Node> {
-        resume self.node(self.nodes[self.index(*this as f64)].parent);
+        resume self.node(self.nodes[self.index(*this)].parent);
     }
 
     fn parent_element(&mut self, this: &Node) -> Option<Element> {
-        resume self.element(self.nodes[self.index(*this as f64)].parent);
+        resume self.element(self.nodes[self.index(*this)].parent);
     }
 
     fn has_child_nodes(&mut self, this: &Node) -> bool {
-        resume self.nodes[self.index(*this as f64)].first_child != NO_NODE;
+        resume self.nodes[self.index(*this)].first_child != NO_NODE;
     }
 
     fn first_child(&mut self, this: &Node) -> Option<Node> {
-        resume self.node(self.nodes[self.index(*this as f64)].first_child);
+        resume self.node(self.nodes[self.index(*this)].first_child);
     }
 
     fn last_child(&mut self, this: &Node) -> Option<Node> {
-        resume self.node(self.nodes[self.index(*this as f64)].last_child);
+        resume self.node(self.nodes[self.index(*this)].last_child);
     }
 
     fn previous_sibling(&mut self, this: &Node) -> Option<Node> {
-        resume self.node(self.nodes[self.index(*this as f64)].previous_sibling);
+        resume self.node(self.nodes[self.index(*this)].previous_sibling);
     }
 
     fn next_sibling(&mut self, this: &Node) -> Option<Node> {
-        resume self.node(self.nodes[self.index(*this as f64)].next_sibling);
+        resume self.node(self.nodes[self.index(*this)].next_sibling);
     }
 
     fn text_content(&mut self, this: &Node) -> Option<String> {
-        let index = self.index(*this as f64);
+        let index = self.index(*this);
         if self.nodes[index].content matches { Document } {
             resume null;
         } else {
@@ -329,7 +330,7 @@ impl Node for FakeDom {
     }
 
     fn set_text_content(&mut self, this: &Node, value: Option<String>) {
-        let index = self.index(*this as f64);
+        let index = self.index(*this);
         let text = value.unwrap_or("");
         match self.nodes[index].content {
             Document | Window => {
@@ -351,20 +352,20 @@ impl Node for FakeDom {
         let Some(other) = other else {
             resume false;
         };
-        resume self.is_inclusive_ancestor(self.index(*this as f64), self.index(other as f64));
+        resume self.is_inclusive_ancestor(self.index(*this), self.index(other));
     }
 
     fn append_child(&mut self, this: &Node, node: Node) -> Node {
-        let parent = self.index(*this as f64);
-        let child = self.index(node as f64);
+        let parent = self.index(*this);
+        let child = self.index(node);
         self.assert_insertable(parent, child);
         self.append(parent, child);
         resume node;
     }
 
     fn remove_child(&mut self, this: &Node, child: Node) -> Node {
-        let index = self.index(child as f64);
-        assert self.nodes[index].parent == self.index(*this as f64), "NotFoundError: the node to remove is a child";
+        let index = self.index(child);
+        assert self.nodes[index].parent == self.index(*this), "NotFoundError: the node to remove is a child";
         self.detach(index);
         resume child;
     }
@@ -374,45 +375,45 @@ impl Node for FakeDom {
 
 impl Element for FakeDom {
     fn local_name(&mut self, this: &Element) -> String {
-        let Element(name) = self.nodes[self.index(*this as f64)].content else {
+        let Element(name) = self.nodes[self.index(*this)].content else {
             unreachable();
         };
         resume name;
     }
 
     fn tag_name(&mut self, this: &Element) -> String {
-        let Element(name) = self.nodes[self.index(*this as f64)].content else {
+        let Element(name) = self.nodes[self.index(*this)].content else {
             unreachable();
         };
         resume name.to_ascii_uppercase();
     }
 
     fn id(&mut self, this: &Element) -> String {
-        resume self.nodes[self.index(*this as f64)].attributes.get("id").unwrap_or("");
+        resume self.nodes[self.index(*this)].attributes.get("id").unwrap_or("");
     }
 
     fn set_id(&mut self, this: &Element, value: String) {
-        let index = self.index(*this as f64);
+        let index = self.index(*this);
         self.nodes[index].attributes["id"] = value;
         resume ();
     }
 
     fn get_attribute(&mut self, this: &Element, qualified_name: String) -> Option<String> {
-        resume self.nodes[self.index(*this as f64)].attributes.get(qualified_name);
+        resume self.nodes[self.index(*this)].attributes.get(qualified_name);
     }
 
     fn set_attribute(&mut self, this: &Element, qualified_name: String, value: String) {
-        let index = self.index(*this as f64);
+        let index = self.index(*this);
         self.nodes[index].attributes[qualified_name] = value;
         resume ();
     }
 
     fn has_attribute(&mut self, this: &Element, qualified_name: String) -> bool {
-        resume self.nodes[self.index(*this as f64)].attributes.contains_key(qualified_name);
+        resume self.nodes[self.index(*this)].attributes.contains_key(qualified_name);
     }
 
     fn remove_attribute(&mut self, this: &Element, qualified_name: String) {
-        let index = self.index(*this as f64);
+        let index = self.index(*this);
         self.nodes[index].attributes.remove(qualified_name);
         resume ();
     }
@@ -422,11 +423,11 @@ impl Element for FakeDom {
 
 impl HtmlInputElement for FakeDom {
     fn value(&mut self, this: &HtmlInputElement) -> String {
-        resume self.nodes[self.index(*this as f64)].value;
+        resume self.nodes[self.index(*this)].value;
     }
 
     fn set_value(&mut self, this: &HtmlInputElement, value: String) {
-        let index = self.index(*this as f64);
+        let index = self.index(*this);
         self.nodes[index].value = value;
         resume ();
     }

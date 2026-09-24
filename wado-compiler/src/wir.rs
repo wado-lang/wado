@@ -812,13 +812,13 @@ impl WirType {
             | Self::U32
             | Self::Bool
             | Self::Char
+            | Self::Unit
             | Self::Enum { .. }
             | Self::Flags { .. } => WirScalarKind::I32,
             Self::I64 | Self::U64 => WirScalarKind::I64,
             Self::F32 => WirScalarKind::F32,
             Self::F64 => WirScalarKind::F64,
             Self::V128 => WirScalarKind::V128,
-            Self::Unit => WirScalarKind::Unit,
             Self::Ref { .. } | Self::AbstractRef { .. } => return None,
         })
     }
@@ -854,7 +854,6 @@ pub enum WirScalarKind {
     F32,
     F64,
     V128,
-    Unit,
 }
 
 /// Abstract heap types for Wasm GC.

@@ -1028,7 +1028,10 @@ impl SolverBridge {
             let eligible = match item {
                 CompilerItem::Eq => &declarations[..],
                 CompilerItem::Ord => &declarations[..variants_from],
-                _ => &declarations[..handles_from],
+                CompilerItem::Serialize | CompilerItem::Deserialize => {
+                    &declarations[..handles_from]
+                }
+                other => unreachable!("{other:?} is not derived"),
             };
             derive(program, lowering.trait_decl(trait_), eligible);
         }

@@ -2,6 +2,7 @@
 //! an `f64` on both sides of the boundary, bare and inside an `option`.
 
 use wado_compiler::OptLevel;
+use wado_compiler::ast::HandleClasses;
 use wasmtime::Store;
 use wasmtime::component::{Component, Val};
 
@@ -29,7 +30,7 @@ export fn echo(n: Option<Node>) -> Option<Node> {
 "#;
 
 /// Class 1, index 7.
-const HANDLE: f64 = 137_438_953_472.0 + 7.0;
+const HANDLE: f64 = HandleClasses::STRIDE + 7.0;
 
 fn handles_cross_as_f64(opt_level: OptLevel) {
     let engine = engine();

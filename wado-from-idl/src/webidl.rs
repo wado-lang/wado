@@ -1,11 +1,10 @@
 //! WebIDL-to-IR transformation, over the webidl2 AST `scripts/webidl/snapshot.mjs`
 //! writes: one unrestricted resource per interface. See `docs/wep-2026-04-01-tide.md`.
 
-use std::ops::RangeInclusive;
-
 use anyhow::{Result, anyhow, bail};
 use indexmap::{IndexMap, IndexSet};
 use serde::Deserialize;
+use wado_compiler::ast::HandleClasses;
 
 use crate::WadoCodeGenerator;
 use crate::ir::{WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource, WadoType};
@@ -190,7 +189,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
                 doc_comment: None,
                 cm_attr: path,
                 unrestricted: true,
-                classes: Some(classes[name].clone()),
+                classes: Some(classes[name]),
                 extends: iface.inheritance.as_deref().map(to_upper_camel_case),
                 methods,
             },
@@ -210,12 +209,12 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
 /// slice order, so each one's descendants take the classes right after its own.
 fn number_classes<'a>(
     merged: &IndexMap<&'a str, Merged<'_>>,
-) -> Result<IndexMap<&'a str, RangeInclusive<u16>>> {
+) -> Result<IndexMap<&'a str, HandleClasses>> {
     fn visit<'a>(
         name: &'a str,
         children: &IndexMap<&'a str, Vec<&'a str>>,
         next: &mut u16,
-        out: &mut IndexMap<&'a str, RangeInclusive<u16>>,
+        out: &mut IndexMap<&'a str, HandleClasses>,
     ) -> Result<()> {
         let own = *next;
         *next = next
@@ -224,7 +223,13 @@ fn number_classes<'a>(
         for child in children.get(name).into_iter().flatten() {
             visit(child, children, next, out)?;
         }
-        out.insert(name, own..=*next - 1);
+        out.insert(
+            name,
+            HandleClasses {
+                lo: own,
+                hi: *next - 1,
+            },
+        );
         Ok(())
     }
 

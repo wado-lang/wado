@@ -33,6 +33,26 @@ test "the handles carry the classes dom.wado numbers" {
     };
 }
 
+test "a handle inspects as the type its class names" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let node: Node = Dom::document().create_element("div", null);
+        assert `${node:?}` == "HtmlElement { type_id: 3, object_id: 5 }";
+    };
+}
+
+test "handles compare equal when they name one object" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let div = doc.create_element("div", null);
+        let as_node: Node = div;
+        assert as_node == div;
+        assert div != doc.create_element("div", null);
+        assert Dom::document() == doc;
+    };
+}
+
 test "a tree is built by appending" {
     let mut dom = FakeDom::new();
     with &mut dom do {

@@ -2198,10 +2198,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn require_handle_classes(&mut self, target: TypeId, span: Span) {
         let unnumbered = {
             let tt = self.tysys.type_table.borrow();
-            let ResolvedType::Resource { def } = tt.get(target) else {
-                unreachable!("only a resource is narrowed to");
-            };
-            tt.handle_classes(*def)
+            tt.narrowing_classes(target)
                 .is_none()
                 .then(|| tt.type_name(target))
         };

@@ -4428,12 +4428,11 @@ fn unrestricted_inspect_body(
     locals: &mut Vec<TirLocal>,
     tt: &TypeTable,
 ) -> TirBlock {
-    let mut next_local = u32::try_from(locals.len()).expect("two locals");
+    let mut next_local = u32::try_from(locals.len()).expect("a local index is a u32");
     let handle_local = common::alloc_local(&mut next_local, locals, TypeTable::F64);
     let class_local = common::alloc_local(&mut next_local, locals, TypeTable::I32);
     let h = || common::local_ref(handle_local, "$h", TypeTable::F64);
     let class = || common::local_ref(class_local, "$class", TypeTable::I32);
-    // `as` makes a handle of any `f64`; `handle_class` answers -1 for one no host mints.
     let class_value = if tt.handle_classes(def).is_some() {
         common::internal_call(
             CompilerItem::HandleClass.attr_name(),
@@ -4443,10 +4442,9 @@ fn unrestricted_inspect_body(
     } else {
         common::i32_const(-1)
     };
-    let owners: Vec<(u16, DefId)> = tt.handle_class_owners(def).collect();
-    let name = owners.iter().rev().fold(
+    let name = tt.handle_class_owners(def).fold(
         common::string_lit(type_name, string_type, synth_span()),
-        |otherwise, &(lo, owner)| {
+        |otherwise, (lo, owner)| {
             let is_owner = common::binary(
                 TirBinaryOp::Eq,
                 class(),

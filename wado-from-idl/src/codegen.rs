@@ -201,8 +201,7 @@ impl WadoCodeGenerator {
         };
         let classes = resource
             .classes
-            .as_ref()
-            .map(|classes| format!(", classes = \"{}..={}\"", classes.start(), classes.end()))
+            .map(|classes| format!(", classes = \"{classes}\""))
             .unwrap_or_default();
         self.writeln(&format!(
             "#[cm(\"{}\"{linearity}{classes})]",
@@ -234,7 +233,7 @@ impl WadoCodeGenerator {
     fn write_handle_classes(&mut self, resources: &[WadoResource]) {
         let classes: Vec<(&str, u16)> = resources
             .iter()
-            .filter_map(|r| Some((r.name.as_str(), *r.classes.as_ref()?.start())))
+            .filter_map(|r| Some((r.name.as_str(), r.classes?.lo)))
             .collect();
         if classes.is_empty() {
             return;
