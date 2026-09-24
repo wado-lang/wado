@@ -1,11 +1,15 @@
 //! `package-web/src/dom.wado` is what the vendored snapshot generates.
 //! Regenerate with `mise run update-package-web`.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+fn root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
+}
 
 #[test]
 fn package_web_dom_is_generated_from_the_vendored_snapshot() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let root = root();
     let source = "package-web/idl/dom.webidl.json";
     let json = std::fs::read_to_string(root.join(source)).expect("the snapshot is vendored");
     let snapshot: wado_from_idl::webidl::Snapshot =
@@ -17,5 +21,34 @@ fn package_web_dom_is_generated_from_the_vendored_snapshot() {
     assert!(
         generated == committed,
         "package-web/src/dom.wado is stale: run `mise run update-package-web`"
+    );
+}
+
+/// The facade is hand-written, so a name a wider slice adds must be added there.
+#[test]
+fn package_web_lib_re_exports_every_generated_name() {
+    let root = root();
+    let generated = std::fs::read_to_string(root.join("package-web/src/dom.wado"))
+        .expect("the module is committed");
+    let facade =
+        std::fs::read_to_string(root.join("package-web/src/lib.wado")).expect("the facade exists");
+    let (list, _) = facade
+        .split_once("} from \"./dom.wado\"")
+        .expect("the facade re-exports from dom.wado");
+    let (_, list) = list.rsplit_once('{').expect("a `pub use { … }` list");
+    let re_exported: Vec<&str> = list.split(',').map(str::trim).collect();
+    let missing: Vec<&str> = generated
+        .lines()
+        .filter_map(|line| {
+            let rest = line
+                .strip_prefix("pub resource ")
+                .or_else(|| line.strip_prefix("pub interface "))?;
+            rest.split([' ', '{']).next()
+        })
+        .filter(|name| !re_exported.contains(name))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "package-web/src/lib.wado does not re-export {missing:?}"
     );
 }

@@ -1256,7 +1256,7 @@ pub const WEB_PACKAGE: &str = "wado-lang:web";
 fn web_dependency() -> indexmap::IndexMap<String, String> {
     indexmap::IndexMap::from([(
         WEB_PACKAGE.to_string(),
-        "package-web/src/dom.wado".to_string(),
+        "package-web/src/lib.wado".to_string(),
     )])
 }
 
