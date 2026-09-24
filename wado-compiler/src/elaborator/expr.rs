@@ -607,9 +607,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Default type: i32 if integer-compatible, f64 if float-only
                 if util::is_float_only_literal(repr) {
                     // Must be float (has decimal point or negative exponent)
-                    if let Err(message) = float_literal_bits(repr, FloatFormat::F64) {
+                    if let Err(error) = float_literal_bits(repr, FloatFormat::F64) {
                         let _ = self.emit(TypeError::InvalidLiteral {
-                            message,
+                            message: error.message(repr),
                             span: lit.span,
                         });
                     }

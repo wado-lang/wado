@@ -1071,14 +1071,13 @@ pub fn parse_text_bits(s: &StrSlice, format: &BinaryFormat) -> Option<u64> {
     }
     let mantissa_end = i;
 
-    // Read exponent, saturating far past the pow10 table's domain.
-    let mut p = 0;
+    let mut written: i64 = 0;
     if i < len && (s.get_byte_unchecked(i) == b'e' || s.get_byte_unchecked(i) == b'E') {
         i += 1;
-        let mut exp_sign = 1;
+        let mut negative = false;
         if i < len {
             if s.get_byte_unchecked(i) == b'-' {
-                exp_sign = -1;
+                negative = true;
                 i += 1;
             } else if s.get_byte_unchecked(i) == b'+' {
                 i += 1;
@@ -1086,14 +1085,14 @@ pub fn parse_text_bits(s: &StrSlice, format: &BinaryFormat) -> Option<u64> {
         }
         let exp_start = i;
         for ; i < len && s.get_byte_unchecked(i).is_ascii_digit(); i += 1 {
-            if p < EXPONENT_SATURATION {
-                p = p * 10 + (s.get_byte_unchecked(i) - b'0') as i32;
-            }
+            written = push_exponent_digit(written, (s.get_byte_unchecked(i) - b'0') as i32);
         }
         if i == exp_start {
             return null;
         }
-        p = p * exp_sign;
+        if negative {
+            written = -written;
+        }
     }
 
     if i != len {
@@ -1104,41 +1103,36 @@ pub fn parse_text_bits(s: &StrSlice, format: &BinaryFormat) -> Option<u64> {
     if d == 0 {
         return Option::Some(sign);
     }
-    let mantissa = s.as_bytes().slice(mantissa_start, mantissa_end);
-    return Option::Some(sign | round_decimal(d, p + scale, inexact, mantissa, p, format));
-}
-
-/// A decimal rounded once into `format`, as its bits with the sign clear. `d`
-/// holds its first significant digits, at most `PARSE_DIGITS_MAX`, and `p`
-/// places them. `inexact` says a nonzero digit follows them in `mantissa`, the
-/// digits and point as written, which `exponent` scales.
-pub fn round_decimal(d: u64, p: i32, inexact: bool, mantissa: ByteSlice, exponent: i32, format: &BinaryFormat) -> u64 {
-    let lo = scaled_bits(d, p, format);
+    let p = decimal_scale(written, scale);
     if !inexact {
-        return lo;
+        return Option::Some(sign | round_decimal(d, p, format));
     }
-    // The value lies strictly between d and d + 1 at this scale, so only a
-    // rounding boundary between their two results needs the digits dropped.
-    let hi = if d == 9999999999999999999 {
-        scaled_bits(1000000000000000000, p + 1, format);
-    } else {
-        scaled_bits(d + 1, p, format);
-    };
-    if lo == hi {
-        return lo;
-    }
-    assert hi == lo + 1;
-    let order = compare_to_midpoint(mantissa, exponent, lo, format);
-    return if order < 0 || order == 0 && lo & 1 == 0 { lo } else { hi };
+    let digits = s.as_bytes().slice(mantissa_start, mantissa_end);
+    return Option::Some(sign | round_truncated_decimal(d, p, digits, format));
 }
 
-/// Exponent digits past this change nothing: the value is already beyond the
-/// pow10 table's domain whatever the mantissa.
-global EXPONENT_SATURATION: i32 = 100000;
+/// An exponent's digits stop accumulating here, far past what any run of
+/// mantissa digits an input can hold would take to bring it back into range.
+global EXPONENT_SATURATION: i64 = 1000000000000000;
 
-/// `d * 10^p` into `format`, with the exponents outside the pow10 table's
-/// domain, where the result is definitely infinity or zero.
-fn scaled_bits(d: u64, p: i32, format: &BinaryFormat) -> u64 {
+/// `exponent` with one more decimal digit written after it, saturating.
+pub fn push_exponent_digit(exponent: i64, digit: i32) -> i64 {
+    if exponent >= EXPONENT_SATURATION {
+        return exponent;
+    }
+    return exponent * 10 + digit as i64;
+}
+
+/// The power of ten placing a decimal's kept digits: the `written` exponent
+/// plus their `offset`, pinned just outside the pow10 table's domain.
+pub fn decimal_scale(written: i64, offset: i32) -> i32 {
+    let p = written + offset as i64;
+    return i64::clamp(p, (PARSE_EXP_MIN - 20) as i64, (PARSE_EXP_MAX + 20) as i64) as i32;
+}
+
+/// `d * 10^p` rounded once into `format`, as its bits with the sign clear; an
+/// infinity or zero where `p` is past the pow10 table's domain.
+pub fn round_decimal(d: u64, p: i32, format: &BinaryFormat) -> u64 {
     if p > PARSE_EXP_MAX {
         return format.infinity_bits();
     }
@@ -1148,37 +1142,46 @@ fn scaled_bits(d: u64, p: i32, format: &BinaryFormat) -> u64 {
     return parse_bits(d, p, format);
 }
 
-/// The sign of `mantissa * 10^exponent` minus the midpoint between the value
-/// `below` holds and the next one up, compared exactly. Only digits a midpoint
-/// can reach are read; a nonzero one past them breaks a tie upward.
-fn compare_to_midpoint(mantissa: ByteSlice, exponent: i32, below: u64, format: &BinaryFormat) -> i32 {
+/// `round_decimal` where `d` holds the first `PARSE_DIGITS_MAX` significant
+/// digits of `digits`, as written, and a nonzero one follows them.
+pub fn round_truncated_decimal(d: u64, p: i32, digits: ByteSlice, format: &BinaryFormat) -> u64 {
+    let lo = round_decimal(d, p, format);
+    // The value lies strictly between d and d + 1 at this scale, so only a
+    // rounding boundary between their two results needs the digits dropped.
+    let hi = if d == 9999999999999999999 {
+        round_decimal(1000000000000000000, p + 1, format);
+    } else {
+        round_decimal(d + 1, p, format);
+    };
+    if lo == hi {
+        return lo;
+    }
+    assert hi == lo + 1;
+    let order = compare_to_midpoint(digits, p, lo, format);
+    return if order < 0 || order == 0 && lo & 1 == 0 { lo } else { hi };
+}
+
+
+/// The exact sign of the decimal `digits` spell, its first `PARSE_DIGITS_MAX`
+/// significant digits scaled by `10^p`, less the midpoint just above `below`.
+fn compare_to_midpoint(digits: ByteSlice, p: i32, below: u64, format: &BinaryFormat) -> i32 {
     let mut decimal: List<u32> = [];
     let mut kept = 0;
-    let mut e10 = exponent;
-    let mut past_point = false;
     let mut sticky = false;
-    for let mut k = 0; k < mantissa.len(); k += 1 {
-        let c = mantissa.get_unchecked(k);
+    for let mut k = 0; k < digits.len(); k += 1 {
+        let c = digits.get_unchecked(k);
         if c == b'.' {
-            past_point = true;
             continue;
         }
         let digit = (c - b'0') as u32;
         if kept == MIDPOINT_DIGITS_MAX {
-            if !past_point {
-                e10 += 1;
-            }
             sticky = sticky || digit != 0;
-            continue;
-        }
-        if kept > 0 || digit != 0 {
+        } else if kept > 0 || digit != 0 {
             big_mul_add(&mut decimal, 10, digit);
             kept += 1;
         }
-        if past_point {
-            e10 -= 1;
-        }
     }
+    let e10 = p - (kept - PARSE_DIGITS_MAX);
 
     // The midpoint is (2m + 1) * 2^(q - 1), where `below` is m * 2^q.
     let tiny = format.tiny();

@@ -10130,12 +10130,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if is_float_target {
             // Rounded once, into the target format, so the later narrowing
             // of an `f32` is exact.
-            let value = if base_target == TypeTable::F32 {
-                let bits = float_literal_bits(repr, FloatFormat::F32).unwrap_or(0);
-                f64::from(f32::from_bits(bits as u32))
+            let format = if base_target == TypeTable::F32 {
+                FloatFormat::F32
             } else {
-                f64::from_bits(float_literal_bits(repr, FloatFormat::F64).unwrap_or(0))
+                FloatFormat::F64
             };
+            let value = format.value(float_literal_bits(repr, format).unwrap_or(0));
             // The literal's *type* must be a concrete float, not the (possibly
             // UNKNOWN) recorded type: a float-only literal with no recorded
             // type defaults to `f64` (matching production's

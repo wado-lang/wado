@@ -56,33 +56,82 @@ impl FloatFormat {
     fn bias(self) -> i64 {
         (1 << (self.exponent_bits - 1)) - 1
     }
+
+    /// The value `bits` hold in `f32` or `f64`, widened to `f64`.
+    pub(crate) fn value(self, bits: u64) -> f64 {
+        match self {
+            Self::F64 => f64::from_bits(bits),
+            Self::F32 => f64::from(f32::from_bits(u32::try_from(bits).expect("f32 bits fit u32"))),
+            _ => unreachable!("`{}` has no float value of its own", self.name),
+        }
+    }
+}
+
+/// Why a literal has no bits in a format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FloatLiteralError {
+    Invalid,
+    OutOfRange(FloatFormat),
+}
+
+impl FloatLiteralError {
+    /// The report for `literal`, spelled as the source writes it, sign included.
+    pub(crate) fn message(self, literal: &str) -> String {
+        match self {
+            Self::Invalid => format!("invalid float literal: {literal}"),
+            Self::OutOfRange(format) => {
+                format!("literal out of range for `{}`: {literal}", format.name)
+            }
+        }
+    }
 }
 
 /// `repr` in `format`'s bits, rounded to nearest even from the literal's exact
-/// value. An error names a literal that does not parse or rounds to infinity.
-pub(crate) fn float_literal_bits(repr: &str, format: FloatFormat) -> Result<u64, String> {
+/// value, which a radix prefix spells as an integer of any width.
+pub(crate) fn float_literal_bits(repr: &str, format: FloatFormat) -> Result<u64, FloatLiteralError> {
     let clean = normalize_numeric_literal(repr);
     let radix = [("0x", 16), ("0b", 2), ("0o", 8)]
         .into_iter()
         .find_map(|(prefix, radix)| clean.strip_prefix(prefix).map(|digits| (digits, radix)));
-    let (approx, exact) = if let Some((digits, radix)) = radix {
-        let value = u128::from_str_radix(digits, radix)
-            .map_err(|_| format!("invalid integer literal: {repr}"))?;
-        (value as f64, value.to_string())
-    } else {
-        let approx: f64 = clean
-            .parse()
-            .map_err(|_| format!("invalid float literal: {repr}"))?;
-        (approx, clean)
+    let exact = match radix {
+        Some((digits, radix)) => radix_to_decimal(digits, radix).ok_or(FloatLiteralError::Invalid)?,
+        None => clean,
     };
-    let out_of_range = || format!("literal out of range for `{}`: {repr}", format.name);
+    let approx: f64 = exact.parse().map_err(|_| FloatLiteralError::Invalid)?;
     if approx.is_infinite() {
-        return Err(out_of_range());
+        return Err(FloatLiteralError::OutOfRange(format));
     }
     if format == FloatFormat::F64 {
         return Ok(approx.to_bits());
     }
-    narrow(approx, format, || compare_decimal(&exact, approx)).ok_or_else(out_of_range)
+    narrow(approx, format, || compare_decimal(&exact, approx))
+        .ok_or(FloatLiteralError::OutOfRange(format))
+}
+
+/// The decimal spelling of the unsigned integer `digits` spell in `radix`.
+fn radix_to_decimal(digits: &str, radix: u32) -> Option<String> {
+    const BASE: u64 = 1_000_000_000;
+    if digits.is_empty() {
+        return None;
+    }
+    // Little-endian limbs of nine decimal digits each.
+    let mut limbs: Vec<u64> = vec![0];
+    for c in digits.chars() {
+        let mut carry = u64::from(c.to_digit(radix)?);
+        for limb in &mut limbs {
+            let v = *limb * u64::from(radix) + carry;
+            *limb = v % BASE;
+            carry = v / BASE;
+        }
+        if carry != 0 {
+            limbs.push(carry);
+        }
+    }
+    let mut out = limbs.pop().expect("one limb at least").to_string();
+    for limb in limbs.iter().rev() {
+        out.push_str(&format!("{limb:09}"));
+    }
+    Some(out)
 }
 
 /// `value` rounded to nearest even in `format`, `None` where that is an
@@ -222,6 +271,16 @@ mod tests {
         assert_eq!(bits("3.14159265", FloatFormat::BF16), 0x4049);
         assert_eq!(bits("1e39", FloatFormat::F64), 1e39_f64.to_bits());
         assert_eq!(bits("1e38", FloatFormat::BF16), 0x7E96);
+    }
+
+    #[test]
+    fn a_radix_literal_is_as_wide_as_its_digits() {
+        assert_eq!(radix_to_decimal("ff", 16).as_deref(), Some("255"));
+        assert_eq!(
+            radix_to_decimal("100000000000000000000000000000000", 16).as_deref(),
+            Some("340282366920938463463374607431768211456")
+        );
+        assert_eq!(radix_to_decimal("12", 2), None);
     }
 
     #[test]

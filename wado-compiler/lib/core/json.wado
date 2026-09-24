@@ -35,9 +35,11 @@ use {
     BINARY32,
     BINARY64,
     BinaryFormat,
+    decimal_scale,
+    push_exponent_digit,
     round_decimal,
+    round_truncated_decimal,
     PARSE_DIGITS_MAX as FPFMT_DIGITS_MAX,
-    PARSE_EXP_MAX as FPFMT_EXP_MAX,
 } from "core:prelude/fpfmt.wado";
 use { encode_with as base64_encode_with, decode as base64_decode, Encoding } from "core:base64";
 
@@ -813,12 +815,12 @@ struct ScannedNumber {
     /// the scale without consuming the mantissa budget, so a value like
     /// `0.0000000000000000000001` keeps its one significant digit.
     frac_lead_zeros: i32,
-    /// Explicit `e`/`E` exponent, saturating past fpfmt's domain.
-    exp: i32,
+    /// Explicit `e`/`E` exponent, saturating as `push_exponent_digit` does.
+    exp: i64,
     has_frac_or_exp: bool,
     /// A nonzero digit past the ones `digits` holds.
     inexact: bool,
-    /// The digits and point as written, the span `round_decimal` rereads.
+    /// The digits and point as written, the span `round_truncated_decimal` rereads.
     mantissa_start: i32,
     mantissa_end: i32,
 }
@@ -853,11 +855,13 @@ fn scanned_to_bits(n: &ScannedNumber, input: &ByteSlice, format: &BinaryFormat) 
     }
     // Integer digits beyond the accumulated ones shift the scale up; every
     // fraction digit (accumulated or a skipped leading zero) shifts it down.
-    // Dropped fraction digits are reread from `input` only near a midpoint.
     let extra_int_digits = if n.int_digits > FPFMT_DIGITS_MAX { n.int_digits - FPFMT_DIGITS_MAX } else { 0 };
-    let eff_p = n.exp - n.frac_digits - n.frac_lead_zeros + extra_int_digits;
-    let mantissa = input.slice(n.mantissa_start, n.mantissa_end);
-    return sign | round_decimal(n.digits, eff_p, n.inexact, mantissa, n.exp, format);
+    let p = decimal_scale(n.exp, extra_int_digits - n.frac_digits - n.frac_lead_zeros);
+    if !n.inexact {
+        return sign | round_decimal(n.digits, p, format);
+    }
+    let digits = input.slice(n.mantissa_start, n.mantissa_end);
+    return sign | round_truncated_decimal(n.digits, p, digits, format);
 }
 
 /// True when `b` is one of JSON's four whitespace bytes. `json_ws_end` is the
@@ -1546,7 +1550,7 @@ impl JsonDeserializer {
             }
         }
         let mantissa_end = pos;
-        let mut exp = 0;
+        let mut exp: i64 = 0;
         if pos < len {
             let eb = input.get_unchecked(pos) as i32;
             if eb == b'e' || eb == b'E' {
@@ -1571,12 +1575,7 @@ impl JsonDeserializer {
                     if d > 9 {
                         break;
                     }
-                    // Stop accumulating once past fpfmt's domain: the value
-                    // stays exact where it matters and saturates (instead of
-                    // overflowing i32) on absurd exponents.
-                    if exp <= FPFMT_EXP_MAX {
-                        exp = exp * 10 + d as i32;
-                    }
+                    exp = push_exponent_digit(exp, d as i32);
                     pos += 1;
                 }
                 if exp_neg {

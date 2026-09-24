@@ -339,9 +339,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .primitive_head(target_type)
             .and_then(FloatFormat::of);
         if let Some(format) = format {
-            if let Err(message) = float_literal_bits(repr, format) {
+            if let Err(error) = float_literal_bits(repr, format) {
                 let _ = self.emit(TypeError::InvalidLiteral {
-                    message,
+                    message: error.message(&format!("{sign}{repr}")),
                     span: whole_span,
                 });
             }

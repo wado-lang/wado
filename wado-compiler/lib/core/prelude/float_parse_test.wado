@@ -917,6 +917,21 @@ test "bf16::from_str rounds once" {
     }
 }
 
+fn zeros(n: i32) -> String {
+    let mut s = String::with_capacity(n);
+    for let mut i = 0; i < n; i += 1 {
+        s.push('0');
+    }
+    return s;
+}
+
+test "an exponent past any saturation still cancels the digits' own scale" {
+    let run = zeros(2000000);
+    assert f64::from_str(`0.${run}1e2000001`).unwrap() == 1.0;
+    assert f64::from_str(`1${run}e-2000000`).unwrap() == 1.0;
+    assert f32::from_str(`0.${run}25e2000001`).unwrap() == 2.5;
+}
+
 test "a half parses NaN, infinity and a malformed string as f32 does" {
     assert f16::from_str("nan").unwrap().is_nan();
     assert bf16::from_str("-inf").unwrap().to_bits() == 0xff80;
