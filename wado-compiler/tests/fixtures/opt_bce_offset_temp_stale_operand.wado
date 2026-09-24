@@ -1,0 +1,33 @@
+// An index held in a temporary is the value it had when bound. `q` is `i + 1`
+// of the old `i`, so once `i` moves, `q < arr.len()` says nothing about
+// `arr[i + 1]`: the index must still be checked and panic.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn build() -> List<i32> {
+    let mut arr: List<i32> = List::with_capacity(16);
+    arr.push(10);
+    arr.push(20);
+    arr.push(30);
+    return arr;
+}
+
+#[inline(never)]
+fn after_moved(arr: &List<i32>, j: i32) -> i32 {
+    let mut i = j;
+    let q = i + 1;
+    i = i + 4;
+    if q < arr.len() {
+        return arr[i + 1];
+    }
+    return -1;
+}
+
+export fn run() with Stdout {
+    let arr = build();
+    println(`${after_moved(&arr, builtin::black_box(0))}`);
+}
+
+__DATA__
+{"stderr_contains": ["index out of bounds"], "trapped": true}

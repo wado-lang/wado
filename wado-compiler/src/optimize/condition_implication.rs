@@ -11,7 +11,9 @@ use cranelift_entity::EntityRef;
 use super::arena_query::local_written_by;
 use crate::const_eval::Value;
 use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
-use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
+};
 use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
@@ -33,7 +35,7 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     let root = engine.body.root;
     // Built once and threaded down: sound because eliminations never add
     // reassignments, so the snapshot only omits bindings, never holds a stale one.
-    let binds = build_copy_bindings(engine.body);
+    let binds = build_copy_bindings(engine);
     // The three flow-insensitive eliminators recognise self-contained shapes
     // (bitmask-bounded, const-bound index, short-circuit `||`), so one subtree
     // walk from the root refutes every nesting depth once — rather than a full
@@ -149,27 +151,201 @@ pub(super) enum BoundKey {
 /// `let $cond = i < n; if !$cond { panic }` shape CSE produces.
 pub(super) type Binds = hashmap::IndexMap<u32, Operand>;
 
-/// Build [`Binds`] over `body`: every `let t = <value>` whose `t` is never
-/// reassigned (`Assign` / `&mut`). Conservative — a reassigned temp is excluded,
-/// so resolving through it can never read a stale value.
-pub(super) fn build_copy_bindings(body: &nir_arena::Body) -> Binds {
+/// Build [`Binds`] over the engine's body: every `let t = <value>` whose `t` is
+/// never reassigned (`Assign` / `&mut`) and whose value still holds at every read
+/// of `t`. A resolved read stands for the value re-read where `t` is read, so a
+/// write between the two to anything the value reads would make it stale.
+pub(super) fn build_copy_bindings(engine: &Engine) -> Binds {
+    let body = &*engine.body;
     let mut reassigned = hashmap::IndexSet::default();
     body.for_each_reachable_node(|n| {
         if let Some(r) = local_written_by(body, n) {
             reassigned.insert(r);
         }
     });
-    let mut binds = Binds::default();
-    for (_, st) in &body.stmts {
-        if let StmtKind::Let {
-            local_index, value, ..
-        } = &st.kind
-            && !reassigned.contains(local_index)
+    let mut walk = BindWalk {
+        engine,
+        tick: 0,
+        last_write: hashmap::IndexMap::default(),
+        last_aliased: 0,
+        last_call: 0,
+        pending: hashmap::IndexMap::default(),
+        stale: hashmap::IndexSet::default(),
+    };
+    walk.node(NodeRef::Block(body.root));
+    walk.pending
+        .into_iter()
+        .filter(|(t, _)| !walk.stale.contains(t) && !reassigned.contains(t))
+        .map(|(t, p)| (t, p.value))
+        .collect()
+}
+
+/// A `let` the walk has passed, and what must stay unwritten for a read of its
+/// local to still stand for its value.
+struct PendingBind {
+    value: Operand,
+    since: u64,
+    deps: Vec<u32>,
+    aliased: bool,
+    escaped: bool,
+}
+
+/// One walk of the body in evaluation order, stamping every write and marking
+/// stale each bind read after a write to something it depends on. A loop's
+/// writes are stamped on entry, since its back edge runs them before each read.
+struct BindWalk<'e, 'a> {
+    engine: &'e Engine<'a>,
+    tick: u64,
+    last_write: hashmap::IndexMap<u32, u64>,
+    last_aliased: u64,
+    last_call: u64,
+    pending: hashmap::IndexMap<u32, PendingBind>,
+    stale: hashmap::IndexSet<u32>,
+}
+
+impl BindWalk<'_, '_> {
+    /// Visit `n`: a promoted operand's source runs first and its reads last, so
+    /// ordering errs toward a write preceding a read.
+    fn node(&mut self, n: NodeRef) {
+        let body = &*self.engine.body;
+        if let NodeRef::Stmt(s) = n {
+            match &body.stmts[s].kind {
+                StmtKind::Loop { .. } => {
+                    let mut writes = Vec::new();
+                    body.for_each_live_node_under(n, |m| node_writes(self.engine, m, &mut writes));
+                    for w in writes {
+                        self.write(w);
+                    }
+                }
+                StmtKind::Let {
+                    local_index, value, ..
+                } => self.bind(*local_index, *value),
+                _ => {}
+            }
+        }
+        let mut sourced = Vec::new();
+        let mut promoted_reads = hashmap::IndexSet::default();
+        let mut seen = hashmap::IndexSet::default();
+        body.for_each_operand(n, |op| {
+            if let Some(v) = op.as_value() {
+                body.values
+                    .for_each_opaque_expr(v, &mut seen, |e| sourced.push(e));
+                body.values.collect_opaque_locals(v, &mut promoted_reads);
+            }
+        });
+        for e in sourced {
+            self.node(NodeRef::Expr(e));
+        }
+        let mut children = Vec::new();
+        body.for_each_child(n, |c| children.push(c));
+        for c in children {
+            self.node(c);
+        }
+        if let NodeRef::Expr(e) = n
+            && let ExprKind::Local { index, .. } = &body.exprs[e].kind
         {
-            binds.insert(*local_index, *value);
+            self.read(*index);
+        }
+        for l in promoted_reads {
+            self.read(l);
+        }
+        let mut writes = Vec::new();
+        node_writes(self.engine, n, &mut writes);
+        for w in writes {
+            self.write(w);
         }
     }
-    binds
+
+    fn bind(&mut self, t: u32, value: Operand) {
+        let body = &*self.engine.body;
+        if self.pending.contains_key(&t) || operand_reads_global(body, value) {
+            self.stale.insert(t);
+            return;
+        }
+        let reads = operand_read_locals(body, value);
+        let mut deps: hashmap::IndexSet<u32> = reads.iter().copied().collect();
+        deps.insert(t);
+        for r in &reads {
+            if let Some(p) = self.pending.get(r) {
+                deps.extend(p.deps.iter().copied());
+            }
+        }
+        let aliased = deps.iter().any(|&d| reachable_elsewhere(self.engine, d));
+        let escaped = deps.iter().any(|d| self.engine.mut_escaped().contains(d));
+        self.pending.insert(
+            t,
+            PendingBind {
+                value,
+                since: self.tick,
+                deps: deps.into_iter().collect(),
+                aliased,
+                escaped,
+            },
+        );
+    }
+
+    fn read(&mut self, t: u32) {
+        let Some(p) = self.pending.get(&t) else {
+            return;
+        };
+        let written_since = |at: u64| at > p.since;
+        let stale = p
+            .deps
+            .iter()
+            .any(|d| self.last_write.get(d).is_some_and(|&at| written_since(at)))
+            || (p.aliased && written_since(self.last_aliased))
+            || (p.escaped && written_since(self.last_call));
+        if stale {
+            self.stale.insert(t);
+        }
+    }
+
+    fn write(&mut self, w: Write) {
+        self.tick += 1;
+        match w {
+            Write::Root(r) => {
+                self.last_write.insert(r, self.tick);
+            }
+            Write::Aliased => self.last_aliased = self.tick,
+            Write::Call => self.last_call = self.tick,
+        }
+    }
+}
+
+/// The writes node `n` itself performs: an expression's, or the local a
+/// pattern binds. A `let` binding its own local is the bind, not a write.
+fn node_writes(engine: &Engine, n: NodeRef, out: &mut Vec<Write>) {
+    match n {
+        NodeRef::Expr(e) => for_each_write(engine, e, &mut |w| out.push(w)),
+        NodeRef::Pat(p) => {
+            if let PatKind::Binding { local_index, .. } = &engine.body.pats[p].kind {
+                out.push(Write::Root(*local_index));
+            }
+        }
+        NodeRef::Stmt(_) | NodeRef::Block(_) => {}
+    }
+}
+
+/// Whether `op` reads a global, which no local write tracks.
+fn operand_reads_global(body: &nir_arena::Body, op: Operand) -> bool {
+    let is_global_read = |n: NodeRef| {
+        matches!(n, NodeRef::Expr(x) if matches!(body.exprs[x].kind, ExprKind::GlobalVarGet { .. }))
+            .then_some(())
+    };
+    match op {
+        Operand::Expr(e) => body
+            .find_in_live_node_under(NodeRef::Expr(e), is_global_read)
+            .is_some(),
+        Operand::Value(v) => {
+            let mut sources = Vec::new();
+            body.values
+                .for_each_opaque_expr(v, &mut hashmap::IndexSet::default(), |e| sources.push(e));
+            sources.into_iter().any(|e| {
+                body.find_in_live_node_under(NodeRef::Expr(e), is_global_read)
+                    .is_some()
+            })
+        }
+    }
 }
 
 /// Cap on how many copy-temp / block-tail hops a bounded resolution chain

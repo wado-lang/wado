@@ -138,7 +138,7 @@ pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCach
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
 
-        let binds = build_copy_bindings(engine.body);
+        let binds = build_copy_bindings(&engine);
         let mut loops: Vec<(BlockId, StmtId, BlockId)> = Vec::new();
         collect_loops(engine.body, engine.body.root, &mut loops);
         let plans: Vec<Plan> = loops
