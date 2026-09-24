@@ -2978,25 +2978,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let earlier =
                     classified[..later]
                         .iter()
-                        .find_map(|(guardless, earlier)| match earlier {
+                        .zip(arms)
+                        .find_map(|((guardless, earlier), arm)| match earlier {
                             Pat::Narrow(earlier) if *guardless => {
                                 let takes = tt.type_key(*earlier) == tt.type_key(*target)
                                     || tt.is_resource_narrowing(*earlier, *target);
-                                takes.then_some(*earlier)
+                                takes.then_some(Some(*earlier))
                             }
+                            Pat::Wild if *guardless => Some(match &arm.pattern {
+                                ast::Pattern::Typed { id, .. } => {
+                                    self.sem.types.pattern_ascriptions.get(id).copied()
+                                }
+                                _ => None,
+                            }),
                             _ => None,
                         });
-                if let Some(earlier) = earlier {
-                    shadowed.push((
-                        arms[later].span,
-                        format!(
-                            "unreachable arm: every `{}` is `{}`, which an earlier arm \
-                             already takes",
-                            tt.type_name(*target),
-                            tt.type_name(earlier)
-                        ),
-                    ));
-                }
+                let message = match earlier {
+                    Some(Some(earlier)) => format!(
+                        "unreachable arm: every `{}` is `{}`, which an earlier arm \
+                         already takes",
+                        tt.type_name(*target),
+                        tt.type_name(earlier)
+                    ),
+                    Some(None) => "unreachable arm: an earlier arm takes every value".to_string(),
+                    None => continue,
+                };
+                shadowed.push((arms[later].span, message));
             }
         }
         for (span, message) in shadowed {

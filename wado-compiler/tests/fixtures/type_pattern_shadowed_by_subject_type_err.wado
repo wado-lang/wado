@@ -1,0 +1,16 @@
+// `el: Element` on an `Element` subject narrows nothing, so it takes every
+// value and the `HtmlInputElement` arm after it can never run.
+use { Element, HtmlInputElement } from "web:dom";
+
+fn kind(e: Element) -> i32 {
+    return match e {
+        el: Element => 1,
+        input: HtmlInputElement => 2,
+        _ => 0,
+    };
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error":":8:9: analysis error: invalid pattern: unreachable arm: every `HtmlInputElement` is `Element`, which an earlier arm already takes"}

@@ -1,0 +1,23 @@
+// A default naming a parameter at or after its own slot is ill-formed on the
+// declaration, whether or not anything applies it.
+
+struct Fwd<A = B, B = i32> {
+    v: B,
+}
+
+variant Own<A = A> {
+    V(i32),
+}
+
+type Later<A = B, B = i32> = List<A>;
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "the default for type parameter 'A' names 'B'",
+  "compile_errors_contains": [
+    "the default for type parameter 'A' names 'B', which is declared no earlier than 'A' itself",
+    "the default for type parameter 'A' names 'A', which is declared no earlier than 'A' itself"
+  ]
+}

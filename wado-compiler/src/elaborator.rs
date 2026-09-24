@@ -2154,6 +2154,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let mut test_count = 0usize;
         for item in &module.items {
+            let generic_type_decl = match item {
+                Item::Struct(decl) => Some((decl.id, !decl.type_params.is_empty())),
+                Item::Variant(decl) => Some((decl.id, !decl.type_params.is_empty())),
+                Item::Newtype(decl) => Some((decl.id, !decl.type_params.is_empty())),
+                _ => None,
+            };
+            if let Some((id, true)) = generic_type_decl
+                && let Some(def) = self.tysys.resolutions.defs().of_ast_id(id)
+            {
+                self.type_param_defaults_are_ordered(def);
+            }
             match item {
                 Item::Function(func) => {
                     self.resolve_function(func);

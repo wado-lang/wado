@@ -1,0 +1,14 @@
+// A bare binding takes every value, so a narrowing arm after it can never run.
+use { Element, HtmlInputElement } from "web:dom";
+
+fn kind(e: Element) -> i32 {
+    return match e {
+        el => 1,
+        input: HtmlInputElement => 2,
+    };
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error":":7:9: analysis error: invalid pattern: unreachable arm: an earlier arm takes every value"}
