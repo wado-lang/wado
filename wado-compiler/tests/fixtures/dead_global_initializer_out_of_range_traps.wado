@@ -1,0 +1,30 @@
+// A dead global's initializer whose loop runs past the end of its array traps,
+// and the trap is observable: the call stays although nothing reads the global.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn build_table() -> ByteList {
+    let mut table = ByteList::filled(256, 255);
+    for let mut i = 0; i < 300; i += 1 {
+        table[i] = 0;
+    }
+    return table;
+}
+
+global TABLE: ByteList = build_table();
+
+fn decode(b: u8) -> u8 {
+    return TABLE[b as i32];
+}
+
+export fn run() with Stdout {
+    println("unreachable");
+}
+
+__DATA__
+{
+    "trapped": true,
+    "wir_expect:O2": [
+        "build_table"
+    ]
+}

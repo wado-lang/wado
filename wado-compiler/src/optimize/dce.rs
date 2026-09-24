@@ -1934,7 +1934,7 @@ pub(super) fn deletable_value(
                     .get(func_id.index())
                     .copied()
                     .unwrap_or_else(FnEffect::opaque);
-                (!effect.is_pure() || effect.may_trap).then_some(())
+                (!effect.is_deletable()).then_some(())
             }
             ExprKind::GlobalVarSet { .. }
             | ExprKind::Assign { .. }

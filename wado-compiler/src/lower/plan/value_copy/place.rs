@@ -411,7 +411,7 @@ impl<'a> Resolver<'a> {
 
     fn bind_pattern(&mut self, pattern: &TirPattern, base: &Names) {
         match pattern {
-            TirPattern::Binding { local_index, .. } => {
+            TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } => {
                 self.bindings.set(*local_index, base.clone());
             }
             TirPattern::Struct {

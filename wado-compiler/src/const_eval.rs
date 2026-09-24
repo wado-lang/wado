@@ -608,6 +608,9 @@ pub(crate) fn eval_bool_binary(l: bool, op: NirBinaryOp, r: bool) -> Option<Valu
     match op {
         NirBinaryOp::And => Some(Value::Bool(l && r)),
         NirBinaryOp::Or => Some(Value::Bool(l || r)),
+        NirBinaryOp::BitAnd => Some(Value::Bool(l & r)),
+        NirBinaryOp::BitOr => Some(Value::Bool(l | r)),
+        NirBinaryOp::BitXor => Some(Value::Bool(l ^ r)),
         NirBinaryOp::Eq => Some(Value::Bool(l == r)),
         NirBinaryOp::NotEq => Some(Value::Bool(l != r)),
         // bool implements Ord with `false < true`. Spelled with `&&`

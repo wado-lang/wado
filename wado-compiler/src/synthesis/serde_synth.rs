@@ -500,6 +500,8 @@ fn field_schema_method_fn(
         effects: Vec::new(),
         retains: vec![],
         immediates: vec![],
+        trap: None,
+        linear_memory: None,
         body: Some(block(body)),
         span,
         local_count,

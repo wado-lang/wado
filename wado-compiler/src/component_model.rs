@@ -24,7 +24,7 @@ use crate::cm_abi::{
 };
 use crate::defs::DefId;
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::{DeclName, DeclPath, to_kebab};
+use crate::name::{DeclName, DeclPath, IDENTITY_TEST_METHOD, NARROWING_TEST_METHOD, to_kebab};
 use crate::primitive::PrimitiveType;
 use crate::synthesis::cm_binding::types::cm_interface_module;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -106,6 +106,62 @@ pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Opti
                 type_table.type_name(element)
             )
         })
+}
+
+/// Why `key` cannot be a `map<K, V>` key, or `None` when it can. The Component
+/// Model's `keytype` admits the integers, `bool`, `char`, and `string` — no
+/// float, no aggregate.
+pub fn map_key_rejection(type_table: &TypeTable, key: TypeId) -> Option<String> {
+    let peeled = peel_newtypes(type_table, key);
+    let admissible = match type_table.get(peeled) {
+        ResolvedType::Primitive(prim) => matches!(
+            prim,
+            PrimitiveType::Bool
+                | PrimitiveType::Char
+                | PrimitiveType::I8
+                | PrimitiveType::I16
+                | PrimitiveType::I32
+                | PrimitiveType::I64
+                | PrimitiveType::U8
+                | PrimitiveType::U16
+                | PrimitiveType::U32
+                | PrimitiveType::U64
+        ),
+        ResolvedType::Struct { def, .. } => matches!(
+            (
+                def.decl(),
+                type_table.compiler_item_def(CompilerItem::String),
+            ),
+            (Some(found), Some(string)) if found == string
+        ),
+        ResolvedType::Unit
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Flags { .. }
+        | ResolvedType::Resource { .. }
+        | ResolvedType::GenericResource { .. }
+        | ResolvedType::GenericInstance { .. }
+        | ResolvedType::Variant { .. }
+        | ResolvedType::Newtype { .. }
+        | ResolvedType::Never
+        | ResolvedType::Ref(_)
+        | ResolvedType::MutRef(_)
+        | ResolvedType::Function { .. }
+        | ResolvedType::Reactive(_)
+        | ResolvedType::TypeParam { .. }
+        | ResolvedType::TypePack { .. }
+        | ResolvedType::InferVar(_)
+        | ResolvedType::AssocTypeProjection { .. }
+        | ResolvedType::BuiltinArray(_)
+        | ResolvedType::Unknown
+        | ResolvedType::Error => false,
+    };
+    (!admissible).then(|| {
+        format!(
+            "`{}` is not a Component Model `map` key — a key is `bool`, \
+             `char`, `String`, or an integer",
+            type_table.type_name(key)
+        )
+    })
 }
 
 /// A WIT alias has no representation of its own. The AST classifier's
@@ -601,6 +657,19 @@ fn extract_cm_params_attr(attrs: &[Attribute]) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// One entry per CM function name, keeping the first binding of each. A CM
+/// interface exports a name once however many Wado names bind it, so anything
+/// describing the interface walks this rather than the bindings.
+pub fn one_per_cm_name<'a>(
+    funcs: impl IntoIterator<Item = &'a CmFunctionInfo>,
+) -> Vec<&'a CmFunctionInfo> {
+    let mut seen = IndexSet::default();
+    funcs
+        .into_iter()
+        .filter(|func| seen.insert(func.wasi_func_name.as_str()))
+        .collect()
+}
+
 /// Information about a CM function from an interface method
 #[derive(Debug, Clone)]
 pub struct CmFunctionInfo {
@@ -696,7 +765,7 @@ impl CmFunctionInfo {
                 named.name == "String" || Self::cm_named_requires_memory(named, registry, seen)
             }
             Type::Generic(g) => {
-                matches!(g.name.as_str(), "Stream" | "List")
+                matches!(g.name.as_str(), "Stream" | "List" | "TreeMap")
                     || g.args
                         .iter()
                         .any(|arg| Self::cm_type_requires_memory(arg, registry, seen))
@@ -757,7 +826,7 @@ impl CmFunctionInfo {
     fn type_requires_memory(ty: &Type) -> bool {
         match ty {
             Type::Generic(g) => {
-                matches!(g.name.as_str(), "Stream" | "List")
+                matches!(g.name.as_str(), "Stream" | "List" | "TreeMap")
                     || g.args.iter().any(Self::type_requires_memory)
             }
             Type::Named(named) => named.name == "String",
@@ -795,7 +864,7 @@ impl CmFunctionInfo {
             Type::Named(named) => named.name == "String",
             Type::Generic(generic) => matches!(
                 generic.name.as_str(),
-                "List" | "Option" | "Result" | "Stream" | "Future"
+                "List" | "TreeMap" | "Option" | "Result" | "Stream" | "Future"
             ),
             Type::Tuple(elems) => !elems.is_empty(),
             _ => false,
@@ -2155,7 +2224,63 @@ impl CmInterfaceRegistry {
                         );
                     }
                 }
+                if declares_unrestricted(&resource.attrs) {
+                    self.register_lang_predicates(resource, &resource_source);
+                }
             }
+        }
+    }
+
+    /// Register the `lang` predicates over `resource`'s handles: `R::$is`
+    /// (`is-r`) for a type pattern, and on a chain root `R::$same` (`is-same`)
+    /// for `==`. Only a called one is imported.
+    fn register_lang_predicates(&mut self, resource: &ast::ResourceDecl, resource_source: &str) {
+        let own = cm_import_of(&resource.attrs)
+            .expect("an unrestricted resource names its interface in `#[cm]`");
+        let cm_name = own.function.as_deref().unwrap_or(&own.interface);
+        let lang = |function: String| CmImport {
+            interface: "lang".to_string(),
+            function: Some(function),
+            ..own.clone()
+        };
+        let self_type = substitute_self_in_type(
+            &self.source_interfaces,
+            &Type::Named(NamedType::new(
+                AstId::fresh(),
+                "Self".to_string(),
+                resource.span,
+            )),
+            &resource.name,
+            resource_source,
+        );
+        let handle = self.cm_param_type(&self_type);
+        let bool_type = || {
+            Type::Named(NamedType::new(
+                AstId::fresh(),
+                "bool".to_string(),
+                resource.span,
+            ))
+        };
+        self.register(
+            &resource.name,
+            NARROWING_TEST_METHOD,
+            &lang(format!("is-{cm_name}")),
+            false,
+            vec![("self".to_string(), "r".to_string(), handle.clone())],
+            Some(bool_type()),
+        );
+        if resource.parent.is_none() {
+            self.register(
+                &resource.name,
+                IDENTITY_TEST_METHOD,
+                &lang("is-same".to_string()),
+                false,
+                vec![
+                    ("self".to_string(), "a".to_string(), handle.clone()),
+                    ("other".to_string(), "b".to_string(), handle),
+                ],
+                Some(bool_type()),
+            );
         }
     }
 
@@ -3295,7 +3420,6 @@ impl CmInterfaceRegistry {
             .function
             .clone()
             .unwrap_or_else(|| method_name.replace('_', "-"));
-
         // Params carry their value types: newtypes peeled, extern handles kept,
         // so a binding's GC-level types match the caller's.
         let resolved_params: Vec<(String, String, Type)> = params
@@ -3533,7 +3657,9 @@ impl CmInterfaceRegistry {
                 }
             },
             Type::Generic(g) => match g.name.as_str() {
-                "List" => {
+                // `map<K, V>` despecializes to `list<tuple<K, V>>`, so it
+                // carries that type's `(ptr, count)` pair.
+                "List" | "TreeMap" => {
                     out.push(CmValType::I32);
                     out.push(CmValType::I32);
                 }
@@ -3767,6 +3893,7 @@ impl CmInterfaceRegistry {
     }
 }
 
+use crate::compiler_item::CompilerItem;
 use wasm_encoder::{
     ComponentTypeRef, ComponentValType, InstanceType, PrimitiveValType, TypeBounds,
 };
@@ -3780,6 +3907,12 @@ pub enum CmDefined<'a> {
     Enum(&'a [&'a str]),
     Flags(&'a [&'a str]),
     List(ComponentValType),
+    /// 🗺️ `map<K, V>` — the `list<tuple<K, V>>` bytes under their own type
+    /// constructor, so the intent survives into the WIT a consumer reads.
+    Map {
+        key: ComponentValType,
+        value: ComponentValType,
+    },
     Tuple(&'a [ComponentValType]),
     Option(ComponentValType),
     Result {
@@ -3882,6 +4015,7 @@ pub(crate) fn emit_cm_defined(
         CmDefined::Enum(names) => enc.enum_type(names.iter().copied()),
         CmDefined::Flags(names) => enc.flags(names.iter().copied()),
         CmDefined::List(elem) => enc.list(elem),
+        CmDefined::Map { key, value } => enc.map(key, value),
         CmDefined::Tuple(elems) => enc.tuple(elems.iter().copied()),
         CmDefined::Option(inner) => enc.option(inner),
         CmDefined::Result { ok, err } => enc.result(ok, err),
@@ -4160,6 +4294,23 @@ impl CmTypeGen {
         idx
     }
 
+    /// Define a map type, returning the type index.
+    fn define_map(
+        &mut self,
+        sink: &mut dyn CmTypeSink,
+        key: ComponentValType,
+        value: ComponentValType,
+        key_suffix: &str,
+    ) -> u32 {
+        let cache_key = format!("map:{key_suffix}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+        let idx = sink.define(CmDefined::Map { key, value });
+        self.cache.insert(cache_key, idx);
+        idx
+    }
+
     /// Define a tuple type, returning the type index.
     fn define_tuple(
         &mut self,
@@ -4430,6 +4581,27 @@ impl CmTypeGen {
                     let idx = self.define_list(sink, elem_cm, &key);
                     ComponentValType::Type(idx)
                 }
+                "TreeMap" => {
+                    let key_cm = self.ast_type_to_cm(
+                        sink,
+                        &generic.args[0],
+                        cm_interface_registry,
+                        resource_exports,
+                    );
+                    let value_cm = self.ast_type_to_cm(
+                        sink,
+                        &generic.args[1],
+                        cm_interface_registry,
+                        resource_exports,
+                    );
+                    let key = format!(
+                        "{},{}",
+                        Self::type_key(&generic.args[0]),
+                        Self::type_key(&generic.args[1])
+                    );
+                    let idx = self.define_map(sink, key_cm, value_cm, &key);
+                    ComponentValType::Type(idx)
+                }
                 "Result" => {
                     let is_ok_unit = generic.args[0].is_unit();
                     let is_err_unit = generic.args[1].is_unit();
@@ -4561,8 +4733,8 @@ pub fn cm_type_to_valtype(ty: &Type) -> ValType {
             "Result" => ValType::I32,
             // Future<T> is represented as i32 handle
             "Future" => ValType::I32,
-            // List<T> is represented as a GC array reference (handled as i32 in WASI context)
-            "List" => ValType::I32,
+            // List<T> / TreeMap<K, V> are GC references (i32 in a WASI context)
+            "List" | "TreeMap" => ValType::I32,
             // Option<T> is represented as i32 discriminant
             "Option" => ValType::I32,
             other => panic!("unknown generic type in cm_type_to_valtype: {other}"),
@@ -4660,7 +4832,7 @@ fn is_param_type_supported_with_types(
         Type::Generic(generic) => {
             matches!(
                 generic.name.as_str(),
-                "Stream" | "Result" | "Future" | "Option" | "List"
+                "Stream" | "Result" | "Future" | "Option" | "List" | "TreeMap"
             ) && !generic.args.iter().any(mentions_empty_tuple)
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
@@ -4733,7 +4905,9 @@ fn is_return_type_supported_with_types(
                         is_return_type_supported_with_types(arg, enums, resources, structs)
                     })
                 }
-                "List" | "Option" => {
+                // A `map` key's `keytype` restriction needs resolved types, so
+                // the boundary representability check enforces it, not this pass.
+                "List" | "Option" | "TreeMap" => {
                     // A list/option element is any supported value type (e.g.
                     // `list<list<u8>>`, `list<[field-name, field-value]>`).
                     generic.args.iter().all(|arg| {

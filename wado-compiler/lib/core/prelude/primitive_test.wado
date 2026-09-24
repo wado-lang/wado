@@ -709,8 +709,8 @@ test "char::from_str takes exactly one scalar" {
 
 test "from_str reads a view without copying out of it" {
     let view = "id=42,on=true,k=x".as_str_slice();
-    assert bool::from_str(view.sub(9, 13)) matches { Ok(v) && v == true };
-    assert char::from_str(view.sub(16, 17)) matches { Ok(v) && v == 'x' };
+    assert bool::from_str(view.slice(9, 13)) matches { Ok(v) && v == true };
+    assert char::from_str(view.slice(16, 17)) matches { Ok(v) && v == 'x' };
 }
 
 test "BITS is the width in bits" {

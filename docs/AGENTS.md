@@ -186,6 +186,7 @@ omission goes in Decision.
 - [Compiler Fuzzing](./wep-2026-08-19-compiler-fuzzing.md)
 - [Power-Assert Coverage](./wep-2026-08-19-power-assert-coverage.md)
 - [Literal Coercion as `From<Array<…>>`](./wep-2026-08-24-literal-from-array.md)
+- [The Component Model `map<K, V>` Type](./wep-2026-08-25-cm-map-type.md)
 - [Markup Dialect — Where the Top Level Lives](./wep-2026-08-29-markup-dialect.md)
 - [Stream Copy Results](./wep-2026-08-30-stream-copy-result.md)
 - [`wado lint` — Corpus Checks](./wep-2026-08-31-wado-lint.md)

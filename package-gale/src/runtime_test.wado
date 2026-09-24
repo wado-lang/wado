@@ -1,16 +1,23 @@
-use { Span, Token, LexerSlice, ParseError, TokenStream } from "./runtime/lex.wado";
+use {
+    Span,
+    TokenStream,
+    chars_text,
+    push_chars_escaped,
+    char_pos_in_line,
+    line_starts,
+    line_col_at,
+    with_expected,
+    kind_set_has,
+} from "./runtime/lex.wado";
+use { kind_bitset_words } from "./kind_set_gen.wado";
 use { to_lexer_string } from "./runtime/tools.wado";
 use {
     HighlightMapping,
-    HighlightOverride,
+    RuleCapture,
     HighlightCapture,
     HighlightVisitor,
     highlight_html,
 } from "./runtime/highlight.wado";
-
-fn ls<S: AsStrSlice>(text: S) -> LexerSlice {
-    return LexerSlice::from_string(text);
-}
 
 /// Build a TokenStream over `src` from `[kind, start, end]` token specs (no
 /// trivia). The returned stream borrows a fresh char list; GC keeps it alive.
@@ -108,150 +115,55 @@ test "TokenStream empty-text token reports empty (EOF sentinel)" {
     assert ts.token_text(0) == "";
 }
 
-test "ParseError::new leaves position at defaults" {
-    let e = ParseError::new("oops", Span::new(0, 1), ["A"]);
-    assert e.line == 1;
-    assert e.col == 0;
-    assert e.rule_stack.is_empty();
-}
-
-test "ParseError::at carries resolved position" {
-    let e = ParseError::at(`got "for"`, Span::new(40, 43), ["'}'"], 12, 5);
-    assert e.line == 12;
-    assert e.col == 5;
-    assert `${e}` == `parse error at 12:5: expected '}'; got "for"`;
-}
-
-test "ParseError Display composes the expected set with the message" {
+test "with_expected composes the expected set with the message" {
     // `message` says what was found; `expected` says what was wanted. Neither
     // repeats the other, so every failure path phrases the pair identically.
-    let one = ParseError::at(`got ")"`, Span::new(0, 1), ["','"], 1, 0);
-    assert one.full_message() == `expected ','; got ")"`;
-    let two = ParseError::at(`got ")"`, Span::new(0, 1), ["','", "';'"], 1, 0);
-    assert two.full_message() == `expected ',' or ';'; got ")"`;
-    let three = ParseError::at(`got ")"`, Span::new(0, 1), ["A", "B", "C"], 1, 0);
-    assert three.full_message() == `expected A, B or C; got ")"`;
+    assert with_expected(`got ")"`, &["','"]) == `expected ','; got ")"`;
+    assert with_expected(`got ")"`, &["','", "';'"]) == `expected ',' or ';'; got ")"`;
+    assert with_expected(`got ")"`, &["A", "B", "C"]) == `expected A, B or C; got ")"`;
+    assert with_expected(`unexpected token "for"`, &[]) == `unexpected token "for"`;
 }
 
-test "ParseError Display omits an empty expected set" {
-    let e = ParseError::at(`unexpected token "for"`, Span::new(0, 1), [], 1, 0);
-    assert e.full_message() == `unexpected token "for"`;
-    assert `${e}` == `parse error at 1:0: unexpected token "for"`;
+test "chars_text copies a window of non-ASCII chars" {
+    let chars: List<char> = "aé日🎉b".chars().collect();
+    assert chars_text(&chars, 1, 4) == "é日🎉";
+    assert chars_text(&chars, 2, 2) == "";
 }
 
-test "ParseError Display renders rule stack outermost-first" {
-    let mut e = ParseError::at("unexpected token", Span::new(3, 4), [], 2, 7);
-    // rule_stack is stored innermost-first, as the wrappers push it.
-    e.rule_stack.push("statement");
-    e.rule_stack.push("block");
-    e.rule_stack.push("program");
-    assert e.rule_path() == "program > block > statement";
-    assert `${e}` == "parse error at 2:7: unexpected token\n  in rule: program > block > statement";
+test "push_chars_escaped escapes the whitespace control chars" {
+    let chars: List<char> = "a\nb\tc\r".chars().collect();
+    let mut out = String::new();
+    push_chars_escaped(&mut out, &chars, 0, chars.len());
+    assert out == "a\\nb\\tc\\r";
+}
+
+test "line_col_at answers from the line starts" {
+    let chars: List<char> = "ab\ncd\n\ne".chars().collect();
+    let starts = line_starts(&chars);
+    assert line_col_at(&starts, 0) == [1, 0];
+    assert line_col_at(&starts, 1) == [1, 1];
+    assert line_col_at(&starts, 3) == [2, 0];
+    assert line_col_at(&starts, 6) == [3, 0];
+    assert line_col_at(&starts, 7) == [4, 0];
+    assert line_col_at(&starts, 8) == [4, 1];
+    assert char_pos_in_line(&chars, 4) == 1;
+}
+
+test "kind_set_has reads the bitset words the generator emits" {
+    assert kind_bitset_words(&[0, 5, 31, 32, 70]) == ["-2147483615", "1", "64"];
+    assert kind_bitset_words(&[31]) == ["i32::MIN"];
+    let set: List<i32> = [-2147483615, 1, 64];
+    for let k of [0, 5, 31, 32, 70] {
+        assert kind_set_has(&set, k), `${k}`;
+    }
+    for let k of [1, 30, 33, 69, 71, 200] {
+        assert !kind_set_has(&set, k), `${k}`;
+    }
 }
 
 test "Span::len returns length" {
     let s = Span::new(3, 10);
     assert s.len() == 7;
-}
-
-test "Span::merge combines two spans" {
-    let a = Span::new(5, 10);
-    let b = Span::new(2, 8);
-    let merged = a.merge(&b);
-    assert merged.start == 2;
-    assert merged.end == 10;
-}
-
-test "Span equality" {
-    let a = Span::new(0, 5);
-    let b = Span::new(0, 5);
-    let c = Span::new(1, 5);
-    assert a == b;
-    assert a != c;
-}
-
-test "LexerSlice basic" {
-    let chars: List<char> = ['h', 'e', 'l', 'l', 'o'];
-    let s = LexerSlice::new(&chars, 0, 5);
-    assert s.len() == 5;
-    assert !s.is_empty();
-    assert s.to_string() == "hello";
-}
-
-test "LexerSlice empty" {
-    let chars: List<char> = [];
-    let s = LexerSlice::empty(&chars);
-    assert s.is_empty();
-    assert s.len() == 0;
-}
-
-test "LexerSlice from_string" {
-    let s = LexerSlice::from_string("hello");
-    assert s.len() == 5;
-    assert s.to_string() == "hello";
-}
-
-test "LexerSlice eq" {
-    let a = ls("hello");
-    let b = ls("hello");
-    let c = ls("world");
-    assert a == b;
-    assert a != c;
-}
-
-test "LexerSlice compares with text" {
-    let s = ls("hello");
-    assert s == "hello";
-    assert s != "world";
-    assert s != "hell";
-    assert s != "helloo";
-}
-
-test "LexerSlice push_to" {
-    let s = ls("world");
-    let mut out = String::with_capacity(16);
-    out.push_str("hello ");
-    s.push_to(&mut out);
-    assert out == "hello world";
-}
-
-test "LexerSlice display" {
-    let s = ls("world");
-    let msg = `hello ${s}`;
-    assert msg == "hello world";
-}
-
-test "Token::new creates token" {
-    let t = Token::new(1, ls("hello"), Span::new(0, 5));
-    assert t.kind == 1;
-    assert t.text.to_string() == "hello";
-    assert t.span == Span::new(0, 5);
-}
-
-// Note: Token equality test skipped due to compiler bug with recursive struct
-// ref field Eq (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado)
-
-test "Token::new has empty leading_trivia" {
-    let t = Token::new(1, ls("hello"), Span::new(0, 5));
-    assert t.leading_trivia.is_empty();
-}
-
-test "Token::with_trivia attaches trivia" {
-    let ws = Token::new(99, ls(" "), Span::new(0, 1));
-    let trivia: List<Token> = [ws];
-    let t = Token::with_trivia(1, ls("hello"), Span::new(1, 6), trivia);
-    assert t.leading_trivia.len() == 1;
-    assert t.leading_trivia[0].text.to_string() == " ";
-}
-
-test "ParseError::new creates error" {
-    let expected: List<String> = ["INT", "STRING"];
-    let err = ParseError::new("unexpected token", Span::new(5, 6), expected);
-    assert err.message == "unexpected token";
-    assert err.span == Span::new(5, 6);
-    assert err.expected.len() == 2;
-    assert err.expected[0] == "INT";
-    assert err.expected[1] == "STRING";
 }
 
 test "highlight_html escapes HTML and wraps captures" {
@@ -272,84 +184,67 @@ test "highlight_html emits plain text for gaps" {
     assert html == `a <span class="operator">+</span> b`;
 }
 
-test "HighlightVisitor converts dot-separated captures to CSS classes" {
-    let mapping = HighlightMapping {
-        defaults: ["punctuation.bracket"],
-        rule_names: ["root"],
-        overrides: [],
+fn mapping_of(capture_names: List<String>, default_ids: List<i32>) -> HighlightMapping {
+    return HighlightMapping {
+        capture_names,
+        capture_classes: capture_names,
+        default_ids,
+        overrides_by_kind: [],
+        rule_captures: [],
     };
-    let visitor = HighlightVisitor::new(mapping);
-    assert visitor.capture_names[0] == "punctuation.bracket";
-    assert visitor.capture_classes[0] == "punctuation bracket";
-
-    let source = "{";
-    let captures: List<HighlightCapture> = [
-        HighlightCapture { capture_id: 0, start: 0, end: 1 },
-    ];
-    let html = highlight_html(&source, &captures, &visitor.capture_classes);
-    assert html == `<span class="punctuation bracket">{</span>`;
 }
 
 test "HighlightVisitor collects captures from tokens" {
-    let mapping = HighlightMapping {
-        defaults: ["string", "number", ""],
-        rule_names: ["root"],
-        overrides: [],
-    };
+    let mapping = mapping_of(["string", "number"], [0, 1, -1]);
     let ts = stream_of("01234567", [
         [0, 0, 4],
         [1, 5, 7],
         [2, 7, 8],
     ]);
-    let mut visitor = HighlightVisitor::new(mapping);
+    let mut visitor = HighlightVisitor::new(&mapping);
     visitor.hl_enter(0);
     visitor.hl_visit_token(&ts, 0);
     visitor.hl_visit_token(&ts, 1);
     visitor.hl_visit_token(&ts, 2);
     visitor.hl_exit();
     assert visitor.captures.len() == 2;
-    assert visitor.capture_names[visitor.captures[0].capture_id] == "string";
+    assert mapping.capture_names[visitor.captures[0].capture_id] == "string";
     assert visitor.captures[0].start == 0;
     assert visitor.captures[0].end == 4;
-    assert visitor.capture_names[visitor.captures[1].capture_id] == "number";
+    assert mapping.capture_names[visitor.captures[1].capture_id] == "number";
     assert visitor.captures[1].start == 5;
     assert visitor.captures[1].end == 7;
 }
 
 test "HighlightVisitor applies context overrides" {
-    let mapping = HighlightMapping {
-        defaults: ["string"],
-        rule_names: ["root", "pair"],
-        overrides: [
-            HighlightOverride { rule_name: "pair", token_kind: 0, capture: "string.special.key" },
+    let mut mapping = mapping_of(["string", "string.special.key"], [0]);
+    mapping.overrides_by_kind = [
+        [
+            RuleCapture { rule_id: 1, capture_id: 1, order: 0 },
         ],
-    };
+    ];
     let ts = stream_of("0123456789012345", [
         [0, 0, 5],
         [0, 11, 16],
     ]);
-    let mut visitor = HighlightVisitor::new(mapping);
+    let mut visitor = HighlightVisitor::new(&mapping);
     visitor.hl_enter(0);
     visitor.hl_enter(1);
     visitor.hl_visit_token(&ts, 0);
     visitor.hl_exit();
     visitor.hl_visit_token(&ts, 1);
     visitor.hl_exit();
-    assert visitor.capture_names[visitor.captures[0].capture_id] == "string.special.key";
-    assert visitor.capture_names[visitor.captures[1].capture_id] == "string";
+    assert mapping.capture_names[visitor.captures[0].capture_id] == "string.special.key";
+    assert mapping.capture_names[visitor.captures[1].capture_id] == "string";
 }
 
 test "hl_cover_unvisited sweeps every token, and only once" {
-    let mapping = HighlightMapping {
-        defaults: ["string", "number"],
-        rule_names: ["root"],
-        overrides: [],
-    };
+    let mapping = mapping_of(["string", "number"], [0, 1]);
     let ts = stream_of("01234567", [
         [0, 0, 3],
         [1, 4, 7],
     ]);
-    let mut visitor = HighlightVisitor::new(mapping);
+    let mut visitor = HighlightVisitor::new(&mapping);
     visitor.hl_cover_unvisited(&ts);
     assert visitor.captures.len() == 2;
     // It is a finishing pass: running it again must add nothing.
@@ -358,16 +253,12 @@ test "hl_cover_unvisited sweeps every token, and only once" {
 }
 
 test "hl_cover_unvisited keeps what the walk took and sorts the merge" {
-    let mapping = HighlightMapping {
-        defaults: ["string", "number"],
-        rule_names: ["root"],
-        overrides: [],
-    };
+    let mapping = mapping_of(["string", "number"], [0, 1]);
     let ts = stream_of("01234567", [
         [0, 0, 3],
         [1, 4, 7],
     ]);
-    let mut visitor = HighlightVisitor::new(mapping);
+    let mut visitor = HighlightVisitor::new(&mapping);
     // The walk reaches the later token first, so the sweep's capture for the
     // earlier one lands out of order and the merge has to be sorted.
     visitor.hl_visit_token(&ts, 1);
@@ -378,23 +269,19 @@ test "hl_cover_unvisited keeps what the walk took and sorts the merge" {
 }
 
 test "HighlightVisitor handles trivia" {
-    let mapping = HighlightMapping {
-        defaults: ["comment", "keyword"],
-        rule_names: ["root"],
-        overrides: [],
-    };
+    let mapping = mapping_of(["comment", "keyword"], [0, 1]);
     let chars: List<char> = "0123456789a".chars().collect();
     let mut ts = TokenStream::new(&chars);
     let lo = ts.trivia_mark();
     ts.push_trivia(0, 0, 8, 0);  // "/* hi */" comment trivia
     ts.push_token(1, 9, 11, lo, ts.trivia_mark());  // "if" keyword
-    let mut visitor = HighlightVisitor::new(mapping);
+    let mut visitor = HighlightVisitor::new(&mapping);
     visitor.hl_enter(0);
     visitor.hl_visit_token(&ts, 0);
     visitor.hl_exit();
     assert visitor.captures.len() == 2;
-    assert visitor.capture_names[visitor.captures[0].capture_id] == "comment";
+    assert mapping.capture_names[visitor.captures[0].capture_id] == "comment";
     assert visitor.captures[0].start == 0;
-    assert visitor.capture_names[visitor.captures[1].capture_id] == "keyword";
+    assert mapping.capture_names[visitor.captures[1].capture_id] == "keyword";
     assert visitor.captures[1].start == 9;
 }

@@ -460,6 +460,41 @@ pub fn generic_method_call(
     )
 }
 
+/// [`generic_method_call`] carrying its impl arguments, for a method that only
+/// a synthesized call reaches, so monomorphization still instantiates it.
+pub fn generic_method_call_monomorphized(
+    receiver: TirExpr,
+    head: &FqTypeName,
+    method_name: &str,
+    method_module_source: ModuleSource,
+    impl_type_args: Vec<TypeId>,
+    args: Vec<TirExpr>,
+    return_type: TypeId,
+) -> TirExpr {
+    let info = LocalMethodName::new(head.clone(), None, method_name.to_string());
+    let mangled_name = info.to_mangled_name();
+    TirExpr::new(
+        TirExprKind::method_call(
+            Box::new(receiver),
+            FunctionRef {
+                module_source: method_module_source,
+                name: mangled_name.clone(),
+                monomorph_info: Some(MonomorphInfo {
+                    generic_name: mangled_name,
+                    impl_type_args,
+                    method_type_args: vec![],
+                    is_blanket: false,
+                }),
+                method_info: Some(info),
+            },
+            vec![],
+            args.into_iter().map(|e| CallArg::new(e, false)).collect(),
+        ),
+        return_type,
+        synth_span(),
+    )
+}
+
 /// Create a synthetic `TirFunction` for an auto-derived trait method.
 pub fn make_synthetic_method(
     name: String,
@@ -506,6 +541,8 @@ pub fn make_synthetic_free_function(
         effects: Vec::new(),
         retains: vec![],
         immediates: vec![],
+        trap: None,
+        linear_memory: None,
         body: Some(body),
         span: synth_span(),
         local_count,

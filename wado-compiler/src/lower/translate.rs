@@ -1529,28 +1529,16 @@ impl FunctionTranslator<'_, '_> {
                 expr.span,
             );
         }
-        // Inside a synthesized fn-param-specialized callee body, a
-        // `Local` read of one of the specialized params surfaces in
-        // NIR as a `Local` retagged to the functor `&$Closure_N`
-        // type (mirrors the in-place rewrite the old
-        // `SpecializerTransformer` applied).
         if let TirExprKind::Local { index, name } = &expr.kind
             && let Some(spec) = self.specialized_for_local(*index)
         {
-            return self.alloc_expr(
-                ExprKind::Local {
-                    index: *index,
-                    name: name.clone(),
-                },
-                spec.functor_ref_type,
-                expr.span,
-            );
+            return self.read_specialized_local(*index, name, spec, expr.type_id, expr.span);
         }
         // `IndirectCall` whose callee resolves to a specialized
         // fn-param `Local` is dispatched directly to the functor's
         // `$call` method.
         if let TirExprKind::IndirectCall { callee, args } = &expr.kind
-            && let TirExprKind::Local { index, .. } = &callee.kind
+            && let TirExprKind::Local { index, name } = &callee.kind
             && let Some(spec) = self.specialized_for_local(*index)
             && let Some(functor) = self
                 .base
@@ -1558,7 +1546,7 @@ impl FunctionTranslator<'_, '_> {
                 .functor_infos
                 .get(spec.functor_id as usize)
         {
-            let nir_receiver = self.convert_expr(callee);
+            let nir_receiver = self.specialized_local(*index, name, spec, callee.span);
             let call_method_borrow = functor.call_method.borrow();
             // `ArenaCallArg::is_mut` means "the callee may write the caller's
             // storage through this slot", which is `is_mut_ref` — the same
@@ -1608,39 +1596,52 @@ impl FunctionTranslator<'_, '_> {
         self.alloc_expr(kind, expr.type_id, expr.span)
     }
 
-    /// Convert a call argument. When the argument is
-    /// a specialized fn-param `Local` and the slot still expects
-    /// `fn(...)`, wrap the converted `Local` in
-    /// `ExprKind::ClosureToCanonical` so the callee sees the
-    /// original function-shaped view.
-    fn convert_specialized_arg_operand(&self, arg: &TirExpr) -> Operand {
-        if let TirExprKind::Local { index, .. } = &arg.kind
-            && let Some(spec) = self.specialized_for_local(*index)
-            && matches!(
-                self.base.type_table.borrow().get(spec.original_fn_type),
-                tir::ResolvedType::Function { .. }
-            )
-            && let Some(functor) = self
-                .base
-                .closure
-                .functor_infos
-                .get(spec.functor_id as usize)
-        {
-            let inner = self.convert_expr(arg);
-            return self
-                .alloc_expr(
-                    ExprKind::ClosureToCanonical {
-                        functor: inner.into(),
-                        functor_id: spec.functor_id,
-                        target_fn_type: spec.original_fn_type,
-                        closure_module: functor.module_source.clone(),
-                    },
-                    spec.original_fn_type,
-                    arg.span,
-                )
-                .into();
+    /// A specialized fn-param `Local`, typed as the functor `&$Closure_N` it holds.
+    fn specialized_local(
+        &self,
+        index: u32,
+        name: &str,
+        spec: &closure::SpecializedLocal,
+        span: Span,
+    ) -> ExprId {
+        self.alloc_expr(
+            ExprKind::Local {
+                index,
+                name: name.to_string(),
+            },
+            spec.functor_ref_type,
+            span,
+        )
+    }
+
+    /// A read of a specialized fn-param: the `fn(...)` value a `site_type` of
+    /// that shape expects, or the functor itself where the site takes `&$Closure_N`.
+    fn read_specialized_local(
+        &self,
+        index: u32,
+        name: &str,
+        spec: &closure::SpecializedLocal,
+        site_type: tir::TypeId,
+        span: Span,
+    ) -> ExprId {
+        let functor = self.specialized_local(index, name, spec, span);
+        if !matches!(
+            self.base.type_table.borrow().get(site_type),
+            tir::ResolvedType::Function { .. }
+        ) {
+            return functor;
         }
-        self.convert_operand(arg)
+        let info = &self.base.closure.functor_infos[spec.functor_id as usize];
+        self.alloc_expr(
+            ExprKind::ClosureToCanonical {
+                functor: functor.into(),
+                functor_id: spec.functor_id,
+                target_fn_type: site_type,
+                closure_module: info.module_source.clone(),
+            },
+            site_type,
+            span,
+        )
     }
 
     /// `result_type` is the converted expression's own type, which an unlabeled
@@ -1932,7 +1933,7 @@ impl FunctionTranslator<'_, '_> {
                 args: args
                     .iter()
                     .map(|a| ArenaCallArg {
-                        expr: self.convert_specialized_arg_operand(&a.expr),
+                        expr: self.convert_operand(&a.expr),
                         is_mut: a.is_mut,
                     })
                     .collect(),
@@ -1959,7 +1960,7 @@ impl FunctionTranslator<'_, '_> {
                         self.convert_receiver_arg(e, *is_mut)
                     } else if self.passes_through(func, i) {
                         ArenaCallArg {
-                            expr: self.convert_specialized_arg_operand(e),
+                            expr: self.convert_operand(e),
                             is_mut: *is_mut,
                         }
                     } else {
@@ -2022,7 +2023,7 @@ impl FunctionTranslator<'_, '_> {
             args: args
                 .iter()
                 .map(|a| ArenaCallArg {
-                    expr: self.convert_specialized_arg_operand(&a.expr),
+                    expr: self.convert_operand(&a.expr),
                     is_mut: a.is_mut,
                 })
                 .collect(),
@@ -2202,6 +2203,9 @@ impl FunctionTranslator<'_, '_> {
             TirPattern::ConstantValue { expr } => PatKind::ConstantValue {
                 expr: self.convert_operand(expr),
             },
+            TirPattern::Narrow { .. } => {
+                panic!("pattern lowering turns every narrowing into a binding and a guard")
+            }
             TirPattern::Range {
                 start,
                 end,
@@ -2413,9 +2417,12 @@ impl FunctionTranslator<'_, '_> {
             .enumerate()
             .map(|(i, cap)| {
                 let value = match cap.source {
-                    CaptureSource::Local(index) => {
-                        self.read_local(index, &cap.name, cap.type_id, span)
-                    }
+                    CaptureSource::Local(index) => match self.specialized_for_local(index) {
+                        Some(spec) => {
+                            self.read_specialized_local(index, &cap.name, spec, cap.type_id, span)
+                        }
+                        None => self.read_local(index, &cap.name, cap.type_id, span),
+                    },
                     CaptureSource::Capture(slot) => self.read_enclosing_capture(cap, slot, span),
                 };
                 ArenaStructField {
@@ -2544,7 +2551,7 @@ impl FunctionTranslator<'_, '_> {
         let needs_value_copy = self.should_wrap_value_copy(arg)
             && !self.arg_confined(arg, is_mut, callee, param_index, mut_roots);
         let value_type = arg.type_id;
-        let converted = self.convert_specialized_arg_operand(arg);
+        let converted = self.convert_operand(arg);
         let expr = if needs_value_copy {
             self.wrap_value_copy_operand(converted, value_type)
         } else {

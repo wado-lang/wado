@@ -826,6 +826,8 @@ fn collect_pattern_resources(pattern: &TirPattern, cx: &Cx, out: &mut Vec<Live>)
         | TirPattern::Enum { .. }
         | TirPattern::ConstantValue { .. }
         | TirPattern::Range { .. } => {}
+        // An unrestricted handle is never dropped, so it owes no cleanup.
+        TirPattern::Narrow { .. } => {}
     }
 }
 

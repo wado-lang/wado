@@ -18,6 +18,7 @@ use crate::tir::{
     TirVariantDecl, TypeId, TypeTable,
 };
 
+use crate::component_model::map_key_rejection;
 use crate::component_model::{future_payload_rejection, stream_payload_rejection};
 use crate::defs::DefId;
 use crate::name::{FqTraitName, FqTypeName};
@@ -53,9 +54,16 @@ pub struct CmStdlibNames {
     pub index_value: FqTraitName,
     /// `List`'s head, likewise the declaration the registry records.
     pub array_fq: FqTypeName,
+    /// `TreeMap`'s name, or `None` where `core:collections` was never loaded.
+    pub tree_map: Option<String>,
 }
 
 impl CmStdlibNames {
+    /// Whether `generic` is a `TreeMap<K, V>`, the Wado spelling of CM `map<K, V>`.
+    pub fn is_tree_map(&self, generic: &GenericType) -> bool {
+        self.tree_map.as_deref() == Some(generic.name.as_str()) && generic.args.len() == 2
+    }
+
     /// Look up every name through the [`CompilerItems`] registry.
     /// Cheap (a handful of registry hits + clones). Each synthesis entry
     /// point builds the snapshot once per binding — the lower side threads
@@ -83,6 +91,9 @@ impl CmStdlibNames {
             err_index,
             index_value: items.trait_fq(CompilerItem::IndexValue),
             array_fq: type_table.compiler_struct_fq_name(CompilerItem::List),
+            tree_map: items
+                .struct_name_opt(CompilerItem::TreeMap)
+                .map(str::to_string),
         }
     }
 }
@@ -360,6 +371,17 @@ pub fn cm_type_to_type_id(
                     cm_held_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 return type_table.make_list(elem_type);
             }
+            // `core:collections` is not auto-imported, so a program that never
+            // names `TreeMap` has no registration to compare against.
+            let tree_map_name = type_table
+                .compiler_items()
+                .struct_name_opt(CompilerItem::TreeMap)
+                .map(str::to_string);
+            if tree_map_name.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 {
+                let key = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let value = cm_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
+                return type_table.make_tree_map(key, value);
+            }
             let option_name = type_table
                 .compiler_variant_name(CompilerItem::Option)
                 .to_string();
@@ -525,27 +547,6 @@ pub(crate) fn kebab_to_pascal(s: &str) -> String {
     s.to_upper_camel_case()
 }
 
-pub(super) fn is_gc_passthrough_param(
-    ty: &Type,
-    cm_interface_registry: &CmInterfaceRegistry,
-    names: &CmStdlibNames,
-) -> bool {
-    match ty {
-        Type::Named(n) if n.name == names.string => true,
-        Type::Named(n) => cm_interface_registry.source_interface(n).is_some_and(|s| {
-            cm_interface_registry
-                .get_variant_cases_by_source(&s, &n.name)
-                .is_some()
-                || cm_interface_registry
-                    .get_struct_fields_by_source(&s, &n.name)
-                    .is_some()
-        }),
-        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => true,
-        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => true,
-        _ => false,
-    }
-}
-
 pub(super) fn is_wasm_flat_type(type_id: TypeId) -> bool {
     matches!(
         type_id,
@@ -709,6 +710,20 @@ fn check_cm_boundary_representable_inner(
                         recurse(a, visited)?;
                     }
                     Ok(())
+                } else if type_table
+                    .compiler_item_def(CompilerItem::TreeMap)
+                    .is_some_and(|tree_map| tree_map == *def)
+                {
+                    // `map<K, V>`: the key comes from the CM's `keytype`
+                    // subset, the value from any representable valtype.
+                    let [key, value] = type_args.as_slice() else {
+                        panic!("`TreeMap` is declared with two type parameters");
+                    };
+                    let (key, value) = (*key, *value);
+                    if let Some(reason) = map_key_rejection(type_table, key) {
+                        return Err(reason);
+                    }
+                    recurse(value, visited)
                 } else {
                     Err(format!(
                         "generic type `{}` has no Component Model value \
@@ -883,39 +898,21 @@ pub(super) fn disc_store_op(byte_size: u32) -> &'static str {
     }
 }
 
+/// The stores that write a string, list, or direct param's flat values into an
+/// async call's params buffer, at offsets from its slot.
 pub(super) fn cm_param_store_plan(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
     names: &CmStdlibNames,
 ) -> Vec<(u32, &'static str)> {
-    if let Type::Named(named) = ty {
-        if named.name == names.string {
-            return vec![(0, "i32_store"), (4, "i32_store")];
-        }
-        return match named.name.as_str() {
-            "f32" => vec![(0, "f32_store")],
-            "f64" => vec![(0, "f64_store")],
-            _ => vec![(0, scalar_store_op(ty, cm_interface_registry, names))],
-        };
-    }
     match ty {
-        Type::Reference(_) | Type::MutReference(_) => vec![(0, "i32_store")],
-        Type::Generic(g) if g.name == names.array => vec![(0, "i32_store"), (4, "i32_store")],
-        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
-            let payload_offset =
-                cm_abi::layout_option_with_registry(&g.args[0], cm_interface_registry)
-                    .payload_offset();
-            let inner_store = cm_param_store_plan(&g.args[0], cm_interface_registry, names);
-            let mut stores = vec![(
-                0,
-                disc_store_op(cm_discriminant_byte_size(OPTION_OR_RESULT_CASES)),
-            )];
-            for (sub_offset, store_name) in inner_store {
-                stores.push((payload_offset + sub_offset, store_name));
-            }
-            stores
+        Type::Named(named) if named.name == names.string => {
+            vec![(0, "i32_store"), (4, "i32_store")]
         }
-        Type::Generic(_) => vec![(0, "i32_store")],
+        Type::Named(named) if named.name == "f32" => vec![(0, "f32_store")],
+        Type::Named(named) if named.name == "f64" => vec![(0, "f64_store")],
+        Type::Named(_) => vec![(0, scalar_store_op(ty, cm_interface_registry, names))],
+        Type::Generic(g) if g.name == names.array => vec![(0, "i32_store"), (4, "i32_store")],
         _ => vec![(0, "i32_store")],
     }
 }
@@ -1016,7 +1013,9 @@ fn flatten_export_type_inner(
                 }
             }
         },
-        Type::Generic(generic) if generic.name == names.array => {
+        Type::Generic(generic) if generic.name == names.array || names.is_tree_map(generic) => {
+            // `map<K, V>` despecializes to `list<tuple<K, V>>` and carries that
+            // type's `(ptr, count)`.
             out.push(cm_abi::CmValType::I32); // ptr
             out.push(cm_abi::CmValType::I32); // len
         }
@@ -1189,7 +1188,9 @@ fn flat_types_from_type_id_inner(
                     names,
                 );
                 out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
-            } else if name == &names.array {
+            } else if name == &names.array || names.tree_map.as_deref() == Some(name.as_str()) {
+                // A `map<K, V>` despecializes to `list<tuple<K, V>>`, so it
+                // carries that type's pair.
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
             } else {

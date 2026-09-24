@@ -83,7 +83,6 @@ pub struct SpecializedLocal {
     pub local_index: u32,
     pub functor_id: u32,
     pub functor_ref_type: tir::TypeId,
-    pub original_fn_type: tir::TypeId,
 }
 
 /// Result of closure planning. `functor_infos` populates
@@ -788,6 +787,8 @@ impl ClosureLowerer {
                 effects: Vec::new(),
                 retains: vec![],
                 immediates: vec![],
+                trap: None,
+                linear_memory: None,
                 body: Some(body_block),
                 span: collected.span,
                 local_count,
@@ -1117,6 +1118,8 @@ impl ClosureLowerer {
             effects: Vec::new(),
             retains: vec![],
             immediates: vec![],
+            trap: None,
+            linear_memory: None,
             body: Some(body),
             span,
             local_count: 2,
@@ -1200,8 +1203,6 @@ impl ClosureLowerer {
                 .map(|(arg_idx, _)| arg_idx + param_offset)
                 .collect();
 
-            // Bail where a use pins the param to its declared `fn(...)` type,
-            // so it cannot be retyped to `&$Closure_N`.
             if let Some(body) = &callee.body {
                 let mut check = UnspecializableFnParam {
                     fn_param_indices: &fn_param_indices,
@@ -1245,16 +1246,6 @@ impl ClosureLowerer {
         for (arg_idx, &functor_type) in &arg_to_functor {
             let slot = (*arg_idx + param_offset) as usize;
             let functor_ref_type = type_table.make_ref(functor_type);
-            // Capture the original `fn(...)` type before we overwrite
-            // the local's declared type — the translator needs it as
-            // `target_fn_type` when re-wrapping a fn-param `Local`
-            // into `ExprKind::ClosureToCanonical` at a call
-            // arg slot that still expects `fn(...)`.
-            let original_fn_type = new_locals
-                .get(slot)
-                .map(|l| l.type_id)
-                .or_else(|| new_params.get(slot).map(|p| p.type_id))
-                .unwrap_or(functor_ref_type);
             if slot < new_params.len() {
                 new_params[slot].type_id = functor_ref_type;
             }
@@ -1270,7 +1261,6 @@ impl ClosureLowerer {
                     local_index: slot as u32,
                     functor_id: functor.id,
                     functor_ref_type,
-                    original_fn_type,
                 });
             }
         }
@@ -1305,6 +1295,8 @@ impl ClosureLowerer {
             effects: callee.effects.clone(),
             retains: callee.retains.clone(),
             immediates: callee.immediates.clone(),
+            trap: callee.trap.clone(),
+            linear_memory: callee.linear_memory,
             body: new_body,
             span: callee.span,
             local_count: callee.local_count,
@@ -2117,56 +2109,20 @@ impl TirRefVisitor for FnParamSpecCollector<'_> {
     }
 }
 
-/// Phase 2.5 predicate visitor: report whether any of the listed
-/// fn-param locals appears as a direct struct-field value somewhere in
-/// the body. Such locals can't be specialised — the struct field type
-/// is `fn(...)`, not `&$Closure_N`.
-///
-/// Recurses through nested struct literals so a fn-param wrapped inside
-/// `Foo { inner: Bar { f: param } }` still counts. Once `found` flips to
-/// true, subsequent visits short-circuit cheaply.
-/// A use that pins a fn-param to its declared `fn(...)` type.
-///
-/// A struct field keeps that type, an assignment stores a value the
-/// specialization cannot narrow, and a return hands the bare functor to a
-/// caller whose own type says canonical closure.
+/// Finds an assignment to a fn-param, whose `fn(...)` value the param retyped to
+/// `&$Closure_N` cannot hold.
 struct UnspecializableFnParam<'a> {
     fn_param_indices: &'a [u32],
     found: bool,
 }
 
-impl UnspecializableFnParam<'_> {
-    fn is_fn_param(&self, expr: &TirExpr) -> bool {
-        matches!(&expr.kind, TirExprKind::Local { index, .. } if self.fn_param_indices.contains(index))
-    }
-}
-
 impl TirRefVisitor for UnspecializableFnParam<'_> {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        if self.found {
-            return;
-        }
-        if let TirStmtKind::Return { value: Some(value) } = &stmt.kind
-            && self.is_fn_param(value)
-        {
-            self.found = true;
-            return;
-        }
-        self.walk_stmt(stmt);
-    }
-
     fn visit_expr(&mut self, expr: &TirExpr) {
         if self.found {
             return;
         }
-        if let TirExprKind::StructLiteral { fields, .. } = &expr.kind
-            && fields.iter().any(|field| self.is_fn_param(&field.value))
-        {
-            self.found = true;
-            return;
-        }
         if let TirExprKind::Assign { target, .. } = &expr.kind
-            && self.is_fn_param(target)
+            && matches!(&target.kind, TirExprKind::Local { index, .. } if self.fn_param_indices.contains(index))
         {
             self.found = true;
             return;

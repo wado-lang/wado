@@ -1,0 +1,14 @@
+// The host may hand back a type no arm names, so a narrowing match ends in `_`.
+use { Element, HtmlInputElement, Node } from "web:dom";
+
+fn kind(n: Node) -> i32 {
+    return match n {
+        input: HtmlInputElement => 1,
+        el: Element => 2,
+    };
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "non-exhaustive match: type patterns cannot cover every type the host may hand back; add a final `_` arm"}

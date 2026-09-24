@@ -494,9 +494,19 @@ Note:
 
 #### Exhaustiveness Checking
 
-1. For variant types: all cases must be covered, or `_` wildcard present
-2. For primitive types: `_` wildcard required (or all possible values, impractical)
-3. For tuple types: component patterns must be exhaustive
+The guardless arms together must take every value of the scrutinee's type. A
+guarded arm takes part only in reachability, never in coverage.
+
+1. An enum, a variant, `bool`, a tuple and a struct are covered case by case,
+   and a case only as far as its payload or field patterns reach:
+   `Some(1)`, `None` leaves `Some` of every other value uncovered.
+2. An integer or `char` is covered by ranges and literals that together span
+   its type.
+3. A string, a float, a constant pattern and a type pattern cover only the
+   values they name, so a match over them ends in `_`.
+
+A missing value is reported as a pattern, such as `Some(Some(false))` or
+`A(Some(-2147483648..=0))`.
 
 #### Pattern Binding Scope
 

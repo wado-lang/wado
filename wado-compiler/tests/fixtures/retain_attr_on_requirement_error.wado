@@ -16,6 +16,9 @@ trait Keeper {
 
     #[result(owned)]
     fn fresh(&self) -> Bag;
+
+    #[trap(never)]
+    fn safe(&self) -> i32;
 }
 
 interface Sink {
@@ -26,6 +29,9 @@ interface Sink {
     // reaches an impl that is called rather than lowered.
     #[immediate(lane)]
     fn pick(lane: i32) -> i32;
+
+    #[linear_memory(read)]
+    fn peek(addr: i32) -> i32;
 }
 
 export fn run() {}
@@ -35,7 +41,9 @@ __DATA__
     "compile_error": "`Keeper::keep` cannot declare `#[retain]`",
     "compile_errors_contains": [
         "`Keeper::fresh` cannot declare `#[result]`",
+        "`Keeper::safe` cannot declare `#[trap]`",
         "`Sink::take` cannot declare `#[retain]`",
-        "`Sink::pick` cannot declare `#[immediate]`"
+        "`Sink::pick` cannot declare `#[immediate]`",
+        "`Sink::peek` cannot declare `#[linear_memory]`"
     ]
 }

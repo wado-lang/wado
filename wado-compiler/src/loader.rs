@@ -1206,11 +1206,10 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// [`ModuleSource::Wasm`] via the dependency index. Drained like
     /// `pending_implicit_wasm_imports`, but from the resolved source directly.
     pending_component_imports: Vec<(ModuleSource, WasmAssetKind)>,
-    /// Bundled stdlib packages a decoded CM component transitively imports (its
-    /// host-leaf capabilities). Loaded once every component import is seen, so
-    /// effect reconstruction can require the effects behind the component;
-    /// otherwise an impure dependency's capability would go unrequested.
-    pending_host_leaf_bindings: IndexSet<ModuleSource>,
+    /// Bundled stdlib modules a decoded CM component needs: its host-leaf
+    /// packages and whatever its binding module imports. Loaded once every
+    /// component import is seen.
+    pending_component_stdlib_deps: IndexSet<ModuleSource>,
     /// The entry module source (for dedup when sub-modules import back to entry)
     entry_module_source: Option<ModuleSource>,
     /// Canonical name of the entry module (e.g., "./`cross_module_type_identity.wado`")
@@ -1243,7 +1242,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             loaded_wasm_namespaces: IndexSet::default(),
             pending_implicit_wasm_imports: Vec::new(),
             pending_component_imports: Vec::new(),
-            pending_host_leaf_bindings: IndexSet::default(),
+            pending_component_stdlib_deps: IndexSet::default(),
             entry_module_source: None,
             entry_canonical_name: None,
             entry_dir: String::new(),
@@ -1434,8 +1433,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
 
         // Now that every component import (file-path and registry-coordinate)
-        // has been seen, load the WASI packages behind their host-leaf imports.
-        self.load_pending_host_leaf_bindings();
+        // has been seen, load the stdlib modules they need.
+        self.load_pending_component_stdlib_deps();
         let queued = std::mem::take(&mut self.pending_implicit_wasm_imports);
         for (from_ms, kind, use_decl) in queued {
             self.handle_wasm_import(&from_ms, kind, &use_decl).await?;
@@ -1648,9 +1647,24 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             if let Some((namespace, rest)) = CmNamespace::split_specifier(fq) {
                 let package = rest.split('/').next().unwrap_or(rest);
                 let ms = self.interner.binding(namespace, package);
-                self.pending_host_leaf_bindings.insert(ms);
+                self.pending_component_stdlib_deps.insert(ms);
             }
         }
+
+        let mut binding_imports = VecDeque::new();
+        let mut binding_wasm_imports = Vec::new();
+        self.collect_imports(
+            &bindings.module,
+            source,
+            &mut binding_imports,
+            &mut binding_wasm_imports,
+        )?;
+        assert!(
+            binding_wasm_imports.is_empty(),
+            "a component binding module imports no wasm asset"
+        );
+        self.pending_component_stdlib_deps
+            .extend(binding_imports.into_iter().map(|(_, ms)| ms));
 
         self.cm_source_interfaces.extend(bindings.source_interfaces);
         self.bind_module(&bindings.module, source)?;
@@ -1718,14 +1732,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         Ok(())
     }
 
-    /// Load the WASI stdlib packages behind imported components' host-leaf
-    /// capabilities so their effects are in scope for reconstruction. Runs
-    /// after every component import — file-path (`with { type: "wasm" }`) and
-    /// registry-coordinate — has been processed, since a coordinate dependency
-    /// is drained after `load_implicit_modules` yet still contributes host-leaf
-    /// imports; loading here catches both paths in one place.
-    fn load_pending_host_leaf_bindings(&mut self) {
-        let sources: Vec<ModuleSource> = std::mem::take(&mut self.pending_host_leaf_bindings)
+    /// Load the stdlib modules imported components need. Runs after every
+    /// component import, file-path and registry-coordinate alike, is processed.
+    fn load_pending_component_stdlib_deps(&mut self) {
+        let sources: Vec<ModuleSource> = std::mem::take(&mut self.pending_component_stdlib_deps)
             .into_iter()
             .collect();
         self.load_stdlib_sources(sources);

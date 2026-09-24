@@ -155,7 +155,7 @@ fn "opt_closure_devirt_iter_map.wado/rows"(w, x) {
     let acc: i32;
     let elements_10: ref Array<i32>;
     let self_18: ref "core:prelude/traits.wado//IterMap<core:prelude/range.wado/RangeExclusive<i32>,i32>";
-    let f: ref struct;
+    let f: ref "opt_closure_devirt_iter_map.wado//$Closure_0";
     let result: ref "core:prelude//List<i32>";
     let end: i32;
     let item_32: i32;
@@ -169,7 +169,6 @@ fn "opt_closure_devirt_iter_map.wado/rows"(w, x) {
     let $sroa_$iter_1_repr: ref Array<i32>;
     let $sroa_$iter_1_index: i32;
     let $licm_inner_64: ref "core:prelude/range.wado//RangeExclusive<i32>";
-    let $functor_57: ref "opt_closure_devirt_iter_map.wado//$Closure_0";
     elements_10 = array.new_fixed<i32>();
     out = struct.new "core:prelude//List<i32>" { repr: elements_10, used: 0 };
     o = 0;
@@ -179,9 +178,8 @@ fn "opt_closure_devirt_iter_map.wado/rows"(w, x) {
         l1: loop {
             break_if b0 o >= $licm_used_41;
             row = builtin::array_get_value<ref "core:prelude//List<i32>">($licm_repr_42, o);
-            $functor_57 = struct.new "opt_closure_devirt_iter_map.wado//$Closure_0" { $capture_0: row, $capture_1: x };
-            f = struct.new "canonical//CanonicalClosure_0" { env: $functor_57, func: ref.func "closure/opt_closure_devirt_iter_map.wado/$closure_wrapper_0" };
-            self_18 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/range.wado/RangeExclusive<i32>,i32>" { inner: struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 0, end: row.used }, f: f };
+            f = struct.new "opt_closure_devirt_iter_map.wado//$Closure_0" { $capture_0: row, $capture_1: x };
+            self_18 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/range.wado/RangeExclusive<i32>,i32>" { inner: struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 0, end: row.used }, f: struct.new "canonical//CanonicalClosure_0" { env: f, func: ref.func "closure/opt_closure_devirt_iter_map.wado/$closure_wrapper_0" } };
             elements_46 = array.new_fixed<i32>();
             result = struct.new "core:prelude//List<i32>" { repr: elements_46, used: 0 };
             $licm_inner_64 = self_18.inner;
@@ -195,7 +193,7 @@ fn "opt_closure_devirt_iter_map.wado/rows"(w, x) {
                         multivalue_bind [$mv$$local_2$0, $mv$$local_2$1] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^core:prelude/traits.wado/Iterator::next"($licm_inner_64);
                         if $mv$$local_2$0 == 0 {
                             $sroa_slot_57 = 0;
-                            break $inline_core_prelude_traits_wado_IterMap_core_prelude_range_wado_RangeExclusive_i32__i32__core_prelude_traits_wado_Iterator__next_2: $sroa_slot_58 = "opt_closure_devirt_iter_map.wado/opt_closure_devirt_iter_map.wado/$Closure_0::$call"($functor_57, $mv$$local_2$1);
+                            break $inline_core_prelude_traits_wado_IterMap_core_prelude_range_wado_RangeExclusive_i32__i32__core_prelude_traits_wado_Iterator__next_2: $sroa_slot_58 = "opt_closure_devirt_iter_map.wado/opt_closure_devirt_iter_map.wado/$Closure_0::$call"(f, $mv$$local_2$1);
                         } else {
                         }
                         $sroa_slot_57 = 1;

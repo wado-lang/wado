@@ -1117,7 +1117,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     );
                 }
             }
-            for required in decl.methods.iter().filter(|m| !m.has_body) {
+            for required in decl.methods.iter().filter(|m| m.is_required()) {
                 if header.methods.iter().all(|m| m.name != required.name) {
                     let _ = logger.error_in(
                         &header.module,

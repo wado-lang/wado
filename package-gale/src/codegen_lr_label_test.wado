@@ -71,20 +71,15 @@ fn scan_e_body<S: AsStrSlice>(out: S) -> String {
     return out.substr_bytes(idx, body_end);
 }
 
-// Regression: the static LR-suffix scan dispatch loop (`gen_lr_suffix_dispatch`)
-// lacked the no-progress guard its ATN twins (`gen_lr_suffix_dispatch_atn` /
-// `gen_lr_fn_atn`) carry. Every valid LR suffix begins with a mandatory
-// operator token, so a committed iteration always advances; the guard makes
-// that termination structural instead of relying on each suffix consuming
-// input. Pin its presence so the scan loop stays in lockstep with the ATN
-// path.
-test "static LR scan dispatch emits a no-progress guard" {
+// A suffix that can match empty would spin the static LR scan loop, so it keeps
+// the no-progress guard; `scan_gate_test` pins its absence where every suffix consumes.
+test "static LR scan dispatch guards a suffix that can match empty" {
     let g4 = "grammar T;
-e : e '*' e
-  | e '?' e ':' e
+e : e x
   | '(' e ')'
   | INT
   ;
+x : '*'? ;
 INT : '0'..'9'+ ;
 WS : (' '|'\\n') -> skip ;
 ";

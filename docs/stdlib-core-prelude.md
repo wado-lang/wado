@@ -795,9 +795,13 @@ literals stops folding to one.
 
 #### `fn is_char_boundary(&self, index: i32) -> bool`
 
-#### `fn sub(&self, start: i32, end: i32) -> StrSlice`
+#### `fn floor_char_boundary(&self, index: i32) -> i32`
 
-#### `fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice`
+#### `fn ceil_char_boundary(&self, index: i32) -> i32`
+
+#### `fn slice(&self, start: i32, end: i32) -> StrSlice`
+
+#### `fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice`
 
 #### `fn as_bytes(&self) -> ByteSlice`
 
@@ -934,6 +938,8 @@ Returns Some(value) when fulfilled, None if the writer dropped without writing.
 `#[cm("future-cancel-read")]`
 
 Cancel an in-progress read. Blocks until cancellation completes.
+Traps if this end is still joined to a `WaitableSet` — leave the set
+first.
 
 #### `fn drop(self)`
 
@@ -957,6 +963,8 @@ Fulfill the future with a value.
 `#[cm("future-cancel-write")]`
 
 Cancel an in-progress write. Blocks until cancellation completes.
+Traps if this end is still joined to a `WaitableSet` — leave the set
+first.
 
 #### `fn drop(self)`
 
@@ -988,6 +996,8 @@ traps, so a loop breaks on the result, never on an empty chunk.
 `#[cm("stream-cancel-read")]`
 
 Cancel an in-progress read. Blocks until cancellation completes.
+Traps if this end is still joined to a `WaitableSet` — leave the set
+first.
 
 #### `fn drop(self)`
 
@@ -1031,6 +1041,8 @@ type is a compile error, and `write` is what carries it.
 `#[cm("stream-cancel-write")]`
 
 Cancel an in-progress write. Blocks until cancellation completes.
+Traps if this end is still joined to a `WaitableSet` — leave the set
+first.
 
 #### `fn drop(self)`
 
@@ -4291,8 +4303,8 @@ here directly, skipping `encode_char`'s width dispatch.
 
 #### `pub fn truncate(&mut self, byte_len: i32)`
 
-Truncates the string to the given byte length.
-Panics if `byte_len` is negative or not on a UTF-8 character boundary.
+Truncates the string to the given byte length. Panics if `byte_len` is
+negative or off a character boundary; round a budget with `floor_char_boundary`.
 
 #### `pub fn truncate_unchecked(&mut self, byte_len: i32)`
 
@@ -4312,6 +4324,16 @@ If `char_count` >= number of characters, the string is unchanged.
 
 Returns true if `byte_index` is 0, `self.len()`, or the start of a
 UTF-8 character in this string.
+
+#### `pub fn floor_char_boundary(&self, byte_index: i32) -> i32`
+
+The largest character boundary `<= byte_index`, or `len()` beyond it:
+cuts to a byte budget with `truncate` or `substr_bytes`. Panics if negative.
+
+#### `pub fn ceil_char_boundary(&self, byte_index: i32) -> i32`
+
+The smallest character boundary `>= byte_index`, or `len()` beyond it.
+Panics if `byte_index` is negative.
 
 #### `pub fn pop(&mut self) -> Option<char>`
 
@@ -4350,8 +4372,8 @@ Non-ASCII bytes are compared exactly.
 
 #### `pub fn substr_bytes(&self, start: i32, end: i32) -> String`
 
-Extract a substring by byte range `[start, end)`.
-Panics if the range is out of bounds or either end is not on a UTF-8 boundary.
+Extract a substring by byte range `[start, end)`. Panics if the range is out
+of bounds or off a character boundary; round a budget with `floor_char_boundary`.
 
 #### `pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String`
 
@@ -4664,13 +4686,23 @@ checks.
 Returns true if `index`, counted from the view's start, is 0, `len()`,
 or the start of a character.
 
-#### `pub fn sub(&self, start: i32, end: i32) -> StrSlice`
+#### `pub fn floor_char_boundary(&self, index: i32) -> i32`
+
+The largest character boundary `<= index`, or `len()` beyond it.
+Panics if `index` is negative.
+
+#### `pub fn ceil_char_boundary(&self, index: i32) -> i32`
+
+The smallest character boundary `>= index`, or `len()` beyond it.
+Panics if `index` is negative.
+
+#### `pub fn slice(&self, start: i32, end: i32) -> StrSlice`
 
 A sub-view over `[start, end)`, counted from this view's start.
 Panics if the range is out of bounds or either end is off a character
 boundary.
 
-#### `pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice`
+#### `pub fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice`
 
 `#[inline]`
 

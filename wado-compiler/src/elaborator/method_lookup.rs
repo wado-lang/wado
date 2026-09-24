@@ -2392,8 +2392,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_found = true;
         }
 
-        // If the method wasn't found in the impl block, check the trait
-        // declaration for a default method with that name
         if !method_found {
             // The block's own trait, by declaration: a second trait of that
             // spelling in this frame would otherwise supply the default body,
@@ -2402,7 +2400,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let trait_module = declaring.map(|sig| sig.module.clone());
             if let Some(default_method) = declaring
                 .and_then(|sig| sig.method(method_name))
-                .filter(|m| m.default_body.is_some())
+                .filter(|m| m.is_inherited())
                 .cloned()
             {
                 let mut declaring_args = vec![receiver_type_id.unwrap_or(TypeTable::UNKNOWN)];

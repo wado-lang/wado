@@ -1,0 +1,11 @@
+// A type pattern nested in a `let` destructure is refutable in the same way.
+use { Element, HtmlInputElement } from "web:dom";
+
+fn take(pair: [Element, i32]) {
+    let [input: HtmlInputElement, n] = pair;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error":":5:10: analysis error: invalid pattern: refutable pattern in `let` binding: not every `Element` is `HtmlInputElement`"}

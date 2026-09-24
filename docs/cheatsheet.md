@@ -325,6 +325,10 @@ println(`${point:#?}`);                   // pretty-print with indentation (Insp
 let n = s.len();                         // UTF8 byte length
 let chars = s.chars().count();           // character count based on Unicode scalars
 
+// Byte indices must sit on a character boundary, or substr_bytes/truncate panic.
+// Round a byte budget down to one first; past len() it clamps to len().
+let head = s.substr_bytes(0, s.floor_char_boundary(200));
+
 // String building
 let mut builder = String::with_capacity(20);
 let part: String = "Hello";
@@ -345,7 +349,7 @@ reference to one, or a view of one — Wado's answer to Rust's `AsRef<str>`. See
 
 ```wado
 let v = "banana".as_str_slice();
-let part = v.sub(1, 4);          // "ana"; panics off a character boundary
+let part = v.slice(1, 4);        // "ana"; panics off a character boundary
 part.len();                      // 3, in bytes
 part.to_string();                // copies out, here and only here
 for let c of part.chars() { ... }
@@ -726,6 +730,15 @@ let grade = match score {
     90..=100 => "A",
     _ => "invalid",
 };
+
+// Type patterns: `p: T` in any pattern position; a `let` annotation is one.
+// Narrowing a resource to one that extends it asks the host, so it is
+// refutable, and a match over type patterns ends in `_`.
+let value = match node {
+    input: HtmlInputElement => input.value(),
+    _ => "",
+};
+let input: HtmlInputElement = el else { return; };
 
 // Constant patterns: an immutable global or associated const matches by
 // value, not a binding. TK_FOO/TK_BAR are `global`s, and a namespace prefix
@@ -1269,7 +1282,7 @@ f64::from_str("3.14")                 // Result<f64, ParseFloatError>
 i32::from_str("42")                   // Result<i32, ParseIntError>
 i32::from_str_hex("ff")               // Result<i32, ParseIntError> (radix 16)
 i32::from_str_radix("1010", 2)        // Result<i32, ParseIntError> (radix 2..=36)
-i32::from_str("xyz42abc".as_str_slice().sub(3, 5))  // no substring alloc
+i32::from_str("xyz42abc".as_str_slice().slice(3, 5))  // no substring alloc
 
 i32::min(a, b)  i32::max(a, b)
 i32::clamp(v, lo, hi)                 // traps when lo > hi
@@ -1701,6 +1714,10 @@ Streaming a file (rather than holding it) stays on `wasi:filesystem`; see
 
 `TreeMap<K, V>` and `TreeSet<T>`, iterating in insertion order. See
 [`core:collections`](./stdlib-core-collections.md).
+
+`TreeMap<K, V>` is also the Wado spelling of the Component Model `map<K, V>`, so
+it crosses a component boundary. There `K` must be `bool`, `char`, `String`, or
+an integer. A repeated key on the wire takes the last pair's value.
 
 ```wado
 use { TreeMap, TreeSet } from "core:collections";

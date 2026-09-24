@@ -145,8 +145,9 @@ fn cm_align_named(name: &str) -> u32 {
 /// Canonical ABI size for generic types.
 fn cm_size_generic(generic: &GenericType) -> u32 {
     match generic.name.as_str() {
-        // list<T> is (ptr: i32, len: i32)
-        "List" => 8,
+        // list<T> is (ptr: i32, len: i32); map<K, V> despecializes to
+        // list<tuple<K, V>> and so carries the same pair.
+        "List" | "TreeMap" => 8,
         "Option" if generic.args.len() == 1 => layout_option(&generic.args[0]).size,
         "Result" if generic.args.len() == 2 => {
             layout_result(&generic.args[0], &generic.args[1]).size
@@ -162,7 +163,7 @@ fn cm_size_generic(generic: &GenericType) -> u32 {
 /// Canonical ABI alignment for generic types.
 fn cm_align_generic(generic: &GenericType) -> u32 {
     match generic.name.as_str() {
-        "List" => 4, // (ptr: i32, len: i32) — aligned to i32
+        "List" | "TreeMap" => 4, // (ptr: i32, len: i32) — aligned to i32
         "Option" if generic.args.len() == 1 => layout_option(&generic.args[0]).align,
         "Result" if generic.args.len() == 2 => {
             layout_result(&generic.args[0], &generic.args[1]).align

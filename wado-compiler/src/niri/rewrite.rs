@@ -1120,10 +1120,15 @@ pub(super) fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) ->
     let keep: Operand = match &body.exprs[e].kind {
         ExprKind::Binary { left, op, right } => {
             let (left, op, right) = (*left, *op, *right);
-            match (operand_bool(body, left), op, operand_bool(body, right)) {
-                (Some(false), NirBinaryOp::Or, _) | (Some(true), NirBinaryOp::And, _) => right,
-                (_, NirBinaryOp::Or, Some(false)) | (_, NirBinaryOp::And, Some(true)) => left,
-                _ => return false,
+            let Some(neutral) = op.bool_identity() else {
+                return false;
+            };
+            if operand_bool(body, left) == Some(neutral) {
+                right
+            } else if operand_bool(body, right) == Some(neutral) {
+                left
+            } else {
+                return false;
             }
         }
         _ => return false,
@@ -1178,8 +1183,8 @@ pub(super) fn absorbing_short_circuit(body: &Body, e: ExprId) -> Option<bool> {
     };
     let (left, op, right) = (*left, *op, *right);
     let absorbing = match op {
-        NirBinaryOp::Or => true,
-        NirBinaryOp::And => false,
+        NirBinaryOp::Or | NirBinaryOp::BitOr => true,
+        NirBinaryOp::And | NirBinaryOp::BitAnd => false,
         _ => return None,
     };
     let discarded = if operand_bool(body, left) == Some(absorbing) {

@@ -1123,7 +1123,7 @@ impl ValuePool {
                 return lhs;
             }
         }
-        // The same argument for the integer identities, which `sub_unchecked`
+        // The same argument for the integer identities, which `slice_unchecked`
         // plants as `self.start + x` wherever a view spans a whole string. The
         // kept operand is the one whose type the operator returns, so a pool
         // entry that recorded no type still folds.

@@ -1,5 +1,5 @@
 use { MemberField, MemberMethod, MemberDecls } from "./java2wado/jmembers.wado";
-use { collect_range } from "./text.wado";
+use { collect_range, is_ident_char } from "./text.wado";
 
 pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, String> {
     let chars: List<char> = body.chars().collect();
@@ -61,10 +61,6 @@ fn skip_ws(chars: &List<char>, start: i32, n: i32) -> i32 {
         i += 1;
     }
     return i;
-}
-
-fn is_ident_char(c: char) -> bool {
-    return 'a' <= c <= 'z' || 'A' <= c <= 'Z' || '0' <= c <= '9' || c == '_';
 }
 
 fn word_at<S: AsStrSlice>(chars: &List<char>, i: i32, n: i32, word: S) -> bool {

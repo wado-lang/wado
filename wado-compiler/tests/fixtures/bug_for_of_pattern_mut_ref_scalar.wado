@@ -1,0 +1,15 @@
+// A for-of binding over `&mut T` refuses a `&mut` onto a scalar, as `let` does:
+// Wasm GC has no interior pointer to one, so the write would reach a copy.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut ts: List<[i32, i32]> = [[1, 2]];
+    for let [a, _] of &mut ts {
+        *a += 1;
+    }
+    println(`${ts[0].0}`);
+}
+
+__DATA__
+{"compile_error": ":8:14: analysis error: cannot assign: cannot bind 'a' as a mutable reference to a primitive: destructure by value, or take the reference to the whole value"}

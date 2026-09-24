@@ -12,12 +12,12 @@
 # which this tree-pinning driver does not cover.
 #
 # Usage: scripts/regen-oracle.sh [sqlite|json|all]   (default: all)
-# Needs java+javac and a built `wado` (WADO env, default ../target/release/wado).
+# Needs java+javac and a built `wado` (WADO env, default ../target/debug/wado).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 export ANTLR4_VERSION="${ANTLR4_VERSION:-4.13.2}"
-WADO="${WADO:-../target/release/wado}"
+WADO="${WADO:-../target/debug/wado}"
 
 # Strip ANTLR4's <EOF> (Gale omits it) and collapse whitespace — safe only for
 # WS-skipping grammars, where no tree token carries a significant space.
@@ -65,13 +65,13 @@ regen_one() {
     echo '    with {'
     echo "        generator: { module: \"../src/generator.wado\", output_dir: \"$outdir\" },"
     echo '    };'
-    echo "use { normalize_tree } from \"./grammars/$grammar\";"
+    echo 'use { normalize_tree } from "./support/tree_compare.wado";'
     echo
-    echo 'fn assert_tree(input: &String, expected: &String) {'
+    echo 'fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {'
     echo "    let result = ${module}::parse(input);"
     echo "    let actual = ${module}::to_string_tree(&result);"
     echo '    let norm = normalize_tree(expected);'
-    echo '    assert actual == norm, `\ninput:    ${*input}\nexpected: ${norm}\nactual:   ${actual}`;'
+    echo '    assert actual == norm, `\ninput:    ${input}\nexpected: ${norm}\nactual:   ${actual}`;'
     echo '}'
     echo
     local i=0 todo=0
@@ -87,12 +87,13 @@ regen_one() {
         echo "#[TODO]"
       fi
       echo "test \"oracle: $name\" {"
-      echo "    assert_tree(&\"$(printf '%s' "$line" | esc)\", &\"$(printf '%s' "$oracle" | esc)\");"
+      echo "    assert_tree(\"$(printf '%s' "$line" | esc)\", \"$(printf '%s' "$oracle" | esc)\");"
       echo "}"
       echo
     done < "$cases"
     echo "// $key: $i cases, $todo #[TODO] (Gale diverges from ANTLR4)." >&2
   } > "$out"
+  $WADO format -w "$out" >/dev/null
   echo "wrote $out" >&2
 }
 

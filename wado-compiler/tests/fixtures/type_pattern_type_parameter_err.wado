@@ -1,0 +1,12 @@
+// A type parameter states nothing about whether it narrows.
+fn pick<T>(opt: Option<i32>) -> i32 {
+    if let Some(x: T) = opt {
+        return 1;
+    }
+    return 0;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "a type pattern needs a concrete type: `T` is a type parameter, so nothing states whether it narrows"}

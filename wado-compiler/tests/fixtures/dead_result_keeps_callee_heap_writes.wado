@@ -1,0 +1,39 @@
+// A call whose result nothing reads still runs when the callee stores through
+// what it was handed: a field of a `&mut` struct, a receiver, or an array.
+use { println, Stdout } from "core:cli";
+
+struct Cell { v: i32 }
+
+#[inline(never)]
+fn bump(c: &mut Cell) -> i32 {
+    c.v = c.v + 1;
+    return 0;
+}
+
+#[inline(never)]
+fn shorten(l: &mut List<i32>) -> i32 {
+    l.truncate(1);
+    return 0;
+}
+
+#[inline(never)]
+fn poke(a: &mut Array<i32>) -> i32 {
+    builtin::array_set(a, 0, 9);
+    return 0;
+}
+
+export fn run() with Stdout {
+    let mut c = Cell { v: 0 };
+    let unused_bump = bump(&mut c);
+    let mut l: List<i32> = [1, 2, 3];
+    let unused_shorten = shorten(&mut l);
+    let mut a: Array<i32> = builtin::array_new(1);
+    let unused_poke = poke(&mut a);
+    l.truncate(0);
+    println(`${c.v} ${l.len()} ${builtin::array_get_value(&a, 0)}`);
+}
+
+__DATA__
+{
+    "stdout": "1 0 9\n"
+}

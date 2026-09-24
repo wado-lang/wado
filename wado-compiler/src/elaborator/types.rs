@@ -437,6 +437,16 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An attribute describing a declaration with no body, written on a trait
+    /// or interface requirement; `reason` is its schema's `on_requirement`.
+    AttributeOnRequirement {
+        owner: String,
+        operation: String,
+        attribute: &'static str,
+        reason: &'static str,
+        span: Span,
+    },
+
     /// Invalid numeric literal
     InvalidLiteral {
         message: String,
@@ -1442,6 +1452,17 @@ impl TypeError {
             } => (
                 Code::InvalidSyntax,
                 format!("`{owner}::{operation}` {detail}"),
+                *span,
+            ),
+            TypeError::AttributeOnRequirement {
+                owner,
+                operation,
+                attribute,
+                reason,
+                span,
+            } => (
+                Code::InvalidSyntax,
+                format!("`{owner}::{operation}` cannot declare `#[{attribute}]`: {reason}"),
                 *span,
             ),
             TypeError::InvalidLiteral { message, span } => {
@@ -2561,6 +2582,13 @@ pub(super) struct LabeledBlockTarget {
     pub(super) expected_type: Option<TypeId>,
 }
 
+/// A position whose pattern must match every value it is given.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum BindingSite {
+    Let,
+    ForOf,
+}
+
 /// Function context during resolution with scope tracking
 pub(super) struct FunctionContext {
     /// Stack of scopes (each scope maps name -> `LocalVar`)
@@ -2624,6 +2652,9 @@ pub(super) struct FunctionContext {
     /// `update` expression runs before the next iteration. Empty outside
     /// a C-style for body.
     pub(super) for_continue_labels: Vec<String>,
+    /// The binding site whose pattern is being resolved, when it must match
+    /// every value. `None` inside `match`, `if let` and `while let`.
+    pub(super) irrefutable_site: Option<BindingSite>,
     /// Power-assert capture side-channel. `Some` only while
     /// [`Elaborator::desugar_assert`] is resolving an assert condition;
     /// the [`Elaborator::resolve_expr`] entry consults it to extract
@@ -2701,6 +2732,7 @@ impl FunctionContext {
             in_handler_method: false,
             next_internal: 0,
             for_continue_labels: Vec::new(),
+            irrefutable_site: None,
             assert_capture_ctx: None,
             reify_assert_capture_ctx: None,
             compound_hoist_types: IndexMap::default(),
@@ -2784,6 +2816,7 @@ impl FunctionContext {
             in_handler_method: false,
             next_internal: 0,
             for_continue_labels: Vec::new(),
+            irrefutable_site: None,
             assert_capture_ctx: None,
             reify_assert_capture_ctx: None,
             compound_hoist_types: IndexMap::default(),

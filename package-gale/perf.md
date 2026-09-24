@@ -141,10 +141,12 @@ arm, arms' ranges disjoint):
   stack, which `classify` reads inside the override loop and nowhere else. A
   query with no rule-context capture leaves that loop empty, so the walk is
   unobservable: `hl_cover_unvisited`'s token sweep reaches the same captures.
-  `gen_highlight` now emits the call only when the query resolved an override.
+  `gen_highlight` emitted the call only when the query resolved an override.
   Skipping the walk **without** also gating `hl_cover_unvisited`'s sort is a
   _loss_ (1.553–1.615) — the sweep alone is already in start order, and sorting
-  ~2900 captures costs more than the walk did.
+  ~2900 captures costs more than the walk did. The gate has since been removed.
+  Every query in the tree carries a rule context, so no generated parser took
+  the skip, and the second path cost more to reason about than it saved.
 - **Escape HTML by byte run (+1.8%).** `highlight_html` drove a `StrCharIter`
   and called `escape_html_char`, which called `String::push` — three calls per
   source character, ~40K per iteration. The escapable set is ASCII, so a byte
@@ -198,12 +200,12 @@ Whole branch against `origin/main`, four alternating pairs, ranges disjoint:
 The mask test also retires the "multi-token guard re-test" item below as a
 cost: the re-tested `_kind_set_37` is now a subtract and a compare.
 
-One lever is left in the highlight half. `HighlightVisitor::new` re-resolves a
-fully static mapping on every call, ~170 `capture_id_of` scans plus the
-`class_text` rewrites, about 2.5% of the profile. The compile-time engine
-cannot fold it, its 10K-step budget being far under the string compares that
-takes, so the fix is `highlight_gen` emitting the resolved `default_ids` and
-`capture_classes` tables directly.
+The last lever in the highlight half has landed too. `HighlightVisitor::new`
+used to re-resolve a fully static mapping on every call: ~170 `capture_id_of`
+scans plus the `class_text` rewrites, about 2.5% of the profile. The
+compile-time engine could not fold it, because its 10K-step budget is far below
+the string compares that takes. `highlight_gen` now emits the resolved tables as
+the `HIGHLIGHT_MAPPING` global, and the visitor borrows it.
 
 ### Live profile (`syntax_highlight`, 2999 leaf samples @1 ms, 2026-09-02)
 
@@ -279,6 +281,27 @@ re-measure before committing. Candidates read off the profile above:
   sidesteps by requiring exactly one token — worth it only if a future
   profile still shows `_kind_set_*` self-time (2.6–4.7% pre-landing) after
   the single-token cut.
+
+- **Scan time grows exponentially with nesting (measured, deferred 2026-09).**
+  On the dev profile, one parse takes these times:
+
+  | Rust input   | depth → ms           |
+  | ------------ | -------------------- |
+  | `f(f(…))`    | 12 → 101, 20 → 35875 |
+  | `A { x: … }` | 10 → 77, 14 → 2056   |
+  | `((…))`      | 16 → 379, 20 → 6155  |
+
+  An identifier-led atom scans the whole argument twice. The first scan is
+  `enumerationVariantExpression`'s `Path(args)` in the tournament, and the
+  second is the winning path's call suffix in the LR loop. Each level doubles
+  the work, and the parse-side `_sd_p_*` tournaments multiply it again. SQLite
+  shows the same effect on nested parens and `CASE`, where it is n². Four
+  select alternatives also each scan a plain `SELECT` to its end.
+
+  A packrat memo would make both linear, because a scan decides nothing and is
+  a pure function of its inputs. It would be keyed per scan function on
+  (pos, min_prec, follow, gate), with a dense array per rule. It is deferred
+  because it adds a per-parse cost to every grammar the tournament reaches.
 
 ### Generation-time cost: the generator itself (2026-07)
 

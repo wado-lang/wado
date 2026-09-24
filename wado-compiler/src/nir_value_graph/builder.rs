@@ -638,6 +638,16 @@ impl<'a> Builder<'a> {
                 return Some(v);
             }
         }
+        // The eager `&` / `|` / `^` over bools obey the identities too, but not
+        // the absorbing folds: the other side was evaluated, and may trap.
+        if let Some(identity) = op.bool_identity() {
+            if self.pool.kind(lhs).as_bool() == Some(identity) {
+                return Some(rhs);
+            }
+            if self.pool.kind(rhs).as_bool() == Some(identity) {
+                return Some(lhs);
+            }
+        }
         let lv = self.value_to_const(lhs, left, tt)?;
         let rv = self.value_to_const(rhs, right, tt)?;
         let result = const_eval::eval_binary(lv, op, rv)?;
