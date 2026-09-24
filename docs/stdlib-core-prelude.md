@@ -1211,6 +1211,36 @@ An owned, fixed-length byte buffer.
 
 #### `pub const NAN: f32`
 
+#### `pub const MAX: f32`
+
+#### `pub const MIN: f32`
+
+#### `pub const MIN_POSITIVE: f32`
+
+The smallest positive normal value.
+
+#### `pub const EPSILON: f32`
+
+The gap between 1.0 and the next larger value.
+
+#### `pub const RADIX: i32`
+
+#### `pub const MANTISSA_DIGITS: i32`
+
+Significand bits, the implicit leading one included.
+
+#### `pub const DIGITS: i32`
+
+Decimal digits that survive a round trip through the type.
+
+#### `pub const MIN_EXP: i32`
+
+#### `pub const MAX_EXP: i32`
+
+#### `pub const MIN_10_EXP: i32`
+
+#### `pub const MAX_10_EXP: i32`
+
 #### `pub fn to_string(&self) -> String`
 
 #### `pub fn abs(x: f32) -> f32`
@@ -1478,6 +1508,36 @@ Creates an f32 from its bit representation.
 
 #### `pub const NAN: f64`
 
+#### `pub const MAX: f64`
+
+#### `pub const MIN: f64`
+
+#### `pub const MIN_POSITIVE: f64`
+
+The smallest positive normal value.
+
+#### `pub const EPSILON: f64`
+
+The gap between 1.0 and the next larger value.
+
+#### `pub const RADIX: i32`
+
+#### `pub const MANTISSA_DIGITS: i32`
+
+Significand bits, the implicit leading one included.
+
+#### `pub const DIGITS: i32`
+
+Decimal digits that survive a round trip through the type.
+
+#### `pub const MIN_EXP: i32`
+
+#### `pub const MAX_EXP: i32`
+
+#### `pub const MIN_10_EXP: i32`
+
+#### `pub const MAX_10_EXP: i32`
+
 #### `pub const MAX_SAFE_INTEGER: f64`
 
 The largest integer exactly representable in f64: 2^53 - 1.
@@ -1731,6 +1791,42 @@ Creates an f64 from its bit representation.
 
 #### `pub const BITS: i32`
 
+#### `pub const MAX: f16`
+
+#### `pub const MIN: f16`
+
+#### `pub const MIN_POSITIVE: f16`
+
+The smallest positive normal value.
+
+#### `pub const EPSILON: f16`
+
+The gap between 1.0 and the next larger value.
+
+#### `pub const INFINITY: f16`
+
+#### `pub const NEG_INFINITY: f16`
+
+#### `pub const NAN: f16`
+
+#### `pub const RADIX: i32`
+
+#### `pub const MANTISSA_DIGITS: i32`
+
+Significand bits, the implicit leading one included.
+
+#### `pub const DIGITS: i32`
+
+Decimal digits that survive a round trip through the type.
+
+#### `pub const MIN_EXP: i32`
+
+#### `pub const MAX_EXP: i32`
+
+#### `pub const MIN_10_EXP: i32`
+
+#### `pub const MAX_10_EXP: i32`
+
 #### `pub fn to_bits(&self) -> u16`
 
 Reinterprets the bits of this f16 as a u16.
@@ -1744,9 +1840,21 @@ Creates an f16 from its bit representation.
 Rounds `v` to the nearest f16, ties to even, saturating to an infinity.
 Use `f16::try_from` where an inexact value should be refused instead.
 
+#### `pub fn from_f64(v: f64) -> f16`
+
+Rounds `v` once to the nearest f16, ties to even, saturating to an infinity.
+
 #### `pub fn is_nan(&self) -> bool`
 
 True for a NaN, quiet or signaling.
+
+#### `impl FromStr for f16`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<f16, ParseFloatError>`
+
+#### `impl LenientFromStr for f16`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f16, LenientParseError>`
 
 #### `impl TryFrom<f32> for f16`
 
@@ -1796,6 +1904,42 @@ True for a NaN, quiet or signaling.
 
 #### `pub const BITS: i32`
 
+#### `pub const MAX: bf16`
+
+#### `pub const MIN: bf16`
+
+#### `pub const MIN_POSITIVE: bf16`
+
+The smallest positive normal value.
+
+#### `pub const EPSILON: bf16`
+
+The gap between 1.0 and the next larger value.
+
+#### `pub const INFINITY: bf16`
+
+#### `pub const NEG_INFINITY: bf16`
+
+#### `pub const NAN: bf16`
+
+#### `pub const RADIX: i32`
+
+#### `pub const MANTISSA_DIGITS: i32`
+
+Significand bits, the implicit leading one included.
+
+#### `pub const DIGITS: i32`
+
+Decimal digits that survive a round trip through the type.
+
+#### `pub const MIN_EXP: i32`
+
+#### `pub const MAX_EXP: i32`
+
+#### `pub const MIN_10_EXP: i32`
+
+#### `pub const MAX_10_EXP: i32`
+
 #### `pub fn to_bits(&self) -> u16`
 
 Reinterprets the bits of this bf16 as a u16.
@@ -1809,9 +1953,21 @@ Creates a bf16 from its bit representation.
 Rounds `v` to the nearest bf16, ties to even. bf16 takes f32's exponent
 field as is, so the top 16 bits are the result and only the mantissa rounds.
 
+#### `pub fn from_f64(v: f64) -> bf16`
+
+Rounds `v` once to the nearest bf16, ties to even.
+
 #### `pub fn is_nan(&self) -> bool`
 
 True for a NaN, quiet or signaling.
+
+#### `impl FromStr for bf16`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<bf16, ParseFloatError>`
+
+#### `impl LenientFromStr for bf16`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<bf16, LenientParseError>`
 
 #### `impl TryFrom<f32> for bf16`
 
@@ -4785,9 +4941,8 @@ run-length expansion (where src < dst). Forward order is correct in both cases.
 
 `#[compiler_item("list_from_le_bytes")]`
 
-The `T`s `bytes` holds, little-endian and back to back. A byte string
-literal or `#include_bytes` argument becomes a data segment, read with
-no decode loop. Panics when `bytes` is not a whole number of `T`s.
+The `T`s `bytes` holds, little-endian and back to back; panics on a partial
+`T`. A literal argument folds to a constant, with no decode loop.
 
 #### `pub fn contains(&self, value: &T) -> bool`
 

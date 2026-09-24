@@ -323,6 +323,10 @@ digit more than `FPFMT_DIGITS_MAX` allocates (for an exact re-parse).
 Parses an f64 directly from `self.input` using fpfmt, without an
 intermediate String allocation.
 
+#### `pub fn parse_f32_direct(&mut self) -> Result<f32, DeserializeError>`
+
+`parse_f64_direct`, rounded once into f32 rather than through f64.
+
 #### `pub fn skip_string(&mut self) -> Result<(), DeserializeError>`
 
 Skips a string token without allocating. Shares `scan_string_run` with
@@ -350,6 +354,10 @@ Skips the next JSON value without allocating.
 ##### `fn deserialize_f32(&mut self) -> Result<f32, DeserializeError>`
 
 ##### `fn deserialize_f64(&mut self) -> Result<f64, DeserializeError>`
+
+##### `fn deserialize_f16(&mut self) -> Result<f16, DeserializeError>`
+
+##### `fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError>`
 
 ##### `fn deserialize_bool(&mut self) -> Result<bool, DeserializeError>`
 
