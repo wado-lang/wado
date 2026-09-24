@@ -1407,6 +1407,18 @@ Floating-point remainder of x/y
 
 Error function: `(2/√π) ∫₀ˣ e^(-t²) dt`
 
+#### `pub fn erfc(x: f32) -> f32`
+
+Complementary error function: `1 - erf(x)`, accurate where erf is near 1
+
+#### `pub fn gamma(x: f32) -> f32`
+
+Gamma function: `Γ(x)`, which is `(x - 1)!` at a positive integer
+
+#### `pub fn ln_gamma(x: f32) -> f32`
+
+Natural logarithm of `|Γ(x)|`
+
 #### `pub fn mul_add(x: f32, y: f32, z: f32) -> f32`
 
 `x * y + z`, rounded once instead of twice.
@@ -1717,6 +1729,18 @@ Floating-point remainder of x/y
 #### `pub fn erf(x: f64) -> f64`
 
 Error function: `(2/√π) ∫₀ˣ e^(-t²) dt`
+
+#### `pub fn erfc(x: f64) -> f64`
+
+Complementary error function: `1 - erf(x)`, accurate where erf is near 1
+
+#### `pub fn gamma(x: f64) -> f64`
+
+Gamma function: `Γ(x)`, which is `(x - 1)!` at a positive integer
+
+#### `pub fn ln_gamma(x: f64) -> f64`
+
+Natural logarithm of `|Γ(x)|`
 
 #### `pub fn mul_add(x: f64, y: f64, z: f64) -> f64`
 

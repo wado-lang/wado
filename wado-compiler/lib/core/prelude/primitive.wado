@@ -88,6 +88,9 @@ use {
     libm_fma as f64_mul_add,
     libm_round as f64_round,
     libm_erf as f64_erf,
+    libm_erfc as f64_erfc,
+    libm_tgamma as f64_gamma,
+    libm_lgamma as f64_ln_gamma,
     libm_sinf as f32_sin,
     libm_cosf as f32_cos,
     libm_tanf as f32_tan,
@@ -116,6 +119,9 @@ use {
     libm_fmaf as f32_mul_add,
     libm_roundf as f32_round,
     libm_erff as f32_erf,
+    libm_erfcf as f32_erfc,
+    libm_tgammaf as f32_gamma,
+    libm_lgammaf as f32_ln_gamma,
 } from "../libm.wat" with { type: "wat" };
 
 use {
@@ -1571,6 +1577,21 @@ impl f32 {
         return f32_erf(x);
     }
 
+    /// Complementary error function: `1 - erf(x)`, accurate where erf is near 1
+    pub fn erfc(x: f32) -> f32 {
+        return f32_erfc(x);
+    }
+
+    /// Gamma function: `Γ(x)`, which is `(x - 1)!` at a positive integer
+    pub fn gamma(x: f32) -> f32 {
+        return f32_gamma(x);
+    }
+
+    /// Natural logarithm of `|Γ(x)|`
+    pub fn ln_gamma(x: f32) -> f32 {
+        return f32_ln_gamma(x);
+    }
+
     /// `x * y + z`, rounded once instead of twice.
     ///
     /// Wasm has no scalar FMA instruction, so this is a software
@@ -1977,6 +1998,21 @@ impl f64 {
     /// Error function: `(2/√π) ∫₀ˣ e^(-t²) dt`
     pub fn erf(x: f64) -> f64 {
         return f64_erf(x);
+    }
+
+    /// Complementary error function: `1 - erf(x)`, accurate where erf is near 1
+    pub fn erfc(x: f64) -> f64 {
+        return f64_erfc(x);
+    }
+
+    /// Gamma function: `Γ(x)`, which is `(x - 1)!` at a positive integer
+    pub fn gamma(x: f64) -> f64 {
+        return f64_gamma(x);
+    }
+
+    /// Natural logarithm of `|Γ(x)|`
+    pub fn ln_gamma(x: f64) -> f64 {
+        return f64_ln_gamma(x);
     }
 
     /// `x * y + z`, rounded once instead of twice.
