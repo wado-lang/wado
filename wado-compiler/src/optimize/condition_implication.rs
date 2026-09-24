@@ -9,6 +9,7 @@ use std::ops::ControlFlow;
 use cranelift_entity::EntityRef;
 
 use super::arena_query::local_written_by;
+use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
 use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
@@ -24,7 +25,7 @@ use crate::optimize::arena_query::{
 };
 use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
-use crate::tir::{ResolvedType, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::{hashmap, nir_arena};
 
 /// Run condition implication at the body root on an existing engine session.
@@ -472,6 +473,48 @@ pub(super) fn parse_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option
     }
 }
 
+/// Whether `op` (through copy temps) reads the length of a `List` or `String`,
+/// which the runtime keeps in `0..2^31`. Any other `i32` field may be negative.
+fn is_seq_length(engine: &Engine, binds: &Binds, op: Operand) -> bool {
+    let op = resolve(engine, binds, peel_capture_block(engine, binds, op));
+    let (field_index, receiver_type) = match op {
+        Operand::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::FieldAccess {
+                expr, field_index, ..
+            } => (*field_index, Some(engine.body.operand_type(*expr))),
+            _ => return false,
+        },
+        Operand::Value(v) => match engine.body.values.kind(v) {
+            ValueKind::FieldAccess {
+                receiver,
+                field_index,
+                ..
+            } => (
+                *field_index,
+                engine.body.values.type_of(*receiver).or_else(|| {
+                    let l = opaque_local(engine, *receiver)?;
+                    engine.locals().get(l as usize).map(|l| l.type_id)
+                }),
+            ),
+            _ => return false,
+        },
+    };
+    field_index == SeqField::Len.index()
+        && receiver_type.is_some_and(|t| is_seq_container_behind_refs(engine, t))
+}
+
+fn is_seq_container_behind_refs(engine: &Engine, mut ty: TypeId) -> bool {
+    let Some(types) = engine.value_graph_type_table() else {
+        return false;
+    };
+    loop {
+        match types.get(ty) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => ty = *inner,
+            _ => return types.is_seq_container(ty),
+        }
+    }
+}
+
 /// Parse an operand (through copy temps) as a constant `i64`. Constants live in
 /// the value **pool** as `Operand::Value(Int)`, never the `value_of` side-table.
 fn parse_const_i64(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
@@ -605,11 +648,9 @@ fn struct_field_init(
         .map(|f| f.value)
 }
 
-/// The offset `c` for which `bound` equals `guard_var + c`, where `bound` is an
-/// invariant struct-field read projected via [`struct_field_init`]. A bare
-/// arithmetic `guard_var + c` is refused: Wado add wraps, so it can overflow
-/// below `guard_var`. The struct-field form holds a real list length, kept in
-/// `[0, capacity)` with `capacity < 2^31`, so the equality proves no wrap.
+/// The offset `c` for which `bound`, a sequence length built from a literal,
+/// equals `guard_var + c`. A length is never negative, so `guard_var + c` did
+/// not wrap; bare arithmetic, or any other field, proves nothing of the kind.
 fn bound_offset_over(
     engine: &Engine,
     binds: &Binds,
@@ -628,6 +669,9 @@ fn bound_offset_over(
         return None;
     };
     let (recv, field_name) = (*recv, field_name.clone());
+    if !is_seq_length(engine, binds, Operand::Expr(e)) {
+        return None;
+    }
     let init = struct_field_init(engine, binds, recv, &field_name)?;
     match parse_var_offset(engine, binds, init) {
         Some((v, c)) if v == guard_var => Some(c),
@@ -1267,7 +1311,7 @@ fn eliminate_checks_in_node(
 
 /// `<=` loop-guard elimination (`var <= gbound`, surviving `var < gbound + 1`):
 /// drive to `false` every dominated check `var + j >= B` whose bound `B` relates
-/// to `gbound + c` with `c >= j + 1` ([`bound_offset_over`]), since then
+/// to `gbound + c` with `c > j >= 0` ([`bound_offset_over`]), since then
 /// `var + j <= gbound + j < gbound + c = B`. Recovers `arr.used == limit + 1`
 /// where the guard is `i <= limit` (structural, value_of-free).
 fn eliminate_le_checks_in_node(
@@ -1282,7 +1326,9 @@ fn eliminate_le_checks_in_node(
         let Some((cvar, cj)) = parse_var_offset(engine, binds, left) else {
             return false;
         };
-        cvar == var && bound_offset_over(engine, binds, right, gbound).is_some_and(|c| c > cj)
+        cvar == var
+            && cj >= 0
+            && bound_offset_over(engine, binds, right, gbound).is_some_and(|c| c > cj)
     })
 }
 
@@ -1797,8 +1843,8 @@ fn sub_const(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, i6
     parse_const_i64(engine, binds, subtrahend).map(|k| (minuend, k))
 }
 
-/// The fact a `let idx = <length field> - k` (k >= 1) proves, as in the
-/// `arr.last()` idiom: `idx + j < field` for `j < k`.
+/// The fact a `let idx = <seq>.len() - k` (k >= 1) proves, as in the
+/// `arr.last()` idiom: `idx + j < len` for `j < k`.
 fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<ProvenLt> {
     let NodeRef::Stmt(s) = node else {
         return None;
@@ -1815,9 +1861,9 @@ fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<Prove
         return None;
     }
     let bound = parse_bound(engine, binds, minuend)?;
-    // `idx + j` is `field - k + j`: below the field for `j < k`, and unwrapped
-    // while `j >= i32::MIN + k`, since `field >= 0`.
-    matches!(bound, BoundKey::Field(..)).then_some(ProvenLt {
+    // `idx + j` is `len - k + j`: below `len` for `j < k`, and unwrapped while
+    // `j >= i32::MIN + k`, since `len >= 0`.
+    is_seq_length(engine, binds, minuend).then_some(ProvenLt {
         var: local_index,
         lo: i64::from(i32::MIN) + k,
         hi: k - 1,
