@@ -2037,6 +2037,17 @@ test "the op walker keeps an alternative open-ended through a rule in place" {
     assert named_arm < 0 || wild_arm < named_arm, `it was demoted behind a later alternative: ${body}`;
 }
 
+/// Whether the open-ended alt 0 of `s` competes on `a` before alt 1 can be
+/// committed to there — where a tie goes to it, the lowest viable alternative.
+fn open_alt_competes_on_a(body: &String) -> bool {
+    let a_arm = find_substr(body, "kind == TK_A");
+    if a_arm < 0 {
+        return false;
+    }
+    let open_scan = find_substr_from(body, "_sd_p_0 =", a_arm);
+    return open_scan >= 0 && open_scan < find_substr_from(body, "_parse_s__inner_alt_1(p)", a_arm);
+}
+
 test "an alternative open-ended through a rule keeps its index too" {
     // An empty first set says nothing about the surface element that produced
     // it, so reading the elements answers for a `.` written in place and not
@@ -2044,24 +2055,16 @@ test "an alternative open-ended through a rule keeps its index too" {
     let mut g = parse(INDIRECT_WILDCARD_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_s__inner(");
-    let wild_arm = find_substr(&body, "scope:");
-    let named_arm = find_substr(&body, "TK_A");
-    assert wild_arm >= 0, `the open-ended alternative lost its arm: ${body}`;
-    assert named_arm < 0 || wild_arm < named_arm, `it was moved past a later alternative: ${body}`;
+    assert open_alt_competes_on_a(&body), `the open-ended alternative was dropped from the \`a\` branch: ${body}`;
 }
 
 test "a wildcard alternative keeps its index against a narrower one" {
-    // It admits everything and shadowing what follows is the correct answer
-    // here — lowest viable alternative wins. Only an alternative no lookahead
-    // can test belongs at the end.
+    // It admits everything, `a` included, so it competes wherever the narrower
+    // alternative does and the tie is its — lowest viable alternative wins.
     let mut g = parse(WILDCARD_FIRST_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_s__inner(");
-    // A rule's unconditional arm is a bare `scope:` block, not `if true`.
-    let wild_arm = find_substr(&body, "scope:");
-    let named_arm = find_substr(&body, "TK_A");
-    assert wild_arm >= 0, `the wildcard alternative lost its arm: ${body}`;
-    assert named_arm < 0 || wild_arm < named_arm, `the wildcard alternative was moved past a later one: ${body}`;
+    assert open_alt_competes_on_a(&body), `the wildcard alternative was dropped from the \`a\` branch: ${body}`;
 }
 
 // An open-ended alternative can still have an enumerated first set: `A? .`

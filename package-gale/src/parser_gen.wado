@@ -66,7 +66,6 @@ use {
     alt_class_of,
     alt_classes,
     classes_union,
-    compute_overlap_groups,
     compute_overlap_groups_of,
     direct_dispatch_branches,
     dispatch_branches,
@@ -2921,14 +2920,7 @@ pub fn rule_overlap_groups(
         let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(&rule.alternatives[idx], &mut visiting));
     }
-    // Raw first sets, not `compute_overlap_groups_of` — the one partition that
-    // cannot yet be the shared one. A merged branch here is decided by
-    // `build_prediction`, which walks static first sets and so cannot rank an
-    // open-ended alternative; merging loses `. EOF | A EOF`'s first
-    // alternative. The cost is the `#[TODO]` in
-    // `driver_cst_open_ended_rule_alt_test.wado`, and closing it means
-    // teaching `build_prediction` what `AltClass` knows.
-    let groups = compute_overlap_groups(&first_sets);
+    let groups = compute_overlap_groups_of(&alt_classes(&non_lr_indices, &rule.alternatives, &first_sets, ctx));
     return [non_lr_indices, first_sets, groups];
 }
 
@@ -8076,7 +8068,7 @@ fn first_nullable_alt(classes: &List<AltClass>) -> Option<i32> {
 }
 
 /// The union of one branch's first sets, for the branches not over classified
-/// alternatives: LR suffixes, and a rule's arms (see `rule_overlap_groups`).
+/// alternatives: LR suffixes.
 fn slot_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List<String> {
     let mut union_first: List<String> = [];
     for let idx of group {
@@ -8678,7 +8670,8 @@ fn dispatch_fallback_indices(
 /// the `Consume` steps crossed terminals every alt shares, so FIRST at `skip`
 /// is exact. It is not exact for an alt whose remainder there can match empty:
 /// that alt also admits whatever follows the rule at the call site, which no
-/// FIRST-derived branch set names (`a : X Y? | X Z` on `X`).
+/// FIRST-derived branch set names (`a : X Y? | X Z` on `X`). Nor for one that
+/// reaches a `.` or `~X`, which admits every token.
 fn dispatch_claims_every_first_token(
     d: &PredictionDispatch,
     indices: &List<i32>,
@@ -8698,7 +8691,7 @@ fn dispatch_claims_every_first_token(
         }
     }
     for let idx of indices {
-        if ctx.tail_is_nullable_deep(&alts[*idx].elements, skip) {
+        if ctx.tail_is_nullable_deep(&alts[*idx].elements, skip) || ctx.elements_reach_open_end(&alts[*idx].elements, skip) {
             return false;
         }
         for let tk of &ctx.first_of_elements_from(&alts[*idx].elements, skip) {
@@ -8957,15 +8950,8 @@ fn gen_multi_alt_body_alt<S: AsStrSlice, S1: AsStrSlice>(
         } else {
             String::new();
         };
-        // The raw union, not `admits[g]`: rule level does not merge the other
-        // alternatives into an open-ended branch (see `rule_overlap_groups`),
-        // so the narrower test is what keeps the arms after it reachable. The
-        // `#[TODO]` in `driver_cst_open_ended_rule_alt_test.wado` is the cost.
-        let cond = ctx.admits_check_str(
-            &admits_or_everything(&slot_first_union(group, first_sets)),
-            &DISPATCH_KIND_LOCAL,
-        );
-        w.begin(`if ${cond}${gate}`);
+        let proven = admits_kinds(&admits[g]);
+        w.begin(`if ${ctx.admits_check_str(&admits[g], &DISPATCH_KIND_LOCAL)}${gate}`);
 
         if group.len() == 1 {
             let alt_index = non_lr_indices[group[0]];
@@ -8983,7 +8969,7 @@ fn gen_multi_alt_body_alt<S: AsStrSlice, S1: AsStrSlice>(
                 rule_alts_labeled(&rule.alternatives),
                 &NO_AFTER,
                 ctx,
-                &slot_first_union(group, first_sets),
+                &proven,
             );
         } else {
             let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx);
@@ -8996,7 +8982,7 @@ fn gen_multi_alt_body_alt<S: AsStrSlice, S1: AsStrSlice>(
                 type_name,
                 ctx,
                 &rule.name,
-                &slot_first_union(group, first_sets),
+                &proven,
             );
         }
 

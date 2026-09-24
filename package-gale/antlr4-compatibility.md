@@ -563,6 +563,12 @@ answer rather than four derivations of it. Lower bakes the classification into
 carries the built `ScanGroupElement` rather than bare scan bodies, so emit has
 nothing left to assemble a second classification into.
 
+A rule's own arms partition the same way (`rule_overlap_groups`), and the
+branch that merges is decided by `build_prediction`, which knows the same thing
+at every depth: a position that reaches a `.` or `~X` joins every token branch,
+and the tokens no alternative names go to the tournament. `r : A? . C | B D |
+B E` takes `b c` by its first alternative. Fixture `open_ended_rule_alt.g4`.
+
 A branch of the decision therefore carries what it admits — `Admits`, one of
 `Everything`, `Untestable`, or `Kinds` (never empty) — instead of a rendered
 test, and `kind_check_str` refuses an empty set rather than choosing for the
