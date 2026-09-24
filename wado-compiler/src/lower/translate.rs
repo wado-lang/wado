@@ -1124,6 +1124,18 @@ impl FunctionTranslator<'_, '_> {
     /// [`Self::wrap_value_copy`] over an operand: a promoted scalar
     /// (`Operand::Value`) is never value-semantic, so it passes through; only a
     /// skeleton aggregate is wrapped.
+    /// `value` lowered for a store into a place: a copy unless the value is
+    /// fresh or moved, since the place and the source are independent after.
+    fn convert_stored_operand(&self, value: &TirExpr) -> Operand {
+        let needs_wrap = self.should_wrap_value_copy(value);
+        let value_op = self.convert_operand(value);
+        if needs_wrap {
+            self.wrap_value_copy_operand(value_op, value.type_id)
+        } else {
+            value_op
+        }
+    }
+
     fn wrap_value_copy_operand(&self, value: Operand, type_id: tir::TypeId) -> Operand {
         match value {
             Operand::Expr(e) => self.wrap_value_copy(e, type_id).into(),
@@ -1227,18 +1239,11 @@ impl FunctionTranslator<'_, '_> {
                 is_mut,
                 value,
             } => {
-                let needs_wrap = self.should_wrap_value_copy(value);
-                let value_type = value.type_id;
-                let value_op = self.convert_operand(value);
-                let value_op = if needs_wrap {
-                    self.wrap_value_copy_operand(value_op, value_type)
-                } else {
-                    value_op
-                };
+                let value = self.convert_stored_operand(value);
                 StmtKind::LetDestructure {
                     pattern: self.convert_pattern(pattern),
                     is_mut: *is_mut,
-                    value: value_op,
+                    value,
                 }
             }
             TirStmtKind::VariadicForOf { .. } => unreachable!(
@@ -1689,7 +1694,7 @@ impl FunctionTranslator<'_, '_> {
             } => ExprKind::GlobalVarSet {
                 module_source: module_source.clone(),
                 name: name.clone(),
-                value: self.convert_operand(value),
+                value: self.convert_stored_operand(value),
             },
             TirExprKind::Binary { left, op, right } => ExprKind::Binary {
                 left: self.convert_operand(left),
@@ -1701,22 +1706,10 @@ impl FunctionTranslator<'_, '_> {
                 expr: self.convert_operand(expr),
             },
             TirExprKind::Assign { target, value } => {
-                // Only `Local` targets receive a defensive copy.
-                // `FieldAccess` / `Index` writes mutate an existing
-                // aggregate slot — the WIR-side semantics let the
-                // reference flow through without an extra wrap.
-                let needs_wrap = matches!(&target.kind, TirExprKind::Local { .. })
-                    && self.should_wrap_value_copy(value);
-                let value_type = value.type_id;
-                let value_op = self.convert_operand(value);
-                let value_op = if needs_wrap {
-                    self.wrap_value_copy_operand(value_op, value_type)
-                } else {
-                    value_op
-                };
+                let value = self.convert_stored_operand(value);
                 ExprKind::Assign {
                     target: self.convert_expr(target),
-                    value: value_op,
+                    value,
                 }
             }
             TirExprKind::Cast { expr, target_type } => ExprKind::Cast {
