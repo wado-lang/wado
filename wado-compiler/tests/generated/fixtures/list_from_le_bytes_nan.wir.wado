@@ -88,8 +88,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global mut global:list_from_le_bytes_nan.wado::$const_obj_3: ref null Array<f64> = ref.null none;
-global mut global:list_from_le_bytes_nan.wado::$const_obj_4: ref null Array<f32> = ref.null none;
+global global:list_from_le_bytes_nan.wado::$const_obj_3: ref null Array<f64> = array.new_fixed<f64>(NaN);
+global global:list_from_le_bytes_nan.wado::$const_obj_4: ref null Array<f32> = array.new_fixed<f32>(NaN_f32);
 global global:list_from_le_bytes_nan.wado::$const_obj_5: ref null Array<u8> = array.new_fixed<u8>(10);
 global global:list_from_le_bytes_nan.wado::$const_obj_6: ref null Array<u8> = array.new_fixed<u8>(119, 105, 100, 101, 91, 48, 93, 46, 116, 111, 95, 98, 105, 116, 115, 40, 41, 58, 32);
 global global:list_from_le_bytes_nan.wado::$const_obj_7: ref null Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 119, 105, 100, 101, 91, 48, 93, 46, 116, 111, 95, 98, 105, 116, 115, 40, 41, 32, 61, 61, 32, 48, 120, 55, 70, 70, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 49, 10);
@@ -106,17 +106,11 @@ fn "list_from_le_bytes_nan.wado/run"() {
     let $v0_4: u64;
     let self_10: f32;
     let self_19: f64;
-    if ref.is_null(global:list_from_le_bytes_nan.wado::$const_obj_4) {
-        global:list_from_le_bytes_nan.wado::$const_obj_4 = array.new_data<f32>(NaN_f32);
-    }
     $v0_1 = builtin::i32_reinterpret_f32(local.tee self_10(builtin::array_get_value<f32>(global:list_from_le_bytes_nan.wado::$const_obj_4, 0)));
     if @unlikely($v0_1 != 2139095041) {
         cold_path;
         "list_from_le_bytes_nan.wado/run$cold1"($v0_1);
         unreachable;
-    }
-    if ref.is_null(global:list_from_le_bytes_nan.wado::$const_obj_3) {
-        global:list_from_le_bytes_nan.wado::$const_obj_3 = array.new_data<f64>(NaN);
     }
     $v0_4 = builtin::i64_reinterpret_f64(local.tee self_19(builtin::array_get_value<f64>(global:list_from_le_bytes_nan.wado::$const_obj_3, 0)));
     if @unlikely($v0_4 != 9218868437227405313_i64) {
@@ -383,14 +377,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = $mv$data$start + ($mv$data$end - $mv$data$start);
     offset = $mv$data$start;
     block {
-        l30: loop {
+        l28: loop {
             $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b31: block {
-                l32: loop {
-                    break_if b31 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b29: block {
+                l30: loop {
+                    break_if b29 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
                     i = i + 1;
-                    continue l32;
+                    continue l30;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -423,7 +417,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
-            continue l30;
+            continue l28;
         };
     };
 }
@@ -446,14 +440,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b37: block {
-        l38: loop {
-            break_if b37 i >= digit_count_4;
+    b35: block {
+        l36: loop {
+            break_if b35 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l38;
+            continue l36;
         };
     };
 }
@@ -471,14 +465,14 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_3 + digit_count_2;
     t = self;
     i = 0;
-    b39: block {
-        l40: loop {
-            break_if b39 i >= digit_count_2;
+    b37: block {
+        l38: loop {
+            break_if b37 i >= digit_count_2;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l40;
+            continue l38;
         };
     };
 }
@@ -497,14 +491,14 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_4 + digit_count_3;
     t = value;
     i = 0;
-    b41: block {
-        l42: loop {
-            break_if b41 i >= digit_count_3;
+    b39: block {
+        l40: loop {
+            break_if b39 i >= digit_count_3;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l42;
+            continue l40;
         };
     };
 }

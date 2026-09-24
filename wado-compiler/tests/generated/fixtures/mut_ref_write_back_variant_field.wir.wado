@@ -203,11 +203,11 @@ type "functype//mut_ref_write_back_variant_field.wado/$test_13_a_destructuring_l
 
 type "functype//mut_ref_write_back_variant_field.wado/writes_through_the_other_argument$scalar" = fn(ref "mut_ref_write_back_variant_field.wado//Bag");  // TypeId(79)
 
-type "functype//mut_ref_write_back_variant_field.wado/mutate_payload$scalar" = fn(ref null "core:prelude/string.wado//String");  // TypeId(80)
+type "functype//mut_ref_write_back_variant_field.wado/appends$scalar" = fn(ref null "core:prelude/string.wado//String");  // TypeId(80)
 
-type "functype//mut_ref_write_back_variant_field.wado/takes_a_snapshot$scalar" = fn(i32, ref "core:prelude/types.wado//Box<mut_ref_write_back_variant_field.wado/Payload>");  // TypeId(81)
+type "functype//mut_ref_write_back_variant_field.wado/mutate_payload$scalar" = fn(ref null "core:prelude/string.wado//String");  // TypeId(81)
 
-type "functype//mut_ref_write_back_variant_field.wado/appends$scalar" = fn(ref null "core:prelude/string.wado//String");  // TypeId(82)
+type "functype//mut_ref_write_back_variant_field.wado/takes_a_snapshot$scalar" = fn(i32, ref "core:prelude/types.wado//Box<mut_ref_write_back_variant_field.wado/Payload>");  // TypeId(82)
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(83)
 
@@ -361,8 +361,8 @@ global global:core:prelude/list.wado::$const_obj_92: ref null Array<u8> = array.
 global global:core:prelude/list.wado::$const_obj_93: ref null Array<u8> = array.new_fixed<u8>(32, 97, 116, 32);
 global global:core:prelude/list.wado::$const_obj_94: ref null Array<u8> = array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101);
 global global:core:prelude/list.wado::$const_obj_95: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
-global global:core:prelude/primitive.wado::$const_obj_96: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-global global:mut_ref_write_back_variant_field.wado::$const_obj_98: ref null Array<u8> = array.new_fixed<u8>(33);
+global global:mut_ref_write_back_variant_field.wado::$const_obj_96: ref null Array<u8> = array.new_fixed<u8>(33);
+global global:core:prelude/primitive.wado::$const_obj_97: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 global global:core:prelude/list.wado::$const_obj_99: ref null Array<u8> = array.new_fixed<u8>(10);
 global global:core:prelude/list.wado::$const_obj_100: ref null Array<u8> = array.new_fixed<u8>(115, 101, 108, 102, 46, 117, 115, 101, 100, 58, 32);
 global global:core:prelude/list.wado::$const_obj_101: ref null Array<u8> = array.new_fixed<u8>(10);
@@ -1525,23 +1525,6 @@ fn "mut_ref_write_back_variant_field.wado/writes_through_the_other_argument$scal
     b.item = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("via_b"), used: 5 };
 }
 
-fn "mut_ref_write_back_variant_field.wado/mutate_payload$scalar"(p) {
-    let s: ref "core:prelude/string.wado//String";
-    let $sroa_$deref_val_3_repr: ref Array<u8>;
-    if ref.is_null(p) == 0 {
-        s = ref.as_non_null(p);
-        $sroa_$deref_val_3_repr = array.new_fixed<u8>(122, 122);
-        s.repr = $sroa_$deref_val_3_repr;
-        s.used = 2;
-    } else {
-    }
-}
-
-fn "mut_ref_write_back_variant_field.wado/takes_a_snapshot$scalar"(seen, p) {
-    let $local_2: ref "core:prelude/string.wado//String";
-    p.value = $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(seen, $local_2); $local_2;
-}
-
 fn "mut_ref_write_back_variant_field.wado/appends$scalar"(p) {
     let $load_1: i32;
     let s: ref "core:prelude/string.wado//String";
@@ -1578,11 +1561,28 @@ fn "mut_ref_write_back_variant_field.wado/appends$scalar"(p) {
         }
         start_31 = $local_2.used;
         $local_2.used = new_used_30;
-        builtin::array_copy<u8>($local_2.repr, start_31, global:mut_ref_write_back_variant_field.wado::$const_obj_98, 0, 1);
+        builtin::array_copy<u8>($local_2.repr, start_31, global:mut_ref_write_back_variant_field.wado::$const_obj_96, 0, 1);
         s.repr = $local_2.repr;
         s.used = $local_2.used;
     } else {
     }
+}
+
+fn "mut_ref_write_back_variant_field.wado/mutate_payload$scalar"(p) {
+    let s: ref "core:prelude/string.wado//String";
+    let $sroa_$deref_val_3_repr: ref Array<u8>;
+    if ref.is_null(p) == 0 {
+        s = ref.as_non_null(p);
+        $sroa_$deref_val_3_repr = array.new_fixed<u8>(122, 122);
+        s.repr = $sroa_$deref_val_3_repr;
+        s.used = 2;
+    } else {
+    }
+}
+
+fn "mut_ref_write_back_variant_field.wado/takes_a_snapshot$scalar"(seen, p) {
+    let $local_2: ref "core:prelude/string.wado//String";
+    p.value = $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(seen, $local_2); $local_2;
 }
 
 fn "core:prelude/primitive.wado/count_digits_u64"(val) {
@@ -2458,7 +2458,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_write_back_varian
     offset_32 = 0 + 63;
     builtin::array_copy<u8>(self_31, offset_32, global:core:prelude/list.wado::$const_obj_91, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(337, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
     new_used_42 = $local_4.used + 58;
     if @unlikely(new_used_42 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -2553,7 +2553,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_write_back_varian
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:core:prelude/list.wado::$const_obj_106, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(337, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
     new_used_41 = $local_4.used + 58;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -2648,7 +2648,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_write_back_varian
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:core:prelude/list.wado::$const_obj_118, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(337, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
     new_used_41 = $local_4.used + 58;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -3399,7 +3399,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = block -> i32 {
         let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_96;
+        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_97;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, digit_count_4);
     };
     self_14 = f.buf;
