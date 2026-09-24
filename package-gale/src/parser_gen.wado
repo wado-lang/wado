@@ -3755,7 +3755,7 @@ fn gen_decision_sync<S: AsStrSlice>(w: &mut CodeWriter, ctx: &mut GenContext, ex
     assert !names.is_empty(), "a decision the rule cannot end at expects some token";
     let bits = sync_set_ref(ctx, &names);
     let list = expected_set_ref(ctx, &names);
-    w.line(`if !kind_set_has(${bits}, p.kinds[p.pos]) { p.${method}(${bits}, ${list}); }`);
+    w.line(`if !kind_set_has(${bits}, p.kinds[p.pos]) { builtin::cold_path(); p.${method}(${bits}, ${list}); }`);
 }
 
 fn gen_rule_entry_sync(w: &mut CodeWriter, ctx: &mut GenContext, rule: &ParserRule) {
