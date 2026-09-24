@@ -321,8 +321,8 @@ pub(super) struct HeapEffectsCache {
 }
 
 impl HeapEffectsCache {
-    /// The summaries of `project` as it stands, every rewrite since the last
-    /// call having been reported to `gate`.
+    /// The summaries of `project` as it stands. Every rewrite since the last
+    /// call must have been reported to `gate`.
     pub(super) fn effects<'t>(
         &'t mut self,
         project: &NirPackage,

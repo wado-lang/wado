@@ -803,11 +803,9 @@ fn run_optimization_passes(
                 )
             })
         );
-        gated!("nir/licm", GatedPass::Licm, |p, g| apply_licm(
-            p,
-            g,
-            &mut heap_effects
-        ));
+        gated!("nir/licm", GatedPass::Licm, |p, g| {
+            apply_licm(p, g, &mut heap_effects)
+        });
         gated!("nir/tmpl_hoist", GatedPass::TmplHoist, |p, g| {
             hoist_template_buffers(p, g, &mut heap_effects)
         });
