@@ -4412,14 +4412,14 @@ An inline `with` source and a `wado.toml` entry for the same specifier are mutua
 
 #### Type Attribute Requirement
 
-| Import Source               | `type` Attribute         | Notes                          |
-| --------------------------- | ------------------------ | ------------------------------ |
-| `.wado` files               | Optional                 | Type inferred from Wado source |
-| `.wasm` files               | Required                 | `type: "wasm"`                 |
-| `.wat` files                | Required                 | `type: "wat"`                  |
+| Import Source      | `type` Attribute         | Notes                          |
+| ------------------ | ------------------------ | ------------------------------ |
+| `.wado` files      | Optional                 | Type inferred from Wado source |
+| `.wasm` files      | Required                 | `type: "wasm"`                 |
+| `.wat` files       | Required                 | `type: "wat"`                  |
 | `core:*`, `wasi:*` | Not applicable           | Bundled namespace handling     |
-| `https:` URLs               | Required for non-`.wado` | Must specify content type      |
-| CM / `lib:` deps            | Optional                 | Type inferred from package     |
+| `https:` URLs      | Required for non-`.wado` | Must specify content type      |
+| CM / `lib:` deps   | Optional                 | Type inferred from package     |
 
 #### Rationale
 
