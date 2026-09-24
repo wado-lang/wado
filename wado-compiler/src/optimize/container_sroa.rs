@@ -25,10 +25,12 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query::{reachable_blocks, strip_one_value_copy};
 use super::gate::{FunctionGate, GatedPass};
+use crate::compiler_item::SeqField;
 use crate::lower::plan::value_copy;
 use crate::name::FqTraitName;
 use crate::nir::NirField;
-use crate::nir_value_graph::ValueKind;
+use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::niri::{CtfeBuiltin, build_ctfe_builtin_map};
 
 /// Signature key for a monomorphized `List<T>` method: (`trait_name`, `method_name`).
 /// Inherent methods (`push/len/is_empty/with_capacity`) use `trait_name = None`;
@@ -79,11 +81,9 @@ enum ListMethodKind {
     /// calls. A non-empty one carries elements this pass would have to split
     /// per field.
     FromArray,
-    /// `fn(&List<T>) -> i32 | bool` — length-invariant query with no element
-    /// argument (e.g. `len`, `is_empty`, `capacity`). Rewritten to field 0's
-    /// method: every rewrite keeps the per-field arrays in lockstep. The
-    /// `i32`/`bool` return bound is what excludes a content-dependent query
-    /// such as a hypothetical `hash_code() -> u64`.
+    /// `fn(&List<T>) -> i32 | bool` that reads only the length (e.g. `len`,
+    /// `is_empty`, `capacity`; see [`reads_length_only`]). Rewritten to field
+    /// 0's method: every rewrite keeps the per-field arrays in lockstep.
     Query,
 }
 
@@ -407,14 +407,199 @@ fn build_method_catalog(
             id_kinds.insert(func_id, kind);
         }
     }
-    (
-        catalog,
-        MethodSig {
-            id_kinds,
-            id_sigkeys,
-            kind_index,
-        },
-    )
+    let mut sig = MethodSig {
+        id_kinds,
+        id_sigkeys,
+        kind_index,
+    };
+    demote_element_reading_queries(project, type_table, &mut sig);
+    (catalog, sig)
+}
+
+/// Unclassify every `Query`-shaped family one member of which reads more than
+/// the length: field 0's list answers a query only when the length decides it.
+fn demote_element_reading_queries(
+    project: &NirPackage,
+    type_table: &TypeTable,
+    sig: &mut MethodSig,
+) {
+    let array_len: IndexSet<FuncId> = build_ctfe_builtin_map(project)
+        .into_iter()
+        .filter_map(|(id, b)| matches!(b, CtfeBuiltin::ArrayLen).then_some(id))
+        .collect();
+    let queries: IndexSet<FuncId> = sig
+        .id_kinds
+        .iter()
+        .filter_map(|(&id, &k)| (k == ListMethodKind::Query).then_some(id))
+        .collect();
+    let array_subjects = project.functions.iter().filter_map(|f| {
+        let f = f.borrow();
+        // A bodyless function's signature types may already be gone.
+        f.body.as_ref()?;
+        let first = f.params.first()?;
+        let ty = match type_table.get(first.type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => first.type_id,
+        };
+        matches!(type_table.get(ty), ResolvedType::BuiltinArray(_))
+            .then_some(f.id)
+            .flatten()
+    });
+    let mut length_only: IndexSet<FuncId> = queries.iter().copied().chain(array_subjects).collect();
+    loop {
+        let failing: Vec<FuncId> = length_only
+            .iter()
+            .copied()
+            .filter(|&id| {
+                let func = project.functions[id.index()].borrow();
+                !reads_length_only(&func, &array_len, &length_only)
+            })
+            .collect();
+        if failing.is_empty() {
+            break;
+        }
+        for id in failing {
+            length_only.shift_remove(&id);
+        }
+    }
+    let demoted: IndexSet<SigKey> = queries
+        .iter()
+        .filter(|id| !length_only.contains(*id))
+        .filter_map(|id| sig.id_sigkeys.get(id).cloned())
+        .collect();
+    let MethodSig {
+        id_kinds,
+        id_sigkeys,
+        kind_index,
+    } = sig;
+    id_kinds.retain(|id, _| id_sigkeys.get(id).is_none_or(|s| !demoted.contains(s)));
+    kind_index.retain(|_, s| !demoted.contains(s));
+}
+
+/// Whether `func` reads its first parameter only for a length: a `used` field,
+/// the length of an array, or through a call to another such function.
+fn reads_length_only(
+    func: &NirFunction,
+    array_len: &IndexSet<FuncId>,
+    length_only: &IndexSet<FuncId>,
+) -> bool {
+    let (Some(body), Some(subject)) = (func.body.as_ref(), func.params.first()) else {
+        return false;
+    };
+    LengthOnly {
+        body,
+        subject: subject.local_index,
+        array_len,
+        length_only,
+    }
+    .node(NodeRef::Block(body.root))
+}
+
+/// The walk behind [`reads_length_only`].
+struct LengthOnly<'a> {
+    body: &'a Body,
+    subject: u32,
+    array_len: &'a IndexSet<FuncId>,
+    length_only: &'a IndexSet<FuncId>,
+}
+
+impl LengthOnly<'_> {
+    fn node(&self, n: NodeRef) -> bool {
+        if let NodeRef::Expr(e) = n {
+            match &self.body.exprs[e].kind {
+                ExprKind::Local { index, .. } if *index == self.subject => return false,
+                ExprKind::FieldAccess {
+                    expr, field_index, ..
+                } if self.is_subject(*expr) => return *field_index == SeqField::Len.index(),
+                ExprKind::Call { func_id, args, .. }
+                    if (self.array_len.contains(func_id) || self.length_only.contains(func_id))
+                        && args
+                            .first()
+                            .is_some_and(|a| self.is_subject_or_backing(a.expr)) =>
+                {
+                    return args[1..].iter().all(|a| self.operand(a.expr));
+                }
+                _ => {}
+            }
+        }
+        let mut ok = true;
+        self.body.for_each_operand(n, |op| {
+            if let Operand::Value(v) = op {
+                ok &= self.value(v);
+            }
+        });
+        self.body.for_each_child(n, |c| {
+            if ok {
+                ok = self.node(c);
+            }
+        });
+        ok
+    }
+
+    fn operand(&self, op: Operand) -> bool {
+        match op {
+            Operand::Expr(e) => self.node(NodeRef::Expr(e)),
+            Operand::Value(v) => self.value(v),
+        }
+    }
+
+    fn value(&self, v: ValueId) -> bool {
+        let values = &self.body.values;
+        if !values.value_reads_local(v, self.subject) {
+            return true;
+        }
+        match values.kind(v) {
+            ValueKind::FieldAccess {
+                receiver,
+                field_index,
+                ..
+            } => {
+                *field_index == SeqField::Len.index()
+                    && matches!(values.kind(*receiver), ValueKind::Opaque(_))
+            }
+            ValueKind::Binary { lhs, rhs, .. } => self.value(*lhs) && self.value(*rhs),
+            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                self.value(*operand)
+            }
+            ValueKind::Select { cond, then, else_ } => {
+                self.value(*cond) && self.value(*then) && self.value(*else_)
+            }
+            ValueKind::Opaque(_)
+            | ValueKind::LoopPhi { .. }
+            | ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+            | ValueKind::Const(..) => false,
+        }
+    }
+
+    fn is_subject(&self, op: Operand) -> bool {
+        let Some(e) = op.as_expr() else {
+            return false;
+        };
+        match &self.body.exprs[e].kind {
+            ExprKind::Local { index, .. } => *index == self.subject,
+            ExprKind::Unary { expr, .. } => self.is_subject(*expr),
+            _ => false,
+        }
+    }
+
+    /// The subject, or a `List`'s backing array reached through it.
+    fn is_subject_or_backing(&self, op: Operand) -> bool {
+        let Some(e) = op.as_expr() else {
+            return false;
+        };
+        match &self.body.exprs[e].kind {
+            ExprKind::FieldAccess {
+                expr, field_index, ..
+            } => *field_index == SeqField::Backing.index() && self.is_subject(*expr),
+            ExprKind::Unary { expr, .. } => self.is_subject_or_backing(*expr),
+            _ => self.is_subject(op),
+        }
+    }
 }
 
 /// Whole-function container SROA driven from the engine session root.
@@ -447,13 +632,13 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
     // Step 3: verify that every required (element_ty, sig) is present in the catalog.
     // Required kinds = `Constructor` (always, for the initializer) ∪ observed
     // kinds. If any candidate has missing monomorphizations, drop it.
-    let empty_used: IndexSet<ListMethodKind> = IndexSet::default();
+    let empty_used: IndexSet<(ListMethodKind, FuncId)> = IndexSet::default();
     let safe_candidates: Vec<&Candidate> = candidates
         .iter()
         .filter(|c| safe_indices.contains(&c.local_index))
         .filter(|c| {
             let used = used_kinds_map.get(&c.local_index).unwrap_or(&empty_used);
-            required_methods_available(c, used, rule.sig)
+            required_methods_available(c, used, rule.sig, rule.catalog)
         })
         .collect();
     if safe_candidates.is_empty() {
@@ -546,29 +731,28 @@ struct RewriteCtx<'a> {
     value_copy_ids: &'a IndexSet<FuncId>,
 }
 
-/// Whether the catalog holds, for every per-field element type, each
-/// [`ListMethodKind`] the rewrite will emit.
+/// Whether the catalog holds, for every per-field element type, the very
+/// method each observed use retargets to, and a `Constructor`.
 ///
-/// `Constructor` is always needed; the rest only where escape analysis observed
-/// a use. `Query` dispatches to field 0, so only field 0 needs it.
+/// `Query` dispatches to field 0, so only field 0 needs it.
 fn required_methods_available(
     c: &Candidate,
-    used_kinds: &IndexSet<ListMethodKind>,
+    used: &IndexSet<(ListMethodKind, FuncId)>,
     sig: &MethodSig,
+    catalog: &MethodCatalog,
 ) -> bool {
     for (fi, &t) in c.element_types.iter().enumerate() {
-        // Constructor is always needed for every field's initializer.
         if find_sig_key_for_kind(sig, t, ListMethodKind::Constructor).is_none() {
             return false;
         }
-        for &kind in used_kinds {
-            // `Query` (len / is_empty / capacity) dispatches to field 0 only, so
-            // only field 0 needs its monomorphization. Element writers/readers
-            // operate per field and are required for every field.
+        for &(kind, callee) in used {
             if kind == ListMethodKind::Query && fi != 0 {
                 continue;
             }
-            if find_sig_key_for_kind(sig, t, kind).is_none() {
+            let Some(key) = sig_key_of_id(sig, callee) else {
+                return false;
+            };
+            if !catalog.contains_key(&(t, key)) {
                 return false;
             }
         }
@@ -765,7 +949,10 @@ fn compute_safe_set(
     candidates: &[Candidate],
     sig: &MethodSig,
     value_copy_ids: &IndexSet<FuncId>,
-) -> (IndexSet<u32>, IndexMap<u32, IndexSet<ListMethodKind>>) {
+) -> (
+    IndexSet<u32>,
+    IndexMap<u32, IndexSet<(ListMethodKind, FuncId)>>,
+) {
     let shape_of: IndexMap<u32, CandidateShape> = candidates
         .iter()
         .map(|c| {
@@ -820,8 +1007,8 @@ struct WhitelistChecker<'a> {
     value_copy_ids: &'a IndexSet<FuncId>,
     sig: &'a MethodSig,
     escaped: IndexSet<u32>,
-    /// Per-candidate set of `ListMethodKind`s observed on whitelisted uses.
-    used_kinds: IndexMap<u32, IndexSet<ListMethodKind>>,
+    /// Per-candidate `(kind, callee)` of every whitelisted use.
+    used_kinds: IndexMap<u32, IndexSet<(ListMethodKind, FuncId)>>,
 }
 
 impl WhitelistChecker<'_> {
@@ -839,9 +1026,13 @@ impl WhitelistChecker<'_> {
         }
     }
 
-    /// Record that a whitelisted call of `kind` was observed on candidate `idx`.
-    fn record_use(&mut self, idx: u32, kind: ListMethodKind) {
-        self.used_kinds.entry(idx).or_default().insert(kind);
+    /// Record that a whitelisted call of `kind` to `callee` was observed on
+    /// candidate `idx`.
+    fn record_use(&mut self, idx: u32, kind: ListMethodKind, callee: FuncId) {
+        self.used_kinds
+            .entry(idx)
+            .or_default()
+            .insert((kind, callee));
     }
 
     /// Default walk: recurse into every id-bearing child. The checker only
@@ -961,7 +1152,7 @@ impl WhitelistChecker<'_> {
                 list_method_kind(f, self.sig) == Some(ListMethodKind::IndexReader)
             }) =>
             {
-                let Some((receiver, _, args)) = kind.as_method_call() else {
+                let Some((receiver, reader, args)) = kind.as_method_call() else {
                     return false;
                 };
                 if args.len() != 1 {
@@ -999,7 +1190,7 @@ impl WhitelistChecker<'_> {
                 }
                 // Record that `other` is being read via IndexReader so it
                 // needs that method monomorphization during rewrite.
-                self.record_use(other, ListMethodKind::IndexReader);
+                self.record_use(other, ListMethodKind::IndexReader, reader);
                 true
             }
             _ => false,
@@ -1032,7 +1223,7 @@ impl WhitelistChecker<'_> {
                     let (arity, layout, all_scalar) =
                         (shape.arity, shape.layout.clone(), shape.all_scalar);
                     if self.check_source_operand(body, arg_ops[0], arity, &layout, all_scalar) {
-                        self.record_use(rec_local, ListMethodKind::ElementWriter);
+                        self.record_use(rec_local, ListMethodKind::ElementWriter, func_id);
                     } else {
                         self.mark(rec_local);
                     }
@@ -1040,7 +1231,7 @@ impl WhitelistChecker<'_> {
                 }
                 // v.len() / v.is_empty() / v.capacity() — Query, no arg
                 (Some(ListMethodKind::Query), 0) => {
-                    self.record_use(rec_local, ListMethodKind::Query);
+                    self.record_use(rec_local, ListMethodKind::Query, func_id);
                     return;
                 }
                 // v.index_assign-shaped(i, source)
@@ -1058,7 +1249,7 @@ impl WhitelistChecker<'_> {
                     // index argument visited normally
                     self.visit_operand(body, arg_ops[0]);
                     if self.check_source_operand(body, arg_ops[1], arity, &layout, all_scalar) {
-                        self.record_use(rec_local, ListMethodKind::IndexWriter);
+                        self.record_use(rec_local, ListMethodKind::IndexWriter, func_id);
                     } else {
                         self.mark(rec_local);
                     }
@@ -1103,13 +1294,13 @@ impl WhitelistChecker<'_> {
                     && let Some(rec_local) = receiver_local(body, receiver)
                     && self.safe.contains(&rec_local)
                 {
-                    Some((rec_local, args[0].expr))
+                    Some((rec_local, args[0].expr, func_id))
                 } else {
                     None
                 };
-                if let Some((rec_local, idx_arg)) = safe_read {
+                if let Some((rec_local, idx_arg, reader)) = safe_read {
                     // Safe — just visit the index expression.
-                    self.record_use(rec_local, ListMethodKind::IndexReader);
+                    self.record_use(rec_local, ListMethodKind::IndexReader, reader);
                     if let Some(e) = idx_arg.as_expr() {
                         self.visit_expr(body, e);
                     }
