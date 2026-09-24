@@ -81,9 +81,13 @@ Rules the table does not carry:
   name, mirroring the cast that builds it.
 - A resource is an opaque handle, so it renders as the type name and the
   handle in lowercase hex through `LowerHex` — never as a constructible value.
-- An unrestricted resource's handle is an `f64`, and `as` makes one of any
-  `f64`, NaN included. It renders as the type name and that `f64`'s own
-  inspection, `Element#412316860417.0`, which no value can make trap.
+- An unrestricted resource renders as its dynamic type: the resource whose
+  class the handle carries, whatever the static type says. The class and the
+  object index follow, as in `HtmlElement { type_id: 3, object_id: 1 }`. A class
+  that no resource in the tree owns keeps the static type's name.
+- `as` makes an unrestricted handle of any `f64`, NaN included. An `f64` that
+  no host mints renders as `Node { handle: 1.5 }`, so no value can make
+  inspection trap.
 - A reference prefixes `&` or `&mut` and inspects the referent. References
   are GC-managed, so the dereference is always safe.
 

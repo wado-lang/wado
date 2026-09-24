@@ -4341,7 +4341,7 @@ fn generate_fn_inspect_fn(
 }
 
 /// Generate `Inspect` for an opaque handle (a resource, Future, Stream), rendered as `Name#0x<hex>`,
-/// or as `Name#<f64>` for an unrestricted one.
+/// or as `Name { type_id, object_id }` for an unrestricted one.
 #[allow(clippy::too_many_arguments)]
 fn generate_opaque_inspect_fn(
     receiver: &FqTypeName,
@@ -4367,39 +4367,45 @@ fn generate_opaque_inspect_fn(
 
     let fmt = || local_expr(1, "f", fmt_type, span);
     let deref_self = deref_local(0, "self", ref_type, resource_type, span);
-    // `as` makes a handle of any `f64`, NaN included, so the `f64` renders as one.
-    let scalar = tt
-        .handle_scalar(resource_type)
-        .expect("a resource is a handle");
-    let (prefix, trait_name, method) = if scalar == TypeTable::F64 {
-        ("#", inspect_trait, inspect_method)
+    let mut locals = inspect_locals(ref_type, fmt_type);
+    let body = if let ResolvedType::Resource { def } = *tt.get(resource_type)
+        && tt.is_unrestricted_resource(def)
+    {
+        unrestricted_inspect_body(
+            def,
+            type_name,
+            deref_self,
+            fmt(),
+            string_type,
+            &mut locals,
+            tt,
+        )
     } else {
-        ("#0x", lower_hex_trait, lower_hex_method)
+        let handle_stmt = inspect_call(
+            common::cast(deref_self, TypeTable::I32),
+            TypeTable::I32,
+            fmt(),
+            trait_env,
+            module_source,
+            tt,
+            span,
+            lower_hex_trait,
+            lower_hex_method,
+        );
+        TirBlock::new(
+            vec![
+                write_str_stmt(
+                    format!("{type_name}#0x"),
+                    fmt(),
+                    string_type,
+                    span,
+                    formatter_fq,
+                ),
+                handle_stmt,
+            ],
+            span,
+        )
     };
-    let handle_stmt = inspect_call(
-        common::cast(deref_self, scalar),
-        scalar,
-        fmt(),
-        trait_env,
-        module_source,
-        tt,
-        span,
-        trait_name,
-        method,
-    );
-    let body = TirBlock::new(
-        vec![
-            write_str_stmt(
-                format!("{type_name}{prefix}"),
-                fmt(),
-                string_type,
-                span,
-                formatter_fq,
-            ),
-            handle_stmt,
-        ],
-        span,
-    );
 
     make_synthetic_method(
         qualified_name,
@@ -4407,8 +4413,72 @@ fn generate_opaque_inspect_fn(
         inspect_params(ref_type, fmt_type, span),
         TypeTable::UNIT,
         body,
-        inspect_locals(ref_type, fmt_type),
+        locals,
     )
+}
+
+/// `inspect_handle(f, name, h, class)`, where `name` is the resource the
+/// handle's class names: its dynamic type, or `type_name` where no resource does.
+fn unrestricted_inspect_body(
+    def: DefId,
+    type_name: &str,
+    handle: TirExpr,
+    fmt: TirExpr,
+    string_type: TypeId,
+    locals: &mut Vec<TirLocal>,
+    tt: &TypeTable,
+) -> TirBlock {
+    let mut next_local = u32::try_from(locals.len()).expect("two locals");
+    let handle_local = common::alloc_local(&mut next_local, locals, TypeTable::F64);
+    let class_local = common::alloc_local(&mut next_local, locals, TypeTable::I32);
+    let h = || common::local_ref(handle_local, "$h", TypeTable::F64);
+    let class = || common::local_ref(class_local, "$class", TypeTable::I32);
+    // `as` makes a handle of any `f64`; `handle_class` answers -1 for one no host mints.
+    let class_value = if tt.handle_classes(def).is_some() {
+        common::internal_call(
+            CompilerItem::HandleClass.attr_name(),
+            vec![h()],
+            TypeTable::I32,
+        )
+    } else {
+        common::i32_const(-1)
+    };
+    let owners: Vec<(u16, DefId)> = tt.handle_class_owners(def).collect();
+    let name = owners.iter().rev().fold(
+        common::string_lit(type_name, string_type, synth_span()),
+        |otherwise, &(lo, owner)| {
+            let is_owner = common::binary(
+                TirBinaryOp::Eq,
+                class(),
+                common::i32_const(i32::from(lo)),
+                TypeTable::BOOL,
+            );
+            let owner_name = common::string_lit(tt.def_name(owner), string_type, synth_span());
+            TirExpr::new(
+                TirExprKind::If {
+                    condition: Box::new(is_owner),
+                    then_branch: common::block(vec![common::expr_stmt(owner_name)]),
+                    else_branch: Some(common::block(vec![common::expr_stmt(otherwise)])),
+                },
+                string_type,
+                synth_span(),
+            )
+        },
+    );
+    common::block(vec![
+        common::let_stmt(
+            "$h",
+            handle_local,
+            TypeTable::F64,
+            common::cast(handle, TypeTable::F64),
+        ),
+        common::let_stmt("$class", class_local, TypeTable::I32, class_value),
+        common::expr_stmt(common::internal_call(
+            CompilerItem::InspectHandle.attr_name(),
+            vec![fmt, name, h(), class()],
+            TypeTable::UNIT,
+        )),
+    ])
 }
 
 /// Build a `value.inspect(f)` method call statement.

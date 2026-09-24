@@ -574,19 +574,24 @@ Cross-type comparison falls out of subtyping. `el == html_input` is well-typed w
 
 `Ord` is **not** auto-derived. Resources have no natural ordering and the host has no obligation to define one.
 
-#### `Inspect` and `Display` delegate to the host
+#### `Inspect` shows the dynamic type, `Display` asks the host
 
-For resources, the auto-derived implementations of `Inspect` (`${x:?}` / `${x:#?}`) and `Display` (`${x}`) call host-imported formatters:
+Debug output is most useful when it shows what is really there. So `Inspect` (`${x:?}` / `${x:#?}`) renders the dynamic type, not the static one. The handle carries its class, and the class names one resource in the tree:
 
-```wit
-inspect:     func(r: extern-handle) -> string
-inspect-alt: func(r: extern-handle) -> string
-display:     func(r: extern-handle) -> string
+```wado
+let n: Node = doc.create_element("div", null);
+`${n:?}`   // "HtmlElement { type_id: 3, object_id: 1 }"
 ```
 
-These are the **one place** where dynamic-type information leaks into Wado output: the host inspects the runtime type of the underlying object and renders accordingly, so `${n:?}` on a `Node` value that is actually an `HTMLInputElement` prints the input element. This matches the intuition that debug output is most valuable when it reflects what's really there.
+`type_id` is the class and `object_id` the index within it. The name is read from the class alone, so no host call is made. A class no resource in the tree owns keeps the static type's name. An `f64` no host mints, which `as` can make, renders as `Node { handle: 1.5 }`.
 
-A user `impl Inspect for Element { ... }` (or `Display`, etc.) shadows the auto-derived host call by the normal trait-resolution rules, with the trait-vs-inherited collision rule (rule 2 of method resolution) keeping ambiguities loud.
+`Display` (`${x}`) has no such answer in the handle, so it calls a host-imported formatter:
+
+```wit
+display: func(r: extern-handle) -> string
+```
+
+A user `impl Inspect for Element { ... }` (or `Display`) shadows the auto-derived one by the normal trait-resolution rules, with the trait-vs-inherited collision rule (rule 2 of method resolution) keeping ambiguities loud.
 
 #### `serde` is a compile error on resources
 
@@ -676,18 +681,17 @@ Same-named methods on unrelated Wado types (e.g., a hypothetical `mouse-event.bu
 
 #### Built-in formatters
 
-`Inspect` and `Display` lower to flat CM imports over `extern-handle`, one each
-whatever the size of the hierarchy:
+`Display` lowers to one flat CM import over `extern-handle`, whatever the size
+of the hierarchy:
 
 ```wit
 interface lang {
-    inspect:     func(r: extern-handle) -> string;
-    inspect-alt: func(r: extern-handle) -> string;
-    display:     func(r: extern-handle) -> string;
+    display: func(r: extern-handle) -> string;
 }
 ```
 
-Narrowing and `Eq` import nothing: the handle already carries what they read.
+Narrowing, `Eq` and `Inspect` import nothing: the handle already carries what
+they read.
 
 #### Operation lowering at a glance
 
@@ -697,7 +701,7 @@ Narrowing and `Eq` import nothing: the handle already carries what they read.
 | `el.foo()` resolving to `Node::foo`      | call `node.foo(el, ...)`                                              |
 | `input: HtmlInputElement` (type pattern) | compare `el` against the target's class range, branch; `el` unchanged |
 | `a == b` for unrestricted `a`, `b`       | `f64.eq` on the two handles                                           |
-| `` `${x:?}` ``                           | call `inspect(x)`                                                     |
+| `` `${x:?}` ``                           | name the resource owning `x`'s class, then write the class and index  |
 | `` `${x}` ``                             | call `display(x)`                                                     |
 
 Upcast and the receiver argument of inherited methods are wasm-level no-ops; the same handle value flows through unchanged.
@@ -739,10 +743,11 @@ Implemented, with tests in `wado-compiler/tests/integration/unrestricted_resourc
 - Type patterns. `p: T` is a pattern wherever one stands, and a `let` annotation is that pattern. An ascription `T` strictly extending the subject's type narrows: a plain `let` rejects it as refutable, and a `match` over one needs a final `_` and reports an arm an earlier ancestor arm shadows. The test compares the handle against `T`'s class range, and a target without `classes` is rejected.
 - `Eq`. `==` / `!=` on two handles one of whose types extends the other compares the two `f64`s. The trait holds of every unrestricted resource, so `Option<Node>` or a struct holding one derives it too (`tests/fixtures/resource_eq_through_option.wado`).
 - `as` between a handle and anything but `f64` or a handle type it upcasts to is rejected (`tests/fixtures/error_unrestricted_resource_cast.wado`).
+- `Inspect` renders the dynamic type (`tests/fixtures/inspect_unrestricted_handle.wado`).
 
 Not built:
 
-- The `Inspect` / `Display` host imports.
+- The `Display` host import.
 - Rule (5), visibility judged at the declaring module, and the unenforced parent-visibility bullet above. Both need per-method visibility on resources, which nothing asks for yet.
 - Declaring `linearity = "unrestricted"` on the non-owning tokens (`Waitable`, `core:icu`'s interned handles), which still take their value semantics from the absence of a `dtor`; and generic resources on either side of `extends`.
 - A parent declared by a prebuilt module. The collect pass skips what the stdlib snapshot covers, so a snapshot parent reaches validation without its method names or its arity; rather than accept what it cannot check, the compiler rejects the clause. `web:dom` is a package, never snapshotted, so nothing reaches it yet.

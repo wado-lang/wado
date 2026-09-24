@@ -1,15 +1,41 @@
-// An unrestricted handle is an `f64`, and `as` accepts any `f64` as one, so it
-// inspects as that `f64`: a NaN or an out-of-range handle renders, never traps.
-#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted", classes = "0..=1")]
+// An unrestricted handle inspects as the type its class names, with the class
+// and the object index: the dynamic type, whatever the static one. `as` makes
+// a handle of any `f64`, so one no host minted renders as that `f64` instead.
+#[cm("wasi:demo/dom@0.1.0#node", linearity = "unrestricted", classes = "0..=2")]
 resource Node {}
 
-test "a handle inspects as its f64" {
-    assert `${(137438953479.0 as Node):?}` == "Node#137438953479.0";
+#[cm("wasi:demo/dom@0.1.0#element", linearity = "unrestricted", classes = "1..=1")]
+resource Element extends Node {}
+
+#[cm("wasi:demo/dom@0.1.0#text", linearity = "unrestricted", classes = "2..=2")]
+resource Text extends Node {}
+
+#[cm("wasi:demo/dom@0.1.0#plain", linearity = "unrestricted")]
+resource Plain {}
+
+global STRIDE: f64 = 137438953472.0;
+
+test "a handle inspects as its dynamic type" {
+    let n = (STRIDE + 7.0) as Node;
+    assert `${n:?}` == "Element { type_id: 1, object_id: 7 }";
+    assert `${n:#?}` == "Element {\n  type_id: 1,\n  object_id: 7,\n}";
+    assert `${(2.0 * STRIDE) as Text:?}` == "Text { type_id: 2, object_id: 0 }";
+    assert `${(STRIDE + 3.0) as Element:?}` == "Element { type_id: 1, object_id: 3 }";
 }
 
-test "a handle no host minted still inspects" {
-    assert `${(builtin::black_box(f64::NAN) as Node):?}` == "Node#NaN";
-    assert `${(builtin::black_box(1.0e300) as Node):?}` == "Node#1e300";
+test "a class the tree does not number keeps the static type" {
+    assert `${(9.0 * STRIDE + 1.0) as Node:?}` == "Node { type_id: 9, object_id: 1 }";
+}
+
+test "an f64 no host minted still inspects" {
+    assert `${builtin::black_box(f64::NAN) as Node:?}` == "Node { handle: NaN }";
+    assert `${builtin::black_box(1.5) as Node:?}` == "Node { handle: 1.5 }";
+    assert `${builtin::black_box(-1.0) as Node:?}` == "Node { handle: -1.0 }";
+    assert `${builtin::black_box(1.0e300) as Node:?}` == "Node { handle: 1e300 }";
+}
+
+test "a resource without classes shows its handle" {
+    assert `${5.0 as Plain:?}` == "Plain { handle: 5.0 }";
 }
 
 __DATA__

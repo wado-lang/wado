@@ -12,6 +12,13 @@ use { Slice } from "core:prelude/slice.wado";
 use { List } from "core:prelude/list.wado";
 use { Formatter } from "core:prelude/format.wado";
 use {
+    Inspect,
+    struct_close,
+    struct_field,
+    struct_field_end,
+    struct_open,
+} from "core:prelude/traits.wado";
+use {
     Option,
     Result,
     CopyResult,
@@ -207,6 +214,39 @@ internal fn write_escaped_string(s: String, f: &mut Formatter) {
             _ => f.write_char(c),
         }
     }
+}
+
+global HANDLE_CLASS_STRIDE: f64 = 137438953472.0;
+global HANDLE_LIMIT: f64 = 9007199254740992.0;
+
+/// The class a host-minted unrestricted handle carries, `class * 2^37 + index`,
+/// or -1 for an `f64` no host mints.
+#[compiler_item("handle_class")]
+internal fn handle_class(handle: f64) -> i32 {
+    if !(handle >= 0.0 && handle < HANDLE_LIMIT && builtin::f64_floor(handle) == handle) {
+        return -1;
+    }
+    return builtin::f64_floor(handle / HANDLE_CLASS_STRIDE) as i32;
+}
+
+/// Writes an unrestricted handle as `name { type_id, object_id }`, or as
+/// `name { handle }` where `class` is -1.
+#[compiler_item("inspect_handle")]
+internal fn inspect_handle(f: &mut Formatter, name: String, handle: f64, class: i32) {
+    struct_open(f, name);
+    if class < 0 {
+        struct_field(f, "handle", true);
+        handle.inspect(f);
+    } else {
+        struct_field(f, "type_id", true);
+        class.inspect(f);
+        struct_field_end(f);
+        struct_field(f, "object_id", false);
+        let object_id = (handle - class as f64 * HANDLE_CLASS_STRIDE) as i64;
+        object_id.inspect(f);
+    }
+    struct_field_end(f);
+    struct_close(f);
 }
 
 // === CM Resource Method Adapters ===
