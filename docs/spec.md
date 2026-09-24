@@ -1513,7 +1513,7 @@ fn normalize(mut s: String) -> String {
 }
 ```
 
-The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function. References (`&T`, `&mut T`) are the exception: they share state with the caller. An affine resource is never copied: passing it moves it. This applies uniformly to primitives, structs, `String`, and `List<T>`. Inside the callee, reassignment (`p = new_value`) and in-place mutation operate on the callee's local copy and are not visible to the caller. In-place mutation covers field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`). To let the callee mutate the caller's value, declare the parameter as `&mut T` and pass a `&mut`-reference at the call site.
+The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function. This applies uniformly to primitives, structs, `String`, and `List<T>`. References (`&T`, `&mut T`) are the exception: they share state with the caller. An affine resource is never copied: passing it moves it. Inside the callee, reassignment (`p = new_value`) and in-place mutation operate on the callee's local copy and are not visible to the caller. In-place mutation covers field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`). To let the callee mutate the caller's value, declare the parameter as `&mut T` and pass a `&mut`-reference at the call site.
 
 ```wado
 fn countdown(mut n: i32) with Stdout {
@@ -2954,7 +2954,7 @@ mention. A bound is a name like any other, so calling a supertrait's method
 through `T: Sub` needs `Base` imported too. This is what keeps a library's new
 blanket impl from changing what a call means in a module that never named it.
 
-Not yet enforced for a supertrait's method called through a bound; see
+Not yet enforced for a supertrait's method called through a bound. See
 [WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md#scope-gates-method-calls-not-the-bounds-path).
 
 ##### The Order
@@ -3163,7 +3163,7 @@ impl<T: Eq> Eq for Pair<T> {
 
 #### Not Yet Implemented
 
-- Trait objects (`dyn Trait`); see [WEP: Struct and Trait System](./wep-2026-01-13-struct-and-trait.md#8-trait-objects-dynamic-dispatch).
+- Trait objects (`dyn Trait`). See [WEP: Struct and Trait System](./wep-2026-01-13-struct-and-trait.md#8-trait-objects-dynamic-dispatch).
 - A namespaced trait in bound position (`T: conv::Convert`). An impl head takes one (`impl conv::Convert<String> for S`).
 
 ### Coherence and Orphan Rules
@@ -3566,8 +3566,8 @@ On every type but a float, a comparison operator means what `Ord::cmp` answers:
 
 A float is the one type whose operators are not its `Ord`: all four are IEEE,
 so a NaN answers false and the two zeroes are one value. This holds for `f16`
-and `bf16` as for `f32` and `f64`. One trait cannot carry both orders, because `Ordering` has three
-cases and an IEEE comparison has four answers. See
+and `bf16` as for `f32` and `f64`. One trait cannot carry both orders, because
+`Ordering` has three cases and an IEEE comparison has four answers. See
 [WEP: The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md).
 
 #### Default Implementations
@@ -3748,9 +3748,9 @@ A parameter with no default is left open by a bound that writes nothing there:
 
 Two bounds on one trait are two obligations, each asking for what it writes.
 Under `trait Pick<K = i32>`, `T: Pick + Pick<String>` asks for `impl Pick<i32>`
-as well as `impl Pick<String>`. A method call on such a
-parameter reads the bound that writes arguments. The trait is one either way, so
-naming it selects nothing.
+as well as `impl Pick<String>`. A method call on such a parameter reads the
+bound that writes arguments. The trait is one either way, so naming it selects
+nothing.
 
 An impl and a bound already in scope read a written argument differently.
 
@@ -4329,7 +4329,7 @@ Namespace Resolution (a namespace is reserved iff the compiler bundles it):
 
 3. Library aliases `lib:<nick>`: resolved via `wado.toml` or an inline `with`. An alias renames a dependency, shortens its name, tells two major versions apart, or names a dependency with no public coordinate.
 
-4. Remote modules (`http://` or `https://`): fetched by the host. Not yet implemented; see [WEP: Module Loader Design](./wep-2026-01-24-module-loader.md).
+4. Remote modules (`http://` or `https://`): fetched by the host. Not yet implemented. See [WEP: Module Loader Design](./wep-2026-01-24-module-loader.md).
 
 5. Local modules (`./` or `../`): Resolved relative to importing module.
 
@@ -4807,7 +4807,7 @@ test {
 - Tests are independent, so they may run in any order, and concurrently
 - A test passes if it completes without panicking or trapping
 - A test fails if `assert` fails, `panic` is called, or a trap occurs
-- Test blocks belong to the `test` world; compiling for any other world leaves them out
+- Test blocks belong to the `test` world. Compiling for any other world leaves them out
 
 #### `#[expect_trap]` Attribute
 
@@ -4949,9 +4949,14 @@ caller's `.wait()` returns it at once. See
 [WEP: Generic `AsyncCall<T>`](./wep-2026-04-22-subtask-generic.md) and
 [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md).
 
-A structured `join` that runs closures concurrently and returns their results
-as a tuple, `let [users, posts] = join(|| fetch_users(), || fetch_posts());`,
-is not yet implemented.
+A structured `join` runs closures concurrently and returns their results as a
+tuple:
+
+```wado
+let [users, posts] = join(|| fetch_users(), || fetch_posts());
+```
+
+Not yet implemented.
 
 ### Async Exports
 
@@ -5367,7 +5372,7 @@ with Stdin => &mut s, Stdout => &mut o do { ... }
 with &mut bundle do { ... }                       // bundled (omits effect name)
 ```
 
-See `docs/wep-2026-01-27-effect-system-design.md` for resource-as-effect and effect propagation design, and `docs/wep-2026-04-11-effect-handler.md` for handler syntax and semantics.
+See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md) for resource-as-effect and effect propagation, and [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md) for handler syntax and semantics.
 
 ## World System
 
@@ -5917,7 +5922,7 @@ Binds a stdlib declaration to the language item of that name, such as `#[compile
 
 #### `#![stdlib("path")]`
 
-Module-level inner attribute. Names the bundled stdlib module a file is (`#![stdlib("core:cbor")]`), however the file was loaded. A file opened directly, as an editor does, is then the same module as the one an import reaches.
+Module-level inner attribute. Names the bundled stdlib module a file is, such as `#![stdlib("core:cbor")]`. The file is that module however it was loaded, so a file an editor opens directly is the same module an import reaches.
 
 #### `#[cm("namespace:pkg/interface@version")]` / `#[cm_params(...)]`
 
@@ -5928,9 +5933,9 @@ Links Wado definitions (interfaces, worlds, resources, enums) to their Component
 What a call does with the reference parameters it is handed: whether its result
 aliases one, and whether it keeps one past the return. Neither is a safety
 condition, since every referent is GC-managed and cannot dangle. The compiler
-reads both from a function's body. These attributes are for a
-declaration that has none: a `core:builtin` primitive, a Component Model import,
-a `.wasm` / `.wat` asset import. See
+reads both from a function's body. These attributes are for a declaration that
+has none: a `core:builtin` primitive, a Component Model import, a `.wasm` /
+`.wat` asset import. See
 [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 ```wado

@@ -14,8 +14,8 @@ Then update docs if applicable:
 
 - docs/spec.md
 - docs/cheatsheet.md
-- docs/compiler.md, docs/optimizer.md — only when a phase or pass is added,
-  removed, or reordered; how one works belongs in its module doc
+- docs/compiler.md and docs/optimizer.md, only when a phase or pass is added,
+  removed, or reordered. How one works belongs in its module doc.
 
 Then, run `time mise run on-task-done`, which includes:
 
