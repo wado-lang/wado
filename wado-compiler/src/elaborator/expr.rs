@@ -2849,8 +2849,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Project an AST pattern onto the shape coverage reads, asked of the
     /// structure its type wraps, as pattern resolution asks it.
-    fn exh_pattern(&mut self, pattern: &ast::Pattern, scrutinee_type: TypeId) -> Pat {
-        let scrutinee_type = self.structure_head(scrutinee_type);
+    fn exh_pattern(&mut self, pattern: &ast::Pattern, written_type: TypeId) -> Pat {
+        let scrutinee_type = self.structure_head(written_type);
         match pattern {
             ast::Pattern::Wildcard | ast::Pattern::Error(_) => Pat::Wild,
             ast::Pattern::Ident { name, .. } | ast::Pattern::MutIdent { name, .. } => {
@@ -2875,12 +2875,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 variant_name,
                 variant_qualifier.as_ref(),
                 bindings,
-                scrutinee_type,
+                written_type,
             ),
             ast::Pattern::Or(alternatives) => Pat::Or(
                 alternatives
                     .iter()
-                    .map(|alt| self.exh_pattern(alt, scrutinee_type))
+                    .map(|alt| self.exh_pattern(alt, written_type))
                     .collect(),
             ),
             ast::Pattern::Range {
@@ -3140,23 +3140,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         variant_name: &str,
         variant_qualifier: Option<&ast::Type>,
         bindings: &[ast::Pattern],
-        scrutinee_type: TypeId,
+        written_type: TypeId,
     ) -> Pat {
+        let scrutinee_type = self.structure_head(written_type);
         let normalized = self
             .strip_ns_prefix(variant_name)
             .unwrap_or(variant_name)
             .to_string();
 
-        // A bare name that is no case: an associated constant is its value or
-        // an opaque constant-value pattern; anything else is a binding.
+        // A bare name that is no case: an associated constant is its value, a
+        // namespaced global an opaque constant-value pattern; anything else binds.
         if bindings.is_empty()
-            && !self.is_known_case_of_type(scrutinee_type, &normalized, variant_qualifier)
+            && !self.is_known_case_of_type(written_type, &normalized, variant_qualifier)
         {
             let Some(AssocConstSig {
                 value: const_expr, ..
             }) = self.associated_constant_qualified(variant_qualifier, variant_name)
             else {
-                return Pat::Wild;
+                let names_global = self
+                    .sem
+                    .imports
+                    .pattern_ns_member(variant_qualifier, variant_name)
+                    .is_some_and(|alias| self.is_immutable_global(&alias));
+                return if names_global { Pat::Opaque } else { Pat::Wild };
             };
             return match &const_expr {
                 ast::Expr::Literal(lit) if !matches!(lit.value, Literal::Null) => {
@@ -3170,7 +3176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // A mismatched qualifier was reported where the pattern was resolved.
-        if !self.pattern_qualifier_matches_scrutinee(scrutinee_type, variant_qualifier) {
+        if !self.pattern_qualifier_matches_scrutinee(written_type, variant_qualifier) {
             return Pat::Wild;
         }
         self.exh_case(scrutinee_type, &normalized, bindings.first())

@@ -1926,15 +1926,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect()
     }
 
-    /// Record use→def edges for each imported name in `use { a, b as c } from "..."`
-    /// declarations. The cursor landing on an imported name inside a `use`
-    /// specifier list should jump to the defining symbol in the source module.
     fn record_use_reference(&mut self, source: &ModuleSource, site: AstId, name: &str) {
         if let Some(sym) = self.symbols.lookup_in_module(source, name) {
             self.record_reference_to_def(site, sym.defined_at);
         }
     }
 
+    /// Record use→def edges for each imported name in `use { a, b as c } from "..."`
+    /// declarations, so the cursor on one jumps to its definition.
     fn record_use_specifier_references(&mut self, module: &Module) {
         for item in &module.items {
             let Item::Use(use_decl) = item else { continue };
