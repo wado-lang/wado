@@ -1560,11 +1560,12 @@ pub(super) fn param_needs_lifting(type_id: TypeId, tt: &TypeTable) -> bool {
     match tt.get(type_id) {
         ResolvedType::Primitive(prim) => matches!(prim, PrimitiveType::Bool),
         ResolvedType::Unit => true,
+        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+            tt.is_unrestricted_handle(type_id)
+        }
         // One-scalar handle-shaped types flow through.
-        ResolvedType::Resource { .. }
-        | ResolvedType::Enum { .. }
-        | ResolvedType::Flags { .. }
-        | ResolvedType::GenericResource { .. } => false,
+        ResolvedType::Enum { .. }
+        | ResolvedType::Flags { .. } => false,
         // `ResolvedType::Newtype` unwraps at the CM boundary, so recurse on
         // the base type rather than treating the newtype itself as
         // opaque.
