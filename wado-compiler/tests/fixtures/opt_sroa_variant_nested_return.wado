@@ -1,0 +1,38 @@
+// A `return` nested inside another return's value: a match arm, and a variant
+// payload. The candidate check looked only at tail positions, so it passed the
+// inner `return fallback`, which the rewrite then left returning the variant
+// from a tuple-returning function (invalid Wasm).
+
+use { println, Stdout } from "core:cli";
+
+fn pick(k: i32, fallback: Result<i32, String>) -> Result<i32, String> {
+    return match k {
+        0 => Ok(10),
+        1 => Err("one"),
+        _ => return fallback,
+    };
+}
+
+fn wrap(k: i32, fallback: Result<i32, String>) -> Result<i32, String> {
+    return Ok(if k > 0 { k } else { return fallback; });
+}
+
+export fn run() with Stdout {
+    for let k of 0..<builtin::black_box(3) {
+        let fb: Result<i32, String> = Err("fb");
+        match pick(k, fb) {
+            Ok(v) => println(`ok ${v}`),
+            Err(e) => println(`err ${e}`),
+        }
+    }
+    for let k of 0..<builtin::black_box(2) {
+        let fb: Result<i32, String> = Err("fb");
+        match wrap(k, fb) {
+            Ok(v) => println(`ok ${v}`),
+            Err(e) => println(`err ${e}`),
+        }
+    }
+}
+
+__DATA__
+{"stdout": "ok 10\nerr one\nerr fb\nerr fb\nok 1\n"}

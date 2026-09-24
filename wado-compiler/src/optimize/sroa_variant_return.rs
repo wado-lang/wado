@@ -1157,7 +1157,7 @@ fn collect_and_validate(
                 .body
                 .as_ref()
                 .expect("is_eligible rejects a body-less function");
-            if !returns_are_scalarizable(body, body.root, cand, &tail_ok) {
+            if !returns_are_scalarizable(body, NodeRef::Block(body.root), cand, &tail_ok) {
                 invalid.insert(key);
             }
         }
@@ -1199,82 +1199,30 @@ fn collect_called(body: &Body, node: NodeRef, out: &mut IndexSet<FuncId>) {
     body.for_each_child(node, |c| collect_called(body, c, out));
 }
 
-/// Whether every `Return` in `block` produces a shape the rewrite can turn into
-/// the result tuple.
+/// Whether every `Return` [`rewrite_returns`] reaches under `node` has a value
+/// [`rewrite_return_value`] turns into the result tuple — the same walk, so a
+/// `return` nested in another's value, a condition or an argument is checked.
 fn returns_are_scalarizable(
     body: &Body,
-    block: BlockId,
+    node: NodeRef,
     cand: &Candidate,
     tail_ok: &IndexMap<FuncId, TypeId>,
 ) -> bool {
-    body.blocks[block]
-        .stmts
-        .iter()
-        .all(|&s| stmt_returns_scalarizable(body, s, cand, tail_ok))
-}
-
-fn stmt_returns_scalarizable(
-    body: &Body,
-    stmt: StmtId,
-    cand: &Candidate,
-    tail_ok: &IndexMap<FuncId, TypeId>,
-) -> bool {
-    match &body.stmts[stmt].kind {
-        StmtKind::Return { value: None } => false,
-        StmtKind::Return { value: Some(v) } => return_value_scalarizable(body, *v, cand, tail_ok),
-        // The condition too: `if f(x)? > 0` puts a `?`-desugared `return Err(…)`
-        // there, and `rewrite_returns` reaches it through `for_each_child`. Every
-        // other arm validates its operands; skipping this one rewrote a return
-        // nothing had agreed to.
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            nested_returns_scalarizable(body, *condition, cand, tail_ok)
-                && returns_are_scalarizable(body, *then_block, cand, tail_ok)
-                && else_block.is_none_or(|b| returns_are_scalarizable(body, b, cand, tail_ok))
-        }
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            returns_are_scalarizable(body, *b, cand, tail_ok)
-        }
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            nested_returns_scalarizable(body, *value, cand, tail_ok)
-        }
-        StmtKind::Expr(e) => nested_returns_scalarizable(body, *e, cand, tail_ok),
-        StmtKind::Break { value, .. } => {
-            value.is_none_or(|v| nested_returns_scalarizable(body, v, cand, tail_ok))
-        }
-        StmtKind::Continue => true,
+    if let NodeRef::Stmt(s) = node
+        && let StmtKind::Return { value } = body.stmts[s].kind
+        && !value.is_some_and(|v| return_value_scalarizable(body, v, cand, tail_ok))
+    {
+        return false;
     }
+    let mut ok = true;
+    body.for_each_child(node, |c| {
+        ok = ok && returns_are_scalarizable(body, c, cand, tail_ok);
+    });
+    ok
 }
 
-/// Every `Return` nested anywhere in an expression — a `?`-desugared
-/// `return Err(…)` inside a `let` initializer or an `if` condition included.
-fn nested_returns_scalarizable(
-    body: &Body,
-    op: Operand,
-    cand: &Candidate,
-    tail_ok: &IndexMap<FuncId, TypeId>,
-) -> bool {
-    let Some(expr) = op.as_expr() else {
-        return true;
-    };
-    let mut stmts = Vec::new();
-    collect_stmts(body, NodeRef::Expr(expr), &mut stmts);
-    stmts
-        .iter()
-        .all(|&s| stmt_returns_scalarizable(body, s, cand, tail_ok))
-}
-
-fn collect_stmts(body: &Body, node: NodeRef, out: &mut Vec<StmtId>) {
-    if let NodeRef::Stmt(s) = node {
-        out.push(s);
-    }
-    body.for_each_child(node, |c| collect_stmts(body, c, out));
-}
-
-/// The value of a `return`, in tail position.
+/// The value of a `return`, in tail position. A `return` nested inside it is
+/// [`returns_are_scalarizable`]'s to check.
 fn return_value_scalarizable(
     body: &Body,
     op: Operand,
@@ -1288,8 +1236,7 @@ fn return_value_scalarizable(
         return true;
     }
     if let Some(b) = body.unbroken_block(expr) {
-        return returns_are_scalarizable(body, b, cand, tail_ok)
-            && block_tail_scalarizable(body, b, cand, tail_ok);
+        return block_tail_scalarizable(body, b, cand, tail_ok);
     }
     match &body.exprs[expr].kind {
         ExprKind::VariantConstruct { variant_type, .. } => *variant_type == cand.variant_type,
@@ -1302,31 +1249,16 @@ fn return_value_scalarizable(
             else_branch,
             ..
         } => {
-            let (then_branch, else_branch) = (*then_branch, *else_branch);
-            returns_are_scalarizable(body, then_branch, cand, tail_ok)
-                && block_tail_scalarizable(body, then_branch, cand, tail_ok)
-                && else_branch.is_some_and(|b| {
-                    returns_are_scalarizable(body, b, cand, tail_ok)
-                        && block_tail_scalarizable(body, b, cand, tail_ok)
-                })
+            block_tail_scalarizable(body, *then_branch, cand, tail_ok)
+                && else_branch.is_some_and(|b| block_tail_scalarizable(body, b, cand, tail_ok))
         }
-        ExprKind::Match { arms, .. } => {
-            let bodies: Vec<Operand> = arms.iter().map(|a| a.body).collect();
-            bodies
-                .iter()
-                .all(|&b| return_value_scalarizable(body, b, cand, tail_ok))
-        }
-        ExprKind::Switch { arms, default, .. } => {
-            let blocks: Vec<BlockId> = arms
-                .iter()
-                .copied()
-                .chain(std::iter::once(*default))
-                .collect();
-            blocks.iter().all(|&b| {
-                returns_are_scalarizable(body, b, cand, tail_ok)
-                    && block_tail_scalarizable(body, b, cand, tail_ok)
-            })
-        }
+        ExprKind::Match { arms, .. } => arms
+            .iter()
+            .all(|a| return_value_scalarizable(body, a.body, cand, tail_ok)),
+        ExprKind::Switch { arms, default, .. } => arms
+            .iter()
+            .chain(std::iter::once(default))
+            .all(|&b| block_tail_scalarizable(body, b, cand, tail_ok)),
         _ => false,
     }
 }
