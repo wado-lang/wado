@@ -17,6 +17,27 @@ pub variant Rank {
     Dims(List<Dim>),
 }
 
+/// Every extent `rank` states, or `None` where it leaves one open.
+pub fn static_extents(rank: &Rank) -> Option<List<i32>> {
+    let mut extents: List<i32> = [];
+    match rank {
+        Scalar => {
+        },
+        Unranked => {
+            return null;
+        },
+        Dims(dims) => {
+            for let d of *dims {
+                let Static(e) = d else {
+                    return null;
+                };
+                extents.push(e);
+            }
+        },
+    }
+    return Option::Some(extents);
+}
+
 pub struct ValueInfo {
     pub name: String,
     pub dtype: String,

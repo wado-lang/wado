@@ -420,7 +420,7 @@ impl Interpreter<'_> {
         let ResolvedType::BuiltinArray(element_type) = *self.type_table.get(type_id) else {
             return None;
         };
-        if let Some(elem) = packed_element(self.type_table, element_type) {
+        if let Some(elem) = self.type_table.packed_element(type_id) {
             let packed = PackedData::from_values(elements, elem)?;
             if let Some(Operand::Expr(previous)) = existing
                 && matches!(&sink.body().exprs[previous].kind, ExprKind::PackedArray(p) if *p == packed)
@@ -1267,8 +1267,8 @@ fn charge_elements(
     type_table: &TypeTable,
     budget: &mut usize,
 ) -> Option<()> {
-    if let ResolvedType::BuiltinArray(e) = type_table.get(type_id)
-        && packed_element(type_table, *e).is_some()
+    if matches!(type_table.get(type_id), ResolvedType::BuiltinArray(_))
+        && type_table.packed_element(type_id).is_some()
     {
         return Some(());
     }
@@ -1322,14 +1322,6 @@ fn scalar_kind(value: &Value, ty: TypeId) -> Option<ValueKind> {
         Value::Unit => ValueKind::Unit,
         Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => return None,
     })
-}
-
-/// The primitive an array of `element_type` packs, `None` for one with no
-/// data width.
-fn packed_element(type_table: &TypeTable, element_type: TypeId) -> Option<PrimitiveType> {
-    type_table
-        .primitive_head(element_type)
-        .filter(|prim| prim.data_width().is_some())
 }
 
 /// The operands a struct literal of `type_id` already holds, in `field_index`

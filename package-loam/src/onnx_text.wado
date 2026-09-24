@@ -17,6 +17,7 @@ use {
     element_of,
     parameters,
     push_element,
+    static_extents,
 } from "./graph.wado";
 
 /// Read a graph out of the ONNX textual format. A syntax error comes back as
@@ -114,22 +115,9 @@ fn read_constant_data(
         return Result::Ok(null);
     };
     let width = element.width;
-    let mut extents: List<i32> = [];
-    match rank {
-        Scalar => {
-        },
-        Unranked => {
-            return Result::Err(`${name}: inline values need a stated rank`);
-        },
-        Dims(dims) => {
-            for let d of *dims {
-                let Static(e) = d else {
-                    return Result::Err(`${name}: inline values need every extent stated`);
-                };
-                extents.push(e);
-            }
-        },
-    }
+    let Some(extents) = static_extents(rank) else {
+        return Result::Err(`${name}: inline values need every extent stated`);
+    };
     let elements = children_of_kind(s, values, onnx::RK_TENSOR_ELEM);
     check_element_count(name, elements.len(), &extents)?;
     let mut bytes = ByteList::with_capacity(elements.len() * width);

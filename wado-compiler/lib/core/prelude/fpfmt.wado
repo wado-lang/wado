@@ -949,20 +949,8 @@ pub fn parse(d: u64, p: i32) -> f64 {
     return f64::from_bits(parse_bits(d, p, &BINARY64));
 }
 
-// parse_text parses the view as a decimal number and returns the nearest f64,
-// allocating no substring. Returns null if the input is malformed.
-// Accepts: optional sign, decimal digits, optional fractional part, optional exponent,
-//          "inf"/"infinity" (case-insensitive), "nan" (case-insensitive).
-// Rejects: leading dot (".5"), trailing dot ("5."), empty input.
-// Examples: "3.14", "1e2", "0.5", "123", "+1.5e-3", "-42", "inf", "NaN"
-pub fn parse_text(s: &StrSlice) -> Option<f64> {
-    return match parse_text_bits(s, &BINARY64) {
-        Some(bits) => Option::Some(f64::from_bits(bits)),
-        None => null,
-    };
-}
-
-/// `parse_text`, rounded once into `format` and returned as its bits.
+/// The decimal text `s` rounded once into `format`, as its bits; `None` where it
+/// is malformed. Takes a sign, `inf`/`infinity`/`nan` in any case, and no bare dot.
 pub fn parse_text_bits(s: &StrSlice, format: &BinaryFormat) -> Option<u64> {
     let len = s.len();
     if len == 0 {

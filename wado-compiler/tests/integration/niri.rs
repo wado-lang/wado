@@ -3536,7 +3536,7 @@ fn packed_array(bytes: Vec<u8>, type_id: TypeId) -> Build {
     Rc::new(move |b| {
         Operand::Expr(pe(
             b,
-            ExprKind::PackedArray(PackedData::of_bytes(bytes.clone())),
+            ExprKind::PackedArray(PackedData::new(bytes.clone(), PrimitiveType::U8)),
             type_id,
         ))
     })

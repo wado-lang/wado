@@ -209,10 +209,6 @@ impl PackedData {
         Self { bytes, elem }
     }
 
-    pub fn of_bytes(bytes: Vec<u8>) -> Self {
-        Self::new(bytes, PrimitiveType::U8)
-    }
-
     /// The bytes of a `u8` array, which is what a string or byte buffer holds.
     pub fn as_bytes(&self) -> Option<&[u8]> {
         (self.elem == PrimitiveType::U8).then_some(self.bytes.as_slice())
@@ -247,7 +243,9 @@ impl PackedData {
     /// The array `elements` spell, the inverse of [`Self::to_value`]. `None`
     /// where one is not a value of `elem`.
     pub fn from_values(elements: &[Value], elem: PrimitiveType) -> Option<Self> {
-        let width = elem.data_width()?;
+        let width = elem
+            .data_width()
+            .expect("a packed element has a data width");
         let mut bytes = Vec::with_capacity(elements.len() * width);
         for element in elements {
             let bits = match *element {
