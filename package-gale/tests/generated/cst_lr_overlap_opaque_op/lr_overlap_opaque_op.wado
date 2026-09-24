@@ -1619,7 +1619,7 @@ fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> () {
 }
 
 fn _parse_op__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_LIT_GT {
         p.take();
@@ -1650,7 +1650,7 @@ fn _parse_op(p: &mut Parser) -> () {
 }
 
 fn _parse_cmp__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         p.take();

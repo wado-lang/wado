@@ -13317,7 +13317,7 @@ fn scan_shr(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
 }
 
 fn _parse_crate__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -13373,9 +13373,9 @@ fn _parse_crate__inner(p: &mut Parser) -> () with RustParserBase {
         }
         p.site = 0;
         _parse_inner_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos_2: i32 = -1;
@@ -13406,7 +13406,7 @@ fn _parse_crate__inner(p: &mut Parser) -> () with RustParserBase {
         }
         p.site = 1;
         _parse_item(p);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
@@ -13444,11 +13444,11 @@ fn _parse_macro_invocation(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_delim_token_tree__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_LPAREN {
         p.take();
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -13479,13 +13479,13 @@ fn _parse_delim_token_tree__inner(p: &mut Parser) -> () with RustParserBase {
             }
             p.site = 4;
             _parse_token_tree(p, 0);
-            if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_back(&SYNC_2, &EXPECTED_2); }
+            if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
         }
         p.expect(TK_RPAREN, &EMPTY_SYNC, true);
         return;
     } else if kind == TK_LSQUAREBRACKET {
         p.take();
-        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
+        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -13516,13 +13516,13 @@ fn _parse_delim_token_tree__inner(p: &mut Parser) -> () with RustParserBase {
             }
             p.site = 5;
             _parse_token_tree(p, 0);
-            if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_back(&SYNC_3, &EXPECTED_3); }
+            if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
         }
         p.expect(TK_RSQUAREBRACKET, &EMPTY_SYNC, true);
         return;
     } else if kind == TK_LCURLYBRACE {
         p.take();
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -13553,7 +13553,7 @@ fn _parse_delim_token_tree__inner(p: &mut Parser) -> () with RustParserBase {
             }
             p.site = 6;
             _parse_token_tree(p, 0);
-            if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+            if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
         }
         p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
         return;
@@ -13578,10 +13578,10 @@ fn _parse_delim_token_tree(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_token_tree__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_2(kind) {
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         let mut _plus_first = true;
         loop {
             if p.recovering { break; }
@@ -13644,7 +13644,7 @@ fn _parse_token_tree(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 }
 
 fn _parse_token_tree_token__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_53(kind) {
         if _kind_set_54(kind) {
@@ -13716,7 +13716,7 @@ fn _parse_macro_invocation_semi__inner_alt_0(p: &mut Parser) -> () with RustPars
     _parse_simple_path(p, FOLLOW_MASK_2);
     p.expect(TK_NOT, &SYNC_7, false);
     p.expect(TK_LPAREN, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -13747,7 +13747,7 @@ fn _parse_macro_invocation_semi__inner_alt_0(p: &mut Parser) -> () with RustPars
         }
         p.site = 14;
         _parse_token_tree(p, 0);
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_back(&SYNC_2, &EXPECTED_2); }
+        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
     }
     p.expect(TK_RPAREN, &SYNC_8, false);
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
@@ -13759,7 +13759,7 @@ fn _parse_macro_invocation_semi__inner_alt_1(p: &mut Parser) -> () with RustPars
     _parse_simple_path(p, FOLLOW_MASK_3);
     p.expect(TK_NOT, &SYNC_9, false);
     p.expect(TK_LSQUAREBRACKET, &SYNC_3, false);
-    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -13790,7 +13790,7 @@ fn _parse_macro_invocation_semi__inner_alt_1(p: &mut Parser) -> () with RustPars
         }
         p.site = 16;
         _parse_token_tree(p, 0);
-        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_back(&SYNC_3, &EXPECTED_3); }
+        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
     }
     p.expect(TK_RSQUAREBRACKET, &SYNC_8, false);
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
@@ -13802,7 +13802,7 @@ fn _parse_macro_invocation_semi__inner_alt_2(p: &mut Parser) -> () with RustPars
     _parse_simple_path(p, FOLLOW_MASK_4);
     p.expect(TK_NOT, &SYNC_10, false);
     p.expect(TK_LCURLYBRACE, &SYNC_4, false);
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -13833,14 +13833,14 @@ fn _parse_macro_invocation_semi__inner_alt_2(p: &mut Parser) -> () with RustPars
         }
         p.site = 18;
         _parse_token_tree(p, 0);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
     p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     return;
 }
 
 fn _parse_macro_invocation_semi__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_9(kind) {
         let _sd_tokens = &p.kinds;
@@ -13914,7 +13914,7 @@ fn _parse_macro_rules_definition(p: &mut Parser, follow: i64 = 0) -> () with Rus
 }
 
 fn _parse_macro_rules_def__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_LPAREN {
         p.take();
@@ -14040,11 +14040,11 @@ fn _parse_macro_rule(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_macro_matcher__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_LPAREN {
         p.take();
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -14075,13 +14075,13 @@ fn _parse_macro_matcher__inner(p: &mut Parser) -> () with RustParserBase {
             }
             p.site = 28;
             _parse_macro_match(p, 0);
-            if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_back(&SYNC_2, &EXPECTED_2); }
+            if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
         }
         p.expect(TK_RPAREN, &EMPTY_SYNC, true);
         return;
     } else if kind == TK_LSQUAREBRACKET {
         p.take();
-        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
+        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -14112,13 +14112,13 @@ fn _parse_macro_matcher__inner(p: &mut Parser) -> () with RustParserBase {
             }
             p.site = 29;
             _parse_macro_match(p, 0);
-            if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_back(&SYNC_3, &EXPECTED_3); }
+            if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
         }
         p.expect(TK_RSQUAREBRACKET, &EMPTY_SYNC, true);
         return;
     } else if kind == TK_LCURLYBRACE {
         p.take();
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -14149,7 +14149,7 @@ fn _parse_macro_matcher__inner(p: &mut Parser) -> () with RustParserBase {
             }
             p.site = 30;
             _parse_macro_match(p, 0);
-            if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+            if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
         }
         p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
         return;
@@ -14175,7 +14175,7 @@ fn _parse_macro_matcher(p: &mut Parser) -> () with RustParserBase {
 
 fn _parse_macro_match__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_DOLLAR, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_4(grp_kind) {
         p.site = 33;
@@ -14194,7 +14194,7 @@ fn _parse_macro_match__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with R
 fn _parse_macro_match__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_DOLLAR, &SYNC_7, false);
     p.expect(TK_LPAREN, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -14229,10 +14229,10 @@ fn _parse_macro_match__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with R
         _plus_first = false;
         p.site = 35;
         _parse_macro_match(p, 0);
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_back(&SYNC_2, &EXPECTED_2); }
+        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
     }
     p.expect(TK_RPAREN, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_6(p.peek_kind()) {
         p.site = 36;
         _parse_macro_rep_sep(p);
@@ -14243,10 +14243,10 @@ fn _parse_macro_match__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with R
 }
 
 fn _parse_macro_match__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_5(kind) {
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         let mut _plus_first = true;
         loop {
             if p.recovering { break; }
@@ -14320,7 +14320,7 @@ fn _parse_macro_match(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase
 }
 
 fn _parse_macro_match_token__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_53(kind) {
         if _kind_set_54(kind) {
@@ -14401,7 +14401,7 @@ fn _parse_macro_frag_spec(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_macro_rep_sep__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_53(kind) {
         if _kind_set_54(kind) {
@@ -14464,7 +14464,7 @@ fn _parse_macro_rep_sep(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_macro_rep_op__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_16, p.kinds[p.pos]) { p.sync_alts(&SYNC_16, &EXPECTED_16); }
+    if !kind_set_has(&SYNC_16, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_16, &EXPECTED_16); }
     let kind = p.peek_kind();
     if _kind_set_58(kind) {
         p.take();
@@ -14507,7 +14507,7 @@ fn _parse_macro_transcriber(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_item__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -14538,9 +14538,9 @@ fn _parse_item__inner(p: &mut Parser) -> () with RustParserBase {
         }
         p.site = 47;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_7(grp_kind) {
         let mut gd_winner: i32 = -1;
@@ -14605,12 +14605,12 @@ fn _parse_item(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_PUB {
         p.site = 50;
         _parse_visibility(p, FOLLOW_MASK_14);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_8(grp_kind) {
         let mut gd_winner: i32 = -1;
@@ -14793,7 +14793,7 @@ fn _parse_vis_item(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
 }
 
 fn _parse_macro_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_9(kind) {
         if kind == TK_KW_MACRORULES {
@@ -14844,20 +14844,20 @@ fn _parse_macro_item(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 }
 
 fn _parse_module__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_19, p.kinds[p.pos]) { p.sync_enter(&SYNC_19, &EXPECTED_19); }
+    if !kind_set_has(&SYNC_19, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_19, &EXPECTED_19); }
     if p.peek_kind() == TK_KW_UNSAFE {
         p.take();
     }
     p.expect(TK_KW_MOD, &SYNC_0, false);
     p.site = 66;
     _parse_identifier(p);
-    if !kind_set_has(&SYNC_20, p.kinds[p.pos]) { p.sync_alts(&SYNC_20, &EXPECTED_20); }
+    if !kind_set_has(&SYNC_20, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_20, &EXPECTED_20); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_SEMI {
         p.take();
     } else if grp_kind == TK_LCURLYBRACE {
         p.take();
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -14913,9 +14913,9 @@ fn _parse_module__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
             }
             p.site = 67;
             _parse_inner_attribute(p, 0);
-            if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+            if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
         }
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos_2: i32 = -1;
@@ -14946,7 +14946,7 @@ fn _parse_module__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
             }
             p.site = 68;
             _parse_item(p);
-            if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+            if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
         }
         p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     } else {
@@ -14971,7 +14971,7 @@ fn _parse_extern_crate__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
     p.expect(TK_KW_CRATE, &SYNC_0, false);
     p.site = 69;
     _parse_crate_ref(p);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_AS {
         p.site = 70;
         _parse_as_clause(p);
@@ -14992,7 +14992,7 @@ fn _parse_extern_crate(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
 }
 
 fn _parse_crate_ref__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
         p.site = 71;
@@ -15023,7 +15023,7 @@ fn _parse_crate_ref(p: &mut Parser) -> () with RustParserBase {
 
 fn _parse_as_clause__inner(p: &mut Parser) -> () with RustParserBase {
     p.expect(TK_KW_AS, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_4(grp_kind) {
         p.site = 72;
@@ -15067,7 +15067,7 @@ fn _parse_use_declaration(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 }
 
 fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut shape_scan_pos: i32 = -1;
     shape_scan: {
         p.scan_gate.no_struct = p.no_struct;
@@ -15089,7 +15089,7 @@ fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Rust
         shape_scan_pos_2 = pos;
     }
     if shape_scan_pos >= 0 {
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         let mut opt_enter: bool = false;
         if _kind_set_9(p.peek_kind()) {
             opt_enter_scan: {
@@ -15111,13 +15111,13 @@ fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Rust
     } else if shape_scan_pos_2 >= 0 {
         p.expect(TK_PATHSEP, &SYNC_23, false);
     }
-    if !kind_set_has(&SYNC_23, p.kinds[p.pos]) { p.sync_alts(&SYNC_23, &EXPECTED_23); }
+    if !kind_set_has(&SYNC_23, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_23, &EXPECTED_23); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_STAR {
         p.take();
     } else if grp_kind == TK_LCURLYBRACE {
         p.take();
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
             p.scan_gate.no_struct = p.no_struct;
@@ -15152,7 +15152,7 @@ fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Rust
         if opt_scan_pos >= 0 {
             p.site = 75;
             _parse_use_tree(p, 0);
-            if !kind_set_has(&SYNC_24, p.kinds[p.pos]) { p.sync_enter(&SYNC_24, &EXPECTED_24); }
+            if !kind_set_has(&SYNC_24, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_24, &EXPECTED_24); }
             loop {
                 if p.recovering { break; }
                 let mut rep_scan_pos: i32 = -1;
@@ -15177,9 +15177,9 @@ fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Rust
                 p.expect(TK_COMMA, &SYNC_0, false);
                 p.site = 76;
                 _parse_use_tree(p, (FOLLOW_MASK_18 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-                if !kind_set_has(&SYNC_24, p.kinds[p.pos]) { p.sync_back(&SYNC_24, &EXPECTED_24); }
+                if !kind_set_has(&SYNC_24, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_24, &EXPECTED_24); }
             }
-            if !kind_set_has(&SYNC_24, p.kinds[p.pos]) { p.sync_enter(&SYNC_24, &EXPECTED_24); }
+            if !kind_set_has(&SYNC_24, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_24, &EXPECTED_24); }
             if p.peek_kind() == TK_COMMA {
                 p.take();
             }
@@ -15196,7 +15196,7 @@ fn _parse_use_tree__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with Rust
     _parse_simple_path(p, follow);
     if (p.peek_kind() == TK_KW_AS && _kind_set_45(p.peek_at(1))) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
         let grp_kind = p.peek_kind();
         if _kind_set_4(grp_kind) {
             p.site = 78;
@@ -15211,7 +15211,7 @@ fn _parse_use_tree__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with Rust
 }
 
 fn _parse_use_tree__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_11(kind) {
         if _kind_set_9(kind) {
@@ -15264,29 +15264,29 @@ fn _parse_function___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
     p.expect(TK_KW_FN, &SYNC_0, false);
     p.site = 80;
     _parse_identifier(p);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LT {
         p.site = 81;
         _parse_generic_params(p, FOLLOW_MASK_20);
     }
     p.expect(TK_LPAREN, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if _kind_set_12(p.peek_kind()) {
         p.site = 82;
         _parse_function_parameters(p, FOLLOW_MASK_21);
     }
     p.expect(TK_RPAREN, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_RARROW {
         p.site = 83;
         _parse_function_return_type(p, 0);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_WHERE {
         p.site = 84;
         _parse_where_clause(p, FOLLOW_MASK_15);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LCURLYBRACE {
         p.site = 85;
@@ -15342,7 +15342,7 @@ fn _parse_function_qualifiers(p: &mut Parser, follow: i64 = 0) -> () with RustPa
 }
 
 fn _parse_abi__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_26, p.kinds[p.pos]) { p.sync_alts(&SYNC_26, &EXPECTED_26); }
+    if !kind_set_has(&SYNC_26, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_26, &EXPECTED_26); }
     let kind = p.peek_kind();
     if _kind_set_13(kind) {
         p.take();
@@ -15377,7 +15377,7 @@ fn _parse_function_parameters__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> (
 }
 
 fn _parse_function_parameters__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         p.scan_gate.no_struct = p.no_struct;
@@ -15446,7 +15446,7 @@ fn _parse_function_parameters__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
 }
 
 fn _parse_function_parameters__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_12(kind) {
         if _kind_set_14(kind) {
@@ -15494,7 +15494,7 @@ fn _parse_function_parameters(p: &mut Parser, follow: i64 = 0) -> () with RustPa
 }
 
 fn _parse_self_param__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -15525,9 +15525,9 @@ fn _parse_self_param__inner(p: &mut Parser) -> () with RustParserBase {
         }
         p.site = 91;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_15(grp_kind) {
         let mut gd_winner: i32 = -1;
@@ -15592,16 +15592,16 @@ fn _parse_self_param(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_shorthand_self__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_28, p.kinds[p.pos]) { p.sync_enter(&SYNC_28, &EXPECTED_28); }
+    if !kind_set_has(&SYNC_28, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_28, &EXPECTED_28); }
     if p.peek_kind() == TK_AND {
         p.take();
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         if _kind_set_16(p.peek_kind()) {
             p.site = 94;
             _parse_lifetime(p);
         }
     }
-    if !kind_set_has(&SYNC_29, p.kinds[p.pos]) { p.sync_enter(&SYNC_29, &EXPECTED_29); }
+    if !kind_set_has(&SYNC_29, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_29, &EXPECTED_29); }
     if p.peek_kind() == TK_KW_MUT {
         p.take();
     }
@@ -15621,7 +15621,7 @@ fn _parse_shorthand_self(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
 }
 
 fn _parse_typed_self__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_29, p.kinds[p.pos]) { p.sync_enter(&SYNC_29, &EXPECTED_29); }
+    if !kind_set_has(&SYNC_29, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_29, &EXPECTED_29); }
     if p.peek_kind() == TK_KW_MUT {
         p.take();
     }
@@ -15644,7 +15644,7 @@ fn _parse_typed_self(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 }
 
 fn _parse_function_param__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -15675,9 +15675,9 @@ fn _parse_function_param__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
         }
         p.site = 96;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_17(grp_kind) {
         let mut gd_winner: i32 = -1;
@@ -15747,7 +15747,7 @@ fn _parse_function_param_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () w
     p.site = 99;
     _parse_pattern(p, FOLLOW_MASK_23);
     p.expect(TK_COLON, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_18(grp_kind) {
         p.site = 100;
@@ -15793,17 +15793,17 @@ fn _parse_type_alias__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     p.expect(TK_KW_TYPE, &SYNC_0, false);
     p.site = 102;
     _parse_identifier(p);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LT {
         p.site = 103;
         _parse_generic_params(p, 0);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_WHERE {
         p.site = 104;
         _parse_where_clause(p, 0);
     }
-    if !kind_set_has(&SYNC_33, p.kinds[p.pos]) { p.sync_enter(&SYNC_33, &EXPECTED_33); }
+    if !kind_set_has(&SYNC_33, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_33, &EXPECTED_33); }
     if p.peek_kind() == TK_EQ && _kind_set_18(p.peek_at(1)) {
         p.take();
         p.site = 105;
@@ -15825,7 +15825,7 @@ fn _parse_type_alias(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 }
 
 fn _parse_struct___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_KW_STRUCT {
         let _sd_tokens = &p.kinds;
@@ -15874,21 +15874,21 @@ fn _parse_struct_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     p.expect(TK_KW_STRUCT, &SYNC_0, false);
     p.site = 108;
     _parse_identifier(p);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LT {
         p.site = 109;
         _parse_generic_params(p, 0);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_WHERE {
         p.site = 110;
         _parse_where_clause(p, FOLLOW_MASK_15);
     }
-    if !kind_set_has(&SYNC_20, p.kinds[p.pos]) { p.sync_alts(&SYNC_20, &EXPECTED_20); }
+    if !kind_set_has(&SYNC_20, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_20, &EXPECTED_20); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LCURLYBRACE {
         p.take();
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
         if _kind_set_19(p.peek_kind()) {
             p.site = 111;
             _parse_struct_fields(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -15917,19 +15917,19 @@ fn _parse_tuple_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
     p.expect(TK_KW_STRUCT, &SYNC_0, false);
     p.site = 112;
     _parse_identifier(p);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LT {
         p.site = 113;
         _parse_generic_params(p, FOLLOW_MASK_20);
     }
     p.expect(TK_LPAREN, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if _kind_set_20(p.peek_kind()) {
         p.site = 114;
         _parse_tuple_fields(p, FOLLOW_MASK_21);
     }
     p.expect(TK_RPAREN, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_WHERE {
         p.site = 115;
         _parse_where_clause(p, (FOLLOW_MASK_16 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -16013,7 +16013,7 @@ fn _parse_struct_fields(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
 }
 
 fn _parse_struct_field__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -16044,9 +16044,9 @@ fn _parse_struct_field__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
         }
         p.site = 118;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_PUB {
         p.site = 119;
         _parse_visibility(p, FOLLOW_MASK_24);
@@ -16134,7 +16134,7 @@ fn _parse_tuple_fields(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
 }
 
 fn _parse_tuple_field__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -16165,9 +16165,9 @@ fn _parse_tuple_field__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
         }
         p.site = 124;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_PUB {
         p.site = 125;
         _parse_visibility(p, FOLLOW_MASK_26);
@@ -16192,18 +16192,18 @@ fn _parse_enumeration__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     p.expect(TK_KW_ENUM, &SYNC_0, false);
     p.site = 127;
     _parse_identifier(p);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LT {
         p.site = 128;
         _parse_generic_params(p, 0);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_WHERE {
         p.site = 129;
         _parse_where_clause(p, FOLLOW_MASK_27);
     }
     p.expect(TK_LCURLYBRACE, &SYNC_4, false);
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_19(p.peek_kind()) {
         p.site = 130;
         _parse_enum_items(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -16287,7 +16287,7 @@ fn _parse_enum_items(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 }
 
 fn _parse_enum_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -16318,9 +16318,9 @@ fn _parse_enum_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
         }
         p.site = 133;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_PUB {
         p.site = 134;
         _parse_visibility(p, FOLLOW_MASK_24);
@@ -16395,7 +16395,7 @@ fn _parse_enum_item(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
 
 fn _parse_enum_item_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_LPAREN, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if _kind_set_20(p.peek_kind()) {
         p.site = 139;
         _parse_tuple_fields(p, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -16417,7 +16417,7 @@ fn _parse_enum_item_tuple(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 
 fn _parse_enum_item_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_LCURLYBRACE, &SYNC_4, false);
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_19(p.peek_kind()) {
         p.site = 140;
         _parse_struct_fields(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -16459,12 +16459,12 @@ fn _parse_union___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
     p.expect(TK_KW_UNION, &SYNC_0, false);
     p.site = 142;
     _parse_identifier(p);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LT {
         p.site = 143;
         _parse_generic_params(p, 0);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_WHERE {
         p.site = 144;
         _parse_where_clause(p, FOLLOW_MASK_27);
@@ -16489,7 +16489,7 @@ fn _parse_union_(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
 
 fn _parse_constant_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_KW_CONST, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_4(grp_kind) {
         p.site = 146;
@@ -16502,7 +16502,7 @@ fn _parse_constant_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     p.expect(TK_COLON, &SYNC_0, false);
     p.site = 147;
     _parse_type_(p, 0);
-    if !kind_set_has(&SYNC_33, p.kinds[p.pos]) { p.sync_enter(&SYNC_33, &EXPECTED_33); }
+    if !kind_set_has(&SYNC_33, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_33, &EXPECTED_33); }
     if p.peek_kind() == TK_EQ && _kind_set_31(p.peek_at(1)) {
         p.take();
         p.site = 148;
@@ -16525,7 +16525,7 @@ fn _parse_constant_item(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
 
 fn _parse_static_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_KW_STATIC, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_MUT {
         p.take();
     }
@@ -16534,7 +16534,7 @@ fn _parse_static_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     p.expect(TK_COLON, &SYNC_0, false);
     p.site = 150;
     _parse_type_(p, 0);
-    if !kind_set_has(&SYNC_33, p.kinds[p.pos]) { p.sync_enter(&SYNC_33, &EXPECTED_33); }
+    if !kind_set_has(&SYNC_33, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_33, &EXPECTED_33); }
     if p.peek_kind() == TK_EQ && _kind_set_31(p.peek_at(1)) {
         p.take();
         p.site = 151;
@@ -16556,34 +16556,34 @@ fn _parse_static_item(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase
 }
 
 fn _parse_trait___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_35, p.kinds[p.pos]) { p.sync_enter(&SYNC_35, &EXPECTED_35); }
+    if !kind_set_has(&SYNC_35, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_35, &EXPECTED_35); }
     if p.peek_kind() == TK_KW_UNSAFE {
         p.take();
     }
     p.expect(TK_KW_TRAIT, &SYNC_0, false);
     p.site = 152;
     _parse_identifier(p);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LT {
         p.site = 153;
         _parse_generic_params(p, 0);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_COLON {
         p.take();
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         if _kind_set_22(p.peek_kind()) {
             p.site = 154;
             _parse_type_param_bounds(p, 0);
         }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_WHERE {
         p.site = 155;
         _parse_where_clause(p, FOLLOW_MASK_27);
     }
     p.expect(TK_LCURLYBRACE, &SYNC_4, false);
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -16639,9 +16639,9 @@ fn _parse_trait___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
         }
         p.site = 156;
         _parse_inner_attribute(p, 0);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos_2: i32 = -1;
@@ -16672,7 +16672,7 @@ fn _parse_trait___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
         }
         p.site = 157;
         _parse_associated_item(p);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
     p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     return;
@@ -16690,7 +16690,7 @@ fn _parse_trait_(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
 }
 
 fn _parse_implementation__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_67(kind) {
         if kind == TK_KW_IMPL {
@@ -16742,7 +16742,7 @@ fn _parse_implementation(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
 
 fn _parse_inherent_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_KW_IMPL, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
     if p.peek_kind() == TK_LT {
         opt_enter_scan: {
@@ -16827,13 +16827,13 @@ fn _parse_inherent_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     }
     p.site = 161;
     _parse_type_(p, 0);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_WHERE {
         p.site = 162;
         _parse_where_clause(p, FOLLOW_MASK_27);
     }
     p.expect(TK_LCURLYBRACE, &SYNC_4, false);
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -16889,9 +16889,9 @@ fn _parse_inherent_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
         }
         p.site = 163;
         _parse_inner_attribute(p, 0);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos_2: i32 = -1;
@@ -16922,7 +16922,7 @@ fn _parse_inherent_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
         }
         p.site = 164;
         _parse_associated_item(p);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
     p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     return;
@@ -16940,17 +16940,17 @@ fn _parse_inherent_impl(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
 }
 
 fn _parse_trait_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_36, p.kinds[p.pos]) { p.sync_enter(&SYNC_36, &EXPECTED_36); }
+    if !kind_set_has(&SYNC_36, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_36, &EXPECTED_36); }
     if p.peek_kind() == TK_KW_UNSAFE {
         p.take();
     }
     p.expect(TK_KW_IMPL, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LT {
         p.site = 165;
         _parse_generic_params(p, 0);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_NOT {
         p.take();
     }
@@ -16959,13 +16959,13 @@ fn _parse_trait_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     p.expect(TK_KW_FOR, &SYNC_0, false);
     p.site = 167;
     _parse_type_(p, 0);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_WHERE {
         p.site = 168;
         _parse_where_clause(p, FOLLOW_MASK_27);
     }
     p.expect(TK_LCURLYBRACE, &SYNC_4, false);
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -17021,9 +17021,9 @@ fn _parse_trait_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
         }
         p.site = 169;
         _parse_inner_attribute(p, 0);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos_2: i32 = -1;
@@ -17054,7 +17054,7 @@ fn _parse_trait_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
         }
         p.site = 170;
         _parse_associated_item(p);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
     p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     return;
@@ -17072,18 +17072,18 @@ fn _parse_trait_impl(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 }
 
 fn _parse_extern_block__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_37, p.kinds[p.pos]) { p.sync_enter(&SYNC_37, &EXPECTED_37); }
+    if !kind_set_has(&SYNC_37, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_37, &EXPECTED_37); }
     if p.peek_kind() == TK_KW_UNSAFE {
         p.take();
     }
     p.expect(TK_KW_EXTERN, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_13(p.peek_kind()) {
         p.site = 171;
         _parse_abi(p);
     }
     p.expect(TK_LCURLYBRACE, &SYNC_4, false);
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -17139,9 +17139,9 @@ fn _parse_extern_block__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
         }
         p.site = 172;
         _parse_inner_attribute(p, 0);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos_2: i32 = -1;
@@ -17172,7 +17172,7 @@ fn _parse_extern_block__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
         }
         p.site = 173;
         _parse_external_item(p);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
     p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     return;
@@ -17190,7 +17190,7 @@ fn _parse_extern_block(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
 }
 
 fn _parse_external_item__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -17221,20 +17221,20 @@ fn _parse_external_item__inner(p: &mut Parser) -> () with RustParserBase {
         }
         p.site = 174;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_9(grp_kind) {
         p.site = 175;
         _parse_macro_invocation_semi(p);
     } else if _kind_set_25(grp_kind) {
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         if p.peek_kind() == TK_KW_PUB {
             p.site = 176;
             _parse_visibility(p, FOLLOW_MASK_29);
         }
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_KW_STATIC {
             p.site = 177;
@@ -17264,7 +17264,7 @@ fn _parse_external_item(p: &mut Parser) -> () with RustParserBase {
 
 fn _parse_generic_params__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_LT, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         p.scan_gate.no_struct = p.no_struct;
@@ -17319,7 +17319,7 @@ fn _parse_generic_params__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -17361,11 +17361,11 @@ fn _parse_generic_params__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             p.site = 179;
             _parse_generic_param(p);
             p.expect(TK_COMMA, &SYNC_0, false);
-            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
         }
         p.site = 180;
         _parse_generic_param(p);
-        if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { p.sync_enter(&SYNC_40, &EXPECTED_40); }
+        if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_40, &EXPECTED_40); }
         if p.peek_kind() == TK_COMMA {
             p.take();
         }
@@ -17386,7 +17386,7 @@ fn _parse_generic_params(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
 }
 
 fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -17464,9 +17464,9 @@ fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
         }
         p.site = 181;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_28(grp_kind) {
         let mut gd_winner: i32 = -1;
@@ -17534,7 +17534,7 @@ fn _parse_generic_param(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_lifetime_param__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_POUND {
         p.site = 185;
         _parse_outer_attribute(p, FOLLOW_MASK_30);
@@ -17560,7 +17560,7 @@ fn _parse_lifetime_param(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
 }
 
 fn _parse_type_param__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_POUND {
         p.site = 187;
         _parse_outer_attribute(p, FOLLOW_MASK_24);
@@ -17684,7 +17684,7 @@ fn _parse_where_clause(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
 }
 
 fn _parse_where_clause_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_18(kind) {
         if _kind_set_16(kind) {
@@ -17755,7 +17755,7 @@ fn _parse_lifetime_where_clause_item(p: &mut Parser, follow: i64 = 0) -> () with
 }
 
 fn _parse_type_bound_where_clause_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
     if p.peek_kind() == TK_KW_FOR {
         opt_enter_scan: {
@@ -17825,7 +17825,7 @@ fn _parse_for_lifetimes(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
 }
 
 fn _parse_associated_item__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -17856,20 +17856,20 @@ fn _parse_associated_item__inner(p: &mut Parser) -> () with RustParserBase {
         }
         p.site = 203;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_9(grp_kind) {
         p.site = 204;
         _parse_macro_invocation_semi(p);
     } else if _kind_set_29(grp_kind) {
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         if p.peek_kind() == TK_KW_PUB {
             p.site = 205;
             _parse_visibility(p, FOLLOW_MASK_32);
         }
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_KW_TYPE {
             p.site = 206;
@@ -17981,7 +17981,7 @@ fn _parse_outer_attribute(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 }
 
 fn _parse_attr__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_KW_UNSAFE {
         p.take();
@@ -18019,7 +18019,7 @@ fn _parse_attr(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
 }
 
 fn _parse_attr_input__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_3(kind) {
         p.site = 214;
@@ -18051,7 +18051,7 @@ fn _parse_attr_input(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_SEMI {
         p.take();
@@ -18178,7 +18178,7 @@ fn _parse_statement(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
 }
 
 fn _parse_let_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -18209,23 +18209,23 @@ fn _parse_let_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
         }
         p.site = 220;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_KW_LET, &SYNC_0, false);
     p.site = 221;
     _parse_pattern_no_top_alt(p, 0);
-    if !kind_set_has(&SYNC_48, p.kinds[p.pos]) { p.sync_enter(&SYNC_48, &EXPECTED_48); }
+    if !kind_set_has(&SYNC_48, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_48, &EXPECTED_48); }
     if p.peek_kind() == TK_COLON && _kind_set_18(p.peek_at(1)) {
         p.take();
         p.site = 222;
         _parse_type_(p, 0);
     }
-    if !kind_set_has(&SYNC_33, p.kinds[p.pos]) { p.sync_enter(&SYNC_33, &EXPECTED_33); }
+    if !kind_set_has(&SYNC_33, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_33, &EXPECTED_33); }
     if p.peek_kind() == TK_EQ && _kind_set_31(p.peek_at(1)) {
         p.take();
         p.site = 223;
         _parse_expression(p, 0);
-        if !kind_set_has(&SYNC_49, p.kinds[p.pos]) { p.sync_enter(&SYNC_49, &EXPECTED_49); }
+        if !kind_set_has(&SYNC_49, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_49, &EXPECTED_49); }
         if p.peek_kind() == TK_KW_ELSE && p.peek_at(1) == TK_LCURLYBRACE {
             p.take();
             p.site = 224;
@@ -18264,7 +18264,7 @@ fn _parse_expression_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> 
 }
 
 fn _parse_expression_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_31(kind) {
         if _kind_set_77(kind) {
@@ -18313,7 +18313,7 @@ fn _parse_expression_statement(p: &mut Parser, follow: i64 = 0) -> () with RustP
 
 fn _parse_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.b.set_alt(0);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -18362,7 +18362,7 @@ fn _parse_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Ru
         _plus_first = false;
         p.site = 227;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 228;
     _parse_expression(p, follow, 22);
@@ -18413,10 +18413,10 @@ fn _parse_expression__inner_alt_40(p: &mut Parser, follow: i64 = 0) -> () with R
 
 fn _parse_expression__inner_alt_10(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.b.set_alt(10);
-    if !kind_set_has(&SYNC_51, p.kinds[p.pos]) { p.sync_alts(&SYNC_51, &EXPECTED_51); }
+    if !kind_set_has(&SYNC_51, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_51, &EXPECTED_51); }
     p.expect_set(&SYNC_51, &EXPECTED_51);
     p.expect(TK_KW_RAW, &SYNC_52, false);
-    if !kind_set_has(&SYNC_52, p.kinds[p.pos]) { p.sync_alts(&SYNC_52, &EXPECTED_52); }
+    if !kind_set_has(&SYNC_52, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_52, &EXPECTED_52); }
     p.expect_set(&SYNC_52, &EXPECTED_52);
     p.site = 244;
     _parse_expression(p, follow, 15);
@@ -18425,9 +18425,9 @@ fn _parse_expression__inner_alt_10(p: &mut Parser, follow: i64 = 0) -> () with R
 
 fn _parse_expression__inner_alt_11(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.b.set_alt(11);
-    if !kind_set_has(&SYNC_51, p.kinds[p.pos]) { p.sync_alts(&SYNC_51, &EXPECTED_51); }
+    if !kind_set_has(&SYNC_51, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_51, &EXPECTED_51); }
     p.expect_set(&SYNC_51, &EXPECTED_51);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_MUT {
         p.take();
     }
@@ -18442,7 +18442,7 @@ fn _parse_expression__inner_alt_33(p: &mut Parser, follow: i64 = 0) -> () with R
     if !p.speculating {
         p.no_struct = 0;
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -18489,7 +18489,7 @@ fn _parse_expression__inner_alt_33(p: &mut Parser, follow: i64 = 0) -> () with R
         }
         p.site = 285;
         _parse_inner_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 286;
     _parse_expression(p, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -18500,7 +18500,7 @@ fn _parse_expression__inner_alt_33(p: &mut Parser, follow: i64 = 0) -> () with R
 fn _parse_expression__inner_alt_35(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.b.set_alt(35);
     p.expect(TK_LPAREN, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -18554,9 +18554,9 @@ fn _parse_expression__inner_alt_35(p: &mut Parser, follow: i64 = 0) -> () with R
         }
         p.site = 289;
         _parse_inner_attribute(p, 0);
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_back(&SYNC_2, &EXPECTED_2); }
+        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
     }
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if _kind_set_31(p.peek_kind()) {
         p.site = 290;
         _parse_tuple_elements(p, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -18566,7 +18566,7 @@ fn _parse_expression__inner_alt_35(p: &mut Parser, follow: i64 = 0) -> () with R
 }
 
 fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_81(kind) {
         if kind == TK_POUND {
@@ -18759,7 +18759,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     }
     if _kind_set_86(kind) {
         p.b.set_alt(13);
-        if !kind_set_has(&SYNC_53, p.kinds[p.pos]) { p.sync_alts(&SYNC_53, &EXPECTED_53); }
+        if !kind_set_has(&SYNC_53, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_53, &EXPECTED_53); }
         p.take();
         p.site = 247;
         _parse_expression(p, follow, 15);
@@ -18839,7 +18839,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     if kind == TK_LSQUAREBRACKET {
         p.b.set_alt(34);
         p.take();
-        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
+        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -18893,9 +18893,9 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
             }
             p.site = 287;
             _parse_inner_attribute(p, 0);
-            if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_back(&SYNC_3, &EXPECTED_3); }
+            if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
         }
-        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
+        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
         if _kind_set_31(p.peek_kind()) {
             p.site = 288;
             _parse_array_elements(p, (FOLLOW_MASK_33 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -18933,7 +18933,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                     p.site = 232;
                     _parse_path_expr_segment(p, FOLLOW_MASK_20);
                     p.expect(TK_LPAREN, &SYNC_2, false);
-                    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+                    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
                     let mut opt_scan_pos: i32 = -1;
                     opt_scan: {
                         p.scan_gate.no_struct = p.no_struct;
@@ -19002,7 +19002,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(7);
                 p.take();
-                if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+                if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
                 let mut opt_scan_pos_2: i32 = -1;
                 opt_scan_2: {
                     p.scan_gate.no_struct = p.no_struct;
@@ -19362,7 +19362,7 @@ fn _parse_expression(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () w
 }
 
 fn _parse_comparison_operator__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_55, p.kinds[p.pos]) { p.sync_alts(&SYNC_55, &EXPECTED_55); }
+    if !kind_set_has(&SYNC_55, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_55, &EXPECTED_55); }
     let kind = p.peek_kind();
     if _kind_set_89(kind) {
         p.take();
@@ -19388,7 +19388,7 @@ fn _parse_comparison_operator(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_compound_assign_operator__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_56, p.kinds[p.pos]) { p.sync_alts(&SYNC_56, &EXPECTED_56); }
+    if !kind_set_has(&SYNC_56, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_56, &EXPECTED_56); }
     let kind = p.peek_kind();
     if _kind_set_90(kind) {
         p.take();
@@ -19414,10 +19414,10 @@ fn _parse_compound_assign_operator(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_expression_with_block__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_POUND {
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         let mut _plus_first = true;
         loop {
             if p.recovering { break; }
@@ -19466,7 +19466,7 @@ fn _parse_expression_with_block__inner(p: &mut Parser, follow: i64 = 0) -> () wi
             _plus_first = false;
             p.site = 296;
             _parse_outer_attribute(p, 0);
-            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
         }
         p.site = 297;
         _parse_expression_with_block(p, follow);
@@ -19551,7 +19551,7 @@ fn _parse_expression_with_block(p: &mut Parser, follow: i64 = 0) -> () with Rust
 }
 
 fn _parse_literal_expression__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_58, p.kinds[p.pos]) { p.sync_alts(&SYNC_58, &EXPECTED_58); }
+    if !kind_set_has(&SYNC_58, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_58, &EXPECTED_58); }
     let kind = p.peek_kind();
     if _kind_set_52(kind) {
         p.take();
@@ -19577,7 +19577,7 @@ fn _parse_literal_expression(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_path_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_32(kind) {
         p.site = 305;
@@ -19612,7 +19612,7 @@ fn _parse_block_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
     if !p.speculating {
         p.no_struct = 0;
     }
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -19666,9 +19666,9 @@ fn _parse_block_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
         }
         p.site = 307;
         _parse_inner_attribute(p, 0);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_33(p.peek_kind()) {
         p.site = 308;
         _parse_statements(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -19689,7 +19689,7 @@ fn _parse_block_expression(p: &mut Parser, follow: i64 = 0) -> () with RustParse
 }
 
 fn _parse_statements__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -19757,7 +19757,7 @@ fn _parse_statements__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Ru
 }
 
 fn _parse_statements__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_33(kind) {
         if _kind_set_31(kind) {
@@ -19807,7 +19807,7 @@ fn _parse_statements(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 
 fn _parse_async_block_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_KW_ASYNC, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_MOVE {
         p.take();
     }
@@ -19913,7 +19913,7 @@ fn _parse_array_elements__inner(p: &mut Parser, follow: i64 = 0) -> ArrayElement
     if !p.speculating {
         vals.sv = p.no_struct; p.no_struct = 0;
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     vals = alt_done: {
         let kind = p.peek_kind();
         if _kind_set_31(kind) {
@@ -19968,7 +19968,7 @@ fn _parse_tuple_elements__inner(p: &mut Parser, follow: i64 = 0) -> TupleElement
     if !p.speculating {
         vals.sv = p.no_struct; p.no_struct = 0;
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -20056,7 +20056,7 @@ fn _parse_tuple_index(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_struct_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_32(kind) {
         let _sd_tokens = &p.kinds;
@@ -20115,7 +20115,7 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     p.site = 323;
     _parse_path_in_expression(p, FOLLOW_MASK_27);
     p.expect(TK_LCURLYBRACE, &SYNC_4, false);
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -20185,9 +20185,9 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         }
         p.site = 324;
         _parse_inner_attribute(p, 0);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     let mut gd_best_gate = p.scan_gate;
@@ -20381,7 +20381,7 @@ fn _parse_struct_expr_fields(p: &mut Parser, follow: i64 = 0) -> () with RustPar
 }
 
 fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -20412,9 +20412,9 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         }
         p.site = 330;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_36(grp_kind) {
         let mut gd_winner: i32 = -1;
@@ -20459,7 +20459,7 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             gd_winner = 1;
         }
         if gd_winner == 1 {
-            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
             let grp_kind = p.peek_kind();
             if _kind_set_4(grp_kind) {
                 p.site = 332;
@@ -20516,7 +20516,7 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     p.site = 336;
     _parse_path_in_expression(p, FOLLOW_MASK_20);
     p.expect(TK_LPAREN, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -20599,9 +20599,9 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         }
         p.site = 337;
         _parse_inner_attribute(p, 0);
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_back(&SYNC_2, &EXPECTED_2); }
+        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
     }
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         p.scan_gate.no_struct = p.no_struct;
@@ -20636,7 +20636,7 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     if opt_scan_pos >= 0 {
         p.site = 338;
         _parse_expression(p, 0);
-        if !kind_set_has(&SYNC_62, p.kinds[p.pos]) { p.sync_enter(&SYNC_62, &EXPECTED_62); }
+        if !kind_set_has(&SYNC_62, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_62, &EXPECTED_62); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -20661,9 +20661,9 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             p.expect(TK_COMMA, &SYNC_0, false);
             p.site = 339;
             _parse_expression(p, (FOLLOW_MASK_35 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-            if !kind_set_has(&SYNC_62, p.kinds[p.pos]) { p.sync_back(&SYNC_62, &EXPECTED_62); }
+            if !kind_set_has(&SYNC_62, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_62, &EXPECTED_62); }
         }
-        if !kind_set_has(&SYNC_62, p.kinds[p.pos]) { p.sync_enter(&SYNC_62, &EXPECTED_62); }
+        if !kind_set_has(&SYNC_62, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_62, &EXPECTED_62); }
         if p.peek_kind() == TK_COMMA {
             p.take();
         }
@@ -20701,7 +20701,7 @@ fn _parse_struct_expr_unit(p: &mut Parser, follow: i64 = 0) -> () with RustParse
 }
 
 fn _parse_enumeration_variant_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_32(kind) {
         let _sd_tokens = &p.kinds;
@@ -20760,7 +20760,7 @@ fn _parse_enum_expr_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
     p.site = 344;
     _parse_path_in_expression(p, FOLLOW_MASK_27);
     p.expect(TK_LCURLYBRACE, &SYNC_4, false);
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_36(p.peek_kind()) {
         p.site = 345;
         _parse_enum_expr_fields(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -20844,7 +20844,7 @@ fn _parse_enum_expr_fields(p: &mut Parser, follow: i64 = 0) -> () with RustParse
 }
 
 fn _parse_enum_expr_field__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_4(grp_kind) {
         p.site = 349;
@@ -20862,7 +20862,7 @@ fn _parse_enum_expr_field__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () wi
 }
 
 fn _parse_enum_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_36(kind) {
         if _kind_set_4(kind) {
@@ -20923,7 +20923,7 @@ fn _parse_enum_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
     p.site = 352;
     _parse_path_in_expression(p, FOLLOW_MASK_20);
     p.expect(TK_LPAREN, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         p.scan_gate.no_struct = p.no_struct;
@@ -20958,7 +20958,7 @@ fn _parse_enum_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
     if opt_scan_pos >= 0 {
         p.site = 353;
         _parse_expression(p, 0);
-        if !kind_set_has(&SYNC_62, p.kinds[p.pos]) { p.sync_enter(&SYNC_62, &EXPECTED_62); }
+        if !kind_set_has(&SYNC_62, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_62, &EXPECTED_62); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -20983,9 +20983,9 @@ fn _parse_enum_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
             p.expect(TK_COMMA, &SYNC_0, false);
             p.site = 354;
             _parse_expression(p, (FOLLOW_MASK_35 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-            if !kind_set_has(&SYNC_62, p.kinds[p.pos]) { p.sync_back(&SYNC_62, &EXPECTED_62); }
+            if !kind_set_has(&SYNC_62, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_62, &EXPECTED_62); }
         }
-        if !kind_set_has(&SYNC_62, p.kinds[p.pos]) { p.sync_enter(&SYNC_62, &EXPECTED_62); }
+        if !kind_set_has(&SYNC_62, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_62, &EXPECTED_62); }
         if p.peek_kind() == TK_COMMA {
             p.take();
         }
@@ -21094,21 +21094,21 @@ fn _parse_call_params(p: &mut Parser, follow: i64 = 0) -> CallParamsVals with Ru
 }
 
 fn _parse_closure_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_63, p.kinds[p.pos]) { p.sync_enter(&SYNC_63, &EXPECTED_63); }
+    if !kind_set_has(&SYNC_63, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_63, &EXPECTED_63); }
     if p.peek_kind() == TK_KW_ASYNC {
         p.take();
     }
-    if !kind_set_has(&SYNC_64, p.kinds[p.pos]) { p.sync_enter(&SYNC_64, &EXPECTED_64); }
+    if !kind_set_has(&SYNC_64, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_64, &EXPECTED_64); }
     if p.peek_kind() == TK_KW_MOVE {
         p.take();
     }
-    if !kind_set_has(&SYNC_65, p.kinds[p.pos]) { p.sync_alts(&SYNC_65, &EXPECTED_65); }
+    if !kind_set_has(&SYNC_65, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_65, &EXPECTED_65); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_OROR {
         p.take();
     } else if grp_kind == TK_OR {
         p.take();
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         let mut opt_enter: bool = false;
         if _kind_set_37(p.peek_kind()) {
             opt_enter_scan: {
@@ -21130,7 +21130,7 @@ fn _parse_closure_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_65);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind_2 = p.peek_kind();
     if _kind_set_31(grp_kind_2) {
         p.site = 359;
@@ -21222,7 +21222,7 @@ fn _parse_closure_parameters(p: &mut Parser, follow: i64 = 0) -> () with RustPar
 }
 
 fn _parse_closure_param__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -21253,7 +21253,7 @@ fn _parse_closure_param__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
         }
         p.site = 364;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 365;
     _parse_pattern(p, follow);
@@ -21277,12 +21277,12 @@ fn _parse_closure_param(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
 }
 
 fn _parse_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LIFETIME_OR_LABEL {
         p.site = 367;
         _parse_loop_label(p);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_KW_LOOP {
         p.site = 368;
@@ -21380,7 +21380,7 @@ fn _parse_predicate_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> (
     if !p.speculating {
         p.no_struct = 0;
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -21411,7 +21411,7 @@ fn _parse_predicate_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> (
         }
         p.site = 374;
         _parse_let_chain_tail(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 375;
     _parse_block_expression(p, follow);
@@ -21443,7 +21443,7 @@ fn _parse_predicate_pattern_loop_expression__inner(p: &mut Parser, follow: i64 =
     if !p.speculating {
         p.no_struct = 0;
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -21474,7 +21474,7 @@ fn _parse_predicate_pattern_loop_expression__inner(p: &mut Parser, follow: i64 =
         }
         p.site = 378;
         _parse_let_chain_tail(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 379;
     _parse_block_expression(p, follow);
@@ -21548,7 +21548,7 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     if !p.speculating {
         p.no_struct = 0;
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -21579,13 +21579,13 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
         }
         p.site = 384;
         _parse_let_chain_tail(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 385;
     _parse_block_expression(p, follow);
     if (p.peek_kind() == TK_KW_ELSE && _kind_set_126(p.peek_at(1))) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LCURLYBRACE {
             p.site = 386;
@@ -21667,7 +21667,7 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     if !p.speculating {
         p.no_struct = 0;
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -21698,13 +21698,13 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         }
         p.site = 391;
         _parse_let_chain_tail(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 392;
     _parse_block_expression(p, follow);
     if (p.peek_kind() == TK_KW_ELSE && _kind_set_126(p.peek_at(1))) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LCURLYBRACE {
             p.site = 393;
@@ -21811,7 +21811,7 @@ fn _parse_match_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
         p.no_struct = 0;
     }
     p.expect(TK_LCURLYBRACE, &SYNC_4, false);
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -21865,9 +21865,9 @@ fn _parse_match_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
         }
         p.site = 399;
         _parse_inner_attribute(p, 0);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_37(p.peek_kind()) {
         p.site = 400;
         _parse_match_arms(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -21888,7 +21888,7 @@ fn _parse_match_expression(p: &mut Parser, follow: i64 = 0) -> () with RustParse
 }
 
 fn _parse_match_arms__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -21938,7 +21938,7 @@ fn _parse_match_arms__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
         p.expect(TK_FATARROW, &SYNC_0, false);
         p.site = 402;
         _parse_match_arm_expression(p, follow);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 403;
     _parse_match_arm(p, FOLLOW_MASK_44);
@@ -21979,7 +21979,7 @@ fn _parse_match_arm_expression__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> 
 }
 
 fn _parse_match_arm_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_31(kind) {
         if _kind_set_77(kind) {
@@ -22027,7 +22027,7 @@ fn _parse_match_arm_expression(p: &mut Parser, follow: i64 = 0) -> () with RustP
 }
 
 fn _parse_match_arm__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -22058,7 +22058,7 @@ fn _parse_match_arm__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
         }
         p.site = 407;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 408;
     _parse_pattern(p, follow);
@@ -22163,7 +22163,7 @@ fn _parse_match_arm_guard__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () wi
 }
 
 fn _parse_match_arm_guard__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_70, p.kinds[p.pos]) { p.sync_alts(&SYNC_70, &EXPECTED_70); }
+    if !kind_set_has(&SYNC_70, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_70, &EXPECTED_70); }
     let kind = p.peek_kind();
     if kind == TK_KW_IF {
         p.pos += 1;
@@ -22195,7 +22195,7 @@ fn _parse_match_arm_guard(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 }
 
 fn _parse_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_OR {
         p.take();
     }
@@ -22242,7 +22242,7 @@ fn _parse_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
 }
 
 fn _parse_pattern_no_top_alt__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_98(kind) {
         if _kind_set_99(kind) {
@@ -22293,7 +22293,7 @@ fn _parse_pattern_no_top_alt(p: &mut Parser, follow: i64 = 0) -> () with RustPar
 }
 
 fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_50(kind) {
         p.site = 419;
@@ -22502,7 +22502,7 @@ fn _parse_pattern_without_range(p: &mut Parser, follow: i64 = 0) -> () with Rust
 }
 
 fn _parse_literal_pattern__inner_alt_8(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_72, p.kinds[p.pos]) { p.sync_enter(&SYNC_72, &EXPECTED_72); }
+    if !kind_set_has(&SYNC_72, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_72, &EXPECTED_72); }
     if p.peek_kind() == TK_MINUS {
         p.take();
     }
@@ -22511,7 +22511,7 @@ fn _parse_literal_pattern__inner_alt_8(p: &mut Parser, follow: i64 = 0) -> () wi
 }
 
 fn _parse_literal_pattern__inner_alt_9(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_73, p.kinds[p.pos]) { p.sync_enter(&SYNC_73, &EXPECTED_73); }
+    if !kind_set_has(&SYNC_73, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_73, &EXPECTED_73); }
     if p.peek_kind() == TK_MINUS {
         p.take();
     }
@@ -22520,7 +22520,7 @@ fn _parse_literal_pattern__inner_alt_9(p: &mut Parser, follow: i64 = 0) -> () wi
 }
 
 fn _parse_literal_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_74, p.kinds[p.pos]) { p.sync_alts(&SYNC_74, &EXPECTED_74); }
+    if !kind_set_has(&SYNC_74, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_74, &EXPECTED_74); }
     let kind = p.peek_kind();
     if kind == TK_KW_TRUE {
         p.take();
@@ -22610,11 +22610,11 @@ fn _parse_literal_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 }
 
 fn _parse_identifier_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_REF {
         p.take();
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_MUT {
         p.take();
     }
@@ -22690,7 +22690,7 @@ fn _parse_range_pattern__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with
 }
 
 fn _parse_range_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_99(kind) {
         let _sd_tokens = &p.kinds;
@@ -22743,7 +22743,7 @@ fn _parse_range_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
 }
 
 fn _parse_range_pattern_bound__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_72, p.kinds[p.pos]) { p.sync_enter(&SYNC_72, &EXPECTED_72); }
+    if !kind_set_has(&SYNC_72, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_72, &EXPECTED_72); }
     if p.peek_kind() == TK_MINUS {
         p.take();
     }
@@ -22752,7 +22752,7 @@ fn _parse_range_pattern_bound__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> (
 }
 
 fn _parse_range_pattern_bound__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_73, p.kinds[p.pos]) { p.sync_enter(&SYNC_73, &EXPECTED_73); }
+    if !kind_set_has(&SYNC_73, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_73, &EXPECTED_73); }
     if p.peek_kind() == TK_MINUS {
         p.take();
     }
@@ -22761,7 +22761,7 @@ fn _parse_range_pattern_bound__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> (
 }
 
 fn _parse_range_pattern_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_CHAR_LITERAL {
         p.take();
@@ -22832,9 +22832,9 @@ fn _parse_range_pattern_bound(p: &mut Parser, follow: i64 = 0) -> () with RustPa
 }
 
 fn _parse_reference_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_51, p.kinds[p.pos]) { p.sync_alts(&SYNC_51, &EXPECTED_51); }
+    if !kind_set_has(&SYNC_51, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_51, &EXPECTED_51); }
     p.expect_set(&SYNC_51, &EXPECTED_51);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
     if p.peek_kind() == TK_KW_MUT {
         opt_enter_scan: {
@@ -22872,7 +22872,7 @@ fn _parse_struct_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
     p.site = 440;
     _parse_path_in_expression(p, FOLLOW_MASK_27);
     p.expect(TK_LCURLYBRACE, &SYNC_4, false);
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     if _kind_set_40(p.peek_kind()) {
         p.site = 441;
         _parse_struct_pattern_elements(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -22906,7 +22906,7 @@ fn _parse_struct_pattern_elements__inner_alt_0(p: &mut Parser, follow: i64 = 0) 
 }
 
 fn _parse_struct_pattern_elements__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_40(kind) {
         if kind == TK_POUND {
@@ -23001,7 +23001,7 @@ fn _parse_struct_pattern_fields(p: &mut Parser, follow: i64 = 0) -> () with Rust
 }
 
 fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -23032,9 +23032,9 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () wit
         }
         p.site = 447;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_INTEGER_LITERAL {
         p.site = 448;
@@ -23097,11 +23097,11 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () wit
             p.site = 451;
             _parse_pattern(p, follow);
         } else {
-            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
             if p.peek_kind() == TK_KW_REF {
                 p.take();
             }
-            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
             if p.peek_kind() == TK_KW_MUT {
                 p.take();
             }
@@ -23126,7 +23126,7 @@ fn _parse_struct_pattern_field(p: &mut Parser, follow: i64 = 0) -> () with RustP
 }
 
 fn _parse_struct_pattern_et_cetera__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -23157,7 +23157,7 @@ fn _parse_struct_pattern_et_cetera__inner(p: &mut Parser) -> () with RustParserB
         }
         p.site = 453;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_DOTDOT, &EMPTY_SYNC, true);
     return;
@@ -23178,7 +23178,7 @@ fn _parse_tuple_struct_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     p.site = 454;
     _parse_path_in_expression(p, FOLLOW_MASK_20);
     p.expect(TK_LPAREN, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if _kind_set_43(p.peek_kind()) {
         p.site = 455;
         _parse_tuple_struct_items(p, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -23263,7 +23263,7 @@ fn _parse_tuple_struct_items(p: &mut Parser, follow: i64 = 0) -> () with RustPar
 
 fn _parse_tuple_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_LPAREN, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if _kind_set_43(p.peek_kind()) {
         p.site = 458;
         _parse_tuple_pattern_items(p, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -23293,7 +23293,7 @@ fn _parse_tuple_pattern_items__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> (
 fn _parse_tuple_pattern_items__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 461;
     _parse_pattern(p, FOLLOW_MASK_22);
-    if !kind_set_has(&SYNC_78, p.kinds[p.pos]) { p.sync_enter(&SYNC_78, &EXPECTED_78); }
+    if !kind_set_has(&SYNC_78, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_78, &EXPECTED_78); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -23348,7 +23348,7 @@ fn _parse_tuple_pattern_items__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> (
 }
 
 fn _parse_tuple_pattern_items__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_43(kind) {
         if kind == TK_DOTDOT {
@@ -23445,7 +23445,7 @@ fn _parse_grouped_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 
 fn _parse_slice_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_LSQUAREBRACKET, &SYNC_3, false);
-    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
     if _kind_set_43(p.peek_kind()) {
         p.site = 464;
         _parse_slice_pattern_items(p, (FOLLOW_MASK_33 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -23529,7 +23529,7 @@ fn _parse_slice_pattern_items(p: &mut Parser, follow: i64 = 0) -> () with RustPa
 }
 
 fn _parse_path_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_32(kind) {
         p.site = 467;
@@ -23560,7 +23560,7 @@ fn _parse_path_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
 }
 
 fn _parse_type___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_18(kind) {
         if kind == TK_KW_IMPL {
@@ -23637,7 +23637,7 @@ fn _parse_type_(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
 }
 
 fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_111(kind) {
         if kind == TK_LPAREN {
@@ -23865,7 +23865,7 @@ fn _parse_never_type(p: &mut Parser) -> () with RustParserBase {
 
 fn _parse_tuple_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_LPAREN, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         p.scan_gate.no_struct = p.no_struct;
@@ -23913,7 +23913,7 @@ fn _parse_tuple_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         let mut _plus_first = true;
         loop {
             if p.recovering { break; }
@@ -23942,9 +23942,9 @@ fn _parse_tuple_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
             p.site = 487;
             _parse_type_(p, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
             p.expect(TK_COMMA, &SYNC_2, false);
-            if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_back(&SYNC_2, &EXPECTED_2); }
+            if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
         }
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         if _kind_set_18(p.peek_kind()) {
             p.site = 488;
             _parse_type_(p, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -24007,14 +24007,14 @@ fn _parse_slice_type(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 }
 
 fn _parse_reference_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_51, p.kinds[p.pos]) { p.sync_alts(&SYNC_51, &EXPECTED_51); }
+    if !kind_set_has(&SYNC_51, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_51, &EXPECTED_51); }
     p.expect_set(&SYNC_51, &EXPECTED_51);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_16(p.peek_kind()) {
         p.site = 492;
         _parse_lifetime(p);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_MUT {
         p.take();
     }
@@ -24036,7 +24036,7 @@ fn _parse_reference_type(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
 
 fn _parse_raw_pointer_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_STAR, &SYNC_52, false);
-    if !kind_set_has(&SYNC_52, p.kinds[p.pos]) { p.sync_alts(&SYNC_52, &EXPECTED_52); }
+    if !kind_set_has(&SYNC_52, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_52, &EXPECTED_52); }
     p.expect_set(&SYNC_52, &EXPECTED_52);
     p.site = 494;
     _parse_type_no_bounds(p, follow);
@@ -24055,7 +24055,7 @@ fn _parse_raw_pointer_type(p: &mut Parser, follow: i64 = 0) -> () with RustParse
 }
 
 fn _parse_bare_function_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_FOR {
         p.site = 495;
         _parse_for_lifetimes(p, 0);
@@ -24064,7 +24064,7 @@ fn _parse_bare_function_type__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     _parse_function_type_qualifiers(p, FOLLOW_MASK_49);
     p.expect(TK_KW_FN, &SYNC_7, false);
     p.expect(TK_LPAREN, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if _kind_set_44(p.peek_kind()) {
         p.site = 497;
         _parse_function_parameters_maybe_named_variadic(p, FOLLOW_MASK_21);
@@ -24132,7 +24132,7 @@ fn _parse_bare_function_return_type(p: &mut Parser, follow: i64 = 0) -> () with 
 }
 
 fn _parse_function_parameters_maybe_named_variadic__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_44(kind) {
         let _sd_tokens = &p.kinds;
@@ -24241,7 +24241,7 @@ fn _parse_maybe_named_function_parameters(p: &mut Parser, follow: i64 = 0) -> ()
 }
 
 fn _parse_maybe_named_param__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -24272,9 +24272,9 @@ fn _parse_maybe_named_param__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         }
         p.site = 505;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         p.scan_gate.no_struct = p.no_struct;
@@ -24287,7 +24287,7 @@ fn _parse_maybe_named_param__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
         let grp_kind = p.peek_kind();
         if _kind_set_4(grp_kind) {
             p.site = 506;
@@ -24316,7 +24316,7 @@ fn _parse_maybe_named_param(p: &mut Parser, follow: i64 = 0) -> () with RustPars
 }
 
 fn _parse_maybe_named_function_parameters_variadic__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -24370,12 +24370,12 @@ fn _parse_maybe_named_function_parameters_variadic__inner(p: &mut Parser, follow
         p.site = 508;
         _parse_maybe_named_param(p, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_COMMA, &SYNC_0, false);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 509;
     _parse_maybe_named_param(p, FOLLOW_MASK_22);
     p.expect(TK_COMMA, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos_2: i32 = -1;
@@ -24406,7 +24406,7 @@ fn _parse_maybe_named_function_parameters_variadic__inner(p: &mut Parser, follow
         }
         p.site = 510;
         _parse_outer_attribute(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_DOTDOTDOT, &EMPTY_SYNC, true);
     return;
@@ -24424,7 +24424,7 @@ fn _parse_maybe_named_function_parameters_variadic(p: &mut Parser, follow: i64 =
 }
 
 fn _parse_trait_object_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_DYN {
         p.take();
     }
@@ -24445,7 +24445,7 @@ fn _parse_trait_object_type(p: &mut Parser, follow: i64 = 0) -> () with RustPars
 }
 
 fn _parse_trait_object_type_one_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_KW_DYN {
         p.take();
     }
@@ -24576,7 +24576,7 @@ fn _parse_type_param_bounds(p: &mut Parser, follow: i64 = 0) -> () with RustPars
 }
 
 fn _parse_type_param_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_16(kind) {
         p.site = 517;
@@ -24613,7 +24613,7 @@ fn _parse_type_param_bound(p: &mut Parser, follow: i64 = 0) -> () with RustParse
 fn _parse_use_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_KW_USE, &SYNC_83, false);
     p.expect(TK_LT, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         p.scan_gate.no_struct = p.no_struct;
@@ -24668,7 +24668,7 @@ fn _parse_use_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -24710,11 +24710,11 @@ fn _parse_use_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
             p.site = 520;
             _parse_use_bound_generic_arg(p);
             p.expect(TK_COMMA, &SYNC_0, false);
-            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
         }
         p.site = 521;
         _parse_use_bound_generic_arg(p);
-        if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { p.sync_enter(&SYNC_40, &EXPECTED_40); }
+        if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_40, &EXPECTED_40); }
         if p.peek_kind() == TK_COMMA {
             p.take();
         }
@@ -24735,7 +24735,7 @@ fn _parse_use_bound(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
 }
 
 fn _parse_use_bound_generic_arg__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_16(kind) {
         p.site = 522;
@@ -24769,14 +24769,14 @@ fn _parse_use_bound_generic_arg(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_trait_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_48(kind) {
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         if p.peek_kind() == TK_QUESTION {
             p.take();
         }
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         if p.peek_kind() == TK_KW_FOR {
             p.site = 524;
             _parse_for_lifetimes(p, FOLLOW_MASK_51);
@@ -24786,11 +24786,11 @@ fn _parse_trait_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
         return;
     } else if kind == TK_LPAREN {
         p.take();
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         if p.peek_kind() == TK_QUESTION {
             p.take();
         }
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         if p.peek_kind() == TK_KW_FOR {
             p.site = 526;
             _parse_for_lifetimes(p, FOLLOW_MASK_51);
@@ -24888,7 +24888,7 @@ fn _parse_lifetime_bounds(p: &mut Parser, follow: i64 = 0) -> () with RustParser
 }
 
 fn _parse_lifetime__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_86, p.kinds[p.pos]) { p.sync_alts(&SYNC_86, &EXPECTED_86); }
+    if !kind_set_has(&SYNC_86, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_86, &EXPECTED_86); }
     let kind = p.peek_kind();
     if _kind_set_16(kind) {
         p.take();
@@ -24914,7 +24914,7 @@ fn _parse_lifetime(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_simple_path__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_PATHSEP {
         p.take();
     }
@@ -24961,7 +24961,7 @@ fn _parse_simple_path(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase
 }
 
 fn _parse_simple_path_segment__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
         p.site = 532;
@@ -24991,7 +24991,7 @@ fn _parse_simple_path_segment(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_path_in_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_PATHSEP {
         p.take();
     }
@@ -25060,7 +25060,7 @@ fn _parse_path_expr_segment(p: &mut Parser, follow: i64 = 0) -> () with RustPars
 }
 
 fn _parse_path_ident_segment__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
         p.site = 537;
@@ -25099,19 +25099,19 @@ fn _parse_generic_args__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with 
     p.expect(TK_LT, &SYNC_0, false);
     p.site = 538;
     _parse_generic_args_lifetimes(p, 0);
-    if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { p.sync_enter(&SYNC_40, &EXPECTED_40); }
+    if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_40, &EXPECTED_40); }
     if p.peek_kind() == TK_COMMA && _kind_set_18(p.peek_at(1)) {
         p.take();
         p.site = 539;
         _parse_generic_args_types(p, 0);
     }
-    if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { p.sync_enter(&SYNC_40, &EXPECTED_40); }
+    if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_40, &EXPECTED_40); }
     if p.peek_kind() == TK_COMMA && _kind_set_4(p.peek_at(1)) {
         p.take();
         p.site = 540;
         _parse_generic_args_bindings(p, 0);
     }
-    if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { p.sync_enter(&SYNC_40, &EXPECTED_40); }
+    if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_40, &EXPECTED_40); }
     if p.peek_kind() == TK_COMMA {
         p.take();
     }
@@ -25123,13 +25123,13 @@ fn _parse_generic_args__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with 
     p.expect(TK_LT, &SYNC_0, false);
     p.site = 541;
     _parse_generic_args_types(p, 0);
-    if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { p.sync_enter(&SYNC_40, &EXPECTED_40); }
+    if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_40, &EXPECTED_40); }
     if p.peek_kind() == TK_COMMA && _kind_set_4(p.peek_at(1)) {
         p.take();
         p.site = 542;
         _parse_generic_args_bindings(p, 0);
     }
-    if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { p.sync_enter(&SYNC_40, &EXPECTED_40); }
+    if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_40, &EXPECTED_40); }
     if p.peek_kind() == TK_COMMA {
         p.take();
     }
@@ -25139,7 +25139,7 @@ fn _parse_generic_args__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with 
 
 fn _parse_generic_args__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_LT, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -25183,11 +25183,11 @@ fn _parse_generic_args__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with 
         p.site = 543;
         _parse_generic_arg(p, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_COMMA, &SYNC_0, false);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 544;
     _parse_generic_arg(p, 0);
-    if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { p.sync_enter(&SYNC_40, &EXPECTED_40); }
+    if !kind_set_has(&SYNC_40, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_40, &EXPECTED_40); }
     if p.peek_kind() == TK_COMMA {
         p.take();
     }
@@ -25196,7 +25196,7 @@ fn _parse_generic_args__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with 
 }
 
 fn _parse_generic_args__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_83, p.kinds[p.pos]) { p.sync_alts(&SYNC_83, &EXPECTED_83); }
+    if !kind_set_has(&SYNC_83, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_83, &EXPECTED_83); }
     let kind = p.peek_kind();
     if kind == TK_LT {
         let _sd_tokens = &p.kinds;
@@ -25258,7 +25258,7 @@ fn _parse_generic_args(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
 }
 
 fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_49(kind) {
         if _kind_set_16(kind) {
@@ -25368,14 +25368,14 @@ fn _parse_generic_arg(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase
 }
 
 fn _parse_generic_args_const__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_LCURLYBRACE {
         p.site = 549;
         _parse_block_expression(p, follow);
         return;
     } else if _kind_set_50(kind) {
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         if p.peek_kind() == TK_MINUS {
             p.take();
         }
@@ -25558,7 +25558,7 @@ fn _parse_generic_args_binding(p: &mut Parser, follow: i64 = 0) -> () with RustP
 fn _parse_qualified_path_in_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 560;
     _parse_qualified_path_type(p, FOLLOW_MASK_59);
-    if !kind_set_has(&SYNC_92, p.kinds[p.pos]) { p.sync_enter(&SYNC_92, &EXPECTED_92); }
+    if !kind_set_has(&SYNC_92, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_92, &EXPECTED_92); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -25607,7 +25607,7 @@ fn _parse_qualified_path_type__inner(p: &mut Parser, follow: i64 = 0) -> () with
     p.expect(TK_LT, &SYNC_0, false);
     p.site = 562;
     _parse_type_(p, 0);
-    if !kind_set_has(&SYNC_93, p.kinds[p.pos]) { p.sync_enter(&SYNC_93, &EXPECTED_93); }
+    if !kind_set_has(&SYNC_93, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_93, &EXPECTED_93); }
     if p.peek_kind() == TK_KW_AS && _kind_set_32(p.peek_at(1)) {
         p.take();
         p.site = 563;
@@ -25631,7 +25631,7 @@ fn _parse_qualified_path_type(p: &mut Parser, follow: i64 = 0) -> () with RustPa
 fn _parse_qualified_path_in_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 564;
     _parse_qualified_path_type(p, FOLLOW_MASK_59);
-    if !kind_set_has(&SYNC_92, p.kinds[p.pos]) { p.sync_enter(&SYNC_92, &EXPECTED_92); }
+    if !kind_set_has(&SYNC_92, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_92, &EXPECTED_92); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -25677,7 +25677,7 @@ fn _parse_qualified_path_in_type(p: &mut Parser, follow: i64 = 0) -> () with Rus
 }
 
 fn _parse_type_path__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_PATHSEP {
         p.take();
     }
@@ -25783,7 +25783,7 @@ fn _parse_type_path_segment(p: &mut Parser, follow: i64 = 0) -> () with RustPars
 
 fn _parse_type_path_fn__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_LPAREN, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if _kind_set_18(p.peek_kind()) {
         p.site = 571;
         _parse_type_path_inputs(p, FOLLOW_MASK_21);
@@ -25875,7 +25875,7 @@ fn _parse_visibility__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     p.expect(TK_KW_PUB, &SYNC_7, true);
     if (p.peek_kind() == TK_LPAREN && _kind_set_128(p.peek_at(1))) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
-        if !kind_set_has(&SYNC_95, p.kinds[p.pos]) { p.sync_alts(&SYNC_95, &EXPECTED_95); }
+        if !kind_set_has(&SYNC_95, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_95, &EXPECTED_95); }
         let grp_kind = p.peek_kind();
         if _kind_set_121(grp_kind) {
             p.take();
@@ -25903,7 +25903,7 @@ fn _parse_visibility(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 }
 
 fn _parse_identifier__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_96, p.kinds[p.pos]) { p.sync_alts(&SYNC_96, &EXPECTED_96); }
+    if !kind_set_has(&SYNC_96, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_96, &EXPECTED_96); }
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
         p.take();
@@ -25929,7 +25929,7 @@ fn _parse_identifier(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_keyword__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_97, p.kinds[p.pos]) { p.sync_alts(&SYNC_97, &EXPECTED_97); }
+    if !kind_set_has(&SYNC_97, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_97, &EXPECTED_97); }
     let kind = p.peek_kind();
     if _kind_set_122(kind) {
         p.take();
@@ -25960,7 +25960,7 @@ fn _parse_macro_identifier_like_token__inner_alt_2(p: &mut Parser) -> () with Ru
 }
 
 fn _parse_macro_identifier_like_token__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_123(kind) {
         if kind == TK_KW_MACRORULES {
@@ -26065,7 +26065,7 @@ fn _parse_macro_literal_token(p: &mut Parser) -> () with RustParserBase {
 }
 
 fn _parse_macro_punctuation_token__inner(p: &mut Parser) -> () with RustParserBase {
-    if !kind_set_has(&SYNC_99, p.kinds[p.pos]) { p.sync_alts(&SYNC_99, &EXPECTED_99); }
+    if !kind_set_has(&SYNC_99, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_99, &EXPECTED_99); }
     let kind = p.peek_kind();
     if _kind_set_57(kind) {
         p.take();

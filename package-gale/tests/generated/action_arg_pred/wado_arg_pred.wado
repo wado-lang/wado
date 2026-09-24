@@ -1503,7 +1503,7 @@ fn _parse_s(p: &mut Parser) -> () {
 fn _parse_e__inner(p: &mut Parser, mode: i32 = 0) -> EVals {
     let mut vals = EVals {};
     vals.mode = mode;
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_A && (vals.mode == 1) {
         p.expect(TK_A, &EMPTY_SYNC, true);

@@ -1449,7 +1449,7 @@ fn scan_assign(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn _parse_a__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -1491,7 +1491,7 @@ fn _parse_a__inner(p: &mut Parser) -> () {
         } else {
             p.expect_not(&SYNC_2);
         }
-        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_back(&SYNC_3, &EXPECTED_3); }
+        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
@@ -1509,7 +1509,7 @@ fn _parse_a(p: &mut Parser) -> () {
 }
 
 fn _parse_b__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -1551,7 +1551,7 @@ fn _parse_b__inner(p: &mut Parser) -> () {
         } else {
             p.any();
         }
-        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_back(&SYNC_3, &EXPECTED_3); }
+        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;

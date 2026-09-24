@@ -1548,7 +1548,7 @@ fn _parse_s__inner_alt_1(p: &mut Parser) -> () {
 }
 
 fn _parse_s__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_A {
         let _sd_tokens = &p.kinds;

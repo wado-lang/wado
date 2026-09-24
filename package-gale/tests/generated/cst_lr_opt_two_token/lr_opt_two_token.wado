@@ -1574,7 +1574,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     p.expect(TK_ID, &SYNC_1, false);
                     p.expect(TK_LIT_RPAREN, &SYNC_2, true);
                 } else if _gk == TK_ID {
-                    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+                    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
                     let mut opt_scan_pos: i32 = -1;
                     opt_scan: {
                         let tokens = &p.kinds;

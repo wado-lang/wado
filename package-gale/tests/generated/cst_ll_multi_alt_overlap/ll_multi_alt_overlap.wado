@@ -1488,7 +1488,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 }
 
 fn _parse_r__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_X {
         let mut gd_winner: i32 = -1;
@@ -1562,7 +1562,7 @@ fn _parse_a__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_X {
         p.pos += 1;

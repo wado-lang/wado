@@ -1482,7 +1482,7 @@ impl Parser {
 }
 
 fn _parse_alts__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -1525,7 +1525,7 @@ fn _parse_alts__inner(p: &mut Parser) -> () {
                  p.emit("b") 
             }
         }
-        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_back(&SYNC_1, &EXPECTED_1); }
+        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
@@ -1564,7 +1564,7 @@ fn _parse_one(p: &mut Parser) -> () {
 }
 
 fn _parse_opt__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_A {
         p.take();
         if !p.speculating {
@@ -1588,7 +1588,7 @@ fn _parse_opt(p: &mut Parser) -> () {
 }
 
 fn _parse_gated__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut gd_winner: i32 = -1;
@@ -1641,7 +1641,7 @@ fn _parse_gated__inner(p: &mut Parser) -> () {
                  p.emit("gated") 
             }
         }
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_B, &SYNC_3, false);
     if !p.speculating {

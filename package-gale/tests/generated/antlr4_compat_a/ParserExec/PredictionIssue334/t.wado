@@ -1587,7 +1587,7 @@ fn scan_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 fn _parse_file___inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
     let item = _parse_item(p, 0);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1626,9 +1626,9 @@ fn _parse_file___inner(p: &mut Parser, follow: i64 = 0) -> () {
         let semicolon = p.expect(TK_SEMICOLON, &SYNC_1, false);
         p.site = 1;
         let item = _parse_item(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_SEMICOLON {
         let semicolon = p.take();
     }

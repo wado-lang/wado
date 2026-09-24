@@ -1642,11 +1642,11 @@ fn _parse_items(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACKET {
         p.take();
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
             let tokens = &p.kinds;
@@ -1672,7 +1672,7 @@ fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if opt_scan_pos >= 0 {
             p.site = 3;
             _parse_item(p, 0);
-            if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
+            if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
             loop {
                 if p.recovering { break; }
                 let mut rep_scan_pos: i32 = -1;
@@ -1696,7 +1696,7 @@ fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 p.expect(TK_LIT_COMMA, &SYNC_0, false);
                 p.site = 4;
                 _parse_item(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-                if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_back(&SYNC_3, &EXPECTED_3); }
+                if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
             }
         }
         p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC, true);
@@ -1732,7 +1732,7 @@ fn _parse_targs__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LIT_LT, &SYNC_0, false);
     p.site = 6;
     _parse_item(p, 0);
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1756,7 +1756,7 @@ fn _parse_targs__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_LIT_COMMA, &SYNC_0, false);
         p.site = 7;
         _parse_item(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
     p.expect(TK_LIT_GT, &EMPTY_SYNC, true);
     return;

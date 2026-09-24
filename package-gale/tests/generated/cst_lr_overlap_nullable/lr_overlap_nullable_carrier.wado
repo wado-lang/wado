@@ -1550,7 +1550,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
-                    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
+                    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
                     if p.peek_kind() == TK_LIT_GT && p.peek_at(1) == TK_LIT_GT {
                         p.take();
                         p.expect(TK_LIT_GT, &SYNC_2, false);
@@ -1581,7 +1581,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 if _lr_scan_0 >= 0 {
                     if 2 >= min_prec {
                         p.b.start_node_at(_cp, RK_E, _start);
-                        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
+                        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
                         if p.peek_kind() == TK_LIT_GT && p.peek_at(1) == TK_LIT_GT {
                             p.take();
                             p.expect(TK_LIT_GT, &SYNC_2, false);
@@ -1626,7 +1626,7 @@ fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> () {
 }
 
 fn _parse_cmp__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_alts(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_4, &EXPECTED_4); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         p.take();

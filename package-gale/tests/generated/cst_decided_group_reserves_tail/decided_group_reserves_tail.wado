@@ -1458,7 +1458,7 @@ fn _parse_start(p: &mut Parser) -> () {
 }
 
 fn _parse_body__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut gd_winner: i32 = -1;
@@ -1511,7 +1511,7 @@ fn _parse_body__inner(p: &mut Parser) -> () {
             p.expect(TK_B, &SYNC_2, false);
             p.expect(TK_Y, &SYNC_0, false);
         }
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_A, &SYNC_1, false);
     p.expect(TK_Z, &EMPTY_SYNC, true);

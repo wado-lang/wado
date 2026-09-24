@@ -11543,7 +11543,7 @@ fn _parse_initializer(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPars
 }
 
 fn _parse_binding_pattern__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_OpenBracket {
         p.site = 1;
@@ -11570,7 +11570,7 @@ fn _parse_binding_pattern(p: &mut Parser) -> () with TypeScriptParserBase {
 
 fn _parse_type_parameters__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.expect(TK_LessThan, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if _kind_set_0(p.peek_kind()) {
         p.site = 3;
         _parse_type_parameter_list(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -11652,7 +11652,7 @@ fn _parse_type_parameter__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () wit
 }
 
 fn _parse_type_parameter__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_19(kind) {
         if _kind_set_34(p.peek_at(1)) {
@@ -11726,7 +11726,7 @@ fn _parse_constraint(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParse
 
 fn _parse_type_arguments__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.expect(TK_LessThan, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if _kind_set_1(p.peek_kind()) {
         p.site = 12;
         _parse_type_argument_list(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -11806,7 +11806,7 @@ fn _parse_type_argument(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
 }
 
 fn _parse_type___inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_2(p.peek_kind()) {
         p.take();
     }
@@ -11816,7 +11816,7 @@ fn _parse_type___inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScr
 }
 
 fn _parse_type___inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_35(kind) {
         if kind == TK_LessThan {
@@ -11990,7 +11990,7 @@ fn _parse_primary_type__inner_alt_9(p: &mut Parser, follow: i64 = 0) -> () with 
 }
 
 fn _parse_primary_type__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_OpenParen {
         p.b.set_alt(0);
@@ -12134,7 +12134,7 @@ fn _parse_primary_type__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0
                     }
                 }
                 p.expect(TK_OpenBracket, &SYNC_7, false);
-                if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { p.sync_enter(&SYNC_7, &EXPECTED_7); }
+                if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_7, &EXPECTED_7); }
                 let mut opt_scan_pos: i32 = -1;
                 opt_scan: {
                     let tokens = &p.kinds;
@@ -12169,13 +12169,13 @@ fn _parse_primary_type(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> ()
 }
 
 fn _parse_predefined_type__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_8, p.kinds[p.pos]) { p.sync_alts(&SYNC_8, &EXPECTED_8); }
+    if !kind_set_has(&SYNC_8, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_8, &EXPECTED_8); }
     let kind = p.peek_kind();
     if _kind_set_41(kind) {
         p.take();
         return;
     } else if _kind_set_4(kind) {
-        if !kind_set_has(&SYNC_9, p.kinds[p.pos]) { p.sync_enter(&SYNC_9, &EXPECTED_9); }
+        if !kind_set_has(&SYNC_9, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_9, &EXPECTED_9); }
         if p.peek_kind() == TK_Unique {
             p.take();
         }
@@ -12229,7 +12229,7 @@ fn _parse_type_generic__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
     p.expect(TK_LessThan, &SYNC_0, false);
     p.site = 38;
     _parse_type_argument_list(p, 0);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if p.peek_kind() == TK_LessThan {
         p.site = 39;
         _parse_type_generic(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -12250,7 +12250,7 @@ fn _parse_type_generic(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPar
 }
 
 fn _parse_type_name__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_19(kind) {
         let _sd_tokens = &p.kinds;
@@ -12295,7 +12295,7 @@ fn _parse_type_name(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParser
 
 fn _parse_object_type__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.expect(TK_OpenBrace, &SYNC_11, false);
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
     if _kind_set_5(p.peek_kind()) {
         p.site = 42;
         _parse_type_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -12359,7 +12359,7 @@ fn _parse_type_member_list__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        if !kind_set_has(&SYNC_12, p.kinds[p.pos]) { p.sync_alts(&SYNC_12, &EXPECTED_12); }
+        if !kind_set_has(&SYNC_12, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_12, &EXPECTED_12); }
         p.expect_set(&SYNC_12, &EXPECTED_12);
         p.site = 45;
         _parse_type_member(p, follow);
@@ -12390,7 +12390,7 @@ fn _parse_type_member__inner_alt_4(p: &mut Parser, follow: i64 = 0) -> () with T
 }
 
 fn _parse_type_member__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_16(kind) {
         if kind == TK_New {
@@ -12603,13 +12603,13 @@ fn _parse_tuple_element_types(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
 }
 
 fn _parse_function_type__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LessThan {
         p.site = 56;
         _parse_type_parameters(p, FOLLOW_MASK_9);
     }
     p.expect(TK_OpenParen, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
     if _kind_set_7(p.peek_kind()) {
         p.site = 57;
         _parse_parameter_list(p, FOLLOW_MASK_10);
@@ -12634,13 +12634,13 @@ fn _parse_function_type(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
 
 fn _parse_constructor_type__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.expect(TK_New, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LessThan {
         p.site = 59;
         _parse_type_parameters(p, FOLLOW_MASK_9);
     }
     p.expect(TK_OpenParen, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
     if _kind_set_7(p.peek_kind()) {
         p.site = 60;
         _parse_parameter_list(p, FOLLOW_MASK_10);
@@ -12682,7 +12682,7 @@ fn _parse_type_query(p: &mut Parser) -> () with TypeScriptParserBase {
 }
 
 fn _parse_type_query_expression__inner_alt_1(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -12722,7 +12722,7 @@ fn _parse_type_query_expression__inner_alt_1(p: &mut Parser) -> () with TypeScri
         p.site = 64;
         _parse_identifier_name(p);
         p.expect(TK_Dot, &SYNC_0, false);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 65;
     _parse_identifier_name(p);
@@ -12730,7 +12730,7 @@ fn _parse_type_query_expression__inner_alt_1(p: &mut Parser) -> () with TypeScri
 }
 
 fn _parse_type_query_expression__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_8(kind) {
         if _kind_set_19(kind) {
@@ -12786,7 +12786,7 @@ fn _parse_type_query_expression(p: &mut Parser) -> () with TypeScriptParserBase 
 }
 
 fn _parse_property_signatur__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
     if p.peek_kind() == TK_ReadOnly {
         opt_enter_scan: {
@@ -12871,13 +12871,13 @@ fn _parse_type_annotation(p: &mut Parser, follow: i64 = 0) -> () with TypeScript
 }
 
 fn _parse_call_signature__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LessThan {
         p.site = 70;
         _parse_type_parameters(p, FOLLOW_MASK_9);
     }
     p.expect(TK_OpenParen, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
     if _kind_set_7(p.peek_kind()) {
         p.site = 71;
         _parse_parameter_list(p, FOLLOW_MASK_4);
@@ -12902,7 +12902,7 @@ fn _parse_call_signature(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptP
 }
 
 fn _parse_parameter_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_Ellipsis {
         p.site = 73;
@@ -13037,7 +13037,7 @@ fn _parse_required_parameter_list(p: &mut Parser, follow: i64 = 0) -> () with Ty
 }
 
 fn _parse_parameter__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_9(kind) {
         if _kind_set_9(kind) {
@@ -13083,12 +13083,12 @@ fn _parse_parameter(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParser
 }
 
 fn _parse_optional_parameter__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_At {
         p.site = 81;
         _parse_decorator_list(p, FOLLOW_MASK_13);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
     if _kind_set_11(p.peek_kind()) {
         opt_enter_scan: {
@@ -13132,7 +13132,7 @@ fn _parse_optional_parameter__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     }
     p.site = 83;
     _parse_identifier_or_pattern(p);
-    if !kind_set_has(&SYNC_20, p.kinds[p.pos]) { p.sync_alts(&SYNC_20, &EXPECTED_20); }
+    if !kind_set_has(&SYNC_20, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_20, &EXPECTED_20); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_QuestionMark {
         p.take();
@@ -13141,7 +13141,7 @@ fn _parse_optional_parameter__inner(p: &mut Parser, follow: i64 = 0) -> () with 
             _parse_type_annotation(p, follow);
         }
     } else if _kind_set_10(grp_kind) {
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         if p.peek_kind() == TK_Colon {
             p.site = 85;
             _parse_type_annotation(p, FOLLOW_MASK_15);
@@ -13188,12 +13188,12 @@ fn _parse_rest_parameter(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptP
 }
 
 fn _parse_required_parameter__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_At {
         p.site = 89;
         _parse_decorator_list(p, 0);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
     if _kind_set_11(p.peek_kind()) {
         opt_enter_scan: {
@@ -13237,7 +13237,7 @@ fn _parse_required_parameter(p: &mut Parser, follow: i64 = 0) -> () with TypeScr
 }
 
 fn _parse_accessibility_modifier__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_22, p.kinds[p.pos]) { p.sync_alts(&SYNC_22, &EXPECTED_22); }
+    if !kind_set_has(&SYNC_22, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_22, &EXPECTED_22); }
     let kind = p.peek_kind();
     if _kind_set_11(kind) {
         p.take();
@@ -13263,7 +13263,7 @@ fn _parse_accessibility_modifier(p: &mut Parser) -> () with TypeScriptParserBase
 }
 
 fn _parse_identifier_or_pattern__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_8(kind) {
         p.site = 93;
@@ -13295,13 +13295,13 @@ fn _parse_identifier_or_pattern(p: &mut Parser) -> () with TypeScriptParserBase 
 
 fn _parse_construct_signature__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.expect(TK_New, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LessThan {
         p.site = 95;
         _parse_type_parameters(p, FOLLOW_MASK_9);
     }
     p.expect(TK_OpenParen, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
     if _kind_set_7(p.peek_kind()) {
         p.site = 96;
         _parse_parameter_list(p, FOLLOW_MASK_4);
@@ -13330,7 +13330,7 @@ fn _parse_index_signature__inner(p: &mut Parser, follow: i64 = 0) -> () with Typ
     p.site = 98;
     _parse_identifier(p);
     p.expect(TK_Colon, &SYNC_24, false);
-    if !kind_set_has(&SYNC_24, p.kinds[p.pos]) { p.sync_alts(&SYNC_24, &EXPECTED_24); }
+    if !kind_set_has(&SYNC_24, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_24, &EXPECTED_24); }
     p.expect_set(&SYNC_24, &EXPECTED_24);
     p.expect(TK_CloseBracket, &SYNC_0, false);
     p.site = 99;
@@ -13352,7 +13352,7 @@ fn _parse_index_signature(p: &mut Parser, follow: i64 = 0) -> () with TypeScript
 fn _parse_method_signature__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 100;
     _parse_property_name(p, 0);
-    if !kind_set_has(&SYNC_20, p.kinds[p.pos]) { p.sync_enter(&SYNC_20, &EXPECTED_20); }
+    if !kind_set_has(&SYNC_20, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_20, &EXPECTED_20); }
     if p.peek_kind() == TK_QuestionMark {
         p.take();
     }
@@ -13373,14 +13373,14 @@ fn _parse_method_signature(p: &mut Parser, follow: i64 = 0) -> () with TypeScrip
 }
 
 fn _parse_type_alias_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_25, p.kinds[p.pos]) { p.sync_enter(&SYNC_25, &EXPECTED_25); }
+    if !kind_set_has(&SYNC_25, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_25, &EXPECTED_25); }
     if p.peek_kind() == TK_Export {
         p.take();
     }
     p.expect(TK_TypeAlias, &SYNC_0, false);
     p.site = 102;
     _parse_identifier(p);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LessThan {
         p.site = 103;
         _parse_type_parameters(p, FOLLOW_MASK_2);
@@ -13405,14 +13405,14 @@ fn _parse_type_alias_declaration(p: &mut Parser, follow: i64 = 0) -> () with Typ
 }
 
 fn _parse_constructor_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_11(p.peek_kind()) {
         p.site = 106;
         _parse_accessibility_modifier(p);
     }
     p.expect(TK_Constructor, &SYNC_26, false);
     p.expect(TK_OpenParen, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
     if _kind_set_14(p.peek_kind()) {
         p.site = 107;
         _parse_formal_parameter_list(p, FOLLOW_MASK_4);
@@ -13477,23 +13477,23 @@ fn _parse_constructor_declaration(p: &mut Parser, follow: i64 = 0) -> () with Ty
 }
 
 fn _parse_interface_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_28, p.kinds[p.pos]) { p.sync_enter(&SYNC_28, &EXPECTED_28); }
+    if !kind_set_has(&SYNC_28, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_28, &EXPECTED_28); }
     if p.peek_kind() == TK_Export {
         p.take();
     }
-    if !kind_set_has(&SYNC_29, p.kinds[p.pos]) { p.sync_enter(&SYNC_29, &EXPECTED_29); }
+    if !kind_set_has(&SYNC_29, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_29, &EXPECTED_29); }
     if p.peek_kind() == TK_Declare {
         p.take();
     }
     p.expect(TK_Interface, &SYNC_0, false);
     p.site = 109;
     _parse_identifier(p);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LessThan {
         p.site = 110;
         _parse_type_parameters(p, 0);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_Extends {
         p.site = 111;
         _parse_interface_extends_clause(p, FOLLOW_MASK_18);
@@ -13578,7 +13578,7 @@ fn _parse_class_or_interface_type_list(p: &mut Parser, follow: i64 = 0) -> () wi
 }
 
 fn _parse_enum_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_30, p.kinds[p.pos]) { p.sync_enter(&SYNC_30, &EXPECTED_30); }
+    if !kind_set_has(&SYNC_30, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_30, &EXPECTED_30); }
     if p.peek_kind() == TK_Const {
         p.take();
     }
@@ -13586,7 +13586,7 @@ fn _parse_enum_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
     p.site = 116;
     _parse_identifier(p);
     p.expect(TK_OpenBrace, &SYNC_11, false);
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
     if _kind_set_16(p.peek_kind()) {
         p.site = 117;
         _parse_enum_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -13691,7 +13691,7 @@ fn _parse_enum_member(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPars
 }
 
 fn _parse_namespace_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_31, p.kinds[p.pos]) { p.sync_enter(&SYNC_31, &EXPECTED_31); }
+    if !kind_set_has(&SYNC_31, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_31, &EXPECTED_31); }
     if p.peek_kind() == TK_Declare {
         p.take();
     }
@@ -13699,7 +13699,7 @@ fn _parse_namespace_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () wi
     p.site = 123;
     _parse_namespace_name(p, FOLLOW_MASK_18);
     p.expect(TK_OpenBrace, &SYNC_11, false);
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
     if _kind_set_17(p.peek_kind()) {
         p.site = 124;
         _parse_statement_list(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -13746,7 +13746,7 @@ fn _parse_namespace_name__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        if !kind_set_has(&SYNC_32, p.kinds[p.pos]) { p.sync_enter(&SYNC_32, &EXPECTED_32); }
+        if !kind_set_has(&SYNC_32, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_32, &EXPECTED_32); }
         let mut _plus_first = true;
         loop {
             if p.recovering { break; }
@@ -13764,7 +13764,7 @@ fn _parse_namespace_name__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
             }
             _plus_first = false;
             p.expect(TK_Dot, &SYNC_33, false);
-            if !kind_set_has(&SYNC_33, p.kinds[p.pos]) { p.sync_back(&SYNC_33, &EXPECTED_33); }
+            if !kind_set_has(&SYNC_33, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_33, &EXPECTED_33); }
         }
         p.site = 126;
         _parse_identifier(p);
@@ -13805,7 +13805,7 @@ fn _parse_import_alias_declaration(p: &mut Parser, follow: i64 = 0) -> () with T
 }
 
 fn _parse_decorator_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -13857,7 +13857,7 @@ fn _parse_decorator_list(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptP
 
 fn _parse_decorator__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     p.expect(TK_At, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_18(grp_kind) {
         let mut gd_winner: i32 = -1;
@@ -13911,7 +13911,7 @@ fn _parse_decorator(p: &mut Parser) -> () with TypeScriptParserBase {
 }
 
 fn _parse_decorator_member_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_19(kind) {
         p.site = 132;
@@ -13990,7 +13990,7 @@ fn _parse_decorator_call_expression(p: &mut Parser, follow: i64 = 0) -> () with 
 }
 
 fn _parse_program__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_17(p.peek_kind()) {
         p.site = 138;
         _parse_source_elements(p, (FOLLOW_MASK_24 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -14011,7 +14011,7 @@ fn _parse_program(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBa
 }
 
 fn _parse_source_element__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
     if p.peek_kind() == TK_Export {
         opt_enter_scan: {
@@ -14052,7 +14052,7 @@ fn _parse_statement__inner_alt_27(p: &mut Parser, follow: i64 = 0) -> () with Ty
 }
 
 fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_52(kind) {
         if kind == TK_OpenBrace {
@@ -15081,7 +15081,7 @@ fn _parse_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParser
 
 fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.expect(TK_OpenBrace, &SYNC_11, false);
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
     if _kind_set_17(p.peek_kind()) {
         p.site = 168;
         _parse_statement_list(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -15102,7 +15102,7 @@ fn _parse_block(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase
 }
 
 fn _parse_statement_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -15154,7 +15154,7 @@ fn _parse_statement_list(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptP
 
 fn _parse_abstract_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.expect(TK_Abstract, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_20(grp_kind) {
         let mut gd_winner: i32 = -1;
@@ -15232,10 +15232,10 @@ fn _parse_import_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScrip
 }
 
 fn _parse_import_from_block__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_21(kind) {
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         let mut opt_enter: bool = false;
         if _kind_set_8(p.peek_kind()) {
             opt_enter_scan: {
@@ -15272,7 +15272,7 @@ fn _parse_import_from_block__inner(p: &mut Parser, follow: i64 = 0) -> () with T
             p.site = 175;
             _parse_import_default(p, FOLLOW_MASK_26);
         }
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
         let grp_kind = p.peek_kind();
         if _kind_set_22(grp_kind) {
             p.site = 176;
@@ -15315,7 +15315,7 @@ fn _parse_import_from_block(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
 
 fn _parse_import_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.expect(TK_OpenBrace, &SYNC_11, false);
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -15373,9 +15373,9 @@ fn _parse_import_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
         p.site = 181;
         _parse_import_alias_name(p, (FOLLOW_MASK_27 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_Comma, &SYNC_11, false);
-        if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_back(&SYNC_11, &EXPECTED_11); }
+        if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_11, &EXPECTED_11); }
     }
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
     let mut shape_scan_pos: i32 = -1;
     shape_scan: {
         let tokens = &p.kinds;
@@ -15397,7 +15397,7 @@ fn _parse_import_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
     if shape_scan_pos >= 0 {
         p.site = 182;
         _parse_import_alias_name(p, 0);
-        if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { p.sync_enter(&SYNC_39, &EXPECTED_39); }
+        if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_39, &EXPECTED_39); }
         if p.peek_kind() == TK_Comma {
             p.take();
         }
@@ -15443,7 +15443,7 @@ fn _parse_import_alias_name(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
 }
 
 fn _parse_module_export_name__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_8(kind) {
         p.site = 185;
@@ -15473,7 +15473,7 @@ fn _parse_module_export_name(p: &mut Parser) -> () with TypeScriptParserBase {
 }
 
 fn _parse_imported_binding__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_41, p.kinds[p.pos]) { p.sync_alts(&SYNC_41, &EXPECTED_41); }
+    if !kind_set_has(&SYNC_41, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_41, &EXPECTED_41); }
     let kind = p.peek_kind();
     if _kind_set_58(kind) {
         p.take();
@@ -15517,7 +15517,7 @@ fn _parse_import_default(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptP
 }
 
 fn _parse_import_namespace__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_Multiply {
         p.take();
@@ -15588,7 +15588,7 @@ fn _parse_alias_name(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParse
 fn _parse_export_statement__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(0);
     p.expect(TK_Export, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
     if p.peek_kind() == TK_Default {
         opt_enter_scan: {
@@ -15627,7 +15627,7 @@ fn _parse_export_statement__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () w
     if opt_enter {
         p.expect(TK_Default, &SYNC_0, false);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_24(grp_kind) {
         let mut gd_winner: i32 = -1;
@@ -15683,7 +15683,7 @@ fn _parse_export_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () w
 }
 
 fn _parse_export_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_46, p.kinds[p.pos]) { p.sync_alts(&SYNC_46, &EXPECTED_46); }
+    if !kind_set_has(&SYNC_46, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_46, &EXPECTED_46); }
     let kind = p.peek_kind();
     if kind == TK_Export {
         let _sd_tokens = &p.kinds;
@@ -15725,7 +15725,7 @@ fn _parse_export_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScrip
 }
 
 fn _parse_export_from_block__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_22(kind) {
         p.site = 196;
@@ -15767,7 +15767,7 @@ fn _parse_export_from_block(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
 
 fn _parse_export_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.expect(TK_OpenBrace, &SYNC_11, false);
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -15825,9 +15825,9 @@ fn _parse_export_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
         p.site = 202;
         _parse_export_alias_name(p, (FOLLOW_MASK_27 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_Comma, &SYNC_11, false);
-        if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_back(&SYNC_11, &EXPECTED_11); }
+        if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_11, &EXPECTED_11); }
     }
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
     let mut shape_scan_pos: i32 = -1;
     shape_scan: {
         let tokens = &p.kinds;
@@ -15849,7 +15849,7 @@ fn _parse_export_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
     if shape_scan_pos >= 0 {
         p.site = 203;
         _parse_export_alias_name(p, 0);
-        if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { p.sync_enter(&SYNC_39, &EXPECTED_39); }
+        if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_39, &EXPECTED_39); }
         if p.peek_kind() == TK_Comma {
             p.take();
         }
@@ -15895,7 +15895,7 @@ fn _parse_export_alias_name(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
 }
 
 fn _parse_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_59(kind) {
         if kind == TK_Async {
@@ -15973,7 +15973,7 @@ fn _parse_declaration(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPars
 fn _parse_variable_statement__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 209;
     _parse_binding_pattern(p);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_Colon {
         p.site = 210;
         _parse_type_annotation(p, FOLLOW_MASK_15);
@@ -15987,17 +15987,17 @@ fn _parse_variable_statement__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> ()
 }
 
 fn _parse_variable_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_11(p.peek_kind()) {
         p.site = 212;
         _parse_accessibility_modifier(p);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_25(p.peek_kind()) {
         p.site = 213;
         _parse_var_modifier(p);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_ReadOnly {
         p.take();
     }
@@ -16010,7 +16010,7 @@ fn _parse_variable_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> ()
 }
 
 fn _parse_variable_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_62(kind) {
         if _kind_set_13(kind) {
@@ -16038,7 +16038,7 @@ fn _parse_variable_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     }
     if kind == TK_Declare {
         p.take();
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         if _kind_set_25(p.peek_kind()) {
             p.site = 215;
             _parse_var_modifier(p);
@@ -16112,7 +16112,7 @@ fn _parse_variable_declaration_list(p: &mut Parser, follow: i64 = 0) -> () with 
 }
 
 fn _parse_variable_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_26(grp_kind) {
         p.site = 219;
@@ -16136,7 +16136,7 @@ fn _parse_variable_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     }
     if (p.peek_kind() == TK_Assign) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         let mut opt_enter: bool = false;
         if p.peek_kind() == TK_LessThan {
             opt_enter_scan: {
@@ -16238,19 +16238,19 @@ fn _parse_iteration_statement__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> (
     p.b.set_alt(2);
     p.expect(TK_For, &SYNC_26, false);
     p.expect(TK_OpenParen, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_27(p.peek_kind()) {
         p.site = 235;
         _parse_expression_sequence(p, FOLLOW_MASK_22);
     }
     p.expect(TK_SemiColon, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_27(p.peek_kind()) {
         p.site = 236;
         _parse_expression_sequence(p, FOLLOW_MASK_22);
     }
     p.expect(TK_SemiColon, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
     if _kind_set_27(p.peek_kind()) {
         p.site = 237;
         _parse_expression_sequence(p, FOLLOW_MASK_32);
@@ -16270,13 +16270,13 @@ fn _parse_iteration_statement__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> (
     p.site = 240;
     _parse_variable_declaration_list(p, FOLLOW_MASK_22);
     p.expect(TK_SemiColon, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_27(p.peek_kind()) {
         p.site = 241;
         _parse_expression_sequence(p, FOLLOW_MASK_22);
     }
     p.expect(TK_SemiColon, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
     if _kind_set_27(p.peek_kind()) {
         p.site = 242;
         _parse_expression_sequence(p, FOLLOW_MASK_32);
@@ -16322,7 +16322,7 @@ fn _parse_iteration_statement__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> (
 fn _parse_iteration_statement__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(6);
     p.expect(TK_For, &SYNC_49, false);
-    if !kind_set_has(&SYNC_49, p.kinds[p.pos]) { p.sync_enter(&SYNC_49, &EXPECTED_49); }
+    if !kind_set_has(&SYNC_49, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_49, &EXPECTED_49); }
     if p.peek_kind() == TK_Await {
         p.take();
     }
@@ -16339,7 +16339,7 @@ fn _parse_iteration_statement__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> (
     }
     p.site = 253;
     _parse_expression_sequence(p, 0);
-    if !kind_set_has(&SYNC_50, p.kinds[p.pos]) { p.sync_enter(&SYNC_50, &EXPECTED_50); }
+    if !kind_set_has(&SYNC_50, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_50, &EXPECTED_50); }
     if p.peek_kind() == TK_As && _kind_set_1(p.peek_at(1)) {
         p.take();
         p.site = 254;
@@ -16354,7 +16354,7 @@ fn _parse_iteration_statement__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> (
 fn _parse_iteration_statement__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(7);
     p.expect(TK_For, &SYNC_49, false);
-    if !kind_set_has(&SYNC_49, p.kinds[p.pos]) { p.sync_enter(&SYNC_49, &EXPECTED_49); }
+    if !kind_set_has(&SYNC_49, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_49, &EXPECTED_49); }
     if p.peek_kind() == TK_Await {
         p.take();
     }
@@ -16373,7 +16373,7 @@ fn _parse_iteration_statement__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> (
     }
     p.site = 259;
     _parse_expression_sequence(p, 0);
-    if !kind_set_has(&SYNC_50, p.kinds[p.pos]) { p.sync_enter(&SYNC_50, &EXPECTED_50); }
+    if !kind_set_has(&SYNC_50, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_50, &EXPECTED_50); }
     if p.peek_kind() == TK_As && _kind_set_1(p.peek_at(1)) {
         p.take();
         p.site = 260;
@@ -16386,7 +16386,7 @@ fn _parse_iteration_statement__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> (
 }
 
 fn _parse_iteration_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_51, p.kinds[p.pos]) { p.sync_alts(&SYNC_51, &EXPECTED_51); }
+    if !kind_set_has(&SYNC_51, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_51, &EXPECTED_51); }
     let kind = p.peek_kind();
     if kind == TK_Do {
         p.b.set_alt(0);
@@ -16485,7 +16485,7 @@ fn _parse_iteration_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
 }
 
 fn _parse_var_modifier__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_52, p.kinds[p.pos]) { p.sync_alts(&SYNC_52, &EXPECTED_52); }
+    if !kind_set_has(&SYNC_52, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_52, &EXPECTED_52); }
     let kind = p.peek_kind();
     if _kind_set_25(kind) {
         p.take();
@@ -16601,7 +16601,7 @@ fn _parse_return_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScrip
 }
 
 fn _parse_yield_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_53, p.kinds[p.pos]) { p.sync_alts(&SYNC_53, &EXPECTED_53); }
+    if !kind_set_has(&SYNC_53, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_53, &EXPECTED_53); }
     p.expect_set(&SYNC_53, &EXPECTED_53);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -16677,12 +16677,12 @@ fn _parse_switch_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScrip
 
 fn _parse_case_block__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.expect(TK_OpenBrace, &SYNC_11, false);
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
     if p.peek_kind() == TK_Case {
         p.site = 274;
         _parse_case_clauses(p, 0);
     }
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
     let mut shape_scan_pos: i32 = -1;
     shape_scan: {
         let tokens = &p.kinds;
@@ -16704,7 +16704,7 @@ fn _parse_case_block__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
     if shape_scan_pos >= 0 {
         p.site = 275;
         _parse_default_clause(p, 0);
-        if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
+        if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
         if p.peek_kind() == TK_Case {
             p.site = 276;
             _parse_case_clauses(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -16729,7 +16729,7 @@ fn _parse_case_block(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParse
 }
 
 fn _parse_case_clauses__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -16873,7 +16873,7 @@ fn _parse_try_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeS
     p.expect(TK_Try, &SYNC_0, false);
     p.site = 285;
     _parse_block(p, FOLLOW_MASK_40);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_Catch {
         p.site = 286;
@@ -16904,12 +16904,12 @@ fn _parse_try_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
 
 fn _parse_catch_production__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.expect(TK_Catch, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_OpenParen && _kind_set_19(p.peek_at(1)) {
         p.take();
         p.site = 289;
         _parse_identifier(p);
-        if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+        if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
         if p.peek_kind() == TK_Colon {
             p.site = 290;
             _parse_type_annotation(p, FOLLOW_MASK_36);
@@ -16969,12 +16969,12 @@ fn _parse_debugger_statement(p: &mut Parser) -> () with TypeScriptParserBase {
 }
 
 fn _parse_function_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_56, p.kinds[p.pos]) { p.sync_enter(&SYNC_56, &EXPECTED_56); }
+    if !kind_set_has(&SYNC_56, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_56, &EXPECTED_56); }
     if p.peek_kind() == TK_Async {
         p.take();
     }
     p.expect(TK_Function_, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_Multiply {
         p.take();
     }
@@ -16982,7 +16982,7 @@ fn _parse_function_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     _parse_identifier(p);
     p.site = 295;
     _parse_call_signature(p, FOLLOW_MASK_41);
-    if !kind_set_has(&SYNC_27, p.kinds[p.pos]) { p.sync_alts(&SYNC_27, &EXPECTED_27); }
+    if !kind_set_has(&SYNC_27, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_27, &EXPECTED_27); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_OpenBrace {
         p.take();
@@ -17009,27 +17009,27 @@ fn _parse_function_declaration(p: &mut Parser, follow: i64 = 0) -> () with TypeS
 }
 
 fn _parse_class_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_At {
         p.site = 297;
         _parse_decorator_list(p, 0);
     }
-    if !kind_set_has(&SYNC_57, p.kinds[p.pos]) { p.sync_enter(&SYNC_57, &EXPECTED_57); }
+    if !kind_set_has(&SYNC_57, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_57, &EXPECTED_57); }
     if p.peek_kind() == TK_Export {
         p.take();
-        if !kind_set_has(&SYNC_58, p.kinds[p.pos]) { p.sync_enter(&SYNC_58, &EXPECTED_58); }
+        if !kind_set_has(&SYNC_58, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_58, &EXPECTED_58); }
         if p.peek_kind() == TK_Default {
             p.take();
         }
     }
-    if !kind_set_has(&SYNC_59, p.kinds[p.pos]) { p.sync_enter(&SYNC_59, &EXPECTED_59); }
+    if !kind_set_has(&SYNC_59, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_59, &EXPECTED_59); }
     if p.peek_kind() == TK_Abstract {
         p.take();
     }
     p.expect(TK_Class, &SYNC_0, false);
     p.site = 298;
     _parse_identifier(p);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LessThan {
         p.site = 299;
         _parse_type_parameters(p, 0);
@@ -17077,7 +17077,7 @@ fn _parse_class_heritage(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptP
 
 fn _parse_class_tail__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     p.expect(TK_OpenBrace, &SYNC_11, false);
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -17107,7 +17107,7 @@ fn _parse_class_tail__inner(p: &mut Parser) -> () with TypeScriptParserBase {
         }
         p.site = 304;
         _parse_class_element(p, 0);
-        if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_back(&SYNC_11, &EXPECTED_11); }
+        if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_11, &EXPECTED_11); }
     }
     p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
     return;
@@ -17161,7 +17161,7 @@ fn _parse_implements_clause(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
 }
 
 fn _parse_class_element__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_At {
         p.site = 308;
         _parse_decorator_list(p, FOLLOW_MASK_42);
@@ -17172,7 +17172,7 @@ fn _parse_class_element__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with
 }
 
 fn _parse_class_element__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_17(kind) {
         if kind == TK_OpenBracket {
@@ -17283,16 +17283,16 @@ fn _parse_property_member_declaration__inner_alt_0(p: &mut Parser, follow: i64 =
     _parse_property_member_base(p, FOLLOW_MASK_42);
     p.site = 313;
     _parse_property_name(p, 0);
-    if !kind_set_has(&SYNC_20, p.kinds[p.pos]) { p.sync_enter(&SYNC_20, &EXPECTED_20); }
+    if !kind_set_has(&SYNC_20, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_20, &EXPECTED_20); }
     if p.peek_kind() == TK_QuestionMark {
         p.take();
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_Colon {
         p.site = 314;
         _parse_type_annotation(p, 0);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_Assign {
         p.site = 315;
         _parse_initializer(p, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -17309,7 +17309,7 @@ fn _parse_property_member_declaration__inner_alt_1(p: &mut Parser, follow: i64 =
     _parse_property_name(p, FOLLOW_MASK_25);
     p.site = 318;
     _parse_call_signature(p, FOLLOW_MASK_41);
-    if !kind_set_has(&SYNC_27, p.kinds[p.pos]) { p.sync_alts(&SYNC_27, &EXPECTED_27); }
+    if !kind_set_has(&SYNC_27, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_27, &EXPECTED_27); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_OpenBrace {
         p.take();
@@ -17328,7 +17328,7 @@ fn _parse_property_member_declaration__inner_alt_2(p: &mut Parser, follow: i64 =
     p.b.set_alt(2);
     p.site = 320;
     _parse_property_member_base(p, FOLLOW_MASK_35);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_19(grp_kind) {
         let mut gd_winner: i32 = -1;
@@ -17378,7 +17378,7 @@ fn _parse_property_member_declaration__inner_alt_3(p: &mut Parser, follow: i64 =
 }
 
 fn _parse_property_member_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_16(kind) {
         if kind == TK_Abstract {
@@ -17515,7 +17515,7 @@ fn _parse_index_member_declaration(p: &mut Parser, follow: i64 = 0) -> () with T
 }
 
 fn _parse_generator_method__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_Async {
         p.take();
         if !p.speculating {
@@ -17525,14 +17525,14 @@ fn _parse_generator_method__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
             }
         }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_Multiply {
         p.take();
     }
     p.site = 326;
     _parse_property_name(p, FOLLOW_MASK_9);
     p.expect(TK_OpenParen, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
     if _kind_set_14(p.peek_kind()) {
         p.site = 327;
         _parse_formal_parameter_list(p, FOLLOW_MASK_36);
@@ -17557,19 +17557,19 @@ fn _parse_generator_method(p: &mut Parser, follow: i64 = 0) -> () with TypeScrip
 }
 
 fn _parse_generator_function_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_56, p.kinds[p.pos]) { p.sync_enter(&SYNC_56, &EXPECTED_56); }
+    if !kind_set_has(&SYNC_56, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_56, &EXPECTED_56); }
     if p.peek_kind() == TK_Async {
         p.take();
     }
     p.expect(TK_Function_, &SYNC_62, false);
     p.expect(TK_Multiply, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_19(p.peek_kind()) {
         p.site = 329;
         _parse_identifier(p);
     }
     p.expect(TK_OpenParen, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
     if _kind_set_14(p.peek_kind()) {
         p.site = 330;
         _parse_formal_parameter_list(p, FOLLOW_MASK_36);
@@ -17597,7 +17597,7 @@ fn _parse_generator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with Typ
     p.expect(TK_OpenBrace, &SYNC_0, false);
     p.site = 332;
     _parse_generator_definition(p, 0);
-    if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { p.sync_enter(&SYNC_39, &EXPECTED_39); }
+    if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_39, &EXPECTED_39); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -17636,9 +17636,9 @@ fn _parse_generator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with Typ
         p.expect(TK_Comma, &SYNC_0, false);
         p.site = 333;
         _parse_generator_definition(p, (FOLLOW_MASK_43 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 32) & FOLLOW_CONT_MASK);
-        if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { p.sync_back(&SYNC_39, &EXPECTED_39); }
+        if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_39, &EXPECTED_39); }
     }
-    if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { p.sync_enter(&SYNC_39, &EXPECTED_39); }
+    if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_39, &EXPECTED_39); }
     if p.peek_kind() == TK_Comma {
         p.take();
     }
@@ -17679,7 +17679,7 @@ fn _parse_iterator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
     p.expect(TK_OpenBrace, &SYNC_0, false);
     p.site = 335;
     _parse_iterator_definition(p, 0);
-    if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { p.sync_enter(&SYNC_39, &EXPECTED_39); }
+    if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_39, &EXPECTED_39); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -17718,9 +17718,9 @@ fn _parse_iterator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
         p.expect(TK_Comma, &SYNC_0, false);
         p.site = 336;
         _parse_iterator_definition(p, (FOLLOW_MASK_44 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 24) & FOLLOW_CONT_MASK);
-        if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { p.sync_back(&SYNC_39, &EXPECTED_39); }
+        if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_39, &EXPECTED_39); }
     }
-    if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { p.sync_enter(&SYNC_39, &EXPECTED_39); }
+    if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_39, &EXPECTED_39); }
     if p.peek_kind() == TK_Comma {
         p.take();
     }
@@ -17745,7 +17745,7 @@ fn _parse_iterator_definition__inner(p: &mut Parser, follow: i64 = 0) -> () with
     _parse_single_expression(p, FOLLOW_MASK_45);
     p.expect(TK_CloseBracket, &SYNC_26, false);
     p.expect(TK_OpenParen, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
     if _kind_set_14(p.peek_kind()) {
         p.site = 338;
         _parse_formal_parameter_list(p, FOLLOW_MASK_36);
@@ -17770,7 +17770,7 @@ fn _parse_iterator_definition(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
 }
 
 fn _parse_class_element_name__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_16(kind) {
         p.site = 340;
@@ -17898,7 +17898,7 @@ fn _parse_formal_parameter_list__inner_alt_3(p: &mut Parser, follow: i64 = 0) ->
 }
 
 fn _parse_formal_parameter_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_70(kind) {
         if kind == TK_OpenBracket {
@@ -17969,12 +17969,12 @@ fn _parse_formal_parameter_list(p: &mut Parser, follow: i64 = 0) -> () with Type
 }
 
 fn _parse_formal_parameter_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_At {
         p.site = 350;
         _parse_decorator(p);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
     if _kind_set_11(p.peek_kind()) {
         opt_enter_scan: {
@@ -18083,7 +18083,7 @@ fn _parse_function_body(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
 }
 
 fn _parse_source_elements__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -18250,7 +18250,7 @@ fn _parse_element_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
             }
         }
         if rep_scan_pos_2 < 0 { break; }
-        if !kind_set_has(&SYNC_65, p.kinds[p.pos]) { p.sync_enter(&SYNC_65, &EXPECTED_65); }
+        if !kind_set_has(&SYNC_65, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_65, &EXPECTED_65); }
         let mut _plus_first = true;
         loop {
             if p.recovering { break; }
@@ -18268,7 +18268,7 @@ fn _parse_element_list__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
             }
             _plus_first = false;
             p.expect(TK_Comma, &SYNC_0, false);
-            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
         }
         p.site = 361;
         _parse_array_element(p, follow);
@@ -18303,11 +18303,11 @@ fn _parse_element_list(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPar
 }
 
 fn _parse_array_element__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_Ellipsis {
         p.take();
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_27(grp_kind) {
         let mut gd_winner: i32 = -1;
@@ -18365,7 +18365,7 @@ fn _parse_array_element(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
 
 fn _parse_object_literal__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.expect(TK_OpenBrace, &SYNC_11, false);
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_enter(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -18394,7 +18394,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
     if opt_scan_pos >= 0 {
         p.site = 364;
         _parse_property_assignment(p, 0);
-        if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { p.sync_enter(&SYNC_39, &EXPECTED_39); }
+        if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_39, &EXPECTED_39); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -18418,9 +18418,9 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
             p.expect(TK_Comma, &SYNC_0, false);
             p.site = 365;
             _parse_property_assignment(p, (FOLLOW_MASK_47 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-            if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { p.sync_back(&SYNC_39, &EXPECTED_39); }
+            if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_39, &EXPECTED_39); }
         }
-        if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { p.sync_enter(&SYNC_39, &EXPECTED_39); }
+        if !kind_set_has(&SYNC_39, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_39, &EXPECTED_39); }
         if p.peek_kind() == TK_Comma {
             p.take();
         }
@@ -18444,7 +18444,7 @@ fn _parse_property_assignment__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> (
     p.b.set_alt(0);
     p.site = 366;
     _parse_property_name(p, FOLLOW_MASK_48);
-    if !kind_set_has(&SYNC_67, p.kinds[p.pos]) { p.sync_alts(&SYNC_67, &EXPECTED_67); }
+    if !kind_set_has(&SYNC_67, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_67, &EXPECTED_67); }
     p.expect_set(&SYNC_67, &EXPECTED_67);
     p.site = 367;
     _parse_single_expression(p, follow);
@@ -18493,7 +18493,7 @@ fn _parse_property_assignment__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> (
 
 fn _parse_property_assignment__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(6);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_Ellipsis {
         p.take();
     }
@@ -18510,7 +18510,7 @@ fn _parse_property_assignment__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> (
 }
 
 fn _parse_property_assignment__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_29(kind) {
         if kind == TK_OpenBracket {
@@ -18710,7 +18710,7 @@ fn _parse_get_accessor__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
     _parse_getter(p, FOLLOW_MASK_50);
     p.expect(TK_OpenParen, &SYNC_69, false);
     p.expect(TK_CloseParen, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_Colon {
         p.site = 377;
         _parse_type_annotation(p, FOLLOW_MASK_18);
@@ -18737,7 +18737,7 @@ fn _parse_set_accessor__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
     p.site = 379;
     _parse_setter(p, FOLLOW_MASK_9);
     p.expect(TK_OpenParen, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
     if _kind_set_14(p.peek_kind()) {
         p.site = 380;
         _parse_formal_parameter_list(p, FOLLOW_MASK_36);
@@ -18762,7 +18762,7 @@ fn _parse_set_accessor(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPar
 }
 
 fn _parse_property_name__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_8(kind) {
         p.site = 382;
@@ -18803,7 +18803,7 @@ fn _parse_property_name(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
 
 fn _parse_arguments__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.expect(TK_OpenParen, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
     let mut shape_scan_pos: i32 = -1;
     shape_scan: {
         let tokens = &p.kinds;
@@ -18825,7 +18825,7 @@ fn _parse_arguments__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScrip
     if shape_scan_pos >= 0 {
         p.site = 385;
         _parse_argument_list(p, 0);
-        if !kind_set_has(&SYNC_70, p.kinds[p.pos]) { p.sync_enter(&SYNC_70, &EXPECTED_70); }
+        if !kind_set_has(&SYNC_70, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_70, &EXPECTED_70); }
         if p.peek_kind() == TK_Comma {
             p.take();
         }
@@ -18891,11 +18891,11 @@ fn _parse_argument_list(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
 }
 
 fn _parse_argument__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_Ellipsis {
         p.take();
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if _kind_set_27(grp_kind) {
         let mut gd_winner: i32 = -1;
@@ -19000,12 +19000,12 @@ fn _parse_single_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () 
 fn _parse_single_expression__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(1);
     p.expect(TK_Class, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_19(p.peek_kind()) {
         p.site = 393;
         _parse_identifier(p);
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LessThan {
         p.site = 394;
         _parse_type_parameters(p, 0);
@@ -19022,7 +19022,7 @@ fn _parse_single_expression__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> () 
     p.expect(TK_New, &SYNC_0, false);
     p.site = 407;
     _parse_single_expression(p, 0);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LessThan {
         p.site = 408;
         _parse_type_arguments(p, FOLLOW_MASK_9);
@@ -19158,7 +19158,7 @@ fn _parse_single_expression__inner_alt_48(p: &mut Parser, follow: i64 = 0) -> ()
 }
 
 fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_76(kind) {
         if kind == TK_Class {
@@ -19653,7 +19653,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                     }
                     p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                     p.b.set_alt(2);
-                    if !kind_set_has(&SYNC_72, p.kinds[p.pos]) { p.sync_enter(&SYNC_72, &EXPECTED_72); }
+                    if !kind_set_has(&SYNC_72, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_72, &EXPECTED_72); }
                     if p.peek_kind() == TK_QuestionMarkDot {
                         p.take();
                     }
@@ -19671,7 +19671,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                     if 27 >= min_prec {
                         p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                         p.b.set_alt(2);
-                        if !kind_set_has(&SYNC_72, p.kinds[p.pos]) { p.sync_enter(&SYNC_72, &EXPECTED_72); }
+                        if !kind_set_has(&SYNC_72, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_72, &EXPECTED_72); }
                         if p.peek_kind() == TK_QuestionMarkDot {
                             p.take();
                         }
@@ -19706,12 +19706,12 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                     if 25 >= min_prec {
                         p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                         p.b.set_alt(4);
-                        if !kind_set_has(&SYNC_73, p.kinds[p.pos]) { p.sync_enter(&SYNC_73, &EXPECTED_73); }
+                        if !kind_set_has(&SYNC_73, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_73, &EXPECTED_73); }
                         if p.peek_kind() == TK_Not {
                             p.take();
                         }
                         p.expect(TK_Dot, &SYNC_0, false);
-                        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+                        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
                         if p.peek_kind() == TK_Hashtag {
                             p.take();
                         }
@@ -19752,12 +19752,12 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                     if 25 >= min_prec {
                         p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                         p.b.set_alt(4);
-                        if !kind_set_has(&SYNC_73, p.kinds[p.pos]) { p.sync_enter(&SYNC_73, &EXPECTED_73); }
+                        if !kind_set_has(&SYNC_73, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_73, &EXPECTED_73); }
                         if p.peek_kind() == TK_Not {
                             p.take();
                         }
                         p.expect(TK_Dot, &SYNC_0, false);
-                        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+                        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
                         if p.peek_kind() == TK_Hashtag {
                             p.take();
                         }
@@ -19786,12 +19786,12 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                         }
                         p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                         p.b.set_alt(5);
-                        if !kind_set_has(&SYNC_74, p.kinds[p.pos]) { p.sync_enter(&SYNC_74, &EXPECTED_74); }
+                        if !kind_set_has(&SYNC_74, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_74, &EXPECTED_74); }
                         if p.peek_kind() == TK_QuestionMark {
                             p.take();
                         }
                         p.expect(TK_Dot, &SYNC_0, false);
-                        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+                        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
                         if p.peek_kind() == TK_Hashtag {
                             p.take();
                         }
@@ -19822,12 +19822,12 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                         }
                         p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
                         p.b.set_alt(5);
-                        if !kind_set_has(&SYNC_74, p.kinds[p.pos]) { p.sync_enter(&SYNC_74, &EXPECTED_74); }
+                        if !kind_set_has(&SYNC_74, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_74, &EXPECTED_74); }
                         if p.peek_kind() == TK_QuestionMark {
                             p.take();
                         }
                         p.expect(TK_Dot, &SYNC_0, false);
-                        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+                        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
                         if p.peek_kind() == TK_Hashtag {
                             p.take();
                         }
@@ -20334,7 +20334,7 @@ fn _parse_as_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with
 }
 
 fn _parse_as_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_27(kind) {
         if _kind_set_90(kind) {
@@ -20382,7 +20382,7 @@ fn _parse_as_expression(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
 }
 
 fn _parse_assignable__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_92(kind) {
         if _kind_set_93(kind) {
@@ -20444,23 +20444,23 @@ fn _parse_assignable(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParse
 }
 
 fn _parse_anonymous_function__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_56, p.kinds[p.pos]) { p.sync_enter(&SYNC_56, &EXPECTED_56); }
+    if !kind_set_has(&SYNC_56, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_56, &EXPECTED_56); }
     if p.peek_kind() == TK_Async {
         p.take();
     }
     p.expect(TK_Function_, &SYNC_77, false);
-    if !kind_set_has(&SYNC_77, p.kinds[p.pos]) { p.sync_enter(&SYNC_77, &EXPECTED_77); }
+    if !kind_set_has(&SYNC_77, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_77, &EXPECTED_77); }
     if p.peek_kind() == TK_Multiply {
         p.take();
     }
     p.expect(TK_OpenParen, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
     if _kind_set_14(p.peek_kind()) {
         p.site = 486;
         _parse_formal_parameter_list(p, FOLLOW_MASK_4);
     }
     p.expect(TK_CloseParen, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_Colon {
         p.site = 487;
         _parse_type_annotation(p, FOLLOW_MASK_18);
@@ -20473,7 +20473,7 @@ fn _parse_anonymous_function__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> ()
 }
 
 fn _parse_anonymous_function__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_96(kind) {
         if _kind_set_77(kind) {
@@ -20530,7 +20530,7 @@ fn _parse_anonymous_function(p: &mut Parser, follow: i64 = 0) -> () with TypeScr
 }
 
 fn _parse_arrow_function_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
     if p.peek_kind() == TK_Async {
         opt_enter_scan: {
@@ -20558,7 +20558,7 @@ fn _parse_arrow_function_declaration__inner(p: &mut Parser, follow: i64 = 0) -> 
     }
     p.site = 490;
     _parse_arrow_function_parameters(p, 0);
-    if !kind_set_has(&SYNC_79, p.kinds[p.pos]) { p.sync_enter(&SYNC_79, &EXPECTED_79); }
+    if !kind_set_has(&SYNC_79, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_79, &EXPECTED_79); }
     if p.peek_kind() == TK_Colon {
         p.site = 491;
         _parse_type_annotation(p, FOLLOW_MASK_53);
@@ -20581,7 +20581,7 @@ fn _parse_arrow_function_declaration(p: &mut Parser, follow: i64 = 0) -> () with
 }
 
 fn _parse_arrow_function_parameters__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_16(kind) {
         p.site = 493;
@@ -20589,7 +20589,7 @@ fn _parse_arrow_function_parameters__inner(p: &mut Parser, follow: i64 = 0) -> (
         return;
     } else if kind == TK_OpenParen {
         p.take();
-        if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+        if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_15, &EXPECTED_15); }
         if _kind_set_14(p.peek_kind()) {
             p.site = 494;
             _parse_formal_parameter_list(p, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -20625,7 +20625,7 @@ fn _parse_arrow_function_body__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
 }
 
 fn _parse_arrow_function_body__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_27(kind) {
         if kind == TK_OpenBrace {
@@ -20673,7 +20673,7 @@ fn _parse_arrow_function_body(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
 }
 
 fn _parse_assignment_operator__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_80, p.kinds[p.pos]) { p.sync_alts(&SYNC_80, &EXPECTED_80); }
+    if !kind_set_has(&SYNC_80, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_80, &EXPECTED_80); }
     let kind = p.peek_kind();
     if _kind_set_85(kind) {
         p.take();
@@ -20699,7 +20699,7 @@ fn _parse_assignment_operator(p: &mut Parser) -> () with TypeScriptParserBase {
 }
 
 fn _parse_literal__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_100(kind) {
         p.take();
@@ -20741,7 +20741,7 @@ fn _parse_literal(p: &mut Parser) -> () with TypeScriptParserBase {
 
 fn _parse_template_string_literal__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     p.expect(TK_BackTick, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -20771,7 +20771,7 @@ fn _parse_template_string_literal__inner(p: &mut Parser) -> () with TypeScriptPa
         }
         p.site = 500;
         _parse_template_string_atom(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_BackTick, &EMPTY_SYNC, true);
     return;
@@ -20789,7 +20789,7 @@ fn _parse_template_string_literal(p: &mut Parser) -> () with TypeScriptParserBas
 }
 
 fn _parse_template_string_atom__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_82, p.kinds[p.pos]) { p.sync_alts(&SYNC_82, &EXPECTED_82); }
+    if !kind_set_has(&SYNC_82, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_82, &EXPECTED_82); }
     let kind = p.peek_kind();
     if kind == TK_TemplateStringAtom {
         p.take();
@@ -20824,7 +20824,7 @@ fn _parse_template_string_atom(p: &mut Parser, follow: i64 = 0) -> () with TypeS
 }
 
 fn _parse_numeric_literal__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_83, p.kinds[p.pos]) { p.sync_alts(&SYNC_83, &EXPECTED_83); }
+    if !kind_set_has(&SYNC_83, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_83, &EXPECTED_83); }
     let kind = p.peek_kind();
     if _kind_set_30(kind) {
         p.take();
@@ -20850,7 +20850,7 @@ fn _parse_numeric_literal(p: &mut Parser) -> () with TypeScriptParserBase {
 }
 
 fn _parse_bigint_literal__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_84, p.kinds[p.pos]) { p.sync_alts(&SYNC_84, &EXPECTED_84); }
+    if !kind_set_has(&SYNC_84, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_84, &EXPECTED_84); }
     let kind = p.peek_kind();
     if _kind_set_31(kind) {
         p.take();
@@ -20926,7 +20926,7 @@ fn _parse_setter(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBas
 }
 
 fn _parse_identifier_name__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_8(kind) {
         if _kind_set_93(kind) {
@@ -20978,7 +20978,7 @@ fn _parse_identifier_name(p: &mut Parser) -> () with TypeScriptParserBase {
 }
 
 fn _parse_identifier__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_10, p.kinds[p.pos]) { p.sync_alts(&SYNC_10, &EXPECTED_10); }
+    if !kind_set_has(&SYNC_10, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_10, &EXPECTED_10); }
     let kind = p.peek_kind();
     if _kind_set_19(kind) {
         p.take();
@@ -21009,7 +21009,7 @@ fn _parse_identifier_or_key_word__inner_alt_1(p: &mut Parser) -> () with TypeScr
 }
 
 fn _parse_identifier_or_key_word__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_19(kind) {
         if kind == TK_TypeAlias {
@@ -21061,7 +21061,7 @@ fn _parse_identifier_or_key_word(p: &mut Parser) -> () with TypeScriptParserBase
 }
 
 fn _parse_reserved_word__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_33(kind) {
         p.site = 509;
@@ -21091,7 +21091,7 @@ fn _parse_reserved_word(p: &mut Parser) -> () with TypeScriptParserBase {
 }
 
 fn _parse_keyword__inner(p: &mut Parser) -> () with TypeScriptParserBase {
-    if !kind_set_has(&SYNC_87, p.kinds[p.pos]) { p.sync_alts(&SYNC_87, &EXPECTED_87); }
+    if !kind_set_has(&SYNC_87, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_87, &EXPECTED_87); }
     let kind = p.peek_kind();
     if _kind_set_33(kind) {
         p.take();

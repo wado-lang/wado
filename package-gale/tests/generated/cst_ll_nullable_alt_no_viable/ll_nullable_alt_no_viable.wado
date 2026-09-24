@@ -1525,7 +1525,7 @@ fn scan_base(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn _parse_start__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_ID {
         p.site = 0;
@@ -1554,7 +1554,7 @@ fn _parse_start(p: &mut Parser) -> () {
 fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_ID, &SYNC_2, false);
     p.expect(TK_LBRACE, &SYNC_3, false);
-    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
     if p.peek_kind() == TK_ID {
         p.site = 2;
         _parse_fields(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);

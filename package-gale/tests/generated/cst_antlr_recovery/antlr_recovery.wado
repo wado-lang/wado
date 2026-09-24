@@ -1673,7 +1673,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_loop__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_x, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1687,7 +1687,7 @@ fn _parse_loop__inner(p: &mut Parser) -> () {
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_LIT_y, &SYNC_0, false);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_LIT_BANG, &EMPTY_SYNC, true);
     return;
@@ -1755,7 +1755,7 @@ fn _parse_tailed(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_opt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LIT_x, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LIT_y {
         p.take();
     }
@@ -1776,7 +1776,7 @@ fn _parse_opt(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_grp__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_x, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     p.expect_set(&SYNC_2, &EXPECTED_2);
     p.expect(TK_LIT_BANG, &EMPTY_SYNC, true);
     return;
@@ -1795,7 +1795,7 @@ fn _parse_grp(p: &mut Parser) -> () {
 
 fn _parse_plus__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_x, &SYNC_1, false);
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -1813,7 +1813,7 @@ fn _parse_plus__inner(p: &mut Parser) -> () {
         }
         _plus_first = false;
         p.expect(TK_LIT_y, &SYNC_0, false);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_LIT_BANG, &EMPTY_SYNC, true);
     return;
@@ -1852,7 +1852,7 @@ fn _parse_twice(p: &mut Parser) -> () {
 }
 
 fn _parse_one__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_alts(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_4, &EXPECTED_4); }
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
         p.take();
@@ -1907,7 +1907,7 @@ fn _parse_inner(p: &mut Parser) -> () {
 }
 
 fn _parse_multi__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_alts(&SYNC_3, &EXPECTED_3); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_3, &EXPECTED_3); }
     let kind = p.peek_kind();
     if kind == TK_LIT_y {
         p.site = 4;
@@ -1977,7 +1977,7 @@ fn _parse_expr(p: &mut Parser) -> () {
 }
 
 fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
-    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { p.sync_alts(&SYNC_5, &EXPECTED_5); }
+    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_5, &EXPECTED_5); }
     let kind = p.peek_kind();
     if kind == TK_INT {
         p.take();
@@ -2108,7 +2108,7 @@ fn _parse_trail(p: &mut Parser) -> () {
 
 fn _parse_grpend__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_x, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LIT_y {
         p.take();

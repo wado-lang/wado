@@ -1561,7 +1561,7 @@ fn _parse_item__inner_alt_1(p: &mut Parser) -> () {
 }
 
 fn _parse_item__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
         let _sd_tokens = &p.kinds;
@@ -1620,7 +1620,7 @@ fn _parse_expr(p: &mut Parser) -> () {
 }
 
 fn _parse_primary__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         p.site = 4;
@@ -1650,7 +1650,7 @@ fn _parse_primary(p: &mut Parser) -> () {
 }
 
 fn _parse_closure__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_PIPEPIPE {
         p.take();

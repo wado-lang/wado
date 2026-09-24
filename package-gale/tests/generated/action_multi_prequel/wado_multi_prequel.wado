@@ -1487,7 +1487,7 @@ fn _parse_r__inner(p: &mut Parser) -> RVals {
     if !p.speculating {
          vals.v = 10; p.emit("i"); 
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     vals = alt_done: {
         let kind = p.peek_kind();
         if kind == TK_A {

@@ -1347,6 +1347,7 @@ impl CtxArena {
             cand = self.intern_next[cand];
         }
         let id = self.node_start.len();
+        assert (id as i64) < ATN_NODE_PAIR_STRIDE, "a node id at the pair-key stride aliases two node pairs onto one key";
         self.node_start.push(s);
         self.node_len.push(n);
         self.intern_next.push(head);
@@ -1461,7 +1462,6 @@ impl CtxArena {
 }
 
 fn atn_node_pair_key(a: i32, b: i32) -> i64 {
-    assert ATN_NODE_PAIR_STRIDE > ATN_ARENA_CAP as i64, "the pair-key stride must exceed the arena cap, or two node id pairs alias onto one key";
     return a as i64 * ATN_NODE_PAIR_STRIDE + b as i64;
 }
 
@@ -2071,7 +2071,7 @@ pub fn atn_lr_loop_decision(
     if enter < 0 {
         return exit_alt;
     }
-    if !atn_caller_mandates(sim, &atn.stack, t, eof) {
+    if !atn_caller_contests(sim, &atn.stack, dstate, t, eof, min_prec) {
         return enter;
     }
     let alt = atn_predict_once(sim, decision, atn, tokens, pos, eof, min_prec);
@@ -2112,12 +2112,22 @@ fn atn_caller_alone_enters(sim: &AtnSim, dstate: i32, t: i32, eof: i32, caller_m
     return false;
 }
 
-fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -> bool {
+fn atn_caller_contests(sim: &AtnSim, rule_stack: &List<i32>, dstate: i32, t: i32, eof: i32, min_prec: i32) -> bool {
+    let mut mp = min_prec;
+    let mut same_loop = true;
     let mut i = rule_stack.len() - 1;
     while i >= 0 {
         let ret = rule_stack[i];
         if ret < 0 {
             return i == 0 && t == eof;
+        }
+        same_loop = same_loop && i >= 1 && sim.state_collapse_to[ret] == dstate;
+        if same_loop {
+            let caller_mp = atn_invocation_prec(sim, rule_stack, i - 1);
+            if atn_caller_alone_enters(sim, dstate, t, eof, caller_mp, mp) {
+                return true;
+            }
+            mp = caller_mp;
         }
         if sim.state_cont_nullable[ret] {
             i -= 1;
@@ -2674,7 +2684,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         let _lr_pos0 = p.pos;
         if _atn_alt == 0 {
             p.b.start_node_at(_cp, RK_E, _start);
-            p.expect(TK_LIT_STAR, &SYNC_0, false);
+            p.take();
             p.site = 2;
             p.atn_ret_pending = 23;
             _parse_e(p, 3);
@@ -2772,7 +2782,6 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [1];
 global EXPECTED_0: List<i32> = [TK_INT];
 global SYNC_1: List<i32> = [64];
 

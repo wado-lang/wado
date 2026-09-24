@@ -1500,7 +1500,7 @@ impl Parser {
 }
 
 fn _parse_opt__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     let gd_kind = p.peek_kind();
@@ -1546,7 +1546,7 @@ fn _parse_opt(p: &mut Parser) -> () {
 }
 
 fn _parse_star__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut gd_winner: i32 = -1;
@@ -1591,7 +1591,7 @@ fn _parse_star__inner(p: &mut Parser) -> () {
         } else {
             p.expect(TK_B, &SYNC_0, false);
         }
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_A, &EMPTY_SYNC, true);
     return;
@@ -1609,7 +1609,7 @@ fn _parse_star(p: &mut Parser) -> () {
 }
 
 fn _parse_nongreedy__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     while p.peek_kind() == TK_B {
         if !((p.peek_kind() == TK_A && (pred_2(p))) || (p.peek_kind() == TK_B)) { break; }
         let grp_kind = p.peek_kind();
@@ -1637,7 +1637,7 @@ fn _parse_nongreedy(p: &mut Parser) -> () {
 }
 
 fn _parse_list_label__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut gd_winner: i32 = -1;
@@ -1682,7 +1682,7 @@ fn _parse_list_label__inner(p: &mut Parser) -> () {
         } else {
             p.expect(TK_B, &SYNC_0, false);
         }
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_A, &EMPTY_SYNC, true);
     return;
@@ -1700,7 +1700,7 @@ fn _parse_list_label(p: &mut Parser) -> () {
 }
 
 fn _parse_nested__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_A {
         p.take();
@@ -1731,7 +1731,7 @@ fn _parse_nested(p: &mut Parser) -> () {
 }
 
 fn _parse_solo_star__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1767,7 +1767,7 @@ fn _parse_solo_star__inner(p: &mut Parser) -> () {
         if !((p.peek_kind() == TK_A && (pred_5(p)))) { break; }
         p.expect(TK_A, &SYNC_3, false);
         p.expect(TK_B, &SYNC_1, false);
-        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_back(&SYNC_1, &EXPECTED_1); }
+        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
     }
     p.expect(TK_A, &EMPTY_SYNC, true);
     return;
@@ -1785,7 +1785,7 @@ fn _parse_solo_star(p: &mut Parser) -> () {
 }
 
 fn _parse_solo_opt__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
     if p.peek_kind() == TK_A && ((p.peek_kind() == TK_A && (pred_6(p)))) {
         p.expect(TK_A, &SYNC_1, false);
     }
@@ -1805,14 +1805,14 @@ fn _parse_solo_opt(p: &mut Parser) -> () {
 }
 
 fn _parse_shape_opt__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_alts(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_4, &EXPECTED_4); }
     let kind = p.peek_kind();
     if kind == TK_A {
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
         if p.peek_kind() == TK_A && p.peek_at(1) == TK_B && p.peek_at(2) == TK_A && (pred_7(p)) {
             p.site = 0;
             _parse_ra(p);
-            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
             if p.peek_kind() == TK_B {
                 p.take();
             }

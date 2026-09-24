@@ -1621,7 +1621,7 @@ fn _parse_start(p: &mut Parser) -> () {
 }
 
 fn _parse_stmt__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_OFF {
         p.take();
@@ -1674,7 +1674,7 @@ fn _parse_pick__inner_alt_1(p: &mut Parser) -> () {
 }
 
 fn _parse_pick__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_ID {
         let _sd_tokens = &p.kinds;

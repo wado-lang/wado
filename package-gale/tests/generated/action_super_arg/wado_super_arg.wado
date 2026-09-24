@@ -1519,7 +1519,7 @@ fn _parse_kw__inner_alt_2(p: &mut Parser) -> () with ArgBase {
 }
 
 fn _parse_kw__inner(p: &mut Parser) -> () with ArgBase {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_ID {
         if (pred_0(p)) {

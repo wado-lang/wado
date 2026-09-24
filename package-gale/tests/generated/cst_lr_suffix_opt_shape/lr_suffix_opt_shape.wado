@@ -1536,7 +1536,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.take();
-                if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
+                if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
                 if p.peek_kind() == TK_LIT_a && p.peek_at(1) == TK_LIT_b {
                     p.expect(TK_LIT_a, &SYNC_2, false);
                     p.expect(TK_LIT_b, &SYNC_3, false);

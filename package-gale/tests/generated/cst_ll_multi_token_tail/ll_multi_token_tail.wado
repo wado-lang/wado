@@ -1494,7 +1494,7 @@ fn _parse_r(p: &mut Parser) -> () {
 
 fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_N, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }

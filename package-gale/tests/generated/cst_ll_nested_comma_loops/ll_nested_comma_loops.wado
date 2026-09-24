@@ -1612,7 +1612,7 @@ fn _parse_start(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LBRACK, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_0(p.peek_kind()) {
         p.site = 1;
         _parse_elems(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -1717,11 +1717,11 @@ fn _parse_alt(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_LBRACE {
         p.take();
-        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
+        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
         if p.peek_kind() == TK_ID {
             p.site = 6;
             _parse_fields(p, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);

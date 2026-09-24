@@ -1598,7 +1598,7 @@ fn scan_sub(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn _parse_start__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1628,7 +1628,7 @@ fn _parse_start__inner(p: &mut Parser) -> () {
         }
         p.site = 0;
         _parse_a(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
@@ -1647,7 +1647,7 @@ fn _parse_start(p: &mut Parser) -> () {
 
 fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> AVals {
     let mut vals = AVals {};
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_LIT_x {
         vals._span_lo_my_label = p.pos;
@@ -1673,7 +1673,7 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> AVals {
         return vals;
     } else if kind == TK_LIT_g {
         p.take();
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
         let mut _plus_first = true;
         loop {
             if p.recovering { break; }

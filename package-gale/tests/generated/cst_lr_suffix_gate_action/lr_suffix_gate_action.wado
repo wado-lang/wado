@@ -1696,7 +1696,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, min_prec: i32 =
 }
 
 fn _parse_start__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -1731,7 +1731,7 @@ fn _parse_start__inner(p: &mut Parser) -> () {
         _plus_first = false;
         p.site = 0;
         _parse_stmt(p);
-        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_back(&SYNC_1, &EXPECTED_1); }
+        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
@@ -1749,7 +1749,7 @@ fn _parse_start(p: &mut Parser) -> () {
 }
 
 fn _parse_stmt__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_IF {
         p.take();
@@ -1821,7 +1821,7 @@ fn _parse_expr__inner_alt_2(p: &mut Parser) -> () {
 }
 
 fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
-    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_alts(&SYNC_3, &EXPECTED_3); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_3, &EXPECTED_3); }
     let kind = p.peek_kind();
     if kind == TK_ID {
         let _sd_tokens = &p.kinds;

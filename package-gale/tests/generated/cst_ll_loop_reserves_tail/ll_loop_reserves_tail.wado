@@ -1477,7 +1477,7 @@ fn _parse_start(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_arms__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1516,7 +1516,7 @@ fn _parse_arms__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 1;
         _parse_arm(p);
         p.expect(TK_SEMI, &SYNC_0, false);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 2;
     _parse_arm(p);

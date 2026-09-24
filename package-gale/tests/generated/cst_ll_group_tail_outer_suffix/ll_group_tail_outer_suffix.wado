@@ -1514,7 +1514,7 @@ fn _parse_start(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_OR, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_ID {
         p.site = 1;
         _parse_names(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);

@@ -1350,6 +1350,7 @@ impl CtxArena {
             cand = self.intern_next[cand];
         }
         let id = self.node_start.len();
+        assert (id as i64) < ATN_NODE_PAIR_STRIDE, "a node id at the pair-key stride aliases two node pairs onto one key";
         self.node_start.push(s);
         self.node_len.push(n);
         self.intern_next.push(head);
@@ -1464,7 +1465,6 @@ impl CtxArena {
 }
 
 fn atn_node_pair_key(a: i32, b: i32) -> i64 {
-    assert ATN_NODE_PAIR_STRIDE > ATN_ARENA_CAP as i64, "the pair-key stride must exceed the arena cap, or two node id pairs alias onto one key";
     return a as i64 * ATN_NODE_PAIR_STRIDE + b as i64;
 }
 
@@ -2580,7 +2580,7 @@ fn _parse_xt__inner_alt_1(p: &mut Parser) -> () {
 }
 
 fn _parse_xt__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_LIT_a {
         let mut _atn_disabled: List<i32> = [];
@@ -2661,7 +2661,7 @@ fn _parse_xr__inner_alt_1(p: &mut Parser) -> () {
 }
 
 fn _parse_xr__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_LIT_a {
         let mut _atn_disabled: List<i32> = [];
@@ -2748,7 +2748,7 @@ fn _parse_ck__inner(p: &mut Parser) -> CkVals {
     if !p.speculating {
          vals.mode = 1; 
     }
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_LIT_a {
         let mut _atn_disabled: List<i32> = [];
@@ -2836,7 +2836,7 @@ fn _parse_cd__inner(p: &mut Parser) -> CdVals {
     if !p.speculating {
          vals.mode = 1; 
     }
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_LIT_a {
         let mut _atn_disabled: List<i32> = [];
@@ -2918,7 +2918,7 @@ fn _parse_af__inner_alt_1(p: &mut Parser) -> () {
 }
 
 fn _parse_af__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_LIT_a {
         let mut _atn_disabled: List<i32> = [];
@@ -2961,11 +2961,11 @@ fn _parse_scanned__inner_alt_0(p: &mut Parser) -> () {
     p.site = 5;
     p.atn_ret_pending = 133;
     _parse_xg(p);
-    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
     if p.peek_kind() == TK_LIT_c {
         p.take();
     }
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -2979,7 +2979,7 @@ fn _parse_scanned__inner_alt_0(p: &mut Parser) -> () {
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_LIT_k, &SYNC_4, false);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
     p.expect(TK_LIT_x, &EMPTY_SYNC, true);
     if !p.speculating {
@@ -2992,11 +2992,11 @@ fn _parse_scanned__inner_alt_1(p: &mut Parser) -> () {
     p.site = 6;
     p.atn_ret_pending = 147;
     _parse_xg(p);
-    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { p.sync_enter(&SYNC_5, &EXPECTED_5); }
+    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_5, &EXPECTED_5); }
     if p.peek_kind() == TK_LIT_c {
         p.take();
     }
-    if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { p.sync_enter(&SYNC_6, &EXPECTED_6); }
+    if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_6, &EXPECTED_6); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -3010,7 +3010,7 @@ fn _parse_scanned__inner_alt_1(p: &mut Parser) -> () {
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_LIT_k, &SYNC_6, false);
-        if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { p.sync_back(&SYNC_6, &EXPECTED_6); }
+        if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_6, &EXPECTED_6); }
     }
     p.expect(TK_LIT_y, &EMPTY_SYNC, true);
     if !p.speculating {
@@ -3020,7 +3020,7 @@ fn _parse_scanned__inner_alt_1(p: &mut Parser) -> () {
 }
 
 fn _parse_scanned__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_LIT_a {
         let _sd_tokens = &p.kinds;
@@ -3085,7 +3085,7 @@ fn _parse_xg__inner_alt_1(p: &mut Parser) -> () {
 }
 
 fn _parse_xg__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_LIT_a {
         let mut _atn_disabled: List<i32> = [];

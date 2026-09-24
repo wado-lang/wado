@@ -1574,12 +1574,12 @@ fn _parse_start(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, _p: i32 = 0) -> EVals {
     let mut vals = EVals {};
     vals._p = _p;
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LIT_a {
         p.take();
     } else if grp_kind == TK_LIT_b {
-        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
+        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
         let mut _plus_first = true;
         loop {
             if p.recovering { break; }

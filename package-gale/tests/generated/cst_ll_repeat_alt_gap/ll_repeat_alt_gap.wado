@@ -1475,7 +1475,7 @@ fn _parse_r(p: &mut Parser) -> () {
 }
 
 fn _parse_a__inner_alt_0(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -1493,7 +1493,7 @@ fn _parse_a__inner_alt_0(p: &mut Parser) -> () {
         }
         _plus_first = false;
         p.expect(TK_X, &SYNC_1, false);
-        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_back(&SYNC_1, &EXPECTED_1); }
+        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
     }
     p.expect(TK_Y, &EMPTY_SYNC, true);
     return;
@@ -1506,7 +1506,7 @@ fn _parse_a__inner_alt_1(p: &mut Parser) -> () {
 }
 
 fn _parse_a__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_X {
         if p.peek_at(1) == TK_Y {

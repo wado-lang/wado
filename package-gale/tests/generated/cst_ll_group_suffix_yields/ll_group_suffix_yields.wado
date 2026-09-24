@@ -1594,13 +1594,13 @@ fn _parse_start(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_ID {
         p.site = 1;
         _parse_path(p, FOLLOW_MASK_1);
     }
     p.expect(TK_SEP, &SYNC_1, false);
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_STAR {
         p.take();
@@ -1615,7 +1615,7 @@ fn _parse_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_tree__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         if kind == TK_ID {

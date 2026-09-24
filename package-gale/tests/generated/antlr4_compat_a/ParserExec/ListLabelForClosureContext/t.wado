@@ -1570,11 +1570,11 @@ fn _parse_if_statement__inner(p: &mut Parser) -> () {
     let lit_if = p.expect(TK_LIT_if, &SYNC_0, false);
     p.site = 0;
     let expression = _parse_expression(p);
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LIT_then {
         let lit_then = p.take();
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -1629,9 +1629,9 @@ fn _parse_if_statement__inner(p: &mut Parser) -> () {
             }
             p.site = 1;
             let executable_statement = _parse_executable_statement(p);
-            if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_back(&SYNC_2, &EXPECTED_2); }
+            if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
         }
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos_2: i32 = -1;
@@ -1661,9 +1661,9 @@ fn _parse_if_statement__inner(p: &mut Parser) -> () {
             }
             p.site = 2;
             let else_if_statement = _parse_else_if_statement(p, 0);
-            if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_back(&SYNC_2, &EXPECTED_2); }
+            if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
         }
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         if p.peek_kind() == TK_LIT_a {
             p.site = 3;
             let else_statement = _parse_else_statement(p);

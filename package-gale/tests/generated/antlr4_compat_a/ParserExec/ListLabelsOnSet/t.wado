@@ -1521,7 +1521,7 @@ fn scan_b(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 fn _parse_a__inner(p: &mut Parser) -> () {
     p.site = 0;
     _parse_b(p, 0);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1551,7 +1551,7 @@ fn _parse_a__inner(p: &mut Parser) -> () {
         }
         p.site = 1;
         _parse_b(p, 0);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
     return;

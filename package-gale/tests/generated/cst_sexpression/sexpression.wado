@@ -1597,7 +1597,7 @@ fn scan_list_(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn _parse_sexpr__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1627,7 +1627,7 @@ fn _parse_sexpr__inner(p: &mut Parser) -> () {
         }
         p.site = 0;
         _parse_item(p);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
@@ -1656,7 +1656,7 @@ fn _parse_item__inner_alt_2(p: &mut Parser) -> () {
 }
 
 fn _parse_item__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
         p.site = 1;
@@ -1705,7 +1705,7 @@ fn _parse_item(p: &mut Parser) -> () {
 
 fn _parse_list___inner(p: &mut Parser) -> () {
     p.expect(TK_LPAREN, &SYNC_2, false);
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1735,7 +1735,7 @@ fn _parse_list___inner(p: &mut Parser) -> () {
         }
         p.site = 5;
         _parse_item(p);
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_back(&SYNC_2, &EXPECTED_2); }
+        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
     }
     p.expect(TK_RPAREN, &EMPTY_SYNC, true);
     return;
@@ -1753,7 +1753,7 @@ fn _parse_list_(p: &mut Parser) -> () {
 }
 
 fn _parse_atom__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_alts(&SYNC_3, &EXPECTED_3); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_3, &EXPECTED_3); }
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
         p.take();

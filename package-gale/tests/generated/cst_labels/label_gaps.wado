@@ -1602,7 +1602,7 @@ fn scan_mix_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn _parse_program__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1632,7 +1632,7 @@ fn _parse_program__inner(p: &mut Parser) -> () {
         }
         p.site = 0;
         _parse_stmt(p);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
@@ -1650,7 +1650,7 @@ fn _parse_program(p: &mut Parser) -> () {
 }
 
 fn _parse_stmt__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_ID {
         p.site = 1;
@@ -1738,7 +1738,7 @@ fn _parse_key_rule(p: &mut Parser) -> () {
 fn _parse_mix_stmt__inner(p: &mut Parser) -> () {
     p.expect(TK_LIST, &SYNC_5, false);
     p.expect(TK_ID, &SYNC_6, false);
-    if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { p.sync_enter(&SYNC_6, &EXPECTED_6); }
+    if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_6, &EXPECTED_6); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1761,7 +1761,7 @@ fn _parse_mix_stmt__inner(p: &mut Parser) -> () {
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_5, false);
         p.expect(TK_ID, &SYNC_6, false);
-        if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { p.sync_back(&SYNC_6, &EXPECTED_6); }
+        if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_6, &EXPECTED_6); }
     }
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;

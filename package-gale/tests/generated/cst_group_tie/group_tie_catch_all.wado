@@ -1528,7 +1528,7 @@ fn scan_opt_tail(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LIT_F, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_ID {
         let mut gd_winner: i32 = -1;
@@ -1577,7 +1577,7 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
         } else {
             p.site = 0;
             _parse_item(p);
-            if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
+            if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
             loop {
                 if p.recovering { break; }
                 let mut rep_scan_pos: i32 = -1;
@@ -1601,7 +1601,7 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 p.expect(TK_LIT_COMMA, &SYNC_0, false);
                 p.site = 1;
                 _parse_item(p);
-                if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_back(&SYNC_1, &EXPECTED_1); }
+                if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
             }
         }
     } else {
@@ -1670,7 +1670,7 @@ fn _parse_pair(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_op__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_alts(&SYNC_3, &EXPECTED_3); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_3, &EXPECTED_3); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         p.take();

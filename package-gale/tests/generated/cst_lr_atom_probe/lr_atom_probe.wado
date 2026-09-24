@@ -1762,7 +1762,7 @@ fn _parse_tail(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_e__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_LIT_case, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
     if _kind_set_0(p.peek_kind()) {
         opt_enter_scan: {
@@ -1811,7 +1811,7 @@ fn _parse_e__inner_alt_1(p: &mut Parser) -> () {
         p.site = 4;
         _parse_e(p);
     }
-    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -1846,14 +1846,14 @@ fn _parse_e__inner_alt_1(p: &mut Parser) -> () {
         p.expect(TK_LIT_then, &SYNC_0, false);
         p.site = 6;
         _parse_e(p);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
     p.expect(TK_LIT_end, &SYNC_5, true);
     return;
 }
 
 fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         if kind == TK_LIT_case {
@@ -1928,7 +1928,7 @@ fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> () {
 }
 
 fn _parse_name__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { p.sync_alts(&SYNC_6, &EXPECTED_6); }
+    if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_6, &EXPECTED_6); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         p.take();

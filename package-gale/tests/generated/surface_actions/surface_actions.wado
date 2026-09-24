@@ -1670,7 +1670,7 @@ fn _parse_prog__inner(p: &mut Parser, follow: i64 = 0) -> ProgVals {
     if !p.speculating {
         vals.seen = 0;
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -1726,7 +1726,7 @@ fn _parse_prog(p: &mut Parser, follow: i64 = 0) -> ProgVals {
 
 fn _parse_item__inner(p: &mut Parser) -> ItemVals {
     let mut vals = ItemVals {};
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_OPEN {
         p.take();

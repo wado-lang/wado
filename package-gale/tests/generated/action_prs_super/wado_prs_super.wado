@@ -1562,7 +1562,7 @@ fn _parse_pick__inner_alt_1(p: &mut Parser) -> () with PsBase {
 }
 
 fn _parse_pick__inner(p: &mut Parser) -> () with PsBase {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_ID {
         if (pred_1(p)) {

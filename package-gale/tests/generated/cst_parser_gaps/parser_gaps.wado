@@ -1575,7 +1575,7 @@ fn scan_any_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn _parse_program__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1605,7 +1605,7 @@ fn _parse_program__inner(p: &mut Parser) -> () {
         }
         p.site = 0;
         _parse_stmt(p);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
@@ -1623,7 +1623,7 @@ fn _parse_program(p: &mut Parser) -> () {
 }
 
 fn _parse_stmt__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_LIST {
         p.site = 1;
@@ -1660,7 +1660,7 @@ fn _parse_stmt(p: &mut Parser) -> () {
 fn _parse_list_stmt__inner(p: &mut Parser) -> () {
     p.expect(TK_LIST, &SYNC_2, false);
     p.expect(TK_ITEM, &SYNC_3, false);
-    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1683,7 +1683,7 @@ fn _parse_list_stmt__inner(p: &mut Parser) -> () {
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_2, false);
         p.expect(TK_ITEM, &SYNC_3, false);
-        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_back(&SYNC_3, &EXPECTED_3); }
+        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
     }
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;
@@ -1701,7 +1701,7 @@ fn _parse_list_stmt(p: &mut Parser) -> () {
 }
 
 fn _parse_not_stmt__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_alts(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_4, &EXPECTED_4); }
     let kind = p.peek_kind();
     if kind == TK_NOT {
         p.take();

@@ -1481,7 +1481,7 @@ impl Parser {
 
 fn _parse_a__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let x = p.expect_set(&SYNC_0, &EXPECTED_0);
     if !p.speculating {
         p.emit(`conjured=${x}\n`);

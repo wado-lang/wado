@@ -1674,12 +1674,12 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 p.b.set_alt(1);
-                if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
+                if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
                 while !p.recovering && (p.peek_kind() == TK_LIT_COMMA) {
                     p.take();
                     p.site = 4;
                     _parse_expr(p, 2);
-                    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_back(&SYNC_1, &EXPECTED_1); }
+                    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
                 }
                 p.expect(TK_LIT_GTGT, &SYNC_0, false);
                 p.site = 5;

@@ -1560,7 +1560,7 @@ fn _parse_para(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_para_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }

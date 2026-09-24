@@ -1662,7 +1662,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32
 }
 
 fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_NOT {
         p.take();
@@ -1696,7 +1696,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
-                if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
+                if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
                 _first_iter: {
                     p.expect(TK_AND, &SYNC_0, false);
                     p.site = 2;
@@ -1717,7 +1717,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
-                if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+                if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
                 _first_iter_2: {
                     p.expect(TK_OR, &SYNC_0, false);
                     p.site = 4;

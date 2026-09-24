@@ -1722,7 +1722,7 @@ fn _parse_shr(p: &mut Parser) -> () {
 }
 
 fn _parse_cmp__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_alts(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_4, &EXPECTED_4); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         p.take();

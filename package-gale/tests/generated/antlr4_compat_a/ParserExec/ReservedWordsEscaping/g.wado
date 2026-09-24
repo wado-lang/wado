@@ -1662,7 +1662,7 @@ fn _parse_root__inner(p: &mut Parser, follow: i64 = 0) -> () {
             return;
         }
     }
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -1717,7 +1717,7 @@ fn _parse_root(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVals = ContinueVals {}, min_prec: i32 = 0) -> ContinueVals {
     let mut vals = vals;
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_FOR {
         p.b.set_alt(0);
@@ -1737,7 +1737,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
     } else if kind == TK_BREAK {
         p.b.set_alt(1);
         p.take();
-        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
+        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
         let mut _plus_first = true;
         loop {
             if p.recovering { break; }
@@ -1755,9 +1755,9 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
             }
             _plus_first = false;
             p.expect(TK_BREAK, &SYNC_0, false);
-            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+            if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
         }
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_FOR {
             p.site = 3;

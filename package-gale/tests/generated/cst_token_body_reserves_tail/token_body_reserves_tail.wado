@@ -1477,7 +1477,7 @@ fn _parse_pick__inner_alt_0(p: &mut Parser) -> () {
 }
 
 fn _parse_pick__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_A {
         let _sd_tokens = &p.kinds;
@@ -1520,7 +1520,7 @@ fn _parse_pick(p: &mut Parser) -> () {
 }
 
 fn _parse_as__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1546,7 +1546,7 @@ fn _parse_as__inner(p: &mut Parser) -> () {
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_A, &SYNC_0, false);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_A, &EMPTY_SYNC, true);
     return;

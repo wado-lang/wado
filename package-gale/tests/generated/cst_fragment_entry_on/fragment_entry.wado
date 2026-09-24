@@ -1555,7 +1555,7 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn _parse_prog__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1585,7 +1585,7 @@ fn _parse_prog__inner(p: &mut Parser) -> () {
         }
         p.site = 0;
         _parse_item(p);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
@@ -1603,7 +1603,7 @@ fn _parse_prog(p: &mut Parser) -> () {
 }
 
 fn _parse_item__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_LIT_set {
         p.take();
@@ -1637,7 +1637,7 @@ fn _parse_item(p: &mut Parser) -> () {
 fn _parse_main__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_main, &SYNC_3, false);
     p.expect(TK_LIT_LBRACE, &SYNC_4, false);
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1667,7 +1667,7 @@ fn _parse_main__inner(p: &mut Parser) -> () {
         }
         p.site = 2;
         _parse_stmt(p);
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
     p.expect(TK_LIT_RBRACE, &EMPTY_SYNC, true);
     return;

@@ -1553,7 +1553,7 @@ fn _parse_e__inner(p: &mut Parser, base: i32 = 0) -> EVals {
     if !p.speculating {
          vals.acc = vals.base; 
     }
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_A {
         p.pos += 1;

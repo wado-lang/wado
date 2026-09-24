@@ -1508,7 +1508,7 @@ fn _parse_prog(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_LIT_keep {
         p.take();
@@ -1522,7 +1522,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.take();
         p.site = 3;
         _parse_a(p, 0);
-        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
+        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
         if p.peek_kind() == TK_Y && p.peek_at(1) == TK_LIT_SEMI {
             p.take();
             p.expect(TK_LIT_SEMI, &SYNC_2, false);

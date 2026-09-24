@@ -1427,7 +1427,7 @@ fn _parse_s(p: &mut Parser) -> () {
 }
 
 fn _parse_t__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
     if p.peek_kind() != TK_EOF {
         opt_enter_scan: {

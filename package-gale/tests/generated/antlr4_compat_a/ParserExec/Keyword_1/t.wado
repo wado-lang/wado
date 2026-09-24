@@ -1489,7 +1489,7 @@ impl Parser {
 
 fn _parse_program__inner(p: &mut Parser) -> () {
     let _rule_start_tok = p.pos;
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1519,7 +1519,7 @@ fn _parse_program__inner(p: &mut Parser) -> () {
         }
         p.site = 0;
         _parse_state(p);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     if !p.speculating {
         p.emit(`${p.rule_text(_rule_start_tok)}\n`);
@@ -1540,7 +1540,7 @@ fn _parse_program(p: &mut Parser) -> () {
 }
 
 fn _parse_state__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         p.take();

@@ -1392,6 +1392,7 @@ impl CtxArena {
             cand = self.intern_next[cand];
         }
         let id = self.node_start.len();
+        assert (id as i64) < ATN_NODE_PAIR_STRIDE, "a node id at the pair-key stride aliases two node pairs onto one key";
         self.node_start.push(s);
         self.node_len.push(n);
         self.intern_next.push(head);
@@ -1506,7 +1507,6 @@ impl CtxArena {
 }
 
 fn atn_node_pair_key(a: i32, b: i32) -> i64 {
-    assert ATN_NODE_PAIR_STRIDE > ATN_ARENA_CAP as i64, "the pair-key stride must exceed the arena cap, or two node id pairs alias onto one key";
     return a as i64 * ATN_NODE_PAIR_STRIDE + b as i64;
 }
 
@@ -3848,7 +3848,7 @@ fn _parse_e__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_LIT_LPAREN {
         let _sd_tokens = &p.kinds;
@@ -3911,11 +3911,11 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
         p.site = 11;
         p.atn_ret_pending = 62;
         _parse_typespec(p);
-        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_alts(&SYNC_3, &EXPECTED_3); }
+        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_3, &EXPECTED_3); }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LIT_LPAREN {
             p.take();
-            if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+            if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
             if _kind_set_0(p.peek_kind()) {
                 p.site = 12;
                 p.atn_ret_pending = 71;
@@ -3923,7 +3923,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
             }
             p.expect(TK_LIT_RPAREN, &SYNC_1, true);
         } else if grp_kind == TK_LIT_LBRACKET {
-            if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { p.sync_enter(&SYNC_5, &EXPECTED_5); }
+            if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_5, &EXPECTED_5); }
             let mut _plus_first = true;
             loop {
                 if p.recovering { break; }
@@ -3965,7 +3965,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
         return;
     }
     if _kind_set_2(kind) {
-        if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { p.sync_alts(&SYNC_6, &EXPECTED_6); }
+        if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_6, &EXPECTED_6); }
         p.take();
         p.site = 21;
         p.atn_ret_pending = 111;
@@ -3973,7 +3973,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
         return;
     }
     if _kind_set_3(kind) {
-        if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { p.sync_alts(&SYNC_7, &EXPECTED_7); }
+        if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_7, &EXPECTED_7); }
         p.take();
         p.site = 22;
         p.atn_ret_pending = 122;
@@ -4031,7 +4031,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                     p.take();
                     p.expect(TK_LIT_super, &SYNC_8, false);
                     p.expect(TK_LIT_LPAREN, &SYNC_4, false);
-                    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+                    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
                     let mut opt_scan_pos: i32 = -1;
                     opt_scan: {
                         let tokens = &p.kinds;
@@ -4062,7 +4062,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                     p.expect(TK_LIT_new, &SYNC_9, false);
                     p.expect(TK_ID, &SYNC_8, false);
                     p.expect(TK_LIT_LPAREN, &SYNC_4, false);
-                    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+                    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
                     let mut opt_scan_pos_2: i32 = -1;
                     opt_scan_2: {
                         let tokens = &p.kinds;
@@ -4117,7 +4117,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.take();
-                if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
+                if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
                 let mut opt_scan_pos_3: i32 = -1;
                 opt_scan_3: {
                     let tokens = &p.kinds;
@@ -4369,7 +4369,7 @@ fn _parse_typespec__inner_alt_3(p: &mut Parser) -> () {
 }
 
 fn _parse_typespec__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { p.sync_alts(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_11, &EXPECTED_11); }
     let kind = p.peek_kind();
     if kind == TK_ID {
         let _atn_alt = atn_predict_once(&ATN_SIM, 18, &mut p.atn, &p.kinds, p.pos, TK_EOF, 0);
