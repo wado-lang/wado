@@ -209,8 +209,10 @@ fn twice(a: i32, b: i32 = a + a) -> i32 { ... }
 twice(next());          // → { let a = next(); twice(a, a + a) }
 ```
 
-A receiver stays in its slot when it is a place, since that is where a
-`&mut self` method writes. Any other receiver is bound ahead of the arguments.
+The receiver runs first too. A receiver that is a place stays in its slot,
+since that is where a `&mut self` method writes, and only its subscripts are
+bound, so `v[i()].m(j())` still runs `i()` before `j()`. Any other receiver is
+bound whole.
 
 #### Interaction with Function Types
 

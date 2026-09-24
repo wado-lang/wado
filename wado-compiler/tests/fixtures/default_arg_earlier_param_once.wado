@@ -108,6 +108,10 @@ impl Acc {
         self.base += by + doubled;
     }
 
+    fn grow(&mut self, by: i32 = 5) {
+        self.base += by;
+    }
+
     fn make(a: i32, b: i32 = a + 1) -> Acc {
         return Acc { base: a * 10 + b };
     }
@@ -135,6 +139,30 @@ test "a `&mut self` method's default leaves the receiver written through" {
     acc.bump(tick(2));
     assert acc.base == 6;
     assert trace == 2;
+}
+
+struct Shelf {
+    accs: List<Acc>,
+    rows: List<List<Acc>>,
+}
+
+test "a place receiver's subscripts run ahead of the arguments" {
+    trace = 0;
+    let mut accs: List<Acc> = [Acc { base: 0 }, Acc { base: 0 }];
+    accs[tick(1)].bump(tick(2));
+    assert accs[1].base == 6;
+    assert trace == 12;
+
+    trace = 0;
+    let mut shelf = Shelf { accs, rows: [[Acc { base: 0 }], [Acc { base: 0 }, Acc { base: 0 }]] };
+    shelf.accs[tick(0)].bump(tick(3));
+    assert shelf.accs[0].base == 9;
+    shelf.rows[tick(1)][tick(1)].bump(tick(4));
+    assert shelf.rows[1][1].base == 12;
+    assert trace == 3114;
+
+    shelf.accs[1].grow();
+    assert shelf.accs[1].base == 11;
 }
 
 test "a static method's default reads its argument once" {

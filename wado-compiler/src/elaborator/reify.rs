@@ -17,7 +17,7 @@ use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Sever
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
-use crate::lower::plan::value_copy::place::is_source_place;
+use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::module_source::ModuleSource;
 use crate::name::{
     FqTypeName, IDENTITY_TEST_METHOD, INTERNAL_PREFIX, NARROWING_TEST_METHOD, Receiver,
@@ -57,8 +57,8 @@ use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
     BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, ImplFacts, IndirectCallee,
-    KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodNames, OperatorDispatch,
-    SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
+    KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodDispatch, MethodNames,
+    OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
 };
 use crate::elaborator::stmt::{
     collect_pattern_bindings_with_index, primitive_assoc_const_to_i128, primitive_int_bound,
@@ -5997,7 +5997,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut base_binding = Vec::new();
         if let Some(spread) = struct_lit.spreads.first() {
             let base_expr = self.reify_expr(&spread.expr, ctx, Some(struct_type));
-            let base_ref = self.hoist_once(ctx, base_expr, "$base", &mut base_binding);
+            let base_ref = Self::hoist_once(ctx, base_expr, "$base", &mut base_binding);
             for (name, field_index, raw_ty, _default) in &decl_fields {
                 if provided.contains(name) {
                     continue;
@@ -7809,12 +7809,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ast::LiteralMember::Spread(si, sp) => {
                     let expr = self.reify_expr(&sp.expr, ctx, None);
                     base_types[si] = expr.type_id;
-                    base_refs[si] = Some(self.hoist_once(ctx, expr, "$base", &mut stmts));
+                    base_refs[si] = Some(Self::hoist_once(ctx, expr, "$base", &mut stmts));
                 }
                 ast::LiteralMember::Field(pos, f) => {
                     let expr = self.reify_expr(&f.value, ctx, None);
                     explicit_types[pos] = expr.type_id;
-                    explicit_refs[pos] = Some(self.hoist_once(ctx, expr, "$fld", &mut stmts));
+                    explicit_refs[pos] = Some(Self::hoist_once(ctx, expr, "$fld", &mut stmts));
                 }
             }
         }
@@ -7873,7 +7873,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Bind `expr` to a fresh `{prefix}_N` temporary (pushed onto `stmts`) so it
     /// evaluates once in place, unless it is already a local. Returns a reference.
     fn hoist_once(
-        &mut self,
         ctx: &mut FunctionContext,
         expr: TirExpr,
         prefix: &str,
@@ -7887,17 +7886,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// [`Self::hoist_once`] for a receiver, so it runs ahead of the arguments
-    /// bound after it. A place stays in its slot: it is where `&mut self` writes.
+    /// bound after it. A place stays in its slot, since `&mut self` writes
+    /// there, and only the subscripts it computes are hoisted.
     fn bind_receiver_ahead(
-        &mut self,
+        &self,
         ctx: &mut FunctionContext,
-        receiver: TirExpr,
+        mut receiver: TirExpr,
         stmts: &mut Vec<TirStmt>,
     ) -> TirExpr {
-        if is_source_place(&receiver, self.tysys.type_table.borrow().compiler_items()) {
-            return receiver;
+        let type_table = self.tysys.type_table.borrow();
+        let items = type_table.compiler_items();
+        if !is_source_place(&receiver, items) {
+            return Self::hoist_once(ctx, receiver, "$recv", stmts);
         }
-        self.hoist_once(ctx, receiver, "$recv", stmts)
+        for subscript in source_place_subscripts_mut(&mut receiver, items) {
+            let unbound = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, subscript.span);
+            let value = std::mem::replace(subscript, unbound);
+            *subscript = Self::hoist_once(ctx, value, "$recv_index", stmts);
+        }
+        drop(type_table);
+        receiver
     }
 
     /// `value` inside the block holding the [`Self::hoist_once`] temporaries it
@@ -8789,8 +8797,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify the `container[i].method(args)` `IndexMut` rewrite from two
     /// dispatch records: `operator_dispatch[index_expr.id]` for the inner
     /// `index_mut(idx)` and `method_dispatch[method_call.id]` for the outer
-    /// call. Builds `container.index_mut(idx)`, then adjusts the receiver by
-    /// the outer dispatch's `self_kind` / `is_ref_impl`.
+    /// call. Builds `container.index_mut(idx)` as the outer call's receiver.
     fn reify_index_mut_method_call(
         &mut self,
         method_call: &ast::MethodCallExpr,
@@ -8839,38 +8846,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             index_expr.span,
         );
 
-        // Step 2: adjust the index_mut result for the outer method's
-        // self_kind and build the outer method-call TIR.
-        let receiver_for_method = adjust_receiver_for_self_kind(
+        self.reify_dispatched_method_call(
+            method_call,
             index_mut_call,
-            outer_dispatch.self_kind,
-            outer_dispatch.is_ref_impl,
-            method_call.span,
-            &self.tysys.type_table,
-        );
-
-        // Method-level type args ride along on `MethodDispatch` — the
-        // IndexMut rewrite in `method_lookup.rs` records the same vector
-        // it passes to `build_tir_method_call`, so reify is a pure read.
-        let type_args = outer_dispatch.method_type_args.clone();
-        let args: Vec<CallArg> = method_call
-            .args
-            .iter()
-            .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
-            .collect();
-
-        let result_type = if outer_dispatch.return_type == TypeTable::UNKNOWN {
-            recorded_type
-        } else {
-            outer_dispatch.return_type
-        };
-        build_tir_method_call(
-            receiver_for_method,
-            outer_dispatch.function_ref,
-            type_args,
-            args,
-            result_type,
-            method_call.span,
+            outer_dispatch,
+            recorded_type,
+            ctx,
         )
     }
 
@@ -8953,7 +8934,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         // Bound ahead of the branch so the deferred expansion
                         // inherits it: the monomorphizer allocates no locals.
                         let mut stmts = Vec::new();
-                        let receiver = self.hoist_once(ctx, receiver, "$zip", &mut stmts);
+                        let receiver = Self::hoist_once(ctx, receiver, "$zip", &mut stmts);
                         // A concrete tuple-of-tuples transposes inline here;
                         // only a type-pack receiver defers expansion to the
                         // monomorphiser via `TupleZip`. Non-generic bodies
@@ -8994,7 +8975,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 method_call.method
             )
         });
+        self.reify_dispatched_method_call(method_call, raw_receiver, dispatch, recorded_type, ctx)
+    }
 
+    /// The call `dispatch` names on `raw_receiver`, its arguments walked and
+    /// its omitted defaults filled.
+    fn reify_dispatched_method_call(
+        &mut self,
+        method_call: &ast::MethodCallExpr,
+        raw_receiver: TirExpr,
+        dispatch: MethodDispatch,
+        recorded_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
         // Per-arg `is_mut` comes from the recorded `MethodDispatch`, off the
         // signature of the method annotate dispatched to.
         // Zip with the AST args so call sites with fewer args than
