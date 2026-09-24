@@ -3627,21 +3627,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The struct declaration an unnamed literal's target names, or `None` where
     /// it declares none or builds from key-value pairs.
-    pub(super) fn implicit_struct_target(
-        &mut self,
-        expected_type: Option<TypeId>,
-    ) -> Option<DefId> {
-        let expected_type = expected_type?;
-        let resolved = self.tysys.type_table.borrow().get(expected_type).clone();
-        match resolved {
+    pub(super) fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<DefId> {
+        match *self.tysys.type_table.borrow().get(expected_type?) {
             ResolvedType::Struct {
                 def: StructDef::Decl(def),
                 ..
             } => Some(def),
             ResolvedType::GenericInstance { def, .. } => {
-                (self.lookup_struct_fields_of_decl(def).is_some()
-                    && !self.is_key_value_literal_target(expected_type))
-                .then_some(def)
+                let from_pairs = self
+                    .tysys
+                    .compiler_trait_def(CompilerItem::From)
+                    .is_some_and(|from| self.tysys.trait_env.converts_from_pairs(def, from));
+                (!from_pairs && self.lookup_struct_fields_of_decl(def).is_some()).then_some(def)
             }
             _ => None,
         }

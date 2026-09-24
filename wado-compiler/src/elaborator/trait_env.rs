@@ -1466,6 +1466,24 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
+    /// Whether some `impl From<Array<[K, V]>> for` the declaration `target`
+    /// exists, whichever of its instantiations it covers.
+    pub(super) fn converts_from_pairs(&self, target: DefId, from: DefId) -> bool {
+        self.all_impl_keys(&ImplTargetKey::Decl(target))
+            .iter()
+            .filter_map(|key| self.impl_headers.get(key)?.trait_.as_ref())
+            .any(|trait_| {
+                trait_.def == Some(from)
+                    && trait_.arg_ids.first().is_some_and(|array| {
+                        matches!(array.head(), name::TypeHead::Builtin(head) if head == TypeTable::ARRAY_TYPE_NAME)
+                            && array.args().first().is_some_and(|element| {
+                                matches!(element.head(), name::TypeHead::Tuple)
+                                    && element.args().len() == 2
+                            })
+                    })
+            })
+    }
+
     /// Keys of the **inherent** impls on `type_name`, in global build order —
     /// the `trait_name.is_none()` subset of [`Self::all_impl_index`]. Used by
     /// instance-method lookup, which must not treat trait impls as inherent.
