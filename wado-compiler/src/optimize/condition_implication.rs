@@ -1751,22 +1751,40 @@ impl ArenaOptVisitor for ConstBoundIndexEliminator<'_> {
 // Redundant bounds-check elimination (forward, dominating panic-guards)
 // ---------------------------------------------------------------------------
 
-/// A proven fact `var + off < bound`, established by a dominating panic-guard's
-/// fall-through and held while walking in execution order.
-type ProvenLt = (u32, i64, BoundKey);
+/// A proven fact `var + j < bound` for every `j` in `lo..=hi`, held while
+/// walking in execution order.
+#[derive(Clone, Copy)]
+struct ProvenLt {
+    var: u32,
+    lo: i64,
+    hi: i64,
+    bound: BoundKey,
+}
 
-/// True if some fact refutes the check `var + j >= bound`: a fact
-/// `var + off < bound` with `off >= j` gives `var + j <= var + off < bound`.
+impl ProvenLt {
+    /// A passed guard proves its own offset only: Wado add wraps, so
+    /// `var + off < bound` holds of a wrapped sum while `var + j` is large.
+    fn exact(var: u32, off: i64, bound: BoundKey) -> Self {
+        Self {
+            var,
+            lo: off,
+            hi: off,
+            bound,
+        }
+    }
+}
+
+/// True if some fact refutes the check `var + j >= bound`.
 fn facts_refute(facts: &[ProvenLt], var: u32, j: i64, bound: BoundKey) -> bool {
     facts
         .iter()
-        .any(|&(fv, foff, fb)| fv == var && fb == bound && foff >= j)
+        .any(|f| f.var == var && f.bound == bound && (f.lo..=f.hi).contains(&j))
 }
 
 /// Drop every fact whose `var` / `bound` root `node` may modify (conservative:
 /// a false "modifies" only keeps a fact, never invents one).
 fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<ProvenLt>) {
-    facts.retain(|&(v, _, b)| !node_modifies(engine, node, v, b));
+    facts.retain(|f| !node_modifies(engine, node, f.var, f.bound));
 }
 
 /// The `(minuend, k)` of a `<expr> - k` (skeleton or promoted), if any.
@@ -1779,12 +1797,8 @@ fn sub_const(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, i6
     parse_const_i64(engine, binds, subtrahend).map(|k| (minuend, k))
 }
 
-/// The fact a `let idx = <length field> - k` (k >= 1) proves: `idx + (k-1) <
-/// field`. Sound because the field is an array length (`Field` bound), hence
-/// non-negative, so `field - k` never signed-wraps (`field >= 0` ⇒
-/// `field - k > i32::MIN`). Returned as an ordinary [`ProvenLt`] so [`invalidate`]
-/// drops it if the array is resized before the check — the `arr.last()` idiom,
-/// flow-sensitive rather than a stale check-point match.
+/// The fact a `let idx = <length field> - k` (k >= 1) proves, as in the
+/// `arr.last()` idiom: `idx + j < field` for `j < k`.
 fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<ProvenLt> {
     let NodeRef::Stmt(s) = node else {
         return None;
@@ -1801,7 +1815,14 @@ fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<Prove
         return None;
     }
     let bound = parse_bound(engine, binds, minuend)?;
-    matches!(bound, BoundKey::Field(..)).then_some((local_index, k - 1, bound))
+    // `idx + j` is `field - k + j`: below the field for `j < k`, and unwrapped
+    // while `j >= i32::MIN + k`, since `field >= 0`.
+    matches!(bound, BoundKey::Field(..)).then_some(ProvenLt {
+        var: local_index,
+        lo: i64::from(i32::MIN) + k,
+        hi: k - 1,
+        bound,
+    })
 }
 
 /// The constant a `+ 1` counting loop's variable enters at, when the enclosing
@@ -2017,7 +2038,7 @@ fn rbce_walk(
                 eliminate_condition(engine, node, cond);
                 return true;
             }
-            facts.push((var, off, bound));
+            facts.push(ProvenLt::exact(var, off, bound));
             return false;
         }
         if let Some(ce) = cond.as_expr() {
