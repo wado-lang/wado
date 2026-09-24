@@ -47,10 +47,11 @@ use {
     rule_kind_const,
     collect_called_names,
     defined_fn_names,
+    join_kinds,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, FnSpec, ParamSpec, wado } from "lib:wadopoet";
-use { TreeSet } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 use {
     PredictionNode,
     PredictionDispatch,
@@ -189,6 +190,7 @@ use {
     sync_set_ref,
     expected_set_ref,
     expect_set_call,
+    kind_bitset_words,
 } from "./kind_set_gen.wado";
 use { group_alt_classes, non_greedy_static_undecided, peel_repeat_body_label, rebind_op_field } from "./lower.wado";
 
@@ -285,7 +287,30 @@ pub fn gen_parser(
         w.raw(chunk);
     }
     w.raw(&parse_text);
+    gen_call_follow_tables(w, ctx);
     warn_unhandled_actions(grammar, ctx);
+}
+
+/// `CALL_FOLLOW[site]` indexes the bitset of what may follow that rule call in
+/// its caller, `CALL_FOLLOW_SETS` holding each distinct set once.
+fn gen_call_follow_tables(w: &mut CodeWriter, ctx: &GenContext) {
+    let mut set_ids = TreeMap::<String, i32>::new();
+    let mut sets: List<String> = [];
+    let mut index: List<String> = [];
+    for let follow of &ctx.recovery_sets().call_follow {
+        let words = join_kinds(&kind_bitset_words(follow));
+        let id = if let Some(id) = set_ids.get(words) {
+            id;
+        } else {
+            set_ids[words] = sets.len();
+            sets.push(`[${words}]`);
+            sets.len() - 1;
+        };
+        index.push(`${id}`);
+    }
+    w.line(`global CALL_FOLLOW_SETS: List<List<i32>> = [${join_kinds(&sets)}];`);
+    w.line(`global CALL_FOLLOW: List<i32> = [${join_kinds(&index)}];`);
+    w.blank();
 }
 
 /// The scan chunks something calls, in emit order: a chunk is kept when the
@@ -3132,6 +3157,7 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     if needs_atn {
         emit_atn_enter(w);
     }
+    w.line("p.sites.push(p.site);");
     // LR rules manage their own nodes (precedence climbing wraps each
     // level via `start_node_at`), so the wrapper must NOT open an outer
     // node — it would nest one extra same-rule level. Non-LR rules get the
@@ -3139,6 +3165,9 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     if !takes_min_prec {
         w.line(`let _start = p.peek_start();`);
         w.line(`p.b.start_node(${rk}, _start);`);
+    } else {
+        // Where the outermost level opens, which recovery reopens.
+        w.line("let _row = p.b.checkpoint();");
     }
     if let Some(body) = inlined_body {
         assert !returns_vals, "only a unit body is inlined";
@@ -3149,22 +3178,23 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
         w.line(`${call};`);
     }
     if !takes_min_prec {
+        w.line(`if p.recovering { let _ = p.recover_rule(${rk}, ${lit}, -1); }`);
         w.line("p.b.finish_node(p.last_end());");
+    } else {
+        w.line(`if p.recovering && p.recover_rule(${rk}, ${lit}, _row) { p.b.finish_node(p.last_end()); }`);
     }
     if needs_atn {
         w.line("p.atn_stack.pop();");
     }
+    w.line("p.sites.pop();");
     if trace {
         w.line("p.trace_depth -= 1;");
-    }
-    w.begin("if p.recovering");
-    w.line(`p.push_rule_stack(${lit});`);
-    if trace {
+        w.begin("if p.recovering");
         w.line(`trace_fail(p, ${lit}, p.pending_message());`);
         w.else_begin("else");
         w.line(`trace_ok(p, ${lit});`);
+        w.end();
     }
-    w.end();
     if returns_vals {
         w.line("return __vals;");
     }
@@ -3252,6 +3282,7 @@ fn gen_parse_fn_single_token<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRul
     }
     f.set_return_type(&rule_result_type());
     f.emit_begin(w);
+    gen_rule_entry_sync(w, ctx, rule);
     w.line(`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
     let mut firsts: List<String> = [];
@@ -3465,6 +3496,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
             w.line("let mut vals = vals;");
         }
         emit_span_capture(w, rule, ctx);
+        gen_rule_entry_sync(w, ctx, rule);
         if has_overlaps {
             gen_multi_alt_body_alt(
                 w,
@@ -3531,6 +3563,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                 gen_prequel_action(w, a, &rule.name, true, ctx);
             }
         }
+        gen_rule_entry_sync(w, ctx, rule);
         // A finished alternative leaves the block for the one `@after`; the
         // no-viable path returns past it, as ANTLR4 skips `@after` on error.
         let after = rule_after_for(rule, lowered_rule, ctx);
@@ -3835,7 +3868,8 @@ fn gen_alt_elements(
             // inserts a missing terminal against (a recovery-only edit; on valid
             // input the leaf matches and `sync` is never read).
             let sync = ctx.first_of_elements_from(elements, i + 1);
-            gen_op_leaf(w, op, ctx, &mut name_counts, &sync, proven);
+            let rest_nullable = ctx.elements_nullable_from(elements, i + 1);
+            gen_op_leaf(w, op, ctx, &mut name_counts, &sync, proven, rest_nullable);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
@@ -3892,7 +3926,8 @@ fn gen_elements_with_non_greedy(
             // only deleted-or-unwound (recovery quality is uniform with the
             // top-level sequence).
             let sync = ctx.first_of_elements_from(elements, i + 1);
-            gen_op_leaf(w, op, ctx, name_counts, &sync, proven);
+            let rest_nullable = ctx.elements_nullable_from(elements, i + 1);
+            gen_op_leaf(w, op, ctx, name_counts, &sync, proven, rest_nullable);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
         } else if let Group(g_op) = op {
@@ -3985,14 +4020,31 @@ fn begin_plus_first_iteration(w: &mut CodeWriter, name_counts: &mut List<[String
 }
 
 
-/// Emit `p.atn_ret_pending = <state>;` immediately before a `_parse_X` call
-/// so the callee's entry wrapper pushes the call's exact ATN return state
-/// onto `p.atn_stack` (full-context prediction). No-op unless the grammar
-/// needs the ATN and the call site has a known return state
-/// (`Atn.call_site_returns`, keyed by `RuleCallOp.atn_call_site`). An
-/// unstamped call leaves `atn_ret_pending` at -1, which the simulator reads
-/// as an unknown caller (SLL-accept at that frame).
-fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
+/// ANTLR4's sync ahead of a decision, calling `method` when the current token
+/// is none the decision expects. Nothing where the rule may end (`expected` null).
+fn gen_decision_sync<S: AsStrSlice>(w: &mut CodeWriter, ctx: &mut GenContext, expected: Option<List<String>>, method: S) {
+    let Some(names) = expected else {
+        return;
+    };
+    assert !names.is_empty(), "a decision the rule cannot end at expects some token";
+    let bits = sync_set_ref(ctx, &names);
+    let list = expected_set_ref(ctx, &names);
+    w.line(`if !kind_set_has(${bits}, p.kinds[p.pos]) { p.${method}(${bits}, ${list}); }`);
+}
+
+fn gen_rule_entry_sync(w: &mut CodeWriter, ctx: &mut GenContext, rule: &ParserRule) {
+    gen_decision_sync(w, ctx, ctx.rule_entry_expect(ctx.rule_index_of(&rule.name)), "sync_alts");
+}
+
+fn gen_loop_back_sync(w: &mut CodeWriter, ctx: &mut GenContext, rep_op: &RepeatOp) {
+    gen_decision_sync(w, ctx, ctx.decision_back_expect(rep_op.atn_decision), "sync_back");
+}
+
+/// The call-site stamps ahead of a `_parse_X` call that its entry wrapper pushes:
+/// `p.site` for recovery's resync, `p.atn_ret_pending` for full-context prediction.
+fn gen_call_site_stamps(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
+    let known = call_site >= 0 && call_site < ctx.recovery_sets().call_follow.len();
+    w.line(`p.site = ${if known { call_site } else { -1 }};`);
     if !ctx.needs_atn() {
         return;
     }
@@ -4072,11 +4124,15 @@ fn gen_op_leaf(
     name_counts: &mut List<[String, i32]>,
     sync: &List<String> = &EMPTY_SYNC,
     proven: &List<String> = &EMPTY_SYNC,
+    rest_nullable: bool = true,
 ) {
     if leaf_is_proven(op, proven) {
         gen_op_leaf_taken(w, op, ctx, name_counts);
         return;
     }
+    // Where the rest of the sequence needs a token EOF is not, the input cannot
+    // end after this one, so `expect` does not complete it there.
+    let ends = if rest_nullable || sync.is_empty() { "" } else { ", false" };
     // The Parser's `expect` / `match_*` append the matched token to the builder
     // and return the token index. `sync` is the rule's FIRST-of-rest at this
     // position — the set `expect` inserts a missing terminal against, passed by
@@ -4086,11 +4142,11 @@ fn gen_op_leaf(
     return match *op {
         Token(t) => {
             let sync_ref = sync_set_ref(ctx, sync);
-            w.line(`${leaf_binding(ctx, &t.dedup_base, &t.field)}p.expect(${t.kind}, ${sync_ref});`);
+            w.line(`${leaf_binding(ctx, &t.dedup_base, &t.field)}p.expect(${t.kind}, ${sync_ref}${ends});`);
         },
         Literal(l) => {
             let sync_ref = sync_set_ref(ctx, sync);
-            w.line(`${leaf_binding(ctx, &l.dedup_base, &l.field)}p.expect(${l.kind}, ${sync_ref});`);
+            w.line(`${leaf_binding(ctx, &l.dedup_base, &l.field)}p.expect(${l.kind}, ${sync_ref}${ends});`);
         },
         RuleCall(r) => {
             // One callee per rule; the caller's continuation is
@@ -4105,7 +4161,7 @@ fn gen_op_leaf(
             // `stamp_lr_self_ref_min_prec`, and `lower_alt_body` stamps the
             // trailing self-ref of a prefix LR alt (e.g. `'-' e`) so emit
             // reads a single source.
-            gen_atn_ret_pending(w, ctx, r.atn_call_site);
+            gen_call_site_stamps(w, ctx, r.atn_call_site);
             let argsfx = call_arg_suffix(&r, ctx);
             let cont = if r.lr_cont_mask >= 0 { `, ${ctx.follow_mask_ref(r.lr_cont_mask)}` } else { "" };
             let bind = leaf_binding(ctx, &r.dedup_base, &r.field);
@@ -4710,6 +4766,7 @@ fn emit_probe_verdict<S: AsStrSlice>(w: &mut CodeWriter, probe_viable: &List<Str
 /// Greedy `*` / `+` / `?` under the emitter: loop the body (which
 /// appends), gated on the body's first set.
 fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+    gen_decision_sync(w, ctx, ctx.decision_entry_expect(r.atn_decision), "sync_enter");
     if let NonGreedy(_) = r.strategy {
         gen_repeat_non_greedy_body(w, r, ctx, nc);
         return;
@@ -4732,6 +4789,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
                 begin_plus_first_iteration(w, nc);
                 gen_op(w, &r.body, ctx, nc);
                 w.end();
+                gen_loop_back_sync(w, ctx, r);
             }
             w.begin("loop");
             w.line("if p.recovering { break; }");
@@ -4755,6 +4813,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
                     let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
                     w.line(`if ${best} <= p.pos { break; }`);
                     gen_group_body(w, g, ctx, nc, Option::Some(winner));
+                    gen_loop_back_sync(w, ctx, r);
                     w.end();
                     return;
                 }
@@ -4763,6 +4822,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.duties, &body_admits, ctx, nc);
             w.line(`if ${scan_pos} < 0 { break; }`);
             gen_op(w, &r.body, ctx, nc);
+            gen_loop_back_sync(w, ctx, r);
             w.end();
             return;
         }
@@ -4779,14 +4839,17 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
         Star => {
             w.begin(`while !p.recovering && (${cond})`);
             gen_op(w, &r.body, ctx, nc, &admits_kinds(&r.body_admits));
+            gen_loop_back_sync(w, ctx, r);
             w.end();
         },
         Plus => {
             begin_plus_first_iteration(w, nc);
             gen_op(w, &r.body, ctx, nc);
             w.end();
+            gen_loop_back_sync(w, ctx, r);
             w.begin(`while !p.recovering && (${cond})`);
             gen_op(w, &r.body, ctx, nc, &admits_kinds(&r.body_admits));
+            gen_loop_back_sync(w, ctx, r);
             w.end();
         },
     }
@@ -5900,6 +5963,11 @@ fn gen_op_group(
     // `peel_scalar_label` helper handles theoretical multi-level
     // scalar Label nesting; lower does not produce that today, but
     // the loop costs nothing.
+    if entry matches { Required } {
+        if let Group(g_elem) = peel_scalar_label(elem) {
+            gen_decision_sync(w, ctx, ctx.decision_entry_expect(g_elem.atn_decision), "sync_alts");
+        }
+    }
     let entry = open_group_entry(w, elem, ctx, entry);
     if let Group(g_elem) = peel_scalar_label(elem) {
         return match &g_op.shape {
@@ -6094,7 +6162,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         // so precedence is never threaded here either.
         RuleRef(r) => {
             let field_name = dedup_name(&r.field_name, name_counts);
-            gen_atn_ret_pending(w, ctx, r.atn_call_site);
+            gen_call_site_stamps(w, ctx, r.atn_call_site);
             w.line(`${leaf_binding(ctx, &r.field_name, &field_name)}_parse_${r.snake_name}(p);`);
         },
         Wildcard(_) => {
@@ -6167,6 +6235,7 @@ fn gen_op_repeat_with_follow_override(
     name_counts: &mut List<[String, i32]>,
     follow: &List<String>,
 ) {
+    gen_decision_sync(w, ctx, ctx.decision_entry_expect(rep.atn_decision), "sync_enter");
     if rep.non_greedy {
         // `??` routes through the greedy Optional emitter because lower
         // already picked a greedy strategy for it (see `lower_repeat_op`).
@@ -6635,6 +6704,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &no_flag);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, decided_entry(&decided, &no_flag), decided);
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         } else {
             w.begin(
@@ -6643,6 +6713,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         }
         return;
@@ -6656,6 +6727,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, decided_entry(&decided, &plus_flag), decided);
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         } else {
             // Plus + non-scannable + no-field: emit the first iteration
@@ -6665,12 +6737,14 @@ fn gen_op_repeat_star_plus_non_storable_group(
             begin_plus_first_iteration(w, name_counts);
             gen_op_group(w, g_op, inner, ctx, name_counts, GroupEntry::Required);
             w.end();
+            gen_loop_back_sync(w, ctx, rep_op);
             w.begin(
                 `while !p.recovering && (${repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)})`,
             );
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         }
     }
@@ -6742,7 +6816,7 @@ fn gen_rep_break_with_recovery<S: AsStrSlice>(w: &mut CodeWriter, scan_pos: S, r
         // does, so a context-sensitive callee (`??` / ATN-class LR) sees the
         // right caller frame.
         if let RuleCall(r) = &rep_op.body {
-            gen_atn_ret_pending(w, ctx, r.atn_call_site);
+            gen_call_site_stamps(w, ctx, r.atn_call_site);
         }
         w.line(`${call};`);
         w.line("p.speculating = _rec_spec;");
@@ -6798,6 +6872,7 @@ fn gen_op_repeat_star_plus_storable(
                 decided_entry(&decided, &no_flag),
                 decided,
             );
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         } else {
             w.begin(
@@ -6807,6 +6882,7 @@ fn gen_op_repeat_star_plus_storable(
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow, looped());
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         }
         return;
@@ -6830,6 +6906,7 @@ fn gen_op_repeat_star_plus_storable(
                 decided_entry(&decided, &plus_flag),
                 decided,
             );
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         } else {
             let plus_flag = dedup_name("_plus_first", name_counts);
@@ -6851,6 +6928,7 @@ fn gen_op_repeat_star_plus_storable(
                 &iter_follow,
                 GroupEntry::Looped(plus_flag),
             );
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         }
     }
@@ -7850,7 +7928,7 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut GenContex
         `p${follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg)}`;
     };
     let span_field = open_call_capture(w, op, ctx);
-    gen_atn_ret_pending(w, ctx, rc.atn_call_site);
+    gen_call_site_stamps(w, ctx, rc.atn_call_site);
     w.line(`${leaf_binding(ctx, &local_var, &local_var)}${fn_name}(${call_args});`);
     close_call_capture(w, &span_field);
 }

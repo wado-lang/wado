@@ -9,7 +9,7 @@ use { DiagnosticKind, DiagnosticOwner, LoweredGrammar, Rule, rule_header } from 
 use { GenContext } from "./gen_context.wado";
 use { join_kinds } from "./gen_util.wado";
 use { kind_bitset_words } from "./kind_set_gen.wado";
-use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis } from "lib:wadopoet";
+use { CodeWriter, FnSpec, ImplSpec, ParamSpec, StructSpec, Vis } from "lib:wadopoet";
 use { add_parser_super_effect, entry_emits_vals } from "./action_gen.wado";
 use { MemberDecls } from "./java2wado/jmembers.wado";
 use { SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
@@ -71,6 +71,7 @@ internal fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragme
         w.line("return false;");
     } else {
         w.line("let _k = p.kinds[p.pos];");
+        w.line("p.site = -1;");
         for let mut i = 0; i < entries.len(); i += 1 {
             w.begin(`if kind_set_has(&_FRAGMENT_FIRST_${i}, _k)`);
             w.line(&entries[i].call);
@@ -239,6 +240,179 @@ fn emit_diag_prologue(w: &mut CodeWriter) {
     w.line("if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }");
 }
 
+/// ANTLR4's rule-level recovery and decision sync: the parser methods a failed
+/// rule and a mismatched decision recover through.
+fn gen_rule_recovery(w: &mut CodeWriter) {
+    let mut rr = FnSpec::new("recover_rule");
+    rr.set_receiver("&mut self");
+    rr.add_param("rule", "NodeKind");
+    rr.add_param("name", "String");
+    rr.add_param("row", "i32");
+    rr.set_return_type("bool");
+    rr.emit_begin(w);
+    w.begin("if self.speculating || self.diagnostics.len() >= self.max_errors");
+    w.line("self.push_rule_stack(name);");
+    w.line("return false;");
+    w.end();
+    w.line("let node = if row < 0 { self.b.innermost_open() } else { row };");
+    w.line("self.b.resume_node(node, self.last_end());");
+    w.line("assert self.b.node_kind(node) == rule, \"recover_rule: the resumed node is the failed rule's\";");
+    w.line("self.commit_pending();");
+    w.line("self.recovering = false;");
+    w.line("self.skip_until(&self.resync_set());");
+    w.line("return true;");
+    w.end();
+    w.blank();
+
+    let mut cp = FnSpec::new("commit_pending");
+    cp.set_receiver("&mut self");
+    cp.emit_begin(w);
+    w.line("let Some(d) = self.pending else { return; };");
+    w.line("self.pending = null;");
+    w.line("if self.in_error_mode() { return; }");
+    w.line("let mut diag = d;");
+    w.line("self.b.push_open_rule_names(&RULE_NAMES, &mut diag.rule_stack);");
+    w.line("self.diagnostics.push(diag);");
+    w.line("self.note_error();");
+    w.end();
+    w.blank();
+
+    let mut em = FnSpec::new("in_error_mode");
+    em.set_receiver("&self");
+    em.set_return_type("bool");
+    em.emit_begin(w);
+    w.line("return self.err_row >= 0 && !self.b.has_token_since(self.err_row);");
+    w.end();
+    w.blank();
+
+    let mut ne = FnSpec::new("note_error");
+    ne.set_receiver("&mut self");
+    ne.emit_begin(w);
+    w.line("self.err_row = self.b.checkpoint();");
+    w.end();
+    w.blank();
+
+    let mut rs = FnSpec::new("resync_set");
+    rs.set_receiver("&self");
+    rs.set_return_type("List<i32>");
+    rs.emit_begin(w);
+    w.line("let mut set: List<i32> = [];");
+    w.begin("for let s of &self.sites");
+    w.line("if *s < 0 { continue; }");
+    w.line("let f = &CALL_FOLLOW_SETS[CALL_FOLLOW[*s]];");
+    w.line("while set.len() < f.len() { set.push(0); }");
+    w.line("for let mut i = 0; i < f.len(); i += 1 { set[i] = set[i] | f[i]; }");
+    w.end();
+    w.line("return set;");
+    w.end();
+    w.blank();
+
+    let mut su = FnSpec::new("skip_until");
+    su.set_receiver("&mut self");
+    su.add_param("set", "&List<i32>");
+    su.emit_begin(w);
+    w.begin("loop");
+    w.line("let k = self.kinds[self.pos];");
+    w.line("if k == TK_EOF || kind_set_has(set, k) { break; }");
+    w.line("self.skip_one();");
+    w.end();
+    w.end();
+    w.blank();
+
+    let mut so = FnSpec::new("skip_one");
+    so.set_receiver("&mut self");
+    so.emit_begin(w);
+    w.line("let _sk = self.advance();");
+    w.line("self.tokens.mark_skipped(_sk);");
+    w.line("self.b.skip(_sk);");
+    w.end();
+    w.blank();
+
+    let mut sd = FnSpec::new("sync_delete");
+    sd.set_receiver("&mut self");
+    sd.add_param("expected", "&List<i32>");
+    sd.add_param("names", "&List<i32>");
+    sd.set_return_type("bool");
+    sd.emit_begin(w);
+    w.begin(
+        "if self.speculating || self.kinds[self.pos] == TK_EOF || !kind_set_has(expected, self.peek_at(1))",
+    );
+    w.line("return false;");
+    w.end();
+    w.line("self.report_sync(names, RecoveryAction::Deleted);");
+    w.line("self.skip_one();");
+    w.line("return true;");
+    w.end();
+    w.blank();
+
+    let mut se = FnSpec::new("sync_enter");
+    se.set_receiver("&mut self");
+    se.add_param("expected", "&List<i32>");
+    se.add_param("names", "&List<i32>");
+    se.emit_begin(w);
+    w.begin("if !self.recovering && !self.sync_delete(expected, names)");
+    w.line("self.fail_at_decision(names);");
+    w.end();
+    w.end();
+    w.blank();
+
+    let mut sa = FnSpec::new("sync_alts");
+    sa.set_receiver("&mut self");
+    sa.add_param("expected", "&List<i32>");
+    sa.add_param("names", "&List<i32>");
+    sa.emit_begin(w);
+    w.begin("if !self.recovering && !self.sync_delete(expected, names)");
+    w.line("self.no_viable(\"no viable alternative\", self.peek_span(), names);");
+    w.end();
+    w.end();
+    w.blank();
+
+    // At EOF there is nothing to skip, and what the loop left unfinished
+    // reports itself.
+    let mut sb = FnSpec::new("sync_back");
+    sb.set_receiver("&mut self");
+    sb.add_param("expected", "&List<i32>");
+    sb.add_param("names", "&List<i32>");
+    sb.emit_begin(w);
+    w.line("if self.recovering || self.kinds[self.pos] == TK_EOF { return; }");
+    w.begin("if self.speculating");
+    w.line("self.fail_at_decision(names);");
+    w.line("return;");
+    w.end();
+    w.line("self.report_sync(names, RecoveryAction::SkippedTo);");
+    w.line("let mut set = self.resync_set();");
+    w.line("while set.len() < expected.len() { set.push(0); }");
+    w.line("for let mut i = 0; i < expected.len(); i += 1 { set[i] = set[i] | expected[i]; }");
+    w.line("self.skip_until(&set);");
+    w.end();
+    w.blank();
+
+    let mut fd = FnSpec::new("fail_at_decision");
+    fd.set_receiver("&mut self");
+    fd.add_param("names", "&List<i32>");
+    fd.emit_begin(w);
+    w.line(
+        "let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };",
+    );
+    w.line("self.fail_on_token(\"got\", names, code);");
+    w.end();
+    w.blank();
+
+    let mut rsy = FnSpec::new("report_sync");
+    rsy.set_receiver("&mut self");
+    rsy.add_param("names", "&List<i32>");
+    rsy.add_param("recovery", "RecoveryAction");
+    rsy.emit_begin(w);
+    emit_diag_prologue(w);
+    w.line("if self.in_error_mode() { return; }");
+    w.line(
+        "self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));",
+    );
+    w.line("self.note_error();");
+    w.end();
+    w.blank();
+}
+
 pub fn gen_parser_struct<S: AsStrSlice>(
     w: &mut CodeWriter,
     trace: bool,
@@ -286,6 +460,13 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // `recovering`; `<= 1` is effectively fail-fast (one diagnostic, partial
     // tree). Defaults to `i32::MAX` — unbounded.
     s.add_field("max_errors", "i32");
+    // The rule calls under way as `atn_call_site` ids, whose follows a failed
+    // rule resynchronises on: a call stamps `site`, its entry pushes it.
+    s.add_field("site", "i32");
+    s.add_field("sites", "List<i32>");
+    // Builder row of the last reported error; recovery reports nothing new
+    // until a token has matched since, as a cascade would otherwise repeat it.
+    s.add_field("err_row", "i32");
     // Current recursive-descent depth, used only to indent trace output.
     if trace {
         s.add_field("trace_depth", "i32");
@@ -341,7 +522,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     f.emit_begin(w);
     w.line("let kinds = tokens.kinds.to_array();");
     let mut init = String::from(
-        "tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX",
+        "tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1",
     );
     if trace {
         init.push_str(", trace_depth: 0");
@@ -647,6 +828,8 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     w.blank();
 
+    gen_rule_recovery(w);
+
     // `trace_fail` is its only caller.
     if trace {
         let mut pm = FnSpec::new("pending_message");
@@ -670,6 +853,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line(
         "self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::Deleted));",
     );
+    w.line("self.note_error();");
     w.end();
     w.blank();
 
@@ -686,6 +870,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line(
         "self.diagnostics.push(Diagnostic::error(code, `missing ${token_kind_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));",
     );
+    w.line("self.note_error();");
     w.end();
     w.blank();
 
@@ -698,6 +883,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line(
         "self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));",
     );
+    w.line("self.note_error();");
     w.end();
     w.blank();
 
@@ -773,6 +959,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     f7.set_receiver("&mut self");
     f7.add_param("kind", "i32");
     f7.add_param("sync", "&List<i32>");
+    f7.add_param_spec(ParamSpec { name: "rest_nullable", type_str: "bool", default_value: Option::Some("true") });
     f7.set_return_type("i32");
     // Fragment recovery descends into rule entries, so `expect` reaches the
     // parse fns and must carry the base effect they declare.
@@ -825,6 +1012,12 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // region and resync to it, then continue; otherwise record the deepest
     // failure and unwind.
     w.begin("if !sync.is_empty()");
+    // Nothing to resync onto at EOF: the missing terminal completes the
+    // construct only where the input may end after it.
+    w.begin("if !rest_nullable && self.kinds[self.pos] == TK_EOF");
+    w.line("self.fail_on_kind(kind);");
+    w.line("return self.pos;");
+    w.end();
     w.line("self.report_unexpected(kind);");
     w.begin("if self.kinds[self.pos] != TK_EOF");
     w.line("self.b.start_error(self.tokens.span_at(self.pos).start);");

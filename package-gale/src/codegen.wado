@@ -61,6 +61,7 @@ use { CodeWriter } from "lib:wadopoet";
 use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
+use { recovery_sets } from "./recovery_sets.wado";
 use { TreeMap, TreeSet } from "core:collections";
 use { collect_referenced_names } from "./gen_util.wado";
 use {
@@ -248,9 +249,11 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     if !ctx.needs_atn() && grammar_has_at_end_conflict(grammar, &lowered, &mut ctx) {
         ctx.mark_needs_atn();
     }
-    let mut atn = empty_atn();
+    // Every grammar reads its recovery sets off the ATN; only the simulator's
+    // grammars also embed it.
+    let atn = build_atn_with(grammar, &lowered);
+    ctx.set_recovery_sets(recovery_sets(&atn, ctx.token_kind_id("TK_EOF")));
     if ctx.needs_atn() {
-        atn = build_atn_with(grammar, &lowered);
         ctx.set_atn_call_site_returns(&atn.call_site_returns);
         ctx.set_atn_decision_sites(&atn.decision_sites);
         let mut lr_decs: List<i32> = [];

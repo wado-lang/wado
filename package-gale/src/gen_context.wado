@@ -20,6 +20,7 @@ use { Admits, Diagnostic, DiagnosticKind, DiagnosticOwner, admits_or_everything 
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
+use { RecoverySets, empty_recovery_sets } from "./recovery_sets.wado";
 use { gate_body_of, SCAN_GATE_HANDLE, SCAN_GATE_FIELD } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
@@ -188,6 +189,7 @@ pub struct GenContext {
     /// number in `atn_predict_with_stack` instead of the retired unique
     /// exit-first BlockStart search. Empty for grammars without the ATN.
     atn_decision_sites: List<i32>,
+    recovery: RecoverySets,
     /// Index of the parser rule currently being emitted (set by
     /// `gen_parse_fn`). Read when emitting a non-greedy `??` to decide whether
     /// the rule is left-recursive (so the `??`'s `atn_predict_with_stack` call
@@ -366,6 +368,7 @@ impl GenContext {
             needs_scan_atn_seen: false,
             atn_call_site_returns: [],
             atn_decision_sites: [],
+            recovery: empty_recovery_sets(),
             current_rule_index: -1,
             scan_group_counter: 0,
             lr_loop_entry_decisions: [],
@@ -716,6 +719,40 @@ impl GenContext {
             return -1;
         }
         return self.atn_decision_sites[site];
+    }
+
+    pub fn set_recovery_sets(&mut self, sets: RecoverySets) {
+        self.recovery = sets;
+    }
+
+    pub fn recovery_sets(&self) -> &RecoverySets {
+        return &self.recovery;
+    }
+
+    /// What a subrule expects on entry, as `TK_*` names; `null` where its
+    /// rule may end there instead, or the site names no decision.
+    pub fn decision_entry_expect(&self, site: i32) -> Option<List<String>> {
+        return self.expect_names(&self.recovery.decision_entry, site);
+    }
+
+    /// What a `*` / `+` expects after an iteration.
+    pub fn decision_back_expect(&self, site: i32) -> Option<List<String>> {
+        return self.expect_names(&self.recovery.decision_back, site);
+    }
+
+    /// What a rule's own alternative block expects on entry.
+    pub fn rule_entry_expect(&self, rule: i32) -> Option<List<String>> {
+        return self.expect_names(&self.recovery.rule_entry, rule);
+    }
+
+    fn expect_names(&self, sets: &List<Option<List<i32>>>, i: i32) -> Option<List<String>> {
+        if i < 0 || i >= sets.len() {
+            return null;
+        }
+        if let Some(ids) = &sets[i] {
+            return Option::Some(self.token_kinds.names_of(ids));
+        }
+        return null;
     }
 
     /// Record the rule whose body is currently being emitted (its index in
@@ -1144,6 +1181,10 @@ impl GenContext {
         return &self.token_kinds.names;
     }
 
+    pub fn token_kind_id<S: AsStrSlice>(&self, name: S) -> i32 {
+        return self.token_kinds.id_of(name);
+    }
+
     /// Install the vocabulary display names (`vocab_display_names`) by kind id.
     pub fn set_vocab_names(&mut self, names: List<String>) {
         self.vocab_names = names;
@@ -1346,6 +1387,16 @@ impl GenContext {
     pub fn first_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<String> {
         let ids = self.first_ids_of_elements_from(elements, start);
         return self.token_kinds.names_of(&ids);
+    }
+
+    pub fn elements_nullable_from(&mut self, elements: &List<Element>, start: i32) -> bool {
+        for let mut i = start; i < elements.len(); i += 1 {
+            let mut nv: List<String> = [];
+            if !self.element_is_nullable_deep(&elements[i], &mut nv) {
+                return false;
+            }
+        }
+        return true;
     }
 
     pub fn first_ids_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<i32> {
