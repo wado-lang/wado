@@ -307,15 +307,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(85)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::sub" = fn(ref "core:prelude/string.wado//StrSlice", i32) -> [ref Array<u8>, i32, i32];  // TypeId(86)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice" = fn(ref "core:prelude/string.wado//StrSlice", i32) -> [ref Array<u8>, i32, i32];  // TypeId(86)
 
-<<<<<<< HEAD
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::substr_bytes" = fn(ref "core:prelude/string.wado//StrSlice", i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(87)
-||||||| 375eb07581
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::sub" = fn(ref "core:prelude/string.wado//StrSlice", i32) -> [ref Array<u8>, i32, i32];  // TypeId(87)
-=======
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice" = fn(ref "core:prelude/string.wado//StrSlice", i32) -> [ref Array<u8>, i32, i32];  // TypeId(87)
->>>>>>> origin/main
 
 type "functype//local_item_serde_attributes.wado/local_item_serde_attributes.wado/Options@8^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<local_item_serde_attributes.wado/Options@8,core:prelude/string.wado/String>, core:prelude/traits.wado/StructField<local_item_serde_attributes.wado/Options@8,bool>, core:prelude/traits.wado/StructField<local_item_serde_attributes.wado/Options@8,i32>]";  // TypeId(88)
 
@@ -5015,7 +5009,7 @@ fn "core:args/core:args/ArgvDeserializer::split_long<&core:prelude/string.wado/S
     let $mv_repr_1: ref Array<u8>;
     let $mv_start_2: i32;
     let $mv_end_3: i32;
-    multivalue_bind [$mv_repr_1, $mv_start_2, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::sub"(self_13, end_9);
+    multivalue_bind [$mv_repr_1, $mv_start_2, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice"(self_13, end_9);
     self_40 = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv_repr_1, start: $mv_start_2, end: $mv_end_3 };
     repr_41 = self_40.repr;
     part = builtin::array_new<u8>(local.tee len($mv_end_3 - $mv_start_2));
@@ -5137,7 +5131,6 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LenientFromStr::fro
     }), ref.null none;
 }
 
-<<<<<<< HEAD
 fn "core:prelude/primitive.wado/bool^core:prelude/traits.wado/LenientFromStr::from_str_lenient<&core:prelude/string.wado/String>"(s) {
     let text: ref "core:prelude/string.wado//StrSlice";
     let other_5: ref "core:prelude/string.wado//String";
@@ -5151,83 +5144,6 @@ fn "core:prelude/primitive.wado/bool^core:prelude/traits.wado/LenientFromStr::fr
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_ignore_ascii_case<core:prelude/string.wado/String>$spec0"(text, $mv_arg_2.repr, $mv_arg_2.used);
     } -> i32 {
         1;
-||||||| 375eb07581
-fn "core:args/core:args/ArgvDeserializer::split_long<&core:prelude/string.wado/String>"(tok) {
-    let $load_0: i32;
-    let raw: ref "core:prelude/string.wado//String";
-    let inline: ref null "core:prelude/string.wado//String";
-    let folded: ref "core:prelude/string.wado//String";
-    let end_9: i32;
-    let self_13: ref "core:prelude/string.wado//StrSlice";
-    let v_27: ref "core:prelude/string.wado//String";
-    let self_34: ref "core:prelude/string.wado//StrSlice";
-    let repr_37: ref Array<u8>;
-    let self_40: ref "core:prelude/string.wado//StrSlice";
-    let repr_41: ref Array<u8>;
-    let len: i32;
-    let part: ref Array<u8>;
-    let self_57: ref "core:prelude/string.wado//StrSlice";
-    let repr_61: ref Array<u8>;
-    let repr_64: ref Array<u8>;
-    let $av_69: i32;
-    end_9 = local.tee $load_0(tok.used);
-    repr_37 = tok.repr;
-    self_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr_37, start: 0, end: $load_0 };
-    let $mv_repr_1: ref Array<u8>;
-    let $mv_start_2: i32;
-    let $mv_end_3: i32;
-    multivalue_bind [$mv_repr_1, $mv_start_2, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::sub"(self_13, end_9);
-    self_40 = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv_repr_1, start: $mv_start_2, end: $mv_end_3 };
-    repr_41 = self_40.repr;
-    part = builtin::array_new<u8>(local.tee len($mv_end_3 - $mv_start_2));
-    builtin::array_copy<u8>(part, 0, repr_41, $mv_start_2, len);
-    raw = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>(len); builtin::array_copy<u8>($array_clone_dst_5, 0, part, 0, len); $array_clone_dst_5), used: len };
-    inline = ref.null none;
-    let $mv$$match_6$0: i32;
-    let $mv$$match_6$1: i32;
-    multivalue_bind [$mv$$match_6$0, $mv$$match_6$1] = (let $arg_spill_7: ref "core:prelude/string.wado//StrSlice"; $arg_spill_7 = struct.new "core:prelude/string.wado//StrSlice" { repr: part, start: 0, end: len }; let $mv_arg_8: ref "core:prelude/string.wado//String"; $mv_arg_8 = global:core:args::$const_obj_30; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>"($arg_spill_7, $mv_arg_8.repr, $mv_arg_8.used));
-    if $mv$$match_6$0 == 0 {
-        raw = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::substr_bytes$spec0"(struct.new "core:prelude/string.wado//StrSlice" { repr: part, start: 0, end: len }, $mv$$match_6$1);
-        inline = ref.as_non_null("core:prelude/string.wado/core:prelude/string.wado/StrSlice::substr_bytes"(struct.new "core:prelude/string.wado//StrSlice" { repr: part, start: 0, end: len }, $mv$$match_6$1 + 1, len));
-=======
-fn "core:args/core:args/ArgvDeserializer::split_long<&core:prelude/string.wado/String>"(tok) {
-    let $load_0: i32;
-    let raw: ref "core:prelude/string.wado//String";
-    let inline: ref null "core:prelude/string.wado//String";
-    let folded: ref "core:prelude/string.wado//String";
-    let end_9: i32;
-    let self_13: ref "core:prelude/string.wado//StrSlice";
-    let v_27: ref "core:prelude/string.wado//String";
-    let self_34: ref "core:prelude/string.wado//StrSlice";
-    let repr_37: ref Array<u8>;
-    let self_40: ref "core:prelude/string.wado//StrSlice";
-    let repr_41: ref Array<u8>;
-    let len: i32;
-    let part: ref Array<u8>;
-    let self_57: ref "core:prelude/string.wado//StrSlice";
-    let repr_61: ref Array<u8>;
-    let repr_64: ref Array<u8>;
-    let $av_69: i32;
-    end_9 = local.tee $load_0(tok.used);
-    repr_37 = tok.repr;
-    self_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr_37, start: 0, end: $load_0 };
-    let $mv_repr_1: ref Array<u8>;
-    let $mv_start_2: i32;
-    let $mv_end_3: i32;
-    multivalue_bind [$mv_repr_1, $mv_start_2, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice"(self_13, end_9);
-    self_40 = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv_repr_1, start: $mv_start_2, end: $mv_end_3 };
-    repr_41 = self_40.repr;
-    part = builtin::array_new<u8>(local.tee len($mv_end_3 - $mv_start_2));
-    builtin::array_copy<u8>(part, 0, repr_41, $mv_start_2, len);
-    raw = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>(len); builtin::array_copy<u8>($array_clone_dst_5, 0, part, 0, len); $array_clone_dst_5), used: len };
-    inline = ref.null none;
-    let $mv$$match_6$0: i32;
-    let $mv$$match_6$1: i32;
-    multivalue_bind [$mv$$match_6$0, $mv$$match_6$1] = (let $arg_spill_7: ref "core:prelude/string.wado//StrSlice"; $arg_spill_7 = struct.new "core:prelude/string.wado//StrSlice" { repr: part, start: 0, end: len }; let $mv_arg_8: ref "core:prelude/string.wado//String"; $mv_arg_8 = global:core:args::$const_obj_30; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>"($arg_spill_7, $mv_arg_8.repr, $mv_arg_8.used));
-    if $mv$$match_6$0 == 0 {
-        raw = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::substr_bytes$spec0"(struct.new "core:prelude/string.wado//StrSlice" { repr: part, start: 0, end: len }, $mv$$match_6$1);
-        inline = ref.as_non_null("core:prelude/string.wado/core:prelude/string.wado/StrSlice::substr_bytes"(struct.new "core:prelude/string.wado//StrSlice" { repr: part, start: 0, end: len }, $mv$$match_6$1 + 1, len));
->>>>>>> origin/main
     } else {
         other_5 = global:core:prelude/primitive.wado::$const_obj_27;
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0"(text, other_5);
