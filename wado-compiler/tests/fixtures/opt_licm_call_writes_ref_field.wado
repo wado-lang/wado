@@ -1,0 +1,76 @@
+// A field read through a reference stays in the loop when a call may write
+// that field some other way: through a global the reference points at, from a
+// closure that captured the object, or through a `&mut` to the object holding
+// it.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    x: i32,
+    y: i32,
+}
+
+struct Outer {
+    inner: P,
+    pad: i32,
+}
+
+global mut G: P = P { x: 1, y: 0 };
+
+#[inline(never)]
+fn bump_global() {
+    G.x += 1;
+}
+
+#[inline(never)]
+fn through_global(r: &P) -> i32 {
+    let mut s = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        s += r.x;
+        bump_global();
+    }
+    return s;
+}
+
+#[inline(never)]
+fn through_closure(r: &P, f: fn mut()) -> i32 {
+    let mut s = 0;
+    let mut g = f;
+    for let mut i = 0; i < 3; i += 1 {
+        s += r.x;
+        g();
+    }
+    return s;
+}
+
+#[inline(never)]
+fn bump_inner(o: &mut Outer) {
+    o.inner.x += 1;
+}
+
+#[inline(never)]
+fn through_container(o: &mut Outer, r: &P) -> i32 {
+    let mut s = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        s += r.x;
+        bump_inner(o);
+    }
+    return s;
+}
+
+export fn run() with Stdout {
+    println(`${through_global(&G)}`);
+
+    let mut p = P { x: 1, y: 0 };
+    let g = || { p.x += 1; };
+    println(`${through_closure(&p, g)}`);
+
+    let mut o = Outer { inner: P { x: 1, y: 0 }, pad: 0 };
+    let r = &o.inner;
+    println(`${through_container(&mut o, r)}`);
+}
+
+__DATA__
+{
+    "stdout": "6\n6\n6\n"
+}
