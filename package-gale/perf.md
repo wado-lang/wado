@@ -596,7 +596,7 @@ this grammar and input at 216.991 ms/iter against Gale's 2.535
   exiting. Where the scan runs out — the rule's tail — the verdict conjoins
   the rule's classical FOLLOW, which cost one bug fix in `follow_env` (an
   optional's callee was receiving the inner's own FIRST) rather than a second
-  runtime argument. That last conjunct is why a probe may only be stamped where
+  runtime argument. That last conjunct is why a probe may only ask it where
   the walk really reaches the rule's tail (soundness invariant 10). Release
   `sqlite_parse` measured unchanged at every step, each arm's own spread moving
   further than any gap between the arms.

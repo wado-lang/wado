@@ -1715,13 +1715,30 @@ impl GenContext {
         return self.alt_reaches_open_end_at(alt, visiting, &mut min_cycle);
     }
 
+    /// `alt_reaches_open_end` for the elements from `start` on.
+    pub fn elements_reach_open_end(&mut self, elements: &List<Element>, start: i32) -> bool {
+        let mut visiting: List<String> = [];
+        let mut min_cycle = i32::MAX;
+        return self.elements_reach_open_end_at(elements, start, &mut visiting, &mut min_cycle);
+    }
+
     fn alt_reaches_open_end_at(&mut self, alt: &Alternative, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
-        for let elem of &alt.elements {
-            if self.element_reaches_open_end_at(elem, visiting, min_cycle) {
+        return self.elements_reach_open_end_at(&alt.elements, 0, visiting, min_cycle);
+    }
+
+    fn elements_reach_open_end_at(
+        &mut self,
+        elements: &List<Element>,
+        start: i32,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> bool {
+        for let mut i = start; i < elements.len(); i += 1 {
+            if self.element_reaches_open_end_at(&elements[i], visiting, min_cycle) {
                 return true;
             }
             let mut nullable_visiting: List<String> = [];
-            if !self.element_is_nullable_deep(elem, &mut nullable_visiting) {
+            if !self.element_is_nullable_deep(&elements[i], &mut nullable_visiting) {
                 return false;
             }
         }

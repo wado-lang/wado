@@ -1,19 +1,11 @@
-//! Two shapes whose lookahead signatures are in a prefix relation.
+//! A nested optional whose first token is also its continuation's, reached by
+//! each route an optional takes inside a group.
 //!
-//! `('=' m? '@' '#')?` enumerates a shape with `m` and one without. The first
-//! truncates at the multi-token `m` to `['=', first(m)]`; the second is
-//! `['=', '@', '#']`. Every input the second matches the first matches too, so
-//! an `if sig0 … else if sig1 …` chain never reaches the shape without `m`.
-//!
-//! Shapes collide when they can both match one input, not only when equal, so
-//! `scan_guarded` fires here. What still blocks it is the emitter: preferring
-//! the shape strategy routes this alt through
-//! `gen_op_optional_with_shape_lookahead_storable`, whose
-//! `gen_op_dispatch_element` emits nothing for a `RepeatOp`; peeling it the way
-//! the transparent twin does re-parents the ops into a scope lower did not bake
-//! `dedup_base` for, and SQLite's `LIMIT expr ((OFFSET | ',') expr)?` then
-//! emits two `let expr` in one block. Closing this needs lower to re-bake the
-//! bases for a peeled shape body.
+//! `m?` before `'@' '#'` enters on `'@'` either way, so neither a first-set
+//! test nor holding the optional back from what follows it is right: the
+//! optional is entered only where `m` and the rest of the group both scan.
+//! Every tree below was taken from the published ANTLR4 jar
+//! (`scripts/antlr4-oracle.sh`, `<EOF>` marker dropped).
 
 use g from "./grammars/ll_shape_prefix_signature.g4"
     with {
@@ -27,15 +19,42 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
-#[TODO]
-test "the shape without the multi-token element" {
+fn assert_rejected<S: AsStrSlice>(input: S) {
+    let result = g::parse(input);
+    assert !result.ok(), `expected diagnostics for ${input}, got ${g::to_string_tree(&result)}`;
+}
+
+test "behind a fixed-token entry: the shape without the multi-token element" {
     assert_tree("let x = @ # ;", "(prog (stmt let x = @ # ;))");
 }
 
-test "the shape with it" {
+test "behind a fixed-token entry: the shape with it" {
     assert_tree("let x = @ ! @ # ;", "(prog (stmt let x = (m @ !) @ # ;))");
 }
 
-test "neither shape" {
+test "behind a fixed-token entry: neither shape" {
     assert_tree("let x ;", "(prog (stmt let x ;))");
+}
+
+test "as a shape of an optional with no fixed-token entry" {
+    assert_tree("var x @ # ;", "(prog (stmt var x @ # ;))");
+    assert_tree("var x @ ! @ # ;", "(prog (stmt var x (m @ !) @ # ;))");
+    assert_tree("var x ;", "(prog (stmt var x ;))");
+}
+
+test "inside a mandatory group" {
+    assert_tree("put x = @ # ;", "(prog (stmt put x = @ # ;))");
+    assert_tree("put x = @ ! @ # ;", "(prog (stmt put x = (m @ !) @ # ;))");
+}
+
+test "a one-token body" {
+    assert_tree("tok x = @ # ;", "(prog (stmt tok x = @ # ;))");
+    assert_tree("tok x = @ @ # ;", "(prog (stmt tok x = @ @ # ;))");
+}
+
+test "neither reading scans: still rejected" {
+    assert_rejected("let x = @ ! # ;");
+    assert_rejected("var x @ ! # ;");
+    assert_rejected("put x = @ ! # ;");
+    assert_rejected("tok x = @ @ @ # ;");
 }

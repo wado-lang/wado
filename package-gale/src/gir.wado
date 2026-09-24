@@ -963,12 +963,18 @@ pub struct RepeatOp {
     /// oracle where no lookahead separates the two readings. Empty for a
     /// tail Repeat — the caller's FOLLOW answers alone.
     pub continuation_scan: List<ScanElement> = [],
-    /// True iff `continuation_scan` was built, which lowering only does for
-    /// a walk that reaches the rule's tail (soundness invariant 10) and whose
-    /// every remaining element is scannable — so a match really means the
-    /// continuation fits and the caller's FOLLOW is the right question at the
-    /// position it ended on. False keeps emit on the static condition.
+    /// True iff `continuation_scan` was built, which lowering does where every
+    /// remaining element is scannable and the scan's end means something: the
+    /// rule's tail (`probe_asks_caller`), or a continuation that must consume a
+    /// token, so a match settles it without the caller. False keeps emit on the
+    /// static condition.
     pub continuation_scannable: bool = false,
+    /// The continuation ends at the rule's tail, so the verdict also asks the
+    /// caller's FOLLOW there (soundness invariant 10).
+    pub probe_asks_caller: bool = false,
+    /// A greedy `?` whose body and continuation can start on one token, which a
+    /// `.` or `~X` on either side does with every token.
+    pub probe_contested: bool = false,
     /// What each iteration owes before it commits. See `IterationDuties`.
     pub duties: IterationDuties = IterationDuties {},
     /// `non_greedy_static_undecided` for this Repeat — no lookahead
@@ -1282,11 +1288,13 @@ pub struct ScanRepeatElement {
     /// True for a non-greedy `*?` / `+?`. Over a body admitting everything the
     /// scan stops at the exit set, not a kind guard, as the parse side does.
     pub non_greedy: bool,
-    /// Mirrors the four `RepeatOp` probe stamps below, so a probed Repeat
+    /// Mirrors the `RepeatOp` probe stamps below, so a probed Repeat
     /// decides the same on both sides — the tournament measures scan lengths
     /// against what the parse consumes.
     pub continuation_scan: List<ScanElement> = [],
     pub continuation_scannable: bool = false,
+    pub probe_asks_caller: bool = false,
+    pub probe_contested: bool = false,
     pub static_exit_undecided: bool = false,
     pub probe_viable: List<String> = [],
     /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on
