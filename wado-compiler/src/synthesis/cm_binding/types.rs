@@ -639,17 +639,17 @@ fn check_cm_boundary_representable_inner(
             // value, so it must be classifiable too — `()` is representable
             // yet has no payload type.
             R::GenericResource { def, type_args } => {
-                let name = type_table.def_name(*def).to_string();
+                let item = type_table.compiler_type_item(*def);
                 let args = type_args.clone();
                 for &a in &args {
                     recurse(a, visited)?;
                 }
                 if let Some(&payload) = args.first()
-                    && let Some(reason) = match name.as_str() {
-                        "Future" | "FutureWritable" => {
+                    && let Some(reason) = match item {
+                        Some(CompilerItem::Future | CompilerItem::FutureWritable) => {
                             future_payload_rejection(type_table, payload)
                         }
-                        "Stream" | "StreamWritable" => {
+                        Some(CompilerItem::Stream | CompilerItem::StreamWritable) => {
                             stream_payload_rejection(type_table, payload)
                         }
                         _ => None,
@@ -660,10 +660,10 @@ fn check_cm_boundary_representable_inner(
                 Ok(())
             }
             R::Struct { def, type_args } => {
-                let name = type_table.struct_head_name(*def);
-                if name == names.string {
+                if type_table.is_string(type_id) {
                     return Ok(());
                 }
+                let name = type_table.struct_head_name(*def);
                 match struct_decl_of(*def, type_args, tir_modules) {
                     Some(decl) if decl.fields.is_empty() => Err(format!(
                         "record `{name}` has no fields; an empty record has no \
@@ -695,25 +695,19 @@ fn check_cm_boundary_representable_inner(
                 None => Ok(()),
             },
             R::GenericInstance { def, type_args } => {
-                let name = &type_table.def_name(*def).to_string();
                 // Option/List/Tuple were handled above by the `as_*` accessors;
                 // `Result<T, E>` recurses into its arms. Any other generic
                 // instance has no concrete CM lowering at this boundary (it
                 // should have monomorphized to a named type), so reject it
                 // rather than lowering it as an opaque i32.
-                let result_name = type_table
-                    .compiler_items()
-                    .variant_name(CompilerItem::Result);
-                if name == result_name {
+                let item = type_table.compiler_type_item(*def);
+                if item == Some(CompilerItem::Result) {
                     let args = type_args.clone();
                     for a in args {
                         recurse(a, visited)?;
                     }
                     Ok(())
-                } else if type_table
-                    .compiler_item_def(CompilerItem::TreeMap)
-                    .is_some_and(|tree_map| tree_map == *def)
-                {
+                } else if item == Some(CompilerItem::TreeMap) {
                     // `map<K, V>`: the key comes from the CM's `keytype`
                     // subset, the value from any representable valtype.
                     let [key, value] = type_args.as_slice() else {
@@ -1137,8 +1131,7 @@ fn flat_types_from_type_id_inner(
         },
         ResolvedType::Unit => {} // no flat values
         ResolvedType::Struct { def, type_args } => {
-            let name = &type_table.struct_head_name(*def);
-            if name == &names.string {
+            if type_table.is_string(type_id) {
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
             } else if let Some(struct_decl) = struct_decl_of(*def, type_args, tir_modules) {
@@ -1148,7 +1141,10 @@ fn flat_types_from_type_id_inner(
                 // flattening it as one i32 would emit a wrong-arity lowering for
                 // a multi-field record. Fail loudly rather than corrupt the
                 // component (the memory lowerer panics on the same condition).
-                panic!("struct `{name}` has no TIR declaration; cannot compute its flat CM types");
+                panic!(
+                    "struct `{}` has no TIR declaration; cannot compute its flat CM types",
+                    type_table.struct_head_name(*def)
+                );
             }
         }
         ResolvedType::Resource { .. } => out.push(cm_abi::CmValType::I32),
@@ -1161,40 +1157,44 @@ fn flat_types_from_type_id_inner(
             }
         }
         ResolvedType::GenericInstance { def, type_args } => {
-            let name = &type_table.def_name(*def).to_string();
-            if TypeTable::is_tuple_type(name) {
+            if TypeTable::is_tuple_type(type_table.def_name(*def)) {
                 for &elem in type_args {
                     flat_types_from_type_id_inner(elem, out, tir_modules, type_table, names);
                 }
-            } else if name == &names.option && type_args.len() == 1 {
-                out.push(cm_abi::CmValType::I32); // discriminant
-                flat_types_from_type_id_inner(type_args[0], out, tir_modules, type_table, names);
-            } else if name == &names.result && type_args.len() == 2 {
-                out.push(cm_abi::CmValType::I32); // discriminant
-                let mut ok_flat = Vec::new();
-                let mut err_flat = Vec::new();
-                flat_types_from_type_id_inner(
-                    type_args[0],
-                    &mut ok_flat,
-                    tir_modules,
-                    type_table,
-                    names,
-                );
-                flat_types_from_type_id_inner(
-                    type_args[1],
-                    &mut err_flat,
-                    tir_modules,
-                    type_table,
-                    names,
-                );
-                out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
-            } else if name == &names.array || names.tree_map.as_deref() == Some(name.as_str()) {
+                return;
+            }
+            match (type_table.compiler_type_item(*def), type_args.as_slice()) {
+                (Some(CompilerItem::Option), [inner]) => {
+                    out.push(cm_abi::CmValType::I32); // discriminant
+                    flat_types_from_type_id_inner(*inner, out, tir_modules, type_table, names);
+                }
+                (Some(CompilerItem::Result), [ok, err]) => {
+                    out.push(cm_abi::CmValType::I32); // discriminant
+                    let mut ok_flat = Vec::new();
+                    let mut err_flat = Vec::new();
+                    flat_types_from_type_id_inner(
+                        *ok,
+                        &mut ok_flat,
+                        tir_modules,
+                        type_table,
+                        names,
+                    );
+                    flat_types_from_type_id_inner(
+                        *err,
+                        &mut err_flat,
+                        tir_modules,
+                        type_table,
+                        names,
+                    );
+                    out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
+                }
                 // A `map<K, V>` despecializes to `list<tuple<K, V>>`, so it
                 // carries that type's pair.
-                out.push(cm_abi::CmValType::I32); // ptr
-                out.push(cm_abi::CmValType::I32); // len
-            } else {
-                out.push(cm_abi::CmValType::I32);
+                (Some(CompilerItem::List | CompilerItem::TreeMap), _) => {
+                    out.push(cm_abi::CmValType::I32); // ptr
+                    out.push(cm_abi::CmValType::I32); // len
+                }
+                _ => out.push(cm_abi::CmValType::I32),
             }
         }
         ResolvedType::Newtype { base_type, .. } => {

@@ -140,9 +140,7 @@ fn lower_to_flat_inner(
                 cm_type: cm_abi::CmValType::I32,
             }]
         }
-        ResolvedType::Struct { def, .. }
-            if ctx.type_table.borrow().struct_head_name(*def) == names.string =>
-        {
+        ResolvedType::Struct { .. } if ctx.type_table.borrow().is_string(type_id) => {
             // String → cm_lower_string → packed i64, split to ptr(i32) and len(i32)
             let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
             let packed_local = alloc_local(next_local, locals, TypeTable::I64);
@@ -167,8 +165,8 @@ fn lower_to_flat_inner(
             ]
         }
         ResolvedType::Unit => vec![],
-        ResolvedType::GenericInstance { def, type_args }
-            if ctx.type_table.borrow().def_name(*def) == names.array && type_args.len() == 1 =>
+        ResolvedType::GenericInstance { type_args, .. }
+            if type_args.len() == 1 && ctx.type_table.borrow().is_list(type_id) =>
         {
             // List<T> flat ABI: (ptr: i32, len: i32) pointing at
             // `len * cm_size(T)` bytes of linear memory with `cm_align(T)`
@@ -349,8 +347,8 @@ fn lower_to_flat_inner(
                 },
             ]
         }
-        ResolvedType::GenericInstance { def, type_args }
-            if ctx.type_table.borrow().def_name(*def) == names.option && type_args.len() == 1 =>
+        ResolvedType::GenericInstance { type_args, .. }
+            if ctx.type_table.borrow().as_option(type_id).is_some() =>
         {
             // Option<T> → disc(i32) + flat(T)
             let inner_type_id = type_args[0];
@@ -480,8 +478,8 @@ fn lower_to_flat_inner(
                 },
             ]
         }
-        ResolvedType::GenericInstance { def, type_args }
-            if ctx.type_table.borrow().def_name(*def) == names.result && type_args.len() == 2 =>
+        ResolvedType::GenericInstance { type_args, .. }
+            if type_args.len() == 2 && ctx.type_table.borrow().is_result(type_id) =>
         {
             // Result<T, E> → disc(i32) + join(flat(T), flat(E)). disc 0 = Ok,
             // 1 = Err. The active arm's payload lowers into the shared joined
@@ -642,9 +640,7 @@ fn lower_to_flat_inner(
                 })
                 .collect()
         }
-        ResolvedType::Struct { def, type_args }
-            if ctx.type_table.borrow().struct_head_name(*def) != names.string =>
-        {
+        ResolvedType::Struct { def, type_args } if !ctx.type_table.borrow().is_string(type_id) => {
             let name = &ctx.type_table.borrow().struct_head_name(*def);
             // Struct: concatenation of field flat types
             if let Some(struct_decl) = struct_decl_of(*def, type_args, tir_modules) {

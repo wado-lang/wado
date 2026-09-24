@@ -6,7 +6,6 @@
 
 use std::cell::RefCell;
 
-use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexMap;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -21,10 +20,6 @@ pub(super) fn unify(
     actual: TypeId,
     bindings: &mut IndexMap<TypeId, TypeId>,
 ) {
-    let list_name = type_table
-        .borrow()
-        .compiler_struct_name(CompilerItem::List)
-        .to_string();
     let expected_type = type_table.borrow().get(expected).clone();
     let actual_type = type_table.borrow().get(actual).clone();
 
@@ -131,14 +126,14 @@ pub(super) fn unify(
         // tuple literal: infer `K` from the tuple element type.
         (
             ResolvedType::GenericInstance {
-                def,
                 type_args: expected_args,
+                ..
             },
             ResolvedType::GenericInstance {
                 def: actual_def,
                 type_args: actual_elems,
             },
-        ) if type_table.borrow().def_name(*def) == list_name
+        ) if type_table.borrow().is_list(expected)
             && TypeTable::is_tuple_type(type_table.borrow().def_name(*actual_def))
             && expected_args.len() == 1
             && !actual_elems.is_empty() =>

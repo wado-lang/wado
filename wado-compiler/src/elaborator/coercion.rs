@@ -455,22 +455,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) || matches!(expr, Expr::TemplateString(_));
 
         if is_string_or_template {
-            let base_id = self
-                .tysys
-                .type_table
-                .borrow()
-                .representation_head(target_type);
-            let string_struct_name = self
-                .tysys
-                .type_table
-                .borrow()
-                .compiler_struct_name(CompilerItem::String)
-                .to_string();
-            let is_string_newtype = matches!(
-                self.tysys.type_table.borrow().get(base_id),
-                ResolvedType::Struct { def, .. }
-                    if self.tysys.type_table.borrow().struct_head_name(*def) == string_struct_name
-            ) && target_type != base_id;
+            let is_string_newtype = {
+                let tt = self.tysys.type_table.borrow();
+                let base_id = tt.representation_head(target_type);
+                tt.is_string(base_id) && target_type != base_id
+            };
             if is_string_newtype {
                 // Walk the inner literal / template for fact recording.
                 self.resolve_expr(expr, ctx, None);

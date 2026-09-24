@@ -415,12 +415,8 @@ fn build_copy_return_expr(
     // `StructLiteral` arm rejects with a hard panic. Falling through to identity
     // keeps a stray non-monomorphized template wrapper safe; the shapes that do
     // need a real copy (`List<T>`, tuples) are recovered by the checks below.
-    let list_name = type_table
-        .borrow()
-        .compiler_struct_name(CompilerItem::List)
-        .to_string();
-    if let ResolvedType::GenericInstance { def, type_args } = resolved
-        && type_table.borrow().def_name(*def) == list_name
+    if let ResolvedType::GenericInstance { type_args, .. } = resolved
+        && type_table.borrow().is_list(type_id)
         && type_args.len() == 1
         && is_synth_safe_element(type_args[0], type_table, project)
     {
@@ -496,23 +492,19 @@ fn is_synth_safe_element(
         ResolvedType::GenericInstance { def, .. } => {
             let name = &type_table.borrow().def_name(def).to_string();
             let module_source = &type_table.borrow().def_module(def).clone();
-            // Tuples / String / List<T> / known struct templates are
-            // safe; unknown generic-instance names whose template
-            // isn't a registered struct or variant are not.
+            // Tuples, `List<T>`, `Box<T>` and known struct templates are
+            // safe; an instance whose template is neither a registered
+            // struct nor a variant is not.
             if TypeTable::is_tuple_type(name) {
                 return true;
             }
-            let (list_name, string_name, box_name) = {
+            {
                 let tt = type_table.borrow();
-                let items = tt.compiler_items();
-                (
-                    items.struct_name(CompilerItem::List).to_string(),
-                    items.struct_name(CompilerItem::String).to_string(),
-                    items.struct_name(CompilerItem::Box).to_string(),
-                )
-            };
-            if *name == list_name || *name == string_name || *name == box_name {
-                return true;
+                if tt.is_list(elem_type)
+                    || tt.is_compiler_struct_instance(elem_type, CompilerItem::Box)
+                {
+                    return true;
+                }
             }
             // A concrete monomorphised struct entry is the strongest
             // signal — without it WIR has no `Ref` to point at. The struct
