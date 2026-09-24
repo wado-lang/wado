@@ -923,12 +923,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             def: expected_def,
                             type_args: expected_args,
                         } = expected_resolved
-                            && Some(expected_def)
+                            && expected_def
                                 == self
                                     .tysys
                                     .resolutions
                                     .defs()
-                                    .of_ast_id(variant_info.defined_at)
+                                    .def_at(variant_info.defined_at)
                             && expected_args.len() == variant_info.type_param_type_ids.len()
                         {
                             payload_type = self

@@ -1,9 +1,9 @@
 //! Trait query functions: checking trait implementations, bounds validation,
 //! and associated type resolution.
 
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexMap;
 
-use crate::ast::{self, Type};
+use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
@@ -344,81 +344,6 @@ impl TypeSystem {
             .any(|(derived, _)| *derived == item)
             .then(|| (item, self.auto_derive_return_type(item)))
     }
-
-    /// Check that concrete type args at non-type-parameter positions match the impl type.
-    /// e.g. `impl From<…> for TreeMap<String, V>` with `TreeMap<i32, String>` should fail
-    /// because position 0 expects String but got i32.
-    pub(crate) fn verify_impl_type_compatibility(
-        &self,
-        impl_ty: &Type,
-        concrete_type_args: &[TypeId],
-        declared_type_params: &IndexSet<String>,
-    ) -> bool {
-        if declared_type_params.is_empty() {
-            return true; // No filtering available, assume compatible
-        }
-        let Type::Generic(g) = impl_ty else {
-            return true;
-        };
-        let tt = self.type_table.borrow();
-        for (i, arg) in g.args.iter().enumerate() {
-            let Some(&concrete_id) = concrete_type_args.get(i) else {
-                continue;
-            };
-            if !Self::impl_type_matches_concrete(arg, concrete_id, declared_type_params, &tt) {
-                return false;
-            }
-        }
-        true
-    }
-
-    /// Recursively check whether an impl type argument matches a concrete type ID.
-    /// - `Type::Named` that is a declared type param → always matches (free type param)
-    /// - `Type::Named` not in type params → concrete name must equal `type_table.type_name()`
-    /// - `Type::Generic` → concrete must be a `GenericInstance` with same outer name; inner args checked recursively
-    /// - Other types → not validated (return true)
-    pub(crate) fn impl_type_matches_concrete(
-        impl_ty: &Type,
-        concrete_id: TypeId,
-        declared_type_params: &IndexSet<String>,
-        type_table: &TypeTable,
-    ) -> bool {
-        match impl_ty {
-            Type::Named(n) => {
-                if declared_type_params.contains(&n.name) {
-                    true // free type param — matches anything
-                } else {
-                    type_table.type_name(concrete_id) == n.name
-                }
-            }
-            Type::Generic(g) => {
-                let resolved = type_table.get(concrete_id).clone();
-                match resolved {
-                    ResolvedType::GenericInstance { def, type_args } => {
-                        if type_table.def_name(def) != g.name {
-                            return false;
-                        }
-                        for (i, inner) in g.args.iter().enumerate() {
-                            let Some(&inner_id) = type_args.get(i) else {
-                                return false;
-                            };
-                            if !Self::impl_type_matches_concrete(
-                                inner,
-                                inner_id,
-                                declared_type_params,
-                                type_table,
-                            ) {
-                                return false;
-                            }
-                        }
-                        true
-                    }
-                    _ => false,
-                }
-            }
-            _ => true,
-        }
-    }
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -707,8 +632,7 @@ impl TypeSystem {
     /// a check phrased against one asks for *that* declaration — never for
     /// whatever a module's `Iterator` happens to be.
     pub(super) fn compiler_trait_def(&self, item: CompilerItem) -> Option<DefId> {
-        let decl = self.type_table.borrow().compiler_items().trait_decl(item)?;
-        self.resolutions.defs().of_ast_id(decl)
+        self.type_table.borrow().compiler_items().trait_def(item)
     }
 
     /// [`Self::compiler_trait_def`] as a trait reference. A compiler item

@@ -221,14 +221,11 @@ pub(crate) struct FlagsInfo {
     pub(super) members: Vec<FlagsMemberData>,
 }
 
-/// Resource info: module source and method names
-/// Note: This infrastructure was added for resource static methods but isn't fully used yet.
-/// Keep it for when wasi:sockets registration is re-enabled.
+/// A declared `resource`, by its declaration.
 #[derive(Clone)]
 pub(crate) struct ResourceInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
-    pub(super) module_source: ModuleSource,
     /// `AstId` of the `resource` declaration (`ResourceDecl::id`).
     pub(super) defined_at: AstId,
 }

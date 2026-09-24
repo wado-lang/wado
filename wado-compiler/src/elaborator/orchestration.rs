@@ -448,22 +448,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 match item {
                     Item::Struct(struct_decl) => {
                         // Insert with empty fields first - will be populated in second sub-pass
-                        if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
-                            all_struct_fields.insert(
-                                def,
-                                StructFieldInfo {
-                                    name: struct_decl.name.clone(),
-                                    module_source: module_source.clone(),
-                                    defined_at: struct_decl.id,
-                                    fields: Vec::new(),
-                                    field_ast_ids: Vec::new(),
-                                    field_defaults: Vec::new(),
-                                    field_wire_numbers: Vec::new(),
-                                    type_params: RealTypeParams::of(&struct_decl.type_params),
-                                    type_param_type_ids: Vec::new(), // filled in second pass
-                                },
-                            );
-                        }
+                        all_struct_fields.insert(
+                            resolutions.defs().def_at(struct_decl.id),
+                            StructFieldInfo {
+                                name: struct_decl.name.clone(),
+                                module_source: module_source.clone(),
+                                defined_at: struct_decl.id,
+                                fields: Vec::new(),
+                                field_ast_ids: Vec::new(),
+                                field_defaults: Vec::new(),
+                                field_wire_numbers: Vec::new(),
+                                type_params: RealTypeParams::of(&struct_decl.type_params),
+                                type_param_type_ids: Vec::new(), // filled in second pass
+                            },
+                        );
                         register_struct_compiler_item(
                             &type_table,
                             &struct_decl.attrs,
@@ -476,19 +474,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     Item::Variant(variant_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass
-                        if let Some(def) = resolutions.defs().of_ast_id(variant_decl.id) {
-                            all_variant_cases.insert(
-                                def,
-                                VariantInfo {
-                                    name: variant_decl.name.clone(),
-                                    module_source: module_source.clone(),
-                                    defined_at: variant_decl.id,
-                                    type_params: RealTypeParams::of(&variant_decl.type_params),
-                                    cases: Vec::new(),
-                                    type_param_type_ids: Vec::new(),
-                                },
-                            );
-                        }
+                        all_variant_cases.insert(
+                            resolutions.defs().def_at(variant_decl.id),
+                            VariantInfo {
+                                name: variant_decl.name.clone(),
+                                module_source: module_source.clone(),
+                                defined_at: variant_decl.id,
+                                type_params: RealTypeParams::of(&variant_decl.type_params),
+                                cases: Vec::new(),
+                                type_param_type_ids: Vec::new(),
+                            },
+                        );
                         register_variant_compiler_item(
                             &type_table,
                             &variant_decl.attrs,
@@ -513,12 +509,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     Item::Enum(enum_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass
-                        if let Some(def) = resolutions.defs().of_ast_id(enum_decl.id) {
-                            all_enum_cases.insert(
-                                def,
-                                EnumInfo::new(module_source.clone(), enum_decl.id, Vec::new()),
-                            );
-                        }
+                        all_enum_cases.insert(
+                            resolutions.defs().def_at(enum_decl.id),
+                            EnumInfo::new(module_source.clone(), enum_decl.id, Vec::new()),
+                        );
                         register_enum_compiler_item(
                             &type_table,
                             &enum_decl.attrs,
@@ -542,44 +536,42 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                     }
                     Item::Resource(resource_decl) => {
-                        if let Some(def) = resolutions.defs().of_ast_id(resource_decl.id) {
-                            all_resource_types.insert(
-                                def,
-                                ResourceInfo {
-                                    name: resource_decl.name.clone(),
-                                    module_source: module_source.clone(),
-                                    defined_at: resource_decl.id,
-                                },
-                            );
-                            if declares_unrestricted(&resource_decl.attrs) {
-                                type_table.borrow_mut().mark_unrestricted_resource(def);
-                            }
-                            let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);
-                            if is_generic {
-                                generic_resources.insert(def);
-                            }
-                            // A static is not inherited, so it shadows nothing.
-                            resource_method_names.insert(
-                                def,
-                                resource_decl
-                                    .methods
-                                    .iter()
-                                    .filter(|m| {
-                                        m.params.iter().any(|p| p.self_kind != ast::SelfKind::None)
-                                    })
-                                    .map(|m| (m.name.clone(), m.span))
-                                    .collect(),
-                            );
-                            if let Some(parent) = &resource_decl.parent {
-                                pending_extends.push(PendingExtends {
-                                    child: def,
-                                    child_name: resource_decl.name.clone(),
-                                    child_is_generic: is_generic,
-                                    parent: parent.clone(),
-                                    module: module_source.clone(),
-                                    span: resource_decl.span,
-                                });
-                            }
+                        let def = resolutions.defs().def_at(resource_decl.id);
+                        all_resource_types.insert(
+                            def,
+                            ResourceInfo {
+                                name: resource_decl.name.clone(),
+                                defined_at: resource_decl.id,
+                            },
+                        );
+                        if declares_unrestricted(&resource_decl.attrs) {
+                            type_table.borrow_mut().mark_unrestricted_resource(def);
+                        }
+                        let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);
+                        if is_generic {
+                            generic_resources.insert(def);
+                        }
+                        // A static is not inherited, so it shadows nothing.
+                        resource_method_names.insert(
+                            def,
+                            resource_decl
+                                .methods
+                                .iter()
+                                .filter(|m| {
+                                    m.params.iter().any(|p| p.self_kind != ast::SelfKind::None)
+                                })
+                                .map(|m| (m.name.clone(), m.span))
+                                .collect(),
+                        );
+                        if let Some(parent) = &resource_decl.parent {
+                            pending_extends.push(PendingExtends {
+                                child: def,
+                                child_name: resource_decl.name.clone(),
+                                child_is_generic: is_generic,
+                                parent: parent.clone(),
+                                module: module_source.clone(),
+                                span: resource_decl.span,
+                            });
                         }
                         register_resource_compiler_item(
                             &type_table,
@@ -822,11 +814,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             type_params: RealTypeParams::of(&struct_decl.type_params),
                             type_param_type_ids,
                         };
-                        if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
-                            all_struct_fields.insert(def, info);
-                        }
+                        all_struct_fields.insert(resolutions.defs().def_at(struct_decl.id), info);
                     }
                     Item::Newtype(newtype_decl) => {
+                        let def = resolutions.defs().def_at(newtype_decl.id);
                         if newtype_decl.type_params.is_empty() {
                             // Concrete newtype: resolve immediately
                             let base_type_id = Self::resolve_type_static(
@@ -834,26 +825,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 &mut type_table.borrow_mut(),
                                 &lookup,
                             );
-                            let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) else {
-                                continue;
-                            };
                             let newtype_id =
                                 type_table.borrow_mut().make_newtype(def, base_type_id);
                             type_table
                                 .borrow_mut()
                                 .register_decl_type(newtype_decl.id, newtype_id);
-                            if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
-                                all_newtypes.insert(def, newtype_id);
-                            }
+                            all_newtypes.insert(def, newtype_id);
                         } else {
                             // Generic newtype: store definition for lazy instantiation
                             let info = GenericNewtypeInfo {
                                 type_params: RealTypeParams::of(&newtype_decl.type_params),
                                 base_type_ast: newtype_decl.ty.clone(),
                             };
-                            if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
-                                all_generic_newtypes.insert(def, info);
-                            }
+                            all_generic_newtypes.insert(def, info);
                         }
                     }
                     Item::Variant(variant_decl) => {
@@ -877,19 +861,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             });
                         }
                         let type_param_type_ids = Self::slot_type_ids(&variant_slots, &type_table);
-                        if let Some(def) = resolutions.defs().of_ast_id(variant_decl.id) {
-                            all_variant_cases.insert(
-                                def,
-                                VariantInfo {
-                                    name: variant_decl.name.clone(),
-                                    module_source: module_source.clone(),
-                                    defined_at: variant_decl.id,
-                                    type_params: RealTypeParams::of(&variant_decl.type_params),
-                                    cases,
-                                    type_param_type_ids,
-                                },
-                            );
-                        }
+                        all_variant_cases.insert(
+                            resolutions.defs().def_at(variant_decl.id),
+                            VariantInfo {
+                                name: variant_decl.name.clone(),
+                                module_source: module_source.clone(),
+                                defined_at: variant_decl.id,
+                                type_params: RealTypeParams::of(&variant_decl.type_params),
+                                cases,
+                                type_param_type_ids,
+                            },
+                        );
                     }
                     Item::Enum(enum_decl) => {
                         // Populate enum cases (no field types, just names and indices)
@@ -903,12 +885,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 ast_id: case.id,
                             })
                             .collect();
-                        if let Some(def) = resolutions.defs().of_ast_id(enum_decl.id) {
-                            all_enum_cases.insert(
-                                def,
-                                EnumInfo::new(module_source.clone(), enum_decl.id, cases),
-                            );
-                        }
+                        all_enum_cases.insert(
+                            resolutions.defs().def_at(enum_decl.id),
+                            EnumInfo::new(module_source.clone(), enum_decl.id, cases),
+                        );
                     }
                     Item::Flags(flags_decl) => {
                         // A flags value is a single 32-bit word at the CM
@@ -929,17 +909,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             continue;
                         }
                         // Create a distinct Flags type (not a newtype over u32)
-                        let Some(def) = resolutions.defs().of_ast_id(flags_decl.id) else {
-                            continue;
-                        };
+                        let def = resolutions.defs().def_at(flags_decl.id);
                         let flags_type = type_table.borrow_mut().make_flags(def);
                         type_table
                             .borrow_mut()
                             .register_decl_type(flags_decl.id, flags_type);
                         // Add to newtypes so it can be used as a type name in signatures
-                        if let Some(def) = resolutions.defs().of_ast_id(flags_decl.id) {
-                            all_newtypes.insert(def, flags_type);
-                        }
+                        all_newtypes.insert(def, flags_type);
                         // Store member info with bitmask values (1 << index)
                         let members: Vec<FlagsMemberData> = flags_decl
                             .flags
@@ -951,16 +927,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 ast_id: m.id,
                             })
                             .collect();
-                        if let Some(def) = resolutions.defs().of_ast_id(flags_decl.id) {
-                            all_flags_cases.insert(
-                                def,
-                                FlagsInfo {
-                                    type_id: flags_type,
-                                    module_source: module_source.clone(),
-                                    members,
-                                },
-                            );
-                        }
+                        all_flags_cases.insert(
+                            def,
+                            FlagsInfo {
+                                type_id: flags_type,
+                                module_source: module_source.clone(),
+                                members,
+                            },
+                        );
                     }
                     _ => {}
                 }
@@ -1243,14 +1217,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Without this, decl-only types (e.g., a standalone `struct Unused {}`)
         // would only appear in the table after TIR lowering — too late for the
         // annotate phase to index them by `AstId`.
-        Self::intern_all_decl_types(
-            modules,
-            &all_struct_fields,
-            &all_resource_types,
-            resolutions.defs(),
-            &type_table,
-            &stdlib_set,
-        );
+        Self::intern_all_decl_types(modules, resolutions.defs(), &type_table, &stdlib_set);
 
         // Populate `TypeTable::type_by_symbol` / `symbol_by_type` so LSP queries
         // can resolve a `AstId` to a decl-backed type without running the
@@ -1715,15 +1682,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         logger.ok_or_bail(result)
     }
 
-    /// Intern every struct / enum / variant / resource declaration so
-    /// `find_decl_type_by_name` answers for each declared symbol — flags and
-    /// newtypes are already interned by the annotate sub-pass. A generic struct's
-    /// base decl is interned under its canonical name, which
-    /// `register_symbol_key_type_indices` resolves against.
+    /// Intern every struct / enum / variant / resource declaration and register
+    /// it under its `AstId`; flags and newtypes are interned by the annotate pass.
     fn intern_all_decl_types(
         modules: &IndexMap<ModuleSource, Module>,
-        all_struct_fields: &IndexMap<DefId, StructFieldInfo>,
-        all_resource_types: &IndexMap<DefId, ResourceInfo>,
         defs: &DefTable,
         type_table: &Rc<RefCell<TypeTable>>,
         stdlib_set: &IndexSet<ModuleSource>,
@@ -1737,45 +1699,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
-                        // Resolve via struct_fields so the canonical name/module
-                        // from `StructFieldInfo` wins over anything else.
-                        let (name, ms) = defs
-                            .of_ast_id(struct_decl.id)
-                            .and_then(|def| all_struct_fields.get(&def))
-                            .map(|info| (info.name.clone(), info.module_source.clone()))
-                            .unwrap_or_else(|| (struct_decl.name.clone(), module_source.clone()));
-                        let (_, _) = (&name, &ms);
-                        let Some(def) = defs.of_ast_id(struct_decl.id) else {
-                            continue;
-                        };
-                        let type_id = tt.make_struct(StructDef::Decl(def));
+                        let type_id = tt.make_struct(StructDef::Decl(defs.def_at(struct_decl.id)));
                         tt.register_decl_type(struct_decl.id, type_id);
                     }
                     Item::Enum(enum_decl) => {
-                        let Some(def) = defs.of_ast_id(enum_decl.id) else {
-                            continue;
-                        };
-                        let type_id = tt.make_enum(def);
+                        let type_id = tt.make_enum(defs.def_at(enum_decl.id));
                         tt.register_decl_type(enum_decl.id, type_id);
                     }
                     Item::Variant(variant_decl) => {
-                        let Some(def) = defs.of_ast_id(variant_decl.id) else {
-                            continue;
-                        };
-                        let type_id = tt.make_variant(def);
+                        let type_id = tt.make_variant(defs.def_at(variant_decl.id));
                         tt.register_decl_type(variant_decl.id, type_id);
                     }
                     Item::Resource(resource_decl) => {
-                        let (name, ms) = defs
-                            .of_ast_id(resource_decl.id)
-                            .and_then(|def| all_resource_types.get(&def))
-                            .map(|info| (info.name.clone(), info.module_source.clone()))
-                            .unwrap_or_else(|| (resource_decl.name.clone(), module_source.clone()));
-                        let (_, _) = (&name, &ms);
-                        let Some(def) = defs.of_ast_id(resource_decl.id) else {
-                            continue;
-                        };
-                        let type_id = tt.make_resource(def);
+                        let type_id = tt.make_resource(defs.def_at(resource_decl.id));
                         tt.register_decl_type(resource_decl.id, type_id);
                     }
                     _ => {}
@@ -3373,10 +3309,7 @@ fn compiler_named_entities(tysys: &TypeSystem) -> CompilerNamed {
     let synthesis_traits: IndexSet<DefId> = CompilerItem::ALL
         .iter()
         .filter(|item| item.dispatched_by_synthesis())
-        .filter_map(|&item| match items.get(item) {
-            Some(Resolved::Trait { decl, .. }) => defs.of_ast_id(*decl),
-            _ => None,
-        })
+        .filter_map(|&item| items.trait_def(item))
         .collect();
     for (impl_def, header) in &tysys.trait_env.impl_headers {
         if header

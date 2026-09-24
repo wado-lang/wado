@@ -3024,8 +3024,8 @@ impl TypeTable {
             && let ResolvedType::Newtype { base_type, .. } = self.get(concrete_id)
             && self
                 .compiler_items()
-                .trait_decl(CompilerItem::ReflectNewtype)
-                == Some(self.defs.ast_id(*trait_key))
+                .trait_def(CompilerItem::ReflectNewtype)
+                == Some(*trait_key)
         {
             return Some(*base_type);
         }

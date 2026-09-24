@@ -926,9 +926,7 @@ impl TraitEnv {
             for item in &module.items {
                 match item {
                     Item::Resource(resource) => {
-                        let Some(resource_key) = defs.of_ast_id(resource.id) else {
-                            continue;
-                        };
+                        let resource_key = defs.def_at(resource.id);
                         let is_resource = |ty: &ast::Type| {
                             matches!(ty, ast::Type::Named(n)
                                 if n.name == "Self" || resolutions.declared(n.id) == Some(resource_key))
@@ -953,40 +951,14 @@ impl TraitEnv {
                             }
                         }
                     }
-                    Item::Struct(s) => {
-                        if let Some(def) = defs.of_ast_id(s.id) {
-                            type_decl_index.insert(def);
-                        }
-                    }
-                    Item::Variant(v) => {
-                        if let Some(def) = defs.of_ast_id(v.id) {
-                            type_decl_index.insert(def);
-                        }
-                    }
-                    Item::Enum(e) => {
-                        if let Some(def) = defs.of_ast_id(e.id) {
-                            type_decl_index.insert(def);
-                        }
-                    }
-                    Item::Flags(f) => {
-                        if let Some(def) = defs.of_ast_id(f.id) {
-                            type_decl_index.insert(def);
-                        }
-                    }
-                    Item::Newtype(n) => {
-                        if let Some(def) = defs.of_ast_id(n.id) {
-                            type_decl_index.insert(def);
-                        }
-                    }
-                    Item::BuiltinTypeDecl(d) => {
-                        if let Some(def) = defs.of_ast_id(d.id) {
-                            type_decl_index.insert(def);
-                        }
-                    }
-                    Item::TupleTypeDecl(t) => {
-                        if let Some(def) = defs.of_ast_id(t.id) {
-                            type_decl_index.insert(def);
-                        }
+                    Item::Struct(_)
+                    | Item::Variant(_)
+                    | Item::Enum(_)
+                    | Item::Flags(_)
+                    | Item::Newtype(_)
+                    | Item::BuiltinTypeDecl(_)
+                    | Item::TupleTypeDecl(_) => {
+                        type_decl_index.insert(defs.def_at(item.id()));
                     }
                     _ => {}
                 }
@@ -1005,11 +977,8 @@ impl TraitEnv {
                     );
                 }
                 if let Item::Trait(trait_decl) = item {
-                    let Some(trait_def) = defs.of_ast_id(trait_decl.id) else {
-                        continue;
-                    };
                     trait_decl_headers.insert(
-                        trait_def,
+                        defs.def_at(trait_decl.id),
                         TraitDeclHeader {
                             name: trait_decl.name.clone(),
                             default_args: trait_decl

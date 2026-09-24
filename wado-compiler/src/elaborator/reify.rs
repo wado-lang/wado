@@ -883,7 +883,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `annotate_decls` interned via `make_flags`; reify reads it from
     /// `tysys.all_flags_cases`.
     fn reify_flags(&self, flags_decl: &ast::FlagsDecl) -> Option<TirFlags> {
-        let def = self.tysys.resolutions.defs().of_ast_id(flags_decl.id)?;
+        let def = self.tysys.resolutions.defs().def_at(flags_decl.id);
         let info = self.tysys.all_flags_cases.get(&def)?;
         Some(TirFlags {
             def,
@@ -933,7 +933,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `make_newtype_instance` — so it lands here without one, carrying the
     /// parameters its synthesized impls are written over.
     fn reify_newtype(&self, newtype_decl: &ast::Newtype) -> Option<TirNewtype> {
-        let def = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id)?;
+        let def = self.tysys.resolutions.defs().def_at(newtype_decl.id);
         let generic = !newtype_decl.type_params.is_empty();
         let type_id = self.tysys.all_newtypes.get(&def).copied();
         if !generic && type_id.is_none() {
@@ -1059,14 +1059,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `reify_struct`'s handling for a top-level struct — `StructFieldInfo`
     /// doesn't carry attributes, only `(name, type, visibility)`.
     fn reify_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let Some(info) = self
-            .tysys
-            .resolutions
-            .defs()
-            .of_ast_id(struct_decl.id)
-            .and_then(|def| self.sem.decls.local_struct_fields.get(&def))
-            .cloned()
-        else {
+        let def = self.tysys.resolutions.defs().def_at(struct_decl.id);
+        let Some(info) = self.sem.decls.local_struct_fields.get(&def).cloned() else {
             // `resolve_local_struct` inserts this unconditionally for every
             // local struct declaration annotate resolved.
             return;
@@ -1110,7 +1104,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             "resolve_local_struct records the type params for every local struct reify emits",
         );
         self.pending_local_structs.push(TirStruct {
-            def: StructDef::Decl(self.tysys.resolutions.defs().def_at(struct_decl.id)),
+            def: StructDef::Decl(def),
             type_args: Vec::new(),
             name: info.name,
             module_source: self.current_module_source.clone(),
@@ -1127,9 +1121,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// fact `resolve_local_newtype` recorded under this declaration's own
     /// identity.
     fn reify_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-            return;
-        };
+        let def = self.tysys.resolutions.defs().def_at(newtype_decl.id);
         let generic = !newtype_decl.type_params.is_empty();
         let type_id = self.sem.decls.local_newtypes.get(&def).copied();
         if !generic && type_id.is_none() {

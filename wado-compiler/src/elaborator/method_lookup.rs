@@ -271,6 +271,17 @@ impl TypeSystem {
         true
     }
 
+    /// Whether a trait impl reaches the receiver: every position its target pins
+    /// is what the receiver supplies. `impl … for TreeMap<String, V>` misses `TreeMap<i32, _>`.
+    fn trait_impl_type_args_match(&self, impl_ty: &Type, receiver_type_args: &[TypeId]) -> bool {
+        impl_target_head_args(impl_ty).is_none_or(|written| {
+            written
+                .iter()
+                .zip(receiver_type_args)
+                .all(|(arg, &recv)| self.arg_matches(arg, recv))
+        })
+    }
+
     /// Whether `recv` is what the header wrote at this position, the header's
     /// own type parameters standing for anything. Structural, never rendered
     /// (WEP 2026-08-12 §4); a binder is free only where it stands, so
@@ -465,42 +476,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         refs
     }
 
-    /// Shared scan-and-map prologue behind `find_indexing_trait_impl`,
-    /// `find_assoc_type_in_trait_impl`, and `find_arithmetic_trait_impl`: walk
-    /// the trait impls on `target` whose name satisfies `trait_matches`
-    /// (prefix for indexing / assoc, exact for arithmetic), align each
-    /// candidate's slots against `concrete_type_args`, and return the first
-    /// non-`None` `project`. Per-candidate filtering and projection live in
-    /// `project` (which also receives the impl's declared type params);
-    /// returning `None` skips the candidate.
+    /// Walk the impls of `trait_` on `target`, instantiate each against
+    /// `concrete_type_args`, and return the first `project` that is not `None`.
     fn probe_trait_impls<R>(
         &mut self,
         target: &ImplTargetKey,
         concrete_type_args: &[TypeId],
-        trait_matches: impl Fn(&str, Option<DefId>) -> bool,
-        mut project: impl FnMut(
-            &mut Self,
-            &ImplBlockRef,
-            &InstantiatedImplSig,
-            &IndexSet<String>,
-        ) -> Option<R>,
+        trait_: DefId,
+        mut project: impl FnMut(&mut Self, &ImplBlockRef, &InstantiatedImplSig) -> Option<R>,
     ) -> Option<R> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let signatures = Rc::clone(&self.tysys.signatures);
         let impl_refs = self.collect_trait_impl_refs(target);
         for impl_ref in &impl_refs {
-            let header = impl_header(&trait_env, impl_ref);
-            let trait_name = self.get_type_name(header.trait_ty().unwrap());
-            if !trait_matches(&trait_name, header.trait_def()) {
+            if impl_header(&trait_env, impl_ref).trait_def() != Some(trait_) {
                 continue;
             }
             let impl_sig = signatures
                 .impl_sig(impl_ref.0)
                 .expect("the decl pass records every impl block's declaration facts")
                 .instantiate(&self.tysys.type_table, concrete_type_args);
-            let declared: IndexSet<String> =
-                header.type_params.iter().map(|p| p.name.clone()).collect();
-            if let Some(result) = project(self, impl_ref, &impl_sig, &declared) {
+            if let Some(result) = project(self, impl_ref, &impl_sig) {
                 return Some(result);
             }
         }
@@ -514,17 +510,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         target: &ImplTargetKey,
         concrete_type_args: &[TypeId],
-        trait_matches: impl Fn(&str, Option<DefId>) -> bool,
-        mut project: impl FnMut(
-            &mut Self,
-            &ImplBlockRef,
-            &InstantiatedImplSig,
-            &IndexSet<String>,
-        ) -> Option<R>,
+        trait_: DefId,
+        mut project: impl FnMut(&mut Self, &ImplBlockRef, &InstantiatedImplSig) -> Option<R>,
     ) -> Vec<R> {
         let mut found = Vec::new();
-        self.probe_trait_impls::<()>(target, concrete_type_args, trait_matches, |s, r, sig, d| {
-            if let Some(projected) = project(s, r, sig, d) {
+        self.probe_trait_impls::<()>(target, concrete_type_args, trait_, |s, r, sig| {
+            if let Some(projected) = project(s, r, sig) {
                 found.push(projected);
             }
             None
@@ -2929,8 +2920,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.collect_trait_impls(
             &self.impl_target_of(base_type_id, &DeclName::new(struct_name)),
             &concrete_type_args,
-            |_, found| found == Some(trait_),
-            |s, impl_ref, impl_sig, declared| {
+            trait_,
+            |s, impl_ref, impl_sig| {
                 // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>).
                 // Shared with `lookup_method_info_uncached` and
                 // `find_trait_impl_for_type_with_args`, so a bound-checking
@@ -2942,11 +2933,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // not answer for a `TreeMap<i32, String>` receiver. Without
                 // this the method signature instantiates against the wrong
                 // arguments and the mismatch only surfaces at WIR build.
-                if !s.tysys.verify_impl_type_compatibility(
-                    &header.ty,
-                    &concrete_type_args,
-                    declared,
-                ) {
+                if !s
+                    .tysys
+                    .trait_impl_type_args_match(&header.ty, &concrete_type_args)
+                {
                     return None;
                 }
                 if !s.tysys.check_impl_block_bounds(
@@ -3068,8 +3058,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.probe_trait_impls(
             &self.impl_target_of(base_type_id, &DeclName::new(struct_name)),
             &concrete_type_args,
-            |_, found| found == Some(trait_),
-            |s, impl_ref, impl_sig, declared| {
+            trait_,
+            |s, impl_ref, impl_sig| {
                 // The trait's index-type argument (`List<i32>` in `impl
                 // Index<List<i32>>`), returned for subscript coercion and used
                 // to disambiguate overlapping impls when `expected_index_type`
@@ -3084,11 +3074,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
 
-                if !s.tysys.verify_impl_type_compatibility(
-                    &header.ty,
-                    &concrete_type_args,
-                    declared,
-                ) {
+                if !s
+                    .tysys
+                    .trait_impl_type_args_match(&header.ty, &concrete_type_args)
+                {
                     return None;
                 }
                 let impl_type_params = header.type_params.clone();

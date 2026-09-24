@@ -244,9 +244,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Give a local struct its identity before any of its block's
     /// declarations are resolved, so a type may name one written later.
     fn declare_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
-            return;
-        };
+        let def = self.tysys.resolutions.defs().def_at(struct_decl.id);
         // Mirrors `intern_all_decl_types`'s "base entry" for a module-level
         // generic struct: its usage sites mint separate `GenericInstance`
         // TypeIds, and this one exists so `type_id_of_decl` has something to
@@ -338,9 +336,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .decl_type_params
             .insert(struct_decl.id, type_params);
 
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
-            return;
-        };
+        let def = self.tysys.resolutions.defs().def_at(struct_decl.id);
         let Some(info) = self.sem.decls.local_struct_fields.get_mut(&def) else {
             return;
         };
@@ -439,10 +435,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A generic one names no single type: each instantiation resolves the
         // base AST with its arguments substituted, so what is recorded is the
         // declaration — the same entry a module-level generic newtype makes.
+        let def = self.tysys.resolutions.defs().def_at(newtype_decl.id);
         if !newtype_decl.type_params.is_empty() {
-            let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-                return true;
-            };
             self.sem.decls.local_generic_newtypes.insert(
                 def,
                 GenericNewtypeInfo {
@@ -461,9 +455,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         }
         // Same as the local struct: the head is this declaration's identity.
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-            return true;
-        };
         let type_id = self
             .tysys
             .type_table
@@ -478,9 +469,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // rather than reading `ResolvedType` directly, so it must be
         // discoverable post-declaration the same way struct field info is
         // (see `resolve_local_struct`).
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-            return true;
-        };
         self.sem.decls.local_newtypes.insert(def, type_id);
         self.sem
             .decls
