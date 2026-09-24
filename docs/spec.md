@@ -2591,7 +2591,7 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
 }
 ```
 
-A hole handle (`Hole<T, V>`) answers `index()` (its position, from 0), `lit()` /
+A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0), `lit()` /
 `raw()` (the preceding segment, escapes processed or preserved), `get(&t)` (the
 value, `V`), `source()` (the expression text), `has_spec()`, and `fmt(&t, f)`
 (rendering as the untagged template would). Every answer but `get` and `fmt` is

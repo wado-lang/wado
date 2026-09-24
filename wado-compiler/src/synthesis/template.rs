@@ -171,7 +171,7 @@ pub fn expand_templates(
 
 /// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every
 /// tagged template shape in `module`: `match index { k => <hole k rendered
-/// through its specifier into f's buffer> }`. `Hole::fmt`'s body carries a
+/// through its specifier into f's buffer> }`. `TemplateHole::fmt`'s body carries a
 /// `builtin::hole_fmt` marker that lowering rewrites to it (WEP 2026-01-10).
 /// Each arm is the interpolation the untagged template would emit for that
 /// hole, so the two forms cannot render differently.
@@ -217,7 +217,7 @@ pub fn synthesize_hole_fmt_helpers(
     };
     for (struct_type, holes, span) in targets {
         let mut helper = build_hole_fmt_helper(struct_type, &holes, span, &ctx);
-        // The index is a constant at every site `Hole::fmt` reaches after
+        // The index is a constant at every site `TemplateHole::fmt` reaches after
         // `members()` folds, so the splice keeps one arm; as a call it would
         // keep the whole dispatch, and its arms are what the threshold
         // refuses.

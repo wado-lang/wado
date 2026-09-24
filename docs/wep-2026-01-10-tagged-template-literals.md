@@ -76,7 +76,7 @@ struct type, unique to that template's static shape, holding one field per
 hole. The shape is the tuple of (raw segments, specifiers, hole source texts,
 hole types): two templates with the same shape denote the same type and share
 every instantiation of the tag. The source texts are part of the shape because
-`Hole::source()` is a constant, so `` tag`${a}` `` and `` tag`${b}` `` are two
+`TemplateHole::source()` is a constant, so `` tag`${a}` `` and `` tag`${b}` `` are two
 types even where `a` and `b` share one. The type is anonymous — nothing in the
 source can name it — and is reached only through the bound the tag declares.
 
@@ -92,7 +92,7 @@ type whose reference is a bare GC handle — `struct`, `List`, `String`, `i128`
 primitive, an `enum`, `flags`, a `variant`, a function — is held as `V`, since
 a scalar copy is free and a box is an allocation. One predicate decides, the one
 [Reference Representation](./wep-2026-06-13-reference-representation.md)
-boxes by. The tag never sees the difference: `Hole::get` answers `V` either
+boxes by. The tag never sees the difference: `TemplateHole::get` answers `V` either
 way.
 
 The type is one of the reflected kinds, under the same seal as the five
@@ -108,7 +108,7 @@ pub trait ReflectTemplate: Reflect {
     /// The hole types as a tuple `[V_0, V_1, …]` — the payload pack.
     type Holes;
 
-    /// The per-hole member tuple `[Hole<Self, V_0>, Hole<Self, V_1>, …]`.
+    /// The per-hole member tuple `[TemplateHole<Self, V_0>, TemplateHole<Self, V_1>, …]`.
     type Members;
 
     /// Returns the per-hole members.
@@ -128,10 +128,10 @@ by `members()`, and not itself reflectable. Like every member handle it is
 prelude API, so a helper that takes one names it.
 
 ```wado
-#[compiler_item("hole")]
-pub struct Hole<T, V> { … }
+#[compiler_item("template_hole")]
+pub struct TemplateHole<T, V> { … }
 
-impl<T, V> Hole<T, V> {
+impl<T, V> TemplateHole<T, V> {
     /// The hole's position in the template, from 0.
     pub fn index(&self) -> i32;
 
@@ -208,7 +208,7 @@ box-target type's local is retagged by a borrow, and those holes are held by
 value.
 
 The synthesized `impl ReflectTemplate` carries the segments, specifiers and
-sources as literals in its `members()` and `tail()` bodies, and `Hole::get`
+sources as literals in its `members()` and `tail()` bodies, and `TemplateHole::get`
 projects the field at the hole's index, dereferencing a handle field.
 
 ### Writing a tag
@@ -386,7 +386,7 @@ solved better. Kept as an optimization opportunity, dropped as a promise.
   already has. SQL, HTML with contextual escaping, structured logging, URL
   building and raw strings are library code.
 - The `ReflectTemplate` kind is a sixth entry under `Reflect`, synthesized per
-  template shape rather than per declaration. `Hole` joins the other member
+  template shape rather than per declaration. `TemplateHole` joins the other member
   handles under the same seal.
 - Type checking of the walk body is at monomorphization, as it is for every
   pack walk. A pack bound (`..V: Trait`) makes the common failure a bound
@@ -421,7 +421,7 @@ introduces a mechanism; each item names the existing one it extends.
   so the two cannot drift. It is the single predicate Reference Representation
   calls for.
 - `reflect_kind` answers `ReflectTemplate` for a `Struct { def: Anon(shape) }`
-  whose shape is a template; `is_sealed_reflect_member` adds the `Hole` handle.
+  whose shape is a template; `is_sealed_reflect_member` adds the `TemplateHole` handle.
 - `anon_struct_mangle` renders a template shape under a `$tmpl` prefix over the
   shape's hash, and `anon_struct_name` renders the reader's name above, which
   `Reflect::type_name()` answers. The mangle is
@@ -435,7 +435,7 @@ introduces a mechanism; each item names the existing one it extends.
 - `#[compiler_item("reflect_template")] pub trait ReflectTemplate: Reflect`
   with `Holes`, `Members`, `members()`, `tail()`, `raw_tail()`, each method
   carrying its own `compiler_item`.
-- `#[compiler_item("hole")] pub struct Hole<T, V> { index, lit, raw, source,
+- `#[compiler_item("template_hole")] pub struct TemplateHole<T, V> { index, lit, raw, source,
   has_spec }` with the constant accessors reading fields, and two bridged ones:
   `get` is `builtin::hole_get::<T, V>(t, self.index)`, `fmt` is
   `builtin::hole_fmt::<T>(t, self.index, f)`. Both builtins are bodyless
@@ -514,7 +514,7 @@ serial advances on read, so a template nested inside a hole mints its own
   resolver types `members()` as `payload_members_ty(ReflectTemplateHole, T,
   holes)` and `tail()` / `raw_tail()` as `String`. The generic resolver, for a
   body written against `T: ReflectTemplate<Holes = [..V]>`, types `members()`
-  as the mapped pack `[..Hole<T, V>]` through `payload_member_pack_bound_ty`,
+  as the mapped pack `[..TemplateHole<T, V>]` through `payload_member_pack_bound_ty`,
   and `emit_missing_pack_bound` spells `Holes = [..V]`.
 - `concrete_reflect_assoc_type` gains the template arm, so a call site projects
   `Holes` and `Members` before synthesis has registered them.
@@ -530,8 +530,8 @@ serial advances on read, so a template nested inside a hole mints its own
 - `collect_reflect_targets` routes a template-shaped `TirStruct` to
   `generate_template_reflect_impls` instead of the struct kind. Per shape it
   emits `type_name` and `wire_name_policy` under the root, registers `Holes =
-  [V_k]` and `Members = [Hole<T, V_k>]`, and emits `members()` through
-  `generate_template_members_fn` with one `Hole` literal per hole (`lit`
+  [V_k]` and `Members = [TemplateHole<T, V_k>]`, and emits `members()` through
+  `generate_template_members_fn` with one `TemplateHole` literal per hole (`lit`
   cooked through `unescape_template_string`, `raw` verbatim), plus `tail()`
   and `raw_tail()` returning literals. The impl is recorded into `TraitEnv`
   like the struct kind's.
@@ -542,7 +542,7 @@ serial advances on read, so a template nested inside a hole mints its own
   for that hole: `trait_fmt_call` on the hole's value with the `Formatter`
   `build_formatter_literal` builds over `f.buf`, or `f` itself when the
   specifier sets no field). `$hole_fmt` is minted inline-always: its index is
-  a constant at every site `Hole::fmt` reaches once `members()` folds, so the
+  a constant at every site `TemplateHole::fmt` reaches once `members()` folds, so the
   splice keeps one arm where a call would keep the whole dispatch, which the
   threshold refuses.
 - `lower/translate.rs` folds `builtin::hole_get` / `hole_fmt` calls to the
@@ -558,7 +558,7 @@ serial advances on read, so a template nested inside a hole mints its own
   `wir_not_expect:O2` denies `$hole_get`, `$hole_fmt`, `members`, `to_param`
   and any `push_str` call.
 - `tagged_template_html.wado`: state carried across holes.
-- `tagged_template_members.wado`: every `Hole` accessor and the tails, with
+- `tagged_template_members.wado`: every `TemplateHole` accessor and the tails, with
   and without holes.
 - `tagged_template_holes.wado`: hole evaluation order and count, a scalar
   hole's copy, a handle hole's sharing, two sites of one shape.
@@ -632,7 +632,7 @@ synthesis and the fold; then the prelude tags and fixtures.
 
 ## Related WEPs
 
-- [String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md) — the untagged lowering, and `Hole::fmt`'s per-specifier body
+- [String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md) — the untagged lowering, and `TemplateHole::fmt`'s per-specifier body
 - [Compile-Time Tuple Enumeration](./wep-2026-02-10-compile-time-tuple-enumeration.md) — the walk
 - [Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) — the pack bound and pack binding
 - [Library-Defined Derivation over `Reflect*`](./wep-2026-06-13-reflect-derivation.md) — the kind and member-handle model this joins
