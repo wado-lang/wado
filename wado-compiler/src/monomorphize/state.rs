@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::defs::DefId;
-use crate::elaborator::trait_env::{ImplReceiver, ReceiverCandidate, TraitEnv};
+use crate::elaborator::trait_env::{ReceiverCandidate, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::monomorphize::dispatch_receiver_name;
@@ -78,23 +78,9 @@ impl FuncInstState {
         info: &LocalMethodName,
         type_module: Option<&ModuleSource>,
     ) -> Option<ModuleSource> {
-        let trait_ = info.trait_decl()?;
-        if let Some(m) = self.trait_env.concrete_impl_module_for(
-            ImplReceiver::Instantiated(&info.mangled_struct_name()),
-            trait_,
-            type_module,
-        ) {
-            return Some(m.clone());
-        }
-        // Then the receiver's head, which an impl written on the bare head keys on.
-        if let Some(m) = self.trait_env.concrete_impl_module_for(
-            ImplReceiver::Of(info.receiver()),
-            trait_,
-            type_module,
-        ) {
-            return Some(m.clone());
-        }
-        None
+        self.trait_env
+            .concrete_impl_module_of(info, type_module)
+            .cloned()
     }
 
     /// `true` when `info` denotes a trait method whose impl is already
@@ -120,21 +106,9 @@ impl FuncInstState {
         info: &LocalMethodName,
         type_module: Option<&ModuleSource>,
     ) -> Option<ModuleSource> {
-        let trait_ = info.trait_decl()?;
-        if let Some(m) = self.trait_env.impl_module_for(
-            ImplReceiver::Instantiated(&info.mangled_struct_name()),
-            trait_,
-            type_module,
-        ) {
-            return Some(m.clone());
-        }
-        if let Some(m) =
-            self.trait_env
-                .impl_module_for(ImplReceiver::Of(info.receiver()), trait_, type_module)
-        {
-            return Some(m.clone());
-        }
-        None
+        self.trait_env
+            .any_impl_module_of(info, type_module)
+            .cloned()
     }
 }
 

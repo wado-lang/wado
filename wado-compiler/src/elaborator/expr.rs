@@ -5232,12 +5232,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_name: &str,
         from_name: &FqTypeName,
     ) -> (Option<DefId>, ModuleSource) {
-        let from_trait_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_trait_name(CompilerItem::From)
-            .to_string();
+        let from_trait = self.tysys.compiler_trait_def(CompilerItem::From);
         // Read off the impl headers: a block's trait reference and its
         // argument are header facts, so the impls are reached by the target's
         // canonical key rather than by scanning every module for one whose
@@ -5248,7 +5243,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .impl_headers
                 .get(key)
                 .is_some_and(|header| {
-                    header.trait_head_name() == Some(from_trait_name.as_str())
+                    header.trait_def().is_some_and(|t| from_trait == Some(t))
                         && matches!(header.trait_ty(), Some(ast::Type::Generic(g))
                         if g.args.first().is_some_and(|arg| {
                             // The header's argument and the call's source type

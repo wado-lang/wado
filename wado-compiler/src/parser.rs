@@ -2113,11 +2113,15 @@ impl Parser {
         if name == EFFECT_HOLE {
             self.note_effect_hole(span)?;
         }
-        Ok(EffectName {
+        Ok(self.effect_name(name, span))
+    }
+
+    fn effect_name(&mut self, name: String, span: Span) -> EffectName {
+        EffectName {
             name,
             id: self.alloc_ast_id(),
             span,
-        })
+        }
     }
 
     /// The effect parameter a signature's `with _` minted, if it carries one.
@@ -6083,8 +6087,7 @@ impl Parser {
                     let inherited = head.inherited_effects(name_span);
                     method.effects_inherited = !inherited.is_empty();
                     for (name, span) in inherited {
-                        let id = self.alloc_ast_id();
-                        method.effects.push(EffectName { name, id, span });
+                        method.effects.push(self.effect_name(name, span));
                     }
                 }
                 methods.push(method);
@@ -6120,11 +6123,10 @@ impl Parser {
             return Ok(TraitHead::Pure { span });
         }
 
-        let mut effects: Vec<EffectName> = Vec::new();
+        let mut effects = Vec::new();
         loop {
             let (name, span) = self.consume_ident_with_span()?;
-            let id = self.alloc_ast_id();
-            effects.push(EffectName { name, id, span });
+            effects.push(self.effect_name(name, span));
             if !parenthesized || !self.check(&TokenKind::Comma) {
                 break;
             }

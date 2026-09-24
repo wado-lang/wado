@@ -79,7 +79,6 @@ use crate::name::{
     LocalMethodName, MethodName, deref_capture_name, display_function_name,
     effect_default_impl_name, mangle_local_item_name, test_function_name,
 };
-use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::tir::{
     EffectRef, StructDef, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
@@ -1524,9 +1523,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // The impl header names the trait at a site of its own, which the walk
         // answered for in the module that wrote the header.
-        let Some(trait_decl) =
-            head_site(trait_ast).and_then(|site| self.tysys.resolutions.declared(site))
-        else {
+        let Some(trait_decl) = self.tysys.resolutions.head_decl(trait_ast) else {
             return Vec::new();
         };
         let Some(trait_sig) =

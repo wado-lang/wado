@@ -1157,6 +1157,11 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A second `<effect E>` on one declaration, which takes at most one.
+    SecondEffectParam {
+        span: Span,
+    },
+
     /// `#[compiler_item("...")]` attribute that failed validation —
     /// unknown name, kind mismatch (e.g. `#[compiler_item("option")]`
     /// on a struct), or used outside a `core::*` module. The
@@ -1470,6 +1475,12 @@ impl TypeError {
             TypeError::InvalidLiteral { message, span } => {
                 (Code::InvalidSyntax, message.clone(), *span)
             }
+            TypeError::SecondEffectParam { span } => (
+                Code::InvalidSyntax,
+                "multiple effect parameters are not allowed; use a single effect parameter instead"
+                    .to_string(),
+                *span,
+            ),
             TypeError::CannotInferType { message, span } => {
                 (Code::NeedsTypeAnnotation, message.clone(), *span)
             }
@@ -3279,12 +3290,8 @@ pub(crate) struct TypeLookup<'a> {
     pub(crate) anon_struct_fields: &'a IndexMap<AnonStructId, StructFieldInfo>,
     /// The local items in scope at the walk's position, highest precedence.
     pub(crate) fn_local_items: &'a IndexMap<String, DefId>,
-    /// The declaration indexes — the frame derivation, for a caller holding a
-    /// rendered head rather than the site that wrote one. They hold what
-    /// modules *declare*, so no import alias can steer them, and they decline
-    /// when several modules declare the name. `None` for the collection passes
-    /// that run before the indexes exist; every name they resolve is written,
-    /// so its site answers.
+    /// The trait declarations, which answer which bound declares an associated
+    /// type. `None` for the collection passes that run before they exist.
     pub(crate) decls: Option<&'a TraitEnv>,
 }
 
@@ -3527,20 +3534,8 @@ impl<'a> TypeLookup<'a> {
         if let Some(def) = self.fn_local_items.get(name) {
             return Some(*def);
         }
-        // The frame derivation. A *written* reference reaches this view through
-        // `declaration_at`, which asks the site the walk answered for; what is
-        // left here arrived holding a rendered head, for which only the
-        // declaration index can answer. The three tiers are the module's own
-        // reach — what it imported, what it declares, what the prelude gives
-        // it — so a declaration this module cannot see stays unseen here.
         self.resolutions
-            .imported_as(self.current_module_source, name)
-            .or_else(|| {
-                self.decls?
-                    .decls_named(name)
-                    .find(|def| self.resolutions.defs().module(*def) == self.current_module_source)
-            })
-            .or_else(|| self.resolutions.prelude_decl(name))
+            .resolve_in(self.current_module_source, name)
     }
 }
 

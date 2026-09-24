@@ -977,26 +977,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         }
     }
 
-    /// Require that the name an `impl` implements is declared — as a trait, an
-    /// effect, or a resource, the latter two installing handlers through the same
-    /// syntax. Nothing else resolves it: every downstream index keys off the
-    /// written string, so an `impl` of an undeclared name registers happily,
-    /// matches no query, and reaches the back end unmentioned.
-    ///
-    /// The header's own reference site answers, and only it. A global by-name
-    /// scan would let `impl Deserialize for T;` compile in a module that never
-    /// named `Deserialize`, and the header would carry no identity — leaving
-    /// dispatch comparing spellings two modules can share.
+    /// Require that an `impl` header's trait position names a trait, an
+    /// `interface` or a resource, at the header's own reference site.
     fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
-        let implementable = head_site(trait_type)
-            .and_then(|site| self.tysys.resolutions.declared(site))
-            .is_some_and(|def| {
-                matches!(
-                    self.tysys.resolutions.defs().kind(def),
-                    DefKind::Trait | DefKind::Effect | DefKind::Resource
-                )
-            });
-        if implementable {
+        if self.impl_trait_decl(trait_type).is_some() {
             return;
         }
         let _ = self.emit(TypeError::UnknownTraitImpl {
@@ -1007,10 +991,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
     fn reject_second_effect_param(&mut self, type_params: &[ast::GenericParam]) {
         if let Some(second) = type_params.iter().filter(|p| p.is_effect).nth(1) {
-            let _ = self.emit(TypeError::InvalidLiteral {
-                message: "multiple effect parameters are not allowed; use a single effect parameter instead".to_string(),
-                span: second.span,
-            });
+            let _ = self.emit(TypeError::SecondEffectParam { span: second.span });
         }
     }
 
@@ -2649,18 +2630,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         );
 
         let mut ctx = FunctionContext::new(return_type, display_name);
-        // Mark this context as a handler method body when the surrounding
-        // impl block targets an effect or resource declaration. `resume`
-        // is only valid inside such bodies (see WEP 2026-04-11). Resources
-        // share the handler-method semantics with effects: an
-        // `impl Fields for CountingFields` method is a one-shot handler
-        // body just like `impl Counter for BaseCounter`.
+        // `resume` is valid only in a handler method body (WEP 2026-04-11).
         if let Some(handled) = trait_name.and_then(FqTraitName::canonical)
-            && scope.tysys.resolutions.defs().kind(handled).is_effect()
+            && let kind = scope.tysys.resolutions.defs().kind(handled)
+            && kind.is_effect()
         {
             ctx.in_handler_method = true;
-            let is_resource_effect =
-                scope.tysys.resolutions.defs().kind(handled) == DefKind::Resource;
+            let is_resource_effect = kind == DefKind::Resource;
             let async_op = scope
                 .tysys
                 .signatures

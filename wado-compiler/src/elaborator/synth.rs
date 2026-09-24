@@ -433,7 +433,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Index(idx) => self.synth_index(idx, scope),
             Expr::Range(range) => self.synth_range(range, scope),
             Expr::StructLiteral(sl) => match &sl.name {
-                Some(name) => self.synth_named_type(name),
+                Some(name) => self.synth_named_type(sl.name_id, name),
                 None => ArgClass::Opaque(OpaqueReason::CompoundLiteral),
             },
             Expr::Block(block) => self.synth_tail(&block.stmts, scope),
@@ -1083,11 +1083,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `Pair<i32, i64>`, and the declaration's own `TypeId` is not that type.
     /// A name that is not a known type resolves to nothing, so it claims no
     /// head either.
-    fn synth_named_type(&self, name: &str) -> ArgClass {
+    fn synth_named_type(&self, site: Option<ast::AstId>, name: &str) -> ArgClass {
         if let Some(primitive) = TypeTable::primitive_by_name(name) {
             return ArgClass::Exact(primitive);
         }
-        let Some(def) = self.decl_key_or_local(name) else {
+        let Some(def) = self.decl_key_at(site, name) else {
             return ArgClass::Opaque(OpaqueReason::Unresolved);
         };
         let generic = self

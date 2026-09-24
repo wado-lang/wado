@@ -4436,9 +4436,7 @@ fn resolve_impl_module_via_env(
     trait_env: &TraitEnv,
     fallback: &ModuleSource,
 ) -> ModuleSource {
-    let resolved = tt.get(type_id).clone();
-
-    let type_module: Option<ModuleSource> = match &resolved {
+    let type_module: Option<ModuleSource> = match tt.get(type_id) {
         ResolvedType::Struct { .. }
         | ResolvedType::Enum { .. }
         | ResolvedType::Variant { .. }

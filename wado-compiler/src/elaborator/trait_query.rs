@@ -1394,11 +1394,7 @@ impl TypeSystem {
                 .trait_ctx
                 .type_param_bounds
                 .get(name)
-                .is_some_and(|bounds| {
-                    bounds
-                        .iter()
-                        .any(|b| self.bound_supplies(b, decl, wanted))
-                });
+                .is_some_and(|bounds| bounds.iter().any(|b| self.bound_supplies(b, decl, wanted)));
         }
 
         if on_bound == Some(OnBoundTrait::Ref) {
@@ -2036,8 +2032,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether `def` is what a bound can name: a trait, interface or resource.
     pub(super) fn is_trait_like(&self, def: DefId) -> bool {
-        self.tysys.trait_env.declares_trait(&def)
-            || self.tysys.resolutions.defs().kind(def).is_effect()
+        self.tysys.resolutions.defs().kind(def).is_trait_like()
     }
 
     /// The header of `method_name` on the trait `key` names. The cheap form of
@@ -2309,20 +2304,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: ArgSource<'_, '_>,
     ) -> Option<(FqTraitName, MethodInfo)> {
         let elaborated = self.elaborate_bounds(bounds);
-        // Which trait each bound means is settled once, here: a bound reached
-        // through a supertrait was written in the *declaring* module, so
-        // resolving its spelling in this frame would miss an aliased one.
         let keyed: Vec<(ElaboratedBound, DefId)> = elaborated
             .iter()
             .filter_map(|b| self.trait_decl_of(&b.bound).map(|key| (b.clone(), key)))
             .collect();
-        // Stopping at the first hit would hide the ambiguity, so every bound is
-        // scanned — by predicate, leaving only the winner to clone.
-        // A qualified call names one bound, so the others are not competitors.
-        // The filter runs *after* elaboration: `T: Derived` carries `Base`, so
-        // `Base::tag(x)` names a supertrait the frame never wrote. Comparing
-        // declarations, not spellings, keeps another module's same-named trait
-        // from answering for the one the call named.
+        // Every bound is scanned so an ambiguity is reported. A qualified call
+        // filters after elaboration, so `Base::tag(x)` reaches `T: Derived`'s `Base`.
         let kept: Vec<(ElaboratedBound, DefId)> = keyed
             .into_iter()
             .filter(|(_, key)| {
@@ -2400,9 +2387,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             decl,
             written_self,
         } = candidate;
-        // The bound answers with the trait its own reference site resolves to,
-        // not the spelling it wrote: an aliased bound (`T: G` for
-        // `use { Greet as G }`) must reach the impl that defines the method.
         let fq_trait_name = FqTraitName::declared(self.tysys.resolutions.defs(), decl);
         // The arguments the bound writes name the trait the way the impl that
         // answers it is named, so `T: Eq<String>` reaches `impl Eq<String>`.
@@ -2651,16 +2635,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A supertrait failure has the same one cause as the bound that
             // implied it, so it is asked but not reported — asking is what
             // drives the derivation that makes `T: Ord` alone satisfy `Eq`.
-            for (bound, root, via) in self.inherited_bounds_of(&param.bounds) {
-                // Which trait a direct bound names, not how it spells it: two
-                // modules may call one name two traits. One that names no
-                // declaration falls back to its spelling, as `merge_bound` does.
-                let declared = self.trait_decl_of(&bound);
-                let already_direct = |b: &ast::TraitBound| match declared {
-                    Some(decl) => self.trait_decl_of(b) == Some(decl),
-                    None => b.name == bound.name,
-                };
-                if param.bounds.iter().any(already_direct) {
+            for (InheritedBound { bound, decl, via }, root) in
+                self.inherited_bounds_of(&param.bounds)
+            {
+                if param
+                    .bounds
+                    .iter()
+                    .any(|b| self.trait_decl_of(b) == Some(decl))
+                {
                     continue;
                 }
                 // The clause is written in the trait that declared it, which the

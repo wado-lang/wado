@@ -479,7 +479,6 @@ Data mapping (TIR read → `Semantics` source):
 | TIR read (today)                         | `Semantics` source                                          |
 | ---------------------------------------- | ----------------------------------------------------------- |
 | `func.effects`                           | `TypeAnnotations.function_effects[fn_key]`                  |
-| `func.benign_effects`                    | `#[benign(E)]` on the AST `Function.attrs`                  |
 | `func.is_ambient`                        | `#[ambient]` on the AST `Function.attrs`                    |
 | `func.task_return_type`                  | `function_task_returns[fn_key]`                             |
 | `param.type_id`                          | `fn_param_types[fn_key]`                                    |

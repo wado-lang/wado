@@ -4,6 +4,7 @@
 use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
+use crate::defs::DefId;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
 
@@ -1572,7 +1573,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn concrete_reflect_assoc_type(
         &mut self,
         subject: TypeId,
-        trait_name: &str,
+        trait_: DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
         use crate::synthesis::traits::{
@@ -1585,72 +1586,69 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) {
             return None;
         }
-        let (struct_trait, variant_trait, enum_trait, flags_trait, template_trait) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            (
-                items.trait_name(CompilerItem::ReflectStruct).to_string(),
-                items.trait_name(CompilerItem::ReflectVariant).to_string(),
-                items.trait_name(CompilerItem::ReflectEnum).to_string(),
-                items.trait_name(CompilerItem::ReflectFlags).to_string(),
-                items.trait_name(CompilerItem::ReflectTemplate).to_string(),
-            )
+        let decl = self.tysys.resolutions.defs().ast_id(trait_);
+        let item = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_item_of_decl(decl)?;
+        let spec = match item {
+            CompilerItem::ReflectTemplate => {
+                let holes = self.reflect_template_holes(subject)?;
+                return match assoc_name {
+                    REFLECT_HOLES_ASSOC => {
+                        Some(self.tysys.type_table.borrow_mut().make_tuple(holes))
+                    }
+                    REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                        CompilerItem::ReflectTemplateHole,
+                        subject,
+                        &holes,
+                    )),
+                    _ => None,
+                };
+            }
+            CompilerItem::ReflectStruct => {
+                let members = self.reflect_struct_subject(subject)?.member_types;
+                return match assoc_name {
+                    REFLECT_FIELD_TYPES_ASSOC => {
+                        Some(self.tysys.type_table.borrow_mut().make_tuple(members))
+                    }
+                    REFLECT_FIELD_SLOTS_ASSOC => {
+                        let mut tt = self.tysys.type_table.borrow_mut();
+                        let slots: Vec<TypeId> =
+                            members.iter().map(|&m| tt.make_option(m)).collect();
+                        Some(tt.make_tuple(slots))
+                    }
+                    REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                        CompilerItem::ReflectStructField,
+                        subject,
+                        &members,
+                    )),
+                    _ => None,
+                };
+            }
+            CompilerItem::ReflectVariant => {
+                let members = self.reflect_variant_subject(subject)?.member_types;
+                return match assoc_name {
+                    REFLECT_CASE_PAYLOADS_ASSOC => {
+                        Some(self.tysys.type_table.borrow_mut().make_tuple(members))
+                    }
+                    REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                        CompilerItem::ReflectVariantCase,
+                        subject,
+                        &members,
+                    )),
+                    _ => None,
+                };
+            }
+            CompilerItem::ReflectEnum => ScalarReflectSpec::ENUM,
+            CompilerItem::ReflectFlags => ScalarReflectSpec::FLAGS,
+            _ => return None,
         };
-        if trait_name == template_trait {
-            let holes = self.reflect_template_holes(subject)?;
-            return match assoc_name {
-                REFLECT_HOLES_ASSOC => Some(self.tysys.type_table.borrow_mut().make_tuple(holes)),
-                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
-                    CompilerItem::ReflectTemplateHole,
-                    subject,
-                    &holes,
-                )),
-                _ => None,
-            };
-        }
-        if trait_name == struct_trait {
-            let members = self.reflect_struct_subject(subject)?.member_types;
-            return match assoc_name {
-                REFLECT_FIELD_TYPES_ASSOC => {
-                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
-                }
-                REFLECT_FIELD_SLOTS_ASSOC => {
-                    let mut tt = self.tysys.type_table.borrow_mut();
-                    let slots: Vec<TypeId> = members.iter().map(|&m| tt.make_option(m)).collect();
-                    Some(tt.make_tuple(slots))
-                }
-                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
-                    CompilerItem::ReflectStructField,
-                    subject,
-                    &members,
-                )),
-                _ => None,
-            };
-        }
-        if trait_name == variant_trait {
-            let members = self.reflect_variant_subject(subject)?.member_types;
-            return match assoc_name {
-                REFLECT_CASE_PAYLOADS_ASSOC => {
-                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
-                }
-                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
-                    CompilerItem::ReflectVariantCase,
-                    subject,
-                    &members,
-                )),
-                _ => None,
-            };
-        }
         if assoc_name != REFLECT_MEMBERS_ASSOC {
             return None;
         }
-        let spec = if trait_name == enum_trait {
-            ScalarReflectSpec::ENUM
-        } else if trait_name == flags_trait {
-            ScalarReflectSpec::FLAGS
-        } else {
-            return None;
-        };
         let subject_ty = self.tysys.type_table.borrow().get(subject).clone();
         if !spec.subject_matches(&subject_ty) {
             return None;

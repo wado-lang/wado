@@ -277,24 +277,6 @@ impl ImplHeader {
         self.type_params.is_empty()
     }
 
-    /// The implemented trait as a mangled method name embeds it: named by the
-    /// module that declares it, carrying the header's written type arguments.
-    /// `None` for an inherent impl, and for a trait position filled by a
-    /// binder or a name that reaches no declaration.
-    pub(super) fn fq_trait(&self, resolutions: &Resolutions) -> Option<name::FqTraitName> {
-        let trait_ = self.trait_.as_ref()?;
-        match &trait_.key {
-            ImplTargetKey::Decl(def) => Some(
-                name::FqTraitName::declared(resolutions.defs(), *def)
-                    .with_args(trait_.arg_ids.clone()),
-            ),
-            ImplTargetKey::TypeParam(..)
-            | ImplTargetKey::Ref(_)
-            | ImplTargetKey::Builtin(_)
-            | ImplTargetKey::Undeclared(..) => None,
-        }
-    }
-
     /// Whether the block writes a trait at all, whatever it resolves to.
     pub(super) fn is_trait_impl(&self) -> bool {
         self.trait_.is_some()
@@ -806,12 +788,6 @@ pub struct TraitEnv {
     /// name)`. Lets `lookup_function_type_params` read a callee's type params
     /// without scanning the module AST.
     pub(super) function_type_params: IndexMap<(ModuleSource, String), Vec<ast::GenericParam>>,
-    /// Declared name → every declaration written under it, in build order.
-    /// The frame derivation's second tier reads this on every name that is not
-    /// an import, so it is keyed by name rather than scanned: the sets it
-    /// unions are whole-program, and every prelude spelling — `i32`, `String`,
-    /// `List` — would otherwise walk all of them before the prelude answered.
-    decls_by_name: IndexMap<String, Vec<DefId>>,
     /// Per-module namespace-import aliases, pre-computed once, so a query
     /// standing in a foreign module's perspective reads them instead of
     /// re-walking its `use` declarations. See [`namespace_imports_of`].
@@ -979,7 +955,9 @@ impl TraitEnv {
                         };
                         for (method_idx, method) in resource.methods.iter().enumerate() {
                             let has_self = method.params.iter().any(|p| match &p.ty {
-                                ast::Type::Reference(r) | ast::Type::MutReference(r) => is_resource(r),
+                                ast::Type::Reference(r) | ast::Type::MutReference(r) => {
+                                    is_resource(r)
+                                }
                                 ty => is_resource(ty),
                             });
                             if !has_self {
@@ -1040,10 +1018,8 @@ impl TraitEnv {
         // every PascalCase reference to its declaring module.
         for (module_source, module) in modules {
             for item in &module.items {
-                // Digest the per-item facts `lookup_function_type_params` and
-                // `decls_by_name` are built from, so neither needs to re-scan
-                // `loaded_modules`. (Non-impl items fall through to the
-                // `Item::Impl` guard below and `continue`.)
+                // Digest the per-item facts `lookup_function_type_params` reads,
+                // so it need not re-scan `loaded_modules`.
                 match item {
                     Item::Function(f) => {
                         function_type_params.insert(
@@ -1128,14 +1104,10 @@ impl TraitEnv {
                 };
                 let impl_def = defs.def_at(impl_block.id);
                 let type_key = impl_target_key_at(&impl_block.ty, module_source, resolutions);
-                let trait_ref: Option<DefId> = impl_block
+                let trait_ref = impl_block
                     .trait_type
                     .as_ref()
-                    .and_then(head_site)
-                    .and_then(|site| resolutions.declared(site));
-                // Implementing a trait is naming it, so the header's own
-                // site answers and a position reaching nothing is an error —
-                // never another module's same-named trait.
+                    .and_then(|t| resolutions.head_decl(t));
                 let trait_ = impl_block
                     .trait_type
                     .as_ref()
@@ -1283,11 +1255,6 @@ impl TraitEnv {
         };
         let trait_impl_modules = index_impl_modules(&impl_headers, defs, false);
         let concrete_trait_impl_modules = index_impl_modules(&impl_headers, defs, true);
-        let decls_by_name = index_decls_by_name(
-            defs,
-            [&type_decl_index, &decl_index, &effect_decl_index],
-            [&struct_like_decl_modules, &newtype_decl_modules],
-        );
 
         violations.extend(check_impl_coherence(&impl_headers, resolutions));
         violations.extend(check_variadic_impl_overlap(defs, &impl_headers));
@@ -1318,7 +1285,6 @@ impl TraitEnv {
                 trait_decl_headers,
                 supertrait_closures,
                 function_type_params,
-                decls_by_name,
                 module_namespace_imports,
                 space_modules,
                 blanket_impls,
@@ -1396,15 +1362,6 @@ impl TraitEnv {
         self.trait_decl_headers.contains_key(key)
     }
 
-    /// Every declaration written under `name`, whichever module declares it.
-    ///
-    /// The frame derivation's raw material, and not a scope: it holds what
-    /// modules *declare*, never what they import, so no alias can steer it, and
-    /// it takes no vantage — the caller filters for the module it means.
-    pub(crate) fn decls_named<'n>(&'n self, name: &str) -> impl Iterator<Item = DefId> + 'n {
-        self.decls_by_name.get(name).into_iter().flatten().copied()
-    }
-
     /// The trait `header` implements, named as a bound can reach it. See
     /// [`args_without_declared_defaults`] for why an argument may drop out.
     pub(super) fn fq_trait_of_impl(
@@ -1412,7 +1369,8 @@ impl TraitEnv {
         header: &ImplHeader,
         resolutions: &Resolutions,
     ) -> Option<name::FqTraitName> {
-        let fq = header.fq_trait(resolutions)?;
+        let fq = name::FqTraitName::declared(resolutions.defs(), header.trait_def()?)
+            .with_args(header.trait_arg_ids().to_vec());
         Some(self.fq_trait_named_by_impl(fq, &header.ty, resolutions))
     }
 
@@ -1716,6 +1674,46 @@ impl TraitEnv {
             .as_ref()
             .and_then(|s| s.concrete_trait_impl_modules.get(receiver, trait_));
         pick_module_union(ast, syn, type_module)
+    }
+
+    /// The module of the concrete impl behind `info`: keyed by its
+    /// instantiation, then by the bare head an impl may be written on.
+    pub(crate) fn concrete_impl_module_of(
+        &self,
+        info: &name::LocalMethodName,
+        type_module: Option<&ModuleSource>,
+    ) -> Option<&ModuleSource> {
+        self.impl_module_of(info, type_module, Self::concrete_impl_module_for)
+    }
+
+    /// [`Self::concrete_impl_module_of`], generic impls included.
+    pub(crate) fn any_impl_module_of(
+        &self,
+        info: &name::LocalMethodName,
+        type_module: Option<&ModuleSource>,
+    ) -> Option<&ModuleSource> {
+        self.impl_module_of(info, type_module, Self::impl_module_for)
+    }
+
+    fn impl_module_of<'a>(
+        &'a self,
+        info: &name::LocalMethodName,
+        type_module: Option<&ModuleSource>,
+        lookup: impl Fn(
+            &'a Self,
+            ImplReceiver<'_>,
+            DefId,
+            Option<&ModuleSource>,
+        ) -> Option<&'a ModuleSource>,
+    ) -> Option<&'a ModuleSource> {
+        let trait_ = info.trait_decl()?;
+        lookup(
+            self,
+            ImplReceiver::Instantiated(&info.mangled_struct_name()),
+            trait_,
+            type_module,
+        )
+        .or_else(|| lookup(self, ImplReceiver::Of(info.receiver()), trait_, type_module))
     }
 
     /// The digested declaration `key` identifies, or `None` when it names no
@@ -2690,34 +2688,6 @@ fn check_all_orphan_rules(
     }
 
     violations
-}
-
-/// Invert the declaration indexes into declared name → declarations, name-keyed
-/// maps first so source order is kept, and each declaration landing once — a
-/// duplicate would make a caller taking the unique answer see two.
-fn index_decls_by_name(
-    defs: &DefTable,
-    sets: [&IndexSet<DefId>; 3],
-    maps: [&IndexMap<String, Vec<DefId>>; 2],
-) -> IndexMap<String, Vec<DefId>> {
-    let mut out: IndexMap<String, Vec<DefId>> = IndexMap::default();
-    let mut push = |def: DefId| {
-        let entry = out.entry(defs.name(def).to_string()).or_default();
-        if !entry.contains(&def) {
-            entry.push(def);
-        }
-    };
-    for map in maps {
-        for def in map.values().flatten() {
-            push(*def);
-        }
-    }
-    for set in sets {
-        for def in set {
-            push(*def);
-        }
-    }
-    out
 }
 
 /// The argument nodes a written trait reference carries, empty for a bare

@@ -1217,12 +1217,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // Every module's type names are known here, so an unrecognized one is
         // undefined rather than left to become UNKNOWN in pre-resolution.
-        Self::validate_type_definitions(
-            modules,
-            &known_type_names,
-            logger,
-            &stdlib_set,
-        )?;
+        Self::validate_type_definitions(modules, &known_type_names, logger, &stdlib_set)?;
 
         // Pre-build function name → index maps for all loaded modules (O(1) lookup)
         let loaded_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>> = {
@@ -1556,7 +1551,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         // Every declaration is resolved, so the solver reads them all at once.
         // Selection asks it, so it is built in every profile.
-        state.tysys.solver = Some(Rc::new(SolverBridge::build(&state.tysys, &state.sorted_sources)));
+        state.tysys.solver = Some(Rc::new(SolverBridge::build(
+            &state.tysys,
+            &state.sorted_sources,
+        )));
 
         // Imported globals: a `use`-brought global's type is the declaring
         // module's declaration fact, so it is filled here — once every decl
@@ -2180,12 +2178,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             &widened
         };
         for stmt in &block.stmts {
-            Self::validate_stmt_type_names(
-                stmt,
-                known_type_names,
-                type_params,
-                logger,
-            )?;
+            Self::validate_stmt_type_names(stmt, known_type_names, type_params, logger)?;
         }
         Ok(())
     }
@@ -2263,21 +2256,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         )?;
                         logger.error(TypeError::InferInLetAnnotation { span })?;
                     } else {
-                        Self::validate_ast_type_names(
-                            ty,
-                            known_type_names,
-                            type_params,
-                            logger,
-                        )?;
+                        Self::validate_ast_type_names(ty, known_type_names, type_params, logger)?;
                     }
                 }
                 if let Some(value) = &let_stmt.value {
-                    Self::validate_expr_type_names(
-                        value,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_expr_type_names(value, known_type_names, type_params, logger)?;
                 }
                 if let Some(else_block) = &let_stmt.else_block {
                     Self::validate_block_type_names(
@@ -2298,12 +2281,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             ast::Stmt::Return(ret) => {
                 if let Some(value) = &ret.value {
-                    Self::validate_expr_type_names(
-                        value,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_expr_type_names(value, known_type_names, type_params, logger)?;
                 }
             }
             ast::Stmt::TaskReturn(task_ret) => {
@@ -2352,12 +2330,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             ast::Stmt::For(for_stmt) => {
                 if let Some(init) = &for_stmt.init {
-                    Self::validate_stmt_type_names(
-                        init,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_stmt_type_names(init, known_type_names, type_params, logger)?;
                 }
                 if let Some(condition) = &for_stmt.condition {
                     Self::validate_condition_type_names(
@@ -2368,12 +2341,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     )?;
                 }
                 if let Some(update) = &for_stmt.update {
-                    Self::validate_expr_type_names(
-                        update,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_expr_type_names(update, known_type_names, type_params, logger)?;
                 }
                 Self::validate_block_type_names(
                     &for_stmt.body,
@@ -2421,12 +2389,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 )?;
             }
             ast::Stmt::LabeledBlock(lb) => {
-                Self::validate_block_type_names(
-                    &lb.block,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
+                Self::validate_block_type_names(&lb.block, known_type_names, type_params, logger)?;
             }
             // A local item's own type references (struct fields, impl/trait
             // method signatures) are validated by the regular elaboration
@@ -2448,12 +2411,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> Result<(), Bail> {
         match condition {
             ast::Condition::Expr(expr) => {
-                Self::validate_expr_type_names(
-                    expr,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
+                Self::validate_expr_type_names(expr, known_type_names, type_params, logger)?;
             }
             ast::Condition::LetChain { elements, .. } => {
                 for elem in elements {
@@ -2496,22 +2454,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     type_params,
                     logger,
                 )?;
-                Self::validate_expr_type_names(
-                    &cast.expr,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
+                Self::validate_expr_type_names(&cast.expr, known_type_names, type_params, logger)?;
             }
             ast::Expr::Closure(closure) => {
                 for param in &closure.params {
                     if let Some(ty) = &param.ty {
-                        Self::validate_ast_type_names(
-                            ty,
-                            known_type_names,
-                            type_params,
-                            logger,
-                        )?;
+                        Self::validate_ast_type_names(ty, known_type_names, type_params, logger)?;
                     }
                 }
                 Self::validate_expr_type_names(
@@ -2523,12 +2471,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             ast::Expr::Call(call) => {
                 for ty in &call.type_args {
-                    Self::validate_turbofish_type_arg(
-                        ty,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_turbofish_type_arg(ty, known_type_names, type_params, logger)?;
                 }
                 Self::validate_expr_type_names(
                     &call.callee,
@@ -2537,22 +2480,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     logger,
                 )?;
                 for arg in &call.args {
-                    Self::validate_expr_type_names(
-                        arg,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_expr_type_names(arg, known_type_names, type_params, logger)?;
                 }
             }
             ast::Expr::MethodCall(mc) => {
                 for ty in &mc.type_args {
-                    Self::validate_turbofish_type_arg(
-                        ty,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_turbofish_type_arg(ty, known_type_names, type_params, logger)?;
                 }
                 Self::validate_expr_type_names(
                     &mc.receiver,
@@ -2561,12 +2494,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     logger,
                 )?;
                 for arg in &mc.args {
-                    Self::validate_expr_type_names(
-                        arg,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_expr_type_names(arg, known_type_names, type_params, logger)?;
                 }
             }
             ast::Expr::StaticMethodCall(smc) => {
@@ -2583,51 +2511,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             )?;
                         }
                     }
-                    other => Self::validate_ast_type_names(
-                        other,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?,
+                    other => {
+                        Self::validate_ast_type_names(other, known_type_names, type_params, logger)?
+                    }
                 }
                 for ty in &smc.type_args {
-                    Self::validate_turbofish_type_arg(
-                        ty,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_turbofish_type_arg(ty, known_type_names, type_params, logger)?;
                 }
                 for arg in &smc.args {
-                    Self::validate_expr_type_names(
-                        arg,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_expr_type_names(arg, known_type_names, type_params, logger)?;
                 }
             }
             ast::Expr::Binary(bin) => {
-                Self::validate_expr_type_names(
-                    &bin.left,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
-                Self::validate_expr_type_names(
-                    &bin.right,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
+                Self::validate_expr_type_names(&bin.left, known_type_names, type_params, logger)?;
+                Self::validate_expr_type_names(&bin.right, known_type_names, type_params, logger)?;
             }
             ast::Expr::Unary(un) => {
-                Self::validate_expr_type_names(
-                    &un.expr,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
+                Self::validate_expr_type_names(&un.expr, known_type_names, type_params, logger)?;
             }
             ast::Expr::Assign(assign) => {
                 Self::validate_expr_type_names(
@@ -2644,26 +2544,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 )?;
             }
             ast::Expr::CompoundAssign(ca) => {
-                Self::validate_expr_type_names(
-                    &ca.target,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
-                Self::validate_expr_type_names(
-                    &ca.value,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
+                Self::validate_expr_type_names(&ca.target, known_type_names, type_params, logger)?;
+                Self::validate_expr_type_names(&ca.value, known_type_names, type_params, logger)?;
             }
             ast::Expr::ComparisonChain(cc) => {
-                Self::validate_expr_type_names(
-                    &cc.first,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
+                Self::validate_expr_type_names(&cc.first, known_type_names, type_params, logger)?;
                 for cmp in &cc.comparisons {
                     Self::validate_expr_type_names(
                         &cmp.right,
@@ -2674,34 +2559,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
             ast::Expr::Index(idx) => {
-                Self::validate_expr_type_names(
-                    &idx.expr,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
-                Self::validate_expr_type_names(
-                    &idx.index,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
+                Self::validate_expr_type_names(&idx.expr, known_type_names, type_params, logger)?;
+                Self::validate_expr_type_names(&idx.index, known_type_names, type_params, logger)?;
             }
             ast::Expr::FieldAccess(fa) => {
-                Self::validate_expr_type_names(
-                    &fa.expr,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
+                Self::validate_expr_type_names(&fa.expr, known_type_names, type_params, logger)?;
             }
             ast::Expr::Block(block) => {
-                Self::validate_block_type_names(
-                    block,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
+                Self::validate_block_type_names(block, known_type_names, type_params, logger)?;
             }
             ast::Expr::If(if_expr) => {
                 Self::validate_condition_type_names(
@@ -2757,22 +2622,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     logger,
                 )?;
                 if let Some(guard) = &matches_expr.guard {
-                    Self::validate_expr_type_names(
-                        guard,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_expr_type_names(guard, known_type_names, type_params, logger)?;
                 }
             }
             ast::Expr::StructLiteral(sl) => {
                 for ty in &sl.type_args {
-                    Self::validate_turbofish_type_arg(
-                        ty,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_turbofish_type_arg(ty, known_type_names, type_params, logger)?;
                 }
                 for field in &sl.fields {
                     Self::validate_expr_type_names(
@@ -2785,51 +2640,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             ast::Expr::TupleLiteral(tl) => {
                 for elem in &tl.elements {
-                    Self::validate_expr_type_names(
-                        elem,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_expr_type_names(elem, known_type_names, type_params, logger)?;
                 }
             }
             ast::Expr::TupleComprehension(c) => {
                 for elem in [&c.iterable, &c.body] {
-                    Self::validate_expr_type_names(
-                        elem,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_expr_type_names(elem, known_type_names, type_params, logger)?;
                 }
             }
             ast::Expr::TaggedTemplate(t) => {
                 for expr in std::iter::once(&t.tag).chain(t.template.interpolations()) {
-                    Self::validate_expr_type_names(
-                        expr,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_expr_type_names(expr, known_type_names, type_params, logger)?;
                 }
             }
             ast::Expr::TemplateString(ts) => {
                 for expr in ts.interpolations() {
-                    Self::validate_expr_type_names(
-                        expr,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_expr_type_names(expr, known_type_names, type_params, logger)?;
                 }
             }
             ast::Expr::LabeledBlock(lb) => {
-                Self::validate_block_type_names(
-                    &lb.block,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
+                Self::validate_block_type_names(&lb.block, known_type_names, type_params, logger)?;
             }
             ast::Expr::TryOp(try_op) => {
                 Self::validate_expr_type_names(
@@ -2840,12 +2670,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 )?;
             }
             ast::Expr::Spread(inner, _) => {
-                Self::validate_expr_type_names(
-                    inner,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
+                Self::validate_expr_type_names(inner, known_type_names, type_params, logger)?;
             }
             ast::Expr::Range(range) => {
                 Self::validate_expr_type_names(
@@ -2854,12 +2679,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     type_params,
                     logger,
                 )?;
-                Self::validate_expr_type_names(
-                    &range.end,
-                    known_type_names,
-                    type_params,
-                    logger,
-                )?;
+                Self::validate_expr_type_names(&range.end, known_type_names, type_params, logger)?;
             }
             ast::Expr::WithHandler(with_handler) => {
                 // The LHS of `E = h` in a `with` clause is an effect
@@ -2876,12 +2696,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     )?;
                 }
                 for stmt in &with_handler.body.stmts {
-                    Self::validate_stmt_type_names(
-                        stmt,
-                        known_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    Self::validate_stmt_type_names(stmt, known_type_names, type_params, logger)?;
                 }
             }
             ast::Expr::Resume(resume) => {
@@ -2907,12 +2722,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             logger,
                         )?;
                     } else {
-                        Self::validate_ast_type_names(
-                            ty,
-                            known_type_names,
-                            type_params,
-                            logger,
-                        )?;
+                        Self::validate_ast_type_names(ty, known_type_names, type_params, logger)?;
                     }
                 }
             }
@@ -2947,13 +2757,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_params: &[&str],
         logger: &ModuleDiag<'_, '_, H>,
     ) -> Result<(), Bail> {
-        Self::validate_ast_type_names_inner(
-            ty,
-            known_type_names,
-            type_params,
-            logger,
-            false,
-        )
+        Self::validate_ast_type_names_inner(ty, known_type_names, type_params, logger, false)
     }
 
     fn validate_ast_type_names_inner(
@@ -3064,12 +2868,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> Result<(), Bail> {
         match ty {
             Type::Infer(_) => Ok(()),
-            _ => Self::validate_ast_type_names(
-                ty,
-                known_type_names,
-                type_params,
-                logger,
-            ),
+            _ => Self::validate_ast_type_names(ty, known_type_names, type_params, logger),
         }
     }
 
@@ -3487,8 +3286,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // because the key stays `AstId`-shaped: its readers arrive
                     // through `decl_of_type`, which also answers for
                     // monomorphized instances and `BuiltinArray`.
-                    let base_decl = head_site(&impl_block.ty)
-                        .and_then(|site| resolutions.declared(site))
+                    let base_decl = resolutions
+                        .head_decl(&impl_block.ty)
                         .map(|def| resolutions.defs().ast_id(def));
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(

@@ -776,12 +776,9 @@ fn collect_inspectable_signatures_from_reachable(
 ) -> InspectableSignatures {
     let mut sigs = InspectableSignatures::default();
     let type_table = &*project.type_table.borrow();
-    // The registry, not a literal, so a stdlib rename flows through.
-    // `base_trait_name` drops the declaring module, so this matches on the
-    // simple name alone — as `dae` does for the same impls.
-    let inspect_name = type_table
-        .compiler_items()
-        .trait_name(CompilerItem::Inspect);
+    let Some(inspect) = type_table.compiler_items().trait_def(CompilerItem::Inspect) else {
+        return sigs;
+    };
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let func_id = function_id_for(&func);
@@ -789,7 +786,7 @@ fn collect_inspectable_signatures_from_reachable(
             continue;
         }
         if let Some(body) = func.body.as_ref() {
-            scan_inspect_signatures_block(body, type_table, descriptors, inspect_name, &mut sigs);
+            scan_inspect_signatures_block(body, type_table, descriptors, inspect, &mut sigs);
         }
     }
     sigs
@@ -829,7 +826,7 @@ fn scan_inspect_signatures_block(
     body: &Body,
     type_table: &TypeTable,
     descriptors: &[FunctionRef],
-    inspect_name: &str,
+    inspect: DefId,
     sigs: &mut InspectableSignatures,
 ) {
     body.for_each_reachable_node(|node| {
@@ -837,7 +834,7 @@ fn scan_inspect_signatures_block(
             && let Some((receiver, func_id, _)) = body.exprs[e].kind.as_method_call()
             && let Some(info) = &callee_descriptor(descriptors, func_id).method_info
             && is_fn_type_name(&info.base_struct_name())
-            && let Some(trait_name) = info.base_trait_name()
+            && info.trait_decl() == Some(inspect)
         {
             // Receiver is `&Fn(...)` (possibly wrapped in `Box<fn(...)>` by the
             // boxing pass); peel both to read the function's arity + return type.
@@ -847,7 +844,6 @@ fn scan_inspect_signatures_block(
                 return_type,
                 ..
             } = type_table.get(recv_type)
-                && trait_name == inspect_name
             {
                 sigs.insert((params.len(), *return_type));
             }

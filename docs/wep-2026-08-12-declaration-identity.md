@@ -198,9 +198,9 @@ module-scoped name.
 `get` is total. A site the walk missed is a bug in the walk, not an absent answer a
 consumer improvises around, so it panics rather than returning `None`. The cases
 stay distinct on purpose: reading `Unresolved` as `Binder` loses the diagnostic a
-name that reaches nothing deserves. `walked` keeps one more case apart from all
-of them — a node no walk saw, which synthesis mints — because that is the only
-one for which some other source of truth is honest.
+name that reaches nothing deserves. `walked` keeps one more case apart: a node
+no walk saw, which synthesis minted. Only for that node is some other source of
+truth honest.
 
 Type resolution carries the site with it: the head's `AstId` reaches
 `resolve_named_type` / `resolve_generic_type`, which read the declaration off
@@ -219,8 +219,8 @@ clause gets sites of its own, resolved in the trait's module, so the impl's
 module cannot capture the name. Fixture:
 `trait_head_effect_reaches_impl_module.wado`.
 
-A binder declared `effect` answers as the parameter. Any other binder, a type
-parameter among them, names no effect. A name reaching no `interface` or
+An effect parameter (`<effect E>`) names that parameter. A type parameter names
+no effect. A name reaching no `interface` or
 resource is rejected where it is written, even when another module declares an
 effect of that name. So `with Stdout` needs `Stdout` in scope like any other
 name.
@@ -359,7 +359,7 @@ none.
 
 ### 7. Synthesis records referents, it does not spell names
 
-A pass that synthesises a reference knows what it refers to, so it records that
+A pass that synthesizes a reference knows what it refers to, so it records that
 rather than spelling a name for someone else to resolve.
 
 Where the referent is a declaration the walk already visited, the cheapest form
@@ -515,15 +515,13 @@ The one scope, which every other entry exists by not being:
 - `Resolutions::resolve_in` — the same scope, for a spelling no walk visits,
   such as the attribute argument in `#[benign(E)]`
 
-The three recorded facts the frame derivation is built from. Each is one tier,
-none is a scope, and none takes a vantage a caller could get wrong:
+Two single tiers of that scope, each for a caller asking about that tier alone:
 
-- `imported_as` — the import tier alone, for a caller asking about the aliasing
+- `imported_as` — the import tier, for a caller asking about the aliasing
 - `prelude_decl` — the prelude tier, which has no vantage to be given
-- `decls_named` — every declaration under the name and no choice between them
 
-The derivation itself: those tiers in order, over the walk's own frame. Each has
-a sited entry point a caller with a reference site reaches instead.
+The frame derivation: the scope over the walk's own frame. Each entry has a
+sited counterpart a caller with a reference site reaches instead.
 
 - `decl_key_or_local`, `TypeLookup::declaration` — for a rendered head
 - `namespace_member` — the `ns$Name` alias a namespace import registers
@@ -536,7 +534,7 @@ The same derivation in the `Symbol` currency, which §5's `DefId` columns subsum
 - `symbol_named`, `imported`, `lookup_in_module`, `lookup_in_module_with_visited`
 - `decl_in_module` — `lookup_in_module` read back as an identity, for the
   positions no reference site answers: `builtin::f`, a namespace member,
-  `core:rt`'s `panic` at a synthesised call, and a default expression's own
+  `core:rt`'s `panic` at a synthesized call, and a default expression's own
   module. Each names its module rather than searching for one, so no vantage
   is supplied.
 
@@ -562,28 +560,18 @@ The Component Model boundary, permanent for the reason §9 gives:
   declaration was interned under.
 - `find_named_type_by_module_name`, which scans the interned types for a head of
   that name in that module.
-- `cm_decl_def`, codegen's entry to the same step, reading the `DefId` off the
-  `TypeId` those two return.
+- `cm_decl_def`, codegen's entry to `cm_decl_in_interface`.
 
 ## The frame derivation
 
-A name whose reference site is not at hand still has to reach a declaration — a
-synthesis target, a mangled name's head. Nothing walks a module's scope for it.
-Three recorded facts answer instead, in order:
+A name whose reference site is not at hand still has to reach a declaration: a
+synthesis target, a mangled name's head. It is resolved in the one scope,
+`Resolutions::resolve_in`, standing in the walk's frame. That scope reads the
+module's imports, then what it declares or re-exports, then the prelude.
 
-1. `Resolutions::imported_as` — what this module `use`d under that local name.
-   The one import fact that is not a scope lookup: it cannot reach another
-   module's imports, and it answers with what an alias aliases.
-2. `TraitEnv::decls_named`, filtered to the module in hand — every declaration
-   written under the name, whichever module declares it. It holds what modules
-   _declare_, never what they import, so no alias can steer it.
-3. `Resolutions::prelude_decl` — what the prelude puts in scope under the name.
-   The prelude tier alone, and it takes no vantage because it cannot be given
-   one: the prelude is in scope in every module.
-
-The three are a module's own reach, so a declaration it cannot see stays unseen
-here — the derivation never widens to the whole program, and a name no module
-brought into scope is unresolved, the same answer the walk gives.
+This is a module's own reach, so a declaration it cannot see stays unseen here.
+The derivation never widens to the whole program, and a name no module brought
+into scope is unresolved, the same answer the walk gives.
 
 Which module is "this" one is the walk's position, and the walk is not always
 standing where the name was written: a parameter or field default is read at the
@@ -598,11 +586,6 @@ There is no fourth tier, and a caller that can avoid the derivation does.
 answered for like any other reference, so the site is read and the spelling is
 never split back into an identity. The derivation answers only where a caller
 holds a mangled spelling and has no site to give.
-
-No tier takes a vantage it could get wrong: `decls_named` takes no module at all,
-and the derivation filters it by a frame of the walk's own. That is why it cannot
-be mistaken for a scope, and why it is sanctioned rather than scheduled for
-removal.
 
 ### A bound means what its writer wrote
 
@@ -695,10 +678,10 @@ to — a concrete impl records a resolution, a generic one a definition to
 substitute. Reading one of the two is what let a widening
 `impl<T> Mul for W<T>` satisfy `Mul<Output = T>`.
 
-The key names the receiver by its declaration and arguments, and keeps any
-reference layer. It never uses the `TypeId` slot, because a generic instance and
-the struct it monomorphizes to are two slots for one type. An impl on the
-reference itself answers before the reference is looked through.
+The key names a nominal receiver by its declaration and arguments, and keeps
+any reference layer. It does not use that receiver's `TypeId` slot, because a
+generic instance and the struct it monomorphizes to are two slots for one type.
+An impl on the reference itself answers before the reference is looked through.
 
 Fixtures: `assoc_type_per_trait_args.wado`,
 `reference_impl_assoc_type_projects.wado`,
@@ -949,13 +932,13 @@ the two names differ. `impl Show for &Wrap<i32>` called directly on a
 directly works, because both sides mint the same name. The pending fixture is
 `reference_impl_named_head_dispatch.wado`.
 
-## Known gap: a synthesised type carries only a spelling
+## Known gap: a synthesized type carries only a spelling
 
-A synthesised bound carries its referent (§7); a synthesised `ast::Type` has no
-field to carry one. The Component Model binding synthesis builds types such as
-`Fields`, `Response` and `WaitableSet` whose nodes no walk visited, so the
-frame derivation answers them. What it admits is §7's hazard at those nodes: the
-frame, not the synthesis, decides which declaration a spelling reaches.
+A synthesized bound carries its referent (§7); a synthesized type carries only
+its spelling. The Component Model binding synthesis builds types such as
+`Fields`, `Response` and `WaitableSet` at nodes no walk visited, so the frame
+derivation resolves them. What it admits is a synthesized type whose spelling
+the frame resolves to a declaration other than the one synthesis meant.
 
 ## Known gap: a data declaration binds no `Self` for its own bounds
 
@@ -966,3 +949,12 @@ off. A `struct` or `variant` declaration does not, so
 written on the impl, so a constraint the data declaration means to carry has to
 be restated at each impl that needs it. The pending fixture is
 `data_decl_bound_projects_off_self.wado`.
+
+## Known gap: effect dispatch keys an effect by module and name
+
+The effect-dispatch synthesis keys each effect or resource by its declaring
+module and its name, not by its `DefId`, and so does every per-instantiation key
+built from it. A module declares one item per name, so the pair names one
+declaration. What it admits is a second identity beside the `DefId`: a pass
+holding a `DefId` has to render it into that pair, and nothing checks that the
+two agree.

@@ -1815,14 +1815,14 @@ impl ClosureCallSiteLowerer<'_> {
         if !is_fn_type_name(&info.base_struct_name()) {
             return;
         }
-        let Some(base_trait) = info.base_trait_name() else {
+        let Some(trait_) = info.trait_decl() else {
             return;
         };
         let is_format_trait = {
             let items = self.type_table.compiler_items();
             CLOSURE_FORMAT_TRAITS
                 .iter()
-                .any(|(it, _)| items.trait_name(*it) == base_trait)
+                .any(|(it, _)| items.trait_def(*it) == Some(trait_))
         };
         if !is_format_trait {
             return;

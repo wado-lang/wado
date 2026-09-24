@@ -4817,22 +4817,11 @@ fn try_lower_comparison(
     };
 
     let resolve_module = |info: &LocalMethodName, type_mod: Option<ModuleSource>| -> ModuleSource {
-        // Only concrete impls live in the module the function compiles into;
-        // generic instantiations live in the receiver's `type_mod`, which also
-        // disambiguates same-named receivers from different modules. Keyed like
-        // `FuncInstState::impl_module` so both paths agree. `try_lower_comparison`
-        // returns `None` for any operand type without a defining module, so the
-        // unwrap below is total under its contract.
-        info.trait_decl()
-            .and_then(|trait_| {
-                trait_env
-                    .concrete_impl_module_for(
-                        ImplReceiver::Instantiated(&info.mangled_struct_name()),
-                        trait_,
-                        type_mod.as_ref(),
-                    )
-                    .cloned()
-            })
+        // A generic impl's instance lives in the receiver's module, which
+        // `try_lower_comparison` has already required the operand to have.
+        trait_env
+            .concrete_impl_module_of(info, type_mod.as_ref())
+            .cloned()
             .or(type_mod)
             .unwrap_or_else(|| {
                 panic!(

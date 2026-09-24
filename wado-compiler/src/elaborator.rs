@@ -67,7 +67,7 @@ use crate::name::{self as name, Receiver, RefKind};
 use crate::name::{
     DeclName, FqTraitName, FqTypeName, global_name, is_builtin_shape_name, namespace_member_alias,
 };
-use crate::resolve::{Resolution, head_site};
+use crate::resolve::Resolution;
 use crate::symbol::{Symbol, SymbolKind, SymbolTable, VariableSymbol};
 use crate::tir::{self as tir, TypeId, TypeTable};
 use crate::tir::{ResolvedType, StructDef};
@@ -241,18 +241,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// answers only for a span no parse produced.
     pub(super) fn emit(&self, err: impl Into<Diagnostic>) -> Result<(), Bail> {
         self.logger.error_in(&self.current_module_source, err)
-    }
-
-    /// The declaration an item node declares.
-    ///
-    /// Every item the collect pass walks was declared into the table, so a miss
-    /// is a hole in that pass rather than a name that reached nothing.
-    pub(super) fn def_of_item(&self, id: AstId) -> DefId {
-        self.tysys
-            .resolutions
-            .defs()
-            .of_ast_id(id)
-            .expect("an item declaration has an identity")
     }
 
     /// The symbol `name` reaches from `module`, for a caller whose reference site
@@ -1256,28 +1244,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .resolving_home
             .clone()
             .unwrap_or_else(|| self.current_module_source.clone());
-        self.decl_key_in(&frame, name)
-    }
-
-    /// The declaration `name` refers to as written in `frame`; an unaccounted
-    /// name falls to the prelude. One frame is one module, so a hit is unique.
-    fn decl_key_in(&self, frame: &ModuleSource, name: &str) -> Option<DefId> {
         // A binder shadows every declaration of its name and has no identity of
-        // its own; the indexes cannot see binders and would answer `struct T`.
+        // its own; the module scope cannot see binders and would answer `struct T`.
         if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
             return None;
         }
-        let defs = self.tysys.resolutions.defs();
-        self.tysys
-            .resolutions
-            .imported_as(frame, name)
-            .or_else(|| {
-                self.tysys
-                    .trait_env
-                    .decls_named(name)
-                    .find(|def| defs.module(*def) == frame)
-            })
-            .or_else(|| self.tysys.resolutions.prelude_decl(name))
+        self.tysys.resolutions.resolve_in(&frame, name)
     }
 
     /// The trait `bound` names; one naming no declaration keeps its spelling,
@@ -1294,7 +1266,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// naming no declaration keeps its spelling.
     pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> FqTraitName {
         let resolutions = &self.tysys.resolutions;
-        let head = self.trait_at_head(ty).map_or_else(
+        let head = resolutions.head_decl(ty).map_or_else(
             || FqTraitName::binder(&self.get_type_name(ty)),
             |def| FqTraitName::declared(resolutions.defs(), def),
         );
@@ -1336,11 +1308,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         } else {
             None
         }
-    }
-
-    /// The declaration a trait position names at its head.
-    fn trait_at_head(&self, trait_type: &ast::Type) -> Option<DefId> {
-        head_site(trait_type).and_then(|site| self.tysys.resolutions.declared(site))
     }
 
     fn record_explicit_derive_request(
@@ -1409,7 +1376,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let Some(trait_type) = &impl_block.trait_type else {
             return;
         };
-        let marked = self.trait_at_head(trait_type);
+        let marked = self.tysys.resolutions.head_decl(trait_type);
         if let Some((trait_, on_bound)) =
             marked.and_then(|trait_| Some((trait_, self.tysys.on_bound_of(trait_)?)))
         {
@@ -1738,10 +1705,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         effects
             .iter()
             .map(|effect| {
-                self.effect_named_at(Some(effect.id), effect.span, &effect.name);
-                self.tysys
-                    .resolutions
-                    .effect_named(effect, &self.current_module_source)
+                self.effect_named_at(Some(effect.id), effect.span, &effect.name)
+                    .unwrap_or_else(|| {
+                        self.tysys
+                            .resolutions
+                            .effect_named(effect, &self.current_module_source)
+                    })
             })
             .collect()
     }

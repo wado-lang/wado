@@ -168,6 +168,13 @@ impl DefKind {
         matches!(self, Self::Effect | Self::Resource)
     }
 
+    /// Whether a bound or an `impl` header can name a declaration of this kind:
+    /// a trait, an `interface` or a resource.
+    #[must_use]
+    pub fn is_trait_like(self) -> bool {
+        self == Self::Trait || self.is_effect()
+    }
+
     /// Whether a declaration of this kind is a case of a sum or bitmask type.
     ///
     /// A case is reachable unqualified wherever its type is in scope, and a
@@ -438,23 +445,26 @@ impl DefTable {
             if self.of_ast_id(member.ast_id).map(|id| self.get(id).parent) == Some(Some(owner)) {
                 continue;
             }
-            let id = self.of_ast_id(member.ast_id).unwrap_or_else(|| {
-                self.declare(Def {
+            let id = match self.of_ast_id(member.ast_id) {
+                Some(id) => {
+                    let def = &mut self.defs[id.0 as usize];
+                    def.parent = Some(owner);
+                    def.kind = member.kind;
+                    def.name = member.name;
+                    id
+                }
+                None => self.declare(Def {
                     ast_id: member.ast_id,
                     module: module.clone(),
-                    name: member.name.clone(),
+                    name: member.name,
                     kind: member.kind,
                     visibility: member.visibility.unwrap_or(owner_visibility),
                     span: Some(member.span),
                     parent: Some(owner),
                     function_local: false,
                     members: Vec::new(),
-                })
-            });
-            let def = &mut self.defs[id.0 as usize];
-            def.parent = Some(owner);
-            def.kind = member.kind;
-            def.name = member.name;
+                }),
+            };
             self.defs[owner.0 as usize].members.push(id);
         }
     }

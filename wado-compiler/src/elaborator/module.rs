@@ -48,7 +48,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
 
                     let module_source = scope.current_module_source.clone();
-                    let def = scope.def_of_item(struct_decl.id);
+                    let def = scope.def_at(struct_decl.id);
                     scope.sem.decls.local_struct_fields.insert(
                         def,
                         StructFieldInfo {
@@ -89,7 +89,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         // Generic newtype: store definition for lazy instantiation
                         self.sem.decls.local_generic_newtypes.insert(
-                            self.def_of_item(newtype_decl.id),
+                            self.def_at(newtype_decl.id),
                             GenericNewtypeInfo {
                                 type_params: RealTypeParams::of(&newtype_decl.type_params),
                                 base_type_ast: newtype_decl.ty.clone(),
@@ -129,7 +129,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     let module_source = scope.current_module_source.clone();
-                    let def = scope.def_of_item(variant_decl.id);
+                    let def = scope.def_at(variant_decl.id);
                     scope.sem.decls.local_variant_cases.insert(
                         def,
                         VariantInfo {
@@ -180,7 +180,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                         .collect();
                     self.sem.decls.local_enum_cases.insert(
-                        self.def_of_item(enum_decl.id),
+                        self.def_at(enum_decl.id),
                         EnumInfo::new(self.current_module_source.clone(), enum_decl.id, cases),
                     );
                     // Mirror the variant / trait paths: register the enum's

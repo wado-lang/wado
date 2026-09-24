@@ -432,8 +432,15 @@ impl Resolutions {
         bound.resolved.or_else(|| self.declared(bound.id))
     }
 
+    /// The declaration a written type names at its head.
+    #[must_use]
+    pub fn head_decl(&self, ty: &ast::Type) -> Option<DefId> {
+        head_site(ty).and_then(|site| self.declared(site))
+    }
+
     /// The declaration `site` names, or `unwalked`'s answer where no walk
     /// reached it: a node the elaborator minted, which only a spelling names.
+    #[must_use]
     pub fn declared_or(
         &self,
         site: Option<AstId>,
@@ -1057,14 +1064,13 @@ impl AstVisitor for Resolver<'_> {
                     self.visit_type(arg);
                 }
             }
-            Type::Tuple(elems) => {
-                for e in elems {
-                    self.visit_type(e);
-                }
-            }
-            Type::Reference(inner) | Type::MutReference(inner) => self.visit_type(inner),
-            Type::Function(ft) => ast::walk_function_type(self, ft),
-            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => {}
+            Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::Function(_)
+            | Type::TypePackSpread(..)
+            | Type::Infer(_)
+            | Type::Error(_) => ast::walk_type(self, ty),
         }
     }
 

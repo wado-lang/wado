@@ -2699,7 +2699,7 @@ impl TypeTable {
     }
 
     /// The interned instance of `def` at `type_args`, if one exists.
-    pub fn find_generic_instance(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
+    fn find_generic_instance(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
         let spelling = ResolvedType::GenericInstance {
             def,
             type_args: type_args.to_vec(),

@@ -526,15 +526,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn inherited_bounds_of(
         &self,
         bounds: &[ast::TraitBound],
-    ) -> Vec<(ast::TraitBound, DefId, Vec<ViaClause>)> {
+    ) -> Vec<(InheritedBound, DefId)> {
         bounds
             .iter()
             .filter(|bound| bound.names_a_trait())
             .filter_map(|bound| self.trait_decl_of(bound))
             .flat_map(|root| {
                 self.supertraits_of(root)
-                    .into_iter()
-                    .map(move |inherited| (inherited.bound, root, inherited.via))
+                    .iter()
+                    .map(move |inherited| (inherited.clone(), root))
             })
             .collect()
     }
@@ -561,7 +561,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self.merge_bound(
                     &mut out,
                     &inherited.bound,
-                    Some((root, inherited.via)),
+                    Some((root, inherited.via.clone())),
                     BoundSelf::Bounded,
                 );
             }
@@ -622,22 +622,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         out.push((entry(), decl));
     }
 
-    /// The transitive supertraits of trait `decl`, each carrying the
-    /// declaration it names.
-    fn supertraits_of(&self, decl: DefId) -> Vec<InheritedBound> {
-        self.tysys
-            .trait_env
-            .supertrait_closure_declared(&decl)
-            .1
-            .iter()
-            .map(|inherited| InheritedBound {
-                bound: ast::TraitBound {
-                    resolved: Some(inherited.decl),
-                    ..inherited.bound.clone()
-                },
-                ..inherited.clone()
-            })
-            .collect()
+    /// The transitive supertraits of trait `decl`.
+    fn supertraits_of(&self, decl: DefId) -> &[InheritedBound] {
+        self.tysys.trait_env.supertrait_closure_declared(&decl).1
     }
 
     /// The type-parameter ids the enclosing generic scope owns: a slot bound to

@@ -3061,12 +3061,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> bool {
         let target_name = get_type_name_static(target_type);
         let arg_type_name = self.tysys.type_table.borrow().type_name(*arg_type_id);
-        let from_trait_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_trait_name(CompilerItem::From)
-            .to_string();
+        let from_trait = self.tysys.compiler_trait_def(CompilerItem::From);
         self.tysys.trait_env.impl_headers.values().any(|header| {
             if !header.is_synthesize_request {
                 return false;
@@ -3074,7 +3069,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(trait_type) = header.trait_ty() else {
                 return false;
             };
-            if header.trait_head_name() != Some(from_trait_name.as_str())
+            if !header.trait_def().is_some_and(|t| from_trait == Some(t))
                 || get_type_name_static(&header.ty) != target_name
             {
                 return false;
@@ -3507,14 +3502,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        // The call site may refer to the receiver type through a
-        // `use { Counter as CounterA }` alias. Resolve the alias to its
-        // canonical declaration name so the mangled TIR function
-        // (`Counter::make`) can be found at WIR-build time — that name
-        // is keyed by the *original* `Counter`, not the local alias.
-        // The other lookups below still consume `struct_name` as-is and
-        // canonicalise internally via `Elaborator::decl_key_or_local`.
-        // Rebuilt from the canonical key, not the local alias.
         let qualified_struct_name = self.qualified_receiver_name(struct_name);
         let mangled_func_name_owned =
             MethodName::format_local(&qualified_struct_name, None, method_name);

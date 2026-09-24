@@ -255,14 +255,19 @@ impl CalleeIdentKind<'_> {
         }
     }
 
+    /// The callee as written, for the one shape no substitution rewrote.
+    fn as_is(&self) -> Option<&ast::IdentExpr> {
+        match self {
+            Self::AsIs(ident) => Some(ident),
+            Self::Rewritten(_) | Self::Case { .. } | Self::AbstractTypeParam { .. } => None,
+        }
+    }
+
     /// The reference site of the callee itself, which says which declaration a
     /// bare `name(…)` means. `Rewritten` is synthesised from an already-resolved
     /// `Self::` / `T::` prefix, so no walk saw it.
     fn callee_site(&self) -> Option<ast::AstId> {
-        match self {
-            Self::AsIs(ident) => Some(ident.id),
-            Self::Rewritten(_) | Self::Case { .. } | Self::AbstractTypeParam { .. } => None,
-        }
+        self.as_is().map(|ident| ident.id)
     }
 
     /// The reference site of a qualified callee's receiver segment — the `Type` of
@@ -272,11 +277,8 @@ impl CalleeIdentKind<'_> {
     /// `effective_name`, and only here are the two the same segment. A namespace
     /// prefix, an unqualified call and `Rewritten` all answer `None`.
     fn receiver_site(&self) -> Option<ast::AstId> {
-        match self {
-            Self::AsIs(ident) => match ident.segments.as_slice() {
-                [receiver, _method] => Some(receiver.id),
-                _ => None,
-            },
+        match self.as_is()?.segments.as_slice() {
+            [receiver, _method] => Some(receiver.id),
             _ => None,
         }
     }
@@ -519,7 +521,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .declared(owner.id)
                     .filter(|d| defs.kind(*d).is_effect())?;
                 let name = &ident.segments.last()?.name;
-                (decl, self.tysys.signatures.resource_method_sig(decl, name)?.def)
+                (
+                    decl,
+                    self.tysys.signatures.resource_method_sig(decl, name)?.def,
+                )
             }
             None => {
                 let op = resolutions.declared_if_walked(ident.id)?;
@@ -538,9 +543,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("an effect operation is found through its signature")
     }
 
-    /// Signature resolution, the effect check, dispatch and WIR all key on the
-    /// declaration's own name and the bare operation, so neither an import
-    /// alias nor a namespace qualifier may reach them.
+    /// The callee of an operation, named by its declaration whatever alias or
+    /// namespace the call wrote.
     fn effect_operation_callee(&self, op: &EffectOperation) -> CalleeRef {
         let defs = self.tysys.resolutions.defs();
         CalleeRef::local_namespace(
@@ -827,10 +831,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_static_call_visibility(&receiver, effective_name, Some(call.id), call.span);
         }
 
-        let effect_op = match &callee_kind {
-            CalleeIdentKind::AsIs(ident) => self.effect_operation_of(ident),
-            _ => None,
-        };
+        let effect_op = callee_kind
+            .as_is()
+            .and_then(|ident| self.effect_operation_of(ident));
         // First, determine expected parameter types to handle coercion.
         let signature = self.lookup_function_signature(
             effective_name,
@@ -1395,12 +1398,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_id_of_decl(variant_info.defined_at);
                     let from_type = args[0];
                     let from_type_name = self.tysys.type_table.borrow().type_name(from_type);
-                    let from_trait_name = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .compiler_trait_name(CompilerItem::From)
-                        .to_string();
+                    let from_trait = self.tysys.compiler_trait_def(CompilerItem::From);
                     // `impl From<X> for Prefix;` — a body-less derivation
                     // request. Both the flag and the trait reference are
                     // header facts, so the impls are reached by the target's
@@ -1414,7 +1412,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .filter_map(|key| self.tysys.trait_env.impl_headers.get(key))
                         .any(|header| {
                             header.is_synthesize_request
-                                && header.trait_head_name() == Some(from_trait_name.as_str())
+                                && header.trait_def().is_some_and(|t| from_trait == Some(t))
                                 && matches!(header.trait_ty(), Some(ast::Type::Generic(generic))
                                     if generic.args.len() == 1
                                         && self.get_type_name_full(&generic.args[0])
@@ -2170,7 +2168,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         callee_site: Option<ast::AstId>,
     ) -> Option<(Vec<TypeId>, Vec<TypeId>)> {
         if let Some(op) = effect_op {
-            return Some((self.effect_operation_sig(op).decl.param_types.clone(), Vec::new()));
+            return Some((
+                self.effect_operation_sig(op).decl.param_types.clone(),
+                Vec::new(),
+            ));
         }
         if let Some(pos) = name.find("::") {
             let prefix = &name[..pos];
@@ -3111,7 +3112,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // synthesis phase that runs after elaboration, so the
                         // registry is empty here; compute the subject's.
                         let resolved = resolved.or_else(|| {
-                            self.concrete_reflect_assoc_type(owner_ty, &bound.name, &assoc.name)
+                            let trait_ = self.tysys.resolutions.bound_decl(bound)?;
+                            self.concrete_reflect_assoc_type(owner_ty, trait_, &assoc.name)
                         });
                         if let Some(resolved) = resolved {
                             args[target_idx] = resolved;

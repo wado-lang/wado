@@ -3229,39 +3229,19 @@ fn deref_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
     }
 }
 
-/// Rewrite `Resume { value }` to `Return { value }` in every `impl Effect for T`
-/// / `impl Resource for T` method, recognised by `method_info.trait_name`. The
-/// MVP has no post-resume continuation, so the two are identical; resources
-/// participate in the same dispatch protocol as effects.
+/// Rewrite `Resume { value }` to `Return { value }` in every effect or resource
+/// handler method. The MVP has no post-resume continuation, so the two agree.
 fn lower_resume_in_handler_methods(project: &mut Package) {
-    // Collect bare names of every effect and resource declaration so we
-    // can recognise candidate impl blocks. A name collision between an
-    // effect/resource and a regular trait would already be a elaborator
-    // error.
-    let mut handler_names: IndexSet<String> = IndexSet::default();
-    for module in project.tir_modules.values() {
-        for effect in &module.effects {
-            handler_names.insert(effect.name.clone());
-        }
-        for resource in &module.resources {
-            handler_names.insert(resource.name.clone());
-        }
-    }
-
     for module in project.tir_modules.values_mut() {
+        let type_table = module.type_table.borrow();
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
-            let Some(method_info) = &func.method_info else {
-                continue;
-            };
-            // `handler_names` is keyed by the bare effect / resource
-            // declaration name; generic-resource impls carry the full
-            // mangled form in `trait_name` ("Stream<u8>") and resolve
-            // against the index via the canonical base name.
-            let Some(base_trait_name) = method_info.base_trait_name() else {
-                continue;
-            };
-            if !handler_names.contains(base_trait_name) {
+            let handles = func
+                .method_info
+                .as_ref()
+                .and_then(LocalMethodName::trait_decl)
+                .is_some_and(|trait_| type_table.defs().kind(trait_).is_effect());
+            if !handles {
                 continue;
             }
             if let Some(body) = &mut func.body {

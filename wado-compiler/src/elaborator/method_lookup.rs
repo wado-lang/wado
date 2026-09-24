@@ -991,8 +991,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // receiver" is one comparison of declarations rather than a
                 // spelling match plus a second lookup asking that module what
                 // the spelling means there.
-                let header_decl =
-                    head_site(&header.ty).and_then(|site| self.tysys.resolutions.declared(site));
+                let header_decl = self.tysys.resolutions.head_decl(&header.ty);
                 let targets_receiver = match (header_decl, receiver_decl) {
                     (Some(header), Some(receiver)) => header == receiver,
                     // A target that names no declaration — a tuple, a function
