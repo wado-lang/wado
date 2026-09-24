@@ -332,7 +332,10 @@ fn find_use_site(
             k += 1;
             continue;
         }
-        if matches!(walk_stmt_for_leftmost(body, stmt, &site), LeftmostWalk::Found) {
+        if matches!(
+            walk_stmt_for_leftmost(body, stmt, &site),
+            LeftmostWalk::Found
+        ) {
             return Some(k);
         }
         let int_mr = ModRef::of_stmt(body, stmt);
@@ -371,22 +374,20 @@ struct UseSite<'a> {
 fn walk_stmt_for_leftmost(body: &Body, stmt: StmtId, site: &UseSite<'_>) -> LeftmostWalk {
     match &body.stmts[stmt].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            match value
-                .as_expr()
-                .map_or(LeftmostWalk::Blocked, |ve| walk_expr_for_leftmost(body, ve, site))
-            {
+            match value.as_expr().map_or(LeftmostWalk::Blocked, |ve| {
+                walk_expr_for_leftmost(body, ve, site)
+            }) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
         }
-        StmtKind::Expr(e) => e
-            .as_expr()
-            .map_or(LeftmostWalk::Pure, |e| walk_expr_for_leftmost(body, e, site)),
+        StmtKind::Expr(e) => e.as_expr().map_or(LeftmostWalk::Pure, |e| {
+            walk_expr_for_leftmost(body, e, site)
+        }),
         StmtKind::Return { value: Some(v) } | StmtKind::Break { value: Some(v), .. } => {
-            match v
-                .as_expr()
-                .map_or(LeftmostWalk::Blocked, |ve| walk_expr_for_leftmost(body, ve, site))
-            {
+            match v.as_expr().map_or(LeftmostWalk::Blocked, |ve| {
+                walk_expr_for_leftmost(body, ve, site)
+            }) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
@@ -402,8 +403,9 @@ fn walk_stmt_for_leftmost(body: &Body, stmt: StmtId, site: &UseSite<'_>) -> Left
 
 fn walk_operand_for_leftmost(body: &Body, op: Operand, site: &UseSite<'_>) -> LeftmostWalk {
     // A promoted constant is a pure leaf.
-    op.as_expr()
-        .map_or(LeftmostWalk::Pure, |e| walk_expr_for_leftmost(body, e, site))
+    op.as_expr().map_or(LeftmostWalk::Pure, |e| {
+        walk_expr_for_leftmost(body, e, site)
+    })
 }
 
 /// A subtree evaluated ahead of the field read now runs before the initializer,
@@ -526,7 +528,11 @@ fn walk_expr_shape(body: &Body, expr: ExprId, site: &UseSite<'_>) -> LeftmostWal
         }
         ExprKind::StructLiteral { fields, .. } => {
             let fields: Vec<ExprId> = fields.iter().filter_map(|f| f.value.as_expr()).collect();
-            finish_leftmost(body, expr, walk_children_pure(body, fields.into_iter(), site))
+            finish_leftmost(
+                body,
+                expr,
+                walk_children_pure(body, fields.into_iter(), site),
+            )
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             let elements: Vec<ExprId> = elements.iter().filter_map(|o| o.as_expr()).collect();

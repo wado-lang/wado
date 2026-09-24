@@ -105,11 +105,10 @@ fn condition_writes_an_arm_read(body: &Body, condition: Operand, arms: [Operand;
     };
     let writes = ModRef::of_expr(body, condition).local_writes;
     !writes.is_empty()
-        && arms.into_iter().filter_map(Operand::as_expr).any(|arm| {
-            !ModRef::of_expr(body, arm)
-                .local_reads
-                .is_disjoint(&writes)
-        })
+        && arms
+            .into_iter()
+            .filter_map(Operand::as_expr)
+            .any(|arm| !ModRef::of_expr(body, arm).local_reads.is_disjoint(&writes))
 }
 
 /// `builtin::select(cond, a, b)` over `ty`.
