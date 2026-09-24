@@ -1121,7 +1121,19 @@ impl Analyzer<'_> {
             }
             let referent = self.borrow_read(place, live, record);
             if record && let Some(r) = referent {
-                self.pin_borrow(*op, r, place, kept);
+                // A call handing its receiver back as its result keeps the
+                // borrow in that result, which the walk follows as a place.
+                let handed_back = callee.is_some_and(|(c, position)| {
+                    position == 0
+                        && self
+                            .returns_receiver_alias
+                            .contains(&c.module_source, &c.name)
+                });
+                if handed_back {
+                    self.pin(r, top_field_of(place), kept);
+                } else {
+                    self.pin_borrow(*op, r, place, kept);
+                }
             }
         } else {
             if record {
