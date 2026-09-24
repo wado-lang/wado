@@ -1,0 +1,38 @@
+// A field typed `I::Item` mentions a slot without being one, so nothing the
+// literal supplies can fix it. Skipping the check on that ground left the
+// mismatch to reach codegen as an invalid module.
+
+trait Src with () {
+    type Item;
+
+    fn first(&self) -> Self::Item;
+}
+
+struct Holder<I: Src> {
+    item: I::Item,
+}
+
+struct Boxy {
+    v: i32,
+}
+
+impl Src for Boxy {
+    type Item = i32;
+
+    fn first(&self) -> Self::Item {
+        return self.v;
+    }
+}
+
+fn wrap<I: Src>(s: &I) -> Holder<I> {
+    return Holder { item: "nope" };
+}
+
+export fn run() {
+    let b = Boxy { v: 3 };
+    let h = wrap(&b);
+    assert h.item == 3;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'I::Item', found 'String'"}

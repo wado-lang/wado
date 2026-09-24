@@ -91,24 +91,9 @@ fn "opt_ref_elim_inline_shadow.wado/run"() with Stdout {
     let packed: i64;
     let rx_60: i32;
     let tx_61: i32;
-    let $sroa_o_tag: i32;
-    let $sroa_$sroa_o_inner_x: i32;
-    let $sroa_$sroa_o_inner_y: i32;
-    $sroa_$sroa_o_inner_x = 0;
-    $sroa_$sroa_o_inner_y = 0;
-    $sroa_o_tag = 0;
-    $sroa_$sroa_o_inner_x = 7;
-    $sroa_$sroa_o_inner_y = 9;
-    $sroa_o_tag = 1;
-    $sroa_$sroa_o_inner_x = 18;
-    $sroa_$sroa_o_inner_y = 22;
-    $sroa_o_tag = 2;
-    $sroa_$sroa_o_inner_x = 33;
-    $sroa_$sroa_o_inner_y = 39;
-    $sroa_o_tag = 3;
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     $local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_$sroa_o_inner_x, $local_2.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(33, $local_2.buf);
     new_used_33 = $local_1.used + 1;
     if @unlikely(new_used_33 > builtin::array_len($local_1.repr)) {
         cold_path;
@@ -118,7 +103,7 @@ fn "opt_ref_elim_inline_shadow.wado/run"() with Stdout {
     $local_1.used = new_used_33;
     builtin::array_copy<u8>($local_1.repr, start_34, global:opt_ref_elim_inline_shadow.wado::$const_obj_1, 0, 1);
     $local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_$sroa_o_inner_y, $local_2.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(39, $local_2.buf);
     new_used_51 = $local_1.used + 1;
     if @unlikely(new_used_51 > builtin::array_len($local_1.repr)) {
         cold_path;
@@ -128,7 +113,7 @@ fn "opt_ref_elim_inline_shadow.wado/run"() with Stdout {
     $local_1.used = new_used_51;
     builtin::array_copy<u8>($local_1.repr, start_52, global:opt_ref_elim_inline_shadow.wado::$const_obj_1, 0, 1);
     $local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_o_tag, $local_2.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(3, $local_2.buf);
     rx_60 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_61 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "opt_ref_elim_inline_shadow.wado/$cm_binding__Stdout_write_via_stream"(rx_60);
@@ -218,19 +203,20 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -293,7 +279,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l24;

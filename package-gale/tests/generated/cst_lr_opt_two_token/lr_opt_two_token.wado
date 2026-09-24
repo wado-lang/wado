@@ -1081,7 +1081,7 @@ pub global TK_ID: i32 = 0;
 pub global TK_WS: i32 = 1;
 pub global TK_EOF: i32 = 2;
 pub global TK_ERROR: i32 = 3;
-pub global TK_LIT_IN: i32 = 4;
+pub global TK_LIT_in: i32 = 4;
 pub global TK_LIT_LPAREN: i32 = 5;
 pub global TK_LIT_RPAREN: i32 = 6;
 pub global TK_LIT_DOT: i32 = 7;
@@ -1150,19 +1150,19 @@ fn try_lit_in(chars: &List<char>, start: i32) -> i32 {
     return pos + 2;
 }
 
-fn try_lit_lparen(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_LPAREN(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '(' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_rparen(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_RPAREN(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ')' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_dot(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_DOT(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '.' { return -1; }
     return pos + 1;
@@ -1178,29 +1178,34 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { '(' } {
-            end = try_lit_lparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
-        } else if first_char matches { ')' } {
-            end = try_lit_rparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
-        } else if first_char matches { '.' } {
-            end = try_lit_dot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_DOT; }
-        } else if first_char matches { 'i' } {
-            end = try_lit_in(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_IN; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 'a'..='z' } {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
+        match first_char {
+            '\t' | '\n' | '\r' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            '(' => {
+                end = try_lit_LPAREN(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
+            },
+            ')' => {
+                end = try_lit_RPAREN(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
+            },
+            '.' => {
+                end = try_lit_DOT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_DOT; }
+            },
+            'a'..='h' | 'j'..='z' => {
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            'i' => {
+                end = try_lit_in(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_in; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1228,7 +1233,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_IN => "'in'",
+        TK_LIT_in => "'in'",
         TK_LIT_LPAREN => "'('",
         TK_LIT_RPAREN => "')'",
         TK_LIT_DOT => "'.'",
@@ -1506,7 +1511,7 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_e_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_IN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_in { return -1; }
     pos += 1;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1558,7 +1563,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         let _lr_pos0 = pos;
-        if suffix_kind == TK_LIT_IN {
+        if suffix_kind == TK_LIT_in {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_e_lr_1(tokens, pos);
@@ -1630,13 +1635,13 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     loop {
         if p.recovering { break; }
         let _sk = p.peek_kind();
-        if _sk == TK_LIT_IN {
+        if _sk == TK_LIT_in {
             if 1 >= min_prec {
                 if scan_e_lr_1(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                p.expect(TK_LIT_IN, &EMPTY_SYNC);
+                p.expect(TK_LIT_in, &EMPTY_SYNC);
                 let _gk = p.peek_kind();
                 if _gk == TK_LIT_LPAREN {
                     p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);

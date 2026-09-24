@@ -245,11 +245,7 @@ fn collect_and_validate(
         let mut invalid: IndexSet<(FnKey, usize)> = IndexSet::default();
         let mut resolved: Vec<((FnKey, usize), u32)> = Vec::new();
         for ((key, pi), info) in &candidates {
-            let Some(func_rc) = project.functions.get(key.index()) else {
-                invalid.insert((*key, *pi));
-                continue;
-            };
-            let func = func_rc.borrow();
+            let func = project.functions[key.index()].borrow();
             let local_index = func.params[*pi].local_index;
             let body = func
                 .body
@@ -889,10 +885,7 @@ fn mint_scalarized_clones(
     let mut minted: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
     let mut next_id = project.next_func_id().index();
     for (key, positions) in &by_fn {
-        let Some(original) = project.functions.get(key.index()) else {
-            continue;
-        };
-        let mut clone = original.borrow().clone();
+        let mut clone = project.functions[key.index()].borrow().clone();
         let origin = (clone.module_source.clone(), clone.name.clone());
         let name = sroa_param_name(&clone.name);
         clone.name.clone_from(&name);
@@ -988,10 +981,7 @@ fn standing_clone_matches(
     key: FnKey,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
 ) -> bool {
-    let Some(standing) = project.functions.get(existing.index()) else {
-        return false;
-    };
-    let standing = standing.borrow();
+    let standing = project.functions[existing.index()].borrow();
     standing.params.len() == fresh.params.len()
         && standing.params.iter().enumerate().all(|(pi, param)| {
             // `fresh` is still the original's copy here, so its type is what a
@@ -1065,9 +1055,9 @@ fn borrow_of_scalarized<'a>(
 /// Pre-order: replace the SROA'd param's `FieldAccess` with the bare scalar
 /// `Local`, keyed on the field index so `b.value.value` keeps its inner read.
 ///
-/// A `Local` read stands — the param forwarded whole to another scalarized
-/// position. [`rewrite_arg`] retypes it at the call it feeds, before a later
-/// round can read the stale wrapper type as licence to project the field twice.
+/// A read of the whole param stands, retyped to the field it now holds: it
+/// forwards to another scalarized position, and the multi-value split projects
+/// `x.repr` off a stale wrapper type, emitting a field the field does not carry.
 fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[Scalarized]) {
     if let NodeRef::Expr(id) = node {
         // `&mut self.f` where the param is already `&mut F`: the whole borrow
@@ -1103,6 +1093,12 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[Scalarized]) 
                 index: s.local,
                 name: s.name.clone(),
             };
+            return;
+        }
+        if let ExprKind::Local { index, .. } = &body.exprs[id].kind
+            && let Some(s) = affected.iter().find(|s| s.local == *index)
+        {
+            body.exprs[id].type_id = s.scalar_type_id;
             return;
         }
     }

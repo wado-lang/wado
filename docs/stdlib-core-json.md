@@ -94,6 +94,48 @@ Returns a read-only `ByteSlice` over the serializer's UTF-8 buffer.
 
 ## Structs
 
+### `pub struct JsonSeqSerializer`
+
+_Fields are private._
+
+#### `impl SerializeSeq for JsonSeqSerializer`
+
+##### `fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct JsonMapSerializer`
+
+_Fields are private._
+
+#### `impl SerializeMap for JsonMapSerializer`
+
+##### `fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError>`
+
+##### `fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct JsonStructSerializer`
+
+_Fields are private._
+
+#### `impl SerializeStruct for JsonStructSerializer`
+
+##### `fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct JsonVariantSerializer`
+
+_Fields are private._
+
+#### `impl SerializeVariant for JsonVariantSerializer`
+
+##### `fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
 ### `pub struct JsonSerializer`
 
 _Fields are private._
@@ -135,6 +177,48 @@ _Fields are private._
 ##### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
 
 ##### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<JsonVariantSerializer, SerializeError>`
+
+### `pub struct PrettyJsonSeqSerializer`
+
+_Fields are private._
+
+#### `impl SerializeSeq for PrettyJsonSeqSerializer`
+
+##### `fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct PrettyJsonMapSerializer`
+
+_Fields are private._
+
+#### `impl SerializeMap for PrettyJsonMapSerializer`
+
+##### `fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError>`
+
+##### `fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct PrettyJsonStructSerializer`
+
+_Fields are private._
+
+#### `impl SerializeStruct for PrettyJsonStructSerializer`
+
+##### `fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct PrettyJsonVariantSerializer`
+
+_Fields are private._
+
+#### `impl SerializeVariant for PrettyJsonVariantSerializer`
+
+##### `fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
 
 ### `pub struct PrettyJsonSerializer`
 
@@ -287,6 +371,58 @@ Skips the next JSON value without allocating.
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 
+### `pub struct JsonSeqAccess`
+
+_Fields are private._
+
+#### `impl DeserializeSeq for JsonSeqAccess`
+
+##### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct JsonMapAccess`
+
+_Fields are private._
+
+#### `impl DeserializeMap for JsonMapAccess`
+
+##### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
+
+##### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct JsonStructAccess`
+
+_Fields are private._
+
+#### `impl DeserializeStruct for JsonStructAccess`
+
+##### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
+
+##### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn skip(&mut self) -> Result<(), DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct JsonVariantAccess`
+
+_Fields are private._
+
+#### `impl DeserializeVariant for JsonVariantAccess`
+
+##### `fn variant_name(&mut self) -> Result<String, DeserializeError>`
+
+##### `fn disc(&mut self) -> Result<i32, DeserializeError>`
+
+##### `fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn is_unit(&mut self) -> Result<bool, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
 ### `pub struct CanonicalJsonSerializer`
 
 _Fields are private._
@@ -328,3 +464,45 @@ _Fields are private._
 ##### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
 
 ##### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<CanonicalVariantSerializer, SerializeError>`
+
+### `pub struct CanonicalSeqSerializer`
+
+_Fields are private._
+
+#### `impl SerializeSeq for CanonicalSeqSerializer`
+
+##### `fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct CanonicalMapSerializer`
+
+_Fields are private._
+
+#### `impl SerializeMap for CanonicalMapSerializer`
+
+##### `fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError>`
+
+##### `fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct CanonicalStructSerializer`
+
+_Fields are private._
+
+#### `impl SerializeStruct for CanonicalStructSerializer`
+
+##### `fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct CanonicalVariantSerializer`
+
+_Fields are private._
+
+#### `impl SerializeVariant for CanonicalVariantSerializer`
+
+##### `fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`

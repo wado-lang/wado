@@ -6,19 +6,26 @@
 
 use std::ops::ControlFlow;
 
+use cranelift_entity::EntityRef;
+
 use super::arena_query::local_written_by;
+use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
-use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
-use crate::nir_engine::Engine;
+use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir_arena::{
+    BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
+};
+use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use crate::optimize::arena_query::{
-    binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand, operand_local,
-    operand_mentions_local, storage_root,
+    WriteRoot, binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand, operand_local,
+    operand_read_locals, storage_root, write_root,
 };
-use crate::tir::TypeTable;
+use crate::optimize::gate::{FunctionGate, GatedPass};
+use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::{hashmap, nir_arena};
 
 /// Run condition implication at the body root on an existing engine session.
@@ -29,7 +36,7 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     let root = engine.body.root;
     // Built once and threaded down: sound because eliminations never add
     // reassignments, so the snapshot only omits bindings, never holds a stale one.
-    let binds = build_copy_bindings(engine.body);
+    let binds = build_copy_bindings(engine);
     // The three flow-insensitive eliminators recognise self-contained shapes
     // (bitmask-bounded, const-bound index, short-circuit `||`), so one subtree
     // walk from the root refutes every nesting depth once — rather than a full
@@ -81,20 +88,21 @@ pub(super) fn resolve_panic_ids(project: &NirPackage) -> hashmap::IndexSet<FuncI
 /// `Operand::Value`, but runs *after* the optimization loop, so the in-loop pass
 /// never sees the promoted bound. The caller pairs this with `const_branch_prune`
 /// to fixpoint so the newly-`false` checks' panic blocks go too.
-pub(super) fn eliminate_post_promote(project: &mut NirPackage) -> bool {
-    use crate::nir::NirFunction;
-    use crate::nir_engine::EngineBuffers;
+pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let len = project.functions.len();
+    if !gate.any_pending(GatedPass::CondImplPostPromote, len) {
+        return false;
+    }
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
     let call_immutability = CallImmutability::new(project, &type_table);
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let mut buffers = EngineBuffers::default();
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
+    gate.run_gated(GatedPass::CondImplPostPromote, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
         if func.body.is_none() {
-            continue;
+            return false;
         }
         let NirFunction {
             body,
@@ -121,9 +129,8 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage) -> bool {
         engine.set_param_locals(param_locals);
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
-        changed |= eliminate_at_root(&mut engine);
-    }
-    changed
+        eliminate_at_root(&mut engine)
+    })
 }
 
 /// A structural bound: the right-hand side of a guard / check comparison,
@@ -145,27 +152,201 @@ pub(super) enum BoundKey {
 /// `let $cond = i < n; if !$cond { panic }` shape CSE produces.
 pub(super) type Binds = hashmap::IndexMap<u32, Operand>;
 
-/// Build [`Binds`] over `body`: every `let t = <value>` whose `t` is never
-/// reassigned (`Assign` / `&mut`). Conservative — a reassigned temp is excluded,
-/// so resolving through it can never read a stale value.
-pub(super) fn build_copy_bindings(body: &nir_arena::Body) -> Binds {
+/// Build [`Binds`] over the engine's body: every `let t = <value>` whose `t` is
+/// never reassigned (`Assign` / `&mut`) and whose value still holds at every read
+/// of `t`. A resolved read stands for the value re-read where `t` is read, so a
+/// write between the two to anything the value reads would make it stale.
+pub(super) fn build_copy_bindings(engine: &Engine) -> Binds {
+    let body = &*engine.body;
     let mut reassigned = hashmap::IndexSet::default();
     body.for_each_reachable_node(|n| {
         if let Some(r) = local_written_by(body, n) {
             reassigned.insert(r);
         }
     });
-    let mut binds = Binds::default();
-    for (_, st) in &body.stmts {
-        if let StmtKind::Let {
-            local_index, value, ..
-        } = &st.kind
-            && !reassigned.contains(local_index)
+    let mut walk = BindWalk {
+        engine,
+        tick: 0,
+        last_write: hashmap::IndexMap::default(),
+        last_aliased: 0,
+        last_call: 0,
+        pending: hashmap::IndexMap::default(),
+        stale: hashmap::IndexSet::default(),
+    };
+    walk.node(NodeRef::Block(body.root));
+    walk.pending
+        .into_iter()
+        .filter(|(t, _)| !walk.stale.contains(t) && !reassigned.contains(t))
+        .map(|(t, p)| (t, p.value))
+        .collect()
+}
+
+/// A `let` the walk has passed, and what must stay unwritten for a read of its
+/// local to still stand for its value.
+struct PendingBind {
+    value: Operand,
+    since: u64,
+    deps: Vec<u32>,
+    aliased: bool,
+    escaped: bool,
+}
+
+/// One walk of the body in evaluation order, stamping every write and marking
+/// stale each bind read after a write to something it depends on. A loop's
+/// writes are stamped on entry, since its back edge runs them before each read.
+struct BindWalk<'e, 'a> {
+    engine: &'e Engine<'a>,
+    tick: u64,
+    last_write: hashmap::IndexMap<u32, u64>,
+    last_aliased: u64,
+    last_call: u64,
+    pending: hashmap::IndexMap<u32, PendingBind>,
+    stale: hashmap::IndexSet<u32>,
+}
+
+impl BindWalk<'_, '_> {
+    /// Visit `n`: a promoted operand's source runs first and its reads last, so
+    /// ordering errs toward a write preceding a read.
+    fn node(&mut self, n: NodeRef) {
+        let body = &*self.engine.body;
+        if let NodeRef::Stmt(s) = n {
+            match &body.stmts[s].kind {
+                StmtKind::Loop { .. } => {
+                    let mut writes = Vec::new();
+                    body.for_each_live_node_under(n, |m| node_writes(self.engine, m, &mut writes));
+                    for w in writes {
+                        self.write(w);
+                    }
+                }
+                StmtKind::Let {
+                    local_index, value, ..
+                } => self.bind(*local_index, *value),
+                _ => {}
+            }
+        }
+        let mut sourced = Vec::new();
+        let mut promoted_reads = hashmap::IndexSet::default();
+        let mut seen = hashmap::IndexSet::default();
+        body.for_each_operand(n, |op| {
+            if let Some(v) = op.as_value() {
+                body.values
+                    .for_each_opaque_expr(v, &mut seen, |e| sourced.push(e));
+                body.values.collect_opaque_locals(v, &mut promoted_reads);
+            }
+        });
+        for e in sourced {
+            self.node(NodeRef::Expr(e));
+        }
+        let mut children = Vec::new();
+        body.for_each_child(n, |c| children.push(c));
+        for c in children {
+            self.node(c);
+        }
+        if let NodeRef::Expr(e) = n
+            && let ExprKind::Local { index, .. } = &body.exprs[e].kind
         {
-            binds.insert(*local_index, *value);
+            self.read(*index);
+        }
+        for l in promoted_reads {
+            self.read(l);
+        }
+        let mut writes = Vec::new();
+        node_writes(self.engine, n, &mut writes);
+        for w in writes {
+            self.write(w);
         }
     }
-    binds
+
+    fn bind(&mut self, t: u32, value: Operand) {
+        let body = &*self.engine.body;
+        if self.pending.contains_key(&t) || operand_reads_global(body, value) {
+            self.stale.insert(t);
+            return;
+        }
+        let reads = operand_read_locals(body, value);
+        let mut deps: hashmap::IndexSet<u32> = reads.iter().copied().collect();
+        deps.insert(t);
+        for r in &reads {
+            if let Some(p) = self.pending.get(r) {
+                deps.extend(p.deps.iter().copied());
+            }
+        }
+        let aliased = deps.iter().any(|&d| reachable_elsewhere(self.engine, d));
+        let escaped = deps.iter().any(|d| self.engine.mut_escaped().contains(d));
+        self.pending.insert(
+            t,
+            PendingBind {
+                value,
+                since: self.tick,
+                deps: deps.into_iter().collect(),
+                aliased,
+                escaped,
+            },
+        );
+    }
+
+    fn read(&mut self, t: u32) {
+        let Some(p) = self.pending.get(&t) else {
+            return;
+        };
+        let written_since = |at: u64| at > p.since;
+        let stale = p
+            .deps
+            .iter()
+            .any(|d| self.last_write.get(d).is_some_and(|&at| written_since(at)))
+            || (p.aliased && written_since(self.last_aliased))
+            || (p.escaped && written_since(self.last_call));
+        if stale {
+            self.stale.insert(t);
+        }
+    }
+
+    fn write(&mut self, w: Write) {
+        self.tick += 1;
+        match w {
+            Write::Root(r) => {
+                self.last_write.insert(r, self.tick);
+            }
+            Write::Aliased => self.last_aliased = self.tick,
+            Write::Call => self.last_call = self.tick,
+        }
+    }
+}
+
+/// The writes node `n` itself performs: an expression's, or the local a
+/// pattern binds. A `let` binding its own local is the bind, not a write.
+fn node_writes(engine: &Engine, n: NodeRef, out: &mut Vec<Write>) {
+    match n {
+        NodeRef::Expr(e) => for_each_write(engine, e, &mut |w| out.push(w)),
+        NodeRef::Pat(p) => {
+            if let PatKind::Binding { local_index, .. } = &engine.body.pats[p].kind {
+                out.push(Write::Root(*local_index));
+            }
+        }
+        NodeRef::Stmt(_) | NodeRef::Block(_) => {}
+    }
+}
+
+/// Whether `op` reads a global, which no local write tracks.
+fn operand_reads_global(body: &nir_arena::Body, op: Operand) -> bool {
+    let is_global_read = |n: NodeRef| {
+        matches!(n, NodeRef::Expr(x) if matches!(body.exprs[x].kind, ExprKind::GlobalVarGet { .. }))
+            .then_some(())
+    };
+    match op {
+        Operand::Expr(e) => body
+            .find_in_live_node_under(NodeRef::Expr(e), is_global_read)
+            .is_some(),
+        Operand::Value(v) => {
+            let mut sources = Vec::new();
+            body.values
+                .for_each_opaque_expr(v, &mut hashmap::IndexSet::default(), |e| sources.push(e));
+            sources.into_iter().any(|e| {
+                body.find_in_live_node_under(NodeRef::Expr(e), is_global_read)
+                    .is_some()
+            })
+        }
+    }
 }
 
 /// Cap on how many copy-temp / block-tail hops a bounded resolution chain
@@ -216,9 +397,10 @@ pub(super) fn capture_block_binding(engine: &Engine, op: Operand) -> Option<(u32
     };
     let index = *index;
     let value = sole_unconditional_write(engine, block, index, None)?;
-    let clobbered = modifies_root_matching(engine, NodeRef::Block(block), |root| {
-        operand_mentions_local(engine.body, value, root)
-    });
+    let reads: Vec<u32> = operand_read_locals(engine.body, value)
+        .into_iter()
+        .collect();
+    let clobbered = modifies_any_root(engine, NodeRef::Block(block), &reads);
     (!clobbered).then_some((index, value))
 }
 
@@ -288,6 +470,48 @@ pub(super) fn parse_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option
             )),
             _ => None,
         },
+    }
+}
+
+/// Whether `op` (through copy temps) reads the length of a `List` or `String`,
+/// which the runtime keeps in `0..2^31`. Any other `i32` field may be negative.
+fn is_seq_length(engine: &Engine, binds: &Binds, op: Operand) -> bool {
+    let op = resolve(engine, binds, peel_capture_block(engine, binds, op));
+    let (field_index, receiver_type) = match op {
+        Operand::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::FieldAccess {
+                expr, field_index, ..
+            } => (*field_index, Some(engine.body.operand_type(*expr))),
+            _ => return false,
+        },
+        Operand::Value(v) => match engine.body.values.kind(v) {
+            ValueKind::FieldAccess {
+                receiver,
+                field_index,
+                ..
+            } => (
+                *field_index,
+                engine.body.values.type_of(*receiver).or_else(|| {
+                    let l = opaque_local(engine, *receiver)?;
+                    engine.locals().get(l as usize).map(|l| l.type_id)
+                }),
+            ),
+            _ => return false,
+        },
+    };
+    field_index == SeqField::Len.index()
+        && receiver_type.is_some_and(|t| is_seq_container_behind_refs(engine, t))
+}
+
+fn is_seq_container_behind_refs(engine: &Engine, mut ty: TypeId) -> bool {
+    let Some(types) = engine.value_graph_type_table() else {
+        return false;
+    };
+    loop {
+        match types.get(ty) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => ty = *inner,
+            _ => return types.is_seq_container(ty),
+        }
     }
 }
 
@@ -424,11 +648,9 @@ fn struct_field_init(
         .map(|f| f.value)
 }
 
-/// The offset `c` for which `bound` equals `guard_var + c`, where `bound` is an
-/// invariant struct-field read projected via [`struct_field_init`]. A bare
-/// arithmetic `guard_var + c` is refused: Wado add wraps, so it can overflow
-/// below `guard_var`. The struct-field form holds a real list length, kept in
-/// `[0, capacity)` with `capacity < 2^31`, so the equality proves no wrap.
+/// The offset `c` for which `bound`, a sequence length built from a literal,
+/// equals `guard_var + c`. A length is never negative, so `guard_var + c` did
+/// not wrap; bare arithmetic, or any other field, proves nothing of the kind.
 fn bound_offset_over(
     engine: &Engine,
     binds: &Binds,
@@ -447,6 +669,9 @@ fn bound_offset_over(
         return None;
     };
     let (recv, field_name) = (*recv, field_name.clone());
+    if !is_seq_length(engine, binds, Operand::Expr(e)) {
+        return None;
+    }
     let init = struct_field_init(engine, binds, recv, &field_name)?;
     match parse_var_offset(engine, binds, init) {
         Some((v, c)) if v == guard_var => Some(c),
@@ -787,40 +1012,147 @@ pub(super) fn stmt_modifies(engine: &Engine, s: StmtId, var: u32, bound: BoundKe
 /// [`stmt_modifies`] over an arbitrary node subtree (e.g. the right operand of a
 /// short-circuit `||`).
 pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: BoundKey) -> bool {
-    let roots = [Some(var), bound_root(bound)];
-    modifies_root_matching(engine, node, |root| roots.contains(&Some(root)))
+    let roots: Vec<u32> = [Some(var), bound_root(bound)]
+        .into_iter()
+        .flatten()
+        .collect();
+    modifies_any_root(engine, node, &roots)
 }
 
-/// The local root the expression node itself may modify: an assignment's place,
-/// a `&mut` escape, or a method receiver (which may take `&mut self`).
-fn modified_root(body: &nir_arena::Body, e: ExprId) -> Option<u32> {
-    let place = match &body.exprs[e].kind {
-        ExprKind::Assign { target, .. } => *target,
-        ExprKind::Unary {
-            op: NirUnaryOp::MutRef,
-            expr: inner,
-        } => inner.as_expr()?,
-        ExprKind::Call {
-            args,
-            has_receiver: true,
-            ..
-        } => args.first()?.expr.as_expr()?,
-        _ => return None,
+/// One write an expression node may perform, in the value graph's alias model
+/// (the engine's alias sets), so the two cannot disagree over what a store
+/// reaches.
+#[derive(Clone, Copy)]
+enum Write {
+    /// The slot or storage of this local.
+    Root(u32),
+    /// Storage another handle may reach: every aliased local's.
+    Aliased,
+    /// What a call may do unseen: write every local escaped by `&mut`.
+    Call,
+}
+
+/// Every write the expression node `e` itself may perform. A method receiver
+/// counts whatever the callee declares, since the boxing rewrite can erase the
+/// `&mut self` a type test would read.
+fn for_each_write(engine: &Engine, e: ExprId, sink: &mut impl FnMut(Write)) {
+    let body = &*engine.body;
+    let no_signatures = hashmap::IndexMap::default();
+    let oracle = MutationOracle::new(&no_signatures);
+    expr_witnesses(body, e, &oracle, &mut |w| match w {
+        Witness::Rebind(l) => sink(Write::Root(l)),
+        Witness::MutBorrow(place) => {
+            if let Some(root) = storage_root(body, place) {
+                sink(Write::Root(root));
+            }
+        }
+        Witness::Write(inner) => {
+            if let Some(place) = inner.as_expr() {
+                write_through(engine, place, sink);
+            }
+        }
+        Witness::CalleeArg {
+            expr,
+            verdict,
+            is_mut,
+        } => {
+            if verdict.unwrap_or(is_mut) {
+                write_through(engine, expr, sink);
+            }
+        }
+        Witness::Receiver { expr, .. } | Witness::IndirectArg(expr) => {
+            write_through(engine, expr, sink);
+        }
+    });
+    match &body.exprs[e].kind {
+        ExprKind::Call { func_id, .. } => {
+            if !engine.is_panic_callee(*func_id) && !engine.is_pure_builtin_callee(*func_id) {
+                sink(Write::Call);
+            }
+        }
+        ExprKind::IndirectCall { .. } => sink(Write::Call),
+        _ => {}
+    }
+}
+
+/// A store into `place`: its root's storage, and every aliased local's when the
+/// root is aliased or the chain crosses a reference to storage it does not own.
+fn write_through(engine: &Engine, place: ExprId, sink: &mut impl FnMut(Write)) {
+    match write_root(engine.body, place, false) {
+        WriteRoot::Local(root) => {
+            sink(Write::Root(root));
+            if engine.aliased().contains(&root) || place_crosses_reference(engine, place) {
+                sink(Write::Aliased);
+            }
+        }
+        WriteRoot::Aliased => sink(Write::Aliased),
+        WriteRoot::Temp => {}
+    }
+}
+
+/// Whether some step of the place chain at `e`, its root included, is a
+/// reference. Without a type table every step might be.
+fn place_crosses_reference(engine: &Engine, e: ExprId) -> bool {
+    let Some(types) = engine.value_graph_type_table() else {
+        return true;
     };
-    storage_root(body, place)
+    let mut cur = e;
+    loop {
+        if matches!(
+            types.get(engine.body.exprs[cur].type_id),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) {
+            return true;
+        }
+        let next = match &engine.body.exprs[cur].kind {
+            ExprKind::Unary { expr: inner, .. }
+            | ExprKind::Cast { expr: inner, .. }
+            | ExprKind::FieldAccess { expr: inner, .. }
+            | ExprKind::VariantPayload { expr: inner, .. }
+            | ExprKind::Index { expr: inner, .. } => inner.as_expr(),
+            _ => None,
+        };
+        match next {
+            Some(inner) => cur = inner,
+            None => return false,
+        }
+    }
 }
 
-/// Whether anything under `node` modifies a root `wanted` accepts.
-fn modifies_root_matching(
-    engine: &Engine,
-    node: NodeRef,
-    mut wanted: impl FnMut(u32) -> bool,
-) -> bool {
+/// Whether `w` may change what `root` holds.
+fn write_hits(engine: &Engine, w: Write, root: u32) -> bool {
+    match w {
+        Write::Root(r) => r == root,
+        Write::Aliased => reachable_elsewhere(engine, root),
+        Write::Call => engine.mut_escaped().contains(&root),
+    }
+}
+
+/// Whether another handle may reach what `root` holds: an aliased local, or a
+/// reference, whose pointee the frame does not own.
+fn reachable_elsewhere(engine: &Engine, root: u32) -> bool {
+    engine.aliased().contains(&root)
+        || engine.locals().get(root as usize).is_none_or(|l| {
+            engine.value_graph_type_table().is_none_or(|types| {
+                matches!(
+                    types.get(l.type_id),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                )
+            })
+        })
+}
+
+/// Whether anything under `node` may change what one of `roots` holds.
+fn modifies_any_root(engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
     engine
         .body
         .find_in_live_node_under(node, |n| {
             let NodeRef::Expr(e) = n else { return None };
-            wanted(modified_root(engine.body, e)?).then_some(())
+            let mut hit = false;
+            for_each_write(engine, e, &mut |w| {
+                hit |= roots.iter().any(|&r| write_hits(engine, w, r));
+            });
+            hit.then_some(())
         })
         .is_some()
 }
@@ -979,7 +1311,7 @@ fn eliminate_checks_in_node(
 
 /// `<=` loop-guard elimination (`var <= gbound`, surviving `var < gbound + 1`):
 /// drive to `false` every dominated check `var + j >= B` whose bound `B` relates
-/// to `gbound + c` with `c >= j + 1` ([`bound_offset_over`]), since then
+/// to `gbound + c` with `c > j >= 0` ([`bound_offset_over`]), since then
 /// `var + j <= gbound + j < gbound + c = B`. Recovers `arr.used == limit + 1`
 /// where the guard is `i <= limit` (structural, value_of-free).
 fn eliminate_le_checks_in_node(
@@ -994,7 +1326,9 @@ fn eliminate_le_checks_in_node(
         let Some((cvar, cj)) = parse_var_offset(engine, binds, left) else {
             return false;
         };
-        cvar == var && bound_offset_over(engine, binds, right, gbound).is_some_and(|c| c > cj)
+        cvar == var
+            && cj >= 0
+            && bound_offset_over(engine, binds, right, gbound).is_some_and(|c| c > cj)
     })
 }
 
@@ -1463,22 +1797,40 @@ impl ArenaOptVisitor for ConstBoundIndexEliminator<'_> {
 // Redundant bounds-check elimination (forward, dominating panic-guards)
 // ---------------------------------------------------------------------------
 
-/// A proven fact `var + off < bound`, established by a dominating panic-guard's
-/// fall-through and held while walking in execution order.
-type ProvenLt = (u32, i64, BoundKey);
+/// A proven fact `var + j < bound` for every `j` in `lo..=hi`, held while
+/// walking in execution order.
+#[derive(Clone, Copy)]
+struct ProvenLt {
+    var: u32,
+    lo: i64,
+    hi: i64,
+    bound: BoundKey,
+}
 
-/// True if some fact refutes the check `var + j >= bound`: a fact
-/// `var + off < bound` with `off >= j` gives `var + j <= var + off < bound`.
+impl ProvenLt {
+    /// A passed guard proves its own offset only: Wado add wraps, so
+    /// `var + off < bound` holds of a wrapped sum while `var + j` is large.
+    fn exact(var: u32, off: i64, bound: BoundKey) -> Self {
+        Self {
+            var,
+            lo: off,
+            hi: off,
+            bound,
+        }
+    }
+}
+
+/// True if some fact refutes the check `var + j >= bound`.
 fn facts_refute(facts: &[ProvenLt], var: u32, j: i64, bound: BoundKey) -> bool {
     facts
         .iter()
-        .any(|&(fv, foff, fb)| fv == var && fb == bound && foff >= j)
+        .any(|f| f.var == var && f.bound == bound && (f.lo..=f.hi).contains(&j))
 }
 
 /// Drop every fact whose `var` / `bound` root `node` may modify (conservative:
 /// a false "modifies" only keeps a fact, never invents one).
 fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<ProvenLt>) {
-    facts.retain(|&(v, _, b)| !node_modifies(engine, node, v, b));
+    facts.retain(|f| !node_modifies(engine, node, f.var, f.bound));
 }
 
 /// The `(minuend, k)` of a `<expr> - k` (skeleton or promoted), if any.
@@ -1491,12 +1843,8 @@ fn sub_const(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, i6
     parse_const_i64(engine, binds, subtrahend).map(|k| (minuend, k))
 }
 
-/// The fact a `let idx = <length field> - k` (k >= 1) proves: `idx + (k-1) <
-/// field`. Sound because the field is an array length (`Field` bound), hence
-/// non-negative, so `field - k` never signed-wraps (`field >= 0` ⇒
-/// `field - k > i32::MIN`). Returned as an ordinary [`ProvenLt`] so [`invalidate`]
-/// drops it if the array is resized before the check — the `arr.last()` idiom,
-/// flow-sensitive rather than a stale check-point match.
+/// The fact a `let idx = <seq>.len() - k` (k >= 1) proves, as in the
+/// `arr.last()` idiom: `idx + j < len` for `j < k`.
 fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<ProvenLt> {
     let NodeRef::Stmt(s) = node else {
         return None;
@@ -1513,7 +1861,14 @@ fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<Prove
         return None;
     }
     let bound = parse_bound(engine, binds, minuend)?;
-    matches!(bound, BoundKey::Field(..)).then_some((local_index, k - 1, bound))
+    // `idx + j` is `len - k + j`: below `len` for `j < k`, and unwrapped while
+    // `j >= i32::MIN + k`, since `len >= 0`.
+    is_seq_length(engine, binds, minuend).then_some(ProvenLt {
+        var: local_index,
+        lo: i64::from(i32::MIN) + k,
+        hi: k - 1,
+        bound,
+    })
 }
 
 /// The constant a `+ 1` counting loop's variable enters at, when the enclosing
@@ -1729,7 +2084,7 @@ fn rbce_walk(
                 eliminate_condition(engine, node, cond);
                 return true;
             }
-            facts.push((var, off, bound));
+            facts.push(ProvenLt::exact(var, off, bound));
             return false;
         }
         if let Some(ce) = cond.as_expr() {

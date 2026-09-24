@@ -1,0 +1,37 @@
+// `&`, `|` and `^` over bools evaluate both sides, and a constant side that is
+// the operator's identity leaves the other: `true & x`, `false | x` and
+// `false ^ x` are `x`. Two constants fold outright.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn check(x: bool) -> i32 {
+    let mut n = 0;
+    if true & x {
+        n += 1;
+    }
+    if x | false {
+        n += 2;
+    }
+    if false ^ x {
+        n += 4;
+    }
+    if !(true & true) {
+        n += 8;
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    println(`${check(builtin::black_box(true))} ${check(builtin::black_box(false))}`);
+}
+
+__DATA__
+{
+    "stdout": "7 0\n",
+    "wir_scope": "check",
+    "wir_not_expect:O2": [
+        "1 & x",
+        "x | 0",
+        "0 ^ x"
+    ]
+}

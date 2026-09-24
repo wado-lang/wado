@@ -9,7 +9,7 @@ use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
     TirStructPatternField, TypeId, TypeTable,
 };
-use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
+use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt, remap_local_reads};
 use crate::token::Span;
 
 /// Idempotent: a second walk finds no `mut` bindings to lift.
@@ -49,37 +49,66 @@ impl MutBindingLifter {
             .is_some_and(|l| l.is_mut)
     }
 
+    /// The fresh local standing in for `original`. Or-pattern alternatives
+    /// bind one name, so every alternative shares the first one's local.
+    fn lift_local(
+        &mut self,
+        name: &str,
+        original: u32,
+        type_id: TypeId,
+        span: Span,
+        lifted: &mut LiftedBindings,
+    ) -> u32 {
+        if let Some(&(_, fresh)) = lifted.fresh.iter().find(|(o, _)| *o == original) {
+            return fresh;
+        }
+        let fresh = self.alloc_local(type_id);
+        lifted.fresh.push((original, fresh));
+        lifted.lets.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: name.to_string(),
+                local_index: original,
+                is_mut: true,
+                is_reactive: false,
+                type_id,
+                value: TirExpr::new(
+                    TirExprKind::Local {
+                        index: fresh,
+                        name: fresh_local_name(fresh),
+                    },
+                    type_id,
+                    span,
+                ),
+                skip_value_copy: false,
+            },
+            span,
+        ));
+        fresh
+    }
+
     /// Replace each `mut` binding in `arm.pattern` with a fresh non-mut local
-    /// and prepend `let mut original = fresh` to the arm body, which the fold
-    /// then decides as it decides any other `Let`.
+    /// and prepend `let mut original = fresh` to the arm, which the fold then
+    /// decides as it decides any other `Let`.
     fn lift_in_match_arm(&mut self, arm: &mut TirMatchArm) {
         let span = arm.span;
-        let mut prefix_stmts: Vec<TirStmt> = Vec::new();
-        self.lift_in_pattern(&mut arm.pattern, span, &mut prefix_stmts);
-        if prefix_stmts.is_empty() {
+        let mut lifted = LiftedBindings::default();
+        self.lift_in_pattern(&mut arm.pattern, span, &mut lifted);
+        if lifted.lets.is_empty() {
             return;
         }
-        let body_span = arm.body.span;
-        let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, body_span);
-        let original_body = std::mem::replace(&mut arm.body, placeholder);
-        let original_type = original_body.type_id;
-        let mut stmts = prefix_stmts;
-        stmts.push(TirStmt::new(TirStmtKind::Expr(original_body), body_span));
-        arm.body = TirExpr::new(
-            TirExprKind::Block(TirBlock {
-                stmts,
-                span: body_span,
-            }),
-            original_type,
-            body_span,
-        );
+        // The guard runs first and its locals persist into the body, so a
+        // guard gets the lets and the body shares its binding.
+        match arm.guard.as_mut() {
+            Some(guard) => prepend_stmts(guard, lifted.lets),
+            None => prepend_stmts(&mut arm.body, lifted.lets),
+        }
     }
 
     fn lift_in_pattern(
         &mut self,
         pattern: &mut TirPattern,
         span: Span,
-        prefix_stmts: &mut Vec<TirStmt>,
+        lifted: &mut LiftedBindings,
     ) {
         match pattern {
             TirPattern::Binding {
@@ -90,63 +119,76 @@ impl MutBindingLifter {
                 if !self.local_is_mut(*local_index) {
                     return;
                 }
-                let fresh_index = self.alloc_local(*type_id);
-                let original_name = name.clone();
-                let original_index = *local_index;
-                let original_type = *type_id;
-                let fresh_name = format!("$match_mut_lift_{fresh_index}");
-                prefix_stmts.push(TirStmt::new(
-                    TirStmtKind::Let {
-                        name: original_name,
-                        local_index: original_index,
-                        is_mut: true,
-                        is_reactive: false,
-                        type_id: original_type,
-                        value: TirExpr::new(
-                            TirExprKind::Local {
-                                index: fresh_index,
-                                name: fresh_name.clone(),
-                            },
-                            original_type,
-                            span,
-                        ),
-                        skip_value_copy: false,
-                    },
-                    span,
-                ));
+                let fresh_index = self.lift_local(name, *local_index, *type_id, span, lifted);
                 *pattern = TirPattern::Binding {
-                    name: fresh_name,
+                    name: fresh_local_name(fresh_index),
                     local_index: fresh_index,
-                    type_id: original_type,
+                    type_id: *type_id,
                 };
             }
             TirPattern::Variant { bindings, .. } => {
                 for sub in bindings.iter_mut() {
-                    self.lift_in_pattern(sub, span, prefix_stmts);
+                    self.lift_in_pattern(sub, span, lifted);
                 }
             }
             TirPattern::Tuple(sub_patterns, _) => {
                 for sub in sub_patterns.iter_mut() {
-                    self.lift_in_pattern(sub, span, prefix_stmts);
+                    self.lift_in_pattern(sub, span, lifted);
                 }
             }
             TirPattern::Struct { fields, .. } => {
                 for TirStructPatternField { pattern, .. } in fields.iter_mut() {
-                    self.lift_in_pattern(pattern, span, prefix_stmts);
+                    self.lift_in_pattern(pattern, span, lifted);
                 }
             }
             TirPattern::Or(alternatives) => {
                 for alt in alternatives.iter_mut() {
-                    self.lift_in_pattern(alt, span, prefix_stmts);
+                    self.lift_in_pattern(alt, span, lifted);
                 }
+            }
+            TirPattern::Narrow {
+                name: Some(name),
+                local_index,
+                type_id,
+                test,
+            } => {
+                if !self.local_is_mut(*local_index) {
+                    return;
+                }
+                let fresh_index = self.lift_local(name, *local_index, *type_id, span, lifted);
+                remap_local_reads(test, *local_index, fresh_index);
+                *local_index = fresh_index;
             }
             TirPattern::Wildcard
             | TirPattern::Literal(_)
             | TirPattern::Enum { .. }
             | TirPattern::ConstantValue { .. }
+            | TirPattern::Narrow { name: None, .. }
             | TirPattern::Range { .. } => {}
         }
     }
+}
+
+/// An arm's lifted bindings: each original local's fresh stand-in, and the
+/// `let mut original = fresh` statements that rebind them.
+#[derive(Default)]
+struct LiftedBindings {
+    fresh: Vec<(u32, u32)>,
+    lets: Vec<TirStmt>,
+}
+
+fn fresh_local_name(index: u32) -> String {
+    format!("$match_mut_lift_{index}")
+}
+
+fn prepend_stmts(expr: &mut TirExpr, prefix: Vec<TirStmt>) {
+    let span = expr.span;
+    let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span);
+    let original = std::mem::replace(expr, placeholder);
+    let type_id = original.type_id;
+    let mut stmts = prefix;
+    stmts.push(TirStmt::new(TirStmtKind::Expr(original), span));
+    *expr = TirExpr::new(TirExprKind::Block(TirBlock { stmts, span }), type_id, span);
 }
 
 impl TirOptVisitor for MutBindingLifter {

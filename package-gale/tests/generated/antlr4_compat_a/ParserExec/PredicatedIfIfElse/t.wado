@@ -1083,7 +1083,7 @@ pub global TK_ID: i32 = 1;
 pub global TK_WS: i32 = 2;
 pub global TK_EOF: i32 = 3;
 pub global TK_ERROR: i32 = 4;
-pub global TK_LIT_IF: i32 = 5;
+pub global TK_LIT_if: i32 = 5;
 
 struct Lexer {
     chars: List<char>,
@@ -1172,25 +1172,28 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '\t' | '\n' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { 'e' } {
-            end = try_ELSE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ELSE; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 'i' } {
-            end = try_lit_if(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_IF; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 'a'..='z' | 'A'..='Z' } {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
+        match first_char {
+            '\t' | '\n' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            'A'..='Z' | 'a'..='d' | 'f'..='h' | 'j'..='z' => {
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            'e' => {
+                end = try_ELSE(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ELSE; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            'i' => {
+                end = try_lit_if(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_if; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1219,14 +1222,14 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_IF => "'if'",
+        TK_LIT_if => "'if'",
         _ => "Unknown",
     };
 }
 
 pub global RK_S: NodeKind = 0;
 pub global RK_STMT: NodeKind = 1;
-pub global RK_IFSTMT: NodeKind = 2;
+pub global RK_IF_STMT: NodeKind = 2;
 
 global RULE_NAMES: List<String> = ["s", "stmt", "ifStmt"];
 
@@ -1581,7 +1584,7 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if alt_kind == TK_LIT_IF {
+        if alt_kind == TK_LIT_if {
             pos = start;
             try_0: {
                 pos = scan_if_stmt(tokens, pos);
@@ -1601,7 +1604,7 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_if_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_if { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
@@ -1652,7 +1655,7 @@ fn _parse_s(p: &mut Parser) -> () {
 
 fn _parse_stmt__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
-    if kind == TK_LIT_IF {
+    if kind == TK_LIT_if {
         let if_stmt = _parse_if_stmt(p);
         return;
     }
@@ -1680,7 +1683,7 @@ fn _parse_stmt(p: &mut Parser) -> () {
 }
 
 fn _parse_if_stmt__inner(p: &mut Parser) -> () {
-    let lit_if = p.expect(TK_LIT_IF, &SYNC_1);
+    let lit_if = p.expect(TK_LIT_if, &SYNC_1);
     let id = p.expect(TK_ID, &SYNC_0);
     let stmt = _parse_stmt(p);
     let grp_kind = p.peek_kind();
@@ -1698,7 +1701,7 @@ fn _parse_if_stmt__inner(p: &mut Parser) -> () {
 fn _parse_if_stmt(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_IFSTMT, _start);
+    p.b.start_node(RK_IF_STMT, _start);
     _parse_if_stmt__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
@@ -1771,7 +1774,7 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_ID, TK_LIT_IF];
+global SYNC_0: List<i32> = [TK_ID, TK_LIT_if];
 global SYNC_1: List<i32> = [TK_ID];
 global SYNC_2: List<i32> = [TK_ELSE];
 

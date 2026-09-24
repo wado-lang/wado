@@ -1,0 +1,43 @@
+// A supertrait clause writes its arguments in the declaring trait's parameter
+// space, so a substitution carries the reader's argument in: `Collect<Item =
+// X::Item>` read at `Sink<Feed>` binds `Item` to what `Feed` binds it to.
+
+trait Src with () {
+    type Item;
+}
+
+trait Collect with () {
+    type Item;
+
+    fn one(&self) -> Self::Item;
+}
+
+trait Sink<X: Src>: Collect<Item = X::Item> with () {}
+
+struct Feed {}
+
+impl Src for Feed {
+    type Item = i32;
+}
+
+struct Bag {
+    n: i32,
+}
+
+impl Collect for Bag {
+    type Item = i32;
+
+    fn one(&self) -> i32 {
+        return self.n;
+    }
+}
+
+impl Sink<Feed> for Bag {}
+
+fn take<T: Sink<Feed>>(t: &T) -> i32 {
+    return t.one();
+}
+
+test "a constraint projecting off a trait parameter reaches the impl" {
+    assert take(&Bag { n: 7 }) == 7;
+}

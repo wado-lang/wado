@@ -1,0 +1,12 @@
+// An ascription that does not narrow must name the type it already has.
+fn pick(opt: Option<i32>) -> i32 {
+    if let Some(x: String) = opt {
+        return 1;
+    }
+    return 0;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "type mismatch"}

@@ -1,8 +1,8 @@
 use { Alternative, Element, Visibility } from "./ir.wado";
-use { FOLLOW_PARAM } from "./ident.wado";
-use { CodeWriter } from "./wadopoet.wado";
+use { FOLLOW_PARAM, symbol_char_names, char_hex_name } from "./ident.wado";
+use { CodeWriter } from "lib:wadopoet";
 use { unwrap_label } from "./lr_util.wado";
-pub use { escape_ident, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
+pub use { escape_ident, escape_case, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 
 /// Emit a `// rule visibility: <name> (ignored by codegen, matches ANTLR4)`
 /// comment for a rule whose .g4 source carried a `public` / `private` /
@@ -29,62 +29,17 @@ pub fn rule_type_name<S: AsStrSlice>(name: S) -> String {
     return result;
 }
 
-fn symbol_char_names(c: char) -> Option<[String, String]> {
-    return match c {
-        '+' => Option::Some(["plus", "PLUS"]),
-        '-' => Option::Some(["minus", "MINUS"]),
-        '*' => Option::Some(["star", "STAR"]),
-        '/' => Option::Some(["slash", "SLASH"]),
-        '%' => Option::Some(["percent", "PERCENT"]),
-        '=' => Option::Some(["eq", "EQ"]),
-        '!' => Option::Some(["bang", "BANG"]),
-        '<' => Option::Some(["lt", "LT"]),
-        '>' => Option::Some(["gt", "GT"]),
-        '&' => Option::Some(["amp", "AMP"]),
-        '|' => Option::Some(["pipe", "PIPE"]),
-        '^' => Option::Some(["caret", "CARET"]),
-        '~' => Option::Some(["tilde", "TILDE"]),
-        '.' => Option::Some(["dot", "DOT"]),
-        ',' => Option::Some(["comma", "COMMA"]),
-        ':' => Option::Some(["colon", "COLON"]),
-        ';' => Option::Some(["semicolon", "SEMI"]),
-        '(' => Option::Some(["lparen", "LPAREN"]),
-        ')' => Option::Some(["rparen", "RPAREN"]),
-        '{' => Option::Some(["lbrace", "LBRACE"]),
-        '}' => Option::Some(["rbrace", "RBRACE"]),
-        '[' => Option::Some(["lbracket", "LBRACKET"]),
-        ']' => Option::Some(["rbracket", "RBRACKET"]),
-        '?' => Option::Some(["question", "QUESTION"]),
-        '@' => Option::Some(["at", "AT"]),
-        '#' => Option::Some(["hash", "HASH"]),
-        '$' => Option::Some(["dollar", "DOLLAR"]),
-        '\\' => Option::Some(["backslash", "BSLASH"]),
-        '`' => Option::Some(["backtick", "BTICK"]),
-        '"' => Option::Some(["dquote", "DQUOTE"]),
-        '\'' => Option::Some(["squote", "SQUOTE"]),
-        _ => null,
-    };
-}
-
-/// Lowercase hex representation of `c`'s Unicode scalar value, used as a
-/// collision-free fallback when a character has no entry in
-/// [`symbol_char_names`].  For ASCII this is two digits (e.g. `?` → `3f`).
-fn char_hex_name(c: char) -> String {
-    let code = c as i32;
-    let mut result = String::with_capacity(6);
-    let mut started = false;
-    for let mut shift = 28; shift >= 0; shift -= 4 {
-        let nibble = code >> shift & 0xf;
-        if nibble != 0 || started || shift == 0 {
-            started = true;
-            if nibble < 10 {
-                result.push(char::from_u32_unchecked(('0' as i32 + nibble) as u32));
-            } else {
-                result.push(char::from_u32_unchecked(('a' as i32 + nibble - 10) as u32));
-            }
-        }
+/// A rule's `RK_` node-kind constant: its snake-case name uppercased, so
+/// `valueInfo` reaches `RK_VALUE_INFO`. The declaration and every `start_node`
+/// referring to it come through here, which is what keeps them one name.
+pub fn rule_kind_const<S: AsStrSlice>(name: S) -> String {
+    let snake = to_snake_case(name);
+    let mut out = String::with_capacity(snake.len() + 3);
+    out.push_str("RK_");
+    for let c of snake.chars() {
+        out.push(c.to_ascii_uppercase());
     }
-    return result;
+    return out;
 }
 
 /// Field base name for a parser-side `~ X` (set complement). The inner element
@@ -413,27 +368,6 @@ pub fn token_group_field_name(alts: &List<Alternative>) -> String {
     return result;
 }
 
-pub fn literal_const_name<S: AsStrSlice>(text: S) -> String {
-    let mut result = String::with_capacity(text.len() + 8);
-    result.push_str("TK_LIT_");
-    for let c of text.chars() {
-        if c.is_ascii_lowercase() {
-            result.push(c.to_ascii_uppercase());
-        } else if c.is_ascii_uppercase() || '0' <= c <= '9' {
-            result.push(c);
-        } else if let Some(names) = symbol_char_names(c) {
-            result.push_str(&names.1);
-        } else {
-            // Unknown character: encode the Unicode scalar as hex so distinct
-            // characters never collapse to the same name (e.g. `?`, `@`, `#`
-            // all used to degenerate to a single `_`).
-            result.push_str("U");
-            result.push_str(&char_hex_name(c));
-        }
-    }
-    return result;
-}
-
 /// Returns true if every alt in `alts` is a single TokenRef or Literal
 /// element. Such rules collapse to a one-token kind check at scan time
 /// and to a compact `{ span, token }` struct (instead of an N-arm
@@ -459,7 +393,7 @@ pub fn all_alts_are_single_token(alts: &List<Alternative>) -> bool {
 pub fn single_token_first(elem: &Element) -> String {
     return match elem {
         TokenRef(t) => `TK_${t.name}`,
-        Literal(l) => literal_const_name(&l.text),
+        Literal(l) => l.const_name,
         _ => panic("single_token_first: unexpected element"),
     };
 }

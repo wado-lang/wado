@@ -16,6 +16,7 @@ use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp,
     TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern,
     TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable, method_param_offset,
+    transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
@@ -218,10 +219,6 @@ struct SubstitutedCall {
     /// The pre-substitution mangled name, still the blanket-template key for a
     /// bare-`T` blanket dispatch.
     original_name: String,
-    /// Whether the *pre-substitution* receiver was an associated-type projection
-    /// (`S::SeqSerializer`) — read from the original method info's metadata, since
-    /// substitution rewrites the receiver into a plain concrete name.
-    receiver_is_assoc_projection: bool,
     /// Substituted impl type args, in param-index order.
     type_args: Vec<TypeId>,
     /// Substituted method-level type args, in declaration order. Non-empty for
@@ -1880,10 +1877,11 @@ impl Monomorphizer {
         // inherit, and peeling is how it is reached.
         if type_table.reflect_kind(tid) == Some(CompilerItem::ReflectNewtype) {
             let items = type_table.compiler_items();
-            if [CompilerItem::Reflect, CompilerItem::ReflectNewtype]
-                .into_iter()
-                .any(|item| items.trait_fq_opt(item).as_ref() == Some(trait_name))
-            {
+            if trait_name.canonical().is_some_and(|declared| {
+                [CompilerItem::Reflect, CompilerItem::ReflectNewtype]
+                    .into_iter()
+                    .any(|item| items.trait_def(item) == Some(declared))
+            }) {
                 return tid;
             }
         }
@@ -1998,19 +1996,33 @@ impl Monomorphizer {
                     .unwrap_or_else(|| type_table.make_tuple(vec![]));
                 substitution.insert(param.index, projected);
             } else if param.is_pack {
-                // Variadic pack: map the pack index to a tuple of the impl-level type args,
-                // excluding non-pack impl params.
-                let pack_args_count = key
-                    .impl_type_args
-                    .len()
-                    .saturating_sub(non_pack_impl_params_count);
-                let pack_args: Vec<TypeId> = key
-                    .impl_type_args
-                    .iter()
-                    .take(pack_args_count)
-                    .copied()
-                    .collect();
-                let pack_type = type_table.make_tuple(pack_args);
+                // Read the shape off the declaration, never off `key`:
+                // `InstantiationKey` leaves `method_info` out of its equality
+                // and hash, so two keys differing only there share one entry.
+                let one_arg_per_param = generic
+                    .method_info
+                    .as_ref()
+                    .is_some_and(|info| info.receiver.is_declared_type());
+                let before = param.index as usize;
+                let pack_type = if one_arg_per_param {
+                    key.impl_type_args
+                        .get(before)
+                        .copied()
+                        .unwrap_or_else(|| type_table.make_tuple(vec![]))
+                } else {
+                    let pack_args_count = key
+                        .impl_type_args
+                        .len()
+                        .saturating_sub(non_pack_impl_params_count);
+                    let pack_args: Vec<TypeId> = key
+                        .impl_type_args
+                        .iter()
+                        .skip(before)
+                        .take(pack_args_count)
+                        .copied()
+                        .collect();
+                    type_table.make_tuple(pack_args)
+                };
                 substitution.insert(param.index, pack_type);
             } else if let Some(&arg) = key.impl_type_args.get(param.index as usize) {
                 substitution.insert(param.index, arg);
@@ -2139,6 +2151,8 @@ impl Monomorphizer {
             effects: generic.effects.clone(),
             retains: generic.retains.clone(),
             immediates: generic.immediates.clone(),
+            trap: generic.trap.clone(),
+            linear_memory: generic.linear_memory,
             body,
             span: generic.span,
             local_count,
@@ -2325,6 +2339,14 @@ impl Monomorphizer {
                     && !substitution.is_empty()
                     && let Some(info) = call_func.method_info.clone()
                 {
+                    // Only a receiver the substitution answers carries its
+                    // trait's arguments with it; every other instance keeps the
+                    // template's spelling, which is what defines it.
+                    let info = if info.is_type_param_receiver {
+                        self.trait_named_at_instance(info, substitution, type_table)
+                    } else {
+                        info
+                    };
                     let old_func_name = call_func.name.clone();
                     let module_source = call_func.module_source.clone();
 
@@ -2958,65 +2980,10 @@ impl Monomorphizer {
                     local_count,
                     locals,
                 );
-                // After substitution, expand to transposed TupleLiteral.
-                // Inner expr type: [[A0, A1, ...], [B0, B1, ...], ...]
-                // Result: [[A0, B0, ...], [A1, B1, ...], ...]
                 let inner_expr = zip_inner.as_ref().clone();
-                let span = expr.span;
-                let outer_elems = match type_table.as_tuple(inner_expr.type_id) {
-                    Some(elems) => elems,
-                    None => return,
-                };
-                let inner_arities: Vec<Vec<TypeId>> = outer_elems
-                    .iter()
-                    .filter_map(|e| type_table.as_tuple(*e))
-                    .collect();
-                if inner_arities.is_empty() || inner_arities.len() != outer_elems.len() {
-                    return;
-                }
-                let arity = inner_arities[0].len();
-                let num_rows = outer_elems.len();
-                let mut col_exprs = Vec::with_capacity(arity);
-                for col in 0..arity {
-                    let mut row_exprs = Vec::with_capacity(num_rows);
-                    for (row, row_types) in inner_arities.iter().enumerate() {
-                        let row_access = TirExpr::new(
-                            TirExprKind::FieldAccess {
-                                expr: Box::new(inner_expr.clone()),
-                                field_index: row as u32,
-                                field_name: row.to_string(),
-                            },
-                            outer_elems[row],
-                            span,
-                        );
-                        let cell = TirExpr::new(
-                            TirExprKind::FieldAccess {
-                                expr: Box::new(row_access),
-                                field_index: col as u32,
-                                field_name: col.to_string(),
-                            },
-                            row_types[col],
-                            span,
-                        );
-                        row_exprs.push(cell);
-                    }
-                    let col_types: Vec<TypeId> = inner_arities.iter().map(|row| row[col]).collect();
-                    let col_tuple_type = type_table.make_tuple(col_types);
-                    col_exprs.push(TirExpr::new(
-                        TirExprKind::TupleLiteral {
-                            elements: row_exprs,
-                        },
-                        col_tuple_type,
-                        span,
-                    ));
-                }
-                // Compute the correct transposed type from the column tuple types
-                let transposed_types: Vec<TypeId> = col_exprs.iter().map(|e| e.type_id).collect();
-                let transposed_type = type_table.make_tuple(transposed_types);
-                expr.kind = TirExprKind::TupleLiteral {
-                    elements: col_exprs,
-                };
-                expr.type_id = transposed_type;
+                let transposed = transpose_tuple_expr(&inner_expr, expr.span, type_table);
+                expr.kind = transposed.kind;
+                expr.type_id = transposed.type_id;
             }
             TirExprKind::TypePackExpansion {
                 call_expr,
@@ -3352,7 +3319,8 @@ impl Monomorphizer {
     }
 
     /// The name with the template's type parameters replaced in the trait's
-    /// arguments: `T^Add<T>::add` under `T = Meters` names `Add<Meters>`.
+    /// arguments: `T^Add<T>::add` under `T = Meters` names `Add<Meters>`, and
+    /// `T^Make<T::Base>::make` under `T = UserName` names `Make<String>`.
     fn trait_named_at_instance(
         &self,
         info: LocalMethodName,
@@ -3365,14 +3333,51 @@ impl Monomorphizer {
         if !trait_name.args_mention_binder() {
             return info;
         }
-        let asked = self
-            .current_param_substitution_key
+        let bound = |name: &str| -> Option<TypeId> {
+            let key = self.current_param_substitution_key.get(name)?;
+            substitution.get(key).copied()
+        };
+        let args: Vec<FqTypeName> = trait_name
+            .args()
             .iter()
-            .filter_map(|(name, key)| Some((name, *substitution.get(key)?)))
-            .fold(trait_name.clone(), |trait_, (name, tid)| {
-                trait_.substitute(&FqTypeName::binder(name), &type_table.fq_type_name(tid))
-            });
-        info.with_trait_type_args(asked.args())
+            .map(|arg| Self::trait_arg_at_instance(arg, &bound, type_table))
+            .collect();
+        info.with_trait_type_args(&args)
+    }
+
+    /// One trait argument re-spelled at the instance, at every position a type
+    /// stands in: `Make<List<T::Base>>` under `T = Bag` names `Make<List<String>>`.
+    ///
+    /// A position the frame does not bind stays as written: the instance is
+    /// still inside a template, and the substitution that does bind it settles
+    /// its name.
+    fn trait_arg_at_instance(
+        arg: &FqTypeName,
+        bound: &impl Fn(&str) -> Option<TypeId>,
+        type_table: &TypeTable,
+    ) -> FqTypeName {
+        arg.rewrite(&|node| {
+            let answer = Self::type_at_instance(node, bound, type_table)?;
+            Some(type_table.fq_type_name(answer))
+        })
+    }
+
+    /// The type a name stands for at the instance: a binder the frame binds, or
+    /// a projection off one — through any depth, since `C::Iter::Item` answers
+    /// only once its own base does.
+    fn type_at_instance(
+        node: &FqTypeName,
+        bound: &impl Fn(&str) -> Option<TypeId>,
+        type_table: &TypeTable,
+    ) -> Option<TypeId> {
+        if let Some((base, assoc, owning_trait)) = node.projected() {
+            let base_id = Self::type_at_instance(base, bound, type_table)?;
+            return type_table.resolve_assoc_type_qualified(base_id, &owning_trait, assoc);
+        }
+        if !node.args().is_empty() {
+            return None;
+        }
+        bound(node.binder_name()?)
     }
 
     /// The name with the trait's arguments cut back to what the answering impl
@@ -3540,7 +3545,6 @@ impl Monomorphizer {
             info: new_info,
             mangled: new_func_name,
             original_name: old_func_name,
-            receiver_is_assoc_projection: info.receiver_is_assoc_projection(),
             type_args,
             method_type_args: sub_method_type_args,
             module_source,
@@ -3603,7 +3607,6 @@ impl Monomorphizer {
             info: new_info,
             mangled: new_func_name,
             original_name: old_func_name,
-            receiver_is_assoc_projection,
             type_args,
             method_type_args,
             module_source,
@@ -3683,9 +3686,7 @@ impl Monomorphizer {
                 blanket_impl_args(&self.functions.trait_env, b, recv_inner, type_table)
             });
             let has_projected = projected.as_ref().is_some_and(|args| args.len() > 1);
-            let blanket_name = if receiver_is_assoc_projection {
-                new_func_name.clone()
-            } else if let Some(b) = blanket.as_ref() {
+            let blanket_name = if let Some(b) = blanket.as_ref() {
                 blanket_template_name(b, &new_info, type_table)
             } else {
                 old_func_name
@@ -3737,7 +3738,6 @@ impl Monomorphizer {
             info: new_info,
             mangled: new_func_name,
             original_name: old_func_name,
-            receiver_is_assoc_projection: _,
             type_args,
             method_type_args: _,
             module_source,

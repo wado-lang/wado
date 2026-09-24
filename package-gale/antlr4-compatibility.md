@@ -58,6 +58,21 @@ diagnostic carries a span.
   (`( A | )+`, `( x )*` with `x : ;`) — `check_epsilon_closure`, ANTLR4
   error 153.
 
+Two more are decided as the text is read, so each carries a span:
+
+- **An escape the lexicon does not define** — ANTLR4 error 156. A string
+  literal takes `\n \r \t \b \f \\ \' \uXXXX \u{…}`. A char set takes the same
+  set with `\- \] \p{…} \P{…}` in place of `\'`. `\uXXXX` takes exactly four
+  hex digits. Anything else is an error, not the bare character. Reading `\[`
+  as `[` compiled a grammar here that the jar refuses, and said nothing about
+  it. The portable spelling `~[[\r\n]` means what `~[\[\r\n]` was written to
+  mean.
+- **A label on a block that is not a set** — ANTLR4 error 130. A set is two or
+  more alternatives, each a single terminal, so `x += (A|B)` takes a label
+  while `x = (ID)`, `x += (A*)`, `n = (ID ',')+` and `x += (.|A)` do not. A
+  label belongs on an atom or a set. `(e)` is not the free wrapper it looks
+  like.
+
 ### ICU is the source of truth for `\p{...}`
 
 `\p{...}` resolves through [`core:icu`](../docs/stdlib-core-icu.md), so its

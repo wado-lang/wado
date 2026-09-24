@@ -13,7 +13,7 @@ use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
-use crate::symbol::{SymbolKind, SymbolTable};
+use crate::symbol::SymbolTable;
 use crate::token::Span;
 
 /// What a reference site refers to.
@@ -27,6 +27,9 @@ pub enum Resolution {
     /// A type parameter of an enclosing item, named by the parameter's own
     /// node. `Self` binds to the `impl` or `trait` that introduces it.
     Binder(AstId),
+    /// An associated type read off a type parameter, named by that parameter's
+    /// binder. `T::Assoc` reaches a declaration only once `T` is a type.
+    Projection(AstId),
     /// Reaches no declaration.
     Unresolved,
 }
@@ -94,6 +97,10 @@ struct Scopes {
     /// hide the prelude's `List`.
     cases: IndexMap<ModuleSource, IndexMap<String, DefId>>,
     prelude_cases: IndexMap<String, DefId>,
+    /// Every case name the tiers above hold, from whichever module holds it.
+    /// A bare case pattern reads against the scrutinee's type, which the
+    /// pattern's module need not import, so this is what a pattern can mean.
+    case_names: hashmap::IndexSet<String>,
 }
 
 impl Scopes {
@@ -188,18 +195,15 @@ impl Scopes {
             }
         }
         // A builtin type is universal by nature rather than by export: `i32`
-        // names the same thing in a module that imports nothing, `#![no_prelude]`
-        // included.
-        for (id, sym) in symbols.iter() {
-            if matches!(sym.kind, SymbolKind::BuiltinType)
-                && is_prelude_module(sym.module_source())
-                && let Some(def) = defs.of_ast_id(*id)
-            {
-                surface.entry(sym.name.clone()).or_insert(def);
+        // names the same thing in a module that imports nothing.
+        for (name, id) in symbols.prelude_builtin_types() {
+            if let Some(def) = defs.of_ast_id(id) {
+                surface.entry(name.to_string()).or_insert(def);
             }
         }
         out.prelude = surface;
         out.prelude_cases = Self::collect_cases(defs, &out.prelude);
+        out.case_names.extend(out.prelude_cases.keys().cloned());
 
         for module in modules.keys() {
             let imports: IndexMap<String, DefId> = symbols
@@ -224,6 +228,7 @@ impl Scopes {
             for (name, def) in Self::collect_cases(defs, &own) {
                 cases.entry(name).or_insert(def);
             }
+            out.case_names.extend(cases.keys().cloned());
             out.imports.insert(module.clone(), imports);
             out.own.insert(module.clone(), own);
             out.cases.insert(module.clone(), cases);
@@ -306,6 +311,15 @@ impl Resolutions {
         self.scopes.prelude.get(name).copied()
     }
 
+    /// Every name the prelude puts in scope in every module, cases included.
+    pub fn prelude_names(&self) -> impl Iterator<Item = (&str, DefId)> {
+        self.scopes
+            .prelude
+            .iter()
+            .chain(&self.scopes.prelude_cases)
+            .map(|(name, def)| (name.as_str(), *def))
+    }
+
     /// The declaration `module` explicitly `use`d under the local name `name`.
     ///
     /// The import tier alone, so an alias answers with what it aliases and a
@@ -348,7 +362,7 @@ impl Resolutions {
     pub fn declared(&self, site: AstId) -> Option<DefId> {
         match self.get(site) {
             Resolution::Def(def) => Some(def),
-            Resolution::Binder(_) | Resolution::Unresolved => None,
+            Resolution::Binder(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
         }
     }
 
@@ -358,7 +372,7 @@ impl Resolutions {
     pub fn declared_if_walked(&self, site: AstId) -> Option<DefId> {
         match self.walked(site)? {
             Resolution::Def(def) => Some(def),
-            Resolution::Binder(_) | Resolution::Unresolved => None,
+            Resolution::Binder(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
         }
     }
 
@@ -400,11 +414,6 @@ impl Resolutions {
 
 /// The name `Self` binds to inside a `trait` or `impl` body.
 const SELF_TYPE: &str = "Self";
-
-fn is_prelude_module(module: &ModuleSource) -> bool {
-    matches!(module, ModuleSource::Core { name } if name.as_str() == "prelude"
-        || name.as_str().starts_with("prelude/"))
-}
 
 /// A module's declaration scope: the one implementation of "what does this name
 /// mean here", and the only place a name becomes a [`DefId`].
@@ -526,6 +535,8 @@ impl Resolver<'_> {
             match self.resolve_value_name(name) {
                 Resolution::Def(def) => Shadowed::Decl(def),
                 Resolution::Binder(_) => Shadowed::Binder,
+                // Only a `ns::Name` type site records a projection.
+                Resolution::Projection(_) => unreachable!("a value name cannot project"),
                 Resolution::Unresolved => return,
             }
         };
@@ -560,12 +571,15 @@ impl Resolver<'_> {
     /// those matches by value instead.
     ///
     /// A case answers here even where a type of the same name outranks it for a
-    /// reference: a pattern is read against the scrutinee's type.
+    /// reference, and even where the module does not import its type: only the
+    /// elaborator knows the scrutinee's type. `case_names` rather than the
+    /// module's own tier, since the lint this feeds had better miss a binder
+    /// than order a rename of a pattern that binds nothing.
     fn pattern_binds(&self, pat: &ast::Pattern, name: &str) -> bool {
         if self.irrefutable_pattern || matches!(pat, ast::Pattern::MutIdent { .. }) {
             return true;
         }
-        if self.scopes.case(self.module, name).is_some() {
+        if self.scopes.case_names.contains(name) {
             return false;
         }
         match self.resolve_value_name(name) {
@@ -852,15 +866,6 @@ impl AstVisitor for Resolver<'_> {
         ast::walk_pattern(self, pat);
     }
 
-    fn visit_generic_params(&mut self, params: &[GenericParam]) {
-        for p in params {
-            self.visit_trait_bounds(&p.bounds);
-            if let Some(default) = &p.default {
-                self.visit_type(default);
-            }
-        }
-    }
-
     /// A bound is a reference to a trait, and its associated-type bindings are
     /// references to that trait's members. Every bound position routes here —
     /// `<T: Trait>`, `trait Sub: Super`, `type A: Trait` — so an inherited
@@ -869,17 +874,16 @@ impl AstVisitor for Resolver<'_> {
         for bound in bounds {
             let answer = self.resolve_name(&bound.name);
             self.record(bound.id, answer);
-            for arg in &bound.type_args {
-                self.visit_type(arg);
-            }
             for assoc in &bound.assoc_types {
                 // The member is named relative to the bound's trait, not to
                 // this module, so the site is recorded and left for the
                 // consumer that knows the trait.
                 self.record(assoc.id, Resolution::Unresolved);
-                self.visit_type(&assoc.ty);
             }
         }
+        // The types a bound carries are reached structurally, so a shape the
+        // walker knows is never one this pass forgets to answer for.
+        ast::walk_trait_bounds(self, bounds);
     }
 
     /// A qualified path names declarations with the segments before its last:
@@ -971,7 +975,7 @@ impl AstVisitor for Resolver<'_> {
                 // the writing module instead would confidently answer with a
                 // different declaration that happens to share the name.
                 let answer = match self.binder(&ns.namespace) {
-                    Some(_) => Resolution::Unresolved,
+                    Some(base) => Resolution::Projection(base),
                     None => self
                         .symbols
                         .imported(

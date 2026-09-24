@@ -1,0 +1,36 @@
+// `Self` in a bound names the implementing type, and a free function binds
+// none. The parameter the bound is on is the name to write, so `Self::Item`
+// here is rejected rather than resolved to what `T::Item` already says.
+
+trait Src with () {
+    type Item;
+}
+
+trait Uses<A> with () {
+    fn go(&self, a: A) -> i32;
+}
+
+struct Holder {
+    n: i32,
+}
+
+impl Src for Holder {
+    type Item = i32;
+}
+
+impl Uses<i32> for Holder {
+    fn go(&self, a: i32) -> i32 {
+        return self.n + a;
+    }
+}
+
+fn drive<T: Src + Uses<Self::Item>>(t: &T, a: T::Item) -> i32 {
+    return t.go(a);
+}
+
+test "Self in a free function's bound is rejected" {
+    assert drive(&Holder { n: 1 }, 2) == 3;
+}
+
+__DATA__
+{"test": {}, "compile_error": "names no implementing type here"}

@@ -542,6 +542,7 @@ impl<'a> Engine<'a> {
             self.body,
             root,
             0,
+            &self.param_locals,
             &empty,
             &self.aliased_locals,
             &self.untrackable_locals,
@@ -608,6 +609,7 @@ impl<'a> Engine<'a> {
             self.body,
             root,
             0,
+            &self.param_locals,
             &empty,
             &self.aliased_locals,
             &self.untrackable_locals,
@@ -710,6 +712,12 @@ impl<'a> Engine<'a> {
         &self.mut_escaped_locals
     }
 
+    /// Locals another handle may reach, so a store through any handle may land
+    /// in theirs. Set by [`Engine::set_alias_sets`].
+    pub fn aliased(&self) -> &IndexSet<u32> {
+        &self.aliased_locals
+    }
+
     /// Record the owning function's parameter local indices so the value graph
     /// seeds them up front (see the field doc on `param_locals`). Used by the
     /// one build-once construction; the graph is never rebuilt on a later change.
@@ -776,6 +784,13 @@ impl<'a> Engine<'a> {
     /// `false` when no set was supplied.
     pub fn is_panic_callee(&self, func_id: FuncId) -> bool {
         self.panic_callee_ids.is_some_and(|s| s.contains(&func_id))
+    }
+
+    /// Whether `func_id` is one of the supplied pure builtins, which write no
+    /// heap. `false` when no set was supplied.
+    pub fn is_pure_builtin_callee(&self, func_id: FuncId) -> bool {
+        self.pure_builtin_callees
+            .is_some_and(|s| s.contains(&func_id))
     }
 
     /// The type table supplied for value-graph folding, if any. Used by
@@ -1623,11 +1638,13 @@ impl<'a> Engine<'a> {
             ExprKind::Switch {
                 scrutinee,
                 min_value,
+                table,
                 arms,
                 default,
             } => ExprKind::Switch {
                 scrutinee: self.clone_operand(scrutinee),
                 min_value,
+                table,
                 arms: arms.into_iter().map(|a| self.clone_block(a)).collect(),
                 default: self.clone_block(default),
             },
@@ -1820,7 +1837,8 @@ mod tests {
     use crate::const_eval::Value;
     use crate::nir::NirBinaryOp;
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
-    use crate::tir::{PrimitiveType, TypeTable};
+    use crate::primitive::PrimitiveType;
+    use crate::tir::TypeTable;
     use Span;
     use std::assert_matches;
 

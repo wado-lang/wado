@@ -1,0 +1,10 @@
+// Widening is a value conversion, so it goes through `From` rather than
+// `as`: one syntax cannot mean both a conversion and a reinterpretation.
+
+export fn run() {
+    let a = f16::from_bits(0x3C00);
+    let _wide = a as f32;
+}
+
+__DATA__
+{"compile_error": "`as` does not convert `f16`; use `f32::from(x)`"}

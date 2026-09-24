@@ -287,6 +287,11 @@ exist. `AssocTypeProjection::owning_trait` carries a `DefId` for the same reason
 `Newtype` carries the same head/arguments split `Struct` has, so the impl index
 is never handed a fused spelling no `impl` header writes.
 
+A projection interns by its `bounds` too, so those are read from the declaration
+`owning_trait` names, never from the associated type's bare name. A name-keyed
+index gave every `Output` whichever bounds the first trait declaring that name
+wrote, and two projections on one `T::Output` stopped comparing equal.
+
 A shape no declaration names — a tuple, a reference, a function type, a pack — has
 no `DefId` and needs none; each is already its own variant. Primitives are not
 special: `i32`, `()` and `!` are `internal type` declarations in
@@ -472,6 +477,11 @@ The list is closed by the type system and the module system, not by a test: no
 mechanism above can be worked around locally, so a new violation needs a new
 API, and adding one is a review decision.
 
+Nothing above closes a declaration's _data_ reached by name. An index keyed by
+an associated type's name can still answer with some trait's bounds for it: it
+mints no identity, and it turns no name into a declaration. The rule that covers
+it is §6, that a fact about a declaration is read through the `DefId` naming it.
+
 ### What still turns a name into a declaration
 
 What is left, each with the reason. A declaration is whatever _identifies_ one,
@@ -496,7 +506,9 @@ a sited entry point a caller with a reference site reaches instead.
 - `decl_key_or_local`, `TypeLookup::declaration` — for a rendered head
 - `namespace_member` — the `ns$Name` alias a namespace import registers
 - `scoped_trait_decl_key` — filtered to the trait index, for a bound's spelling
-- `bound_declaring_assoc_type` — which of a _binder's_ bounds declares a name
+- `bound_declaring_assoc_type` — which of a _binder's_ bounds declares a name.
+  One algorithm on `TraitEnv`, reading each bound through the reference site its
+  caller supplies, so a frame and a declaration-level resolver share it.
 
 The same derivation in the `Symbol` currency, which §5's `DefId` columns subsume:
 
@@ -576,7 +588,44 @@ through `T: Derived` was written in `Derived`'s frame, so `Item = A` there is
 naming the writer's own parameters stays abstract rather than binding to a name
 the asking frame happens to share.
 
-Fixture: `supertrait_binding_keeps_writer_frame.wado`.
+`Self` is the other half of that frame, and it travels with the bound for the
+same reason its parameter space does. A bound written on a parameter means the
+`Self` of the declaration that wrote it. A supertrait clause and a declared
+parameter default (`Eq<Rhs = Self>`) are written in the trait's own space
+instead, where `Self` is whichever type the bound stands on. The two travel
+separately: a reader that supplies one for the other projects off the wrong
+receiver.
+
+Three facts say what `Self` means: the type it stands for, the trait whose
+declaration names what is projected off it, and the bindings that trait's `impl`
+wrote. `Self::Assoc` needs all three, so a frame is installed whole or not at
+all. A frame carrying a receiver without its trait answers `Self` and leaves
+`Self::Assoc` unresolved. One that keeps the enclosing walk's bindings answers it
+off the type that walk was standing on.
+
+A free function declares no `Self`. A bound there that writes one is rejected at
+the declaration, naming the type parameter to write instead, at every position: a
+trait argument, and an associated-type constraint nested under one.
+
+An `impl` block binds its `Self` between its own names and their bounds. Its
+target is resolved from those names (`impl<U> Maker<Container<U>> for Foo<U>`),
+and a bound on one of them may project off that target
+(`impl<O: Uses<Self::Item>> Run for Wrap<O>`). So the names are bound first, the
+target resolved, and the bounds read last.
+
+The trait solver's lowering cannot state every bound. `O: Uses<Self::Item>` is
+one it cannot: the argument is a projection it has no name for. Such a bound
+silences the solver about `O` alone, and the rest of the frame stands. A question
+about any other type is answered as it would be without the bound. Declining the
+whole frame instead takes down every receiver the declaration reaches.
+
+Fixtures: `supertrait_binding_keeps_writer_frame.wado`,
+`bound_self_projection_in_trait_method.wado`,
+`bound_self_projection_in_impl_method.wado`,
+`bound_self_projection_on_impl_param.wado`,
+`bound_self_projection_in_trait_argument.wado`,
+`bound_self_projection_on_trait_param.wado`,
+`assoc_type_constraint_fn_over_self.wado`.
 
 ### What a derivation may not be
 
@@ -694,6 +743,55 @@ compare without being nominal types); every other shape compares as itself, a
 reference by kind, a tuple by arity, a function type by parameters and return.
 Nothing is spelled, so nothing can be spelled two ways.
 
+### A parameter's number is where the target names it
+
+A parameter of an `impl` block is substituted against the instance's type
+arguments, so its number is the position the target writes it at.
+`impl<T> Kind for Holder<Option<i32>, T>` puts `T` at 1. Numbering by
+declaration order would put it at 0, where the instance carries `Option<i32>`. A parameter the target does not name
+takes a slot past the ones it assigned, which no instantiation reaches.
+
+One answer, `ImplParamSlots`, serves the block's own frame, its methods, and the
+associated types it registers. Where each site computes its own, they read the
+target differently. One unwraps a reference and another does not; one counts the
+arguments the target writes and another the parameters it bound. A block both
+sites reach then carries two numbers for one parameter, and the cross-check
+against the trait solver reports it as a disagreement about whether the impl
+applies at all.
+
+A trait declaration carries two numberings, and they do not count the same
+parameters. An argument position counts every parameter a site may write; a slot
+counts only those a substitution fills, and an `fn`-bound parameter takes the
+first and not the second. `trait_params_from_impl` reports both, so a reader
+asking for one cannot land on the other.
+
+### The head finds the candidates, the arguments choose
+
+An impl is filed under its target's head, so every impl on `List<_>` answers a
+lookup for `List<String>`. The written arguments decide which of them applies.
+That decision is `inherent_impl_type_args_match`, wherever the answer is used.
+Registering a block's associated types without it files
+`impl Kind for List<u8>`'s `Out` under `List<String>` too. The last impl in
+build order then decides both, which is the pick this WEP forbids.
+
+A reference target is where a reading comes apart most easily. Every impl on one
+is filed under a single receiver key, so the written arguments are what choose
+between them. `impl_target_args` reads through the reference to the pointee's
+arguments, and `ImplParamSlots` numbers the block's parameters by those
+positions, so that is what a receiver supplies there.
+`TypeSystem::impl_position_args` is the one answer. A caller handing the pointee
+whole instead makes the match contradict the binding.
+
+A blanket `impl<T: Bound> Trait for &T` writes no position at all, so its `T`
+stands for the receiver's pointee rather than for an argument of it. The bound is
+checked against that pointee, read off the receiver rather than off a position a
+caller filled.
+
+Fixtures: `assoc_type_per_receiver_args.wado`,
+`assoc_type_binder_at_target_position.wado`,
+`impl_on_reference_to_generic_head.wado`,
+`bound_arg_behind_fn_bound_param.wado`.
+
 ## Keys past the Component Model boundary
 
 A component's outer scope holds two kinds of type. One stands for a shape, and is
@@ -748,21 +846,35 @@ any of them is spelled such that the step could answer.
 ## Known gap: a CM name still reaches a declaration by search
 
 A reference the Component Model boundary synthesizes carries the interface its
-own declaring module registers, so §9's step answers it. Where one arrives
-without that interface, the registry searches for the name instead: one kind of
-declaration at a time, over every bundled interface, taking the first kind in
-which the name has exactly one registrant.
+own declaring module registers, so §9's step answers it. Where a reference
+arrives without one, the registry searches for the name instead, one kind of
+declaration at a time, over the one fixed order of the six kinds.
 
 That is all three shapes "What a derivation may not be" forbids at once. The
-search spans the whole program; each kind's map answers in registration order;
-and a kind that declines because two interfaces spell the name hands the
-question to the next kind, so which kind is asked first is a silent tiebreak.
-`ErrorCode` is the instance: a variant in four `wasi:` interfaces and an enum in
-`wasi:cli/types`, so the variants decline and the enum answers. That holds for
-any module's `ErrorCode`, including one a user wrote.
+search spans every interface in reach; each kind's map answers in registration
+order; and a kind that declines because two interfaces spell the name hands the
+question to the next kind. `ErrorCode` is the instance: a variant in four
+`wasi:` interfaces and an enum in `wasi:cli/types`, so the variants decline and
+the enum answers. That holds for any module's `ErrorCode`, including one a user
+wrote.
 
-Which references still arrive without their declaring interface is not
-established.
+Two kinds answering with different interfaces is a disagreement, and what it
+yields depends on which search asked. A search scoped to a namespace prefix
+takes the first kind that answers, so the order is a silent tiebreak. A search
+over every kind at once refuses instead, so the name resolves to nothing. Which
+of the two a reference meets follows from where it arrived, not from anything it
+says.
+
+A reference arrives without a declaring interface in three positions:
+
+- A world body names an export type that no import resolves. Only the world's
+  own namespace scopes such a name, and that namespace does not reach a type
+  another package declares.
+- A lib-local type is registered under its package's default interface, which no
+  CM namespace covers, so only a program-wide unique match reaches it.
+- A reference synthesized while emitting a CM instance carries at most the
+  interface being emitted, which need not be the one that declares it. That is
+  where `ErrorCode` arrives.
 
 ## Known gap: an abstract qualifier argument is not compared
 
@@ -772,6 +884,50 @@ where the scrutinee carries a concrete type, which is ordinary code. A parameter
 names no instantiation, so the scrutinee's argument has nothing to disagree with.
 
 What this admits is a body whose parameter is bound, at the instantiation being
-compiled, to a type the scrutinee's argument contradicts. Closing it means
-comparing after substitution wherever that instantiation is known, rather than
-declining to compare.
+compiled, to a type the scrutinee's argument contradicts. The pattern is taken
+as matching, and nothing later rejects it.
+
+## Known gap: a reference impl's associated type is not projected
+
+An impl on a reference target (`impl Kind for &Wrap<i32>`) answers a trait
+bound, and its methods dispatch. Its associated types do not project: `T::Out`
+where `T` is that reference stays unresolved, so the binding the impl wrote is
+out of reach. What it admits is a reference impl that can carry methods but not
+an associated type, so a trait declaring one cannot be implemented on a
+reference to a generic head.
+
+## Known gap: the operator paths compare an impl target by spelling
+
+`inherent_impl_type_args_match` decides whether a receiver reaches an impl, and
+it compares structurally. The arithmetic and indexing lookups do not ask it.
+They ask `verify_impl_type_compatibility`, which compares a written argument's
+head against the receiver's rendered type name and reads a free parameter off a
+set of parameter names rather than off its reference site.
+
+What it admits is §8's hazard on those two paths: an alias spelled like a
+parameter, a qualified `ns::Tag`, and two declarations rendering alike are each
+decided by the rendering.
+
+## Known gap: a reference impl target has no name of its own
+
+`name::Receiver::Ref` spells the reference kind and nothing else. The pointee
+rides in the type-argument list, which is the blanket `impl<T> Trait for &T`
+written out, and it is the only reference target the naming layer can say. A
+target that is a reference to a named head has no spelling of its own, so its
+definition and its call sites mint two different names for one method.
+
+What it admits is a reference impl on a named head that is unreachable wherever
+the two names differ. `impl Show for &Wrap<i32>` called directly on a
+`&Wrap<i32>` reports that `&i32` does not implement `Show`;
+`impl<T> Show for &Wrap<T>` reached inside a frame monomorphized for
+`&Wrap<i32>` reports that `Wrap<i32>` does not. The same generic impl called
+directly works, because both sides mint the same name.
+
+## Known gap: a data declaration binds no `Self` for its own bounds
+
+A `trait` and an `impl` each bind a `Self` their parameters' bounds may project
+off. A `struct` or `variant` declaration does not, so
+`struct Wrap<O: Uses<Self::Item>>` is rejected where the same bound on
+`impl ... for Wrap<O>` is read. What it admits is a bound that can only be
+written on the impl, so a constraint the data declaration means to carry has to
+be restated at each impl that needs it.

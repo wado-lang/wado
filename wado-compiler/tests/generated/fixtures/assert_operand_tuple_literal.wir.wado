@@ -41,7 +41,7 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//assert_operand_tuple_literal.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//assert_operand_tuple_literal.wado/run$cold0" = fn(i32, i32);  // TypeId(13)
+type "functype//assert_operand_tuple_literal.wado/run$cold0" = fn();  // TypeId(13)
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(14)
 
@@ -90,99 +90,102 @@ global global:assert_operand_tuple_literal.wado::$const_obj_12: ref null Array<u
 
 fn "assert_operand_tuple_literal.wado/$cm_export__run"() {
     cold_path;
-    "assert_operand_tuple_literal.wado/run$cold0"(1, 2);
+    "assert_operand_tuple_literal.wado/run$cold0"();
     unreachable;
     "wasi/task-return"(0);
 }
 
-fn "assert_operand_tuple_literal.wado/run$cold0"(a, b) with Stdout {
+fn "assert_operand_tuple_literal.wado/run$cold0"() with Stdout {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4: ref "core:prelude/format.wado//Formatter";
-    let self_16: ref Array<u8>;
-    let self_20: ref Array<u8>;
-    let offset_21: i32;
-    let self_24: ref Array<u8>;
-    let offset_25: i32;
-    let self_28: ref Array<u8>;
-    let offset_29: i32;
-    let self_32: ref Array<u8>;
-    let offset_33: i32;
-    let new_used_43: i32;
-    let start_44: i32;
-    let self_46: ref Array<u8>;
-    let self_50: ref Array<u8>;
-    let offset_51: i32;
-    let self_54: ref Array<u8>;
-    let offset_55: i32;
-    let self_58: ref Array<u8>;
-    let offset_59: i32;
-    let new_used_69: i32;
-    let start_70: i32;
-    let self_72: ref Array<u8>;
-    let self_76: ref Array<u8>;
-    let offset_77: i32;
-    let new_used_95: i32;
-    let start_96: i32;
+    let self_14: ref Array<u8>;
+    let self_18: ref Array<u8>;
+    let offset_19: i32;
+    let self_22: ref Array<u8>;
+    let offset_23: i32;
+    let self_26: ref Array<u8>;
+    let offset_27: i32;
+    let self_30: ref Array<u8>;
+    let offset_31: i32;
+    let new_used_41: i32;
+    let start_42: i32;
+    let self_44: ref Array<u8>;
+    let self_48: ref Array<u8>;
+    let offset_49: i32;
+    let self_52: ref Array<u8>;
+    let offset_53: i32;
+    let self_56: ref Array<u8>;
+    let offset_57: i32;
+    let new_used_67: i32;
+    let start_68: i32;
+    let self_70: ref Array<u8>;
+    let self_74: ref Array<u8>;
+    let offset_75: i32;
+    let new_used_93: i32;
+    let start_94: i32;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(160), used: 0 };
     $local_3.used = 61;
-    self_16 = $local_3.repr;
-    builtin::array_copy<u8>(self_16, 0, global:assert_operand_tuple_literal.wado::$const_obj_12, 0, 20);
-    self_20 = $local_3.repr;
-    offset_21 = 0 + 20;
-    builtin::array_copy<u8>(self_20, offset_21, global:assert_operand_tuple_literal.wado::$const_obj_11, 0, 3);
-    self_24 = $local_3.repr;
-    offset_25 = 0 + 23;
-    builtin::array_copy<u8>(self_24, offset_25, global:assert_operand_tuple_literal.wado::$const_obj_10, 0, 4);
-    self_28 = $local_3.repr;
-    offset_29 = 0 + 27;
-    builtin::array_copy<u8>(self_28, offset_29, global:assert_operand_tuple_literal.wado::$const_obj_9, 0, 33);
-    self_32 = $local_3.repr;
-    offset_33 = 0 + 60;
-    builtin::array_copy<u8>(self_32, offset_33, global:assert_operand_tuple_literal.wado::$const_obj_8, 0, 1);
+    self_14 = local.tee $load_0($local_3.repr);
+    builtin::array_copy<u8>(self_14, 0, global:assert_operand_tuple_literal.wado::$const_obj_12, 0, 20);
+    self_18 = $load_0;
+    offset_19 = 0 + 20;
+    builtin::array_copy<u8>(self_18, offset_19, global:assert_operand_tuple_literal.wado::$const_obj_11, 0, 3);
+    self_22 = $load_0;
+    offset_23 = 0 + 23;
+    builtin::array_copy<u8>(self_22, offset_23, global:assert_operand_tuple_literal.wado::$const_obj_10, 0, 4);
+    self_26 = $load_0;
+    offset_27 = 0 + 27;
+    builtin::array_copy<u8>(self_26, offset_27, global:assert_operand_tuple_literal.wado::$const_obj_9, 0, 33);
+    self_30 = $load_0;
+    offset_31 = 0 + 60;
+    builtin::array_copy<u8>(self_30, offset_31, global:assert_operand_tuple_literal.wado::$const_obj_8, 0, 1);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(7, $local_4.buf);
-    new_used_43 = $local_3.used + 47;
-    if @unlikely(new_used_43 > builtin::array_len($local_3.repr)) {
+    new_used_41 = $local_3.used + 47;
+    if @unlikely(new_used_41 > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_43);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_41);
     }
-    start_44 = $local_3.used;
-    $local_3.used = new_used_43;
-    self_46 = $local_3.repr;
-    builtin::array_copy<u8>(self_46, start_44, global:assert_operand_tuple_literal.wado::$const_obj_7, 0, 2);
-    self_50 = $local_3.repr;
-    offset_51 = start_44 + 2;
-    builtin::array_copy<u8>(self_50, offset_51, global:assert_operand_tuple_literal.wado::$const_obj_6, 0, 13);
-    self_54 = $local_3.repr;
-    offset_55 = start_44 + 15;
-    builtin::array_copy<u8>(self_54, offset_55, global:assert_operand_tuple_literal.wado::$const_obj_5, 0, 29);
-    self_58 = $local_3.repr;
-    offset_59 = start_44 + 44;
-    builtin::array_copy<u8>(self_58, offset_59, global:assert_operand_tuple_literal.wado::$const_obj_4, 0, 3);
+    start_42 = $local_3.used;
+    $local_3.used = new_used_41;
+    self_44 = local.tee $load_5($local_3.repr);
+    builtin::array_copy<u8>(self_44, start_42, global:assert_operand_tuple_literal.wado::$const_obj_7, 0, 2);
+    self_48 = $load_5;
+    offset_49 = start_42 + 2;
+    builtin::array_copy<u8>(self_48, offset_49, global:assert_operand_tuple_literal.wado::$const_obj_6, 0, 13);
+    self_52 = $load_5;
+    offset_53 = start_42 + 15;
+    builtin::array_copy<u8>(self_52, offset_53, global:assert_operand_tuple_literal.wado::$const_obj_5, 0, 29);
+    self_56 = $load_5;
+    offset_57 = start_42 + 44;
+    builtin::array_copy<u8>(self_56, offset_57, global:assert_operand_tuple_literal.wado::$const_obj_4, 0, 3);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(a, $local_4.buf);
-    new_used_69 = $local_3.used + 4;
-    if @unlikely(new_used_69 > builtin::array_len($local_3.repr)) {
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $local_4.buf);
+    new_used_67 = $local_3.used + 4;
+    if @unlikely(new_used_67 > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_69);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_67);
     }
-    start_70 = $local_3.used;
-    $local_3.used = new_used_69;
-    self_72 = $local_3.repr;
-    builtin::array_copy<u8>(self_72, start_70, global:assert_operand_tuple_literal.wado::$const_obj_1, 0, 1);
-    self_76 = $local_3.repr;
-    offset_77 = start_70 + 1;
-    builtin::array_copy<u8>(self_76, offset_77, global:assert_operand_tuple_literal.wado::$const_obj_2, 0, 3);
+    start_68 = $local_3.used;
+    $local_3.used = new_used_67;
+    self_70 = local.tee $load_10($local_3.repr);
+    builtin::array_copy<u8>(self_70, start_68, global:assert_operand_tuple_literal.wado::$const_obj_1, 0, 1);
+    self_74 = $load_10;
+    offset_75 = start_68 + 1;
+    builtin::array_copy<u8>(self_74, offset_75, global:assert_operand_tuple_literal.wado::$const_obj_2, 0, 3);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(b, $local_4.buf);
-    new_used_95 = $local_3.used + 1;
-    if @unlikely(new_used_95 > builtin::array_len($local_3.repr)) {
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(2, $local_4.buf);
+    new_used_93 = $local_3.used + 1;
+    if @unlikely(new_used_93 > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_95);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_93);
     }
-    start_96 = $local_3.used;
-    $local_3.used = new_used_95;
-    builtin::array_copy<u8>($local_3.repr, start_96, global:assert_operand_tuple_literal.wado::$const_obj_1, 0, 1);
+    start_94 = $local_3.used;
+    $local_3.used = new_used_93;
+    builtin::array_copy<u8>($local_3.repr, start_94, global:assert_operand_tuple_literal.wado::$const_obj_1, 0, 1);
     "core:rt/panic"($local_3.repr, $local_3.used);
     unreachable;
 }
@@ -270,19 +273,20 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -345,7 +349,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l25;

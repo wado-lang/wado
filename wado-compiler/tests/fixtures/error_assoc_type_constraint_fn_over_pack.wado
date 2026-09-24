@@ -1,0 +1,37 @@
+// A constraint whose type mentions a pack is left unchecked at the bound: a
+// pack has no arity until it expands. The call is what rejects it, and nothing
+// there settles `P`, so the call names the parameter it could not infer rather
+// than closing the pack to `[]` and reporting the shape that leaves
+// (docs/wep-2026-03-14-variadic-type-parameters.md §6).
+
+trait Sink with () {
+    type Cb;
+
+    fn run(&self, cb: Self::Cb) -> i32;
+}
+
+struct Holder {
+    n: i32,
+}
+
+impl Sink for Holder {
+    type Cb = String;
+
+    fn run(&self, cb: String) -> i32 {
+        return cb.len();
+    }
+}
+
+fn drive<..P, T: Sink<Cb = fn([..P]) -> i32>>(t: &T, cb: T::Cb) -> i32 {
+    return t.run(cb);
+}
+
+test "a pack in a constraint is rejected at the call, not at the bound" {
+    assert drive(&Holder { n: 7 }, "ab") == 2;
+}
+
+__DATA__
+{
+  "test": {},
+  "compile_error": "cannot infer type parameter `P` of function `drive`"
+}

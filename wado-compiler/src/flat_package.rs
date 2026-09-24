@@ -15,6 +15,8 @@ use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::WasmAsset;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
+#[cfg(debug_assertions)]
+use crate::name::FunctionId;
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::{
     BuiltinDeclarations, TirEnum, TirFlags, TirFunction, TirGlobal, TirImport, TirStruct, TirTest,
@@ -112,6 +114,11 @@ pub struct FlatPackage {
     /// identifier use there is a move-eligible local's final use; the
     /// value-copy planner elides the copy there.
     pub moved_local_spans: IndexSet<Span>,
+
+    /// What `prelower_reach` dropped. Minting a stub for one of these means the
+    /// walk owes it a root, which `lower`'s `Interner::resolve` asserts against.
+    #[cfg(debug_assertions)]
+    pub pruned: IndexSet<FunctionId>,
 }
 
 impl FlatPackage {

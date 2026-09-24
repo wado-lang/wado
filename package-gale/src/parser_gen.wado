@@ -17,7 +17,6 @@ use {
 use {
     literal_field_name,
     not_element_field_name,
-    literal_const_name,
     is_token_only_group,
     group_field_base_name,
     single_alt_group_type_name,
@@ -47,9 +46,10 @@ use {
     follow_forward_args,
     follow_yields_call,
     follow_yields_call_of,
+    rule_kind_const,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
-use { CodeWriter, FnSpec, ParamSpec, wado } from "./wadopoet.wado";
+use { CodeWriter, FnSpec, ParamSpec, wado } from "lib:wadopoet";
 use { TreeSet } from "core:collections";
 use {
     PredictionNode,
@@ -2639,16 +2639,6 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         ctx,
         lr_mid_operand_gated(lowered_rule),
     );
-}
-
-/// `RK_<UPPER>` node-kind constant name for a rule (matches `gen_node_kinds`).
-fn rule_kind_const<S: AsStrSlice>(name: S) -> String {
-    let mut out = String::with_capacity(name.len() + 3);
-    out.push_str("RK_");
-    for let c of name.chars() {
-        out.push(c.to_ascii_uppercase());
-    }
-    return out;
 }
 
 /// Emit a thin entry wrapper named `outer_name` that delegates to
@@ -5449,7 +5439,7 @@ fn collect_token_only_kinds(alts: &List<Alternative>) -> List<String> {
         if let TokenRef(t) = elem {
             out.push(`TK_${t.name}`);
         } else if let Literal(l) = elem {
-            out.push(literal_const_name(&l.text));
+            out.push(l.const_name);
         } else {
             panic("collect_token_only_kinds: token-only group alt is not TokenRef or Literal");
         }
@@ -5532,7 +5522,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
             w.line(`${leaf_binding(ctx, &field_name)}p.expect(TK_${t.name}, &EMPTY_SYNC);`);
         },
         Literal(l) => {
-            let const_name = literal_const_name(&l.text);
+            let const_name = l.const_name;
             let field_name = dedup_name(&literal_field_name(&l.text), name_counts);
             w.line(`${leaf_binding(ctx, &field_name)}p.expect(${const_name}, &EMPTY_SYNC);`);
         },
@@ -6894,7 +6884,7 @@ fn not_match_call(inner: &Element, ctx: &mut GenContext) -> String {
     let unsupported = "not_match_call: unsupported inner element for parser-side ~";
     let kinds = match inner {
         TokenRef(t) => [`TK_${t.name}`] as List<String>,
-        Literal(l) => [literal_const_name(&l.text)] as List<String>,
+        Literal(l) => [l.const_name] as List<String>,
         Group(g) => {
             let mut ks: List<String> = [];
             if !collect_not_set_tokens(&g.alternatives, &mut ks) {
@@ -6918,7 +6908,7 @@ fn collect_not_set_tokens(alts: &List<Alternative>, out: &mut List<String>) -> b
         if let TokenRef(t) = e {
             out.push(`TK_${t.name}`);
         } else if let Literal(l) = e {
-            out.push(literal_const_name(&l.text));
+            out.push(l.const_name);
         } else {
             return false;
         }

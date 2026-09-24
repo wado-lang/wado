@@ -59,7 +59,7 @@ type "functype//wir_optimize_vcopy_return_struct.wado/make_outer$spec0" = fn() -
 
 type "functype//wir_optimize_vcopy_return_struct.wado/make_outer$spec1" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Outer", ref null "core:prelude/string.wado//String"];  // TypeId(18)
 
-type "functype//wir_optimize_vcopy_return_struct.wado/make_inner$spec0" = fn(i32) -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Inner", ref null "core:prelude/string.wado//String"];  // TypeId(19)
+type "functype//wir_optimize_vcopy_return_struct.wado/make_inner$spec0" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Inner", ref null "core:prelude/string.wado//String"];  // TypeId(19)
 
 type "functype//wir_optimize_vcopy_return_struct.wado/make_inner$spec1" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Inner", ref null "core:prelude/string.wado//String"];  // TypeId(20)
 
@@ -99,6 +99,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:wir_optimize_vcopy_return_struct.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(32);
 
 fn "wir_optimize_vcopy_return_struct.wado/run"() with Stdout {
+    let $load_6: ref Array<u8>;
+    let $load_10: i32;
     let o: ref "wir_optimize_vcopy_return_struct.wado//Outer";
     let e: ref "core:prelude/string.wado//String";
     let $local_4_4: ref "core:prelude/string.wado//String";
@@ -135,20 +137,20 @@ fn "wir_optimize_vcopy_return_struct.wado/run"() with Stdout {
         }
         start_28 = $local_4_4.used;
         $local_4_4.used = new_used_27;
-        builtin::array_copy<u8>($local_4_4.repr, start_28, global:wir_optimize_vcopy_return_struct.wado::$const_obj_1, 0, 1);
+        builtin::array_copy<u8>(local.tee $load_6($local_4_4.repr), start_28, global:wir_optimize_vcopy_return_struct.wado::$const_obj_1, 0, 1);
         v = o.inner.name;
         let $array_clone_src_1: ref Array<u8>;
         $array_clone_src_1 = v.repr;
         let $array_clone_len_3: i32;
-        $array_clone_len_3 = v.used;
+        $array_clone_len_3 = local.tee $load_10(v.used);
         let $array_clone_dst_2: ref Array<u8>;
         $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
         builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
-        $sroa_other_used_88 = v.used;
+        $sroa_other_used_88 = $load_10;
         $inline_core_prelude_string_wado_String__internal_push_string_14: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_14 $sroa_other_used_88 == 0;
             new_used_41 = $local_4_4.used + $sroa_other_used_88;
-            if @unlikely(new_used_41 > builtin::array_len($local_4_4.repr)) {
+            if @unlikely(new_used_41 > builtin::array_len($load_6)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_41);
             }
@@ -202,7 +204,7 @@ fn "wir_optimize_vcopy_return_struct.wado/make_outer$spec0"() {
     let $mv$$vr_4$0: i32;
     let $mv$$vr_4$1: ref null "wir_optimize_vcopy_return_struct.wado//Inner";
     let $mv$$vr_4$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [$mv$$vr_4$0, $mv$$vr_4$1, $mv$$vr_4$2] = "wir_optimize_vcopy_return_struct.wado/make_inner$spec0"(5);
+    multivalue_bind [$mv$$vr_4$0, $mv$$vr_4$1, $mv$$vr_4$2] = "wir_optimize_vcopy_return_struct.wado/make_inner$spec0"();
     i = ref.as_non_null($mv$$vr_4$1);
     return 0, struct.new "wir_optimize_vcopy_return_struct.wado//Outer" { inner: i, tag: 50 }, ref.null none;
 }
@@ -219,15 +221,8 @@ fn "wir_optimize_vcopy_return_struct.wado/make_outer$spec1"() {
     return 0, struct.new "wir_optimize_vcopy_return_struct.wado//Outer" { inner: inner, tag: -10 }, ref.null none;
 }
 
-fn "wir_optimize_vcopy_return_struct.wado/make_inner$spec0"(v) {
-    let $local_1: ref "core:prelude/string.wado//String";
-    let new_used: i32;
-    let start_15: i32;
-    let $sroa_other_repr: ref Array<u8>;
-    return 0, struct.new "wir_optimize_vcopy_return_struct.wado//Inner" { value: 5, name: ref.as_non_null($local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }; $sroa_other_repr = array.new_data<u8>("item_"); new_used = 0 + 5; if @unlikely(new_used > builtin::array_len($local_1.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used);
-    }; start_15 = $local_1.used; $local_1.used = new_used; builtin::array_copy<u8>($local_1.repr, start_15, $sroa_other_repr, 0, 5); "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(v, $local_1); $local_1) }, ref.null none;
+fn "wir_optimize_vcopy_return_struct.wado/make_inner$spec0"() {
+    return 0, struct.new "wir_optimize_vcopy_return_struct.wado//Inner" { value: 5, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("item_5"), used: 6 } }, ref.null none;
 }
 
 fn "wir_optimize_vcopy_return_struct.wado/make_inner$spec1"() {
@@ -307,19 +302,20 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -345,14 +341,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = $mv$data$start + ($mv$data$end - $mv$data$start);
     offset = $mv$data$start;
     block {
-        l28: loop {
+        l27: loop {
             $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b29: block {
-                l30: loop {
-                    break_if b29 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b28: block {
+                l29: loop {
+                    break_if b28 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
                     i = i + 1;
-                    continue l30;
+                    continue l29;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -382,10 +378,10 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
-            continue l28;
+            continue l27;
         };
     };
 }
@@ -408,14 +404,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b35: block {
-        l36: loop {
-            break_if b35 i >= digit_count_4;
+    b34: block {
+        l35: loop {
+            break_if b34 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l36;
+            continue l35;
         };
     };
 }

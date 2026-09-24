@@ -12,6 +12,7 @@ use crate::ast::{
     self, AstId, AstVisitor, Block, Expr, Function, Item, Module, for_each_pattern_binding,
     type_head_name,
 };
+use crate::attribute::EXPORT;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::token::Span;
@@ -1151,7 +1152,7 @@ impl CompilerNamed {
 
 /// `#[export]` marks a raw Wasm export — an export-boundary root.
 fn has_export_attr(func: &Function) -> bool {
-    func.attrs.iter().any(|attr| attr.name == "export")
+    func.attrs.iter().any(|attr| attr.name == EXPORT)
 }
 
 #[cfg(test)]

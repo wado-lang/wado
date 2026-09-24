@@ -1,0 +1,11 @@
+// A plain `let` cannot narrow: an `Element` may not be an `HtmlInputElement`.
+use { Element, HtmlInputElement } from "web:dom";
+
+fn take(el: Element) {
+    let input: HtmlInputElement = el;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error":":5:9: analysis error: invalid pattern: refutable pattern in `let` binding: not every `Element` is `HtmlInputElement`; use `let ... else` or `if let` instead"}

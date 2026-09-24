@@ -86,7 +86,6 @@ fn "comparison_chain_no_short_circuit.wado/run"() with Stdout {
     let $m0_1: i32;
     let a: bool;
     let $m0_3: i32;
-    let b: bool;
     let $local_5: ref "core:prelude/string.wado//String";
     let $local_6: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
@@ -99,12 +98,9 @@ fn "comparison_chain_no_short_circuit.wado/run"() with Stdout {
     let packed: i64;
     let rx_59: i32;
     let tx_60: i32;
-    let $sroa_c_hits: i32;
-    $sroa_c_hits = 0;
     $m0_1 = black_box(-1);
-    a = (0 <= $m0_1) & ($m0_1 < $sroa_c_hits = 1; 10);
+    a = (0 <= $m0_1) & ($m0_1 < 10);
     $m0_3 = black_box(5);
-    b = (0 <= $m0_3) & ($m0_3 < $sroa_c_hits = 2; 10);
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
     text_20 = (if a -> ref "core:prelude/string.wado//String" {
@@ -124,7 +120,7 @@ fn "comparison_chain_no_short_circuit.wado/run"() with Stdout {
     $local_5.used = new_used_31;
     builtin::array_copy<u8>($local_5.repr, start_32, global:comparison_chain_no_short_circuit.wado::$const_obj_0, 0, 1);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
-    text_39 = (if b -> ref "core:prelude/string.wado//String" {
+    text_39 = (if (0 <= $m0_3) & ($m0_3 < 10) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -141,7 +137,7 @@ fn "comparison_chain_no_short_circuit.wado/run"() with Stdout {
     $local_5.used = new_used_50;
     builtin::array_copy<u8>($local_5.repr, start_51, global:comparison_chain_no_short_circuit.wado::$const_obj_0, 0, 1);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_c_hits, $local_6.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(2, $local_6.buf);
     rx_59 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_60 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "comparison_chain_no_short_circuit.wado/$cm_binding__Stdout_write_via_stream"(rx_59);
@@ -231,19 +227,20 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -306,7 +303,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l26;

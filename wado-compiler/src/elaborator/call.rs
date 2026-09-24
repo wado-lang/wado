@@ -18,7 +18,7 @@ use super::expr::BareCase;
 use super::infer::InferCtx;
 use super::instantiate::{Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
-use super::scope::{BinderInScope, Scope, TraitContext};
+use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext};
 use super::sem::types::{CalleeParams, IndirectCallee, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
 use super::static_call::StaticQuery;
@@ -34,7 +34,7 @@ use crate::defs::{DefId, DefKind};
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::DesugarKind;
 use crate::elaborator::trait_env::ImplMethodEntry;
-use crate::elaborator::types::{ImplMemberKind, VariantCaseData, VariantInfo};
+use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, VariantInfo};
 use crate::{Span, token};
 
 /// The parameter an associated-type equality binds: a bare parameter
@@ -104,8 +104,19 @@ pub(super) struct DefaultTypeBinding {
     pub(super) name: String,
     /// What a default dispatching on the parameter has to go on where the
     /// argument is itself a parameter.
-    pub(super) bounds: Vec<ast::TraitBound>,
+    pub(super) bounds: Vec<ScopedBound>,
     pub(super) settled: SettledAs,
+}
+
+/// Add each of `nearer` to `bindings`, replacing a same-named entry: several
+/// declarations reach one default's scope, and they may share a spelling.
+pub(super) fn bind_nearer(bindings: &mut Vec<DefaultTypeBinding>, nearer: Vec<DefaultTypeBinding>) {
+    for binding in nearer {
+        match bindings.iter_mut().find(|held| held.name == binding.name) {
+            Some(held) => *held = binding,
+            None => bindings.push(binding),
+        }
+    }
 }
 
 /// What a site settled one type parameter to. A pack carries no type here:
@@ -132,29 +143,28 @@ impl SettledAs {
     }
 }
 
-/// What `enclosing` declares `type_id` is bound by, found through the name it
-/// knows the type under. Empty where it knows of no such name, which is every
-/// argument that is not one of its own parameters.
-fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ast::TraitBound> {
+/// What `enclosing` declares `type_id` is bound by, through every name it knows
+/// the type under. Empty where it knows of no such name, which is every argument
+/// that is not one of its own parameters.
+///
+/// One type reaches a frame under several names whenever an `impl` binds two of
+/// a trait's parameters to one type, and each name's bounds hold of it, so they
+/// are taken together rather than one of them picked.
+fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ScopedBound> {
     enclosing
         .type_params
         .iter()
-        .find(|(_, binder)| binder.type_id == type_id)
-        .and_then(|(name, _)| enclosing.type_param_bounds.get(name))
+        .filter(|(_, binder)| binder.type_id == type_id)
+        .filter_map(|(name, _)| enclosing.type_param_bounds.get(name))
+        .flatten()
         .cloned()
-        .unwrap_or_default()
+        .collect()
 }
 
 /// Whether a call supplying `args_len` arguments leaves a defaulted parameter
 /// for a walk to fill. Annotate walks and reify pads on the same answer.
 pub(super) fn omits_a_default(args_len: usize, params: &[(String, Option<Expr>)]) -> bool {
     matches!(params.get(args_len), Some((_, Some(_))))
-}
-
-/// The parameters a declaration's type arguments are indexed by, per
-/// [`ast::GenericParam::is_real_type_param`].
-fn real_type_params(declared: &[ast::GenericParam]) -> Vec<&ast::GenericParam> {
-    declared.iter().filter(|p| p.is_real_type_param()).collect()
 }
 
 /// Pair each declared slot with the type argument filling it, under the name
@@ -845,6 +855,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: effective_name,
                     span: call.span,
                     type_args: &type_args,
+                    self_binding: None,
                 },
             )
         });
@@ -1029,7 +1040,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Before anything counts slots, since a pack's arguments are
                 // one per element until they are grouped.
                 let mut written = type_args.clone();
-                self.group_variadic_type_args_of(&mtype_params, &mut written);
+                if self.group_variadic_type_args_of(suffix, &mtype_params, &mut written, call.span)
+                {
+                    return TypeTable::ERROR;
+                }
                 // An omitted turbofish infers both levels; a partial one keeps
                 // what it named and infers only its `_` slots. The call's own
                 // `type_args` stay as written.
@@ -1403,28 +1417,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if matching_impl {
                         return self.resolve_from_call(target_type_id, from_type, call.id);
                     }
-                    if let Some(return_type) = self.resolve_named_type_blanket_static(
-                        prefix, suffix, call.id, &args, &call.args, call.span, ctx,
-                    ) {
-                        return return_type;
-                    }
-                    let _ = self.emit(TypeError::UnknownFunction {
-                        name: format!("{prefix}::{suffix}"),
-                        span: call.span,
-                    });
-                    return TypeTable::ERROR;
-                } else {
-                    if let Some(return_type) = self.resolve_named_type_blanket_static(
-                        prefix, suffix, call.id, &args, &call.args, call.span, ctx,
-                    ) {
-                        return return_type;
-                    }
-                    let _ = self.emit(TypeError::UnknownFunction {
-                        name: format!("{prefix}::{suffix}"),
-                        span: call.span,
-                    });
-                    return TypeTable::ERROR;
                 }
+                return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
             }
             // An operation dispatch, `Stdout::write()` or `ns::Counter::next()`
             // alike. Ahead of the namespace arm below, which reads the
@@ -1436,16 +1430,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // If prefix is a known type (struct/enum/newtype/flags) with no matching
             // static method, emit a compile error.
             else if self.tysys.is_known_type_name(prefix) {
-                if let Some(return_type) = self.resolve_named_type_blanket_static(
-                    prefix, suffix, call.id, &args, &call.args, call.span, ctx,
-                ) {
-                    return return_type;
-                }
-                let _ = self.emit(TypeError::UnknownFunction {
-                    name: format!("{prefix}::{suffix}"),
-                    span: call.span,
-                });
-                return TypeTable::ERROR;
+                return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
             }
             // Namespace import: `use ns from "..."` then `ns::Type::method()`
             // or `ns::VariantType::Case(...)`.
@@ -1880,7 +1865,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if type_args.is_empty() {
             type_args =
                 self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
-        } else if turbofish_leaves_slot(&type_args, real_type_params(&declared).len()) {
+        } else if turbofish_leaves_slot(&type_args, RealTypeParams::borrowed(&declared).len()) {
             let inferred =
                 self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
             merge_turbofish_type_args(&mut type_args, &inferred);
@@ -1892,7 +1877,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Group flat turbofish args into the variadic pack so a pack slot holds
         // one tuple, the per-param shape inference already produces.
-        self.group_variadic_type_args_of(&declared, &mut type_args);
+        if self.group_variadic_type_args_of(callee.name(), &declared, &mut type_args, call.span) {
+            return TypeTable::ERROR;
+        }
 
         if !type_args.is_empty() {
             // Resolve any type parameter that appears only inside another
@@ -1906,7 +1893,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // After the projection above, which is what answers for a pack bound
         // through another parameter's associated type.
-        self.settle_empty_pack_of(&declared, &mut type_args);
+        let reached = self.packs_callee_args_reach(&callee, args.len());
+        self.settle_unreached_packs(&declared, &mut type_args, &reached);
 
         if !type_args.is_empty() {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
@@ -2473,8 +2461,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     SettledAs::Type(type_id)
                 },
+                // A free function's declaration binds no `Self`, so a bound of
+                // its own writes none.
+                bounds: ScopedBound::pin_declared(&param, None),
                 name: param.name,
-                bounds: param.bounds,
             })
             .collect()
     }
@@ -2504,7 +2494,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // stands for a parameter of the enclosing scope, that parameter's are
         // the ones in force: `T` *is* the caller's `X` here, so it is bound by
         // whatever `X` is bound by.
-        let installed: Vec<Option<Vec<ast::TraitBound>>> = {
+        let installed: Vec<Option<Vec<ScopedBound>>> = {
             let table = scope.tysys.type_table.borrow();
             bindings
                 .iter()
@@ -2539,22 +2529,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
             })
             .collect();
-        let trait_ctx = &mut scope.annotate_ctx.trait_ctx;
-        trait_ctx.type_params.clear();
-        trait_ctx.type_param_bounds.clear();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
         for (i, binding) in bindings.iter().enumerate() {
             let Some(bounds) = &installed[i] else {
                 continue;
             };
-            trait_ctx.type_params.insert(
-                binding.name.clone(),
+            scope.bind_param(
+                &binding.name,
                 BinderInScope::undeclared(i as u32, in_scope[i]),
+                bounds.clone(),
             );
-            if !bounds.is_empty() {
-                trait_ctx
-                    .type_param_bounds
-                    .insert(binding.name.clone(), bounds.clone());
-            }
         }
         body(&mut scope)
     }
@@ -2648,10 +2633,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Copy what the signature needs before instantiating: `info`
             // borrows the registry, and minting variables takes `self`.
-            let real_type_params: Vec<String> = info.type_params.clone();
+            let param_names: Vec<String> = info.type_params.clone();
             let decl_param_types: Vec<TypeId> = info.params.iter().map(|(_, t)| *t).collect();
             let decl_return = info.return_type;
-            let param_ids: Vec<TypeId> = real_type_params
+            let param_ids: Vec<TypeId> = param_names
                 .iter()
                 .enumerate()
                 .map(|(i, name)| {
@@ -2673,6 +2658,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span,
                     // A builtin has no turbofish to read.
                     type_args: &[],
+                    self_binding: None,
                 },
             );
             let resolved_param_types = self.instantiate_types(&decl_param_types, &inst);
@@ -2754,6 +2740,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The inference pass itself: its caller merges the turbofish in
                 // afterwards, so every slot is open here.
                 type_args: &[],
+                self_binding: None,
             },
         );
         let resolved_param_types = self.instantiate_types(&resolved_param_types, &inst);
@@ -2814,14 +2801,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // trailing pack slot absent. Seed it with its declared, still-unbound
         // form so the projection below can pin it from the owner's bound.
         for (i, param) in params.iter().enumerate().skip(type_args.len()) {
-            let declared = {
-                let mut tt = self.tysys.type_table.borrow_mut();
-                if param.is_pack {
-                    tt.make_type_pack(param.name.clone(), i as u32)
-                } else {
-                    tt.make_type_param(param.name.clone(), i as u32)
-                }
-            };
+            let declared = self.tysys.type_table.borrow_mut().make_declared_param(
+                param.name.clone(),
+                i as u32,
+                param.is_pack,
+            );
             type_args.push(declared);
         }
         self.resolve_assoc_bound_args(params, type_args);
@@ -2875,19 +2859,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if unresolved.is_empty() {
             return;
         }
-        let names = unresolved
-            .iter()
-            .map(|n| format!("`{n}`"))
-            .collect::<Vec<_>>()
-            .join(", ");
+        let names: Vec<String> = unresolved.iter().copied().map(str::to_string).collect();
         let func_name = callee.name();
-        let _ = self.emit(TypeError::CannotInferType {
-            message: format!(
-                "cannot infer type parameter {names} of function `{func_name}`; \
-                 add a turbofish (`{func_name}::<...>()`) or a type annotation"
-            ),
+        let _ = self.emit(TypeError::cannot_infer(
+            &names,
+            &format!("function `{func_name}`"),
+            &format!("`{func_name}::<...>()`"),
             span,
-        });
+        ));
     }
 
     fn report_uninferred_static_method_type_args(
@@ -2937,23 +2916,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
 
-        let joined = names
-            .iter()
-            .map(|n| format!("`{n}`"))
-            .collect::<Vec<_>>()
-            .join(", ");
         let turbofish = if type_level_unresolved {
             format!("`{prefix}::<...>::{suffix}()`")
         } else {
             format!("`{prefix}::{suffix}::<...>()`")
         };
-        let _ = self.emit(TypeError::CannotInferType {
-            message: format!(
-                "cannot infer type parameter {joined} of `{prefix}::{suffix}`; \
-                 add a turbofish ({turbofish}) or a type annotation"
-            ),
+        let _ = self.emit(TypeError::cannot_infer(
+            &names,
+            &format!("`{prefix}::{suffix}`"),
+            &turbofish,
             span,
-        });
+        ));
     }
 
     /// Substitute a declared default (`fn f<T = Fallback>`) into any dense
@@ -2989,10 +2962,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .enumerate()
                 .map(|(i, p)| {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_param(p.name.clone(), i as u32)
+                    self.tysys.type_table.borrow_mut().make_declared_param(
+                        p.name.clone(),
+                        i as u32,
+                        p.is_pack,
+                    )
                 })
                 .collect();
         }
@@ -3035,7 +3009,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: token::Span,
     ) {
         let params = self.lookup_function_type_params(callee);
-        let space = real_type_params(&params);
+        let space = RealTypeParams::borrowed(&params);
         let n = space.len();
         if n == 0 {
             return;
@@ -3095,7 +3069,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 new_args.push(type_args[i]);
                 continue;
             }
-            let bounds = self.declared_bounds(p);
+            let bounds = self.declared_bounds(p, None);
             // `infer_fn_type_args` already instantiated this slot, so the
             // variable standing in for it is the one to blame — minting a
             // second would orphan the first, which the sweep would then pin to
@@ -3186,59 +3160,144 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Group flat turbofish type args into a variadic pack: `ids::<i32, bool>()`
-    /// writes two args for one `..T`, whose slot holds the tuple `[i32, bool]`.
+    /// Group flat turbofish type args into one variadic pack: `ids::<i32, bool>()`
+    /// fills `..T` with `[i32, bool]`. Returns whether it reported instead.
     pub(super) fn group_variadic_type_args_of(
         &mut self,
+        callee_name: &str,
         declared: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
-    ) {
-        let real = real_type_params(declared);
-        let Some(pack_pos) = real.iter().position(|p| p.is_pack) else {
-            return;
+        span: token::Span,
+    ) -> bool {
+        let real = RealTypeParams::borrowed(declared);
+        let mut packs = real
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.is_pack)
+            .map(|(i, _)| i);
+        let Some(pack_pos) = packs.next() else {
+            return false;
         };
-        if type_args.len() <= real.len() {
-            return;
+        if packs.next().is_some() {
+            return self.reject_unspelled_pack_args(callee_name, &real, type_args, span);
         }
-        // Single pack (guaranteed by the parser): it absorbs every arg past the
-        // non-pack params.
+        if type_args.len() <= real.len() {
+            return false;
+        }
+        // One pack: it absorbs every arg past the non-pack params.
         let non_pack = real.len() - 1;
         let pack_count = type_args.len() - non_pack;
         let pack_args: Vec<TypeId> = type_args.drain(pack_pos..pack_pos + pack_count).collect();
         let tuple = self.tysys.type_table.borrow_mut().make_tuple(pack_args);
         type_args.insert(pack_pos, tuple);
+        false
     }
 
-    /// Settle a pack slot nothing else answered for to the empty pack: a pack
-    /// stands for the type arguments left over, and this site left none over.
-    pub(super) fn settle_empty_pack_of(
+    /// Report type arguments that cannot be matched to more than one pack,
+    /// returning whether they were. Surplus arguments are an arity error here,
+    /// where with one pack they are what the pack absorbs.
+    fn reject_unspelled_pack_args(
+        &mut self,
+        callee_name: &str,
+        real: &[&ast::GenericParam],
+        type_args: &[TypeId],
+        span: token::Span,
+    ) -> bool {
+        // Before the count: a flat `f::<i32, bool, String>` is surplus only
+        // because nothing says where the first pack stops, and naming the count
+        // would send the caller to delete an argument rather than group them.
+        let spelled = {
+            let table = self.tysys.type_table.borrow();
+            type_args
+                .iter()
+                .zip(real.iter())
+                .all(|(&arg, p)| !p.is_pack || table.is_tuple(arg) || table.contains_undecided(arg))
+        };
+        if !spelled {
+            let _ = self.emit(TypeError::UnspelledPackBoundary { span });
+            return true;
+        }
+        // Each pack spelled and still too many. With one pack the surplus is
+        // instead what that pack absorbs, which is why this lives here.
+        if type_args.len() > real.len() {
+            let _ = self.emit(TypeError::SurplusTypeArguments {
+                name: callee_name.to_string(),
+                expected: real.len(),
+                found: type_args.len(),
+                span,
+            });
+            return true;
+        }
+        false
+    }
+
+    /// Settle to the empty pack every pack slot this site left nothing over
+    /// for. `reached` ([`Self::packs_args_reach`]) names the packs an argument
+    /// was meant to settle, which closing here would answer with a wrong shape.
+    pub(super) fn settle_unreached_packs(
         &mut self,
         declared: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
+        reached: &[String],
     ) {
-        let real = real_type_params(declared);
-        let Some(pack_pos) = real.iter().position(|p| p.is_pack) else {
+        let real = RealTypeParams::borrowed(declared);
+        if !real.iter().any(|p| p.is_pack) {
             return;
-        };
-        if type_args.len() == pack_pos {
+        }
+        // A pack slot the site never reached stands for no arguments at all, so
+        // append one empty tuple per trailing pack. A non-pack slot stops the
+        // walk: nothing here can answer for it.
+        while real
+            .get(type_args.len())
+            .is_some_and(|p| p.is_pack && !reached.contains(&p.name))
+        {
             let empty = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
             type_args.push(empty);
-            return;
         }
         if type_args.len() != real.len() {
             return;
         }
-        let slot = type_args[pack_pos];
-        if !self.is_unbound_type_param(slot) && !self.type_contains_pack(slot) {
+        let unanswered: Vec<usize> = (0..real.len())
+            .filter(|&i| real[i].is_pack && !reached.contains(&real[i].name))
+            .filter(|&i| {
+                self.is_unbound_type_param(type_args[i]) || self.type_contains_pack(type_args[i])
+            })
+            .collect();
+        if unanswered.is_empty() {
             return;
         }
         // A pack the caller declares interns to the same id as the callee's,
         // so a scope holding one is a forwarding this cannot tell apart.
         let scope = self.scope_type_param_ids();
-        if scope.contains(&slot) || scope.iter().any(|&s| self.type_contains_pack(s)) {
+        if scope.iter().any(|&s| self.type_contains_pack(s)) {
             return;
         }
-        type_args[pack_pos] = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
+        for pack_pos in unanswered {
+            if scope.contains(&type_args[pack_pos]) {
+                continue;
+            }
+            type_args[pack_pos] = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
+        }
+    }
+
+    /// The packs a parameter the call writes an argument for mentions. Those a
+    /// written argument was meant to settle; the rest the site never reached.
+    pub(super) fn packs_args_reach(&self, param_types: &[TypeId], arg_count: usize) -> Vec<String> {
+        let table = self.tysys.type_table.borrow();
+        param_types
+            .iter()
+            .take(arg_count)
+            .flat_map(|&t| table.pack_names(t))
+            .collect()
+    }
+
+    /// [`Self::packs_args_reach`] for a free function, whose parameter types
+    /// the callee reference answers.
+    fn packs_callee_args_reach(&self, callee: &CalleeRef, arg_count: usize) -> Vec<String> {
+        let Some((_, param_types, _)) = self.lookup_generic_func_for_inference(callee) else {
+            return vec![];
+        };
+        self.packs_args_reach(&param_types, arg_count)
     }
 
     /// Look up a generic function (current or imported) and produce a temporary
@@ -3567,8 +3626,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter_map(|impl_def| trait_env.impl_headers.get(impl_def)?.trait_def())
             .find_map(|trait_decl| {
                 let method = self.trait_sig_of(&trait_decl)?.method(method_name)?;
-                method.default_body.as_ref()?;
-                Some(method.sig.clone())
+                method.is_inherited().then(|| method.sig.clone())
             })?;
         let split = sig.declaring_split();
         sig.decl.type_params.drain(..split);
@@ -3581,6 +3639,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// under the blanket's receiver param and so misses `type_name`'s own
     /// bucket. The variant-case branch owns the `Variant::Name` shape, so it
     /// shares this entry rather than falling through to the known-type one.
+    /// `prefix::suffix` answered by a blanket static, or the diagnostic for a
+    /// name that reaches no function at all.
+    fn blanket_static_or_unknown(
+        &mut self,
+        prefix: &str,
+        suffix: &str,
+        call: &ast::CallExpr,
+        args: &[TypeId],
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        if let Some(return_type) = self.resolve_named_type_blanket_static(
+            prefix, suffix, call.id, args, &call.args, call.span, ctx,
+        ) {
+            return return_type;
+        }
+        let _ = self.emit(TypeError::UnknownFunction {
+            name: format!("{prefix}::{suffix}"),
+            span: call.span,
+        });
+        TypeTable::ERROR
+    }
+
     pub(super) fn resolve_named_type_blanket_static(
         &mut self,
         type_name: &str,
@@ -3823,6 +3903,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             }
         {
+            if let Some(def) = method_info_result.method_def
+                && self.report_unavailable(def, call.span)
+            {
+                return TypeTable::ERROR;
+            }
+            let receiver = usize::from(method_info_result.self_kind != ast::SelfKind::None);
+            let expected = receiver + method_info_result.param_types.len();
+            let omitted_have_defaults = args
+                .len()
+                .checked_sub(receiver)
+                .and_then(|given| method_info_result.param_defaults.get(given..))
+                .is_some_and(|omitted| omitted.iter().all(Option::is_some));
+            if args.len() > expected || !omitted_have_defaults {
+                let _ = self.emit(TypeError::ArgumentCountMismatch {
+                    expected,
+                    found: args.len(),
+                    span: call.span,
+                });
+                return TypeTable::ERROR;
+            }
             let return_type = method_info_result.return_type;
 
             // Resolve method-level type args (e.g., T::deserialize::<JsonDeserializer>)

@@ -50,23 +50,23 @@ test {
 // `String`'s `repr`), and the previous `self.buf = ser.buf` save-
 // back trick (still in older revisions) doesn't recover the bytes
 // the sub-serializer wrote to its own copy.
-struct NsdSeqSerializer {
+pub struct NsdSeqSerializer {
     buf: &mut String,
     count: i32,
 }
 
-struct NsdMapSerializer {
+pub struct NsdMapSerializer {
     buf: &mut String,
     count: i32,
     need_value: bool,
 }
 
-struct NsdStructSerializer {
+pub struct NsdStructSerializer {
     buf: &mut String,
     count: i32,
 }
 
-struct NsdVariantSerializer {
+pub struct NsdVariantSerializer {
     buf: &mut String,
 }
 
@@ -161,7 +161,7 @@ impl Serializer for NsdSerializer {
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
-        if v > 9007199254740991 || v < -9007199254740991 {
+        if v > f64::MAX_SAFE_INTEGER as i64 || v < f64::MIN_SAFE_INTEGER as i64 {
             self.buf.push_str(`"${v}"`);
         } else {
             self.buf.push_str(`${v}`);
@@ -175,7 +175,7 @@ impl Serializer for NsdSerializer {
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
-        if v > 9007199254740991 {
+        if v > f64::MAX_SAFE_INTEGER as u64 {
             self.buf.push_str(`"${v}"`);
         } else {
             self.buf.push_str(`${v}`);
@@ -303,19 +303,19 @@ impl Serializer for NsdSerializer {
     }
 }
 
-struct NsdSeqAccess {
+pub struct NsdSeqAccess {
     de: &mut JsonDeserializer,
     depth: i32,
     first: bool,
 }
 
-struct NsdMapAccess {
+pub struct NsdMapAccess {
     de: &mut JsonDeserializer,
     depth: i32,
     first: bool,
 }
 
-struct NsdStructAccess {
+pub struct NsdStructAccess {
     de: &mut JsonDeserializer,
     depth: i32,
     index: i32,
@@ -323,7 +323,7 @@ struct NsdStructAccess {
     first: bool,
 }
 
-struct NsdVariantAccess {
+pub struct NsdVariantAccess {
     de: &mut JsonDeserializer,
     depth: i32,
     disc: i32,

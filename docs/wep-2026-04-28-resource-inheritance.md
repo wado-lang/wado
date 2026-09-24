@@ -449,8 +449,7 @@ degrades to a plain annotation, so a generator may emit the same shape whether o
 not the narrowing turns out to be trivial. The sibling and unrelated rows stay
 errors — neither can ever match.
 
-Both `S` and `T` must be unrestricted. The check is redundant given the v1 gating
-(`extends` requires it), but the compiler validates it defensively.
+Both `S` and `T` are unrestricted, because `extends` requires it on both sides.
 
 #### Generic targets are forbidden in v1
 
@@ -720,13 +719,16 @@ Implemented, with tests in `wado-compiler/tests/integration/unrestricted_resourc
 
 - The registry reads that newtype two ways. `resolve_type` peels the handle to its `u32`, the view the boundary decides with: the flat ABI, the canonical options, the emitted WIT. `value_type` keeps the resource's own type, the view the guest holds. A binding's signature takes the second, because `Option<Element>` and `Option<u32>` are distinct GC types (`tests/integration/web_dom.rs`). `cm_type_to_type_id` finds the resource's `TypeId` under its package, a `web:` package being one flat file.
 
+- Type patterns. `p: T` is a pattern wherever one stands, and a `let` annotation is that pattern. An ascription `T` strictly extending the subject's type narrows: a plain `let` rejects it as refutable, and a `match` over one needs a final `_` and reports an arm an earlier ancestor arm shadows. Each narrowing target `R` imports `lang#is-r`, called on the handle before the arm is taken.
+- `Eq`. `==` / `!=` on two handles one of whose types extends the other calls `lang#is-same`. Every chain root binds it, and the registry keeps the one import they share.
+
 Not built:
 
-- The type pattern, its `is-T` imports, and the `Eq` / `Inspect` / `Display` host imports. Pattern ascription (`p: T`) is unparsed, so no part of narrowing exists yet; the `let` annotation is still a separate grammar slot (`letStatement : 'let' pattern (':' typeRef)? …`) rather than the pattern form this WEP specifies.
+- The `Inspect` / `Display` host imports.
 - Rule (5), visibility judged at the declaring module, and the unenforced parent-visibility bullet above. Both need per-method visibility on resources, which nothing asks for yet.
 - Declaring `linearity = "unrestricted"` on the non-owning tokens (`Waitable`, `core:icu`'s interned handles), which still take their value semantics from the absence of a `dtor`; and generic resources on either side of `extends`.
 - Calling a `#[cm(...)]` member a user module declares. The registry is built from the bundled binding modules and from component dependencies, so a binding declared anywhere else reaches WIR build with no import, and `wir_build` collects it as a `CmImportViolation` the driver reports (`wado-compiler/tests/integration/cm_resource_unbound.rs`). Declaring one without calling it still type-checks.
-- A parent declared by a prebuilt module. The collect pass skips what the stdlib snapshot covers, so a snapshot parent reaches validation without its method names or its arity; rather than accept what it cannot check, the compiler rejects the clause. `web:dom` is loaded per compile rather than snapshotted, so nothing reaches it yet; closing it takes seeding the two maps from the snapshot, as `all_resource_types` already is.
+- A parent declared by a prebuilt module. The collect pass skips what the stdlib snapshot covers, so a snapshot parent reaches validation without its method names or its arity; rather than accept what it cannot check, the compiler rejects the clause. `web:dom` is loaded per compile rather than snapshotted, so nothing reaches it yet.
 
 ### Known gap: the handle is an index, not a reference
 
@@ -734,7 +736,7 @@ An extern-handle would rather be a Wasm GC `externref`: the collector would recl
 
 The Component Model is. Its value types include no reference type; `own` and `borrow` are the only handle types and both carry the obligations §"Why this is hard" describes; and a resource's representation is validated to `i32` or `i64`. Nor is there a side door: `externtype` admits a `core module` import but no `core func`, and a component satisfies an imported module's own imports from its core index spaces, which bottom out at `canon lower` — so host code is reachable only through the canonical ABI. CM-GC changes the representation of `own` / `borrow`, not their semantics.
 
-Closing it takes a target that is not a component: a core module whose host imports are typed `(param externref)` directly, which is how `wasm-bindgen` reaches the same APIs. That would give this WEP's value semantics natively — free copying, GC reclamation, a narrowing that hands back the subject unchanged — and would cost the CM machinery the web target currently rides on, including the jco transpile path [Tide](./wep-2026-04-01-tide.md) assumes.
+Nothing inside the component target reaches it. An `externref`-typed host import belongs to a core module, which is how `wasm-bindgen` reaches the same APIs. Targeting a core module would give up the CM machinery the web target rides on, including the jco transpile path [Tide](./wep-2026-04-01-tide.md) assumes.
 
 ## See Also
 

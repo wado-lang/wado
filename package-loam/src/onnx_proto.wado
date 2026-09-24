@@ -1,0 +1,440 @@
+//! The ONNX protobuf format, as much of it as Loam reads. Field numbers are
+//! `vendor/onnx/onnx/onnx.proto`; `onnx-ml.proto` declares them identically.
+//!
+//! Every field carries a default, since protobuf omits a field holding its
+//! type's default and a missing one would otherwise be an error. A field the
+//! subset leaves out is skipped by `core:protobuf`, so a real model reads
+//! whatever else it carries.
+
+use { from_bytes, read_fixed32 } from "core:protobuf";
+use { Attr, ConstTensor, Dim, Graph, Node, Rank, ValueInfo, parameters } from "./graph.wado";
+
+/// Nesting flattens: `.proto` nests a message inside a message and Wado has
+/// no nested declaration, so the path is joined into the name. This is the
+/// rule Grog will apply; here it is applied by hand.
+pub struct TensorShapeProtoDimension {
+    #[wire(number = 1)]
+    pub dim_value: i64 = 0,
+    #[wire(number = 2)]
+    pub dim_param: String = "",
+    #[wire(number = 3)]
+    pub denotation: String = "",
+}
+
+pub struct TensorShapeProto {
+    #[wire(number = 1)]
+    pub dim: List<TensorShapeProtoDimension> = [],
+}
+
+pub struct TypeProtoTensor {
+    #[wire(number = 1)]
+    pub elem_type: i32 = 0,
+    #[wire(number = 2)]
+    pub shape: Option<TensorShapeProto> = null,
+}
+
+/// The `oneof value` in the schema. A `oneof` is a set of ordinary fields of
+/// which at most one is written, so on the wire it is these numbers and
+/// nothing more.
+pub struct TypeProto {
+    #[wire(number = 1)]
+    pub tensor_type: Option<TypeProtoTensor> = null,
+}
+
+pub struct ValueInfoProto {
+    #[wire(number = 1)]
+    pub name: String = "",
+    #[wire(number = 2)]
+    pub type_: Option<TypeProto> = null,
+    #[wire(number = 3)]
+    pub doc_string: String = "",
+}
+
+pub struct StringStringEntryProto {
+    #[wire(number = 1)]
+    pub key: String = "",
+    #[wire(number = 2)]
+    pub value: String = "",
+}
+
+pub struct TensorProto {
+    #[wire(number = 1)]
+    pub dims: List<i64> = [],
+    #[wire(number = 2)]
+    pub data_type: i32 = 0,
+    #[wire(number = 4)]
+    pub float_data: List<f32> = [],
+    #[wire(number = 5)]
+    pub int32_data: List<i32> = [],
+    #[wire(number = 7)]
+    pub int64_data: List<i64> = [],
+    #[wire(number = 8)]
+    pub name: String = "",
+    #[wire(number = 9)]
+    pub raw_data: ByteList = b"",
+    #[wire(number = 10)]
+    pub double_data: List<f64> = [],
+    #[wire(number = 11)]
+    pub uint64_data: List<u64> = [],
+    #[wire(number = 13)]
+    pub external_data: List<StringStringEntryProto> = [],
+    #[wire(number = 14)]
+    pub data_location: i32 = 0,
+}
+
+/// `TensorProto.DataLocation`: `EXTERNAL` says the bytes are in a file beside
+/// the model rather than in `raw_data`.
+pub global DATA_LOCATION_EXTERNAL: i32 = 1;
+
+/// An attribute, carried as the payload fields the schema declares. `g` and
+/// `graphs` are left out: a subgraph belongs to the control-flow operators,
+/// which Loam does not cover, and reading it would make the declarations
+/// mutually recursive.
+pub struct AttributeProto {
+    #[wire(number = 1)]
+    pub name: String = "",
+    #[wire(number = 2)]
+    pub f: f32 = 0.0,
+    #[wire(number = 3)]
+    pub i: i64 = 0,
+    #[wire(number = 4)]
+    pub s: ByteList = b"",
+    #[wire(number = 5)]
+    pub t: Option<TensorProto> = null,
+    #[wire(number = 7)]
+    pub floats: List<f32> = [],
+    #[wire(number = 8)]
+    pub ints: List<i64> = [],
+    #[wire(number = 9)]
+    pub strings: List<ByteList> = [],
+    #[wire(number = 10)]
+    pub tensors: List<TensorProto> = [],
+    #[wire(number = 20)]
+    pub type_: i32 = 0,
+}
+
+/// `AttributeProto.AttributeType`, the discriminator saying which payload
+/// field above is in use.
+pub global ATTRIBUTE_FLOAT: i32 = 1;
+pub global ATTRIBUTE_INT: i32 = 2;
+pub global ATTRIBUTE_STRING: i32 = 3;
+pub global ATTRIBUTE_TENSOR: i32 = 4;
+pub global ATTRIBUTE_FLOATS: i32 = 6;
+pub global ATTRIBUTE_INTS: i32 = 7;
+pub global ATTRIBUTE_STRINGS: i32 = 8;
+pub global ATTRIBUTE_TENSORS: i32 = 9;
+
+pub struct NodeProto {
+    #[wire(number = 1)]
+    pub input: List<String> = [],
+    #[wire(number = 2)]
+    pub output: List<String> = [],
+    #[wire(number = 3)]
+    pub name: String = "",
+    #[wire(number = 4)]
+    pub op_type: String = "",
+    #[wire(number = 5)]
+    pub attribute: List<AttributeProto> = [],
+    #[wire(number = 6)]
+    pub doc_string: String = "",
+    #[wire(number = 7)]
+    pub domain: String = "",
+}
+
+pub struct GraphProto {
+    #[wire(number = 1)]
+    pub node: List<NodeProto> = [],
+    #[wire(number = 2)]
+    pub name: String = "",
+    #[wire(number = 5)]
+    pub initializer: List<TensorProto> = [],
+    #[wire(number = 10)]
+    pub doc_string: String = "",
+    #[wire(number = 11)]
+    pub input: List<ValueInfoProto> = [],
+    #[wire(number = 12)]
+    pub output: List<ValueInfoProto> = [],
+    #[wire(number = 13)]
+    pub value_info: List<ValueInfoProto> = [],
+}
+
+pub struct OperatorSetIdProto {
+    #[wire(number = 1)]
+    pub domain: String = "",
+    #[wire(number = 2)]
+    pub version: i64 = 0,
+}
+
+pub struct ModelProto {
+    #[wire(number = 1)]
+    pub ir_version: i64 = 0,
+    #[wire(number = 2)]
+    pub producer_name: String = "",
+    #[wire(number = 3)]
+    pub producer_version: String = "",
+    #[wire(number = 4)]
+    pub domain: String = "",
+    #[wire(number = 5)]
+    pub model_version: i64 = 0,
+    #[wire(number = 6)]
+    pub doc_string: String = "",
+    #[wire(number = 7)]
+    pub graph: Option<GraphProto> = null,
+    #[wire(number = 8)]
+    pub opset_import: List<OperatorSetIdProto> = [],
+}
+
+/// A `FLOAT` tensor's elements and extents. ONNX writes the elements either
+/// in the typed `float_data` or, as every exporter does, as little-endian
+/// bytes in `raw_data`. `None` where the tensor is some other element type.
+pub fn float_tensor(t: &TensorProto) -> Result<Option<[List<f32>, List<i32>]>, String> {
+    if t.data_type != 1 {
+        return Result::Ok(null);
+    }
+    let mut extents: List<i32> = [];
+    for let d of t.dims {
+        extents.push(extent(d, &t.name)?);
+    }
+    let data = if t.raw_data.is_empty() { t.float_data } else { raw_floats(&t.raw_data, &t.name)? };
+    check_element_count(&t.name, data.len(), &extents)?;
+    return Result::Ok(Option::Some([data, extents]));
+}
+
+fn raw_floats(raw: &ByteList, tensor: &String) -> Result<List<f32>, String> {
+    if raw.len() % 4 != 0 {
+        return Result::Err(`${tensor}: ${raw.len()} raw bytes is not whole f32 elements`);
+    }
+    let bytes = raw.as_byte_slice();
+    let mut data: List<f32> = List::with_capacity(raw.len() / 4);
+    let mut at = 0;
+    while at < bytes.len() {
+        let Some([bits, next]) = read_fixed32(&bytes, at) else {
+            unreachable();
+        };
+        data.push(f32::from_bits(bits));
+        at = next;
+    }
+    return Result::Ok(data);
+}
+
+/// The extents' product is how many elements the tensor says it has, and a
+/// payload of any other length is a file disagreeing with itself.
+fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) -> Result<(), String> {
+    let mut declared: i64 = 1;
+    for let e of *extents {
+        declared = declared * e as i64;
+        // No payload is longer than what was read, so a product past it is
+        // already wrong and cannot overflow on the way.
+        if declared > elements as i64 {
+            return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared} or more`);
+        }
+    }
+    if declared != elements as i64 {
+        return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared}`);
+    }
+    return Result::Ok(());
+}
+
+/// The element type names the textual format spells, indexed by
+/// `TensorProto.DataType`. The two formats must agree, since one `Graph`
+/// serves both readers.
+fn dtype_name(elem_type: i32) -> Option<String> {
+    return match elem_type {
+        1 => Option::Some("float"),
+        2 => Option::Some("uint8"),
+        3 => Option::Some("int8"),
+        4 => Option::Some("uint16"),
+        5 => Option::Some("int16"),
+        6 => Option::Some("int32"),
+        7 => Option::Some("int64"),
+        8 => Option::Some("string"),
+        9 => Option::Some("bool"),
+        10 => Option::Some("float16"),
+        11 => Option::Some("double"),
+        12 => Option::Some("uint32"),
+        13 => Option::Some("uint64"),
+        14 => Option::Some("complex64"),
+        15 => Option::Some("complex128"),
+        16 => Option::Some("bfloat16"),
+        _ => null,
+    };
+}
+
+/// An extent as the shape algebra holds it. ONNX states a dimension as an
+/// `int64` and no tensor that fits in memory needs one, so narrowing it is
+/// where a file says something no graph can mean.
+fn extent(dim: i64, tensor: &String) -> Result<i32, String> {
+    if !(0 <= dim <= i32::MAX as i64) {
+        return Result::Err(`${tensor}: dimension ${dim}`);
+    }
+    return Result::Ok(dim as i32);
+}
+
+fn read_dim(d: &TensorShapeProtoDimension, tensor: &String) -> Result<Dim, String> {
+    if d.dim_param != "" {
+        return Result::Ok(Dim::Symbol(d.dim_param));
+    }
+    if d.dim_value != 0 {
+        return Result::Ok(Dim::Static(extent(d.dim_value, tensor)?));
+    }
+    // A `oneof`'s presence is on the wire, and `core:protobuf` has none, so an
+    // extent of zero is the absent field. See the Loam WEP's known gaps.
+    return Result::Ok(Dim::Unknown);
+}
+
+fn read_value_info(vi: &ValueInfoProto) -> Result<ValueInfo, String> {
+    let Some(ty) = &vi.type_ else {
+        return Result::Err(`${vi.name}: a value with no type`);
+    };
+    let Some(tensor) = &ty.tensor_type else {
+        return Result::Err(`${vi.name}: a value that is not a tensor`);
+    };
+    let Some(dtype) = dtype_name(tensor.elem_type) else {
+        return Result::Err(`${vi.name}: element type ${tensor.elem_type}`);
+    };
+    let rank = match &tensor.shape {
+        Some(shape) => {
+            let mut dims: List<Dim> = [];
+            for let d of shape.dim {
+                dims.push(read_dim(&d, &vi.name)?);
+            }
+            Rank::Dims(dims);
+        },
+        None => Rank::Unranked,
+    };
+    return Result::Ok(ValueInfo { name: vi.name, dtype, rank });
+}
+
+/// An initializer as a `ValueInfo`: its name, type and extents. The weights
+/// themselves are the caller's, as `emit` already assumes.
+fn read_initializer(t: &TensorProto) -> Result<ValueInfo, String> {
+    if let Some(entry) = t.external_data.first() {
+        return Result::Err(`${t.name}: external data (${entry.key})`);
+    }
+    if t.data_location == DATA_LOCATION_EXTERNAL {
+        return Result::Err(`${t.name}: external data`);
+    }
+    let Some(dtype) = dtype_name(t.data_type) else {
+        return Result::Err(`${t.name}: element type ${t.data_type}`);
+    };
+    let mut dims: List<Dim> = [];
+    for let d of t.dims {
+        dims.push(Dim::Static(extent(d, &t.name)?));
+    }
+    return Result::Ok(ValueInfo { name: t.name, dtype, rank: Rank::Dims(dims) });
+}
+
+/// An attribute's values as text, so the two readers hand `Attr` the same
+/// thing. The declared `type` says which payload field holds them.
+fn read_attr(a: &AttributeProto) -> Result<Attr, String> {
+    let mut values: List<String> = [];
+    let mut is_list = true;
+    match a.type_ {
+        ATTRIBUTE_FLOAT => {
+            values.push(`${a.f}`);
+            is_list = false;
+        },
+        ATTRIBUTE_INT => {
+            values.push(`${a.i}`);
+            is_list = false;
+        },
+        ATTRIBUTE_STRING => {
+            values.push(utf8(&a.s));
+            is_list = false;
+        },
+        ATTRIBUTE_FLOATS => {
+            for let v of a.floats {
+                values.push(`${v}`);
+            }
+        },
+        ATTRIBUTE_INTS => {
+            for let v of a.ints {
+                values.push(`${v}`);
+            }
+        },
+        ATTRIBUTE_STRINGS => {
+            for let v of a.strings {
+                values.push(utf8(&v));
+            }
+        },
+        // A tensor has no text form, so it travels whole. Only a float one
+        // does, since the kernels compute in f32.
+        ATTRIBUTE_TENSOR => {
+            is_list = false;
+            if let Some(t) = &a.t {
+                if let Some([data, _]) = float_tensor(t)? {
+                    return Result::Ok(Attr {
+                        name: a.name,
+                        values: [],
+                        is_list: false,
+                        tensor: Option::Some(ConstTensor { data }),
+                    });
+                }
+            }
+        },
+        // A graph or a type has no text form, so the attribute is carried with
+        // no value; the operator that reads one is refused by name anyway.
+        _ => {
+            is_list = false;
+        },
+    }
+    return Result::Ok(Attr { name: a.name, values, is_list });
+}
+
+/// ONNX declares a string attribute as `bytes`, and the specification says it
+/// is UTF-8. Bytes that are not are kept as the replacement character rather
+/// than failing the read, since no shape rule consults an attribute.
+fn utf8(bytes: &ByteList) -> String {
+    let mut out = String::with_capacity(bytes.len());
+    if let Err(_) = out.push_utf8(bytes) {
+        return "\u{FFFD}";
+    }
+    return out;
+}
+
+fn read_node(n: &NodeProto) -> Result<Node, String> {
+    let mut attrs: List<Attr> = [];
+    for let a of n.attribute {
+        attrs.push(read_attr(&a)?);
+    }
+    return Result::Ok(Node { op: n.op_type, outputs: n.output, inputs: n.input, attrs });
+}
+
+/// Read a graph out of a serialized `ModelProto`. What the subset does not
+/// cover names itself, as the textual reader's errors do.
+pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
+    let model = match from_bytes::<ModelProto, S>(bytes) {
+        Ok(m) => m,
+        Err(e) => {
+            return Result::Err(`${e.message}`);
+        },
+    };
+    let Some(graph) = &model.graph else {
+        return Result::Err("a model without a graph");
+    };
+
+    let mut initializers: List<ValueInfo> = [];
+    for let t of graph.initializer {
+        initializers.push(read_initializer(&t)?);
+    }
+    let mut declared: List<ValueInfo> = [];
+    for let vi of graph.input {
+        declared.push(read_value_info(&vi)?);
+    }
+    let inputs = parameters(declared, &initializers);
+    let mut outputs: List<ValueInfo> = [];
+    for let vi of graph.output {
+        outputs.push(read_value_info(&vi)?);
+    }
+    let mut nodes: List<Node> = [];
+    for let n of graph.node {
+        nodes.push(read_node(&n)?);
+    }
+    return Result::Ok(Graph {
+        name: graph.name,
+        inputs,
+        outputs,
+        initializers,
+        nodes,
+    });
+}

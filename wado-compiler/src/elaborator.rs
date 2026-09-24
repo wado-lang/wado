@@ -9,6 +9,7 @@ mod callee;
 mod closure;
 mod coercion;
 mod control_flow;
+mod exhaustiveness;
 mod expr;
 mod handlers;
 mod infer;
@@ -51,9 +52,11 @@ use crate::ast::{self, AstId, Block, Expr, IdentExpr, ImplBlock, Item, Module, V
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::item::OperationOwner;
+use crate::elaborator::method_lookup::ImplParamSlots;
 use crate::elaborator::reify::default_impl_methods;
 use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
+use crate::elaborator::trait_query::SelfBinding;
 use crate::elaborator::types::FunctionContext;
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
@@ -67,7 +70,7 @@ use crate::name::{
 use crate::resolve::{Resolution, head_site};
 use crate::symbol::{Symbol, SymbolKind, SymbolTable, VariableSymbol};
 use crate::tir::{self as tir, TypeId, TypeTable};
-use crate::tir::{ResolvedType, StructDef, TraitRef};
+use crate::tir::{ResolvedType, StructDef};
 use crate::token::Span;
 
 /// Build a function-name → item-index map for a module's items. Used
@@ -118,6 +121,14 @@ pub use types::TypeError;
 use types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
 };
+
+/// A written type application's head: the site that wrote it, and the spelling
+/// a declaration lookup asks by — `ns::Name` by its `ns$Name` alias.
+pub(super) struct WrittenHead<'a> {
+    pub(super) site: ast::AstId,
+    pub(super) name: String,
+    pub(super) args: &'a [ast::Type],
+}
 
 pub struct Elaborator<'a, H: CompilerHost> {
     /// Pipeline-wide type knowledge: type arena, decl-interned type
@@ -174,6 +185,10 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Two assoc types bounded through each other have no fixpoint, so a pair
     /// already on the walk contributes no binding and stays abstract.
     pub(super) assoc_binding_stack: hashmap::IndexSet<(tir::TypeId, String)>,
+    /// The binders whose bound closure is being built right now. A bound's own
+    /// arguments are read while it is built, so `T: Uses<T::Item>` asks for it
+    /// again, and a closure cannot answer itself.
+    pub(super) bound_closure_stack: hashmap::IndexSet<tir::TypeId>,
     /// Whether each declaration's `= Default`s can be expanded at all, asked
     /// once: the declaration is ill-formed, not the application reaching it.
     pub(super) checked_type_param_defaults: hashmap::IndexMap<DefId, bool>,
@@ -184,38 +199,39 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     /// against. The decl pass and the body walk share it, so both see one
     /// numbering.
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
-        for (slot, param) in impl_block.type_params.iter().enumerate() {
-            let slot = slot as u32;
-            if !self
+        let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
+        for param in &impl_block.type_params {
+            let Some(slot) = slots.of_name(&param.name) else {
+                continue;
+            };
+            // A name the enclosing frame already numbered keeps that number;
+            // renumbering it here would give one parameter two indices.
+            if self
                 .annotate_ctx
                 .trait_ctx
                 .type_params
                 .contains_key(&param.name)
             {
-                let type_id = if param.is_pack {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_pack(param.name.clone(), slot)
-                } else {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_param(param.name.clone(), slot)
-                };
-                self.annotate_ctx.trait_ctx.type_params.insert(
-                    param.name.clone(),
-                    scope::BinderInScope::declared(slot, type_id, param.id),
-                );
+                continue;
             }
-            if !param.bounds.is_empty() {
-                self.annotate_ctx
-                    .trait_ctx
-                    .type_param_bounds
-                    .entry(param.name.clone())
-                    .or_default()
-                    .extend(param.bounds.clone());
-            }
+            let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
+                param.name.clone(),
+                slot,
+                param.is_pack,
+            );
+            self.bind_param(
+                &param.name,
+                scope::BinderInScope::declared(slot, type_id, param.id),
+                Vec::new(),
+            );
+        }
+        // Between the names and their bounds: the target is resolved from the
+        // names, and a bound's `Self::Assoc` projects off the target.
+        let implementing = self.impl_self_binding(&impl_block.ty, impl_block.trait_type.as_ref());
+        self.set_self_binding(implementing);
+        for param in &impl_block.type_params {
+            let bounds = self.scoped_bounds(param);
+            self.add_param_bounds(&param.name, bounds);
         }
     }
 }
@@ -420,6 +436,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// are keyed by. `None` when `ns` is no namespace alias of `node`'s module.
     pub(super) fn canonical_ns_ref_at(&self, name: &str, node: ast::AstId) -> Option<String> {
         canonical_ns_ref(self.namespace_imports_at(node)?, name)
+    }
+
+    /// The head a written type application names. `None` where no declaration
+    /// is named: a projection (`Self::Assoc`), or any type that is no application.
+    pub(super) fn written_head<'t>(&self, ty: &'t ast::Type) -> Option<WrittenHead<'t>> {
+        let (site, name) = match ty {
+            ast::Type::Generic(generic) => (generic.id, generic.name.clone()),
+            ast::Type::NamespacedGeneric(ns) => {
+                self.namespace_alias_source(&ns.namespace, ns.id)?;
+                (ns.id, namespace_member_alias(&ns.namespace, &ns.name))
+            }
+            _ => return None,
+        };
+        Some(WrittenHead {
+            site,
+            name,
+            args: trait_env::written_arg_nodes(ty),
+        })
     }
 
     /// Run `body` in `module`'s perspective, swapping the current module and
@@ -827,8 +861,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    pub(super) fn ast_find_return_type_in_block(&self, block: &Block) -> Option<TypeId> {
-        control_flow::find_return_type_in_block(self.ctrl_flow_ctx(), block)
+    pub(super) fn ast_return_types_in_block(&self, block: &Block) -> Vec<TypeId> {
+        control_flow::return_types_in_block(self.ctrl_flow_ctx(), block)
     }
 
     pub(super) fn ast_block_always_exits(&self, block: &Block) -> bool {
@@ -1182,10 +1216,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
-    /// The declared name of the trait `trait_name` refers to here — the same
-    /// name past a `use … as` alias.
-    pub(super) fn declared_trait_name(&self, trait_name: &str) -> String {
-        self.decl_key_or_local(trait_name).map_or_else(
+    /// The declared name of the trait `trait_name` refers to at `site`, past a
+    /// `use … as` or `ns$Trait` alias. No site falls back to the decl indexes.
+    pub(super) fn declared_trait_name(&self, site: Option<AstId>, trait_name: &str) -> String {
+        site.map_or_else(
+            || self.decl_key_or_local(trait_name),
+            |site| self.decl_key_at(site, trait_name),
+        )
+        .map_or_else(
             || trait_name.to_string(),
             |def| self.tysys.resolutions.defs().name(def).to_string(),
         )
@@ -2194,30 +2232,107 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.finalize_infer_holes();
     }
 
+    /// The impl header's trait, named at the target it writes.
+    pub(super) fn impl_block_trait_name(
+        &mut self,
+        impl_block: &ast::ImplBlock,
+    ) -> Option<FqTraitName> {
+        let trait_type = impl_block.trait_type.as_ref()?;
+        let fq = self.fq_trait_name(trait_type);
+        Some(self.tysys.trait_env.fq_trait_named_by_impl(
+            fq,
+            &impl_block.ty,
+            &self.tysys.resolutions,
+        ))
+    }
+
+    /// Register every impl block's associated types before anything in the
+    /// module asks for one, so what a type binds a name to does not depend on
+    /// where the answering impl sits in the file.
+    pub(super) fn register_module_assoc_types(&mut self, module: &ast::Module) {
+        for item in &module.items {
+            if let ast::Item::Impl(impl_block) = item {
+                drop(self.enter_impl_scope(impl_block));
+            }
+        }
+    }
+
+    /// Bind this impl's associated types against the target and `Self` to it,
+    /// so `T::Assoc` is answered by the type rather than by the block in scope.
+    pub(super) fn register_impl_assoc_types(
+        &mut self,
+        impl_block: &ast::ImplBlock,
+        trait_name: Option<&FqTraitName>,
+    ) {
+        let target_type_id = self.resolve_type(&impl_block.ty);
+        let declaring_trait = trait_name.and_then(|fq| self.tysys.trait_env.trait_def_of_fq(fq));
+        self.set_self_binding(SelfBinding {
+            type_id: target_type_id,
+            declaring_trait,
+        });
+        let is_concrete = !self
+            .tysys
+            .type_table
+            .borrow()
+            .contains_type_param(target_type_id);
+        // The header names one instantiation whatever it binds, so the
+        // arguments are resolved once rather than per associated type.
+        let impl_trait_ref = impl_block
+            .trait_type
+            .as_ref()
+            .zip(trait_name.and_then(FqTraitName::canonical))
+            .map(|(written, trait_key)| self.impl_trait_ref(written, &impl_block.ty, trait_key));
+
+        for binding in &impl_block.associated_types {
+            let type_id = self.resolve_type(&binding.ty);
+            self.annotate_ctx
+                .trait_ctx
+                .assoc_type_bindings
+                .insert(binding.name.clone(), type_id);
+
+            let Some(trait_ref) = impl_trait_ref.clone() else {
+                continue;
+            };
+            if is_concrete {
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .register_assoc_type_resolution(
+                        target_type_id,
+                        trait_ref,
+                        binding.name.clone(),
+                        type_id,
+                    );
+            } else {
+                // A generic impl registers the definition instead, which the
+                // monomorphizer reads to answer a `GenericInstance`.
+                let base_decl = self.tysys.type_table.borrow().decl_of_type(target_type_id);
+                if let Some(base_decl) = base_decl {
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .register_generic_assoc_type_def(
+                            base_decl,
+                            trait_ref,
+                            binding.name.clone(),
+                            type_id,
+                        );
+                }
+            }
+        }
+    }
+
     /// Resolve an `impl` block item: register its type-param scope, record
     /// the impl facts, resolve its methods, and synthesise trait default
     /// methods. The guard restores the parent context on every exit path,
     /// including the synthesize-request early return.
     fn resolve_impl_item(&mut self, impl_block: &ast::ImplBlock) {
-        let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
-        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-
-        // Resolve impl block methods with mangled names
-        let struct_name = scope.get_type_name(&impl_block.ty);
-        let trait_name = impl_block.trait_type.as_ref().map(|t| {
-            let fq = scope.fq_trait_name(t);
-            scope.tysys.trait_env.fq_trait_named_by_impl(
-                fq,
-                &impl_block.ty,
-                &scope.tysys.resolutions,
-            )
-        });
-
-        let impl_owner = scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
-        scope.register_impl_block_params(impl_block);
-        // The node the registration above bound the receiver to, so a method
-        // parameter shadowing the letter is a different binder.
+        let struct_name = self.get_type_name(&impl_block.ty);
+        let impl_owner = self.tysys.resolutions.defs().of_ast_id(impl_block.id);
+        let mut scope = self.enter_impl_scope(impl_block);
+        let trait_name = scope.impl_block_trait_name(impl_block);
+        // The node the scope bound the receiver to, so a method parameter
+        // shadowing the letter is a different binder.
         let receiver_decl = scope
             .annotate_ctx
             .trait_ctx
@@ -2231,83 +2346,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
 
-        scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
-        if impl_block.trait_type.is_some() {
-            // Resolve the target type for registering associated type resolutions
-            let target_type_id = scope.resolve_type(&impl_block.ty);
-            // `type Output = Self;` names this impl's target. Without the
-            // binding it resolved to `unknown` and registered as one.
-            scope.annotate_ctx.trait_ctx.self_type = Some(target_type_id);
-            let is_concrete = !scope
-                .tysys
-                .type_table
-                .borrow()
-                .contains_type_param(target_type_id);
-            // The header names one instantiation whatever it binds, so the
-            // arguments are resolved once rather than per associated type.
-            let impl_trait_ref =
-                trait_name
-                    .as_ref()
-                    .and_then(FqTraitName::canonical)
-                    .map(|trait_key| {
-                        impl_block.trait_type.as_ref().map_or_else(
-                            || TraitRef::bare(trait_key),
-                            |t| scope.impl_trait_ref(t, &impl_block.ty, trait_key),
-                        )
-                    });
-
-            for binding in &impl_block.associated_types {
-                let type_id = scope.resolve_type(&binding.ty);
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .assoc_type_bindings
-                    .insert(binding.name.clone(), type_id);
-
-                // Register in TypeTable for substitution resolution
-                // Only for concrete types (not generic impls like impl<T> Trait for List<T>)
-                let Some(trait_ref) = impl_trait_ref.clone() else {
-                    continue;
-                };
-                if is_concrete {
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .register_assoc_type_resolution(
-                            target_type_id,
-                            trait_ref,
-                            binding.name.clone(),
-                            type_id,
-                        );
-                } else {
-                    // For generic impls, register the definition so the monomorphizer
-                    // can resolve associated types for GenericInstance types.
-                    let base_decl = scope.tysys.type_table.borrow().decl_of_type(target_type_id);
-                    if let Some(base_decl) = base_decl {
-                        scope
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .register_generic_assoc_type_def(
-                                base_decl,
-                                trait_ref,
-                                binding.name.clone(),
-                                type_id,
-                            );
-                    }
-                }
-            }
-        }
-
-        // Record the impl-block
-        // resolution facts so `reify_impl` can read them
-        // verbatim. All inputs are already computed by
-        // the setup above; the recording is one call
-        // that snapshots the resolved Self type, the
-        // trait canonical / mangled forms, the impl's
-        // TIR type-param projection, the assoc-type
-        // bindings, and the handler / ref-impl flags.
+        // Snapshot the resolution facts, which `reify_impl` reads back verbatim.
         {
             let self_type = scope.resolve_type(&impl_block.ty);
             let is_handler_method = trait_name

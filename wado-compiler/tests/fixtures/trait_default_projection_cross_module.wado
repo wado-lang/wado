@@ -1,0 +1,43 @@
+//! A trait's defaulted method materialized for an impl in another module
+//! re-resolves its signature there. Reading a bound by its written name gave up
+//! where the trait was reachable only through a namespace import, leaving the
+//! projection with no owning trait. Both shapes appear: `Self::Value` on the
+//! trait's own `Self`, and `S::Value` on a bound the impl's module never names.
+use lib from "./sub/trait_default_projection_lib.wado";
+
+struct Counter {
+    n: i32,
+}
+
+impl lib::Source for Counter {
+    type Value = i32;
+
+    fn read(&self) -> Self::Value {
+        return self.n;
+    }
+}
+
+struct Label {
+    text: String,
+}
+
+impl lib::Sample for Label {
+    type Value = String;
+
+    fn draw(&self) -> Self::Value {
+        return self.text;
+    }
+}
+
+test "a default body projects off Self in the impl's module" {
+    let c = Counter { n: 7 };
+    let [a, b] = c.read_twice();
+    assert a == 7;
+    assert b == 7;
+}
+
+test "a default body projects off its own bound in the impl's module" {
+    let c = Counter { n: 7 };
+    let l = Label { text: "hi" };
+    assert c.relay(&l) == "hi";
+}

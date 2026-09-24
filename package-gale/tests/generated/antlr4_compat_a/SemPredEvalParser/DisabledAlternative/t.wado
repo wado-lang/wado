@@ -1117,12 +1117,12 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '_' | 'a'..='z' | 'A'..='Z' | '0'..='9' } {
-            end = try_ANY_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ANY_CHAR; }
-        } else {
-            end = try_ANY_CHAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ANY_CHAR; }
+        match first_char {
+            '0'..='9' | 'A'..='Z' | '_' | 'a'..='z' => {
+                end = try_ANY_CHAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ANY_CHAR; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1148,7 +1148,7 @@ pub fn token_kind_name(kind: i32) -> String {
     };
 }
 
-pub global RK_CPPCOMPILATIONUNIT: NodeKind = 0;
+pub global RK_CPP_COMPILATION_UNIT: NodeKind = 0;
 pub global RK_CONTENT: NodeKind = 1;
 pub global RK_ANYTHING: NodeKind = 2;
 
@@ -1586,7 +1586,7 @@ fn _parse_cpp_compilation_unit__inner(p: &mut Parser) -> () {
 fn _parse_cpp_compilation_unit(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_CPPCOMPILATIONUNIT, _start);
+    p.b.start_node(RK_CPP_COMPILATION_UNIT, _start);
     _parse_cpp_compilation_unit__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {

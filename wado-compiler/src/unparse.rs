@@ -7,15 +7,15 @@ use crate::ast::{
     Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr,
     ChainedComparison, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp,
     Condition, ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
-    ForOfStmt, ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IfExpr, IfStmt,
-    ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
-    LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
-    MethodCallExpr, Module, Newtype, Param, Pattern, RangeKind, ResourceDecl, RestClause,
-    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, TaskReturnStmt, TemplateStringExpr, TestDecl, TraitBound, TraitDecl,
-    TraitHead, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
-    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
-    WithHandlerExpr, WorldDecl, WorldExport, written_params,
+    ForOfStmt, ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IdentExpr, IfExpr,
+    IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
+    LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm,
+    MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern, RangeKind,
+    ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
+    StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr,
+    TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr,
+    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, written_params,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::escape::{quoted, quoted_char};
@@ -527,8 +527,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_use(&mut self, u: &UseDecl) {
-        self.write_indent();
-
+        self.emit_outer_attrs(&u.attrs);
         self.emit_visibility(u.visibility);
 
         // The line is rendered as a `(imports_wrapped, with_multiline)` choice.
@@ -928,7 +927,6 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_struct_field(&mut self, field: &StructField) {
-        self.emit_outer_attrs(&field.attrs);
         self.output.push_str(field.visibility.keyword());
         self.output.push_str(&field.name);
         self.output.push_str(": ");
@@ -995,9 +993,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_enum_case(&mut self, case: &EnumCase) {
-        self.emit_outer_attrs(&case.attrs);
         self.output.push_str(&case.name);
-        // Enum cases have no payload (unlike variant cases)
         self.output.push(',');
     }
 
@@ -1019,7 +1015,6 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_variant_case(&mut self, case: &VariantCase) {
-        self.emit_outer_attrs(&case.attrs);
         self.output.push_str(&case.name);
         if let Some(payload) = &case.payload {
             self.output.push('(');
@@ -1039,7 +1034,6 @@ impl<'a> Unparser<'a> {
         self.with_braced_body(f.span, |this| {
             for flag in &f.flags {
                 this.emit_member(flag.id, flag.span, &flag.attrs, |this| {
-                    this.emit_outer_attrs(&flag.attrs);
                     this.output.push_str(&flag.name);
                     this.output.push(',');
                 });
@@ -1078,7 +1072,7 @@ impl<'a> Unparser<'a> {
     /// Output an inherent impl type with type param bounds inlined into type args.
     /// E.g.: `impl<T: Ord> List<T>` → `impl List<T: Ord>`
     fn unparse_impl(&mut self, i: &ImplBlock) {
-        self.write_indent();
+        self.emit_outer_attrs(&i.attrs);
         self.output.push_str("impl");
 
         // Always emit explicit type params: `impl<T> Foo<T>`, not compact `impl Foo<T>`
@@ -1100,8 +1094,7 @@ impl<'a> Unparser<'a> {
 
         self.with_braced_body(i.span, |this| {
             for assoc in &i.associated_types {
-                this.emit_member(assoc.id, assoc.span, &[], |this| {
-                    this.write_indent();
+                this.emit_member(assoc.id, assoc.span, &assoc.attrs, |this| {
                     this.output.push_str("type ");
                     this.output.push_str(&assoc.name);
                     this.output.push_str(" = ");
@@ -1110,27 +1103,21 @@ impl<'a> Unparser<'a> {
                 });
             }
 
-            for assoc_const in &i.constants {
-                this.emit_member(assoc_const.id, assoc_const.span, &[], |this| {
-                    this.write_indent();
-                    this.output.push_str(assoc_const.visibility.keyword());
+            for constant in &i.constants {
+                this.emit_member(constant.id, constant.span, &constant.attrs, |this| {
+                    this.output.push_str(constant.visibility.keyword());
                     this.output.push_str("const ");
-                    this.output.push_str(&assoc_const.name);
+                    this.output.push_str(&constant.name);
                     this.output.push_str(": ");
-                    this.unparse_type(&assoc_const.ty);
+                    this.unparse_type(&constant.ty);
                     this.output.push_str(" = ");
-                    this.unparse_expr(&assoc_const.value);
+                    this.unparse_expr(&constant.value);
                     this.output.push(';');
                 });
             }
 
-            // Force one blank line between an associated-type / constant
-            // block and the first method, regardless of source spacing.
-            // After hand-emitting the blank, anchor `last_source_line`
-            // at the first method's `effective_start` (= leading-comment
-            // line or first-attribute line, falling back to the method
-            // line) so the methods loop's per-comment / per-attribute
-            // `emit_blank_lines_to` calls don't re-emit blanks on top.
+            // One blank line separates declarations from the first method
+            // whatever the source did. Anchoring past it stops a second.
             let has_declarations = !i.associated_types.is_empty() || !i.constants.is_empty();
             if has_declarations && let Some(first) = i.methods.first() {
                 this.output.push('\n');
@@ -1139,12 +1126,8 @@ impl<'a> Unparser<'a> {
             }
 
             for (idx, method) in i.methods.iter().enumerate() {
-                // Subsequent methods are visually separated by at
-                // least one blank line, even if the source had none.
-                // The leading-comment helper would emit zero blanks
-                // when `blank_lines_between(...) == 0`, so force the
-                // gap and advance `last_source_line` to the helper's
-                // anchor in the same way as the assoc-method gap above.
+                // Methods are separated by at least one blank line whatever the
+                // source did, which `emit_blank_lines_to` alone cannot force.
                 let effective_line = effective_start_line(&method.attrs, method.span.line);
                 let effective_start = this.leading_start_line(method.id, effective_line);
                 if idx > 0 && blank_lines_between(this.last_source_line, effective_start) == 0 {
@@ -1186,7 +1169,6 @@ impl<'a> Unparser<'a> {
         self.with_braced_body(t.span, |this| {
             for assoc in &t.associated_types {
                 this.emit_member(assoc.id, assoc.span, &[], |this| {
-                    this.write_indent();
                     this.output.push_str("type ");
                     this.output.push_str(&assoc.name);
                     if !assoc.bounds.is_empty() {
@@ -1711,23 +1693,14 @@ impl<'a> Unparser<'a> {
     fn unparse_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Ident(i) => {
-                // `Maybe::<i32>::Nothing` puts its turbofish on the path's
-                // prefix; appending it to the whole name would re-parse as the
-                // identifier's own (`Maybe::Nothing::<i32>`).
-                let split = i
-                    .type_args_on_prefix
-                    .then(|| i.name.split_once("::"))
-                    .flatten();
-                if let Some((prefix, suffix)) = split {
+                if let Some((prefix, suffix)) = prefix_turbofish_split(i) {
                     self.output.push_str(prefix);
                     self.unparse_turbofish(&i.type_args);
                     self.output.push_str("::");
                     self.output.push_str(suffix);
                 } else {
                     self.output.push_str(&i.name);
-                    if !i.type_args.is_empty() {
-                        self.unparse_turbofish(&i.type_args);
-                    }
+                    self.unparse_turbofish(&i.type_args);
                 }
             }
             Expr::Literal(l) => self.unparse_literal(&l.value),
@@ -2157,11 +2130,19 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_static_method_call(&mut self, s: &StaticMethodCallExpr) {
-        // For generic types, use turbofish syntax: Name::<Args>
+        // The target is a path here, not an annotation, so its arguments are a
+        // turbofish: an annotation's `Name<Args>::m()` re-parses as a chain of
+        // comparisons. Both spellings a path can carry one on are written out.
         match &s.target_type {
             Type::Generic(g) => {
                 self.output.push_str(&g.name);
-                self.delimited("::<", ">", &g.args, Unparser::unparse_type);
+                self.unparse_turbofish(&g.args);
+            }
+            Type::NamespacedGeneric(n) => {
+                self.output.push_str(&n.namespace);
+                self.output.push_str("::");
+                self.output.push_str(&n.name);
+                self.unparse_turbofish(&n.args);
             }
             _ => self.unparse_type(&s.target_type),
         }
@@ -2511,6 +2492,11 @@ impl<'a> Unparser<'a> {
                 }
                 self.unparse_pattern(end);
             }
+            Pattern::Typed { pattern, ty, .. } => {
+                self.unparse_pattern(pattern);
+                self.output.push_str(": ");
+                self.unparse_type(ty);
+            }
             // The formatter is fail-fast on syntax errors, so this placeholder
             // is never reached; emit nothing to keep the match total.
             Pattern::Error(_) => {}
@@ -2579,6 +2565,7 @@ impl<'a> Unparser<'a> {
     fn unparse_struct_literal(&mut self, s: &StructLiteralExpr) {
         if let Some(name) = &s.name {
             self.output.push_str(name);
+            self.unparse_turbofish(&s.type_args);
             self.output.push(' ');
         }
 
@@ -2778,9 +2765,8 @@ impl<'a> Unparser<'a> {
         self.output.push_str("}\n");
     }
 
-    /// Emit a member of a braced body that itself carries leading attributes and
-    /// optional comments: leading comments → blank lines → caller body → inline
-    /// trailing comments → newline.
+    /// Emit a member of a braced body: leading comments → blank lines → `attrs`
+    /// → indent → caller body → inline trailing comments → newline.
     fn emit_member<F>(&mut self, id: AstId, span: Span, attrs: &[Attribute], body: F)
     where
         F: FnOnce(&mut Self),
@@ -2788,6 +2774,7 @@ impl<'a> Unparser<'a> {
         let effective_line = effective_start_line(attrs, span.line);
         self.open_member(id, span.start);
         self.emit_blank_lines_to(effective_line);
+        self.emit_outer_attrs(attrs);
         body(self);
         self.emit_trailing_for_inline(id);
         self.output.push('\n');
@@ -3058,33 +3045,10 @@ pub fn get_item_id(item: &Item) -> AstId {
     }
 }
 
-/// Returns the first source line of an item, including any preceding attributes.
-/// This is used to compute blank lines correctly when items have both doc comments
-/// and attributes, avoiding blank-line growth on repeated formatting passes.
+/// The first source line of an item, its attributes included, so a doc comment
+/// above an attribute does not grow a blank line on every formatting pass.
 fn get_item_first_line(item: &Item) -> usize {
-    let first_attr_line = |attrs: &[Attribute]| attrs.first().map(|a| a.span.line);
-    let item_line = get_item_span(item).line;
-    let attr_line = match item {
-        Item::Struct(s) => first_attr_line(&s.attrs),
-        Item::Enum(e) => first_attr_line(&e.attrs),
-        Item::Variant(v) => first_attr_line(&v.attrs),
-        Item::Interface(e) => first_attr_line(&e.attrs),
-        Item::Resource(r) => first_attr_line(&r.attrs),
-        Item::Function(f) => first_attr_line(&f.attrs),
-        Item::Newtype(t) => first_attr_line(&t.attrs),
-        Item::World(w) => first_attr_line(&w.attrs),
-        Item::Global(g) => first_attr_line(&g.attributes),
-        Item::Flags(f) => f
-            .attributes
-            .as_deref()
-            .and_then(|a| a.first().map(|a| a.span.line)),
-        Item::Trait(t) => first_attr_line(&t.attrs),
-        Item::TupleTypeDecl(d) => first_attr_line(&d.attrs),
-        Item::BuiltinTypeDecl(d) => first_attr_line(&d.attrs),
-        Item::Test(t) => first_attr_line(&t.attributes),
-        _ => None,
-    };
-    attr_line.unwrap_or(item_line).min(item_line)
+    effective_start_line(item.attrs(), get_item_span(item).line)
 }
 
 fn get_stmt_span(stmt: &Stmt) -> Span {
@@ -3484,8 +3448,20 @@ pub fn unparse_expr_simple(expr: &Expr) -> String {
     output
 }
 
+/// A case path's turbofish sits on the prefix, so split at the last `::` and
+/// answer `(prefix, case)`. On the whole name it re-parses as the ident's own.
+fn prefix_turbofish_split(ident: &IdentExpr) -> Option<(&str, &str)> {
+    ident
+        .type_args_on_prefix
+        .then(|| ident.name.rsplit_once("::"))
+        .flatten()
+}
+
 /// Emit `::<T1, T2, ...>` turbofish into `output`.
 fn unparse_turbofish_into(type_args: &[Type], output: &mut String) {
+    if type_args.is_empty() {
+        return;
+    }
     output.push_str("::<");
     for (idx, ty) in type_args.iter().enumerate() {
         if idx > 0 {
@@ -3503,20 +3479,14 @@ fn unparse_turbofish_into(type_args: &[Type], output: &mut String) {
 fn unparse_expr_into(expr: &Expr, output: &mut String) {
     match expr {
         Expr::Ident(i) => {
-            let split = i
-                .type_args_on_prefix
-                .then(|| i.name.split_once("::"))
-                .flatten();
-            if let Some((prefix, suffix)) = split {
+            if let Some((prefix, suffix)) = prefix_turbofish_split(i) {
                 output.push_str(prefix);
                 unparse_turbofish_into(&i.type_args, output);
                 output.push_str("::");
                 output.push_str(suffix);
             } else {
                 output.push_str(&i.name);
-                if !i.type_args.is_empty() {
-                    unparse_turbofish_into(&i.type_args, output);
-                }
+                unparse_turbofish_into(&i.type_args, output);
             }
         }
         Expr::Literal(l) => unparse_literal_into(&l.value, output),
@@ -3618,6 +3588,7 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
         Expr::StructLiteral(s) => {
             if let Some(name) = &s.name {
                 output.push_str(name);
+                unparse_turbofish_into(&s.type_args, output);
                 output.push(' ');
             }
             if s.fields.is_empty() {
@@ -3965,6 +3936,11 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
             }
             unparse_pattern_into(end, output);
         }
+        Pattern::Typed { pattern, ty, .. } => {
+            unparse_pattern_into(pattern, output);
+            output.push_str(": ");
+            unparse_type_into(ty, output);
+        }
         Pattern::Error(_) => output.push_str("<error>"),
     }
 }
@@ -4117,6 +4093,11 @@ fn unparse_attr_arg_into(arg: &AttrArg, output: &mut String) {
             delimited_into("[", "]", vs, output, |v: &String, out: &mut String| {
                 out.push_str(&quoted(v));
             });
+        }
+        AttrArg::KeyNumber(k, v) => {
+            output.push_str(k);
+            output.push_str(" = ");
+            output.push_str(v);
         }
         AttrArg::KeyIdent(k, v) => {
             output.push_str(k);
@@ -5002,6 +4983,11 @@ impl<'a> TirUnparser<'a> {
                 self.comma_sep_with(" | ", alternatives, TirUnparser::unparse_tir_pattern);
             }
             TirPattern::ConstantValue { expr } => self.unparse_expr(expr),
+            TirPattern::Narrow { name, type_id, .. } => {
+                self.output.push_str(name.as_deref().unwrap_or("_"));
+                self.output.push_str(": ");
+                self.output.push_str(&self.type_table.type_name(*type_id));
+            }
             TirPattern::Range {
                 start,
                 end,

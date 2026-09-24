@@ -9,24 +9,9 @@ The Wado compiler (`wado-compiler/`) translates `.wado` source into a Wasm compo
 
 ## Pipeline
 
-```
-Source (.wado)
-  → Lex → Parse → Bind                    (per module, in loader)
-  → Analyze → Resolve
-  → Annotate (decls, then bodies) → Liveness → Reify (TIR)
-  → Default-purity Check
-  → Synthesis (auto-derives, template, From, serde, pre-CM effect dispatch, CM bindings)
-  → Effect Check
-  → Effect Dispatch (post-check: WithHandler / Resume desugaring)
-  → Link (Package → FlatPackage)
-  → Monomorphize → Erase Newtypes & Flags → Reflect Bridges
-  → Lower
-  → Optimize
-  → WIR Build → WIR Optimize → Codegen
-  → Wasm component bytes
-```
-
-The driver is `compile_after_load` in `src/lib.rs`.
+A source file enters as `.wado` text and leaves as Wasm component bytes. The
+driver is `compile_after_load` in `src/lib.rs`; the loader runs lex, parse and
+bind per module ahead of it.
 
 | Phase                  | Output          | Module(s)                                        |
 | ---------------------- | --------------- | ------------------------------------------------ |
@@ -46,6 +31,7 @@ The driver is `compile_after_load` in `src/lib.rs`.
 | Monomorphize           | `FlatPackage`   | `monomorphize/`                                  |
 | Erase Newtypes & Flags | `FlatPackage`   | `tir.rs`                                         |
 | Reflect Bridges (post) | `FlatPackage`   | `synthesis/reflect_bridge.rs`                    |
+| Pre-lower Prune        | `FlatPackage`   | `prelower_reach.rs`                              |
 | Lower                  | `NirPackage`    | `lower/`                                         |
 | Optimize               | `NirPackage`    | `optimize/`                                      |
 | WIR Build              | `WirPackage`    | `wir_build/`                                     |
@@ -89,6 +75,8 @@ The AST is parser-immutable from this point on. The desugar-replacement surface 
 - **Reify** reads the recorded facts back and emits one `TirModule` per module. No inference, no dispatch decisions.
 
 The LSP path stops after liveness and builds no TIR.
+
+`attribute.rs` holds the attribute schema: each attribute's name, the declarations it may sit on, and the arguments it takes. Analyze walks every attribute a module writes and rejects an unknown name, a misplaced one, or arguments the schema does not admit. A shape the schema leaves as `AttrArgs::Read` is checked where the attribute is read instead: reify reads `#[param]`, `#[result]`, `#[retain]`, `#[immediate]` and `#[wire]`, and the parser reads `#[cm]` and `#[canonical]` into the `CmBoundary` the attribute carries. Every reader names its attribute through a constant there, so a name is spelled once.
 
 The result, `Semantics`, carries an `AstIndex`, and the `TirModule`s too once reify has run. It holds no fact of its own: a query names a globally-unique `AstId` and a fact kind, and is routed to the `ModuleSemantics` whose walk recorded that fact — the use→def edges among them. The kind is part of the route because one node's kinds need not come from one walk; [WEP 2026-05-26](./wep-2026-05-26-elaborator-rearchitecture.md) owns the rest of the rule. This is what makes the architecture LSP-friendly: facts are attached to AST nodes without mutating them, so cross-file navigation, hover, and rename all fall out of the same data the batch compiler uses. See the [LSP](#lsp) section below.
 
@@ -165,6 +153,10 @@ A body-less marker is itself an `Item::Impl` and lands in `TraitEnv`'s impl inde
 - `type_table.erase_newtypes_and_flags()` then collapses newtypes to their base type and flag types to `u32`. The distinction is needed during monomorphize for trait dispatch but not afterwards.
 
 ## Lower
+
+`prelower_reach.rs` runs first, dropping every function no root reaches so that
+`lower` never translates it. See
+[WEP 2026-05-26](./wep-2026-05-26-elaborator-rearchitecture.md).
 
 `lower.rs` runs `FlatPackage` (TIR-shaped) → `NirPackage` as planner + translator: the planner ([`lower::plan::plan`]) runs the TIR-mutating sub-passes and produces a `LowerPlan` of facts; the translator ([`lower::translate::translate`]) is a single fold from TIR to NIR. See `docs/wep-2026-05-11-nir.md`.
 

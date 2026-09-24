@@ -1209,47 +1209,47 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { 'g' } {
-            end = try_E(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_E; }
-            end = try_MULTI(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MULTI; }
-            end = try_C(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_C; }
-        } else if first_char matches { 'h' } {
-            end = try_D(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_D; }
-            end = try_MULTI(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MULTI; }
-            end = try_C(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_C; }
-        } else if first_char matches { 'q' } {
-            end = try_WORD(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WORD; }
-            end = try_MULTI(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MULTI; }
-            end = try_C(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_C; }
-        } else if first_char matches { 'a'..='f' } {
-            end = try_A(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_A; }
-            end = try_C(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_C; }
-        } else if first_char matches { 'i'..='z' } {
-            end = try_WORD(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WORD; }
-            end = try_C(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_C; }
-        } else if first_char matches { 'g'..='h' } {
-        } else {
-            end = try_A(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_A; }
-            end = try_WORD(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WORD; }
-            end = try_MULTI(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MULTI; }
-            end = try_C(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_C; }
+        match first_char {
+            'a'..='f' => {
+                end = try_A(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_A; }
+                end = try_C(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_C; }
+            },
+            'g' => {
+                end = try_E(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_E; }
+                end = try_MULTI(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_MULTI; }
+                end = try_C(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_C; }
+            },
+            'h' => {
+                end = try_D(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_D; }
+                end = try_MULTI(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_MULTI; }
+                end = try_C(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_C; }
+            },
+            'i'..='p' | 'r'..='z' => {
+                end = try_WORD(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WORD; }
+                end = try_C(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_C; }
+            },
+            'q' => {
+                end = try_WORD(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WORD; }
+                end = try_MULTI(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_MULTI; }
+                end = try_C(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_C; }
+            },
+            _ => {
+                end = try_C(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_C; }
+            },
         }
         if best_end > start {
             let kw_kind = classify_keyword(&lexer.chars, start, best_end);

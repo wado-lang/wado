@@ -13,7 +13,7 @@ use { parse_rust } from "./rust_corpus.wado";
 use { collect_paths } from "../src/corpus.wado";
 use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use fs from "core:fs";
-use { Preopens } from "wasi:filesystem";
+use { Preopens } from "core:fs";
 use { TreeMap } from "core:collections";
 use { from_string, to_string_pretty } from "core:json";
 
@@ -42,7 +42,7 @@ fn path_roots(result: &rust::ParseResult) -> List<[i32, String]> {
             Open => {
                 depth += 1;
                 let kind = cst.kind(row);
-                if exempt_depth < 0 && (kind == rust::RK_USEDECLARATION || kind == rust::RK_VISIBILITY) {
+                if exempt_depth < 0 && (kind == rust::RK_USE_DECLARATION || kind == rust::RK_VISIBILITY) {
                     exempt_depth = depth;
                 }
             },

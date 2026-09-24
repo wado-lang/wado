@@ -9,8 +9,8 @@
 use { Grammar, LexerRule, ParserRule, Alternative } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { Rule } from "./gir.wado";
-use { CodeWriter } from "./wadopoet.wado";
-use { to_pascal_case, escape_ident, rule_alts_labeled } from "./gen_util.wado";
+use { CodeWriter } from "lib:wadopoet";
+use { to_pascal_case, escape_case, rule_alts_labeled, rule_kind_const } from "./gen_util.wado";
 
 /// Number of distinct token kinds: one per non-fragment lexer rule, the two
 /// synthetic kinds (`Eof`, `Error`), and one per collected literal — matching
@@ -33,22 +33,13 @@ fn rule_name(rule: &Rule) -> String {
     };
 }
 
-/// Uppercase the rule name for the `RK_` constant suffix.
-fn rule_const<S: AsStrSlice>(name: S) -> String {
-    let mut out = String::with_capacity(name.len());
-    for let c of name.chars() {
-        out.push(c.to_ascii_uppercase());
-    }
-    return out;
-}
-
 /// Emit the per-rule `RK_<RULE>` node-kind constants and the `RULE_NAMES`
 /// table (rule-index order); the name table drives `to_string_tree`. The
 /// `RK_*` constants are `pub` so a consumer can dispatch on a node's kind
 /// (e.g. an interpreter walking the tree).
 pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
     for let mut i = 0; i < rules.len(); i += 1 {
-        w.line(`pub global RK_${rule_const(&rule_name(&rules[i]))}: NodeKind = ${i};`);
+        w.line(`pub global ${rule_kind_const(&rule_name(&rules[i]))}: NodeKind = ${i};`);
     }
     w.blank();
     let mut names = String::with_capacity(rules.len() * 12);
@@ -112,13 +103,12 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
 
     // Several alternatives may share one `# Label` (valid in ANTLR4: they
     // denote the same alternative kind), so emit each distinct label once —
-    // a repeated variant would not compile. A label may be a Wado reserved
-    // word (e.g. `# else`), so escape it to a valid identifier.
+    // a repeated variant would not compile.
     w.begin(`pub enum ${enum_name}`);
     let mut seen: List<String> = [];
     for let alt of &rule.alternatives {
         if let Some(label) = &alt.label {
-            let case = escape_ident(label);
+            let case = escape_case(label);
             let mut dup = false;
             for let s of &seen {
                 if *s == case {
@@ -140,7 +130,7 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
     w.indent();
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
         if let Some(label) = &rule.alternatives[i].label {
-            w.line(`${i} => Option::Some(${enum_name}::${escape_ident(label)}),`);
+            w.line(`${i} => Option::Some(${enum_name}::${escape_case(label)}),`);
         }
     }
     w.line("_ => null,");

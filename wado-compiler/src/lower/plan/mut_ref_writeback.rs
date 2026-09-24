@@ -55,6 +55,7 @@ pub fn insert_write_backs(
             local_base: 0,
             locals,
             detached_locals: IndexSet::default(),
+            borrowed_locals: func.address_taken_locals.clone(),
             borrowed_temps: Vec::new(),
             refused: None,
         };
@@ -108,6 +109,8 @@ struct WriteBack<'a> {
     /// that borrow, so a sink reached through the variable is the same escape
     /// as spelling the borrow there.
     detached_locals: IndexSet<u32>,
+    /// Locals this body borrows somewhere, which a reference value may name.
+    borrowed_locals: IndexSet<u32>,
     borrowed_temps: Vec<u32>,
     /// The first detached borrow with no write-back point, and why.
     refused: Option<(Span, String)>,
@@ -244,6 +247,7 @@ impl WriteBack<'_> {
             local_base,
             locals: std::mem::take(body_locals),
             detached_locals: IndexSet::default(),
+            borrowed_locals: address_taken_locals.clone(),
             borrowed_temps: Vec::new(),
             refused: None,
         };
@@ -326,9 +330,34 @@ impl WriteBack<'_> {
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: inner,
-            } => names_a_slot(inner).then_some(place),
+            } => place_root(inner).is_some().then_some(place),
             _ => None,
         }
+    }
+
+    /// Whether the callee can reach the storage `place` names through `sibling`:
+    /// a borrow of a place on the same root, the root itself where the root is
+    /// a reference, or any reference once the root is borrowed elsewhere.
+    fn reaches(&self, sibling: &TirExpr, place: &TirExpr) -> bool {
+        let Some(root) = place_root(place) else {
+            return false;
+        };
+        if let TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: borrowed,
+        } = &sibling.kind
+            && place_root(borrowed) == Some(root)
+        {
+            return true;
+        }
+        if !matches!(
+            self.type_table.get(sibling.type_id),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) {
+            return false;
+        }
+        place_root(sibling) == Some(root)
+            || matches!(root, Root::Local(index) if self.borrowed_locals.contains(&index))
     }
 
     /// Read every step of `place` that is not already a slot into a temp, so
@@ -479,6 +508,21 @@ impl WriteBack<'_> {
                     && self.detached_place(arg).is_some()
             })
             .collect();
+        // Until the store back, the replaced value is in the temp alone, so a
+        // sibling reaching the same storage reads the old value and has its own
+        // write undone.
+        let shared: Vec<bool> = args
+            .iter()
+            .enumerate()
+            .map(|(position, arg)| {
+                detached[position]
+                    && self.detached_place(arg).is_some_and(|place| {
+                        args.iter().enumerate().any(|(other, sibling)| {
+                            other != position && self.reaches(sibling, place)
+                        })
+                    })
+            })
+            .collect();
         // Everything up to the last place moves to the prefix; what follows it
         // already evaluates after that place, so it stays in the call.
         let last_place = detached.iter().rposition(|&d| d);
@@ -520,6 +564,16 @@ impl WriteBack<'_> {
                 self.refuse(
                     arg.span,
                     format!("'{callee}' retains it, so it outlives the call"),
+                );
+                continue;
+            }
+            if shared[position] {
+                self.refuse(
+                    arg.span,
+                    format!(
+                        "'{callee}' replaces it, and another argument reaches the same storage, \
+                         which would read the old value and have its own write undone"
+                    ),
                 );
                 continue;
             }
@@ -597,18 +651,26 @@ impl WriteBack<'_> {
     }
 }
 
-/// Whether `expr` names storage this body can spell again — a projection chain
-/// rooted at a local or a capture, rather than a value a call produced.
-fn names_a_slot(expr: &TirExpr) -> bool {
+/// The slot a projection chain is rooted at.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Root {
+    Local(u32),
+    Capture(u32),
+}
+
+/// The slot `expr` reads storage out of, where it names storage this body can
+/// spell again rather than a value a call produced.
+fn place_root(expr: &TirExpr) -> Option<Root> {
     match &expr.kind {
-        TirExprKind::Local { .. } | TirExprKind::Capture { .. } => true,
+        TirExprKind::Local { index, .. } => Some(Root::Local(*index)),
+        TirExprKind::Capture { index, .. } => Some(Root::Capture(*index)),
         TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::Index { expr, .. }
         | TirExprKind::Unary {
             op: TirUnaryOp::Deref,
             expr,
-        } => names_a_slot(expr),
-        _ => false,
+        } => place_root(expr),
+        _ => None,
     }
 }
 

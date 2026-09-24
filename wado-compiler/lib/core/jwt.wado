@@ -78,6 +78,23 @@ pub enum JwtError {
     NotYetValid,
 }
 
+impl Display for JwtError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match *self {
+            Malformed => "malformed token",
+            AlgMismatch => "algorithm does not match the key",
+            CriticalHeader => "unsupported critical header",
+            InvalidSignature => "invalid signature",
+            Expired => "token has expired",
+            NotYetValid => "token is not yet valid",
+        };
+        f.write_str(&message);
+    }
+}
+
+impl Error for JwtError {
+}
+
 /// The registered claims (RFC 7519 §4.1) this module knows how to check.
 /// `aud` is absent: it is a string *or* an array of strings on the wire, so it
 /// belongs to a caller's own claims struct until this module carries both.
@@ -120,7 +137,7 @@ impl RegisteredClaims {
 /// Whether the header carries `crit`, which is all [`verify`] asks: the member
 /// is refused for being present, so its contents are never read. An `Option`
 /// field would read an explicit `null` as the absent member it is not.
-enum Crit {
+pub enum Crit {
     Absent,
     Present,
 }

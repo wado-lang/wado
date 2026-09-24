@@ -8,6 +8,7 @@
 pub mod analyze;
 pub mod ast;
 pub mod ast_index;
+pub mod attribute;
 pub mod bind;
 pub mod builtin_registry;
 pub mod canonical;
@@ -50,10 +51,12 @@ pub mod param_resolution;
 pub mod parser;
 pub mod path;
 mod prelower_reach;
+pub mod primitive;
 pub mod remarks;
 pub mod resolve;
 pub mod resource_move_check;
 pub mod semantics;
+pub mod signature_reach;
 pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
 pub mod test_names;
@@ -64,6 +67,7 @@ use crate::component_model::{CmInterfaceRegistry, declares_cm_binding, wado_prim
 use crate::name::entry_dir_of;
 use crate::wit_consume::module_host_leaf_imports;
 use crate::world_registry::WorldInfo;
+pub use stdlib_snapshot::prelude_names;
 pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
 pub mod niri;
 pub mod symbol;
@@ -90,6 +94,7 @@ pub mod world_registry;
 pub use analyze::Analyzer;
 pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
+pub use codegen::InvalidArtifact;
 pub use codegen_flags::CodegenFlags;
 pub use compiler_host::{
     Code, CompilerHost, DependencyIndex, Diagnostic, DiagnosticSpan, GeneratorDiagnostic,
@@ -211,6 +216,19 @@ fn report_without_span<H: compiler_host::CompilerHost>(
         message,
         span: None,
     });
+}
+
+/// Hand the invalid binary to the host to save, then stop: a pipeline that
+/// emits what it cannot validate has no result to return.
+fn panic_on_invalid_artifact<H: CompilerHost>(host: &H, invalid: &InvalidArtifact) -> ! {
+    let subject = invalid.subject;
+    let saved = match host.save_internal_artifact(invalid.file_stem, &invalid.wasm) {
+        Some(path) => {
+            format!("The full invalid {subject} is at {path} (inspect with `wasm-tools print`).")
+        }
+        None => format!("The invalid {subject} was not saved: this host keeps no files."),
+    };
+    panic!("{}\n{saved}", invalid.report);
 }
 
 /// [`report_without_span`], for a caller that stops at the first such error.
@@ -657,8 +675,13 @@ fn collect_lib_surface(
                         reexport_origin: Some((source.clone(), func.name.clone())),
                     });
                 }
+                // Not `is_public`: a lowered type carries its fields whatever
+                // their scope, so an `internal` type reaches the CM interface
+                // through a `pub` one that holds it.
                 _ if lib_type_decl_name(item).is_some()
-                    && item.visibility().is_some_and(ast::Visibility::is_public) =>
+                    && item
+                        .visibility()
+                        .is_some_and(ast::Visibility::reaches_beyond_file) =>
                 {
                     submodule_type_decls.push((source.clone(), item.clone()));
                 }
@@ -867,15 +890,10 @@ fn tag_lib_local_decl_fields(
 /// and the unit type are not user types.
 fn lib_sig_uses_named_type(ty: &ast::Type) -> bool {
     use crate::ast::Type;
-    match ty {
-        Type::Named(named) => {
-            named.name != "()" && wado_primitive_name_to_cm(&named.name).is_none()
-        }
-        Type::Generic(g) => g.args.iter().any(lib_sig_uses_named_type),
-        Type::Tuple(elems) => elems.iter().any(lib_sig_uses_named_type),
-        Type::Reference(inner) | Type::MutReference(inner) => lib_sig_uses_named_type(inner),
-        _ => false,
-    }
+    ty.any(&mut |ty| {
+        matches!(ty, Type::Named(named)
+            if named.name != "()" && wado_primitive_name_to_cm(&named.name).is_none())
+    })
 }
 
 /// The types a library declaration carries: a struct's fields, a variant's
@@ -909,7 +927,7 @@ fn resource_in_lib_sig<'a>(
         Type::Tuple(elems) => elems.iter().find_map(&mut follow),
         Type::Reference(inner) | Type::MutReference(inner) => follow(inner),
         Type::Named(named) => {
-            if let Some(source) = registry.resolve_cm_source_for(named, None)
+            if let Some(source) = registry.resolve_cm_source_for(named)
                 && let Some(cm) = registry.get_resource_cm_name_by_source(&source, &named.name)
             {
                 return Some(cm);
@@ -1315,18 +1333,23 @@ fn compile_after_load<H: CompilerHost>(
         .lib_world
         .clone()
         .or_else(|| is_kiln_generator.then(|| KILN_GENERATOR_IMPL_FQ.to_string()));
-    // A kiln generator's `generate` lives in the entry module; only a real
-    // `--lib` package spreads its API (and the types it exposes) across
-    // submodules. Captured here (owned) so it outlives the `sem` destructure
-    // below and can be registered into the CM interface registry.
-    let lib_surface = if options.lib_world.is_some() {
-        collect_lib_surface(&sem.entry_module_source, &sem.modules)
-    } else {
-        LibSurface {
+    // Captured here (owned) so it outlives the `sem` destructure below and can
+    // be registered into the CM interface registry. A kiln generator keeps only
+    // the types: its world is `generate`, but that record's fields may name a
+    // type the generator shares with its own library, in another module.
+    let lib_surface = match (options.lib_world.is_some(), is_kiln_generator) {
+        (true, _) => collect_lib_surface(&sem.entry_module_source, &sem.modules),
+        (false, true) => LibSurface {
+            submodule_type_decls: collect_lib_surface(&sem.entry_module_source, &sem.modules)
+                .submodule_type_decls,
+            submodule_exports: Vec::new(),
+            submodule_interfaces: Vec::new(),
+        },
+        (false, false) => LibSurface {
             submodule_exports: Vec::new(),
             submodule_type_decls: Vec::new(),
             submodule_interfaces: Vec::new(),
-        }
+        },
     };
 
     let entry_type_names: Vec<String> = sem
@@ -1346,34 +1369,54 @@ fn compile_after_load<H: CompilerHost>(
         .collect();
 
     // A data-model library exposes public types with no `export fn`; those types
-    // are its component surface. Submodule type decls are already public-only;
-    // the entry module's are filtered here.
-    let lib_has_public_type = !lib_surface.submodule_type_decls.is_empty()
-        || sem.modules.get(&sem.entry_module_source).is_some_and(|m| {
-            m.items.iter().any(|item| {
-                lib_type_decl_name(item).is_some()
-                    && item.visibility().is_some_and(ast::Visibility::is_public)
-            })
-        });
+    // are its component surface. `submodule_type_decls` answers a wider question
+    // — what the CM interface publishes, `internal` included — so the library
+    // API is asked for separately here, of every module.
+    let is_public_type_decl = |item: &ast::Item| {
+        lib_type_decl_name(item).is_some()
+            && item.visibility().is_some_and(ast::Visibility::is_public)
+    };
+    let lib_has_public_type = lib_surface
+        .submodule_type_decls
+        .iter()
+        .any(|(_, item)| is_public_type_decl(item))
+        || sem
+            .modules
+            .get(&sem.entry_module_source)
+            .is_some_and(|m| m.items.iter().any(is_public_type_decl));
 
-    if options.lib_world.is_some() {
-        let all_names: Vec<String> = entry_type_names
+    // Every published type reaches the registry under one interface FQ, which
+    // registers each name once, so the check belongs to whoever synthesizes a
+    // world rather than to `--lib` alone.
+    if synth_world_fq.is_some() {
+        let entry_named = entry_type_names
             .iter()
-            .cloned()
+            .map(|name| (name.clone(), sem.entry_module_source.to_string()));
+        let all_named: Vec<(String, String)> = entry_named
             .chain(
                 lib_surface
                     .submodule_type_decls
                     .iter()
-                    .filter_map(|(_, item)| lib_type_decl_name(item)),
+                    .filter_map(|(source, item)| {
+                        Some((lib_type_decl_name(item)?, source.to_string()))
+                    }),
             )
             .collect();
-        if let Some(dup) = first_duplicate(all_names.iter().map(String::as_str)) {
+        if let Some(dup) = first_duplicate(all_named.iter().map(|(name, _)| name.as_str())) {
+            let mut modules: Vec<&str> = all_named
+                .iter()
+                .filter(|(name, _)| *name == dup)
+                .map(|(_, source)| source.as_str())
+                .collect();
+            modules.dedup();
             return Err(bail_with(
                 logger,
                 Code::DuplicateDefinition,
                 format!(
-                    "library type `{dup}` is defined in more than one module; a \
-                     library's public types must have distinct names"
+                    "type `{dup}` is defined in {}; the types a component \
+                     publishes must have distinct names, and every type but a \
+                     file-private one in a submodule is published",
+                    modules.join(" and "),
                 ),
             ));
         }
@@ -1424,10 +1467,12 @@ fn compile_after_load<H: CompilerHost>(
         && let Some(kiln_registry) = cm_registry
         && let Some(world) = lib_world_info.as_mut()
     {
-        // Only `generate` is the generator world's contract; a helper
-        // `export fn` beside it is not a world export and must not be
-        // force-routed through the async binding below.
-        world.exports.retain(|e| e.name == "generate");
+        // `generate` and the optional `probe` are the generator world's
+        // contract; a helper `export fn` beside them is not a world export and
+        // must not be force-routed through the async binding below.
+        world
+            .exports
+            .retain(|e| e.name == "generate" || e.name == "probe");
         let kiln_shared: hashmap::IndexSet<String> = kiln::import_check::KILN_SHARED_TYPE_NAMES
             .iter()
             .map(|s| (*s).to_string())
@@ -1897,7 +1942,10 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 14: Emit Wasm (WirPackage → Wasm component bytes) ===
     let wasm = {
         let _span = logger.span("codegen");
-        codegen::emit_wasm(&nir, &wir_package, &options.providers)
+        match codegen::emit_wasm(&nir, &wir_package, &options.providers) {
+            Ok(wasm) => wasm,
+            Err(invalid) => panic_on_invalid_artifact(logger.host(), &invalid),
+        }
     };
 
     // Return the entry AST for tooling

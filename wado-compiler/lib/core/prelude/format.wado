@@ -118,6 +118,7 @@ impl Formatter {
     /// `write_str` for the compiler's own synthesized bodies. Lowering runs
     /// after monomorphization, so a call it mints can only name a target that
     /// needs no instantiation.
+    #[compiler_item("formatter_write_literal")]
     internal fn internal_write_literal(&mut self, s: String) {
         self.buf.push_str(s);
     }
@@ -159,9 +160,9 @@ impl Formatter {
             // Zero padding goes after the sign, so the value reads as one
             // figure: `-0000042`, never `0000-42`.
             let sign_len = leading_sign_byte_len(view, 0, view.len());
-            self.buf.push_str(view.sub_unchecked(0, sign_len));
+            self.buf.push_str(view.slice_unchecked(0, sign_len));
             self.write_char_n('0', padding);
-            self.buf.push_str(view.sub_unchecked(sign_len, view.len()));
+            self.buf.push_str(view.slice_unchecked(sign_len, view.len()));
             return;
         }
         let align = self.align;
@@ -411,7 +412,7 @@ fn pad_text<S: AsStrSlice>(f: &mut Formatter, text: S) {
         return;
     }
     let view = text.as_str_slice();
-    f.pad(view.sub_unchecked(0, view.char_prefix_end(f.precision)));
+    f.pad(view.slice_unchecked(0, view.char_prefix_end(f.precision)));
 }
 
 impl Display for String {
@@ -442,7 +443,7 @@ impl PushDisplay for String {
 /// Write text as a quoted, escaped literal, capped at the formatter's
 /// sequence limit with a trailing `...` outside the quotes when it cuts.
 fn inspect_text<S: AsStrSlice>(f: &mut Formatter, text: S) {
-    // The escaped set is mirrored by `write_escaped` in package-gale's
+    // The escaped set is mirrored by `write_escaped` in package-wadopoet's
     // wadopoet.wado, which emits Wado source literals. Keep the two in lockstep.
     let limit = f.resolved_seq_limit();
     f.write_char('"');

@@ -7,6 +7,8 @@
 use std::fmt;
 
 use crate::ast::{AstId, Attribute};
+use crate::attribute::COMPILER_ITEM;
+use crate::defs::DefId;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName};
@@ -130,6 +132,12 @@ pub enum CompilerItem {
     /// the CM lift, value-copy synthesis, and serde codegen so the
     /// compiler always points at the right concrete `List` struct.
     List,
+    /// `TreeMap<K, V>` — the insertion-ordered map struct, and the Wado
+    /// spelling of the Component Model `map<K, V>`.
+    TreeMap,
+    /// `TreeMapEntriesRefIter<K, V>` — what `TreeMap::entries` returns, and
+    /// what the `map<K, V>` lower walks.
+    TreeMapEntriesIter,
     /// `Box<T>` — boxes primitive values into a struct that
     /// participates in GC tracing.
     Box,
@@ -267,6 +275,9 @@ pub enum CompilerItem {
     /// `Ord` — anchor for synthesised `<` / `>` / `<=` / `>=`
     /// lowering and for auto-derived `T^Ord::cmp` bodies.
     Ord,
+    /// `OperatorOrd` — where `<` / `>` / `<=` / `>=` mean something other
+    /// than the type's total order. Only the half types implement it.
+    OperatorOrd,
     /// `From<T>` — synthesised by the `From` synthesiser.
     From,
     /// `core:serde::Serialize` — anchor for `Serialize` impl synthesis.
@@ -274,6 +285,9 @@ pub enum CompilerItem {
     /// `core:serde::Deserialize` — anchor for `Deserialize` impl
     /// synthesis and for the Kiln CM adapter's options decoding.
     Deserialize,
+    /// `core:serde::WireNumbered` — the bound a format keyed by field numbers
+    /// requires, which holds for a struct whose every field carries one.
+    WireNumbered,
     /// `core:serde::Serializer` — supertrait bound on synthesised
     /// `serialize<S: Serializer>` methods.
     Serializer,
@@ -408,6 +422,16 @@ pub enum CompilerItem {
     /// Every kind carries the attribute and it says the same thing on each, so
     /// the root states it once.
     ReflectWireNamePolicy,
+    /// `TreeMap`'s `IndexAssign::index_assign` — the last-wins, order-preserving
+    /// insert behind `map[k] = v`, which the `map<K, V>` lift builds pairs with.
+    TreeMapIndexAssign,
+    /// `TreeMapEntriesRefIter`'s `Iterator::next`. `Iterator` carries an
+    /// associated type, so the trait item records no method name to reach for.
+    TreeMapEntriesIterNext,
+    /// `TreeMap::len` — the live pair count, sizing the `map<K, V>` buffer.
+    TreeMapLen,
+    /// `TreeMap::entries` — the pair traversal the `map<K, V>` lower walks.
+    TreeMapEntries,
     /// `ReflectStruct::members` — the per-field member tuple.
     ReflectStructMembers,
     /// `ReflectStruct::from_fields` — assemble a struct from its field-value tuple.
@@ -577,6 +601,9 @@ pub enum CompilerItem {
     // analysis can see, so each is a root of the liveness graph.
     /// `Formatter::new` — template expansion builds the formatter through it.
     FormatterNew,
+    /// `Formatter::internal_write_literal` — the only call a synthesized
+    /// closure-functor `Display` / `Inspect` body makes.
+    FormatterWriteLiteral,
     /// `core:rt::assert_failed`.
     AssertFailed,
     /// `core:rt::cm_future_pair`.
@@ -633,6 +660,8 @@ impl CompilerItem {
     /// that need to check the full registry.
     pub const ALL: &'static [CompilerItem] = &[
         Self::List,
+        Self::TreeMap,
+        Self::TreeMapEntriesIter,
         Self::Box,
         Self::I128,
         Self::U128,
@@ -689,9 +718,11 @@ impl CompilerItem {
         Self::Shr,
         Self::Eq,
         Self::Ord,
+        Self::OperatorOrd,
         Self::From,
         Self::Serialize,
         Self::Deserialize,
+        Self::WireNumbered,
         Self::Serializer,
         Self::Deserializer,
         Self::SerializeStruct,
@@ -736,6 +767,10 @@ impl CompilerItem {
         Self::ListFromTuple,
         Self::ReflectTypeName,
         Self::ReflectWireNamePolicy,
+        Self::TreeMapIndexAssign,
+        Self::TreeMapEntriesIterNext,
+        Self::TreeMapLen,
+        Self::TreeMapEntries,
         Self::ReflectStructMembers,
         Self::ReflectStructFromFields,
         Self::ReflectStructDefaults,
@@ -800,6 +835,7 @@ impl CompilerItem {
         Self::DeserializeVariantPayload,
         Self::DeserializeVariantEnd,
         Self::FormatterNew,
+        Self::FormatterWriteLiteral,
         Self::AssertFailed,
         Self::CmFuturePair,
         Self::CmStreamPair,
@@ -832,6 +868,8 @@ impl CompilerItem {
     pub fn attr_name(self) -> &'static str {
         match self {
             Self::List => "list",
+            Self::TreeMap => "tree_map",
+            Self::TreeMapEntriesIter => "tree_map_entries_iter",
             Self::Box => "box",
             Self::I128 => "i128",
             Self::U128 => "u128",
@@ -888,9 +926,11 @@ impl CompilerItem {
             Self::Shr => "shr",
             Self::Eq => "eq",
             Self::Ord => "ord",
+            Self::OperatorOrd => "operator_ord",
             Self::From => "from",
             Self::Serialize => "serialize",
             Self::Deserialize => "deserialize",
+            Self::WireNumbered => "wire_numbered",
             Self::Serializer => "serializer",
             Self::Deserializer => "deserializer",
             Self::SerializeStruct => "serialize_struct",
@@ -935,6 +975,10 @@ impl CompilerItem {
             Self::ListFromTuple => "list_from_tuple",
             Self::ReflectTypeName => "reflect_type_name",
             Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
+            Self::TreeMapIndexAssign => "tree_map_index_assign",
+            Self::TreeMapEntriesIterNext => "tree_map_entries_iter_next",
+            Self::TreeMapLen => "tree_map_len",
+            Self::TreeMapEntries => "tree_map_entries",
             Self::ReflectStructMembers => "reflect_struct_members",
             Self::ReflectStructFromFields => "reflect_struct_from_fields",
             Self::ReflectStructDefaults => "reflect_struct_defaults",
@@ -945,6 +989,7 @@ impl CompilerItem {
             Self::MemberName => "member_name",
             Self::MemberWireNameOverride => "member_wire_name_override",
             Self::FormatterNew => "formatter_new",
+            Self::FormatterWriteLiteral => "formatter_write_literal",
             Self::AssertFailed => "assert_failed",
             Self::CmFuturePair => "cm_future_pair",
             Self::CmStreamPair => "cm_stream_pair",
@@ -1109,6 +1154,7 @@ impl CompilerItem {
             | Self::LiteralSpread
             | Self::Eq
             | Self::Ord
+            | Self::OperatorOrd
             | Self::From
             | Self::ListPush
             | Self::ListFromTuple
@@ -1124,6 +1170,7 @@ impl CompilerItem {
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::FormatterNew
+            | Self::FormatterWriteLiteral
             | Self::ReflectVariantDiscriminant
             | Self::ReflectVariantMembers
             | Self::ReflectEnumDiscriminant
@@ -1187,6 +1234,13 @@ impl CompilerItem {
             | Self::IntoIterator => true,
             // Kiln generator world only.
             Self::KilnRequest => world == "core:kiln/generator",
+            // Loaded only when the user imports `core:collections`.
+            Self::TreeMap
+            | Self::TreeMapEntriesIter
+            | Self::TreeMapIndexAssign
+            | Self::TreeMapEntriesIterNext
+            | Self::TreeMapLen
+            | Self::TreeMapEntries => false,
             // Loaded only when the user imports `core:serde` (which
             // happens implicitly for kiln-options decoding). The
             // validator skips the check; downstream synthesis ICEs
@@ -1194,6 +1248,7 @@ impl CompilerItem {
             // without being registered.
             Self::Serialize
             | Self::Deserialize
+            | Self::WireNumbered
             | Self::Serializer
             | Self::Deserializer
             | Self::SerializeStruct
@@ -1270,7 +1325,7 @@ impl CompilerItem {
     /// `#[compiler_item("option")]` on a trait.
     pub fn expected_kind(self) -> CompilerItemKind {
         match self {
-            Self::FormatterNew => CompilerItemKind::Method,
+            Self::FormatterNew | Self::FormatterWriteLiteral => CompilerItemKind::Method,
             Self::AssertFailed
             | Self::CmFuturePair
             | Self::CmStreamPair
@@ -1288,6 +1343,8 @@ impl CompilerItem {
             | Self::CmWaitableJoin
             | Self::CmWaitableSetPoll => CompilerItemKind::Function,
             Self::List
+            | Self::TreeMap
+            | Self::TreeMapEntriesIter
             | Self::Box
             | Self::I128
             | Self::U128
@@ -1332,9 +1389,11 @@ impl CompilerItem {
             | Self::LiteralSpread
             | Self::Eq
             | Self::Ord
+            | Self::OperatorOrd
             | Self::From
             | Self::Serialize
             | Self::Deserialize
+            | Self::WireNumbered
             | Self::Serializer
             | Self::Deserializer
             | Self::SerializeStruct
@@ -1370,6 +1429,10 @@ impl CompilerItem {
             | Self::ListFromTuple
             | Self::ReflectTypeName
             | Self::ReflectWireNamePolicy
+            | Self::TreeMapIndexAssign
+            | Self::TreeMapEntriesIterNext
+            | Self::TreeMapLen
+            | Self::TreeMapEntries
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
             | Self::ReflectStructDefaults
@@ -1948,10 +2011,18 @@ impl CompilerItems {
             .unwrap_or_else(|| panic!("compiler item `{item}` is not a registered trait"))
     }
 
-    /// Non-panicking [`Self::trait_fq`]: `None` when the item is not
-    /// registered.
+    /// The trait's declaration identity, which is what an impl of it is matched
+    /// by: an impl writes the trait with its own type arguments (`Eq<String>`),
+    /// so the spelling does not settle which trait it is.
     #[must_use]
-    pub fn trait_fq_opt(&self, item: CompilerItem) -> Option<FqTraitName> {
+    pub fn trait_def(&self, item: CompilerItem) -> Option<DefId> {
+        self.trait_fq_opt(item)?.canonical()
+    }
+
+    /// Non-panicking [`Self::trait_fq`]: `None` when the item is not
+    /// registered. Private, so matching an impl goes through [`Self::trait_def`]
+    /// rather than through a spelling.
+    fn trait_fq_opt(&self, item: CompilerItem) -> Option<FqTraitName> {
         match self.get(item)? {
             Resolved::Trait { fq, .. } => fq.clone(),
             _ => None,
@@ -2068,6 +2139,15 @@ impl CompilerItems {
         self.require_struct(item).1
     }
 
+    /// [`Self::struct_name`] for an item whose module may not be loaded, such as
+    /// `TreeMap`: `core:collections` is not auto-imported.
+    pub fn struct_name_opt(&self, item: CompilerItem) -> Option<&str> {
+        if let Resolved::Struct { name, .. } = self.get(item)? {
+            return Some(name.as_str());
+        }
+        None
+    }
+
     /// Name-only convenience for a [`CompilerItemKind::Variant`] item.
     pub fn variant_name(&self, item: CompilerItem) -> &str {
         self.require_variant(item).1
@@ -2097,6 +2177,17 @@ impl CompilerItems {
         match self.get(item)? {
             Resolved::Struct { module_source, .. } => Some(module_source),
             _ => None,
+        }
+    }
+
+    /// Module + name of a [`CompilerItemKind::Function`] item.
+    pub fn require_function(&self, item: CompilerItem) -> (&ModuleSource, &str) {
+        match self.require(item) {
+            Resolved::Function {
+                module_source,
+                name,
+            } => (module_source, name.as_str()),
+            other => kind_mismatch_ice(item, "Function", other),
         }
     }
 
@@ -2273,7 +2364,7 @@ pub fn parse_compiler_item_attrs(attrs: &[Attribute]) -> (Vec<CompilerItem>, Vec
     let mut items = Vec::new();
     let mut unknown = Vec::new();
     for attr in attrs {
-        if attr.name != "compiler_item" {
+        if attr.name != COMPILER_ITEM {
             continue;
         }
         for arg in &attr.args {

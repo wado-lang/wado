@@ -23,10 +23,33 @@ use crate::token::Span;
 use crate::unparse::unparse_tir_closure_source;
 use crate::{hashmap, tir};
 
-/// The non-generic `Formatter` entry point a lowered body writes through, since
-/// lowering runs past monomorphization and a generic call minted here is never
-/// instantiated.
-const FORMATTER_WRITE_LITERAL: &str = "internal_write_literal";
+/// The `Formatter` facts a synthesized format body is written against, read
+/// from the registry once per functor.
+struct FormatterFacts {
+    fq: FqTypeName,
+    mut_ref: TypeId,
+    string_type: TypeId,
+    write_literal: String,
+}
+
+impl FormatterFacts {
+    fn of(type_table: &mut TypeTable) -> Self {
+        let fq = type_table.compiler_struct_fq_name(CompilerItem::Formatter);
+        let formatter_type = {
+            let def = type_table.require_compiler_item_def(CompilerItem::Formatter);
+            type_table.make_struct(StructDef::Decl(def))
+        };
+        Self {
+            fq,
+            mut_ref: type_table.make_mut_ref(formatter_type),
+            string_type: type_table.make_compiler_struct(CompilerItem::String),
+            write_literal: type_table
+                .compiler_items()
+                .method_name(CompilerItem::FormatterWriteLiteral)
+                .to_string(),
+        }
+    }
+}
 
 /// Body a per-functor format impl gets.
 enum FunctorFmtBody {
@@ -603,6 +626,7 @@ impl ClosureLowerer {
                     wire_name_override: None,
                     serde_default: false,
                     serde_positional: false,
+                    serde_number: None,
                     default_expr: None,
                 })
                 .collect();
@@ -764,6 +788,8 @@ impl ClosureLowerer {
                 effects: Vec::new(),
                 retains: vec![],
                 immediates: vec![],
+                trap: None,
+                linear_memory: None,
                 body: Some(body_block),
                 span: collected.span,
                 local_count,
@@ -846,13 +872,7 @@ impl ClosureLowerer {
         type_table: &mut TypeTable,
         span: Span,
     ) {
-        let formatter_fq = type_table.compiler_struct_fq_name(CompilerItem::Formatter);
-        let formatter_type = {
-            let def = type_table.require_compiler_item_def(CompilerItem::Formatter);
-            type_table.make_struct(StructDef::Decl(def))
-        };
-        let formatter_mut_ref = type_table.make_mut_ref(formatter_type);
-        let string_type = type_table.make_compiler_struct(CompilerItem::String);
+        let fmt = FormatterFacts::of(type_table);
 
         for (item, body) in &CLOSURE_FORMAT_TRAITS {
             let name = |it| type_table.compiler_items().trait_fq(it);
@@ -871,9 +891,7 @@ impl ClosureLowerer {
                     signature,
                     source,
                     self_ref_type,
-                    formatter_mut_ref,
-                    string_type,
-                    &formatter_fq,
+                    &fmt,
                     span,
                 ),
                 FunctorFmtBody::Delegate(target) => self.build_functor_delegate_method(
@@ -883,7 +901,7 @@ impl ClosureLowerer {
                     &name(*target),
                     &method(*target),
                     self_ref_type,
-                    formatter_mut_ref,
+                    fmt.mut_ref,
                     span,
                 ),
             };
@@ -902,9 +920,7 @@ impl ClosureLowerer {
         plain: &str,
         alternate: &str,
         self_ref_type: TypeId,
-        formatter_mut_ref: TypeId,
-        string_type: TypeId,
-        formatter_fq: &FqTypeName,
+        fmt: &FormatterFacts,
         span: Span,
     ) -> TirFunction {
         let fmt_local = TirExpr::new(
@@ -912,7 +928,7 @@ impl ClosureLowerer {
                 index: 1,
                 name: "f".to_string(),
             },
-            formatter_mut_ref,
+            fmt.mut_ref,
             span,
         );
         let write_str = |text: &str| {
@@ -922,19 +938,19 @@ impl ClosureLowerer {
                         Box::new(fmt_local.clone()),
                         FunctionRef {
                             module_source: ModuleSource::format(),
-                            name: format!("{formatter_fq}::{FORMATTER_WRITE_LITERAL}"),
+                            name: format!("{}::{}", fmt.fq, fmt.write_literal),
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
-                                formatter_fq.clone(),
+                                fmt.fq.clone(),
                                 None,
-                                FORMATTER_WRITE_LITERAL.to_string(),
+                                fmt.write_literal.clone(),
                             )),
                         },
                         vec![],
                         vec![CallArg::new(
                             TirExpr::new(
                                 TirExprKind::StringLiteral(text.to_string()),
-                                string_type,
+                                fmt.string_type,
                                 span,
                             ),
                             false,
@@ -975,7 +991,7 @@ impl ClosureLowerer {
             method_name,
             body,
             self_ref_type,
-            formatter_mut_ref,
+            fmt.mut_ref,
             span,
         )
     }
@@ -1103,6 +1119,8 @@ impl ClosureLowerer {
             effects: Vec::new(),
             retains: vec![],
             immediates: vec![],
+            trap: None,
+            linear_memory: None,
             body: Some(body),
             span,
             local_count: 2,
@@ -1291,6 +1309,8 @@ impl ClosureLowerer {
             effects: callee.effects.clone(),
             retains: callee.retains.clone(),
             immediates: callee.immediates.clone(),
+            trap: callee.trap.clone(),
+            linear_memory: callee.linear_memory,
             body: new_body,
             span: callee.span,
             local_count: callee.local_count,

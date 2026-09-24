@@ -1132,14 +1132,20 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_set_mode: i32 = -1;
         let mut best_channel: i32 = 0;
         if current_mode == 0 {
-            if first_char matches { 'a' } {
-                end = try_A(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_A; best_push_mode = -1; best_pop_mode = false; best_set_mode = 1; best_channel = 0; }
+            match first_char {
+                'a' => {
+                    end = try_A(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_A; best_push_mode = -1; best_pop_mode = false; best_set_mode = 1; best_channel = 0; }
+                },
+                _ => {},
             }
         } else if current_mode == 1 {
-            if first_char matches { 'b' } {
-                end = try_B(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_B; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 2; }
+            match first_char {
+                'b' => {
+                    end = try_B(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_B; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 2; }
+                },
+                _ => {},
             }
         }
         if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode && best_set_mode < 0) {

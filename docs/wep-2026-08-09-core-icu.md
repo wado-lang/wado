@@ -357,8 +357,7 @@ dedup following genuine runtime data dependencies rather than taxonomy.
 - **The collection reaches an interface's lifts, not a world's.** A world-level
   lift is a root whether or not the program calls it, because the import plan
   lists every world function the dependency declares and `used_wasi_functions`
-  keys effect operations alone. Closing it means recording what a world-level
-  call reaches, which changes what a plan entry means
+  keys effect operations alone
   ([#2068](https://github.com/wado-lang/wado/issues/2068)). `core:icu` exports
   interfaces only, so it costs nothing here.
 

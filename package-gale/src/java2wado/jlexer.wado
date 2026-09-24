@@ -3,6 +3,7 @@
 //! language-independent attribute engine); string literals keep raw escapes.
 
 use { is_id_start_char, is_id_continue_char, scan_string } from "../g4/scan.wado";
+use { collect_range } from "../text.wado";
 
 pub variant JToken {
     Ident(String),
@@ -26,13 +27,13 @@ pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
         }
         if c == '"' {
             let e = scan_string(&chars, i);
-            out.push(JToken::Str(slice(&chars, i + 1, e - 1)));
+            out.push(JToken::Str(collect_range(&chars, i + 1, e - 1)));
             i = e;
             continue;
         }
         if c == '$' && i + 1 < n && is_id_start_char(chars[i + 1]) {
             let e = scan_attr_ref(&chars, i, n);
-            out.push(JToken::Attr(slice(&chars, i, e)));
+            out.push(JToken::Attr(collect_range(&chars, i, e)));
             i = e;
             continue;
         }
@@ -41,7 +42,7 @@ pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
             while j < n && is_id_continue_char(chars[j]) {
                 j += 1;
             }
-            out.push(JToken::Ident(slice(&chars, i, j)));
+            out.push(JToken::Ident(collect_range(&chars, i, j)));
             i = j;
             continue;
         }
@@ -50,7 +51,7 @@ pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
             while j < n && chars[j].is_ascii_digit() {
                 j += 1;
             }
-            out.push(JToken::Int(slice(&chars, i, j)));
+            out.push(JToken::Int(collect_range(&chars, i, j)));
             i = j;
             continue;
         }
@@ -86,7 +87,7 @@ fn scan_attr_ref(chars: &List<char>, pos: i32, n: i32) -> i32 {
 /// Longest operator / punctuation token at `pos` (two-char before one-char).
 fn scan_punct(chars: &List<char>, pos: i32, n: i32) -> Option<String> {
     if pos + 1 < n {
-        let two = slice(chars, pos, pos + 2);
+        let two = collect_range(chars, pos, pos + 2);
         if is_two_char_op(&two) {
             return Option::Some(two);
         }
@@ -122,12 +123,4 @@ fn is_one_char_punct(c: char) -> bool {
         || c == ')'
         || c == '{'
         || c == '}';
-}
-
-fn slice(chars: &List<char>, start: i32, end: i32) -> String {
-    let mut s = String::with_capacity(end - start);
-    for let mut i = start; i < end; i += 1 {
-        s.push(chars[i]);
-    }
-    return s;
 }

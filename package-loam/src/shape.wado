@@ -1,0 +1,134 @@
+//! A tensor's axes as stage 0 sees them, and the extent conditions each
+//! operation owes before it can emit anything.
+
+use { Extent } from "./extent.wado";
+
+/// One axis: the identity the type layer carries, paired with the length it
+/// cannot. See WEP 2026-09-20 § "Axis Identity Is a Type, Extents Are Values".
+pub struct Axis {
+    pub name: String,
+    pub extent: Extent,
+}
+
+pub struct Shape {
+    pub axes: List<Axis>,
+}
+
+/// Two axes that must be one length are not, at an operation that cannot
+/// proceed without them being one. Carries both, since a diagnostic that names
+/// only the expected one leaves the reader to find the other.
+pub struct ExtentConflict {
+    pub op: String,
+    pub axis: String,
+    pub left: Extent,
+    pub right: Extent,
+}
+
+impl Display for ExtentConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(
+            `${self.op}: axis ${self.axis} is ${self.left} on the left and ${self.right} on the right`,
+        );
+    }
+}
+
+impl Shape {
+    pub fn rank(&self) -> i32 {
+        return self.axes.len();
+    }
+
+    /// The same axes in the order `perm` names, which is what `Transpose`
+    /// does. `perm` is a permutation of this shape's rank, which its reader
+    /// has already established.
+    pub fn permute(&self, perm: &List<i32>) -> Shape {
+        assert perm.len() == self.rank();
+        let mut axes: List<Axis> = [];
+        for let p of *perm {
+            axes.push(self.axes[p]);
+        }
+        return Shape { axes };
+    }
+
+    /// The axis `back` positions from the end, `0` being the last.
+    pub fn from_end(&self, back: i32) -> &Axis {
+        assert 0 <= back < self.rank();
+        return &self.axes[self.rank() - 1 - back];
+    }
+
+    /// Elementwise over two operands under ONNX's multidirectional
+    /// broadcasting, which every unary operation is the one-operand case of.
+    pub fn elementwise(&self, other: &Shape, op: String) -> Result<Shape, ExtentConflict> {
+        let axes = Shape::broadcast(&self.axes, &other.axes, &op)?;
+        return Result::Ok(Shape { axes });
+    }
+
+    /// `MatMul` as ONNX defines it, which is numpy's: the trailing axis of
+    /// `self` contracts with the leading matrix axis of `rhs`, the batch axes
+    /// ahead of them broadcast, and a rank-1 operand is a matrix whose missing
+    /// axis is dropped from the result.
+    pub fn matmul(&self, rhs: &Shape, op: String) -> Result<Shape, ExtentConflict> {
+        assert self.rank() >= 1 && rhs.rank() >= 1;
+
+        let right_k = if rhs.rank() == 1 { rhs.from_end(0) } else { rhs.from_end(1) };
+        Shape::agree(self.from_end(0), right_k, &op)?;
+
+        let mut axes = Shape::broadcast(&self.batch_axes(), &rhs.batch_axes(), &op)?;
+        if self.rank() >= 2 {
+            axes.push(*self.from_end(1));
+        }
+        if rhs.rank() >= 2 {
+            axes.push(*rhs.from_end(0));
+        }
+        return Result::Ok(Shape { axes });
+    }
+
+    /// The axes ahead of the matrix a `MatMul` operand ends in. A rank-1
+    /// operand is all matrix.
+    fn batch_axes(&self) -> List<Axis> {
+        let mut axes: List<Axis> = [];
+        for let mut i = 0; i < self.rank() - 2; i += 1 {
+            axes.push(self.axes[i]);
+        }
+        return axes;
+    }
+
+    /// Align two axis lists from the end and take, at each position, the axis
+    /// the other cannot override: a missing axis or an extent of 1 yields.
+    fn broadcast(left: &List<Axis>, right: &List<Axis>, op: &String) -> Result<List<Axis>, ExtentConflict> {
+        let rank = i32::max(left.len(), right.len());
+        let mut axes: List<Axis> = [];
+        for let mut i = 0; i < rank; i += 1 {
+            let li = i - (rank - left.len());
+            let ri = i - (rank - right.len());
+            if li < 0 {
+                axes.push(right[ri]);
+            } else if ri < 0 {
+                axes.push(left[li]);
+            } else if left[li].extent matches { Static(1) } {
+                axes.push(right[ri]);
+            } else if right[ri].extent matches { Static(1) } {
+                axes.push(left[li]);
+            } else {
+                Shape::agree(&left[li], &right[ri], op)?;
+                axes.push(left[li]);
+            }
+        }
+        return Result::Ok(axes);
+    }
+
+    /// Discharge the one condition an operation places on a pair of axes. What
+    /// stage 0 cannot prove is an error here, since there is no runtime tier
+    /// below it to re-check at.
+    fn agree(left: &Axis, right: &Axis, op: &String) -> Result<(), ExtentConflict> {
+        if left.extent.agrees(&right.extent) {
+            return Result::Ok(());
+        }
+        builtin::cold_path();
+        return Result::Err(ExtentConflict {
+            op: *op,
+            axis: left.name,
+            left: left.extent,
+            right: right.extent,
+        });
+    }
+}

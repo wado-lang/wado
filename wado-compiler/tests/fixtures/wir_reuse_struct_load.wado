@@ -1,0 +1,72 @@
+// A field chain read twice with no write between reuses the first read: every
+// `struct.get` costs wasmtime a null check and a load. A write to a field of
+// the same name, or a call, makes the next read load again; a call on a path
+// that never returns does not.
+
+use { println, Stdout } from "core:cli";
+
+struct Span {
+    start: i32,
+    end: i32,
+}
+
+struct Cursor {
+    span: Span,
+    pos: i32,
+}
+
+#[inline(never)]
+fn width_and_offset(c: &mut Cursor) -> i32 {
+    let w = c.span.end - c.span.start;
+    c.pos = c.pos + 1;
+    return w * 100 + c.span.start + c.pos;
+}
+
+#[inline(never)]
+fn shift(c: &mut Cursor) -> i32 {
+    let a = c.span.start;
+    c.span.start = a + 5;
+    return a + c.span.start;
+}
+
+#[inline(never)]
+fn opaque(n: i32) -> i32 {
+    return n;
+}
+
+#[inline(never)]
+fn around_call(c: &mut Cursor) -> i32 {
+    let a = c.span.end;
+    c.pos = opaque(a);
+    return c.pos + c.span.end;
+}
+
+#[inline(never)]
+fn guarded(c: &mut Cursor, i: i32) -> i32 {
+    let a = c.span.end;
+    if i < 0 {
+        panic("negative");
+    }
+    c.pos = i;
+    return a + c.span.end;
+}
+
+export fn run() with Stdout {
+    let mut c = Cursor { span: Span { start: 3, end: 10 }, pos: 0 };
+    println(`${width_and_offset(&mut c)}`);
+    println(`${shift(&mut c)}`);
+    println(`${around_call(&mut c)}`);
+    println(`${guarded(&mut c, builtin::black_box(1))}`);
+}
+
+__DATA__
+{
+    "stdout": "704\n11\n20\n20\n",
+    "wir_expect:O2": [
+        "w = local.tee $load_0(c.span).end - local.tee $load_2($load_0.start);",
+        "return ((w * 100) + $load_2) + c.pos;",
+        "return a + $load_0.start;",
+        "return c.pos + c.span.end;",
+        "return a + $load_1;"
+    ]
+}

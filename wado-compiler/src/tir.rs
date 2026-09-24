@@ -23,6 +23,7 @@ use crate::name::{
     TypeHead, TypeNameInfo, format_type_name, mangle_builtin_array_type, mangle_generic_name,
     mangle_local_item_name, mangle_tuple_type,
 };
+use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
 use crate::token::Span;
 use crate::{hashmap, name};
@@ -152,13 +153,11 @@ impl SubstitutionContext {
                 // declaring the same associated-type name on one implementor
                 // stay apart (WEP-2026-08-12). The name-keyed chain below gives
                 // up on exactly that case, so it must not be reached first.
-                if let Some(trait_key) = &owning_trait
-                    && let Some(resolved) = type_table.resolve_trait_assoc_type_of_instance(
-                        concrete_id,
-                        trait_key,
-                        &assoc_name,
-                    )
-                {
+                if let Some(resolved) = type_table.resolve_trait_assoc_type_of_instance(
+                    concrete_id,
+                    &owning_trait,
+                    &assoc_name,
+                ) {
                     return resolved;
                 }
                 if let Some(resolved) =
@@ -300,77 +299,6 @@ impl std::fmt::Display for InferVarId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PrimitiveType {
-    I8,
-    I16,
-    I32,
-    I64,
-    U8,
-    U16,
-    U32,
-    U64,
-    F32,
-    F64,
-    Bool,
-    Char,
-    V128,
-}
-
-impl PrimitiveType {
-    /// Returns the string representation of the primitive type (e.g., "i32", "f64")
-    #[must_use]
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::I8 => "i8",
-            Self::I16 => "i16",
-            Self::I32 => "i32",
-            Self::I64 => "i64",
-            Self::U8 => "u8",
-            Self::U16 => "u16",
-            Self::U32 => "u32",
-            Self::U64 => "u64",
-            Self::F32 => "f32",
-            Self::F64 => "f64",
-            Self::Bool => "bool",
-            Self::Char => "char",
-            Self::V128 => "v128",
-        }
-    }
-
-    /// The largest value a scalar integer holds; `None` for every other
-    /// primitive.
-    #[must_use]
-    pub fn int_max(self) -> Option<u128> {
-        Some(match self {
-            Self::I8 => i8::MAX as u128,
-            Self::I16 => i16::MAX as u128,
-            Self::I32 => i32::MAX as u128,
-            Self::I64 => i64::MAX as u128,
-            Self::U8 => u128::from(u8::MAX),
-            Self::U16 => u128::from(u16::MAX),
-            Self::U32 => u128::from(u32::MAX),
-            Self::U64 => u128::from(u64::MAX),
-            Self::F32 | Self::F64 | Self::Bool | Self::Char | Self::V128 => return None,
-        })
-    }
-
-    /// Check if a name is a primitive type name.
-    #[must_use]
-    pub fn is_primitive_name(name: &str) -> bool {
-        Self::all_primitive_names().contains(&name)
-    }
-
-    /// Every name this enum spells. `i128` and `u128` are absent: they are
-    /// prelude struct declarations, which write their own operator impls.
-    pub fn all_primitive_names() -> &'static [&'static str] {
-        &[
-            "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char",
-            "v128",
-        ]
-    }
-}
-
 /// An anonymous struct's shape, interned by its field list.
 ///
 /// Minted only by [`TypeTable::intern_anon_struct`]. Two literals of the same
@@ -457,6 +385,14 @@ impl StructDef {
             Self::Anon(_) => None,
         }
     }
+}
+
+/// One position in a tuple's layout: a pack standing for a run of positions,
+/// or a single slot holding one type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TupleSlot {
+    Fixed,
+    Pack(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -556,12 +492,11 @@ pub enum ResolvedType {
         param_id: TypeId,
         /// Name of the associated type (e.g., `"Value"` in `T::Value`)
         assoc_name: String,
-        /// The trait declaring `assoc_name`: `Self::Err` inside
-        /// `trait FromStr` is `<Self as FromStr>::Err`. An identity, so a
-        /// projection built under one module's `FromStr` cannot be answered by
-        /// another's. `None` where the builder had no trait, which makes
-        /// resolution require the name to be unambiguous.
-        owning_trait: Option<DefId>,
+        /// The trait declaring `assoc_name`: `Self::Err` inside `trait FromStr`
+        /// is `<Self as FromStr>::Err`.
+        // Part of the identity, so a projection built under one module's
+        // `FromStr` is never answered by another's.
+        owning_trait: DefId,
         /// Trait bounds on this associated type, named by the declarations the
         /// trait's own `type A: Bound` references resolve to. A projection
         /// outlives the frame that built it, so a spelling here would be read
@@ -802,6 +737,13 @@ fn one_assoc_answer<T: Copy + PartialEq>(
     answers.all(|answer| answer == first).then_some(first)
 }
 
+/// Whether a slot search descends into a projection's base or stops there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Through {
+    Projection,
+    ProjectionStops,
+}
+
 #[derive(Debug, Clone)]
 pub struct TypeTable {
     /// `TypeId` → `ResolvedType`. See [`TypeMap`]; `get` reads this on
@@ -931,38 +873,46 @@ impl TypeTable {
     pub const U64: TypeId = TypeId(7);
     pub const F32: TypeId = TypeId(8);
     pub const F64: TypeId = TypeId(9);
-    pub const BOOL: TypeId = TypeId(10);
-    pub const CHAR: TypeId = TypeId(11);
-    pub const V128: TypeId = TypeId(12);
-    pub const UNIT: TypeId = TypeId(13);
-    pub const NEVER: TypeId = TypeId(14);
-    // STRING removed - String is now a user-defined struct in core:prelude/string.wado
-    pub const UNKNOWN: TypeId = TypeId(15);
-    pub const ERROR: TypeId = TypeId(16);
+    pub const F16: TypeId = TypeId(10);
+    pub const BF16: TypeId = TypeId(11);
+    pub const BOOL: TypeId = TypeId(12);
+    pub const CHAR: TypeId = TypeId(13);
+    pub const V128: TypeId = TypeId(14);
+    pub const UNIT: TypeId = TypeId(15);
+    pub const NEVER: TypeId = TypeId(16);
+    pub const UNKNOWN: TypeId = TypeId(17);
+    pub const ERROR: TypeId = TypeId(18);
 
-    /// The primitive spelling → well-known `TypeId` mapping, the single
-    /// source for every by-name primitive resolution. `i128` / `u128` are
-    /// deliberately absent: they are struct-backed in the prelude, so their
-    /// names resolve through the declaration path, not to the raw
-    /// `PrimitiveType` ids.
+    /// The well-known id `prim` interns to. [`Self::new`] asserts each one
+    /// against what it actually interns, so neither can drift.
+    #[must_use]
+    pub fn primitive_type_id(prim: PrimitiveType) -> TypeId {
+        match prim {
+            PrimitiveType::I8 => Self::I8,
+            PrimitiveType::I16 => Self::I16,
+            PrimitiveType::I32 => Self::I32,
+            PrimitiveType::I64 => Self::I64,
+            PrimitiveType::U8 => Self::U8,
+            PrimitiveType::U16 => Self::U16,
+            PrimitiveType::U32 => Self::U32,
+            PrimitiveType::U64 => Self::U64,
+            PrimitiveType::F32 => Self::F32,
+            PrimitiveType::F64 => Self::F64,
+            PrimitiveType::F16 => Self::F16,
+            PrimitiveType::Bf16 => Self::BF16,
+            PrimitiveType::Bool => Self::BOOL,
+            PrimitiveType::Char => Self::CHAR,
+            PrimitiveType::V128 => Self::V128,
+        }
+    }
+
+    /// The type spelling → well-known `TypeId` mapping, the single source for
+    /// every by-name primitive resolution. `i128` / `u128` are struct-backed.
     pub fn primitive_by_name(name: &str) -> Option<TypeId> {
         match name {
-            "i8" => Some(Self::I8),
-            "i16" => Some(Self::I16),
-            "i32" => Some(Self::I32),
-            "i64" => Some(Self::I64),
-            "u8" => Some(Self::U8),
-            "u16" => Some(Self::U16),
-            "u32" => Some(Self::U32),
-            "u64" => Some(Self::U64),
-            "f32" => Some(Self::F32),
-            "f64" => Some(Self::F64),
-            "bool" => Some(Self::BOOL),
-            "char" => Some(Self::CHAR),
-            "v128" => Some(Self::V128),
             "()" => Some(Self::UNIT),
             "!" => Some(Self::NEVER),
-            _ => None,
+            _ => PrimitiveType::from_name(name).map(Self::primitive_type_id),
         }
     }
 
@@ -1035,23 +985,14 @@ impl TypeTable {
             defs: std::sync::Arc::default(),
         };
 
-        // Pre-populate primitive types matching the constants above
-        table.intern(ResolvedType::Primitive(PrimitiveType::I8));
-        table.intern(ResolvedType::Primitive(PrimitiveType::I16));
-        table.intern(ResolvedType::Primitive(PrimitiveType::I32));
-        table.intern(ResolvedType::Primitive(PrimitiveType::I64));
-        table.intern(ResolvedType::Primitive(PrimitiveType::U8));
-        table.intern(ResolvedType::Primitive(PrimitiveType::U16));
-        table.intern(ResolvedType::Primitive(PrimitiveType::U32));
-        table.intern(ResolvedType::Primitive(PrimitiveType::U64));
-        table.intern(ResolvedType::Primitive(PrimitiveType::F32));
-        table.intern(ResolvedType::Primitive(PrimitiveType::F64));
-        table.intern(ResolvedType::Primitive(PrimitiveType::Bool));
-        table.intern(ResolvedType::Primitive(PrimitiveType::Char));
-        table.intern(ResolvedType::Primitive(PrimitiveType::V128));
-        table.intern(ResolvedType::Unit);
+        for &prim in PrimitiveType::ALL {
+            let id = table.intern(ResolvedType::Primitive(prim));
+            assert_eq!(id, Self::primitive_type_id(prim));
+        }
+        // Landing here says `ALL` holds every variant once: a missing or
+        // repeated entry shifts everything after the primitives.
+        assert_eq!(table.intern(ResolvedType::Unit), Self::UNIT);
         table.intern(ResolvedType::Never);
-        // ResolvedType::String removed - String is now a user-defined struct
         table.intern(ResolvedType::Unknown);
         table.intern(ResolvedType::Error);
 
@@ -1272,6 +1213,37 @@ impl TypeTable {
     #[must_use]
     pub fn is_resource_subtype(&self, sub: DefId, sup: DefId) -> bool {
         self.resource_chain(sub).any(|current| current == sup)
+    }
+
+    /// Whether only the host can tell a `value` is a `target`: `target` is a
+    /// resource strictly extending `value`'s, which makes both unrestricted.
+    #[must_use]
+    pub fn is_resource_narrowing(&self, value: TypeId, target: TypeId) -> bool {
+        let (ResolvedType::Resource { def: value }, ResolvedType::Resource { def: target }) =
+            (self.get(value), self.get(target))
+        else {
+            return false;
+        };
+        value != target && self.is_resource_subtype(*target, *value)
+    }
+
+    /// The root resource whose `$same` compares `a` and `b` by identity: both
+    /// unrestricted, one extending the other.
+    #[must_use]
+    pub fn identity_root(&mut self, a: TypeId, b: TypeId) -> Option<TypeId> {
+        let joined = self.resource_join(a, b)?;
+        let ResolvedType::Resource { def } = self.get(joined) else {
+            return None;
+        };
+        let def = *def;
+        if !self.is_unrestricted_resource(def) {
+            return None;
+        }
+        let root = self
+            .resource_chain(def)
+            .last()
+            .expect("a chain starts at its own resource");
+        Some(self.make_resource(root))
     }
 
     /// Attach the program's declarations, so a nominal type can render its
@@ -1578,6 +1550,12 @@ impl TypeTable {
             StructDef::Decl(def) => self.decl_render_name(def),
             StructDef::Anon(id) => self.anon_struct_mangle(id),
         }
+    }
+
+    /// Whether `id` is stored as `i128` or `u128`, newtypes of them included.
+    #[must_use]
+    pub fn is_wide_int(&self, id: TypeId) -> bool {
+        self.wide_int_item(self.representation_head(id)).is_some()
     }
 
     /// A struct head as a mangled name embeds it: the declaration when it names
@@ -2359,6 +2337,81 @@ impl TypeTable {
         )
     }
 
+    /// Whether a type is a declared type pack, as opposed to one of the
+    /// tuples a pack stands for.
+    pub fn is_type_pack(&self, id: TypeId) -> bool {
+        matches!(self.get(id), ResolvedType::TypePack { .. })
+    }
+
+    /// How a tuple's positions divide into packs and single slots, or `None`
+    /// where `id` is no tuple. Equal layouts are the same shape for a value.
+    pub fn tuple_layout(&self, id: TypeId) -> Option<Vec<TupleSlot>> {
+        Some(
+            self.as_tuple(id)?
+                .into_iter()
+                .map(|e| match self.get(e) {
+                    ResolvedType::TypePack { name, .. } => TupleSlot::Pack(name.clone()),
+                    _ => TupleSlot::Fixed,
+                })
+                .collect(),
+        )
+    }
+
+    /// The type of `t.zip()`: the tuple-of-tuples `t` transposed column by
+    /// column, or `None` where its rows share no layout to transpose.
+    pub fn transposed_tuple(&mut self, id: TypeId) -> Option<TypeId> {
+        let row_ids = self.as_tuple(id)?;
+        let layout = self.tuple_layout(*row_ids.first()?)?;
+        let mut rows = Vec::with_capacity(row_ids.len());
+        for &row in &row_ids {
+            if self.tuple_layout(row).as_ref() != Some(&layout) {
+                return None;
+            }
+            rows.push(self.as_tuple(row).expect("a row with a layout is a tuple"));
+        }
+        let columns: Vec<TypeId> = layout
+            .iter()
+            .enumerate()
+            .map(|(col, slot)| {
+                let cells: Vec<TypeId> = rows.iter().map(|row| row[col]).collect();
+                match slot {
+                    TupleSlot::Fixed => self.make_tuple(cells),
+                    // A pack slot stands for a run, so its column is a pack too:
+                    // element `k` is the cells with the pack bound to its `k`-th.
+                    TupleSlot::Pack(name) => {
+                        let parts: Vec<(u32, TypeId)> =
+                            cells.iter().map(|&c| self.pack_element(c)).collect();
+                        let (index, _) = parts[0];
+                        assert!(
+                            parts.iter().all(|&(i, _)| i == index),
+                            "one scope gives a pack name one index"
+                        );
+                        let elem = self.make_tuple(parts.iter().map(|&(_, e)| e).collect());
+                        self.make_mapped_type_pack(name.clone(), index, elem)
+                    }
+                }
+            })
+            .collect();
+        Some(self.make_tuple(columns))
+    }
+
+    /// What one row contributes at a pack slot: the pack's index, and its
+    /// mapped element or the scalar placeholder an identity pack stands for.
+    fn pack_element(&mut self, cell: TypeId) -> (u32, TypeId) {
+        let ResolvedType::TypePack {
+            name,
+            index,
+            mapped_elem,
+        } = self.get(cell).clone()
+        else {
+            unreachable!("`tuple_layout` marks a slot a pack only for a `TypePack`")
+        };
+        (
+            index,
+            mapped_elem.unwrap_or_else(|| self.make_type_param(name, index)),
+        )
+    }
+
     /// Like [`Self::as_tuple`], but also looks through `&`/`&mut` wrappers
     /// (any nesting depth, via [`Self::peel_refs`]). Returns the element types
     /// together with a `by_ref` flag that is `true` when the tuple was reached
@@ -2388,6 +2441,12 @@ impl TypeTable {
         } else {
             None
         }
+    }
+
+    /// The element types `id` stands for: a tuple's own, and otherwise the one
+    /// type itself. This is what a spread splices into the tuple holding it.
+    pub fn elem_types_or_self(&self, id: TypeId) -> Vec<TypeId> {
+        self.as_tuple(id).unwrap_or_else(|| vec![id])
     }
 
     pub fn make_function(
@@ -2694,10 +2753,11 @@ impl TypeTable {
         self.primitive_head(id).is_some()
     }
 
-    /// Whether `id` bottoms out in a primitive Wasm *scalar* — every primitive
-    /// but `v128`, whose arithmetic is known only to the lane type's own impl.
+    /// Whether `id` bottoms out in a primitive that carries Wasm arithmetic.
+    /// `v128`'s belongs to the lane type's own impl, and the half types carry
+    /// none at all.
     pub fn is_scalar_primitive_like(&self, id: TypeId) -> bool {
-        matches!(self.primitive_head(id), Some(p) if p != PrimitiveType::V128)
+        matches!(self.primitive_head(id), Some(p) if p != PrimitiveType::V128 && !p.is_half())
     }
 
     /// Whether a value of this type leaves nothing on the Wasm stack: unit or
@@ -2828,6 +2888,16 @@ impl TypeTable {
         self.intern(ResolvedType::TypeParam { name, index })
     }
 
+    /// The id a declaration's parameter at `index` interns to. A pack holds a
+    /// tuple in its one slot, so it is a `TypePack` and not a `TypeParam`.
+    pub fn make_declared_param(&mut self, name: String, index: u32, is_pack: bool) -> TypeId {
+        if is_pack {
+            self.make_type_pack(name, index)
+        } else {
+            self.make_type_param(name, index)
+        }
+    }
+
     /// Create an inference variable (see [`ResolvedType::InferVar`]).
     pub fn make_infer_var(&mut self, id: InferVarId) -> TypeId {
         self.intern(ResolvedType::InferVar(id))
@@ -2872,45 +2942,12 @@ impl TypeTable {
         })
     }
 
-    /// Create a simple associated type projection `T::X` with no bounds or bindings.
-    /// Used in pre-pass registration of generic impl associated types.
-    pub fn make_assoc_type_projection_simple(
-        &mut self,
-        param_id: TypeId,
-        assoc_name: String,
-    ) -> TypeId {
-        self.intern(ResolvedType::AssocTypeProjection {
-            param_id,
-            assoc_name,
-            owning_trait: None,
-            bounds: vec![],
-            assoc_type_bindings: vec![],
-        })
-    }
-
-    /// Create an associated type projection: `T::X` where T is a type parameter.
+    /// Create an associated type projection `<T as Trait>::X`. The declaring
+    /// trait is required: without it the projection has no identity to compare.
     pub fn make_assoc_type_projection(
         &mut self,
         param_id: TypeId,
-        assoc_name: String,
-        bounds: Vec<FqTraitName>,
-        assoc_type_bindings: Vec<(String, TypeId)>,
-    ) -> TypeId {
-        self.make_assoc_type_projection_of_trait(
-            param_id,
-            None,
-            assoc_name,
-            bounds,
-            assoc_type_bindings,
-        )
-    }
-
-    /// [`Self::make_assoc_type_projection`] for a builder that knows which
-    /// trait declares the associated type.
-    pub fn make_assoc_type_projection_of_trait(
-        &mut self,
-        param_id: TypeId,
-        owning_trait: Option<DefId>,
+        owning_trait: DefId,
         assoc_name: String,
         bounds: Vec<FqTraitName>,
         assoc_type_bindings: Vec<(String, TypeId)>,
@@ -2993,20 +3030,18 @@ impl TypeTable {
         }
     }
 
-    /// Resolve `assoc_name` on `concrete_id`, qualified by `owning_trait`
-    /// when the caller has one. Falls back to the unqualified rule when it
-    /// does not, or when the named trait registered nothing for this type —
-    /// a projection built under a bound can name the trait that *declared*
-    /// the associated type while the impl registered it under a subtrait.
+    /// Resolve `assoc_name` on `concrete_id`, qualified by `owning_trait`,
+    /// falling back to the unqualified rule where that trait registered nothing.
+    // A projection built under a bound can name the trait that *declared* the
+    // associated type while the impl registered it under a subtrait.
     pub fn resolve_assoc_type_qualified(
         &self,
         concrete_id: TypeId,
-        owning_trait: &Option<DefId>,
+        owning_trait: &DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        if let Some(trait_key) = owning_trait
-            && let Some(resolved) =
-                self.resolve_assoc_type_of_trait(concrete_id, trait_key, assoc_name)
+        if let Some(resolved) =
+            self.resolve_assoc_type_of_trait(concrete_id, owning_trait, assoc_name)
         {
             return Some(resolved);
         }
@@ -3218,12 +3253,7 @@ impl TypeTable {
         let type_args = self.nominal_type_args(concrete_id)?;
         let (_, def_type_id) =
             self.generic_assoc_type_def(self.decl_of_type(concrete_id)?, assoc_name)?;
-        let subst: IndexMap<u32, TypeId> = type_args
-            .iter()
-            .enumerate()
-            .map(|(i, &a)| (i as u32, a))
-            .collect();
-        Some(self.substitute_type_params(def_type_id, &subst))
+        Some(self.substitute_positional(def_type_id, &type_args))
     }
 
     /// Whether the declaration behind `type_id` can be reflected — every
@@ -3287,12 +3317,13 @@ impl TypeTable {
         let type_args = self.nominal_type_args(concrete_id)?;
         let decl = self.decl_of_type(concrete_id)?;
         let def_type_id = self.generic_assoc_type_def_of_trait(decl, trait_key, assoc_name)?;
-        let subst: IndexMap<u32, TypeId> = type_args
-            .iter()
-            .enumerate()
-            .map(|(i, &a)| (i as u32, a))
-            .collect();
-        Some(self.substitute_type_params(def_type_id, &subst))
+        Some(self.substitute_positional(def_type_id, &type_args))
+    }
+
+    /// [`Self::substitute_type_params`] with `args` read positionally, which a
+    /// declaration's own parameters are, since it numbers them densely from zero.
+    pub fn substitute_positional(&mut self, type_id: TypeId, args: &[TypeId]) -> TypeId {
+        self.substitute_type_params(type_id, &positional_substitution(args))
     }
 
     /// Substitute `TypeParam` and `TypePack` indices in `type_id`, descending
@@ -3435,9 +3466,7 @@ impl TypeTable {
                                         // a pack-independent `..F::method()`
                                         // repeats its return type `|F|` times.
                                         Some(elem) => {
-                                            let pack_elems = self
-                                                .as_tuple(pack_type)
-                                                .unwrap_or_else(|| vec![pack_type]);
+                                            let pack_elems = self.elem_types_or_self(pack_type);
                                             for pe in pack_elems {
                                                 let mut elem_substitution = substitution.clone();
                                                 elem_substitution.insert(index, pe);
@@ -3533,13 +3562,11 @@ impl TypeTable {
                     // same associated-type name on one implementor stay apart
                     // (WEP-2026-08-12). The name-keyed forms below give up on
                     // that case rather than choosing.
-                    if let Some(trait_key) = &owning_trait
-                        && let Some(resolved) = self.resolve_trait_assoc_type_of_instance(
-                            concrete,
-                            trait_key,
-                            &assoc_name,
-                        )
-                    {
+                    if let Some(resolved) = self.resolve_trait_assoc_type_of_instance(
+                        concrete,
+                        &owning_trait,
+                        &assoc_name,
+                    ) {
                         return resolved;
                     }
                     if let Some(resolved) =
@@ -3571,7 +3598,7 @@ impl TypeTable {
                 if substituted_base == param_id && new_bindings == assoc_type_bindings {
                     type_id
                 } else {
-                    self.make_assoc_type_projection_of_trait(
+                    self.make_assoc_type_projection(
                         substituted_base,
                         owning_trait,
                         assoc_name,
@@ -3613,6 +3640,14 @@ impl TypeTable {
             .compiler_item_def(CompilerItem::List)
             .expect("the List declaration is a registered compiler item");
         self.make_generic_instance(def, vec![element])
+    }
+
+    /// Create a `TreeMap<K, V>` type — the Wado spelling of CM `map<K, V>`.
+    pub fn make_tree_map(&mut self, key: TypeId, value: TypeId) -> TypeId {
+        let def = self
+            .compiler_item_def(CompilerItem::TreeMap)
+            .expect("the TreeMap declaration is a registered compiler item");
+        self.make_generic_instance(def, vec![key, value])
     }
 
     /// Create the `ByteList` newtype (`type ByteList = List<u8>`).
@@ -3941,31 +3976,80 @@ impl TypeTable {
     /// yet: an inference variable, a type pack, or an unresolved / error type.
     /// A rigid type parameter is decided, and so is a projection over one.
     pub fn contains_undecided(&self, id: TypeId) -> bool {
+        self.contains_hole(id, true)
+    }
+
+    /// [`Self::contains_undecided`] without the packs. A pack is decided
+    /// wherever its own declaration is in scope, so a rule about shape must not
+    /// read it as the hole an `InferVar` is.
+    pub fn awaits_inference(&self, id: TypeId) -> bool {
+        self.contains_hole(id, false)
+    }
+
+    /// The walk both of the above are, differing only in whether a declared
+    /// pack counts as a hole.
+    fn contains_hole(&self, id: TypeId, packs_count: bool) -> bool {
+        let holds = |&t: &TypeId| self.contains_hole(t, packs_count);
         match self.get(id) {
-            ResolvedType::InferVar(_)
-            | ResolvedType::TypePack { .. }
-            | ResolvedType::Unknown
-            | ResolvedType::Error => true,
+            ResolvedType::TypePack { .. } => packs_count,
+            ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error => true,
             ResolvedType::AssocTypeProjection { param_id, .. } => {
                 !self.projects_from_param(*param_id)
             }
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.contains_undecided(*inner),
+            | ResolvedType::Reactive(inner) => holds(inner),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => params.iter().any(holds) || holds(return_type),
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => type_args.iter().any(holds),
+            _ => false,
+        }
+    }
+
+    /// The name of every type pack `id` mentions, so a caller can ask whose
+    /// declaration they belong to.
+    pub fn pack_names(&self, id: TypeId) -> Vec<String> {
+        let mut out = Vec::new();
+        self.collect_pack_names(id, &mut out);
+        out
+    }
+
+    fn collect_pack_names(&self, id: TypeId, out: &mut Vec<String>) {
+        match self.get(id) {
+            ResolvedType::TypePack {
+                name, mapped_elem, ..
+            } => {
+                out.push(name.clone());
+                if let Some(elem) = mapped_elem {
+                    self.collect_pack_names(*elem, out);
+                }
+            }
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.collect_pack_names(*inner, out),
             ResolvedType::Function {
                 params,
                 return_type,
                 ..
             } => {
-                params.iter().any(|p| self.contains_undecided(*p))
-                    || self.contains_undecided(*return_type)
+                for p in params {
+                    self.collect_pack_names(*p, out);
+                }
+                self.collect_pack_names(*return_type, out);
             }
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| self.contains_undecided(*t))
+                for t in type_args {
+                    self.collect_pack_names(*t, out);
+                }
             }
-            _ => false,
+            _ => {}
         }
     }
 
@@ -3985,27 +4069,35 @@ impl TypeTable {
     /// of some declaration's own frame, as opposed to an inference variable a
     /// solver still owns.
     pub fn contains_rigid_param(&self, id: TypeId) -> bool {
+        self.mentions_slot(id, Through::Projection)
+    }
+
+    /// Whether `id` mentions a slot a value assigned to it could still fill.
+    /// [`Self::contains_rigid_param`] stopping at a projection: `I::Item`
+    /// mentions a slot without being one, and inference cannot invert it.
+    pub fn contains_fillable_slot(&self, id: TypeId) -> bool {
+        self.mentions_slot(id, Through::ProjectionStops)
+    }
+
+    fn mentions_slot(&self, id: TypeId, through: Through) -> bool {
+        let mentions = |inner: &TypeId| self.mentions_slot(*inner, through);
         match self.get(id) {
             ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => true,
+            ResolvedType::AssocTypeProjection { param_id, .. } => match through {
+                Through::Projection => mentions(param_id),
+                Through::ProjectionStops => false,
+            },
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.contains_rigid_param(*inner),
-            ResolvedType::AssocTypeProjection { param_id, .. } => {
-                self.contains_rigid_param(*param_id)
-            }
+            | ResolvedType::Reactive(inner) => mentions(inner),
             ResolvedType::Function {
                 params,
                 return_type,
                 ..
-            } => {
-                params.iter().any(|p| self.contains_rigid_param(*p))
-                    || self.contains_rigid_param(*return_type)
-            }
+            } => params.iter().any(mentions) || mentions(return_type),
             ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| self.contains_rigid_param(*t))
-            }
+            | ResolvedType::GenericResource { type_args, .. } => type_args.iter().any(mentions),
             _ => false,
         }
     }
@@ -4340,8 +4432,8 @@ impl TypeTable {
                 let base = type_name(*param_id);
                 // The owning trait is part of a projection's identity, so two
                 // that differ only there render the same without it.
-                if let (true, Some(def)) = (qualified, owning_trait) {
-                    let owner = self.head_name(*def, true);
+                if qualified {
+                    let owner = self.head_name(*owning_trait, true);
                     format!("<{base} as {owner}>::{assoc_name}")
                 } else {
                     format!("{base}::{assoc_name}")
@@ -4769,9 +4861,21 @@ impl TypeTable {
             ResolvedType::MutRef(inner) => self
                 .fq_type_name_spelled(*inner, unboxed)
                 .with_reference(RefKind::Mut),
-            // Shapes that name no declaration — assoc-type projections, packs,
-            // `Unknown`. They carry no module, so the rendered spelling is
-            // already their whole identity.
+            // Structural, so substituting the base reaches it: the base is what
+            // a monomorphized call answers, and the projection follows.
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                owning_trait,
+                ..
+            } => FqTypeName::projection(
+                self.fq_type_name_spelled(*param_id, unboxed),
+                assoc_name,
+                &self.defs,
+                *owning_trait,
+            ),
+            // Shapes that name no declaration — packs, `Unknown`. They carry no
+            // module, so the rendered spelling is already their whole identity.
             _ => FqTypeName::builtin(&self.mangle_type_name(id)),
         }
     }
@@ -4872,6 +4976,16 @@ impl TypeTable {
             ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
         }
     }
+}
+
+/// `args` keyed by the parameter slot each one fills, which is what
+/// [`TypeTable::substitute_type_params`] reads.
+#[must_use]
+pub fn positional_substitution(args: &[TypeId]) -> IndexMap<u32, TypeId> {
+    args.iter()
+        .enumerate()
+        .map(|(slot, &arg)| (slot as u32, arg))
+        .collect()
 }
 
 #[derive(Debug, Clone)]
@@ -5525,6 +5639,15 @@ pub enum TirPattern {
         inclusive: bool,
         is_unsigned: bool,
     },
+    /// Holds the scrutinee at `type_id`, and matches only when `test`, which
+    /// reads that local, holds: a type pattern the host decides, or a constant
+    /// compared by `Eq`. `name` is the binding it makes, `None` for none.
+    Narrow {
+        name: Option<String>,
+        local_index: u32,
+        type_id: TypeId,
+        test: Box<TirExpr>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -5626,6 +5749,69 @@ impl TirBlock {
             span,
         }
     }
+}
+
+/// `receiver.zip()` as a tuple literal: one column per position, each reading
+/// its cell out of every row. A `&`/`&mut` receiver transposes what it refers to.
+pub fn transpose_tuple_expr(receiver: &TirExpr, span: Span, type_table: &mut TypeTable) -> TirExpr {
+    assert!(
+        matches!(receiver.kind, TirExprKind::Local { .. }),
+        "every cell reads the receiver, so reify binds it before either expansion"
+    );
+    let tuple = type_table.peel_refs(receiver.type_id);
+    let transposed = type_table
+        .transposed_tuple(tuple)
+        .expect("method lookup admits `zip` only over rows that transpose");
+    let rows: Vec<(TypeId, Vec<TypeId>)> = type_table
+        .as_tuple(tuple)
+        .expect("a transpose has rows")
+        .into_iter()
+        .map(|row| {
+            let cells = type_table
+                .as_tuple(row)
+                .expect("a transposed row is a tuple");
+            (row, cells)
+        })
+        .collect();
+    let column_types = type_table
+        .as_tuple(transposed)
+        .expect("a transpose is a tuple");
+    let columns: Vec<TirExpr> = column_types
+        .into_iter()
+        .enumerate()
+        .map(|(col, column_type)| {
+            let elements: Vec<TirExpr> = rows
+                .iter()
+                .enumerate()
+                .map(|(row, (row_type, cells))| {
+                    let row_access = TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(receiver.clone()),
+                            field_index: row as u32,
+                            field_name: row.to_string(),
+                        },
+                        *row_type,
+                        span,
+                    );
+                    TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(row_access),
+                            field_index: col as u32,
+                            field_name: col.to_string(),
+                        },
+                        cells[col],
+                        span,
+                    )
+                })
+                .collect();
+            TirExpr::new(TirExprKind::TupleLiteral { elements }, column_type, span)
+        })
+        .collect();
+    TirExpr::new(
+        TirExprKind::TupleLiteral { elements: columns },
+        transposed,
+        span,
+    )
 }
 
 /// Value-yielding type of a block: the last statement decides, except that a
@@ -6035,6 +6221,10 @@ pub struct TirFunction {
     /// `#[immediate(...)]` — parameters lowered to a Wasm immediate, whose
     /// argument must still be a literal when codegen reads it.
     pub immediates: Vec<String>,
+    /// `#[trap(...)]` on a bodyless declaration — when the call can trap.
+    pub trap: Option<TrapSpec<String>>,
+    /// `#[linear_memory(...)]` on a bodyless declaration.
+    pub linear_memory: Option<LinearMemory>,
     pub body: Option<TirBlock>,
     pub span: Span,
     pub local_count: u32,
@@ -6203,6 +6393,61 @@ pub struct RetainSpec<Param> {
     pub into: Option<Param>,
 }
 
+/// One `#[trap(...)]` condition: the call traps exactly where one fails.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TrapCheck<Param> {
+    /// `negative = p` — traps when `p < 0`.
+    Negative(Param),
+    /// `outside = a, at = i, len = n` — traps unless `[i, i + n)` lies within
+    /// the array `a`. `at` defaults to 0, `len` to 1.
+    Outside {
+        array: Param,
+        at: Option<Param>,
+        len: Option<Param>,
+    },
+    /// `unset = a` — traps when the element read is a slot of `a` that holds no
+    /// value, as a reference element `array_new` left at its default does.
+    Unset(Param),
+}
+
+/// What a bodyless declaration's `#[trap(...)]` attributes state. Silence is
+/// "may trap"; `#[trap(never)]` is a spec with no checks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrapSpec<Param> {
+    pub checks: Vec<TrapCheck<Param>>,
+    /// `result_len = p` — the returned array holds exactly `p` elements.
+    pub result_len: Option<Param>,
+}
+
+impl<P> TrapSpec<P> {
+    fn map<Q>(&self, mut f: impl FnMut(&P) -> Q) -> TrapSpec<Q> {
+        TrapSpec {
+            checks: self
+                .checks
+                .iter()
+                .map(|check| match check {
+                    TrapCheck::Negative(p) => TrapCheck::Negative(f(p)),
+                    TrapCheck::Outside { array, at, len } => TrapCheck::Outside {
+                        array: f(array),
+                        at: at.as_ref().map(&mut f),
+                        len: len.as_ref().map(&mut f),
+                    },
+                    TrapCheck::Unset(array) => TrapCheck::Unset(f(array)),
+                })
+                .collect(),
+            result_len: self.result_len.as_ref().map(f),
+        }
+    }
+}
+
+/// `#[linear_memory(...)]`: how a bodyless declaration touches linear memory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinearMemory {
+    Read,
+    /// Writes, and reads too: a store is ordered against every other access.
+    Write,
+}
+
 /// What a bodyless `core:builtin` declared about storage, by parameter position.
 /// Link snapshots it because monomorphization drops the generic declarations.
 #[derive(Debug, Clone, Default)]
@@ -6219,6 +6464,10 @@ pub struct BuiltinDeclaration {
     /// reads the argument's literal value, so nothing may rewrite it into a
     /// load.
     pub immediate_params: IndexSet<usize>,
+    /// `#[trap(...)]`, or `None` where the declaration states none.
+    pub trap: Option<TrapSpec<usize>>,
+    /// `#[linear_memory(...)]`, or `None` where it touches none.
+    pub linear_memory: Option<LinearMemory>,
 }
 
 /// All a declaration lookup reads of a call. TIR and NIR each carry their own
@@ -6311,6 +6560,27 @@ impl BuiltinDeclarations {
         self.get(call.into())
             .map(|d| d.immediate_params.clone())
             .unwrap_or_default()
+    }
+
+    /// What `call` declared with `#[trap(...)]`; `None` is "may trap".
+    pub fn trap<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&TrapSpec<usize>> {
+        self.get(call.into())?.trap.as_ref()
+    }
+
+    /// What `call` declared with `#[linear_memory(...)]`.
+    pub fn linear_memory<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> Option<LinearMemory> {
+        self.get(call.into())?.linear_memory
+    }
+
+    /// The positions `call` takes by `&mut`, `None` where nothing was snapshot.
+    pub fn mut_params<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> Option<&IndexSet<usize>> {
+        self.get(call.into()).map(|d| &d.mut_params)
     }
 
     /// Whether the call declared `#[result(owned)]`: the object it hands back
@@ -6409,6 +6679,13 @@ impl TirFunction {
             .map(move |name| self.param_position(name))
     }
 
+    /// This declaration's `#[trap(...)]` by parameter position.
+    pub fn trap_by_position(&self) -> Option<TrapSpec<usize>> {
+        self.trap
+            .as_ref()
+            .map(|spec| spec.map(|name| self.param_position(name)))
+    }
+
     /// Take the body's frame, leaving an empty one. The counterpart of
     /// [`Self::set_frame`]: a caller moving a body elsewhere takes what
     /// describes its locals with it.
@@ -6465,6 +6742,8 @@ impl TirFunction {
             effects: Vec::new(),
             retains: Vec::new(),
             immediates: Vec::new(),
+            trap: None,
+            linear_memory: None,
             body: Some(body),
             span,
             local_count: u32::try_from(locals.len()).expect("local count fits in u32"),
@@ -6630,6 +6909,10 @@ pub struct TirField {
     /// (never matched by name) and `positional_at` enumerates it. Name-only and
     /// sequence-only formats ignore it; `core:args` binds it to a bare token.
     pub serde_positional: bool,
+    /// `#[wire(number = N)]` — the numeric wire key, which a format reads
+    /// instead of the name. A struct numbers every field or none, so this is
+    /// `Some` for all of a struct's fields or for none of them.
+    pub serde_number: Option<u32>,
     /// Resolved default expression for `struct S { x: T = expr }`.
     /// Inserted by the elaborator when the field is omitted in a struct literal.
     pub default_expr: Option<Box<TirExpr>>,
@@ -6935,7 +7218,8 @@ pub struct TirImport {
 
 /// Tracks a requested instantiation of a generic item.
 /// `name`, `module_source`, `impl_type_args`, and `method_type_args` are used for equality/hashing.
-/// `method_info` is auxiliary metadata for name formatting.
+/// `method_info` names an instance but never decides one: it is left out of
+/// both, so read a declaration's own `method_info` for anything else.
 #[derive(Debug, Clone)]
 pub struct InstantiationKey {
     /// The generic declaration being instantiated, where the site holds one.
@@ -7254,6 +7538,16 @@ mod tests {
         let _ = table.type_id_of_decl(unregistered);
     }
 
+    fn make_projection(table: &mut TypeTable, base: TypeId, assoc: &str) -> TypeId {
+        table.make_assoc_type_projection(
+            base,
+            DefId::for_test(0),
+            assoc.to_string(),
+            vec![],
+            vec![],
+        )
+    }
+
     /// Substituting a projection's base rewrites the projection even when the
     /// replacement is itself a parameter. `Self::Item` under `Self := I` is
     /// `I::Item`, not `Self::Item` — a trait signature instantiated for an
@@ -7262,7 +7556,7 @@ mod tests {
     fn substitute_rewrites_projection_base_to_another_param() {
         let mut table = TypeTable::new();
         let self_param = table.make_type_param("Self".to_string(), 0);
-        let projection = table.make_assoc_type_projection_simple(self_param, "Item".to_string());
+        let projection = make_projection(&mut table, self_param, "Item");
 
         let receiver = table.make_type_param("I".to_string(), 1);
         let substitution = IndexMap::from_iter([(0, receiver)]);
@@ -7287,7 +7581,7 @@ mod tests {
     fn a_projection_answer_replaces_the_projection() {
         let mut table = TypeTable::new();
         let self_param = table.make_type_param("Self".to_string(), 0);
-        let projection = table.make_assoc_type_projection_simple(self_param, "Item".to_string());
+        let projection = make_projection(&mut table, self_param, "Item");
 
         let receiver = table.make_type_param("I".to_string(), 1);
         let projections =
@@ -7308,7 +7602,7 @@ mod tests {
     fn an_unanswered_projection_stays_abstract() {
         let mut table = TypeTable::new();
         let self_param = table.make_type_param("Self".to_string(), 0);
-        let projection = table.make_assoc_type_projection_simple(self_param, "Iter".to_string());
+        let projection = make_projection(&mut table, self_param, "Iter");
 
         let receiver = table.make_type_param("I".to_string(), 1);
         let substituted = table.substitute_type_params_with(
@@ -7330,7 +7624,7 @@ mod tests {
     fn substitute_leaves_unrelated_projection_untouched() {
         let mut table = TypeTable::new();
         let self_param = table.make_type_param("Self".to_string(), 0);
-        let projection = table.make_assoc_type_projection_simple(self_param, "Item".to_string());
+        let projection = make_projection(&mut table, self_param, "Item");
 
         let substitution = IndexMap::from_iter([(7, TypeTable::I32)]);
         assert_eq!(

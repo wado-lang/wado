@@ -14,10 +14,11 @@ use crate::component_model::{CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::LocalMethodName;
+use crate::primitive::PrimitiveType;
 use crate::tir::{
-    CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStructField, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField,
+    TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
 
 use crate::synthesis::common::{
@@ -32,6 +33,8 @@ use super::cm_free::{
 };
 use super::import_adapter::make_binding_function;
 use super::lift::synthesize_lift_list;
+use super::lift::synthesize_lift_map;
+use super::lower::synthesize_lower_map_to_buffer;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id,
@@ -42,7 +45,7 @@ use super::types::{
 };
 use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{cm_align_with_registry_scoped, cm_size_with_registry_scoped};
+use crate::component_model::cm_layout_with_registry;
 use crate::name::FqTypeName;
 
 /// Build the export binding function name for a world export.
@@ -108,8 +111,8 @@ fn lower_to_flat_inner(
                 PrimitiveType::I64 | PrimitiveType::U64 => (TypeTable::I64, cm_abi::CmValType::I64),
                 PrimitiveType::F32 => (TypeTable::F32, cm_abi::CmValType::F32),
                 PrimitiveType::F64 => (TypeTable::F64, cm_abi::CmValType::F64),
-                PrimitiveType::V128 => {
-                    panic!("v128 cannot appear at CM boundary")
+                PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16 => {
+                    panic!("{} cannot appear at CM boundary", p.as_str())
                 }
             };
             let cast_value = if flat_type_id == type_id {
@@ -181,16 +184,8 @@ fn lower_to_flat_inner(
                 let tt = ctx.type_table.borrow();
                 type_id_to_ast_type(elem_type_id, &tt, ctx.cm_interface_registry)
             };
-            let elem_size = cm_size_with_registry_scoped(
-                &elem_ast_type,
-                ctx.cm_interface_registry,
-                Some(ctx.cm_package),
-            );
-            let elem_align = cm_align_with_registry_scoped(
-                &elem_ast_type,
-                ctx.cm_interface_registry,
-                Some(ctx.cm_package),
-            );
+            let (elem_size, elem_align) =
+                cm_layout_with_registry(&elem_ast_type, ctx.cm_interface_registry);
 
             // $arr = value
             let arr_local = alloc_local(next_local, locals, type_id);
@@ -447,6 +442,43 @@ fn lower_to_flat_inner(
             }
 
             result
+        }
+        ResolvedType::GenericInstance { def, type_args }
+            if ctx
+                .type_table
+                .borrow()
+                .compiler_item_def(CompilerItem::TreeMap)
+                == Some(*def)
+                && type_args.len() == 2 =>
+        {
+            // `map<K, V>` flattens as the `list<tuple<K, V>>` it despecializes to.
+            let lower_ctx = LowerContext {
+                cm_interface_registry: ctx.cm_interface_registry,
+                type_table: ctx.type_table,
+                wasi_package: ctx.cm_package,
+                names,
+            };
+            let (key_ast, value_ast) = {
+                let tt = ctx.type_table.borrow();
+                (
+                    type_id_to_ast_type(type_args[0], &tt, ctx.cm_interface_registry),
+                    type_id_to_ast_type(type_args[1], &tt, ctx.cm_interface_registry),
+                )
+            };
+            let (buffer_stmts, base_local, len_local) = synthesize_lower_map_to_buffer(
+                &key_ast, &value_ast, value, next_local, locals, &lower_ctx,
+            );
+            stmts.extend(buffer_stmts);
+            vec![
+                FlatLocal {
+                    index: base_local,
+                    cm_type: cm_abi::CmValType::I32,
+                },
+                FlatLocal {
+                    index: len_local,
+                    cm_type: cm_abi::CmValType::I32,
+                },
+            ]
         }
         ResolvedType::GenericInstance { def, type_args }
             if ctx.type_table.borrow().def_name(*def) == names.result && type_args.len() == 2 =>
@@ -908,38 +940,8 @@ pub(super) fn synthesize_lift_from_flat_params(
                 // bare `Array<u8>` mislabeled as `List<u8>`; the general path below
                 // builds the real `List<T>` struct, so all element types share it.)
                 // Write ptr/len to a temp memory block so we can reuse synthesize_lift
-                let ptr = local_ref(flat_param_locals[0], "$p", TypeTable::I32);
-                let len = local_ref(flat_param_locals[1], "$p", TypeTable::I32);
-                // Allocate 8 bytes for ptr+len
-                let tmp_ptr_local = alloc_local(next_local, locals, TypeTable::I32);
-                stmts.push(let_stmt(
-                    "$lift_tmp",
-                    tmp_ptr_local,
-                    TypeTable::I32,
-                    builtin_call(
-                        "realloc",
-                        vec![i32_const(0), i32_const(0), i32_const(4), i32_const(8)],
-                        TypeTable::I32,
-                    ),
-                ));
-                // Write ptr at offset 0
-                stmts.push(expr_stmt(builtin_call(
-                    "i32_store",
-                    vec![local_ref(tmp_ptr_local, "$lift_tmp", TypeTable::I32), ptr],
-                    TypeTable::UNIT,
-                )));
-                // Write len at offset 4
-                stmts.push(expr_stmt(builtin_call(
-                    "i32_store",
-                    vec![
-                        binary_add(
-                            local_ref(tmp_ptr_local, "$lift_tmp", TypeTable::I32),
-                            i32_const(4),
-                        ),
-                        len,
-                    ],
-                    TypeTable::UNIT,
-                )));
+                let tmp_ptr_local =
+                    spill_ptr_len_to_temp(flat_param_locals, next_local, stmts, locals);
                 // Lift into the user function's exact `List<T>` type
                 // (`target_type_id`), not a rebuilt one, so a shared stdlib
                 // element type (e.g. `InputFile`) does not resolve to a second
@@ -953,17 +955,23 @@ pub(super) fn synthesize_lift_from_flat_params(
                     locals,
                     &lift_ctx,
                 );
-                // Free temp memory
-                stmts.push(expr_stmt(builtin_call(
-                    "realloc",
-                    vec![
-                        local_ref(tmp_ptr_local, "$lift_tmp", TypeTable::I32),
-                        i32_const(8),
-                        i32_const(4),
-                        i32_const(0),
-                    ],
-                    TypeTable::I32,
-                )));
+                free_ptr_len_temp(tmp_ptr_local, stmts);
+                (lifted, 2)
+            }
+            _ if names.is_tree_map(generic) => {
+                let tmp_ptr_local =
+                    spill_ptr_len_to_temp(flat_param_locals, next_local, stmts, locals);
+                let lifted = synthesize_lift_map(
+                    &generic.args[0],
+                    &generic.args[1],
+                    local_ref(tmp_ptr_local, "$lift_tmp", TypeTable::I32),
+                    Some(target_type_id),
+                    next_local,
+                    stmts,
+                    locals,
+                    &lift_ctx,
+                );
+                free_ptr_len_temp(tmp_ptr_local, stmts);
                 (lifted, 2)
             }
             n if n == names.option && generic.args.len() == 1 => {
@@ -1189,6 +1197,57 @@ fn coerce_payload_slots(
         }
     }
     (out_locals, natural)
+}
+
+/// Spill a `(ptr, len)` flat pair into an 8-byte scratch block, so a lift that
+/// reads from memory can be reused on flat parameters.
+fn spill_ptr_len_to_temp(
+    flat_param_locals: &[u32],
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+) -> u32 {
+    let ptr = local_ref(flat_param_locals[0], "$p", TypeTable::I32);
+    let len = local_ref(flat_param_locals[1], "$p", TypeTable::I32);
+    let tmp = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_stmt(
+        "$lift_tmp",
+        tmp,
+        TypeTable::I32,
+        builtin_call(
+            "realloc",
+            vec![i32_const(0), i32_const(0), i32_const(4), i32_const(8)],
+            TypeTable::I32,
+        ),
+    ));
+    stmts.push(expr_stmt(builtin_call(
+        "i32_store",
+        vec![local_ref(tmp, "$lift_tmp", TypeTable::I32), ptr],
+        TypeTable::UNIT,
+    )));
+    stmts.push(expr_stmt(builtin_call(
+        "i32_store",
+        vec![
+            binary_add(local_ref(tmp, "$lift_tmp", TypeTable::I32), i32_const(4)),
+            len,
+        ],
+        TypeTable::UNIT,
+    )));
+    tmp
+}
+
+/// Release the block [`spill_ptr_len_to_temp`] allocated.
+fn free_ptr_len_temp(tmp: u32, stmts: &mut Vec<TirStmt>) {
+    stmts.push(expr_stmt(builtin_call(
+        "realloc",
+        vec![
+            local_ref(tmp, "$lift_tmp", TypeTable::I32),
+            i32_const(8),
+            i32_const(4),
+            i32_const(0),
+        ],
+        TypeTable::I32,
+    )));
 }
 
 /// Lift a named `variant` from the flat CM ABI
@@ -1467,7 +1526,6 @@ impl<'a> ExportBindingEnv<'a> {
     fn shape_ctx<'n: 'a>(&self, names: &'n CmStdlibNames) -> CmShapeContext<'a> {
         CmShapeContext {
             cm_interface_registry: self.cm_interface_registry,
-            cm_package: self.cm_package,
             names,
             tir_modules: self.tir_modules,
             type_table: self.type_table,
@@ -1657,10 +1715,7 @@ fn push_sync_return_epilogue(
             call_user,
         ));
 
-        let size =
-            cm_size_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
-        let align =
-            cm_align_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
+        let (size, align) = cm_layout_with_registry(ty, env.cm_interface_registry);
         let ptr_local = alloc_local(next_local, locals, TypeTable::I32);
         body_stmts.push(let_stmt(
             "$ret_ptr",
@@ -1755,8 +1810,7 @@ pub(super) fn synthesize_post_return(
     let addr = local_ref(0, "$ret_ptr", TypeTable::I32);
 
     let mut body = synthesize_free_cm_value(&shape, &addr, &mut next_local, &mut locals);
-    let size = cm_size_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
-    let align = cm_align_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
+    let (size, align) = cm_layout_with_registry(ty, env.cm_interface_registry);
     body.push(expr_stmt(builtin_call(
         "realloc",
         vec![
@@ -2043,7 +2097,8 @@ pub(super) fn synthesize_variant_lower_to_flat(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     ctx: LiftContext<'_>,
 ) {
-    // Set flat[0] = discriminant
+    // The tag is an i32 but flat[0] may be wider: the Canonical ABI joins this
+    // slot with an enclosing variant's sibling case, as `result<u64, error>` does.
     if !flat_locals.is_empty() {
         stmts.push(expr_stmt(assign(
             local_ref(
@@ -2051,7 +2106,11 @@ pub(super) fn synthesize_variant_lower_to_flat(
                 &flat_locals[0].1,
                 cm_val_type_to_type_id(flat_types[0]),
             ),
-            variant_tag(local_ref(value_local, "$variant_val", value_type_id)),
+            coerce_flat_lower(
+                variant_tag(local_ref(value_local, "$variant_val", value_type_id)),
+                cm_abi::CmValType::I32,
+                flat_types[0],
+            ),
         )));
     }
 

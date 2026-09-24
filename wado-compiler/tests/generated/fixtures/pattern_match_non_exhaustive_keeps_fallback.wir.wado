@@ -64,6 +64,7 @@ global global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_2: re
 global mut global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_12: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "pattern_match_non_exhaustive_keeps_fallback.wado/$test_0"() {
+    let $load_0: ref "core:prelude/string.wado//String";
     let e_3: ref "pattern_match_non_exhaustive_keeps_fallback.wado//AppError";
     let $cond_4: bool;
     let e_52: ref "pattern_match_non_exhaustive_keeps_fallback.wado//AppError";
@@ -92,8 +93,8 @@ fn "pattern_match_non_exhaustive_keeps_fallback.wado/$test_0"() {
     $cond_4 = (if ref.is_null($match_scrut_1) == 0 -> bool {
         e_3 = ref.as_non_null($match_scrut_1);
         $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-            a_112 = e_3.message.repr;
-            a_end_114 = e_3.message.used;
+            a_112 = local.tee $load_0(e_3.message).repr;
+            a_end_114 = $load_0.used;
             b_115 = global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_2;
             if a_end_114 != 4 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
@@ -218,7 +219,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l12;

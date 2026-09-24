@@ -129,13 +129,7 @@ fn classify(
         // folds away the only read site. The matching `let x;` declaration
         // falls out once every write to `x` is gone.
         StmtKind::Expr(operand @ Operand::Value(_)) => {
-            if !is_tail
-                && arena_query::is_pure_nontrapping_operand_typed(
-                    engine.body,
-                    *operand,
-                    engine.value_graph_type_table(),
-                )
-            {
+            if !is_tail && deletable(engine, *operand, effects) {
                 return Action::Drop;
             }
             Action::Keep
@@ -146,14 +140,7 @@ fn classify(
                 _ => None,
             };
             // Not in tail position — a block's tail `Expr` is its value.
-            if assign.is_none()
-                && !is_tail
-                && arena_query::is_pure_nontrapping_operand_typed(
-                    engine.body,
-                    Operand::Expr(*e),
-                    engine.value_graph_type_table(),
-                )
-            {
+            if assign.is_none() && !is_tail && deletable(engine, Operand::Expr(*e), effects) {
                 return Action::Drop;
             }
             if let Some((target, value)) = assign

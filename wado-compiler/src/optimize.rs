@@ -7,6 +7,7 @@
 mod aggregate_forward;
 mod alias;
 mod arena_query;
+mod bounds;
 mod census;
 mod clone_forward;
 mod closure_devirt;
@@ -65,7 +66,7 @@ use crate::nir_arena::{NodeRef, PatKind, StmtKind};
 use crate::trace::filter;
 
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
-use const_folding::{ConstFoldCache, fold_constants, fold_constants_all};
+use const_folding::{fold_constants, fold_constants_all};
 use const_object_globalization::globalize_const_objects;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
@@ -80,16 +81,17 @@ use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use licm::apply_licm;
 use match_to_switch::{match_to_switch_all, match_to_switch_globals};
+use mod_ref::compute_fn_effects;
 use scalar_forward::forward_scalar_temps;
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
 use sroa_variant_return::scalarize_variant_returns;
-use store_load_forward::forward_stores_to_loads_all;
+use store_load_forward::forward_stores_to_loads;
 use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
 
 use extract::FreezePhase;
-use gate::GatedPass;
+use gate::{FunctionGate, GatedPass};
 
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
@@ -163,10 +165,14 @@ pub fn optimize(
     // which lets a constant string global promote to an eager Wasm constant.
     project.string_inline_max_bytes = string_inline_max_bytes(opt_level);
     census::report(&project, "post-lower");
+    // One table for the whole of optimization: a descriptor names a function and
+    // says nothing about its body, so clearing bodies leaves every entry current
+    // and only an appended function needs a new one.
+    let mut descriptors = dce::DescriptorCache::default();
     match opt_level {
         OptLevel::O0 => {
             // No optimizations, but still run DCE to reduce codegen work
-            run_dce(&mut project, profiler);
+            run_dce(&mut project, profiler, &mut descriptors);
             // Dense-int / dense-enum `Match` → `Switch` is a codegen-
             // friendly late lowering. The translator emits a canonical
             // `Match` (see WEP 2026-05-11). Materialising `Switch` here
@@ -190,10 +196,10 @@ pub fn optimize(
             };
             // Early DCE: remove unreachable functions/types before optimization
             // to reduce the working set for subsequent passes
-            run_dce(&mut project, profiler);
-            run_optimization_passes(&mut project, &config, profiler);
+            run_dce(&mut project, profiler, &mut descriptors);
+            run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
             // Final DCE: clean up code made dead by optimizations
-            run_dce(&mut project, profiler);
+            run_dce(&mut project, profiler, &mut descriptors);
         }
         OptLevel::O2 | OptLevel::Os => {
             let config = OptConfig {
@@ -218,9 +224,9 @@ pub fn optimize(
                 inline_growth,
                 cap_is_defect: opt_iterations.is_none(),
             };
-            run_dce(&mut project, profiler);
-            run_optimization_passes(&mut project, &config, profiler);
-            run_dce(&mut project, profiler);
+            run_dce(&mut project, profiler, &mut descriptors);
+            run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
+            run_dce(&mut project, profiler, &mut descriptors);
             if opt_level == OptLevel::Os {
                 project.strip_names = true;
             }
@@ -240,9 +246,9 @@ pub fn optimize(
                 inline_growth,
                 cap_is_defect: opt_iterations.is_none(),
             };
-            run_dce(&mut project, profiler);
-            run_optimization_passes(&mut project, &config, profiler);
-            run_dce(&mut project, profiler);
+            run_dce(&mut project, profiler, &mut descriptors);
+            run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
+            run_dce(&mut project, profiler, &mut descriptors);
         }
     }
 
@@ -262,9 +268,14 @@ pub fn optimize(
         // cond-impl could not see; pair with `const_branch_prune` so the
         // now-`false` checks' panic blocks are removed. Must precede
         // `select_lowering`, which reshapes conditions out of matcher form.
-        run_bounded_fixpoint("nir/cond_impl_post_promote", &mut project, profiler, |p| {
-            condition_implication::eliminate_post_promote(p) | prune_constant_branches(p)
-        });
+        run_bounded_fixpoint(
+            "nir/cond_impl_post_promote",
+            &mut project,
+            profiler,
+            |p, g| {
+                condition_implication::eliminate_post_promote(p, g) | prune_constant_branches(p, g)
+            },
+        );
         // Loop-versioned BCE: a check whose bound is loop-invariant but not
         // statically related to the loop guard (the relation lives at the
         // call site) is deleted in a fast clone guarded by the runtime
@@ -273,7 +284,7 @@ pub fn optimize(
         // checks are versioned, and before `select_lowering`, which
         // reshapes conditions out of matcher form.
         run_pass("nir/loop_version_bce", &mut project, profiler, |p| {
-            loop_version_bce::version_loops(p)
+            loop_version_bce::version_loops(p, &mut descriptors)
         });
     }
 
@@ -311,26 +322,35 @@ pub fn optimize(
     project
 }
 
-fn run_dce(project: &mut NirPackage, profiler: &dyn SpanEmitter) {
+fn run_dce(
+    project: &mut NirPackage,
+    profiler: &dyn SpanEmitter,
+    descriptors: &mut dce::DescriptorCache,
+) {
     profiler.span_start("nir/dce");
     // Removing callers exposes unobserved globals; removing their stores can
-    // empty an initializer and make its once guard unobserved in turn.
+    // empty an initializer and make its once guard unobserved in turn. Each
+    // round is a whole-module analysis, so it carries a span of its own.
+    let mut round = 0;
     let analysis = loop {
-        let functions_before = project
-            .functions
-            .iter()
-            .filter(|f| f.borrow().body.is_some())
-            .count();
+        let span = format!("nir/dce/round {round}");
+        profiler.span_start(&span);
+        let functions_before = live_bodies(project);
         let globals_before = project.globals.len();
-        unhoist_unobserved_globals(project);
-        let analysis = analyze_dce(project);
+        let mut effects = compute_fn_effects(project);
+        if unhoist_unobserved_globals(project, descriptors, &effects) {
+            // A rewritten body only lost work, so its real summary shrank, and
+            // the stale table refuses deletions nothing has a reason to refuse.
+            effects = compute_fn_effects(project);
+        }
+        let analysis = analyze_dce(project, descriptors);
+        // Clearing an unreachable function's body leaves its entry describing
+        // the body it had, which no surviving body calls.
         remove_unreachable_functions(project, &analysis.functions);
-        remove_unreachable_globals(project, &analysis.globals);
-        let functions_after = project
-            .functions
-            .iter()
-            .filter(|f| f.borrow().body.is_some())
-            .count();
+        remove_unreachable_globals(project, &analysis.globals, &effects);
+        let functions_after = live_bodies(project);
+        profiler.span_end(&span);
+        round += 1;
         if functions_before == functions_after && globals_before == project.globals.len() {
             break analysis;
         }
@@ -343,6 +363,16 @@ fn run_dce(project: &mut NirPackage, profiler: &dyn SpanEmitter) {
     profiler.span_end("nir/dce");
 }
 
+/// How many functions still carry a body: what one DCE round is measured by,
+/// since removal clears the body and leaves the entry.
+fn live_bodies(project: &NirPackage) -> usize {
+    project
+        .functions
+        .iter()
+        .filter(|f| f.borrow().body.is_some())
+        .count()
+}
+
 /// Defensive iteration cap for the post-loop cleanup fixpoints
 /// (`cond_impl_post_promote`, `branch_prune_final`, `const_fold_post_global`).
 /// In practice these converge in a handful of rounds; the cap exists only so an
@@ -353,16 +383,24 @@ const POST_LOOP_FIXPOINT_CAP: u32 = 100;
 /// Run `step` to a fixed point under [`run_pass`] instrumentation, bounded by
 /// [`POST_LOOP_FIXPOINT_CAP`]. Returns whether any round changed the IR; emits a
 /// debug diagnostic if the cap is reached (a sign of an oscillating rewrite).
+///
+/// `step` gets a gate of the fixpoint's own: round 0 processes every function,
+/// each later round processes what the one before rewrote and its neighbours.
 fn run_bounded_fixpoint(
     name: &'static str,
     project: &mut NirPackage,
     profiler: &dyn SpanEmitter,
-    mut step: impl FnMut(&mut NirPackage) -> bool,
+    mut step: impl FnMut(&mut NirPackage, &mut FunctionGate) -> bool,
 ) -> bool {
+    let mut gate = FunctionGate::new(project);
     run_pass(name, project, profiler, |p| {
         let mut changed = false;
         for i in 0..POST_LOOP_FIXPOINT_CAP {
-            if !step(p) {
+            let round = format!("{name}/round {i}");
+            profiler.span_start(&round);
+            let stepped = step(p, &mut gate);
+            profiler.span_end(&round);
+            if !stepped {
                 break;
             }
             changed = true;
@@ -568,23 +606,19 @@ fn run_optimization_passes(
     project: &mut NirPackage,
     config: &OptConfig,
     profiler: &dyn SpanEmitter,
+    descriptor_cache: &mut dce::DescriptorCache,
 ) {
-    let mut descriptor_cache = dce::DescriptorCache::default();
     // Before anything prices a body, so `nir/inline`'s cold discount describes
     // the function it copies. Ahead of the gate too, so the call graph is built
     // over the split shape rather than growing into it.
     run_pass("nir/cold_outline", project, profiler, |p| {
-        cold_outline::outline_cold_regions(p, &mut descriptor_cache)
+        cold_outline::outline_cold_regions(p, descriptor_cache)
     });
     // Per-function dirty-set gate. Every loop pass is gate-aware:
     // a per-function pass (`gated!`) skips functions unchanged since it last ran;
     // an interprocedural pass scans all functions but reports exactly the ones
     // it touched. Both go through `&mut gate`.
     let mut gate = gate::FunctionGate::new(project);
-    // Cross-iteration cache for `const_fold`'s whole-program maps (CalleeMap /
-    // GlobalEnv / GlobalFieldEnv). Rebuilt only when the function or global count
-    // changes; see `ConstFoldCache`.
-    let mut const_fold_cache: Option<ConstFoldCache> = None;
     let mut param_spec_state = param_spec::ParamSpecState::default();
     // Held across the loop: the budget anchors on the unit as the loop found it,
     // so what the rounds add together stays bounded. See `InlineBudget`.
@@ -679,7 +713,7 @@ fn run_optimization_passes(
         gate_only!(
             "nir/value_copy_demote",
             GatedPass::ValueCopyDemote,
-            |p, g| demote_value_copies(p, g, &mut descriptor_cache)
+            |p, g| demote_value_copies(p, g, descriptor_cache)
         );
         // Single-field parameter SROA: rewrite functions whose parameter type
         // is `&S` for a single-field struct (`Box<T>` being the canonical
@@ -712,7 +746,7 @@ fn run_optimization_passes(
             &mut inline_budget,
             &mut inline_holds,
             g,
-            &mut descriptor_cache,
+            descriptor_cache,
         ));
         // Peephole engine, post-inline run. `elide_local` runs again over
         // inline's freshly dead bindings. No `MatchToSwitchRule` — the
@@ -742,9 +776,7 @@ fn run_optimization_passes(
         // collapse — where the env-free half runs in `nir/peephole`. It absorbs
         // `field_forward`, which used to alternate one statement per round and
         // left `-O3` non-convergent. No `cse` pass: hash-consing already shares.
-        gated!("nir/const_fold", GatedPass::ConstFold, |p, g| {
-            fold_constants(p, g, &mut const_fold_cache)
-        });
+        gated!("nir/const_fold", GatedPass::ConstFold, fold_constants);
         // Trivial-block / dead-statement pruning moved into the pre-inline
         // `nir/peephole` run above; the post-loop `branch_prune_final` and the
         // post-globalization `const_fold_post_global` keep their own engine
@@ -757,7 +789,12 @@ fn run_optimization_passes(
         record!(
             "nir/param_spec",
             run_pass("nir/param_spec", project, profiler, |p| {
-                param_spec::specialize_const_params(p, &mut param_spec_state, &mut gate)
+                param_spec::specialize_const_params(
+                    p,
+                    &mut param_spec_state,
+                    &mut gate,
+                    descriptor_cache,
+                )
             })
         );
         gated!("nir/licm", GatedPass::Licm, apply_licm);
@@ -827,7 +864,9 @@ fn run_optimization_passes(
         "nir/store_load_forward_post_scalarize",
         project,
         profiler,
-        |p| forward_stores_to_loads_all(p) | fold_constants_all(p) | prune_constant_branches(p),
+        |p, g| {
+            forward_stores_to_loads(p, g) | fold_constants_all(p, g) | prune_constant_branches(p, g)
+        },
     );
     // Final cleanup: flatten any `$tmpl:` labeled blocks the fixpoint
     // preserved as anchors for `tmpl_hoist`. `tmpl_hoist` has finished
@@ -836,8 +875,8 @@ fn run_optimization_passes(
     // body directly. Iterate until convergence because one flatten can
     // expose another (e.g. single-stmt Block collapse on a freshly
     // produced `Block { Expr(tail) }`).
-    run_bounded_fixpoint("nir/branch_prune_final", project, profiler, |p| {
-        prune_template_block_wrappers(p)
+    run_bounded_fixpoint("nir/branch_prune_final", project, profiler, |p, g| {
+        prune_template_block_wrappers(p, g)
     });
     // Body globalization: hoist constant, read-only aggregate `let` bindings
     // into shared immutable module globals so they build once at instantiation
@@ -857,8 +896,8 @@ fn run_optimization_passes(
     // `branch_prune` run here — re-entering the full loop is unsafe, since the
     // nullable `GlobalVarGet`s globalization emits are not meant to flow back
     // through `value_copy` / `sroa` (which is why globalization runs last).
-    run_bounded_fixpoint("nir/const_fold_post_global", project, profiler, |p| {
-        fold_constants_all(p) | prune_constant_branches(p)
+    run_bounded_fixpoint("nir/const_fold_post_global", project, profiler, |p, g| {
+        fold_constants_all(p, g) | prune_constant_branches(p, g)
     });
     // Forward the inliner's leftover single-use pure-scalar value-parameter
     // temps into their uses. Runs last, after every scalarization / globalization
@@ -873,6 +912,6 @@ fn run_optimization_passes(
     // flat `let t = array_clone(&global.field)` shape only exists here, after the
     // pre-inline value-copy elider that cannot reach it has long run.
     run_pass("nir/clone_forward", project, profiler, |p| {
-        clone_forward::forward_redundant_clones(p)
+        clone_forward::forward_redundant_clones(p, descriptor_cache)
     });
 }

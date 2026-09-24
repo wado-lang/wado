@@ -29,6 +29,16 @@ pub(super) fn unify(
     let actual_type = type_table.borrow().get(actual).clone();
 
     match (&expected_type, &actual_type) {
+        // A pack stands for a list of types, so it binds to a tuple and nothing
+        // else. Without this arm a turbofish or annotation could settle no pack.
+        (
+            ResolvedType::TypePack {
+                mapped_elem: None, ..
+            },
+            ResolvedType::GenericInstance { def, .. },
+        ) if TypeTable::is_tuple_type(type_table.borrow().def_name(*def)) => {
+            bindings.entry(expected).or_insert(actual);
+        }
         // Direct type parameter mapping.
         //
         // `or_insert` prevents later fields with self-referential types
@@ -56,15 +66,25 @@ pub(super) fn unify(
             && TypeTable::is_tuple_type(type_table.borrow().def_name(*actual_def))
             && expected_elems
                 .iter()
-                .any(|e| matches!(type_table.borrow().get(*e), ResolvedType::TypePack { .. })) =>
+                .any(|e| type_table.borrow().is_type_pack(*e)) =>
         {
-            let pack_idx = expected_elems
-                .iter()
-                .position(|e| matches!(type_table.borrow().get(*e), ResolvedType::TypePack { .. }))
-                .unwrap();
+            let packs: Vec<usize> = {
+                let table = type_table.borrow();
+                expected_elems
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, e)| table.is_type_pack(**e))
+                    .map(|(i, _)| i)
+                    .collect()
+            };
+            assert!(!packs.is_empty(), "the arm's guard found a pack");
 
-            let fixed_before = pack_idx;
-            let fixed_after = expected_elems.len() - pack_idx - 1;
+            // The elements ahead of the first pack and behind the last keep
+            // their positions whatever the packs expand to; what lies between
+            // two moves with a boundary the source never wrote.
+            let last_pack = packs[packs.len() - 1];
+            let fixed_before = packs[0];
+            let fixed_after = expected_elems.len() - last_pack - 1;
             let total_fixed = fixed_before + fixed_after;
 
             if actual_elems.len() >= total_fixed {
@@ -74,17 +94,21 @@ pub(super) fn unify(
                 for i in 0..fixed_after {
                     unify(
                         type_table,
-                        expected_elems[pack_idx + 1 + i],
+                        expected_elems[last_pack + 1 + i],
                         actual_elems[actual_elems.len() - fixed_after + i],
                         bindings,
                     );
                 }
-                let pack_elements: Vec<TypeId> =
-                    actual_elems[fixed_before..actual_elems.len() - fixed_after].to_vec();
-                let pack_tuple = type_table.borrow_mut().make_tuple(pack_elements);
-                bindings
-                    .entry(expected_elems[pack_idx])
-                    .or_insert(pack_tuple);
+                // One pack takes what the fixed elements leave over; two divide
+                // it at a boundary nothing here can find.
+                if packs.len() == 1 {
+                    let pack_elements: Vec<TypeId> =
+                        actual_elems[fixed_before..actual_elems.len() - fixed_after].to_vec();
+                    let pack_tuple = type_table.borrow_mut().make_tuple(pack_elements);
+                    bindings
+                        .entry(expected_elems[packs[0]])
+                        .or_insert(pack_tuple);
+                }
             }
         }
         // Same-named generic instance (including tuples): unify type

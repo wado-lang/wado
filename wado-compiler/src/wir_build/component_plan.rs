@@ -369,9 +369,7 @@ fn resolve_cm_export_type(
         // World bodies (`lib/wasi/**/worlds.wado`, `lib/core/kiln/worlds.wado`)
         // reference type names like `Response` / `OutputFile` directly without
         // a `use { ... } from "..."` import, so `populate_named_type_sources`
-        // leaves `source_interface = None`. `CmInterfaceRegistry::resolve_cm_source_for`
-        // already chains the `wasi:*` and `core:kiln/*` by-name lookups for
-        // exactly this case — re-use it instead of duplicating the chain.
+        // leaves `source_interface = None`, and only a by-name scan resolves it.
         let interface_fq = cm_interface_registry
             .source_interface(named)
             .or_else(|| {
@@ -381,7 +379,7 @@ fn resolve_cm_export_type(
                     })
                     .map(str::to_string)
             })
-            .or_else(|| cm_interface_registry.resolve_cm_source_for(named, None))
+            .or_else(|| cm_interface_registry.resolve_cm_source_for(named))
             .unwrap_or_else(|| {
                 panic!(
                     "world export type `{}` has no source interface — neither the \
@@ -586,8 +584,9 @@ mod tests {
         use resolver_helpers::*;
         let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
 
-        // `Request` is a resource declared in `wasi:http/types`.
-        match resolve_cm_export_type(&named("Request"), &registry, None) {
+        // `Request` is a resource declared in `wasi:http/types`, reached under
+        // the prefix its own world carries — the one production always passes.
+        match resolve_cm_export_type(&named("Request"), &registry, Some("wasi:http/")) {
             CmExportType::Named {
                 interface_fq,
                 cm_name,

@@ -23,7 +23,7 @@ Commands:
   clean [options]                     Evict derived cache state (git worktrees)
   build [options]                     Build the project's worlds from wado.toml
   compile [options] <file.wado>       Compile a single Wado source file
-  check [options] [file.wado]         Verify a source file and its Kiln generators
+  check [options] [file.wado | dir]   Verify a source file and its Kiln generators
   run [options] [file.wado]           Compile and run a Wado CLI program
   serve [options] [file.wado]         Compile and serve a Wado HTTP service
   test [options] [files or dirs...]   Run tests in Wado source files
@@ -111,15 +111,15 @@ To inspect invalid Wasm when debugging codegen bugs, skip validation:
 wado compile --no-validate --wat-to-stdout file.wado
 ```
 
-`wado check` verifies Wado sources — and re-runs their Kiln generators,
-comparing the output against the committed source — without emitting Wasm. It
-resolves dependencies exactly as `compile` / `run` do, fetching what the cache
-lacks.
+`wado check` verifies Wado sources without emitting Wasm. It runs their Kiln
+generators and resolves dependencies exactly as `compile` / `run` do, writing
+what the generators produce and fetching what the cache lacks.
 
 With no file it checks every world `wado.toml` declares, exactly the targets
-`wado build` builds. It runs at `O0` since it throws the component away, so it
-reports everything a build would and skips the optimization loop, which is most
-of a large build's time.
+`wado build` builds. Naming a directory checks that directory's project the same
+way, so a workspace member needs no `cd`. It runs at `O0` since it throws the
+component away, so it reports everything a build would and skips the
+optimization loop, which is most of a large build's time.
 
 Naming a file checks that file alone, against the world whose `[world]` entry
 names it and otherwise the library world, which requires no entry point. So a

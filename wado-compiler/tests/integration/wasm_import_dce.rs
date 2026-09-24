@@ -42,7 +42,7 @@ fn find_wat_asset_module(component_bytes: &[u8]) -> Vec<u8> {
         } = payload
         {
             let range = unchecked_range;
-            core_modules.push(component_bytes[range.start..range.end].to_vec());
+            core_modules.push(component_bytes[range.start as usize..range.end as usize].to_vec());
         }
     }
     assert!(
@@ -155,7 +155,9 @@ export fn run() with Stdout {
             unchecked_range, ..
         }) = payload
         {
-            core_modules.push(result.wasm[unchecked_range.start..unchecked_range.end].to_vec());
+            core_modules.push(
+                result.wasm[unchecked_range.start as usize..unchecked_range.end as usize].to_vec(),
+            );
         }
     }
     for module in &core_modules {
@@ -267,7 +269,7 @@ export fn run() with Stdout {
             unchecked_range, ..
         }) = payload
         {
-            let module = &result.wasm[unchecked_range.start..unchecked_range.end];
+            let module = &result.wasm[unchecked_range.start as usize..unchecked_range.end as usize];
             if module_has_export(module, "libm_sin") {
                 return module.to_vec();
             }

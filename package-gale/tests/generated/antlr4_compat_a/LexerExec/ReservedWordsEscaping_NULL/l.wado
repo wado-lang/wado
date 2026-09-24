@@ -1102,73 +1102,69 @@ impl Lexer {
 fn try_NULL(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
-    let mut alts_ok_0 = false;
-    alts_0_0: {
-        pos = alts_saved_0;
-        if pos >= chars.len() || chars[pos] != 'N' { break alts_0_0; }
-        pos += 1;
-        alts_ok_0 = true;
-    }
-    if !alts_ok_0 {
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= chars.len() || chars[pos] != 'N' { break alts_0_0; }
+            pos += 1;
+            break alts_done_0;
+        }
         alts_0_1: {
             pos = alts_saved_0;
             if pos >= chars.len() || chars[pos] != 'n' { break alts_0_1; }
             pos += 1;
-            alts_ok_0 = true;
+            break alts_done_0;
         }
+        return -1;
     }
-    if !alts_ok_0 { return -1; }
     let alts_saved_1 = pos;
-    let mut alts_ok_1 = false;
-    alts_1_0: {
-        pos = alts_saved_1;
-        if pos >= chars.len() || chars[pos] != 'U' { break alts_1_0; }
-        pos += 1;
-        alts_ok_1 = true;
-    }
-    if !alts_ok_1 {
+    alts_done_1: {
+        alts_1_0: {
+            pos = alts_saved_1;
+            if pos >= chars.len() || chars[pos] != 'U' { break alts_1_0; }
+            pos += 1;
+            break alts_done_1;
+        }
         alts_1_1: {
             pos = alts_saved_1;
             if pos >= chars.len() || chars[pos] != 'u' { break alts_1_1; }
             pos += 1;
-            alts_ok_1 = true;
+            break alts_done_1;
         }
+        return -1;
     }
-    if !alts_ok_1 { return -1; }
     let alts_saved_2 = pos;
-    let mut alts_ok_2 = false;
-    alts_2_0: {
-        pos = alts_saved_2;
-        if pos >= chars.len() || chars[pos] != 'L' { break alts_2_0; }
-        pos += 1;
-        alts_ok_2 = true;
-    }
-    if !alts_ok_2 {
+    alts_done_2: {
+        alts_2_0: {
+            pos = alts_saved_2;
+            if pos >= chars.len() || chars[pos] != 'L' { break alts_2_0; }
+            pos += 1;
+            break alts_done_2;
+        }
         alts_2_1: {
             pos = alts_saved_2;
             if pos >= chars.len() || chars[pos] != 'l' { break alts_2_1; }
             pos += 1;
-            alts_ok_2 = true;
+            break alts_done_2;
         }
+        return -1;
     }
-    if !alts_ok_2 { return -1; }
     let alts_saved_3 = pos;
-    let mut alts_ok_3 = false;
-    alts_3_0: {
-        pos = alts_saved_3;
-        if pos >= chars.len() || chars[pos] != 'L' { break alts_3_0; }
-        pos += 1;
-        alts_ok_3 = true;
-    }
-    if !alts_ok_3 {
+    alts_done_3: {
+        alts_3_0: {
+            pos = alts_saved_3;
+            if pos >= chars.len() || chars[pos] != 'L' { break alts_3_0; }
+            pos += 1;
+            break alts_done_3;
+        }
         alts_3_1: {
             pos = alts_saved_3;
             if pos >= chars.len() || chars[pos] != 'l' { break alts_3_1; }
             pos += 1;
-            alts_ok_3 = true;
+            break alts_done_3;
         }
+        return -1;
     }
-    if !alts_ok_3 { return -1; }
     return pos;
 }
 
@@ -1182,9 +1178,12 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { 'N' | 'n' } {
-            end = try_NULL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NULL; }
+        match first_char {
+            'N' | 'n' => {
+                end = try_NULL(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_NULL; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

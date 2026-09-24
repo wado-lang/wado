@@ -3,6 +3,16 @@ name: pull-request
 description: The rules for opening a PR you must read before creating or editing any pull request.
 ---
 
+## First: a question you asked is a stop
+
+If even one question you put to the user is still unanswered, stop here. Do not
+open a pull request, do not edit one, do not write a title or a description.
+End the turn by asking for the answer.
+
+A pull request never goes out with an open question behind it. "The rest is
+ready" is not a reason to proceed, and neither is a question that looks minor:
+the user decides what is minor.
+
 ## Before writing
 
 Read the branch's own changes, generated files left out:
@@ -13,9 +23,10 @@ git diff origin/main...HEAD -- $(scripts/changed-sources.sh)
 
 The title and description come from that diff, not from the session that
 produced it. `scripts/changed-sources.sh` drops what `.gitattributes` marks
-`linguist-generated`, which is where a regenerated corpus would otherwise bury
-the change the PR is actually about. Say in the description that the generated
-output was regenerated, not what moved inside it.
+`linguist-generated` or `linguist-vendored`, which is where a regenerated corpus
+or a fetched one would otherwise bury the change the PR is actually about. Say
+in the description that the generated output was regenerated, not what moved
+inside it.
 
 Revise the branch while you are there: clean up comments and docs according to
 the project rules.

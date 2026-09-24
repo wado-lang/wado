@@ -42,6 +42,7 @@ mise run update-golden-fixtures
 mise run update-golden-format-fixtures
 mise run doc-stdlib
 mise run update-rust-paths-baseline
+mise run update-wadopoet-vocabulary
 mise run format
 mise run test
 mise run test-wado
@@ -79,6 +80,30 @@ run = "scripts/check-rust-paths.sh --check"
 [tasks.check-internal-names]
 description = "Fail if a name the compiler mints for itself is spelled `__x` instead of `$x`"
 run = "node scripts/internal-names.mjs --check"
+
+[tasks.check-review-filters]
+description = "Fail if a generated or vendored path is not filtered out of code review"
+run = "scripts/check-review-filters.sh"
+
+[tasks.update-wadopoet-vocabulary]
+description = "Regenerate package-wadopoet/src/vocabulary.wado from the compiler's keywords and prelude"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+cargo build --bin wado
+mkdir -p package-wadopoet/build
+./target/debug/wado syntax --format json -o package-wadopoet/build/syntax.json
+./target/debug/wado run package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
+"""
+
+[tasks.check-wadopoet-vocabulary]
+description = "Fail if package-wadopoet/src/vocabulary.wado drifts from the compiler's keywords and prelude"
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+mise run update-wadopoet-vocabulary
+git diff --exit-code -- package-wadopoet/src/vocabulary.wado
+"""
 
 [tasks.update-rust-paths-baseline]
 description = "Record the inline paths each Rust file still carries, ratcheting the baseline down"
@@ -389,7 +414,7 @@ set -xe -o pipefail
 cargo build --bin wado --quiet
 
 CORE_MODULES="core:prelude core:cli core:collections core:fs core:base64 core:zlib \
-  core:serde core:json core:json_nsd core:args core:value core:cbor core:simd core:url core:kiln \
+  core:serde core:json core:json_nsd core:args core:value core:cbor core:protobuf core:simd core:url core:kiln \
   core:benchmark core:router core:digest core:prng core:secure_random core:uuid core:temporal core:log core:jwt \
   core:icu"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls"
@@ -510,6 +535,10 @@ curl -sL "https://raw.githubusercontent.com/SchemaStore/schemastore/master/src/s
 [tasks.sync-vendor]
 description = "Sync vendor submodules (wasmtime pinned to Cargo.lock, others to latest)"
 run = "scripts/sync-vendor.sh"
+
+[tasks.sync-onnx-data]
+description = "Copy the ONNX test data Loam's tests name out of the vendor/onnx submodule"
+run = "scripts/sync-onnx-data.sh"
 
 [tasks.update-stdlib-wasi]
 description = "Regenerate wasi stdlib from WIT files"

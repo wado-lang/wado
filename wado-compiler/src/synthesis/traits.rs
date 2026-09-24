@@ -250,6 +250,8 @@ fn make_trait_method(
         effects: Vec::new(),
         retains: vec![],
         immediates: vec![],
+        trap: None,
+        linear_memory: None,
         body: Some(body),
         span,
         local_count,
@@ -491,6 +493,9 @@ struct ReflectFieldInfo {
     type_id: TypeId,
     index: u32,
     wire_name_override: Option<String>,
+    /// `#[wire(number = N)]`, or `0` where the field carries none. Zero is the
+    /// wire format's own non-number: a field number starts at 1.
+    wire_number: i32,
     is_secret: bool,
     has_default: bool,
     /// The declared default (`f: T = expr`), reified in the struct's own
@@ -541,6 +546,7 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
                     type_id: f.type_id,
                     index: f.index,
                     wire_name_override: f.wire_name_override.clone(),
+                    wire_number: f.serde_number.unwrap_or(0) as i32,
                     is_secret: f.is_secret,
                     has_default: f.default_expr.is_some(),
                     default_expr: f.default_expr.clone(),
@@ -998,6 +1004,15 @@ fn generate_struct_members_fn(
                     ),
                     field_index: 4,
                 },
+                reflect_meta_int_field(
+                    "wire_number",
+                    u64::try_from(f.wire_number).unwrap_or_else(|_| {
+                        unreachable!("reify rejects a field number outside 1..=536870911")
+                    }),
+                    TypeTable::I32,
+                    5,
+                    span,
+                ),
             ];
             TirExpr::new(
                 TirExprKind::StructLiteral {
@@ -3487,7 +3502,7 @@ fn shape_declaring_module(tt: &TypeTable, resolved: &ResolvedType) -> Option<Mod
 fn make_type_param_ids(type_params: &[TirTypeParam], tt: &mut TypeTable) -> Vec<TypeId> {
     type_params
         .iter()
-        .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+        .map(|tp| tt.make_declared_param(tp.name.clone(), tp.index, tp.is_pack))
         .collect()
 }
 
@@ -4449,7 +4464,8 @@ fn resolve_impl_module_via_env(
         | ResolvedType::Flags { .. }
         | ResolvedType::GenericInstance { .. }
         | ResolvedType::GenericResource { .. } => tt.nominal_head(type_id).map(|(_, m)| m),
-        ResolvedType::Primitive(_) | ResolvedType::Unit => Some(ModuleSource::primitive()),
+        ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
+        ResolvedType::Unit => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
         _ => None,
     };

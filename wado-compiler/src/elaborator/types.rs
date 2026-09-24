@@ -1,6 +1,7 @@
 //! Type definitions used across the elaborator phase.
 
 use std::cell::RefCell;
+use std::ops::Deref;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -14,11 +15,10 @@ use crate::elaborator::reify::ReifyAssertCaptureContext;
 use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::elaborator::trait_query::BoundUnmet;
-use crate::elaborator::type_resolution::substitute_type_params;
 use crate::elaborator::tysys::TypeSystem;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName};
+use crate::name::{FqTraitName, FqTypeName, unalias_namespace_member};
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{AnonStructId, StructDef, TirLocal, TypeId, TypeTable};
 use crate::token::Span;
@@ -42,9 +42,12 @@ pub(crate) struct StructFieldInfo {
     /// `Some(expr)` means the field declared `= expr` and may be omitted at
     /// construction; `None` means the field is required.
     pub(super) field_defaults: Vec<Option<ast::Expr>>,
-    /// The declaration's type parameters as written. Bounds, defaults and arity
-    /// are all read from here, never from a projection of it.
-    pub(super) type_params: Vec<ast::GenericParam>,
+    /// `#[wire(number = N)]` per field, parallel to `fields`. A struct numbers
+    /// every field or none, which `WireNumbered` is the bound for.
+    pub(super) field_wire_numbers: Vec<Option<u32>>,
+    /// The declaration's real type parameters. Bounds, defaults and arity are
+    /// all read from here, never from a projection of it.
+    pub(super) type_params: RealTypeParams,
     /// `TypeIds` of the struct's own type parameters in declaration order.
     /// Used by `infer_struct_type_args` to fill phantom type params
     /// (e.g., `D` in `struct DirMap<D, V>` where D doesn't appear in any field).
@@ -147,9 +150,9 @@ pub(crate) struct VariantInfo {
     pub(crate) module_source: ModuleSource,
     /// `AstId` of the `variant` declaration (`VariantDecl::id`).
     pub(super) defined_at: AstId,
-    /// The declaration's type parameters as written, like
+    /// The declaration's real type parameters, like
     /// [`StructFieldInfo::type_params`].
-    pub(super) type_params: Vec<ast::GenericParam>,
+    pub(super) type_params: RealTypeParams,
     /// Per-case data. `pub(crate)` so the Semantics-based effect checker can
     /// follow resources nested in variant case payloads.
     pub(crate) cases: Vec<VariantCaseData>,
@@ -233,19 +236,10 @@ pub(crate) struct ResourceInfo {
 /// Generic newtype definition: `type Foo<T> = Bar<T>`
 #[derive(Clone)]
 pub(crate) struct GenericNewtypeInfo {
-    /// The declaration's type parameters as written, like
+    /// The declaration's real type parameters, like
     /// [`StructFieldInfo::type_params`].
-    pub(super) type_params: Vec<ast::GenericParam>,
+    pub(super) type_params: RealTypeParams,
     pub(super) base_type_ast: ast::Type,
-}
-
-impl GenericNewtypeInfo {
-    /// The base type with each declared parameter replaced by `args`. A generic
-    /// newtype names no single type, so every instantiation goes through this.
-    pub(super) fn base_instantiated(&self, args: &[ast::Type]) -> ast::Type {
-        let names: Vec<String> = self.type_params.iter().map(|p| p.name.clone()).collect();
-        substitute_type_params(&self.base_type_ast, &names, args)
-    }
 }
 
 /// Which kind of inherent impl member a visibility violation names.
@@ -307,6 +301,12 @@ pub enum TypeError {
     /// Unknown type name
     UnknownType {
         name: String,
+        span: Span,
+    },
+
+    /// A bound writing `Self` where no declaration binds one.
+    SelfInUnboundedBound {
+        param: String,
         span: Span,
     },
 
@@ -434,6 +434,16 @@ pub enum TypeError {
         owner: String,
         operation: String,
         detail: &'static str,
+        span: Span,
+    },
+
+    /// An attribute describing a declaration with no body, written on a trait
+    /// or interface requirement; `reason` is its schema's `on_requirement`.
+    AttributeOnRequirement {
+        owner: String,
+        operation: String,
+        attribute: &'static str,
+        reason: &'static str,
         span: Span,
     },
 
@@ -634,15 +644,14 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A static declaring type parameters of its own, on an `impl` block that
-    /// declares some too. The block's are spelled at the receiver and the
-    /// method's are not inferred from the arguments, so an unspelled one
-    /// reaches codegen unsubstituted.
-    UninferredStaticTypeArg {
+    /// A method's own type parameters that the arguments do not settle. Left
+    /// unspelled they reach codegen unsubstituted.
+    UninferredMethodTypeArgs {
         receiver: String,
         method: String,
-        /// The first of the method's own parameters, which the call must spell.
-        param: String,
+        /// The method's own parameters the call must spell, in declaration
+        /// order. Never empty.
+        params: Vec<String>,
         span: Span,
     },
 
@@ -704,10 +713,9 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A supertrait clause naming something that is not a declared trait.
-    UnknownSupertrait {
-        trait_name: String,
-        supertrait: String,
+    /// A bound naming something that is not a declared trait.
+    UnknownBound {
+        name: String,
         span: Span,
     },
 
@@ -843,6 +851,26 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A `..X` whose `X` is not a declared type pack. A scalar parameter stands
+    /// for one position, so spreading it says nothing a bare `X` does not.
+    SpreadOfNonPack {
+        name: String,
+        span: Span,
+    },
+
+    /// A turbofish spelling more than one type pack's arguments flat, which
+    /// says nothing about where one pack ends and the next begins.
+    UnspelledPackBoundary {
+        span: Span,
+    },
+
+    /// A tuple `zip` whose rows are not all the same length. Two distinct packs
+    /// are never known to be equally long, so the transpose has no answer.
+    ZipOverUnequalPacks {
+        row: String,
+        span: Span,
+    },
+
     /// An `impl` type parameter that its target and trait reference do not
     /// mention. Nothing at a use site says what such a parameter is: the
     /// receiver determines the ones the target names and no more, so the rest
@@ -889,6 +917,30 @@ pub enum TypeError {
         /// Whether the trait declares a receiver, and whether the impl does.
         expected: bool,
         found: bool,
+        span: Span,
+    },
+
+    /// An `impl` leaves one of its trait's associated types unbound. None
+    /// declares a default, so the projection reaches codegen unsubstituted.
+    ImplMissingAssocType {
+        trait_name: String,
+        assoc_name: String,
+        span: Span,
+    },
+
+    /// An `impl` binds a name its trait does not declare — a typo for one it
+    /// does, which leaves the real associated type unbound.
+    ImplAssocTypeNotInTrait {
+        trait_name: String,
+        assoc_name: String,
+        span: Span,
+    },
+
+    /// An `impl` leaves a method its trait requires undefined. A trait method
+    /// written with a body is a default and is not required.
+    ImplMissingMethod {
+        trait_name: String,
+        method_name: String,
         span: Span,
     },
 
@@ -1196,6 +1248,29 @@ pub(super) fn format_operator_not_applicable(
 }
 
 impl TypeError {
+    /// The one sentence every use site says when a type parameter goes
+    /// unanswered. `owner` names the declaration and `turbofish` shows the
+    /// spelling that would answer it, both already backticked.
+    pub(super) fn cannot_infer(
+        names: &[String],
+        owner: &str,
+        turbofish: &str,
+        span: Span,
+    ) -> TypeError {
+        let named = names
+            .iter()
+            .map(|n| format!("`{n}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        TypeError::CannotInferType {
+            message: format!(
+                "cannot infer type parameter {named} of {owner}; \
+                 add a turbofish ({turbofish}) or a type annotation"
+            ),
+            span,
+        }
+    }
+
     /// This error as its `(code, message, span)` triple, which is what
     /// `From<TypeError> for Diagnostic` fills a `Diagnostic` from.
     pub(super) fn render(&self) -> (Code, String, Span) {
@@ -1213,6 +1288,13 @@ impl TypeError {
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
+            TypeError::SelfInUnboundedBound { param, span } => (
+                Code::UnknownType,
+                format!(
+                    "`Self` in a bound on `{param}` names no implementing type here; write `{param}`"
+                ),
+                *span,
+            ),
             TypeError::RecursiveTypeParamDefault { name, span } => (
                 Code::UnknownType,
                 format!(
@@ -1258,7 +1340,7 @@ impl TypeError {
                 *span,
             ),
             TypeError::SelfByValueOnNonResource { type_name, span } => (
-                Code::TypeMismatch,
+                Code::ReceiverMismatch,
                 format!(
                     "`self` by value is only allowed on a resource; `{type_name}` is a value type — use `&self`"
                 ),
@@ -1281,12 +1363,15 @@ impl TypeError {
                 expected,
                 span,
             } => (
-                Code::TypeMismatch,
-                format!(
-                    "missing type arguments for `{name}`: expected {expected} type argument{}; \
-                     supply them (e.g. `{name}<...>`) or drop the annotation to infer from the initializer",
-                    if *expected == 1 { "" } else { "s" },
-                ),
+                Code::ArityMismatch,
+                {
+                    let name = unalias_namespace_member(name);
+                    format!(
+                        "missing type arguments for `{name}`: expected {expected} type argument{}; \
+                         supply them (e.g. `{name}<...>`) or drop the annotation to infer from the initializer",
+                        if *expected == 1 { "" } else { "s" },
+                    )
+                },
                 *span,
             ),
             TypeError::SurplusTypeArguments {
@@ -1295,11 +1380,12 @@ impl TypeError {
                 found,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::ArityMismatch,
                 {
                     // Surplus, so a declared parameter puts `found` at two or
                     // more and only the `expected == 0` wording needs "was".
                     debug_assert!(found > expected);
+                    let name = unalias_namespace_member(name);
                     if *expected == 0 {
                         format!(
                             "`{name}` takes no type arguments, but {found} {} supplied",
@@ -1349,12 +1435,12 @@ impl TypeError {
                 found,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::ArityMismatch,
                 format!("expected {expected} arguments, found {found}"),
                 *span,
             ),
             TypeError::CalleeNotCallable { type_name, span } => (
-                Code::TypeMismatch,
+                Code::NotCallable,
                 format!("expression is not callable: type '{type_name}' is not a function"),
                 *span,
             ),
@@ -1368,11 +1454,22 @@ impl TypeError {
                 format!("`{owner}::{operation}` {detail}"),
                 *span,
             ),
+            TypeError::AttributeOnRequirement {
+                owner,
+                operation,
+                attribute,
+                reason,
+                span,
+            } => (
+                Code::InvalidSyntax,
+                format!("`{owner}::{operation}` cannot declare `#[{attribute}]`: {reason}"),
+                *span,
+            ),
             TypeError::InvalidLiteral { message, span } => {
                 (Code::InvalidSyntax, message.clone(), *span)
             }
             TypeError::CannotInferType { message, span } => {
-                (Code::TypeMismatch, message.clone(), *span)
+                (Code::NeedsTypeAnnotation, message.clone(), *span)
             }
             TypeError::BareCaseNeedsContext {
                 case,
@@ -1380,7 +1477,7 @@ impl TypeError {
                 expected,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::NeedsTypeAnnotation,
                 {
                     let context = match expected {
                         Some(expected) => {
@@ -1409,7 +1506,7 @@ impl TypeError {
                 span,
                 unmet: _,
             } => (
-                Code::TypeMismatch,
+                Code::TraitBoundNotSatisfied,
                 append_reason_chain(
                     format!(
                         "type '{type_name}' does not implement trait '{trait_name}' required by bound on '{param_name}'"
@@ -1425,7 +1522,7 @@ impl TypeError {
                 reason,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitBoundNotSatisfied,
                 append_reason_chain(
                     format!(
                         "type '{type_name}' implements trait '{trait_name}' but not its supertrait '{supertrait}'"
@@ -1440,7 +1537,7 @@ impl TypeError {
                 arguments,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 append_reason_chain(
                     format!(
                         "ambiguous call to '{method}': the arguments do not select between {}; annotate an argument (e.g. '42 as i64') or pin the trait, e.g. '{}::{method}(&value, …)'",
@@ -1484,7 +1581,7 @@ impl TypeError {
                 candidates,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 format!(
                     "ambiguous operator `{op}` on '{type_name}': the right operand does not select between {}; annotate it (e.g. '42 as i64') to pin one",
                     candidates
@@ -1501,7 +1598,7 @@ impl TypeError {
                 traits,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 format!(
                     "ambiguous associated type '{param}::{assoc}': declared by {}; name the trait's own binding, e.g. '{param}: {}<{assoc} = ...>'",
                     traits
@@ -1519,7 +1616,7 @@ impl TypeError {
                 bounds,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 format!(
                     "ambiguous blanket impls of '{trait_name}' for '{receiver}': {} apply, and nothing ranks them; write 'impl {trait_name} for {receiver}'",
                     bounds
@@ -1536,7 +1633,7 @@ impl TypeError {
                 traits,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitNotImported,
                 format!(
                     "{} is not imported here: '{receiver}' has '{method}' through it; import the trait to call it",
                     traits
@@ -1552,7 +1649,7 @@ impl TypeError {
                 traits,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 format!(
                     "ambiguous method '{method}': declared by {}; name the trait, e.g. '{}::{method}(&value)'",
                     traits
@@ -1573,7 +1670,7 @@ impl TypeError {
                 method,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::ReceiverMismatch,
                 format!(
                     "'{trait_name}::{method}' takes the receiver as its first argument, e.g. '{trait_name}::{method}(&value)'"
                 ),
@@ -1586,22 +1683,36 @@ impl TypeError {
                 spelled,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::ReceiverMismatch,
                 format!(
                     "'{trait_name}::{method}' takes '{expected}'; the receiver spells its own mode: '{trait_name}::{method}({spelled}, …)'"
                 ),
                 *span,
             ),
-            TypeError::UninferredStaticTypeArg {
+            TypeError::UninferredMethodTypeArgs {
                 receiver,
                 method,
-                param,
+                params,
                 span,
             } => (
-                Code::TypeMismatch,
-                format!(
-                    "'{receiver}::{method}' declares the type parameter '{param}', which is not inferred from the arguments here; spell it: '{receiver}::{method}::<{param}>(…)'"
-                ),
+                Code::NeedsTypeAnnotation,
+                {
+                    assert!(!params.is_empty(), "the emitter found an unspelled slot");
+                    let named = params
+                        .iter()
+                        .map(|p| format!("'{p}'"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let (plural, verb, them) = if params.len() == 1 {
+                        ("", "is", "it")
+                    } else {
+                        ("s", "are", "them")
+                    };
+                    let spelled = params.join(", ");
+                    format!(
+                        "'{receiver}::{method}' declares the type parameter{plural} {named}, which {verb} not inferred from the arguments here; spell {them}: '{receiver}::{method}::<{spelled}>(…)'"
+                    )
+                },
                 *span,
             ),
             TypeError::AmbiguousStaticArgument {
@@ -1610,7 +1721,7 @@ impl TypeError {
                 candidates,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 format!(
                     "ambiguous call to '{receiver}::{method}': a literal argument admits {}; annotate the argument (e.g. '42 as i64')",
                     candidates
@@ -1628,7 +1739,7 @@ impl TypeError {
                 arg_type,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitDeclInvalid,
                 format!(
                     "'{receiver}::{method}' resolves to a blanket '{trait_name}' impl, and selecting its instantiation from the argument is not supported yet; write a concrete 'impl {trait_name}<{arg_type}> for {receiver}'"
                 ),
@@ -1639,7 +1750,7 @@ impl TypeError {
                 method,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::NeedsTypeAnnotation,
                 format!(
                     "'{trait_name}' declares type parameters of its own, so the turbofish of '{trait_name}::<…>::{method}' is its argument list and names no receiver; write the receiver out ('Receiver::{method}(…)'), where the arguments select the impl"
                 ),
@@ -1684,21 +1795,15 @@ impl TypeError {
                 actual,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitBoundNotSatisfied,
                 format!(
                     "type '{type_name}' does not satisfy the associated type '{trait_name}::{assoc_name} = {expected}': it is '{actual}'"
                 ),
                 *span,
             ),
-            TypeError::UnknownSupertrait {
-                trait_name,
-                supertrait,
-                span,
-            } => (
-                Code::TypeMismatch,
-                format!(
-                    "supertrait '{supertrait}' of trait '{trait_name}' is not a declared trait"
-                ),
+            TypeError::UnknownBound { name, span } => (
+                Code::UnknownType,
+                format!("'{name}' is not a declared trait"),
                 *span,
             ),
             TypeError::CircularSupertrait {
@@ -1706,7 +1811,7 @@ impl TypeError {
                 chain,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitDeclInvalid,
                 format!(
                     "circular supertrait: trait '{trait_name}' is its own supertrait via {}",
                     chain.join(" -> ")
@@ -1719,7 +1824,7 @@ impl TypeError {
                 reason,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitDeclInvalid,
                 append_reason_chain(
                     format!(
                         "cannot derive `{trait_name}` for `{type_name}`: not every field/case implements `{trait_name}`"
@@ -1758,7 +1863,7 @@ impl TypeError {
                 field_name,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::StructFieldMismatch,
                 format!("missing field '{field_name}' in struct literal '{struct_name}'"),
                 *span,
             ),
@@ -1767,22 +1872,22 @@ impl TypeError {
                 field_name,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::StructFieldMismatch,
                 format!("struct '{struct_name}' has no field '{field_name}'"),
                 *span,
             ),
             TypeError::DuplicateField { name, span } => (
-                Code::DuplicateDefinition,
+                Code::StructFieldMismatch,
                 format!("duplicate field '{name}' in struct literal"),
                 *span,
             ),
             TypeError::MissingReturn { return_type, span } => (
-                Code::TypeMismatch,
+                Code::MissingReturn,
                 format!("function with return type '{return_type}' must use explicit `return`"),
                 *span,
             ),
             TypeError::MissingTaskReturn { function, span } => (
-                Code::TypeMismatch,
+                Code::MissingReturn,
                 format!(
                     "`export async fn {function}` never delivers its result; \
                      add a `task return` where the result is ready"
@@ -1790,7 +1895,7 @@ impl TypeError {
                 *span,
             ),
             TypeError::LetElseMustDiverge { span } => (
-                Code::TypeMismatch,
+                Code::MissingReturn,
                 "the `else` block of a `let ... else` must diverge (`return`, `break`, \
                  `continue`, `panic`, …)"
                     .to_string(),
@@ -1858,8 +1963,27 @@ impl TypeError {
                 "a variadic impl target must be the bare `[..T]`: a pack alongside other elements (`[i32, ..T]`) or under a reference (`&[..T]`) is not supported yet".to_string(),
                 *span,
             ),
-            TypeError::UnconstrainedImplTypeParam { param_name, span } => (
+            TypeError::SpreadOfNonPack { name, span } => (
                 Code::TypeMismatch,
+                format!(
+                    "`..{name}` spreads `{name}`, which is not a type pack: declare it as `..{name}` in the type parameter list, or write `{name}` here"
+                ),
+                *span,
+            ),
+            TypeError::ZipOverUnequalPacks { row, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "`zip` transposes its rows position by position, so every row must be the same length; `{row}` is not the length of the first. Two type packs are never known to be equally long, so `zip` over them is not supported"
+                ),
+                *span,
+            ),
+            TypeError::UnspelledPackBoundary { span } => (
+                Code::TypeMismatch,
+                "with more than one type pack, a flat list of type arguments does not say where one pack ends; spell each type pack as a tuple, as in `f::<[i32], [bool]>(...)`".to_string(),
+                *span,
+            ),
+            TypeError::UnconstrainedImplTypeParam { param_name, span } => (
+                Code::TraitDeclInvalid,
                 format!(
                     "the type parameter `{param_name}` is not constrained by the impl target or the trait reference"
                 ),
@@ -1890,7 +2014,7 @@ impl TypeError {
                 found,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::ArityMismatch,
                 format!(
                     "method `{method_name}` takes {found} {}parameter(s) but `{trait_name}` declares {expected}",
                     list.prefix()
@@ -1904,7 +2028,7 @@ impl TypeError {
                 found,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::ReceiverMismatch,
                 {
                     let receiver = |has: bool| if has { "a receiver" } else { "no receiver" };
                     format!(
@@ -1913,6 +2037,33 @@ impl TypeError {
                         receiver(*expected)
                     )
                 },
+                *span,
+            ),
+            TypeError::ImplMissingAssocType {
+                trait_name,
+                assoc_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("impl of trait '{trait_name}' does not bind associated type '{assoc_name}'"),
+                *span,
+            ),
+            TypeError::ImplAssocTypeNotInTrait {
+                trait_name,
+                assoc_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("trait '{trait_name}' declares no associated type '{assoc_name}'"),
+                *span,
+            ),
+            TypeError::ImplMissingMethod {
+                trait_name,
+                method_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("impl of trait '{trait_name}' does not define method '{method_name}'"),
                 *span,
             ),
             TypeError::UnknownTraitImpl { name, span } => (
@@ -1990,7 +2141,7 @@ impl TypeError {
                 hint,
                 span,
             } => (
-                Code::UndefinedVariable,
+                Code::MethodNotFound,
                 if hint.is_empty() {
                     format!("no method '{method_name}' found on type '{type_name}'")
                 } else {
@@ -2006,7 +2157,7 @@ impl TypeError {
                 trait_name,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitBoundNotSatisfied,
                 format!("type '{type_name}' does not implement {trait_name}"),
                 *span,
             ),
@@ -2015,7 +2166,7 @@ impl TypeError {
                 count,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 format!(
                     "literal is ambiguous: '{type_name}' has {count} `From<Array<…>>` impls that \
                      could build it — write `{type_name}::from(…)` to choose one"
@@ -2043,7 +2194,7 @@ impl TypeError {
                     ""
                 };
                 (
-                    Code::TypeMismatch,
+                    Code::TraitDeclInvalid,
                     format!(
                         "cannot synthesize trait `{trait_name}` for `{type_name}`: `impl Trait for Type;` is supported for `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, and `Inspect`.{hint}"
                     ),
@@ -2055,7 +2206,7 @@ impl TypeError {
                 param,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitDeclInvalid,
                 format!(
                     "default value for parameter '{param}' in method '{method}' is not allowed; defaults belong to the trait declaration"
                 ),
@@ -2066,21 +2217,21 @@ impl TypeError {
                 param,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitDeclInvalid,
                 format!(
                     "default for type parameter '{param}' in method '{method}' is not allowed; defaults belong to the trait declaration"
                 ),
                 *span,
             ),
             TypeError::DefaultInClosure { param, span } => (
-                Code::TypeMismatch,
+                Code::ClosureInvalid,
                 format!(
                     "default value for parameter '{param}' is not allowed in closure; closures erase defaults when assigned to a function type"
                 ),
                 *span,
             ),
             TypeError::ClosureMutBindingRequired { name, span } => (
-                Code::TypeMismatch,
+                Code::ClosureInvalid,
                 format!(
                     "cannot call `fn mut` closure '{name}' through a non-`mut` binding; use `let mut {name}`"
                 ),
@@ -2091,7 +2242,7 @@ impl TypeError {
                 position,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::CmBoundaryType,
                 format!(
                     "closure type in {position} of `{function}` is not allowed: closures cannot cross the Component Model boundary"
                 ),
@@ -2102,7 +2253,7 @@ impl TypeError {
                 position,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::CmBoundaryType,
                 format!(
                     "slice type in {position} of `{function}` is not allowed: a slice is a reference view with no Component Model representation; use `List<T>` or `Array<T>`"
                 ),
@@ -2113,7 +2264,7 @@ impl TypeError {
                 param,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::CmBoundaryType,
                 format!(
                     "default value for parameter '{param}' in export fn '{function}' is not allowed; the Component Model ABI requires every parameter at the boundary"
                 ),
@@ -2152,14 +2303,14 @@ impl TypeError {
                 interface_name,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::EffectHandlerInvalid,
                 format!(
                     "handler value of type '{type_name}' does not implement interface '{interface_name}'"
                 ),
                 *span,
             ),
             TypeError::BundledHandlerImplementsNoEffect { type_name, span } => (
-                Code::TypeMismatch,
+                Code::EffectHandlerInvalid,
                 format!(
                     "handler value of type '{type_name}' does not implement any effect; use `with E => h do` instead"
                 ),
@@ -2202,7 +2353,7 @@ impl TypeError {
                 trait_name,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 format!(
                     "ambiguous method '{method}': declared by resource '{resource}' and by trait '{trait_name}'; name one, e.g. '{resource}::{method}(&value)' or '{trait_name}::{method}(&value)'"
                 ),
@@ -2431,6 +2582,13 @@ pub(super) struct LabeledBlockTarget {
     pub(super) expected_type: Option<TypeId>,
 }
 
+/// A position whose pattern must match every value it is given.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum BindingSite {
+    Let,
+    ForOf,
+}
+
 /// Function context during resolution with scope tracking
 pub(super) struct FunctionContext {
     /// Stack of scopes (each scope maps name -> `LocalVar`)
@@ -2494,6 +2652,9 @@ pub(super) struct FunctionContext {
     /// `update` expression runs before the next iteration. Empty outside
     /// a C-style for body.
     pub(super) for_continue_labels: Vec<String>,
+    /// The binding site whose pattern is being resolved, when it must match
+    /// every value. `None` inside `match`, `if let` and `while let`.
+    pub(super) irrefutable_site: Option<BindingSite>,
     /// Power-assert capture side-channel. `Some` only while
     /// [`Elaborator::desugar_assert`] is resolving an assert condition;
     /// the [`Elaborator::resolve_expr`] entry consults it to extract
@@ -2571,6 +2732,7 @@ impl FunctionContext {
             in_handler_method: false,
             next_internal: 0,
             for_continue_labels: Vec::new(),
+            irrefutable_site: None,
             assert_capture_ctx: None,
             reify_assert_capture_ctx: None,
             compound_hoist_types: IndexMap::default(),
@@ -2654,6 +2816,7 @@ impl FunctionContext {
             in_handler_method: false,
             next_internal: 0,
             for_continue_labels: Vec::new(),
+            irrefutable_site: None,
             assert_capture_ctx: None,
             reify_assert_capture_ctx: None,
             compound_hoist_types: IndexMap::default(),
@@ -3016,6 +3179,75 @@ impl TraitMethodMatch {
     }
 }
 
+/// One type-parameter slot as a declaration-level resolver sees it: the name
+/// filling it and the bounds that say what `T::Assoc` means.
+#[derive(Debug, Clone, Default)]
+pub(super) struct ParamSlot {
+    pub(super) name: String,
+    pub(super) bounds: Vec<ast::TraitBound>,
+    pub(super) is_pack: bool,
+}
+
+impl From<&ast::GenericParam> for ParamSlot {
+    fn from(param: &ast::GenericParam) -> Self {
+        Self {
+            name: param.name.clone(),
+            bounds: param.bounds.clone(),
+            is_pack: param.is_pack,
+        }
+    }
+}
+
+/// A declaration's type parameters as the dense type-argument space holds
+/// them: a position here is the index an argument fills.
+#[derive(Clone, Default)]
+pub(crate) struct RealTypeParams(Vec<ast::GenericParam>);
+
+impl RealTypeParams {
+    // An effect or `fn`-bound parameter holds no position in that space, so
+    // counting one leaves a slot no argument can fill (`register_generic_params`).
+    pub(super) fn of(params: &[ast::GenericParam]) -> Self {
+        Self(Self::borrowed(params).into_iter().cloned().collect())
+    }
+
+    /// The same parameters borrowed, for a caller that only counts them or
+    /// looks for the pack among them.
+    pub(super) fn borrowed(params: &[ast::GenericParam]) -> Vec<&ast::GenericParam> {
+        params
+            .iter()
+            .filter(|param| param.is_real_type_param())
+            .collect()
+    }
+}
+
+impl Deref for RealTypeParams {
+    type Target = [ast::GenericParam];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl ParamSlot {
+    /// A declaration's real parameters as slots, in declaration order.
+    pub(super) fn list(params: &[ast::GenericParam]) -> Vec<Self> {
+        RealTypeParams::borrowed(params)
+            .into_iter()
+            .map(Self::from)
+            .collect()
+    }
+
+    /// An `impl` head's parameters as slots, [`Self::list`] minus the effect
+    /// parameters, which are no type. The target says where each one sits.
+    pub(super) fn impl_list(params: &[ast::GenericParam]) -> Vec<Self> {
+        params
+            .iter()
+            .filter(|param| param.fills_impl_slot())
+            .map(Self::from)
+            .collect()
+    }
+}
+
 /// Read-only view resolving a type name from a module's perspective without
 /// cloning per-module maps. Precedence, highest first: local additions found
 /// during resolution, the current module's own definitions, then its imports
@@ -3118,8 +3350,8 @@ impl<'a> TypeLookup<'a> {
         (!info.type_param_type_ids.is_empty()).then_some(&*info.type_param_type_ids)
     }
 
-    /// `def`'s type parameters exactly as the declaration wrote them, for the
-    /// one declaration of the three kinds that takes any.
+    /// `def`'s real type parameters, for the one declaration of the three kinds
+    /// that takes any.
     ///
     /// The one source for its bounds, defaults and arity, so a consumer cannot
     /// answer from a projection that dropped a bound, a pack or a default.
@@ -3156,27 +3388,20 @@ impl<'a> TypeLookup<'a> {
     pub(super) fn type_args_with_defaults(
         &self,
         def: DefId,
-        args: &[ast::Type],
-    ) -> Option<Vec<ast::Type>> {
+        given: usize,
+    ) -> Option<(Vec<ParamSlot>, Vec<ast::Type>)> {
         let params = self.declared_generic_params(def)?;
-        if args.len() >= params.len() {
+        if given >= params.len() {
             return None;
         }
         if !self.type_param_defaults_terminate(def) {
             return None;
         }
-        let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-        let mut filled = args.to_vec();
-        for param in &params[args.len()..] {
-            let default = param.default.clone()?;
-            let settled = filled.clone();
-            filled.push(substitute_type_params(
-                &default,
-                &names[..settled.len()],
-                &settled,
-            ));
-        }
-        Some(filled)
+        let defaults: Option<Vec<ast::Type>> = params[given..]
+            .iter()
+            .map(|param| param.default.clone())
+            .collect();
+        Some((params.iter().map(ParamSlot::from).collect(), defaults?))
     }
 
     /// Whether expanding `def`'s declared defaults reaches a fixpoint.
@@ -3276,6 +3501,19 @@ impl<'a> TypeLookup<'a> {
             .copied()
     }
 
+    /// Which of `bounds` declares `assoc_name`. `None` where the declaration
+    /// indexes are absent, since no bound can be asked what it declares then.
+    pub(super) fn bound_declaring_assoc_type(
+        &self,
+        bounds: &[ast::TraitBound],
+        assoc_name: &str,
+    ) -> Option<DefId> {
+        self.decls?
+            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
+                self.declaration_at(Some(bound.id), &bound.name)
+            })
+    }
+
     /// The declaration a type reference names.
     ///
     /// The site decides: the walk answered for it once, in the module that
@@ -3288,7 +3526,9 @@ impl<'a> TypeLookup<'a> {
     pub(super) fn declaration_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
         match site.and_then(|site| self.resolutions.walked(site)) {
             Some(Resolution::Def(def)) => Some(def),
-            Some(Resolution::Binder(_)) => None,
+            // Neither is a declaration, and a projection's bare member name
+            // would reach whatever else this module calls that.
+            Some(Resolution::Binder(_) | Resolution::Projection(_)) => None,
             Some(Resolution::Unresolved) | None => self.declaration(name),
         }
     }

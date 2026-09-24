@@ -205,6 +205,9 @@ serde wire form — `Instant` and `ZonedDateTime` under CBOR's date/time tag 0
 Deserialization of the two instant-bearing types also accepts an epoch-seconds
 number (tag 1 / JSON number), read as UTC. `FromStr` reads the same spellings.
 
+Parsing is `FromStr` and nothing else. Each `impl` documents the spelling it
+accepts, and the module's synopsis shows the call.
+
 `Instant` additionally carries RFC 7231 IMF-fixdate, the form an HTTP `Date`,
 `Expires`, or `Last-Modified` header takes. It renders that form and reads all
 three a recipient must accept: IMF-fixdate, the obsolete RFC 850 (whose
@@ -316,10 +319,9 @@ Temporal's canonical `ZonedDateTime.toString()` is
 `2023-11-14T22:13:20+09:00[Asia/Tokyo]` — RFC 9557 (IXDTF), an offset plus a
 bracketed zone identifier. `core:temporal` neither emits nor parses the bracket,
 and `parse_rfc3339` collapses the zone to the offset string it saw, so zone
-identity does not survive a round trip. Closing it takes the bracket in both
-directions plus Temporal's rule for reconciling a stored offset that disagrees
-with what the named zone says at that instant — which needs the zone database
-above, so this gap is downstream of it.
+identity does not survive a round trip. Reconciling a stored offset against what
+the named zone says at that instant needs the zone database above, so this gap is
+downstream of it.
 
 ### `relativeTo` for calendar-unit durations
 
@@ -327,9 +329,9 @@ above, so this gap is downstream of it.
 months, or weeks, because those have no length without a calendar position, and
 `Duration` has no ordering at all for the same reason — `Temporal.Duration`'s
 `compare` also demands an anchor. Temporal's answer is a `relativeTo` argument
-that turns the calendar components into exact time before measuring. Closing it
-takes that parameter on `total` and `round`, a `compare` that takes it too, and
-a decision about what it accepts — a `PlainDate`, a `ZonedDateTime`, or either.
+that turns the calendar components into exact time before measuring. Wado has no
+counterpart, and what an anchor would accept is undecided: a `PlainDate`, a
+`ZonedDateTime`, or either.
 
 ### The system time zone
 

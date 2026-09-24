@@ -1,0 +1,42 @@
+// A name one trait reserves and another implements is that method: the
+// reservation answers only where nothing else does, so it adds no ambiguity.
+
+trait Old with () {
+    #[unavailable("use `New`")]
+    fn foo(&self);
+
+    #[unavailable("use `New`")]
+    fn make();
+}
+
+trait New with () {
+    fn foo(&self) -> i32 {
+        return 1;
+    }
+
+    fn make() -> i32 {
+        return 2;
+    }
+}
+
+struct X {
+    v: i32,
+}
+
+impl Old for X {}
+
+impl New for X {}
+
+fn via<T: Old + New>(t: &T) -> i32 {
+    return t.foo() + T::make();
+}
+
+export fn run() {
+    let x = X { v: 0 };
+    assert x.foo() == 1;
+    assert X::make() == 2;
+    assert via(&x) == 3;
+}
+
+__DATA__
+{}

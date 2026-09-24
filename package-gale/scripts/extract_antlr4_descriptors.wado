@@ -33,7 +33,10 @@ use {
     Filesize,
 } from "wasi:filesystem";
 use { ErrorCode } from "wasi:filesystem/types.wado";
-use { CodeWriter } from "../src/wadopoet.wado";
+// Only the path functions: the I/O here is on subdirectory descriptors, which
+// `core:fs` does not reach.
+use fs from "core:fs";
+use { CodeWriter } from "lib:wadopoet";
 use { expand_action_templates } from "../src/g4/action_templates.wado";
 use { to_snake_case } from "../src/ident.wado";
 
@@ -1588,8 +1591,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
         let mut category_errors = 0;
 
         for let txt_name of &txt_files {
-            // Strip ".txt" → descriptor name.
-            let base = txt_name.substr_bytes(0, txt_name.len() - 4);
+            let base = fs::file_stem(txt_name).unwrap().to_string();
             let key = `${*category}/${base}`;
 
             let triage = triage_map.lookup(&key);
@@ -1995,9 +1997,7 @@ fn write_oracle_pending_files<S: AsStrSlice, S1: AsStrSlice>(
     start_filename: S1,
     parsed: &ParsedDescriptor,
 ) -> Result<(), ErrorCode> {
-    if let Err(e) = write_file_string(dir, input_filename, &parsed.input) {
-        return Result::Err(e);
-    }
+    write_file_string(dir, input_filename, &parsed.input)?;
     if let Err(e) = write_file_string(dir, start_filename, &parsed.start) {
         let _ = remove_file(dir, input_filename);
         return Result::Err(e);
@@ -2062,8 +2062,7 @@ fn finalize_stage_b_oracle(root: &Descriptor) with (Stdout, Stderr, Environment,
         let input_files = list_files_with_suffix(&pending_cat, ".input");
         let mut chunks: List<TestChunk> = [];
         for let input_filename of &input_files {
-            // Strip ".input" (6 chars) to get the descriptor base name.
-            let base = input_filename.substr_bytes(0, input_filename.len() - 6);
+            let base = fs::file_stem(input_filename).unwrap().to_string();
             let start_filename = `${base}.start`;
             let expected_filename = `${base}.expected`;
             let key = `${category}/${base}`;

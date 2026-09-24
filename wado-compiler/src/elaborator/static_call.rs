@@ -202,7 +202,7 @@ struct Candidate {
 
 /// Narrow to the candidates the rule prefers, where any of them qualifies.
 /// A rule that no candidate satisfies decides nothing and leaves the field.
-fn prefer(candidates: &mut Vec<Candidate>, preferred: impl Fn(&Candidate) -> bool) {
+fn prefer<C>(candidates: &mut Vec<C>, preferred: impl Fn(&C) -> bool) {
     if candidates.iter().any(&preferred) {
         candidates.retain(&preferred);
     }
@@ -581,6 +581,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A receiver-less declaration answers before a receiver-taking one, so
         // `Type::method(x)` is a static's call before it is a UFCS receiver.
         prefer(&mut candidates, |c| c.kind == CandidateKind::Static);
+        // A reserved name answers only where no method of its kind does, so
+        // this runs once the kinds are settled.
+        prefer(&mut candidates, |c| {
+            !self.tysys.unavailable.contains_key(&c.method_id)
+        });
         // A block naming the receiver answers before a blanket covering it
         // through a bound, so a blanket is no alternative to report against.
         // Before the ambiguity rule, or the trait a blanket names would be
@@ -686,7 +691,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .trait_env
                     .fq_trait_of_impl(header, &self.tysys.resolutions)?;
-                let trait_decl = self.tysys.signatures.impl_sig(impl_def)?.trait_decl?;
+                let trait_decl = self.tysys.signatures.impl_trait(impl_def)?;
                 let build = |method_id, kind, origin, selector| Candidate {
                     supply: Some(TraitSupply {
                         impl_def,
@@ -737,7 +742,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter_map(|blanket| {
                 let header = self.tysys.trait_env.impl_headers.get(&blanket.def)?;
                 let method_id = header.methods.iter().find(|m| m.name == method_name)?.def;
-                let trait_decl = self.tysys.signatures.impl_sig(blanket.def)?.trait_decl?;
+                let trait_decl = self.tysys.signatures.impl_trait(blanket.def)?;
                 Some(Candidate {
                     supply: Some(TraitSupply {
                         impl_def: blanket.def,
@@ -822,7 +827,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .signatures
             .trait_sig(trait_decl)?
             .method(method_name)?;
-        declared.default_body.as_ref()?;
+        if !declared.is_inherited() {
+            return None;
+        }
         let frame: Vec<TypeId> = std::iter::once(receiver_type.unwrap_or(TypeTable::UNKNOWN))
             .chain(self.trait_args_of_impl(impl_def))
             .collect();

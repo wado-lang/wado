@@ -3,7 +3,7 @@
 //! packing encodes smaller than inline operands, and splitting one past the
 //! threshold into `array.new_default` + sets.
 
-use crate::tir::PrimitiveType;
+use crate::primitive::PrimitiveType;
 use crate::wir::{WirData, WirInstr, WirPackage, WirType, WirTypeDef};
 use crate::wir_optimize::util::is_same_free_read;
 use crate::wir_visitor::WirMutVisitor;
@@ -184,13 +184,16 @@ fn try_pack_constant_elements(element_type: &WirType, elements: &[WirInstr]) -> 
 /// `PrimitiveType`; an enum or flags element is four bytes, like the `u32` it
 /// lowers to.
 pub(crate) fn primitive_byte_width(prim: PrimitiveType) -> Option<usize> {
-    use crate::tir::PrimitiveType as P;
+    use crate::primitive::PrimitiveType as P;
     Some(match prim {
         P::I8 | P::U8 => 1,
-        P::I16 | P::U16 => 2,
+        // A half is its `u16` in a data segment, as it is everywhere else.
+        P::I16 | P::U16 | P::F16 | P::Bf16 => 2,
         P::I32 | P::U32 | P::F32 => 4,
         P::I64 | P::U64 | P::F64 => 8,
-        _ => return None,
+        // `bool` and `char` are packed by the caller, which knows the
+        // discriminant width; `v128` has no data-segment element form.
+        P::Bool | P::Char | P::V128 => return None,
     })
 }
 

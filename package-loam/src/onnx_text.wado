@@ -1,0 +1,296 @@
+//! The ONNX textual format, read off the parse tree into `graph.wado`'s types.
+
+use onnx from "../grammar/Onnx.g4"
+    with {
+        generator: { module: "../../package-gale/src/generator.wado" },
+    };
+
+use { Attr, Dim, Graph, Node, Rank, ValueInfo, parameters } from "./graph.wado";
+
+/// Read a graph out of the ONNX textual format. A syntax error comes back as
+/// the first diagnostic; anything the reader does not cover names itself.
+pub fn read<S: AsStrSlice>(source: S) -> Result<Graph, String> {
+    let result = onnx::parse(source);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        return Result::Err(`${d.line}:${d.col}: ${d.message}`);
+    }
+    let s = &result.cst;
+    let toks = &result.tokens;
+    let Some(graph) = first_child_of_kind(s, 0, onnx::RK_GRAPH) else {
+        return Result::Err("a model without a graph");
+    };
+    return read_graph(s, toks, graph);
+}
+
+fn read_graph(s: &onnx::CstStore, toks: &onnx::TokenStream, graph: i32) -> Result<Graph, String> {
+    let Some(name_node) = first_child_of_kind(s, graph, onnx::RK_QUOTABLE_ID) else {
+        return Result::Err("a graph without a name");
+    };
+    let mut inputs: List<ValueInfo> = [];
+    let mut outputs: List<ValueInfo> = [];
+    let mut initializers: List<ValueInfo> = [];
+    let mut nodes: List<Node> = [];
+    for let c of children(s, graph) {
+        if !s.is_node(c) {
+            continue;
+        }
+        let kind = s.kind(c);
+        if kind == onnx::RK_INPUTS {
+            inputs = read_value_infos(s, toks, c)?;
+        } else if kind == onnx::RK_OUTPUTS {
+            outputs = read_value_infos(s, toks, c)?;
+        } else if kind == onnx::RK_INITIALIZERS {
+            initializers = read_value_infos(s, toks, c)?;
+        } else if kind == onnx::RK_NODES {
+            nodes = read_nodes(s, toks, c)?;
+        }
+    }
+    return Result::Ok(Graph {
+        name: quotable_text(s, toks, name_node),
+        inputs: parameters(inputs, &initializers),
+        outputs,
+        initializers,
+        nodes,
+    });
+}
+
+fn read_value_infos(s: &onnx::CstStore, toks: &onnx::TokenStream, list: i32) -> Result<List<ValueInfo>, String> {
+    let mut out: List<ValueInfo> = [];
+    for let c of children_of_kind(s, list, onnx::RK_VALUE_INFO) {
+        out.push(read_value_info(s, toks, c)?);
+    }
+    return Result::Ok(out);
+}
+
+fn read_value_info(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32) -> Result<ValueInfo, String> {
+    let Some(type_node) = first_child_of_kind(s, vi, onnx::RK_TYPE) else {
+        return Result::Err("a value without a type");
+    };
+    let Some(name_node) = first_child_of_kind(s, vi, onnx::RK_QUOTABLE_ID) else {
+        return Result::Err("a value without a name");
+    };
+    let name = quotable_text(s, toks, name_node);
+    // `seq(...)` / `map(...)` parse as an `ID (` that no `tensorType` follows.
+    let Some(tensor) = first_child_of_kind(s, type_node, onnx::RK_TENSOR_TYPE) else {
+        return Result::Err(`${name}: only a tensor type is read, not a sequence or a map`);
+    };
+    // Loam takes its weights from the checkpoint the invocation names, so
+    // dropping this would leave a tensor whose data came from nowhere.
+    if has_external_data(s, vi) {
+        return Result::Err(
+            `${name}: an initializer whose data lives in another file is not read`,
+        );
+    }
+    let [dtype, rank] = read_tensor_type(s, toks, tensor);
+    return Result::Ok(ValueInfo { name, dtype, rank });
+}
+
+/// Whether an initializer's data is a `["location": ...]` list naming a file,
+/// rather than inline values or the checkpoint.
+fn has_external_data(s: &onnx::CstStore, vi: i32) -> bool {
+    let Some(data) = first_child_of_kind(s, vi, onnx::RK_CONSTANT_DATA) else {
+        return false;
+    };
+    return first_child_of_kind(s, data, onnx::RK_EXTERNAL_DATA) matches { Some(_) };
+}
+
+fn read_tensor_type(s: &onnx::CstStore, toks: &onnx::TokenStream, tensor: i32) -> [String, Rank] {
+    let mut dtype = "";
+    let mut saw_bracket = false;
+    let mut rank = Rank::Scalar;
+    for let c of children(s, tensor) {
+        if s.is_token(c) {
+            let text = toks.token_text(s.token_index(c));
+            if text == "[" {
+                saw_bracket = true;
+            } else if text != "]" {
+                dtype = text;
+            }
+        } else if s.is_node(c) {
+            rank = Rank::Dims(read_dims(s, toks, c));
+        }
+    }
+    if saw_bracket && rank matches { Scalar } {
+        rank = Rank::Unranked;
+    }
+    return [dtype, rank];
+}
+
+fn read_dims(s: &onnx::CstStore, toks: &onnx::TokenStream, dims: i32) -> List<Dim> {
+    let mut out: List<Dim> = [];
+    for let c of children_of_kind(s, dims, onnx::RK_DIM) {
+        out.push(read_dim(s, toks, c));
+    }
+    return out;
+}
+
+fn read_dim(s: &onnx::CstStore, toks: &onnx::TokenStream, dim: i32) -> Dim {
+    for let c of children(s, dim) {
+        if s.is_node(c) {
+            return Dim::Symbol(quotable_text(s, toks, c));
+        }
+        if s.is_token(c) {
+            let text = toks.token_text(s.token_index(c));
+            if text == "?" {
+                return Dim::Unknown;
+            }
+            return match i32::from_str(&text) {
+                Ok(n) => Dim::Static(n),
+                Err(_) => Dim::Symbol(text),
+            };
+        }
+    }
+    panic("dim: no child");
+}
+
+fn read_nodes(s: &onnx::CstStore, toks: &onnx::TokenStream, nodes: i32) -> Result<List<Node>, String> {
+    let mut out: List<Node> = [];
+    for let c of children_of_kind(s, nodes, onnx::RK_NODE) {
+        out.push(read_node(s, toks, c)?);
+    }
+    return Result::Ok(out);
+}
+
+fn read_node(s: &onnx::CstStore, toks: &onnx::TokenStream, node: i32) -> Result<Node, String> {
+    let mut op = "";
+    let mut outputs: List<String> = [];
+    let mut inputs: List<String> = [];
+    let mut attrs: List<Attr> = [];
+    for let c of children(s, node) {
+        if !s.is_node(c) {
+            continue;
+        }
+        let kind = s.kind(c);
+        if kind == onnx::RK_QUALIFIED_ID {
+            op = joined_text(s, toks, c);
+        } else if kind == onnx::RK_OUTPUT_NAMES {
+            outputs = read_names(s, toks, c);
+        } else if kind == onnx::RK_INPUT_NAMES {
+            inputs = read_names(s, toks, c);
+        } else if kind == onnx::RK_ATTRS {
+            attrs = read_attrs(s, toks, c)?;
+        }
+    }
+    return Result::Ok(Node { op, outputs, inputs, attrs });
+}
+
+fn read_names(s: &onnx::CstStore, toks: &onnx::TokenStream, list: i32) -> List<String> {
+    let mut out: List<String> = [];
+    for let c of children_of_kind(s, list, onnx::RK_QUOTABLE_ID) {
+        out.push(quotable_text(s, toks, c));
+    }
+    return out;
+}
+
+fn read_attrs(s: &onnx::CstStore, toks: &onnx::TokenStream, list: i32) -> Result<List<Attr>, String> {
+    let mut out: List<Attr> = [];
+    for let c of children_of_kind(s, list, onnx::RK_ATTR) {
+        out.push(read_attr(s, toks, c)?);
+    }
+    return Result::Ok(out);
+}
+
+fn read_attr(s: &onnx::CstStore, toks: &onnx::TokenStream, attr: i32) -> Result<Attr, String> {
+    let name = first_token_text(s, toks, attr);
+    let Some(value) = first_child_of_kind(s, attr, onnx::RK_ATTR_VALUE) else {
+        return Result::Err(`${name}: an attribute without a value`);
+    };
+    if let Some(list) = first_child_of_kind(s, value, onnx::RK_ATTR_VALUE_LIST) {
+        let mut values: List<String> = [];
+        for let c of children_of_kind(s, list, onnx::RK_SINGLE_ATTR_VALUE) {
+            values.push(single_attr_text(s, toks, c, &name)?);
+        }
+        return Result::Ok(Attr { name, values, is_list: true });
+    }
+    let Some(single) = first_child_of_kind(s, value, onnx::RK_SINGLE_ATTR_VALUE) else {
+        return Result::Err(`${name}: an attribute without a value`);
+    };
+    let text = single_attr_text(s, toks, single, &name)?;
+    return Result::Ok(Attr {
+        name,
+        values: [text],
+        is_list: false,
+    });
+}
+
+fn single_attr_text(
+    s: &onnx::CstStore,
+    toks: &onnx::TokenStream,
+    single: i32,
+    attr_name: &String,
+) -> Result<String, String> {
+    for let c of children(s, single) {
+        if s.is_token(c) {
+            return Result::Ok(unquote(toks.token_text(s.token_index(c))));
+        }
+        if s.is_node(c) {
+            return Result::Err(`${attr_name}: an inline tensor or subgraph attribute is not read`);
+        }
+    }
+    panic("singleAttrValue: no child");
+}
+
+/// A `quotableId`'s text, with a quoted name's quotes taken off. An exporter's
+/// names carry `/` and `.`, so most of them arrive quoted.
+fn quotable_text(s: &onnx::CstStore, toks: &onnx::TokenStream, node: i32) -> String {
+    return unquote(first_token_text(s, toks, node));
+}
+
+/// The first terminal under a node. Every caller names a rule whose first
+/// element is one, so a node with none is a grammar that moved under the
+/// reader.
+fn first_token_text(s: &onnx::CstStore, toks: &onnx::TokenStream, node: i32) -> String {
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
+        if s.is_token(c) {
+            return toks.token_text(s.token_index(c));
+        }
+    }
+    panic(`${s.kind(node)}: expected a terminal`);
+}
+
+/// Every token under a node, run together. `qualifiedId` is `ID ('.' ID)*`, so
+/// this is the operator's domain-qualified name.
+fn joined_text(s: &onnx::CstStore, toks: &onnx::TokenStream, node: i32) -> String {
+    let mut out = "";
+    for let c of children(s, node) {
+        if s.is_token(c) {
+            out.push_str(&toks.token_text(s.token_index(c)));
+        }
+    }
+    return out;
+}
+
+fn unquote(text: String) -> String {
+    let view = text.as_str_slice();
+    if view.len() >= 2 && view.slice(0, 1) == "\"" {
+        return view.slice(1, view.len() - 1).to_string();
+    }
+    return text;
+}
+
+fn children(s: &onnx::CstStore, node: i32) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
+        out.push(c);
+    }
+    return out;
+}
+
+fn children_of_kind(s: &onnx::CstStore, node: i32, kind: onnx::NodeKind) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
+        if s.is_node(c) && s.kind(c) == kind {
+            out.push(c);
+        }
+    }
+    return out;
+}
+
+fn first_child_of_kind(s: &onnx::CstStore, node: i32, kind: onnx::NodeKind) -> Option<i32> {
+    let found = s.find_child(node, kind);
+    if found < 0 {
+        return null;
+    }
+    return Option::Some(found);
+}

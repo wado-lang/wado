@@ -1,0 +1,733 @@
+use { ReflectTemplate } from "core:prelude";
+
+/// Indentation and blocks for generated Wado source. The builder specs
+/// (`StructSpec`, `VariantSpec`, `FnSpec`, …) construct declarations around it;
+/// function bodies stay string-based.
+pub struct CodeWriter {
+    buf: String,
+    indent_level: i32,
+    fresh_line: bool,
+    id_counter: i32,
+}
+
+impl CodeWriter {
+    pub fn new() -> CodeWriter {
+        // Pre-size to 64 KB: amortizes `String::grow` doublings over a large
+        // emit (Gale's parser for Rust runs to ≈ 1.3 MB), negligible for a small one.
+        return CodeWriter::with_capacity(65536);
+    }
+
+    pub fn with_capacity(initial: i32) -> CodeWriter {
+        return CodeWriter {
+            buf: String::with_capacity(initial),
+            indent_level: 0,
+            fresh_line: true,
+            id_counter: 0,
+        };
+    }
+
+    /// Write text with auto-indentation at line starts.
+    pub fn write<S: AsStrSlice>(&mut self, text: S) {
+        for let c of text.chars() {
+            if c == '\n' {
+                self.buf.push('\n');
+                self.fresh_line = true;
+            } else {
+                if self.fresh_line {
+                    self.write_indent();
+                    self.fresh_line = false;
+                }
+                self.buf.push(c);
+            }
+        }
+    }
+
+    /// Write a complete line (auto-indented, with trailing newline).
+    pub fn line<S: AsStrSlice>(&mut self, text: S) {
+        self.write_indent();
+        self.buf.push_str(text);
+        self.buf.push('\n');
+        self.fresh_line = true;
+    }
+
+    /// Emit a blank line.
+    pub fn blank(&mut self) {
+        self.buf.push('\n');
+        self.fresh_line = true;
+    }
+
+    /// Begin a block: emits "opener {" and increases indentation.
+    pub fn begin<S: AsStrSlice>(&mut self, opener: S) {
+        self.write_indent();
+        self.buf.push_str(opener);
+        self.buf.push_str(" {\n");
+        self.fresh_line = true;
+        self.indent_level += 1;
+    }
+
+    /// End a block: decreases indentation and emits "}".
+    pub fn end(&mut self) {
+        self.indent_level -= 1;
+        self.write_indent();
+        self.buf.push_str("}\n");
+        self.fresh_line = true;
+    }
+
+    /// End a block with a trailing suffix, e.g. "," or "\n".
+    pub fn end_with<S: AsStrSlice>(&mut self, suffix: S) {
+        self.indent_level -= 1;
+        self.write_indent();
+        self.buf.push('}');
+        self.buf.push_str(suffix);
+        self.buf.push('\n');
+        self.fresh_line = true;
+    }
+
+    /// Close the current block and open a new one: "} opener {".
+    /// Useful for else-if chains: `w.else_begin("else if cond")`.
+    pub fn else_begin<S: AsStrSlice>(&mut self, opener: S) {
+        self.indent_level -= 1;
+        self.write_indent();
+        self.buf.push_str("} ");
+        self.buf.push_str(opener);
+        self.buf.push_str(" {\n");
+        self.fresh_line = true;
+        self.indent_level += 1;
+    }
+
+    /// Increase indentation level manually.
+    pub fn indent(&mut self) {
+        self.indent_level += 1;
+    }
+
+    /// Decrease indentation level manually.
+    pub fn dedent(&mut self) {
+        self.indent_level -= 1;
+    }
+
+    /// Generate a unique ID (replaces manual counter threading).
+    pub fn next_id(&mut self) -> i32 {
+        let id = self.id_counter;
+        self.id_counter += 1;
+        return id;
+    }
+
+    /// Append raw text with no indentation handling.
+    pub fn raw<S: AsStrSlice>(&mut self, text: S) {
+        self.buf.push_str(text);
+        if text.len() > 0 {
+            self.fresh_line = text.as_str_slice().ends_with("\n");
+        }
+    }
+
+    /// Return the generated code. Asserts that indentation is balanced.
+    pub fn to_string(&self) -> String {
+        assert self.indent_level == 0, `CodeWriter: unbalanced indentation (level=${self.indent_level})`;
+        return self.buf;
+    }
+
+    fn write_indent(&mut self) {
+        for let mut i = 0; i < self.indent_level; i += 1 {
+            self.buf.push_str("    ");
+        }
+    }
+}
+
+/// The lexical state the template text of a `wado` tag is in at a hole: the
+/// contexts the compiler's own lexer has, which this must agree with. `Tpl`
+/// needs no nesting count, since the tag's own holes are the interpolations.
+enum Ctx {
+    Code,
+    CodeSlash,
+    Str,
+    StrEscape,
+    Chr,
+    ChrEscape,
+    Tpl,
+    TplEscape,
+    LineComment,
+    BlockComment,
+    BlockCommentStar,
+}
+
+/// The state one character further on.
+fn step(ctx: Ctx, c: char) -> Ctx {
+    return match ctx {
+        Ctx::Code => open(c),
+        Ctx::CodeSlash => match c {
+            '/' => Ctx::LineComment,
+            '*' => Ctx::BlockComment,
+            _ => open(c),
+        },
+        Ctx::Str => match c {
+            '\\' => Ctx::StrEscape,
+            '"' => Ctx::Code,
+            _ => Ctx::Str,
+        },
+        Ctx::StrEscape => Ctx::Str,
+        Ctx::Chr => match c {
+            '\\' => Ctx::ChrEscape,
+            '\'' => Ctx::Code,
+            _ => Ctx::Chr,
+        },
+        Ctx::ChrEscape => Ctx::Chr,
+        Ctx::Tpl => match c {
+            '\\' => Ctx::TplEscape,
+            '`' => Ctx::Code,
+            _ => Ctx::Tpl,
+        },
+        Ctx::TplEscape => Ctx::Tpl,
+        Ctx::LineComment => match c {
+            '\n' => Ctx::Code,
+            _ => Ctx::LineComment,
+        },
+        Ctx::BlockComment => match c {
+            '*' => Ctx::BlockCommentStar,
+            _ => Ctx::BlockComment,
+        },
+        Ctx::BlockCommentStar => match c {
+            '/' => Ctx::Code,
+            '*' => Ctx::BlockCommentStar,
+            _ => Ctx::BlockComment,
+        },
+    };
+}
+
+/// The state `c` opens from code.
+fn open(c: char) -> Ctx {
+    return match c {
+        '"' => Ctx::Str,
+        '\'' => Ctx::Chr,
+        '`' => Ctx::Tpl,
+        '/' => Ctx::CodeSlash,
+        _ => Ctx::Code,
+    };
+}
+
+/// Advance the lexical state over one literal segment. Kept apart from `step`
+/// so both fit the inliner's budget: the whole walk then folds to a constant at
+/// -O2 and the tag pays nothing for it.
+fn advance<S: AsStrSlice>(ctx: Ctx, lit: S) -> Ctx {
+    let mut cur = ctx;
+    for let c of lit.chars() {
+        cur = step(cur, c);
+    }
+    return cur;
+}
+
+/// The delimiter a hole landing in `ctx` is escaped for, or none where it is
+/// written as it renders.
+fn hole_quote(ctx: Ctx) -> Option<u8> {
+    return match ctx {
+        Ctx::Code | Ctx::CodeSlash | Ctx::LineComment | Ctx::BlockComment | Ctx::BlockCommentStar => null,
+        Ctx::Str | Ctx::StrEscape => Option::Some(b'"'),
+        Ctx::Chr | Ctx::ChrEscape => Option::Some(b'\''),
+        Ctx::Tpl | Ctx::TplEscape => Option::Some(b'`'),
+    };
+}
+
+/// Whether `b` may not stand as itself inside a Wado literal delimited by
+/// `quote`. Every other byte passes through, so printable non-ASCII survives.
+fn needs_escape(b: u8, quote: u8) -> bool {
+    return b < 0x20 || b == 0x7f || b == quote || b == b'\\' || quote == b'`' && b == b'$';
+}
+
+/// Append `b` in the form a Wado literal delimited by `quote` reads back. The
+/// control-char policy mirrors `Inspect for String` in core's `format.wado`;
+/// keep the two in lockstep (see WEP: Inspect).
+fn write_escaped(out: &mut String, b: u8, quote: u8) {
+    assert needs_escape(b, quote);
+    if b == quote || b == b'\\' || b == b'$' {
+        out.push('\\');
+        out.push_ascii_unchecked(b);
+        return;
+    }
+    match b {
+        b'\n' => out.push_str("\\n"),
+        b'\r' => out.push_str("\\r"),
+        b'\t' => out.push_str("\\t"),
+        _ => out.push_str(`\\u{${b:x}}`),
+    }
+}
+
+/// Escape in place the text `out` grew past `at`, which is one hole's
+/// rendering, for a literal delimited by `quote`. Nothing to escape costs one
+/// scan and no copy.
+fn escape_in_place(out: &mut String, at: i32, quote: u8) {
+    let n = out.len();
+    let mut i = at;
+    while i < n && !needs_escape(out.get_byte_unchecked(i), quote) {
+        i += 1;
+    }
+    if i == n {
+        return;
+    }
+    let tail = out.substr_bytes_unchecked(i, n);
+    out.truncate_unchecked(i);
+    let end = tail.len();
+    let mut from = 0;
+    for let mut j = 0; j < end; j += 1 {
+        let b = tail.get_byte_unchecked(j);
+        if !needs_escape(b, quote) {
+            continue;
+        }
+        if j > from {
+            out.push_str_range_unchecked(&tail, from, j);
+        }
+        write_escaped(out, b, quote);
+        from = j + 1;
+    }
+    if end > from {
+        out.push_str_range_unchecked(&tail, from, end);
+    }
+}
+
+/// Build a fragment of Wado source (WEP: Tagged Template Literals), escaping
+/// each hole for the lexical context the template's own text put it in.
+pub fn wado<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
+    let mut out = String::with_capacity(64);
+    let mut ctx = Ctx::Code;
+    for let h of ReflectTemplate::<T>::members() {
+        let lit = h.lit();
+        out.push_str(&lit);
+        ctx = advance(ctx, &lit);
+        // A backslash left pending at a hole binds the hole's first byte, and
+        // which state that lands in depends on the value: `z` stays in the
+        // string, an escaped `"` closes it. The scan reads literals only, so it
+        // cannot answer for the rest of the template. The template is malformed.
+        assert !ctx matches { Ctx::StrEscape | Ctx::ChrEscape | Ctx::TplEscape }, "a `wado` hole cannot follow a dangling backslash";
+        let at = out.len();
+        h.fmt(&t, &mut Formatter::new(&mut out));
+        if let Some(quote) = hole_quote(ctx) {
+            escape_in_place(&mut out, at, quote);
+        }
+    }
+    out.push_str(&ReflectTemplate::<T>::tail());
+    return out;
+}
+
+pub type CharRangePat = RangeInclusive<char>;
+
+pub fn char_range_pat(range: RangeInclusive<char>) -> CharRangePat {
+    return range as CharRangePat;
+}
+
+impl Display for CharRangePat {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let range = *self as RangeInclusive<char>;
+        if range.start == range.end {
+            f.write_str(wado`'${range.start}'`);
+            return;
+        }
+        f.write_str(wado`'${range.start}'..='${range.end}'`);
+    }
+}
+
+/// Visibility modifier for an emitted Wado declaration — the scope ladder
+/// (file-private / `internal` / `pub`). Passed to the spec builders as a
+/// defaulted argument, so the common file-private case stays implicit.
+pub enum Vis {
+    Private,
+    Internal,
+    Pub,
+}
+
+impl Vis {
+    /// Source keyword with a trailing space (`""`, `"internal "`, `"pub "`).
+    pub fn prefix(&self) -> String {
+        let p = match *self {
+            Vis::Private => "",
+            Vis::Internal => "internal ",
+            Vis::Pub => "pub ",
+        };
+        return p;
+    }
+}
+
+pub struct FieldSpec {
+    pub name: String,
+    pub type_str: String,
+    pub is_pub: bool,
+    /// Optional field default (`field: T = default`), so a struct literal can
+    /// omit the field.
+    pub default: Option<String> = null,
+}
+
+impl FieldSpec {
+    pub fn new<S: AsStrSlice, S1: AsStrSlice>(name: S, type_str: S1) -> FieldSpec {
+        return FieldSpec {
+            name: name.to_string(),
+            type_str: type_str.to_string(),
+            is_pub: false,
+        };
+    }
+
+    pub fn new_pub<S: AsStrSlice, S1: AsStrSlice>(name: S, type_str: S1) -> FieldSpec {
+        return FieldSpec {
+            name: name.to_string(),
+            type_str: type_str.to_string(),
+            is_pub: true,
+        };
+    }
+}
+
+pub struct StructSpec {
+    pub name: String,
+    fields: List<FieldSpec>,
+    visibility: Vis,
+}
+
+impl StructSpec {
+    pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> StructSpec {
+        return StructSpec { name: name.to_string(), fields: [], visibility };
+    }
+
+    pub fn add_field<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut StructSpec {
+        self.fields.push(FieldSpec::new(name, type_str));
+        return self;
+    }
+
+    pub fn add_pub_field<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut StructSpec {
+        self.fields.push(FieldSpec::new_pub(name, type_str));
+        return self;
+    }
+
+    pub fn add_field_default<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+        &mut self,
+        name: S,
+        type_str: S1,
+        default: S2,
+    ) -> &mut StructSpec {
+        self.fields.push(FieldSpec {
+            name: name.to_string(),
+            type_str: type_str.to_string(),
+            is_pub: false,
+            default: Option::Some(default.to_string()),
+        });
+        return self;
+    }
+
+    pub fn add_field_spec(&mut self, field: FieldSpec) -> &mut StructSpec {
+        self.fields.push(field);
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        let head = `${self.visibility.prefix()}struct ${self.name}`;
+        if self.fields.is_empty() {
+            w.line(`${head} {}`);
+            return;
+        }
+        w.begin(head);
+        for let field of &self.fields {
+            let vis = if field.is_pub { "pub " } else { "" };
+            match &field.default {
+                Some(d) => w.line(`${vis}${field.name}: ${field.type_str} = ${*d},`),
+                None => w.line(`${vis}${field.name}: ${field.type_str},`),
+            }
+        }
+        w.end();
+    }
+}
+
+pub struct VariantCase {
+    pub name: String,
+    pub payload: Option<String>,
+}
+
+pub struct VariantSpec {
+    pub name: String,
+    cases: List<VariantCase>,
+    visibility: Vis,
+}
+
+impl VariantSpec {
+    pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> VariantSpec {
+        return VariantSpec { name: name.to_string(), cases: [], visibility };
+    }
+
+    pub fn add_case<S: AsStrSlice>(&mut self, name: S) -> &mut VariantSpec {
+        self.cases.push(VariantCase { name: name.to_string(), payload: null });
+        return self;
+    }
+
+    pub fn add_case_with_payload<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, payload: S1) -> &mut VariantSpec {
+        self.cases.push(VariantCase {
+            name: name.to_string(),
+            payload: Option::<String>::Some(payload.to_string()),
+        });
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        w.begin(`${self.visibility.prefix()}variant ${self.name}`);
+        for let case of &self.cases {
+            if let Some(p) = &case.payload {
+                w.line(`${case.name}(${*p}),`);
+            } else {
+                w.line(`${case.name},`);
+            }
+        }
+        w.end();
+    }
+}
+
+pub struct EnumMember {
+    pub name: String,
+    pub trailing_comment: Option<String>,
+}
+
+pub struct EnumSpec {
+    pub name: String,
+    members: List<EnumMember>,
+    visibility: Vis,
+}
+
+impl EnumSpec {
+    pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> EnumSpec {
+        return EnumSpec { name: name.to_string(), members: [], visibility };
+    }
+
+    pub fn add_member<S: AsStrSlice>(&mut self, name: S) -> &mut EnumSpec {
+        self.members.push(EnumMember { name: name.to_string(), trailing_comment: null });
+        return self;
+    }
+
+    pub fn add_member_with_comment<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, comment: S1) -> &mut EnumSpec {
+        self.members.push(EnumMember {
+            name: name.to_string(),
+            trailing_comment: Option::<String>::Some(comment.to_string()),
+        });
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        w.begin(`${self.visibility.prefix()}enum ${self.name}`);
+        for let member of &self.members {
+            if let Some(c) = &member.trailing_comment {
+                w.line(`${member.name},  // ${*c}`);
+            } else {
+                w.line(`${member.name},`);
+            }
+        }
+        w.end();
+    }
+}
+
+pub struct ParamSpec {
+    pub name: String,
+    pub type_str: String,
+    pub is_mut: bool = false,
+    pub default_value: Option<String> = null,
+}
+
+impl ParamSpec {
+    pub fn new<S: AsStrSlice, S1: AsStrSlice>(name: S, type_str: S1) -> ParamSpec {
+        return ParamSpec {
+            name: name.to_string(),
+            type_str: type_str.to_string(),
+        };
+    }
+}
+
+/// Join strings with ", " — the separator every spec list (generics,
+/// effects, …) renders with.
+fn join_comma(items: &List<String>) -> String {
+    let mut out = String::with_capacity(items.len() * 8);
+    for let mut i = 0; i < items.len(); i += 1 {
+        if i > 0 {
+            out.push_str(", ");
+        }
+        out.push_str(&items[i]);
+    }
+    return out;
+}
+
+pub struct FnSpec {
+    pub name: String,
+    params: List<ParamSpec>,
+    return_type: Option<String>,
+    visibility: Vis,
+    is_export: bool,
+    /// Generic type parameters, each rendered verbatim between the name
+    /// and the parameter list (e.g. `"V: Visitor"` → `fn walk<V: Visitor>(`).
+    generics: List<String>,
+    /// Effect names for the `with …` clause, rendered after the return
+    /// type (e.g. `["Stdout", "Stderr"]` → ` with (Stdout, Stderr)`).
+    effects: List<String>,
+    receiver: Option<String>,
+}
+
+impl FnSpec {
+    pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> FnSpec {
+        return FnSpec {
+            name: name.to_string(),
+            params: [],
+            return_type: null,
+            visibility,
+            is_export: false,
+            generics: [],
+            effects: [],
+            receiver: null,
+        };
+    }
+
+    /// Mark the function `export` (component-model export). `export` implies
+    /// `pub`; the signature emits just `export`, never `pub export`.
+    pub fn set_export(&mut self) -> &mut FnSpec {
+        self.is_export = true;
+        return self;
+    }
+
+    pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut FnSpec {
+        self.generics.push(generic.to_string());
+        return self;
+    }
+
+    pub fn add_effect<S: AsStrSlice>(&mut self, effect_name: S) -> &mut FnSpec {
+        self.effects.push(effect_name.to_string());
+        return self;
+    }
+
+    pub fn set_receiver<S: AsStrSlice>(&mut self, recv: S) -> &mut FnSpec {
+        self.receiver = Option::<String>::Some(recv.to_string());
+        return self;
+    }
+
+    pub fn add_param<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut FnSpec {
+        self.params.push(ParamSpec::new(name, type_str));
+        return self;
+    }
+
+    pub fn add_param_spec(&mut self, param: ParamSpec) -> &mut FnSpec {
+        self.params.push(param);
+        return self;
+    }
+
+    pub fn set_return_type<S: AsStrSlice>(&mut self, type_str: S) -> &mut FnSpec {
+        self.return_type = Option::<String>::Some(type_str.to_string());
+        return self;
+    }
+
+    /// Emit the function signature as a `begin` block (opens `{`).
+    /// Caller writes the body via `w`, then calls `w.end()`.
+    pub fn emit_begin(&self, w: &mut CodeWriter) {
+        w.begin(&self.signature());
+    }
+
+    /// Build the full signature string.
+    pub fn signature(&self) -> String {
+        let mut sig = String::with_capacity(64);
+        if self.is_export {
+            sig.push_str("export ");
+        } else {
+            sig.push_str(&self.visibility.prefix());
+        }
+        sig.push_str(`fn ${self.name}`);
+        if self.generics.len() > 0 {
+            sig.push_str(`<${join_comma(&self.generics)}>`);
+        }
+        sig.push_str("(");
+        let mut first = true;
+        if let Some(recv) = &self.receiver {
+            sig.push_str(recv);
+            first = false;
+        }
+        for let param of &self.params {
+            if !first {
+                sig.push_str(", ");
+            }
+            if param.is_mut {
+                sig.push_str("mut ");
+            }
+            sig.push_str(`${param.name}: ${param.type_str}`);
+            if let Some(d) = &param.default_value {
+                sig.push_str(` = ${*d}`);
+            }
+            first = false;
+        }
+        sig.push_str(")");
+        if let Some(ret) = &self.return_type {
+            sig.push_str(` -> ${*ret}`);
+        }
+        let mut clauses: List<String> = [];
+        for let e of &self.effects {
+            clauses.push(*e);
+        }
+        if clauses.len() == 1 {
+            sig.push_str(` with ${clauses[0]}`);
+        } else if clauses.len() > 1 {
+            sig.push_str(` with (${join_comma(&clauses)})`);
+        }
+        return sig;
+    }
+}
+
+pub struct GlobalSpec {
+    pub name: String,
+    type_str: String,
+    initializer: String,
+    visibility: Vis,
+    is_mut: bool,
+    trailing_comment: Option<String>,
+}
+
+impl GlobalSpec {
+    pub fn new<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+        name: S,
+        type_str: S1,
+        initializer: S2,
+        visibility: Vis = Vis::Private,
+    ) -> GlobalSpec {
+        return GlobalSpec {
+            name: name.to_string(),
+            type_str: type_str.to_string(),
+            initializer: initializer.to_string(),
+            visibility,
+            is_mut: false,
+            trailing_comment: null,
+        };
+    }
+
+    pub fn set_trailing_comment<S: AsStrSlice>(&mut self, comment: S) -> &mut GlobalSpec {
+        self.trailing_comment = Option::<String>::Some(comment.to_string());
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        let vis = self.visibility.prefix();
+        let mutability = if self.is_mut { "mut " } else { "" };
+        let trailer = if let Some(c) = &self.trailing_comment {
+            `  // ${*c}`;
+        } else {
+            "";
+        };
+        w.line(`${vis}global ${mutability}${self.name}: ${self.type_str} = ${self.initializer};${trailer}`);
+    }
+}
+
+pub struct ImplSpec {
+    type_name: String,
+    trait_name: Option<String>,
+}
+
+impl ImplSpec {
+    pub fn new<S: AsStrSlice>(type_name: S) -> ImplSpec {
+        return ImplSpec { type_name: type_name.to_string(), trait_name: null };
+    }
+
+    pub fn new_trait<S: AsStrSlice, S1: AsStrSlice>(trait_name: S, type_name: S1) -> ImplSpec {
+        return ImplSpec {
+            type_name: type_name.to_string(),
+            trait_name: Option::<String>::Some(trait_name.to_string()),
+        };
+    }
+
+    pub fn emit_begin(&self, w: &mut CodeWriter) {
+        if let Some(t) = &self.trait_name {
+            w.begin(`impl ${*t} for ${self.type_name}`);
+        } else {
+            w.begin(`impl ${self.type_name}`);
+        }
+    }
+}

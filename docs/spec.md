@@ -14,7 +14,7 @@ one. That gets settled when the disagreement is found.
 
 What is not allowed is leaving the disagreement in place as an accepted
 difference. If it is not resolved, it becomes a Known gap, recorded wherever
-that area is owned, saying what it would take to close it.
+that area is owned, saying what the disagreement is and what it admits.
 
 | Document               | Holds                                                         |
 | ---------------------- | ------------------------------------------------------------- |
@@ -720,6 +720,8 @@ scope: {
 
 The binding is a copy of each element (value semantics), so modifying it does not affect the original collection. For-of works with any type implementing `IntoIterator`, not just arrays.
 
+The binding must match every element, as a `let` pattern must. A pattern that can fail (`for let Some(x) of xs`, a narrowing type pattern) is a compile error. Match on the element in the body instead.
+
 #### Tuple for-of (compile-time expansion)
 
 When the iterable is a tuple, the loop body is expanded once per element at compile time. Each expansion independently types the binding, enabling heterogeneous iteration with per-element trait dispatch.
@@ -938,6 +940,16 @@ match color {
 }
 ```
 
+The guardless arms must cover every value together. A guarded arm covers
+nothing, and a case is covered only as far as its payload patterns reach:
+
+```wado
+match opt {
+    Some(1) => "one",
+    None => "none",
+}   // Error: non-exhaustive match: missing case `Some(-2147483648..=0)`
+```
+
 #### Guard Expressions
 
 Guards use `&&` to reflect left-to-right evaluation (pattern first, then guard):
@@ -992,6 +1004,10 @@ let kind = match token {
     _               => "other",
 };
 ```
+
+The pattern matches where `scrutinee == CONSTANT` holds, so a constant of any
+type with an `Eq` compares as `==` would: a `String`, a struct, a tuple or an
+`Option` constant matches at the top of an arm or nested in another pattern.
 
 #### Or Patterns
 
@@ -1213,26 +1229,27 @@ Wado types are stored internally as WebAssembly core and GC types, and lift/lowe
 
 The table below is the Wado↔CM correspondence, read in both directions: Wado→CM when generating a component's exported interface, and CM→Wado when importing an external component (`use { Iface } from "./c.wasm" with { type: "wasm" }`, see [Wasm Module and Component Imports](#wasm-module-and-component-imports)). CM types are written in their WIT spelling.
 
-| Wado Type                 | Internal Representation    | CM Type at Boundary       | Notes                                                                    |
-| ------------------------- | -------------------------- | ------------------------- | ------------------------------------------------------------------------ |
-| `bool`                    | `i32`                      | `bool`                    | Boolean value                                                            |
-| `char`                    | `i32`                      | `char`                    | Unicode scalar value                                                     |
-| `i8`, `i16`, `i32`, `i64` | `i32`, `i32`, `i32`, `i64` | `s8`, `s16`, `s32`, `s64` | Signed integers                                                          |
-| `u8`, `u16`, `u32`, `u64` | `i32`, `i32`, `i32`, `i64` | `u8`, `u16`, `u32`, `u64` | Unsigned integers                                                        |
-| `i128`, `u128`            | GC `struct {u64, i64/u64}` | `record { low, high }`    | Prelude structs, so each crosses as its own record                       |
-| `f32`, `f64`              | `f32`, `f64`               | `f32`, `f64`              | Floating point                                                           |
-| `String`                  | GC `array i8` (UTF-8)      | `string`                  | UTF-8 string, GC-managed internally                                      |
-| `List<T>`                 | GC `array T`               | `list<T>`                 | Dynamic array, GC-managed internally                                     |
-| `[T1, T2, ...]`           | GC `struct {T1, T2, ...}`  | `tuple<T1, T2, ...>`      | Tuple types                                                              |
-| `Option<T>`               | GC variant                 | `option<T>`               | Optional value                                                           |
-| `Result<T, E>`            | GC variant                 | `result<T, E>`            | Result type; `result<ok>` and bare `result` are the payload-elided forms |
-| `struct { ... }`          | GC `struct`                | `record { ... }`          | Wasm GC struct internally, record at CM boundary                         |
-| `enum { ... }`            | `i32`                      | `enum { ... }`            | Enumeration without payloads                                             |
-| `variant { ... }`         | GC variant                 | `variant { ... }`         | Variant/sum type with payloads                                           |
-| `flags { ... }`           | `i32`/`i64`                | `flags { ... }`           | Bit flags                                                                |
-| `resource`                | `i32` (handle)             | `resource`                | Resource handle; owned and borrowed handles both map here                |
-| `Stream<T>`               | CM stream (P3)             | `stream<T>`               | Component Model async stream                                             |
-| `Future<T>`               | CM future (P3)             | `future<T>`               | Component Model async future                                             |
+| Wado Type                 | Internal Representation    | CM Type at Boundary       | Notes                                                                                      |
+| ------------------------- | -------------------------- | ------------------------- | ------------------------------------------------------------------------------------------ |
+| `bool`                    | `i32`                      | `bool`                    | Boolean value                                                                              |
+| `char`                    | `i32`                      | `char`                    | Unicode scalar value                                                                       |
+| `i8`, `i16`, `i32`, `i64` | `i32`, `i32`, `i32`, `i64` | `s8`, `s16`, `s32`, `s64` | Signed integers                                                                            |
+| `u8`, `u16`, `u32`, `u64` | `i32`, `i32`, `i32`, `i64` | `u8`, `u16`, `u32`, `u64` | Unsigned integers                                                                          |
+| `i128`, `u128`            | GC `struct {u64, i64/u64}` | `record { low, high }`    | Prelude structs, so each crosses as its own record                                         |
+| `f32`, `f64`              | `f32`, `f64`               | `f32`, `f64`              | Floating point                                                                             |
+| `String`                  | GC `array i8` (UTF-8)      | `string`                  | UTF-8 string, GC-managed internally                                                        |
+| `List<T>`                 | GC `array T`               | `list<T>`                 | Dynamic array, GC-managed internally                                                       |
+| `TreeMap<K, V>`           | GC `struct` (AA tree)      | `map<K, V>`               | `K` is `bool`, `char`, `String`, or an integer; a repeated key takes the last pair's value |
+| `[T1, T2, ...]`           | GC `struct {T1, T2, ...}`  | `tuple<T1, T2, ...>`      | Tuple types                                                                                |
+| `Option<T>`               | GC variant                 | `option<T>`               | Optional value                                                                             |
+| `Result<T, E>`            | GC variant                 | `result<T, E>`            | Result type; `result<ok>` and bare `result` are the payload-elided forms                   |
+| `struct { ... }`          | GC `struct`                | `record { ... }`          | Wasm GC struct internally, record at CM boundary                                           |
+| `enum { ... }`            | `i32`                      | `enum { ... }`            | Enumeration without payloads                                                               |
+| `variant { ... }`         | GC variant                 | `variant { ... }`         | Variant/sum type with payloads                                                             |
+| `flags { ... }`           | `i32`/`i64`                | `flags { ... }`           | Bit flags                                                                                  |
+| `resource`                | `i32` (handle)             | `resource`                | Resource handle; owned and borrowed handles both map here                                  |
+| `Stream<T>`               | CM stream (P3)             | `stream<T>`               | Component Model async stream                                                               |
+| `Future<T>`               | CM future (P3)             | `future<T>`               | Component Model async future                                                               |
 
 ### The Prelude
 
@@ -1448,6 +1465,26 @@ let r2 = &mut x;  // OK in Wado (no borrow checker)
 
 *r1 = 20;
 *r2 = 30;
+```
+
+#### Reference Identity
+
+`==` and `!=` on two references to a type whose value is a heap object (a
+struct, `List<T>`, `String`, a tuple, a variant) compare identity, not content.
+
+Identity is guaranteed in one direction only. Two references to one object
+always compare equal. Two references to distinct objects of identical content
+may also compare equal, because the optimizer may intern such objects into one.
+Whether it does can change with the optimization level and with the Wado
+version. An identity comparison that should be true is never false.
+
+```wado
+fn same(a: &List<i32>, b: &List<i32>) -> bool { return a == b; }
+
+let xs: List<i32> = [1, 2, 3];
+same(&xs, &xs);                 // always true
+let ys: List<i32> = [1, 2, 3];
+same(&xs, &ys);                 // false or true: the two may be one object
 ```
 
 #### Design Trade-offs
@@ -2837,6 +2874,17 @@ let ok: Result<i32, String> = Result::Ok(42);
 
 When both mechanisms are available, forward inference takes precedence for type parameters that appear in the payload, and backward inference fills in any remaining parameters.
 
+A turbofish on the type name pins the arguments outright. It reaches a parameter
+no field mentions, and it overrides one a field would otherwise settle. It says
+what the matching annotation says, so the two must agree:
+
+```wado
+struct Tagged<T> { tag: i32 }
+let b = Box::<i64> { value: 1 };        // T=i64, not the i32 the literal infers
+let t = Tagged::<String> { tag: 7 };    // T names no field
+let n: Box<i32> = Box::<i64> { … };     // error: the annotation disagrees
+```
+
 #### Scope of inference
 
 | Constructor kind       | Forward | Backward | Status              |
@@ -3569,19 +3617,32 @@ pub enum Ordering {
 #### Ord - Ordering
 
 ```wado
-/// Types that can be ordered
+/// A total order over the type
 pub trait Ord: Eq {
     /// Compares self with other and returns an Ordering
     fn cmp(&self, other: &Self) -> Ordering;
 }
 ```
 
-Comparison operators use `Ord::cmp`:
+`Ord` is a total order, and `sort`, `TreeMap` and every `T: Ord` bound read it.
+On a float it is IEEE 754-2019 `totalOrder`, so it separates `-0.0` from `0.0`
+and places each NaN at one end rather than calling it equal to what it met.
+
+A comparison operator lowers to an instruction where the type has one. Where it
+does not, a type stating what its operators mean answers first, and any other
+type reads `Ord::cmp`:
 
 - `a < b` desugars to `Ord::cmp(&a, &b) == Ordering::Less`
 - `a > b` desugars to `Ord::cmp(&a, &b) == Ordering::Greater`
 - `a <= b` desugars to `Ord::cmp(&a, &b) != Ordering::Greater`
 - `a >= b` desugars to `Ord::cmp(&a, &b) != Ordering::Less`
+
+A float is the one type whose operators are not its `Ord`: all four are IEEE,
+so a NaN answers false and the two zeroes are one value. `f32` and `f64` get
+that from their instructions and `f16` / `bf16` state it, so every float reads
+the same. One trait cannot carry both orders, because `Ordering` has three
+cases and an IEEE comparison has four answers. See
+[WEP: The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md).
 
 #### Default Implementations
 
@@ -3661,7 +3722,7 @@ impl Default for Point {
 
 ### String Parsing Traits
 
-Two prelude traits parse a value from a `String`, both returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. The built-in scalars (`String`, `char`, the integer types, `f32`/`f64`, `bool`) implement both.
+Two prelude traits parse a value from text, both taking any `AsStrSlice` and returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. The built-in scalars (`char`, `bool`, the integer types, `f32`/`f64`) implement both; `String` implements only the lenient one, since taking a string as itself cannot fail.
 
 ```wado
 i32::from_str("42")              // Ok(42)
@@ -3674,7 +3735,7 @@ f64::from_str_lenient("inf")     // Ok(f64::INFINITY)
 i32::from_str_lenient(" 1 ")     // Err — never trims whitespace
 ```
 
-`FromStr`'s fundamental operation is `from_str_slice(&StrSlice)` (parse a view of a string with no substring allocation); `from_str` defaults to calling it over the whole string. See [WEP: String Views](./wep-2026-09-13-string-slice.md) and [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
+`FromStr::from_str` takes any `AsStrSlice` — a `StrSlice` among them, so a field is parsed out of a larger buffer with no substring allocation. See [WEP: String Views](./wep-2026-09-13-string-slice.md) and [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
 
 ### Arithmetic Operator Traits
 
@@ -3728,6 +3789,17 @@ A bound that writes one asks for that argument. `T: Eq<String>` reaches
 
 An impl writing `Self` as a trait argument says its own target, so
 `impl Add<Self> for Feet` and `impl Add<Feet> for Feet` are one impl.
+
+`Self` in a bound names the type the surrounding declaration implements. A
+`trait` binds one and an `impl` binds one. A free function binds none, so `Self`
+anywhere in a free function's bounds is an error, and the error names the type
+parameter to write instead. A `struct` or `variant` declaration binds none
+either, so a bound on its own parameter is the same error.
+
+The position makes no difference. A trait argument (`T: Uses<Self::Item>`) and
+an associated-type constraint nested under one
+(`T: Sink<Cb = fn(Self::Item) -> i32>`) are both rejected. Rust rejects the same
+spelling.
 
 The rule is the same wherever a bound is written: on a type parameter, on a
 supertrait (`trait AsStrSlice: Eq<String>`), or on an associated type
@@ -3935,7 +4007,7 @@ match s {
 - Tuple payload pattern destructuring (`if let Foo([a, b]) = x`): implemented
 - `match` expression/statement: implemented
 - `matches` operator: implemented
-- Match ergonomics (`&T` scrutinees in `if let`/`match`/`matches`; payload bindings become refs): implemented
+- Match ergonomics (`&T` scrutinees in `let`/`if let`/`match`/`matches`; payload bindings become refs onto the scrutinee's own storage, never a copy): implemented
 - Nested sub-patterns in tuple/struct destructuring (literal, variant, enum): implemented
 - Generic custom variant pattern matching (e.g., `Maybe<T>`): not yet implemented
 - `Result<T, E>` pattern matching: not yet implemented
@@ -4221,6 +4293,52 @@ impl Config {
 }
 ```
 
+#### Signature reach
+
+An item's signature may not name a declaration that reaches less far than the
+item itself. Naming one is a compile error at the reference. A caller that
+reaches the item has to be able to write the types it names, and a `pub fn`
+returning a file-private struct hands back a value whose type no caller can
+write.
+
+```wado
+struct Hidden { n: i32 }
+
+pub fn make() -> Hidden { ... }   // ERROR: widen `Hidden`, or narrow `make`
+```
+
+The rule holds at every rung: an `internal` item may not name a file-private
+type either. `export` counts as `pub` here. Whether the type crosses the CM
+boundary is a separate question, answered at the definition site.
+
+Where an item carries no modifier of its own, its reach comes from what encloses
+it. A struct field reaches no further than its struct. An impl's member reaches
+no further than the impl's head, and a trait impl's no further than the trait
+either: a caller has to be able to write the head to name the member. So
+`impl Add for Local` on a file-private `Local` gives its `add` that same reach,
+and `add` may then name `Local` freely. An impl's own bounds count as part of
+its head: a type that cannot name `T`'s bound cannot satisfy it, so
+`impl<T: Local> Add for T` confines `add` the same way.
+
+A declared reach is a claim, so a bound on one is checked instead of narrowing
+it. `pub fn f<T: Local>()` and `pub trait F<T: Local>` are errors, because no
+caller can supply the `T` they ask for.
+
+A type parameter, `Self`, and an associated-type projection (`Self::Output`,
+`I::Item`) are binders rather than declarations, so they carry no reach of their
+own and are not checked.
+
+The signature is everything the caller has to be able to write or read back, not
+just the parameters and the return type. A type parameter's default is
+instantiated at the call, an impl's associated type comes back through
+`Self::Out`, and a resource's parent carries the methods it inherits, so all
+three obey the rule.
+
+A bound obeys the rule too, so naming a less visible trait in one is the same
+error. Rust's sealed-trait pattern seals a trait by giving it a supertrait that
+implementors cannot reach, and that is exactly what this forbids. Wado has no
+equivalent. If sealing is wanted, it gets a keyword that says so.
+
 #### Re-export visibility
 
 A `use` declaration carrying a visibility modifier re-exports the imported names
@@ -4436,6 +4554,8 @@ gale = { registry = "wado", package = "gale", version = "0.1" }
 ```
 
 A bare `use { ... } from "./schema.g4"` against such a file with no `with` clause is a hard error (`Code::KilnMissingWith`). Two `use` clauses for the same `from` in the same file collapse to a single invocation if their `(module, inputs, options, output_dir)` match; mismatched clauses are a duplicate-generator error.
+
+A file that is not `.wado` is only ever reached through a generator. When a `use` names one and no invocation produced a module for that schema, the import is a hard error (`Code::KilnNoGeneratedModule`); the compiler never falls back to parsing the schema as Wado.
 
 #### Authoring a generator
 
@@ -5287,12 +5407,85 @@ fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
 Type pack parameters:
 
 - Are declared with `..` prefix in generic parameter lists: `<..T>`, `<A, ..T>`
-- At most one type pack parameter is allowed per function
+- May appear more than once per list, each settled on its own (see
+  [Multiple Type Packs](#multiple-type-packs))
 - Cannot be combined with `effect`: `<effect ..T>` is invalid
 - Appear inside tuple types as `[..T]` (type pack spread)
 - Can be mixed with fixed type elements: `[A, ..T]`, `[..T, B]`
 - Type arguments are inferred from tuple argument types at call sites
 - Expansion happens at monomorphization time
+
+#### Multiple Type Packs
+
+A parameter list may declare more than one pack. Each is settled from the
+argument that carries it alone, so nothing has to find a boundary that was
+never written:
+
+```wado
+fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
+    return [..a, ..b];
+}
+
+concat([1, "x"], [true]);   // A = [i32, String], B = [bool]
+```
+
+A tuple holding two packs (`[..A, ..B]`) settles neither pack, because matching
+it against a concrete tuple admits every split. Such a tuple is legal anywhere.
+It just cannot be the only thing naming a pack: something else must settle each
+one — another parameter, a turbofish, or an annotation — and then the tuple is
+checked against the arity they fix.
+
+```wado
+fn wrap<X, ..A, ..B, Y>(x: X, a: [..A], b: [..B], y: Y) -> [X, ..A, ..B, Y] {
+    return [x, ..a, ..b, y];   // the parameters settle both packs
+}
+
+fn joined<..A, ..B>(split: [[..A], [..B]], both: [..A, ..B]) -> i32 { … }
+joined([[1], [true]], [1, true]);         // `split` settles both
+joined([[1], [true]], [1, true, "x"]);    // ERROR: expected `[i32, bool]`
+
+fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { … }
+middle::<[i32], String, [bool]>([1, "mid", true]);   // the turbofish settles them
+middle([1, "mid", true]);                 // ERROR: cannot infer `Pre`, `Post`
+```
+
+A pack nothing settles is reported at the use site as an uninferred type
+parameter, as a scalar parameter no argument reaches is. To settle both packs
+from one value, give each a tuple of its own (`[[..A], [..B]]`).
+
+Where such a tuple is produced, its ends still place elements. The elements ahead
+of the first pack and behind the last keep their positions, so `[X, ..A, ..B, Y]`
+settles `X` and `Y` and nothing else. An element between two packs is settled by
+no argument, so name it in a turbofish.
+
+Inside the body that declares them, packs are rigid, as a scalar parameter is. A
+value matches such a tuple by layout: the same fixed positions and the same packs
+in the same order. Naming the same packs is not enough.
+
+```wado
+fn reorder<..A, ..B>(a: [..A], b: [..B]) {
+    let ab: [..A, ..B] = [..a, ..b];      // OK
+    // let ba: [..B, ..A] = [..a, ..b];   // ERROR: the order is part of the type
+    // let shifted: [i32, ..A] = [..a];   // ERROR: so is a fixed element
+}
+```
+
+A turbofish spells each pack as its own tuple. A flat list carries no boundary
+either:
+
+```wado
+concat::<[i32], [bool, String]>([1], [true, "x"]);
+// concat::<i32, String>(…)  // ERROR: spell each type pack as a tuple
+```
+
+Writing one argument per pack is refused as well: `<i32, String>` and
+`<[i32, String], []>` split the same list, and nothing says which was meant. The
+flat form stays available where a single pack absorbs the surplus on its own
+(`make_defaults::<i32, String>()`).
+
+`zip` transposes its operands position by position, so its rows must be equally
+long. Two distinct packs are never known to be, so `[[..a], [..b]].zip()` is
+rejected where it is written.
 
 #### Lexical note
 
@@ -5616,7 +5809,8 @@ fn use_it(n: Node) {
 Rules:
 
 - The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet. `&mut T`, container elements (`List<T>`, `Option<T>`, …) and function types are invariant.
-- Narrowing back to a child is never implicit. It is written as a type pattern (below, not yet implemented), which asks the host whether the handle really is one.
+- Narrowing back to a child is never implicit. It is written as a type pattern (below), which asks the host whether the handle really is one.
+- `==` and `!=` compare two handles when one type extends the other, and ask the host whether both name one object. There is no ordering.
 - A child may not redeclare a method it inherits, and a name reachable through both the chain and a trait impl is ambiguous — write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
 - Static methods (no `&self`) are not inherited, and `Self` in an inherited method names the resource that declares it.
 - Generic resources take no part in `extends` yet.
@@ -5624,8 +5818,6 @@ Rules:
 See [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md) for the design and what is not built yet.
 
 ### Type Patterns
-
-Note: not yet implemented. The `let` annotation is still its own grammar slot, and no pattern position accepts an ascription. See [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md).
 
 A pattern may ascribe a type: `p: T` matches when the subject is a `T`, and `p` binds it. The ascription on a `let` is this pattern, so one rule covers both spellings.
 
@@ -5637,7 +5829,7 @@ Whether the pattern can fail is decided statically, from the subject's type `S`:
 | `T <: S`, `T ≠ S` | refutable — a runtime test, and only where `extends` relates the two |
 | otherwise         | a type error, as a mismatched annotation is today                    |
 
-An irrefutable ascription still drives type context, so `let x: i64 = 42` coerces the literal as before. A refutable one needs a pattern position that admits failure, so `let` rejects it exactly as it rejects `let Some(x) = opt`:
+An irrefutable ascription still drives type context, so `let x: i64 = 42` coerces the literal as before. A refutable one needs a pattern position that admits failure, so `let` and a `for` binding reject it exactly as they reject `Some(x)`:
 
 ```wado
 let n: Node = el;                                   // Element <: Node — irrefutable upcast
@@ -5654,6 +5846,8 @@ match e {
 ```
 
 A type match over resources always needs a final `_` arm, because the host may hand back a type the program does not name. An arm whose type is a supertype of a later arm's makes that later arm dead, which is reported.
+
+A refutable ascription tests a handle, so it binds a name or `_` and nothing deeper, and its subject is the value rather than a reference to it. `T` must be a concrete type: a type parameter says nothing about whether it narrows.
 
 This is not [`match type`](./wep-2026-09-05-total-reflection.md), which narrows a type parameter at compile time, is exhaustive, and takes no `_`.
 
@@ -5951,6 +6145,61 @@ It names one parameter, unquoted, and repeats for a second. Like
 codegen lowers the call, and a body is called rather than lowered. A `trait` or
 `interface` method requirement is an error for the same reason — it reaches an
 impl, which is called.
+
+#### `#[trap(...)]`
+
+When a call to a declaration with no body traps. Silence means it may trap, so
+the optimizer keeps every call whose result nothing reads. `#[trap(never)]` says
+it never traps, and a check names the one condition it traps on:
+
+```wado
+#[trap(never)]
+pub fn f64_sqrt(x: f64) -> f64;
+
+#[trap(outside = arr, at = idx)]
+#[trap(unset = arr)]
+pub fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
+
+#[trap(outside = dst, at = dst_offset, len = len)]
+#[trap(outside = src, at = src_offset, len = len)]
+pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
+
+#[result(owned)]
+#[trap(negative = len, result_len = len)]
+pub fn array_new<T>(len: i32) -> Array<T>;
+```
+
+`negative = p` traps when `p` is below zero. `outside = a` traps unless the
+range from `at` (0 when absent) of `len` elements (1 when absent) lies within
+the array `a`, and says the call does not replace `a`. `unset = a` traps when
+the element read holds no value: `array_new` leaves a reference element empty,
+while a primitive element always holds one. Each attribute states one
+check and repeats for another; the call traps where any fails. `result_len = p`
+is no check: it says the returned array holds `p` elements, so a later check
+against it can be proved. Running out of memory is not a trap any of these
+describe.
+
+It is an error on a function with a body, which states when it traps itself,
+and on a `trait` or `interface` method requirement, for the reason `#[retain]`
+is.
+
+#### `#[linear_memory(...)]`
+
+How a call to a declaration with no body touches linear memory: `read` or
+`write`. Silence means it touches none. A linear-memory address is a plain
+`i32`, so no parameter type says this, and the attribute is the only source.
+A `read` call is not moved across a `write`, and neither is deleted as if it
+touched nothing.
+
+```wado
+#[linear_memory(read)]
+pub fn i32_load(addr: i32) -> i32;
+
+#[linear_memory(write)]
+pub fn i32_store(addr: i32, value: i32);
+```
+
+It is written once, and is an error where `#[trap]` is.
 
 ### The "mem" Core Module
 

@@ -13,7 +13,8 @@ use crate::nir_arena::{
 };
 use crate::nir_value_graph::{Side, ValueKind, neutral_int};
 use crate::nir_visitor::NirRefVisitor;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::lattice::is_provably_exhaustive;
 use super::pattern::PatternMatch;
@@ -1126,10 +1127,15 @@ pub(super) fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) ->
     let keep: Operand = match &body.exprs[e].kind {
         ExprKind::Binary { left, op, right } => {
             let (left, op, right) = (*left, *op, *right);
-            match (operand_bool(body, left), op, operand_bool(body, right)) {
-                (Some(false), NirBinaryOp::Or, _) | (Some(true), NirBinaryOp::And, _) => right,
-                (_, NirBinaryOp::Or, Some(false)) | (_, NirBinaryOp::And, Some(true)) => left,
-                _ => return false,
+            let Some(neutral) = op.bool_identity() else {
+                return false;
+            };
+            if operand_bool(body, left) == Some(neutral) {
+                right
+            } else if operand_bool(body, right) == Some(neutral) {
+                left
+            } else {
+                return false;
             }
         }
         _ => return false,
@@ -1184,8 +1190,8 @@ pub(super) fn absorbing_short_circuit(body: &Body, e: ExprId) -> Option<bool> {
     };
     let (left, op, right) = (*left, *op, *right);
     let absorbing = match op {
-        NirBinaryOp::Or => true,
-        NirBinaryOp::And => false,
+        NirBinaryOp::Or | NirBinaryOp::BitOr => true,
+        NirBinaryOp::And | NirBinaryOp::BitAnd => false,
         _ => return None,
     };
     let discarded = if operand_bool(body, left) == Some(absorbing) {
@@ -1462,7 +1468,7 @@ mod tests {
     use super::*;
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::niri::BodySink;
-    use crate::tir::PrimitiveType;
+    use crate::primitive::PrimitiveType;
     use crate::token::Span;
 
     /// `20 + 22`, as the two pooled operands the skeleton carries.

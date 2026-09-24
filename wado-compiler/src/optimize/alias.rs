@@ -188,6 +188,26 @@ pub(super) fn copy_edge(body: &Body, node: NodeRef) -> Option<(u32, Operand)> {
     }
 }
 
+/// The value a binding stores, and the local it binds when the shape names one.
+/// Widens [`copy_edge`] to the shapes that name none: a destructure, and a store
+/// into `x.f`.
+pub(super) fn bound_value(body: &Body, node: NodeRef) -> Option<(Option<u32>, Operand)> {
+    if let Some((dst, value)) = copy_edge(body, node) {
+        return Some((Some(dst), value));
+    }
+    match node {
+        NodeRef::Stmt(s) => match &body.stmts[s].kind {
+            StmtKind::LetDestructure { value, .. } => Some((None, *value)),
+            _ => None,
+        },
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Assign { value, .. } => Some((None, *value)),
+            _ => None,
+        },
+        NodeRef::Block(_) | NodeRef::Pat(_) => None,
+    }
+}
+
 /// A copy of a name that *is* the storage, by the same [`type_creates_alias`]
 /// the value graph seeds its own edges from.
 fn collect_alias_edges_node(

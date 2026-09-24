@@ -1,0 +1,40 @@
+use { is_keyword, is_reserved } from "./vocabulary.wado";
+
+test "a keyword is reserved, contextual ones included" {
+    assert is_reserved("fn");
+    assert is_reserved("internal");
+    assert is_reserved("resume");
+    assert is_reserved("forward");
+    assert is_reserved("self");
+    assert is_reserved("Self");
+}
+
+test "a keyword the parser also takes as a name is not reserved" {
+    assert !is_reserved("extends");
+    assert !is_reserved("type");
+    assert !is_reserved("from");
+}
+
+test "is_keyword holds the keywords alone, not name keywords or prelude names" {
+    assert is_keyword("match");
+    assert is_keyword("resume");
+    assert !is_keyword("Add");
+    assert !is_keyword("panic");
+    assert !is_keyword("of");
+}
+
+test "a name the prelude puts in scope is reserved" {
+    assert is_reserved("List");
+    assert is_reserved("Ordering");
+    assert is_reserved("i128");
+    assert is_reserved("Some");
+    assert is_reserved("panic");
+}
+
+test "an ordinary name is not reserved" {
+    assert !is_reserved("expr");
+    assert !is_reserved("list");
+    assert !is_reserved("string");
+    assert !is_reserved("I32");
+    assert !is_reserved("");
+}

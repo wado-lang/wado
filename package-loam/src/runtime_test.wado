@@ -1,0 +1,138 @@
+use {
+    Tensor,
+    map,
+    matmul,
+    narrow,
+    sigmoid_f32,
+    transpose2,
+    widen,
+    zip,
+    zip_suffix,
+    zip_suffix_lhs,
+} from "./runtime/tensor.wado";
+
+struct Batch {
+}
+struct Row {
+}
+struct Col {
+}
+struct Inner {
+}
+
+fn tensor<Axes>(extents: List<i32>, data: List<f32>) -> Tensor<f32, Axes> {
+    return Tensor { data, extents };
+}
+
+test "matmul contracts the trailing axis" {
+    let a: Tensor<f32, [Row, Inner]> = tensor([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    let b: Tensor<f32, [Inner, Col]> = tensor([3, 2], [1.0, 0.0, 0.0, 1.0, 1.0, 1.0]);
+
+    let c: Tensor<f32, [Row, Col]> = matmul(&a, &b);
+    assert c.extents == [2, 2] as List<i32>;
+    assert c.data == [4.0, 5.0, 10.0, 11.0] as List<f32>;
+}
+
+test "matmul runs one matrix per batch element" {
+    let a: Tensor<f32, [Batch, Row, Inner]> = tensor([2, 1, 2], [1.0, 2.0, 3.0, 4.0]);
+    let b: Tensor<f32, [Batch, Inner, Col]> = tensor([2, 2, 1], [1.0, 1.0, 2.0, 2.0]);
+
+    let c: Tensor<f32, [Batch, Row, Col]> = matmul(&a, &b);
+    assert c.extents == [2, 1, 1] as List<i32>;
+    assert c.data == [3.0, 14.0] as List<f32>;
+}
+
+test "zip pairs two tensors of one shape" {
+    let a: Tensor<f32, [Row, Col]> = tensor([2, 2], [1.0, 2.0, 3.0, 4.0]);
+    let b: Tensor<f32, [Row, Col]> = tensor([2, 2], [10.0, 20.0, 30.0, 40.0]);
+
+    let c = zip(&a, &b, |x, y| x + y);
+    assert c.data == [11.0, 22.0, 33.0, 44.0] as List<f32>;
+}
+
+test "zip_suffix repeats the shorter operand across the leading axes" {
+    let a: Tensor<f32, [Row, Col]> = tensor([2, 2], [1.0, 2.0, 3.0, 4.0]);
+    let b: Tensor<f32, [Col]> = tensor([2], [10.0, 20.0]);
+
+    let c = zip_suffix::<[Row], [Col]>(&a, &b, |x, y| x + y);
+    assert c.extents == [2, 2] as List<i32>;
+    assert c.data == [11.0, 22.0, 13.0, 24.0] as List<f32>;
+}
+
+test "zip_suffix broadcasts a trailing axis across a rank-3 operand" {
+    let a: Tensor<f32, [Batch, Row, Col]> = tensor([2, 1, 2], [1.0, 2.0, 3.0, 4.0]);
+    let b: Tensor<f32, [Col]> = tensor([2], [10.0, 20.0]);
+
+    let c = zip_suffix::<[Batch, Row], [Col]>(&a, &b, |x, y| x * y);
+    assert c.extents == [2, 1, 2] as List<i32>;
+    assert c.data == [10.0, 40.0, 30.0, 80.0] as List<f32>;
+}
+
+test "zip_suffix_lhs keeps the operand order the operator wrote" {
+    let a: Tensor<f32, [Col]> = tensor([2], [10.0, 20.0]);
+    let b: Tensor<f32, [Row, Col]> = tensor([2, 2], [1.0, 2.0, 3.0, 4.0]);
+
+    let c = zip_suffix_lhs::<[Row], [Col]>(&a, &b, |x, y| x - y);
+    assert c.extents == [2, 2] as List<i32>;
+    assert c.data == [9.0, 18.0, 7.0, 16.0] as List<f32>;
+}
+
+test "transpose2 swaps the two axes and their extents" {
+    let t: Tensor<f32, [Row, Col]> = tensor([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+
+    let r: Tensor<f32, [Col, Row]> = transpose2(&t);
+    assert r.extents == [3, 2] as List<i32>;
+    assert r.data == [1.0, 4.0, 2.0, 5.0, 3.0, 6.0] as List<f32>;
+
+    let back: Tensor<f32, [Row, Col]> = transpose2(&r);
+    assert back.data == t.data;
+    assert back.extents == t.extents;
+}
+
+test "map applies one function per element" {
+    let t: Tensor<f32, [Row, Col]> = tensor([1, 3], [-1.0, 0.0, 2.0]);
+
+    let r = map(&t, |v| f32::max(v, 0.0));
+    assert r.data == [0.0, 0.0, 2.0] as List<f32>;
+}
+
+test "sigmoid_f32 is stable on both signs" {
+    assert sigmoid_f32(0.0) == 0.5;
+    assert f32::abs(sigmoid_f32(-100.0)) < 1.0e-30;
+    assert f32::abs(sigmoid_f32(100.0) - 1.0) < 1.0e-30;
+}
+
+test "widening and narrowing keep a value f16 holds exactly" {
+    let half: Tensor<f16, [Row, Col]> = Tensor {
+        data: [
+            f16::from_f32(0.5),
+            f16::from_f32(-2.0),
+            f16::from_f32(3.0),
+        ],
+        extents: [1, 3],
+    };
+
+    let wide = widen(&half);
+    assert wide.data == [0.5, -2.0, 3.0] as List<f32>;
+    assert wide.extents == half.extents;
+
+    let back: Tensor<f16, [Row, Col]> = narrow(&wide);
+    assert back.data == half.data;
+}
+
+test "bf16 widens and narrows over the same axes" {
+    let half: Tensor<bf16, [Row, Col]> = Tensor {
+        data: [
+            bf16::from_f32(0.5),
+            bf16::from_f32(-2.0),
+            bf16::from_f32(3.0),
+        ],
+        extents: [1, 3],
+    };
+
+    let wide = widen(&half);
+    assert wide.data == [0.5, -2.0, 3.0] as List<f32>;
+
+    let back: Tensor<bf16, [Row, Col]> = narrow(&wide);
+    assert back.data == half.data;
+}

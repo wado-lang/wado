@@ -30,7 +30,8 @@ use wado_compiler::niri::{
     BodySink, Callee, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, DEFAULT_STEP_BUDGET, GlobalEnv,
     GlobalFieldEnv, Interpreter, Lattice, is_ctfe_eligible,
 };
-use wado_compiler::tir::{EffectRef, PrimitiveType, TypeId, TypeTable};
+use wado_compiler::primitive::PrimitiveType;
+use wado_compiler::tir::{EffectRef, TypeId, TypeTable};
 
 /// A struct type for a fixture.
 ///

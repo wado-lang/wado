@@ -2,6 +2,9 @@ use { args, print, eprintln, exit, Stdout, Stderr, Environment, Exit } from "cor
 use { Deserialize } from "core:serde";
 use { parse, ArgsError } from "core:args";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
+// Only the path functions, which perform no I/O: this file opens its own files
+// because it searches every grant, which `core:fs` does not.
+use fs from "core:fs";
 use { assemble_grammar, AssembleError } from "./g4/parser.wado";
 use { Grammar } from "./ir.wado";
 use {
@@ -244,8 +247,8 @@ fn load_and_merge(paths: &List<String>) -> Grammar with (Stdout, Stderr, Preopen
         };
         let content = match String::from_utf8(bytes) {
             Ok(s) => s,
-            Err(_) => {
-                eprintln(`gale: ${*path}: not valid UTF-8`);
+            Err(e) => {
+                eprintln(`gale: ${*path}: not valid UTF-8: ${e}`);
                 exit(1);
             },
         };
@@ -278,8 +281,8 @@ fn read_source_file<S: AsStrSlice>(path: S) -> String with (Stderr, Preopens, Ex
     };
     return match String::from_utf8(bytes) {
         Ok(s) => s,
-        Err(_) => {
-            eprintln(`gale: ${path}: not valid UTF-8`);
+        Err(e) => {
+            eprintln(`gale: ${path}: not valid UTF-8: ${e}`);
             exit(1);
         },
     };
@@ -361,10 +364,16 @@ fn create_granted<S: AsStrSlice>(path: S) -> Descriptor with (Stderr, Preopens, 
 /// The `wado run` invocation that would grant `path`'s own directory and name
 /// the file relative to it.
 fn grant_hint<S: AsStrSlice>(path: S) -> String {
-    let cut = path.rfind("/").unwrap();
-    let dir = if cut == 0 { "/" } else { path.substr_bytes(0, cut) };
-    let name = path.substr_bytes(cut + 1, path.len());
-    return `wado run --dir ${dir} ... ${name}`;
+    let Some(name) = fs::file_name(path) else {
+        return `wado run --dir ${path} ...`;
+    };
+    // A path with one component has no directory part, so the grant is the one
+    // it resolves against: the filesystem root, or where the command runs.
+    let holder = match fs::parent(path) {
+        Some(dir) && !dir.is_empty() => dir.to_string(),
+        _ => if path.starts_with("/") { "/" } else { "." },
+    };
+    return `wado run --dir ${holder} ... ${name}`;
 }
 
 /// Read a file to EOF. The stream's completion future is consumed so a

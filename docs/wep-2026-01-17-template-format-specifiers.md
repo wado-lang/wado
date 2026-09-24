@@ -235,12 +235,9 @@ one is not.
 ### Known gaps
 
 - [ ] Dynamic width and precision: the grammar takes literal digits, so neither
-      can be computed. Closing it takes a nested interpolation
-      (`${value:${width}.${precision}}`), which fits Wado's arbitrary-expression
-      interpolations better than Rust's `width$` form — that one names
-      argument-list positions Wado does not have. The interpolation scanner
-      already tracks brace depth, so the spec text can carry a nested `${…}`;
-      the parser and `format_spec` would have to keep it as an expression.
+      can be computed. Rust's `width$` form names argument-list positions Wado
+      does not have. `format_spec` holds the spec as text, not as anything that
+      could carry an expression.
 - [ ] A parameter with no meaning for its operand is dropped rather than
       rejected, against the closed grammar's intent: precision on an integer,
       `+` on a `String`, `#` on `e`/`E`. Only the type checker knows which

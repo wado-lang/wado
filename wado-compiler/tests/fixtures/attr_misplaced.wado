@@ -1,0 +1,11 @@
+// A known attribute written where it does not belong names the places it does.
+
+#[expect_trap]
+struct Point {
+    x: i32,
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "`expect_trap` does not belong on a struct; it belongs on a test block", "compile_error_codes": ["ATTR_MISUSE"]}

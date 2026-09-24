@@ -1,0 +1,33 @@
+// A projection inside a bound's trait argument is re-spelled too, not only one
+// standing alone: `Make<List<Self::Base>>` reaches `impl Make<List<String>>`.
+
+trait Make<T> with () {
+    fn make(v: T) -> Self;
+}
+
+trait Constrained: Make<List<Self::Base>> with () {
+    type Base;
+}
+
+struct Bag {
+    n: i32,
+}
+
+impl Make<List<String>> for Bag {
+    fn make(v: List<String>) -> Bag {
+        return Bag { n: v.len() };
+    }
+}
+
+impl Constrained for Bag {
+    type Base = String;
+}
+
+fn build<T: Constrained>(b: List<T::Base>) -> T {
+    return T::make(b);
+}
+
+test "a projection nested inside a trait argument reaches the impl" {
+    let xs: List<String> = ["a", "b"];
+    assert build::<Bag>(xs).n == 2;
+}

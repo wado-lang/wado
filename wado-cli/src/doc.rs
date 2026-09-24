@@ -353,19 +353,30 @@ fn format_markdown(content: &str) -> String {
 #[cfg(test)]
 mod format_contract_tests {
     use super::*;
-    use wado_compiler::doc::{extract_stdlib_doc, extract_stdlib_doc_with};
+    use wado_compiler::doc::extract_stdlib_doc;
+    use wado_lsp::host::install_dev_stdlib;
+
+    fn stdlib_doc(module: &str) -> DocModule {
+        install_dev_stdlib();
+        extract_stdlib_doc(module).unwrap_or_else(|| panic!("{module} stdlib doc"))
+    }
+
+    fn stdlib_doc_all(module: &str) -> DocModule {
+        install_dev_stdlib();
+        extract_stdlib_doc_with(module, true).unwrap_or_else(|| panic!("{module} stdlib doc"))
+    }
 
     #[test]
     fn all_view_includes_private_members() {
         // `append_bytes` is a non-`pub` inherent helper on CborDeserializer.
         let default = render_single(
-            &extract_stdlib_doc("core:cbor").expect("doc"),
+            &stdlib_doc("core:cbor"),
             "simple",
             "core:cbor",
             OutputFormat::Simple,
         );
         let all = render_single(
-            &extract_stdlib_doc_with("core:cbor", true).expect("doc"),
+            &stdlib_doc_all("core:cbor"),
             "simple",
             "core:cbor",
             OutputFormat::Simple,
@@ -386,7 +397,7 @@ mod format_contract_tests {
         // `pub use { BinaryProperty } from "./icu.wat"`. The type is named in
         // two signatures, so a reader who cannot see its cases cannot call them.
         let out = render_single(
-            &extract_stdlib_doc("core:icu").expect("core:icu stdlib doc"),
+            &stdlib_doc("core:icu"),
             "markdown",
             "core:icu",
             OutputFormat::Markdown,
@@ -411,14 +422,14 @@ mod format_contract_tests {
 
     #[test]
     fn markdown_output_is_dprint_stable() {
-        let doc = extract_stdlib_doc("core:cli").expect("core:cli stdlib doc");
+        let doc = stdlib_doc("core:cli");
         let out = render_single(&doc, "markdown", "core:cli", OutputFormat::Markdown);
         assert_dprint_stable(&out, "markdown single");
     }
 
     #[test]
     fn simple_output_is_dprint_stable() {
-        let doc = extract_stdlib_doc("core:cli").expect("core:cli stdlib doc");
+        let doc = stdlib_doc("core:cli");
         let out = render_single(&doc, "simple", "core:cli", OutputFormat::Simple);
         assert_dprint_stable(&out, "simple single");
     }
@@ -429,6 +440,38 @@ mod format_contract_tests {
             .expect("parse");
         let doc = wado_compiler::doc::extract_doc(&parsed.ast, &parsed.trivia, source, "demo");
         render_single(&doc, "markdown", "demo.wado", OutputFormat::Markdown)
+    }
+
+    fn simple_all_of(source: &str) -> String {
+        let parsed = wado_compiler::parse(source)
+            .into_fail_fast()
+            .expect("parse");
+        let doc = extract_doc_with(&parsed.ast, &parsed.trivia, source, "demo", true);
+        render_single(&doc, "simple", "demo.wado", OutputFormat::Simple)
+    }
+
+    /// `--all` documents a struct at every visibility.
+    #[test]
+    fn an_internal_struct_heads_its_impl_block_with_its_own_name() {
+        let out = simple_all_of(
+            "//! Demo.\n\ninternal struct Limit {\n    value: i32,\n}\n\nimpl Limit {\n    pub const MAX: i32 = 99;\n}\n",
+        );
+        assert!(
+            out.contains("impl Limit {"),
+            "an internal struct's impl block must name the struct:\n{out}"
+        );
+    }
+
+    /// A `pub const` is part of the type's API wherever it is declared.
+    #[test]
+    fn a_struct_documents_its_associated_constants() {
+        let out = markdown_of(
+            "//! Demo.\n\npub struct Limit {\n    value: i32,\n}\n\nimpl Limit {\n    pub const MAX: i32 = 99;\n\n    pub fn get(&self) -> i32 {\n        return self.value;\n    }\n}\n",
+        );
+        assert!(
+            out.contains("pub const MAX: i32"),
+            "a struct's associated constant must be documented:\n{out}"
+        );
     }
 
     #[test]
@@ -501,10 +544,7 @@ mod format_contract_tests {
     #[test]
     fn combined_markdown_output_is_dprint_stable() {
         let inputs = ["core:cli".to_string(), "core:base64".to_string()];
-        let docs: Vec<(String, _)> = inputs
-            .iter()
-            .map(|i| (i.clone(), extract_stdlib_doc(i).expect("stdlib doc")))
-            .collect();
+        let docs: Vec<(String, _)> = inputs.iter().map(|i| (i.clone(), stdlib_doc(i))).collect();
         let opts = DocOptions {
             inputs: inputs.to_vec(),
             format: OutputFormat::Markdown,
@@ -757,6 +797,9 @@ fn render_md_struct(out: &mut String, s: &DocStruct, h3: &str, h4: &str) {
     }
     for f in &s.fields {
         render_md_entity(out, &format!("{}: {}", f.name, f.ty), f.doc.as_deref(), h4);
+    }
+    for c in &s.constants {
+        render_md_member(out, &c.signature, &c.attrs, c.doc.as_deref(), h4);
     }
     for m in &s.methods {
         render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
@@ -1212,15 +1255,11 @@ fn render_simple_structs_section(out: &mut String, doc: &DocModule, h2: &str) {
     for s in &doc.structs {
         out.push_str("\n```wado\n");
         render_simple_struct(out, s);
-        if !s.methods.is_empty() {
-            let type_name = s
-                .signature
-                .strip_prefix("pub ")
-                .unwrap_or(&s.signature)
-                .strip_prefix("struct ")
-                .and_then(|rest| rest.split([' ', '<', '{']).next())
-                .unwrap_or("?");
-            writeln!(out, "\nimpl {type_name} {{").unwrap();
+        if !s.constants.is_empty() || !s.methods.is_empty() {
+            writeln!(out, "\nimpl {} {{", s.name).unwrap();
+            for c in &s.constants {
+                writeln!(out, "    {};", c.signature).unwrap();
+            }
             for m in &s.methods {
                 writeln!(out, "    {};", m.signature).unwrap();
             }

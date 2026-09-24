@@ -139,7 +139,7 @@ fieldList
     ;
 
 fieldDecl
-    : attribute* ('pub' | 'internal')? identifier ':' typeRef ('=' expression)?
+    : attribute* ('pub' | 'internal')? fieldName ':' typeRef ('=' expression)?
     ;
 
 enumDecl
@@ -271,7 +271,7 @@ typeArg
     ;
 
 path
-    : IDENTIFIER ('::' IDENTIFIER)*
+    : (IDENTIFIER | 'Self') ('::' IDENTIFIER)*
     ;
 
 // `memberName` is the token set. Each use site wraps it in a rule naming what
@@ -283,7 +283,8 @@ methodName
     : memberName
     ;
 
-// The name in `.name`, a struct literal's `name:`, and a pattern's `name:`.
+// The name in `.name`, a field declaration's, a struct literal's and a
+// pattern's `name:`.
 fieldName
     : memberName
     ;
@@ -296,7 +297,7 @@ memberName
     | 'reactive' | 'unique' | 'struct' | 'enum' | 'variant' | 'flags'
     | 'type' | 'impl' | 'trait' | 'resource' | 'world' | 'async'
     | 'import' | 'export' | 'assert' | 'global' | 'const' | 'matches'
-    | 'true' | 'false' | 'null' | 'trap' | 'forward'
+    | 'true' | 'false' | 'null' | 'trap' | 'forward' | 'Self'
     | 'test' | 'do' | 'task' | 'extends' | 'internal' | 'resume' | 'self'
     ;
 
@@ -342,7 +343,7 @@ labeledBlock
     ;
 
 letStatement
-    : attribute* 'reactive'? 'let' pattern (':' typeRef)? ('=' expression ('else' block)?)?
+    : attribute* 'reactive'? 'let' pattern ('=' expression ('else' block)?)?
     ;
 
 assertStatement
@@ -385,7 +386,7 @@ forHead
 
 forTail
     : 'of' exprNoStruct
-    | (':' typeRef)? '=' expression ';' condition? ';' exprNoStruct?
+    | '=' expression ';' condition? ';' exprNoStruct?
     ;
 
 whileStatement
@@ -491,7 +492,7 @@ braceLiteral
     ;
 
 exprPath
-    : identifier ('::' (typeArgs | pathSegment))*
+    : (identifier | 'Self') ('::' (typeArgs | pathSegment))*
     ;
 
 // A template literal directly after a path tags it (WEP 2026-01-10). The
@@ -568,7 +569,7 @@ primaryNoStruct
     ;
 
 structLiteral
-    : path '{' fieldInitList? '}'
+    : path ('::' typeArgs)? '{' fieldInitList? '}'
     ;
 
 fieldInitList
@@ -639,7 +640,7 @@ pattern
     ;
 
 patternRange
-    : patternPrimary (('..<' | '..=') patternPrimary)?
+    : patternPrimary (('..<' | '..=') patternPrimary)? (':' typeRef)?
     ;
 
 patternPrimary
@@ -654,7 +655,7 @@ patternPrimary
     ;
 
 patternPath
-    : identifier typeArgs? ('::' (typeArgs | identifier))*
+    : (identifier | 'Self') typeArgs? ('::' (typeArgs | identifier))*
     ;
 
 patternElements

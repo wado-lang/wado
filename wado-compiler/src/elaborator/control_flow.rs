@@ -249,17 +249,25 @@ pub(super) fn find_return_type_in_block(
     ctx: CtrlFlowCtx<'_>,
     block: &ast::Block,
 ) -> Option<TypeId> {
-    for stmt in &block.stmts {
-        if let Some(t) = find_return_type_in_stmt(ctx, stmt) {
-            return Some(t);
-        }
-    }
-    None
+    return_types_in_block(ctx, block).into_iter().next()
 }
 
-fn find_return_type_in_stmt(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt) -> Option<TypeId> {
+/// Every return statement's value type in `block`, in source order.
+pub(super) fn return_types_in_block(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> Vec<TypeId> {
+    let mut out = Vec::new();
+    collect_return_types_in_block(ctx, block, &mut out);
+    out
+}
+
+fn collect_return_types_in_block(ctx: CtrlFlowCtx<'_>, block: &ast::Block, out: &mut Vec<TypeId>) {
+    for stmt in &block.stmts {
+        collect_return_types_in_stmt(ctx, stmt, out);
+    }
+}
+
+fn collect_return_types_in_stmt(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt, out: &mut Vec<TypeId>) {
     match stmt {
-        ast::Stmt::Return(r) => match &r.value {
+        ast::Stmt::Return(r) => out.extend(match &r.value {
             // The value's type comes from `expression_types`; an ERROR /
             // UNKNOWN-containing type counts as "not recorded" (via
             // `definite_type_of`), so the caller treats this arm as "no
@@ -267,72 +275,57 @@ fn find_return_type_in_stmt(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt) -> Option<Ty
             // producing a misleading missing-return diagnostic.
             Some(expr) => ctx.definite_type_of(expr),
             None => Some(TypeTable::UNIT),
-        },
+        }),
         ast::Stmt::If(if_stmt) => {
-            if let Some(t) = find_return_type_in_block(ctx, &if_stmt.then_block) {
-                return Some(t);
+            collect_return_types_in_block(ctx, &if_stmt.then_block, out);
+            if let Some(else_block) = &if_stmt.else_block {
+                collect_return_types_in_block(ctx, else_block, out);
             }
-            if let Some(else_block) = &if_stmt.else_block
-                && let Some(t) = find_return_type_in_block(ctx, else_block)
-            {
-                return Some(t);
-            }
-            None
         }
-        ast::Stmt::Loop(loop_stmt) => find_return_type_in_block(ctx, &loop_stmt.body),
-        ast::Stmt::LabeledBlock(lb) => find_return_type_in_block(ctx, &lb.block),
-        ast::Stmt::Expr(e) => find_return_type_in_expr(ctx, &e.expr),
+        ast::Stmt::Loop(loop_stmt) => collect_return_types_in_block(ctx, &loop_stmt.body, out),
+        ast::Stmt::LabeledBlock(lb) => collect_return_types_in_block(ctx, &lb.block, out),
+        ast::Stmt::Expr(e) => collect_return_types_in_expr(ctx, &e.expr, out),
         // Top-level `match` statement — recurse through arms like the
         // expression form; `Stmt::Match` is just an AST surface that
         // lowers to the same TIR shape.
         ast::Stmt::Match(m) => {
             for arm in &m.arms {
-                if let Some(t) = find_return_type_in_expr(ctx, &arm.body) {
-                    return Some(t);
-                }
+                collect_return_types_in_expr(ctx, &arm.body, out);
             }
-            None
         }
-        ast::Stmt::Let(l) => l
-            .else_block
-            .as_ref()
-            .and_then(|b| find_return_type_in_block(ctx, b)),
-        _ => None,
+        ast::Stmt::Let(l) => {
+            if let Some(b) = &l.else_block {
+                collect_return_types_in_block(ctx, b, out);
+            }
+        }
+        _ => {}
     }
 }
 
-pub(super) fn find_return_type_in_expr(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr) -> Option<TypeId> {
+fn collect_return_types_in_expr(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr, out: &mut Vec<TypeId>) {
     match expr {
         ast::Expr::Match(m) => {
             for arm in &m.arms {
-                if let Some(t) = find_return_type_in_expr(ctx, &arm.body) {
-                    return Some(t);
-                }
+                collect_return_types_in_expr(ctx, &arm.body, out);
             }
-            None
         }
-        ast::Expr::Block(block) => find_return_type_in_block(ctx, block),
+        ast::Expr::Block(block) => collect_return_types_in_block(ctx, block, out),
         ast::Expr::If(if_expr) => {
-            if let Some(t) = find_return_type_in_block(ctx, &if_expr.then_block) {
-                return Some(t);
+            collect_return_types_in_block(ctx, &if_expr.then_block, out);
+            if let Some(else_block) = &if_expr.else_block {
+                collect_return_types_in_block(ctx, else_block, out);
             }
-            if let Some(else_block) = &if_expr.else_block
-                && let Some(t) = find_return_type_in_block(ctx, else_block)
-            {
-                return Some(t);
-            }
-            None
         }
-        ast::Expr::LabeledBlock(lb) => find_return_type_in_block(ctx, &lb.block),
-        ast::Expr::WithHandler(wh) => find_return_type_in_block(ctx, &wh.body),
+        ast::Expr::LabeledBlock(lb) => collect_return_types_in_block(ctx, &lb.block, out),
+        ast::Expr::WithHandler(wh) => collect_return_types_in_block(ctx, &wh.body, out),
         // `resume value` lowers to `return value` in the MVP, so a
         // body whose tail is `resume X` satisfies missing-return as
         // if it were `return X`. Same `expression_types`-missing
         // rule as `Stmt::Return` above: yield `None` rather than
         // synthesising `Unit`, to keep ERROR-recovery diagnostics
         // free of bogus missing-return reports.
-        ast::Expr::Resume(r) => ctx.definite_type_of(&r.value),
-        _ => None,
+        ast::Expr::Resume(r) => out.extend(ctx.definite_type_of(&r.value)),
+        _ => {}
     }
 }
 

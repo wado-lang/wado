@@ -209,6 +209,18 @@ pub enum NirBinaryOp {
     RefNotEq,
 }
 
+impl NirBinaryOp {
+    /// The bool operand this op passes the other one through for: `true & x`,
+    /// `false | x` and `false ^ x` are `x`, as are their `&&` / `||` forms.
+    pub fn bool_identity(self) -> Option<bool> {
+        match self {
+            Self::And | Self::BitAnd => Some(true),
+            Self::Or | Self::BitOr | Self::BitXor => Some(false),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NirUnaryOp {
     Neg,
@@ -942,8 +954,9 @@ pub struct InstantiationKey {
     pub impl_type_args: Vec<TypeId>,
     /// Method-level type arguments (from the method's own generics)
     pub method_type_args: Vec<TypeId>,
-    /// Method info for method instantiations (None for struct/enum instantiations)
-    /// Not included in equality/hash - used only for name formatting
+    /// Method info for method instantiations (None for struct/enum instantiations).
+    /// Left out of equality and hash, so it names an instance but never decides
+    /// one: read a declaration's own `method_info` for anything else.
     pub method_info: Option<LocalMethodName>,
 }
 

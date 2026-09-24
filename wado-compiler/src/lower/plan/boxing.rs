@@ -275,6 +275,7 @@ impl TypeBuilder {
                 wire_name_override: None,
                 serde_default: false,
                 serde_positional: false,
+                serde_number: None,
                 default_expr: None,
             }],
             span: Span::new(0, 0, 0, 0),
@@ -557,6 +558,14 @@ fn remap_locals_in_pattern(pattern: &mut TirPattern, remap: &IndexMap<u32, u32>)
             }
         }
         TirPattern::ConstantValue { expr } => remap_locals_in_expr(expr, remap),
+        TirPattern::Narrow {
+            local_index, test, ..
+        } => {
+            if let Some(&new_idx) = remap.get(local_index) {
+                *local_index = new_idx;
+            }
+            remap_locals_in_expr(test, remap);
+        }
         TirPattern::Wildcard
         | TirPattern::Literal(_)
         | TirPattern::Enum { .. }

@@ -21,6 +21,7 @@ use crate::ast::{
     UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
     WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
+use crate::attribute::{CANONICAL, CM, TODO};
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
@@ -136,6 +137,16 @@ struct ParserCheckpoint {
     pending_gt: bool,
     errors_len: usize,
     contextual_keywords_len: usize,
+}
+
+/// The path prefix a turbofish pins, in `Wrapper::<T>` or `geo::Wrapper::<T>`.
+/// A namespace is as much qualification as a type spells, so no third segment.
+struct TurbofishHead {
+    namespace: Option<(String, Span)>,
+    name: String,
+    name_span: Span,
+    /// The whole prefix, so a diagnostic points at `geo::Wrapper` and not `Wrapper`.
+    span: Span,
 }
 
 /// Groups of comparison operators for chain validation
@@ -344,9 +355,7 @@ impl Parser {
     /// Valid even after a parse error: each inner attribute is recorded as it
     /// parses, so the valid ones survive a later malformed attribute or item.
     pub fn has_todo(&self) -> bool {
-        self.parsed_inner_attributes
-            .iter()
-            .any(|a| a.name == "TODO")
+        self.parsed_inner_attributes.iter().any(|a| a.name == TODO)
     }
 
     /// Parse an expression with struct literals restricted. Used in contexts
@@ -1158,7 +1167,7 @@ impl Parser {
         }
 
         match self.peek_kind() {
-            TokenKind::Use => self.parse_use_decl(visibility).map(Item::Use),
+            TokenKind::Use => self.parse_use_decl(visibility, attrs).map(Item::Use),
             TokenKind::Fn => self
                 .parse_function(visibility, has_export, is_async, attrs, false)
                 .map(Item::Function),
@@ -1172,7 +1181,7 @@ impl Parser {
                 .map(Item::Variant),
             TokenKind::Flags => self.parse_flags_decl(visibility, attrs).map(Item::Flags),
             TokenKind::Type => self.parse_type_decl(visibility, attrs),
-            TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
+            TokenKind::Impl => self.parse_impl_block(attrs).map(Item::Impl),
             TokenKind::Trait => self.parse_trait_decl(visibility, attrs).map(Item::Trait),
             TokenKind::Resource => self
                 .parse_resource_decl(visibility, attrs)
@@ -1371,6 +1380,10 @@ impl Parser {
                                 self.expect(&TokenKind::RBracket)?;
                                 AttrArg::KeyArray(value, items)
                             }
+                            TokenKind::NumberLit(number) => {
+                                self.advance();
+                                AttrArg::KeyNumber(value, number)
+                            }
                             _ => {
                                 // `part_of = arr` names something in the source,
                                 // so it stays unquoted and keeps its own shape.
@@ -1380,7 +1393,7 @@ impl Parser {
                                     let span = self.peek().span;
                                     return Err(self.error_at_span(
                                         span,
-                                        "expected a string, an array, or an identifier after `=`",
+                                        "expected a string, a number, an array, or an identifier after `=`",
                                     ));
                                 };
                                 self.mark_keyword_name();
@@ -1511,7 +1524,11 @@ impl Parser {
     /// - Simple: `name` or `name as alias`
     /// - Effect functions: `Effect::{func1, func2}` or `Effect::{func1 as alias}`
     /// - Wildcard: `_` (no braces needed)
-    fn parse_use_decl(&mut self, visibility: Visibility) -> ParseResult<UseDecl> {
+    fn parse_use_decl(
+        &mut self,
+        visibility: Visibility,
+        attrs: Vec<Attribute>,
+    ) -> ParseResult<UseDecl> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Use)?;
@@ -1560,6 +1577,7 @@ impl Parser {
 
         Ok(UseDecl {
             id,
+            attrs,
             visibility,
             source,
             source_span,
@@ -2445,9 +2463,8 @@ impl Parser {
         };
 
         let pattern_start_span = self.peek().span;
-        let pattern = self.parse_pattern()?;
         let name_span = pattern_start_span;
-
+        let pattern = self.parse_pattern_of(Self::parse_pattern_atom_or_range_unascribed)?;
         let ty = if self.check(&TokenKind::Colon) {
             self.advance();
             Some(self.parse_type()?)
@@ -2964,13 +2981,20 @@ impl Parser {
     }
 
     fn parse_pattern(&mut self) -> ParseResult<Pattern> {
-        let first = self.parse_pattern_atom_or_range()?;
+        self.parse_pattern_of(Self::parse_pattern_atom_or_range)
+    }
+
+    fn parse_pattern_of(
+        &mut self,
+        alternative: fn(&mut Self) -> ParseResult<Pattern>,
+    ) -> ParseResult<Pattern> {
+        let first = alternative(self)?;
 
         if self.check(&TokenKind::Pipe) {
             let mut alternatives = vec![first];
             while self.check(&TokenKind::Pipe) {
                 self.advance();
-                alternatives.push(self.parse_pattern_atom_or_range()?);
+                alternatives.push(alternative(self)?);
             }
             Ok(Pattern::Or(alternatives))
         } else {
@@ -2978,8 +3002,26 @@ impl Parser {
         }
     }
 
-    /// Parse an atom, optionally extended into a range (`a..=b` / `a..<b`).
+    /// Parse an atom or range, optionally ascribed a type (`input: HtmlInputElement`).
     fn parse_pattern_atom_or_range(&mut self) -> ParseResult<Pattern> {
+        let start_span = self.peek().span;
+        let pattern = self.parse_pattern_atom_or_range_unascribed()?;
+        if !self.check(&TokenKind::Colon) {
+            return Ok(pattern);
+        }
+        self.advance();
+        let ty = self.parse_type()?;
+        let span = start_span.merge(&ty.span());
+        Ok(Pattern::Typed {
+            id: self.alloc_ast_id(),
+            pattern: Box::new(pattern),
+            ty,
+            span,
+        })
+    }
+
+    /// Parse an atom, optionally extended into a range (`a..=b` / `a..<b`).
+    fn parse_pattern_atom_or_range_unascribed(&mut self) -> ParseResult<Pattern> {
         let start_span = self.peek().span;
         let first = self.parse_pattern_atom()?;
 
@@ -3714,6 +3756,20 @@ impl Parser {
                     self.advance(); // consume ::
                     if self.check(&TokenKind::Lt) {
                         let callee_span = expr.span();
+                        // One head carries one turbofish, whichever of the arms
+                        // below consumes it: `Box::<i32>::<i64> { … }` would
+                        // otherwise drop the first list on the way to the
+                        // struct literal.
+                        if let Expr::Ident(ident) = &expr
+                            && !ident.type_args.is_empty()
+                        {
+                            return Err(ParseError {
+                                message:
+                                    "turbofish type arguments already specified on this identifier"
+                                        .to_string(),
+                                span: callee_span,
+                            });
+                        }
                         let type_args = self.parse_call_type_args()?;
                         if self.check(&TokenKind::LParen) {
                             // Call-site turbofish: foo::<T>(x)
@@ -3733,19 +3789,21 @@ impl Parser {
                                 has_trailing_comma,
                                 span: merged_span,
                             }));
+                        } else if self.check(&TokenKind::LBrace)
+                            && !self.restrict_struct_literals
+                            && self.looks_like_struct_literal_content()
+                            && let Expr::Ident(ident) = &expr
+                        {
+                            // `Box::<i32> { value: 1 }`. The primary parser
+                            // leaves the `::<…>` to this loop for a bare `Name`
+                            // and a `ns::Name` path alike, so both arrive here.
+                            let head = (ident.name.clone(), type_args);
+                            expr = self.parse_struct_literal(Some(head), callee_span)?;
                         } else if let Expr::Ident(ident) = &mut expr {
                             // Bare turbofish on an identifier: `foo::<T>` as a value.
                             // Attach the type args to the identifier and let the
                             // outer postfix loop continue (so `foo::<T>(x)` after a
                             // method-call chain still parses as a call below).
-                            if !ident.type_args.is_empty() {
-                                return Err(ParseError {
-                                    message:
-                                        "turbofish type arguments already specified on this identifier"
-                                            .to_string(),
-                                    span: callee_span,
-                                });
-                            }
                             ident.type_args = type_args;
                         } else {
                             // Turbofish on a non-identifier expression with no call
@@ -3929,15 +3987,42 @@ impl Parser {
         Ok(expr)
     }
 
-    /// Speculatively parse `Type::<Args>::method(...)` after `name::` was already
-    /// consumed and `<` is the next token. On any speculative failure, restore the
-    /// parser to `cp` (just before the `::`) and produce a bare `Ident`.
+    /// [`Self::parse_turbofish_path_tail`] on a bare head, with the `Ident` the
+    /// backtrack leaves behind. `cp` sits just before the `::`.
     fn parse_generic_static_method_call_or_backtrack(
         &mut self,
         start_span: Span,
         name: String,
         cp: ParserCheckpoint,
     ) -> ParseResult<Expr> {
+        let head = TurbofishHead {
+            namespace: None,
+            name: name.clone(),
+            name_span: start_span,
+            span: start_span,
+        };
+        if let Some(expr) = self.parse_turbofish_path_tail(head, cp)? {
+            return Ok(expr);
+        }
+        Ok(Expr::Ident(IdentExpr {
+            id: self.alloc_ast_id(),
+            name,
+            span: start_span,
+            segments: Vec::new(),
+            type_args: Vec::new(),
+            type_args_on_prefix: false,
+        }))
+    }
+
+    /// Parse what follows the turbofish in `Head::<Args>…`, positioned at the
+    /// `<`: `::method(…)` as a static call, `::Case` as the qualified path with
+    /// its arguments pinned. `None` where neither follows, parser restored
+    /// to `cp` so the caller reads the path its own way.
+    fn parse_turbofish_path_tail(
+        &mut self,
+        head: TurbofishHead,
+        cp: ParserCheckpoint,
+    ) -> ParseResult<Option<Expr>> {
         self.advance(); // consume <
 
         let mut type_args = Vec::new();
@@ -3958,90 +4043,110 @@ impl Parser {
             spec_ok = self.expect_gt().is_ok();
         }
 
-        // After `Name::<…>`, `::method(…)` continues the static-method-call path
-        // and `::Case` (no call) is a turbofish-qualified path selecting a
-        // payload-less case. A bare `Name::<…>` (used as a value) backtracks
-        // below so the outer postfix loop sees the `::<…>` again and either
-        // parses it as a turbofish-attached identifier or rejects a duplicate
-        // turbofish. `Name::<A>::<B>` falls into the same backtrack: the second
-        // `<` is not a method identifier.
+        // A value, a struct literal's brace and a second turbofish all follow a
+        // bare `Head::<…>`, and the postfix loop tells them apart — so each
+        // backtracks from here rather than being named again.
+        //
         // The segment may be a contextual keyword — `Type::<T>::from(x)` is the
         // one every `From` impl is called through — so admit whatever
         // `consume_ident` below will accept, not `Ident` alone.
-        if spec_ok
+        if !(spec_ok
             && self.check(&TokenKind::ColonColon)
-            && self.peek_nth(1).kind.as_ident_name().is_some()
+            && self.peek_nth(1).kind.as_ident_name().is_some())
         {
-            self.advance(); // consume ::
-            let (method, method_span) = self.consume_ident_with_span()?;
+            self.restore(cp);
+            return Ok(None);
+        }
 
-            // Method-level turbofish: method::<U>(...)
-            let method_type_args =
-                if self.check(&TokenKind::ColonColon) && self.peek_nth(1).kind == TokenKind::Lt {
-                    self.advance(); // consume ::
-                    self.parse_call_type_args()?
-                } else {
-                    Vec::new()
-                };
+        self.advance(); // consume ::
+        let (method, method_span) = self.consume_ident_with_span()?;
 
-            // `Name::<Args>::Case` with no call: the qualified path the
-            // untargeted `Name::Case` produces, with the type args pinned on
-            // it. A method-level turbofish rules this out — `method::<U>` is
-            // never a case name — so that keeps expecting the call.
-            if method_type_args.is_empty() && !self.check(&TokenKind::LParen) {
-                let path_span = start_span.merge(&method_span);
-                return Ok(Expr::Ident(IdentExpr {
+        // Method-level turbofish: method::<U>(...)
+        let method_type_args =
+            if self.check(&TokenKind::ColonColon) && self.peek_nth(1).kind == TokenKind::Lt {
+                self.advance(); // consume ::
+                self.parse_call_type_args()?
+            } else {
+                Vec::new()
+            };
+
+        // `Head::<Args>::Case` with no call: the qualified path the untargeted
+        // `Head::Case` produces, with the type args pinned on it. A
+        // method-level turbofish rules this out — `method::<U>` is never a case
+        // name — so that keeps expecting the call.
+        if method_type_args.is_empty() && !self.check(&TokenKind::LParen) {
+            let mut segments = Vec::new();
+            if let Some((namespace, namespace_span)) = &head.namespace {
+                segments.push(PathSegment {
                     id: self.alloc_ast_id(),
-                    name: format!("{name}::{method}"),
-                    span: path_span,
-                    segments: vec![
-                        PathSegment {
-                            id: self.alloc_ast_id(),
-                            name,
-                            span: start_span,
-                        },
-                        PathSegment {
-                            id: self.alloc_ast_id(),
-                            name: method,
-                            span: method_span,
-                        },
-                    ],
-                    type_args,
-                    type_args_on_prefix: true,
-                }));
+                    name: namespace.clone(),
+                    span: *namespace_span,
+                });
             }
-
-            self.expect(&TokenKind::LParen)?;
-            let (args, has_trailing_comma) = self.parse_arg_list()?;
-            let end_span = self.expect(&TokenKind::RParen)?.span;
-
-            return Ok(Expr::StaticMethodCall(Box::new(StaticMethodCallExpr {
+            segments.push(PathSegment {
                 id: self.alloc_ast_id(),
-                target_type: Type::Generic(GenericType {
-                    id: self.alloc_ast_id(),
-                    name,
-                    args: type_args,
-                    span: start_span,
-                }),
+                name: head.name.clone(),
+                span: head.name_span,
+            });
+            segments.push(PathSegment {
+                id: self.alloc_ast_id(),
+                name: method,
+                span: method_span,
+            });
+            let name = segments
+                .iter()
+                .map(|segment| segment.name.as_str())
+                .collect::<Vec<_>>()
+                .join("::");
+            return Ok(Some(Expr::Ident(IdentExpr {
+                id: self.alloc_ast_id(),
+                name,
+                span: head.span.merge(&method_span),
+                segments,
+                type_args,
+                type_args_on_prefix: true,
+            })));
+        }
+
+        let target_type = self.turbofish_head_type(&head, type_args);
+        self.expect(&TokenKind::LParen)?;
+        let (args, has_trailing_comma) = self.parse_arg_list()?;
+        let end_span = self.expect(&TokenKind::RParen)?.span;
+
+        Ok(Some(Expr::StaticMethodCall(Box::new(
+            StaticMethodCallExpr {
+                id: self.alloc_ast_id(),
+                target_type,
                 method,
                 method_id: self.alloc_ast_id(),
                 method_span,
                 type_args: method_type_args,
                 args,
                 has_trailing_comma,
-                span: start_span.merge(&end_span),
-            })));
-        }
+                span: head.span.merge(&end_span),
+            },
+        ))))
+    }
 
-        self.restore(cp);
-        Ok(Expr::Ident(IdentExpr {
-            id: self.alloc_ast_id(),
-            name,
-            span: start_span,
-            segments: Vec::new(),
-            type_args: Vec::new(),
-            type_args_on_prefix: false,
-        }))
+    /// The type a turbofish head denotes, which is the one the equivalent
+    /// annotation spells: `Wrapper<T>` bare, `geo::Wrapper<T>` namespaced.
+    fn turbofish_head_type(&mut self, head: &TurbofishHead, args: Vec<Type>) -> Type {
+        match &head.namespace {
+            None => Type::Generic(GenericType {
+                id: self.alloc_ast_id(),
+                name: head.name.clone(),
+                args,
+                span: head.span,
+            }),
+            Some((namespace, _)) => Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                id: self.alloc_ast_id(),
+                namespace: namespace.clone(),
+                name: head.name.clone(),
+                name_span: head.name_span,
+                args,
+                span: head.span,
+            })),
+        }
     }
 
     /// Parse a `name::seg::seg...` qualified path identifier. The leading `name`
@@ -4062,6 +4167,21 @@ impl Parser {
         });
         let mut qualified_name = format!("{name}::{first_seg_name}");
         let mut end_span = first_seg_span;
+        // `geo::Wrapper::<i64>::make(…)`: the turbofish pins `geo::Wrapper`,
+        // the type a namespace qualifies, which only the first segment can do.
+        if self.check(&TokenKind::ColonColon) && self.peek_nth(1).kind == TokenKind::Lt {
+            let cp = self.checkpoint();
+            self.advance(); // consume ::
+            let head = TurbofishHead {
+                namespace: Some((name, start_span)),
+                name: first_seg_name,
+                name_span: first_seg_span,
+                span: start_span.merge(&first_seg_span),
+            };
+            if let Some(expr) = self.parse_turbofish_path_tail(head, cp)? {
+                return Ok(expr);
+            }
+        }
         while self.check(&TokenKind::ColonColon) && self.peek_nth(1).kind.as_ident_name().is_some()
         {
             self.advance(); // consume ::
@@ -4086,7 +4206,7 @@ impl Parser {
             && !self.restrict_struct_literals
             && self.looks_like_struct_literal_content()
         {
-            return self.parse_struct_literal(Some(qualified_name), path_span);
+            return self.parse_struct_literal(Some((qualified_name, Vec::new())), path_span);
         }
         Ok(Expr::Ident(IdentExpr {
             id: self.alloc_ast_id(),
@@ -4141,7 +4261,7 @@ impl Parser {
                 // Detected by looking at content inside braces, not naming convention.
                 // Restricted in contexts where a block follows the expression
                 // (e.g., if/while/match conditions) to avoid ambiguity.
-                return self.parse_struct_literal(Some(name), start_span);
+                return self.parse_struct_literal(Some((name, Vec::new())), start_span);
             }
             return Ok(Expr::Ident(IdentExpr {
                 id: self.alloc_ast_id(),
@@ -5117,13 +5237,6 @@ impl Parser {
                 ));
             }
 
-            if is_pack && params.iter().any(|p: &GenericParam| p.is_pack) {
-                return Err(self.error_at_span(
-                    start_span,
-                    "only one type pack parameter is allowed per generic parameter list",
-                ));
-            }
-
             let (name, name_span) = self.consume_ident_with_span()?;
 
             if is_effect && name == EFFECT_HOLE {
@@ -5651,7 +5764,7 @@ impl Parser {
         }))
     }
 
-    fn parse_impl_block(&mut self) -> ParseResult<ImplBlock> {
+    fn parse_impl_block(&mut self, block_attrs: Vec<Attribute>) -> ParseResult<ImplBlock> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Impl)?;
@@ -5683,6 +5796,7 @@ impl Parser {
             }
             return Ok(ImplBlock {
                 id,
+                attrs: block_attrs,
                 type_params,
                 trait_type,
                 ty,
@@ -5750,6 +5864,7 @@ impl Parser {
                 let end = self.expect(&TokenKind::Semicolon)?.span;
                 associated_types.push(AssociatedTypeBinding {
                     id: assoc_id,
+                    attrs,
                     name: assoc_name,
                     ty: assoc_ty,
                     span: type_span.merge(&end),
@@ -5790,6 +5905,7 @@ impl Parser {
                     let end = self.expect(&TokenKind::Semicolon)?.span;
                     constants.push(AssociatedConst {
                         id: const_id,
+                        attrs,
                         name: const_name,
                         visibility: member_vis,
                         ty: const_ty,
@@ -5806,6 +5922,7 @@ impl Parser {
 
         Ok(ImplBlock {
             id,
+            attrs: block_attrs,
             type_params,
             trait_type,
             ty,
@@ -5917,7 +6034,7 @@ impl Parser {
         let supertraits = if self.check(&TokenKind::Colon) {
             self.advance();
             let bounds = self.parse_trait_bounds()?;
-            if let Some(bound) = bounds.iter().find(|b| b.fn_signature.is_some()) {
+            if let Some(bound) = bounds.iter().find(|b| !b.names_a_trait()) {
                 return Err(self.error_at_span(
                     bound.span,
                     "a `fn` signature cannot be a supertrait: only a trait a type can implement",
@@ -6342,13 +6459,16 @@ impl Parser {
         }
     }
 
-    /// Parse struct literal: `Point { x: 10, y: 20 }` or `Point { x, y }` (shorthand)
-    /// Also handles implicit struct literals `{ x: 10, y: 20 }` where name is None.
+    /// Parse a struct literal: `Point { x: 10, y: 20 }`, its shorthand, or the
+    /// implicit `{ x: 10, y: 20 }`. `head` is the written name and the turbofish
+    /// on it, and `None` for the implicit form.
     fn parse_struct_literal(
         &mut self,
-        name: Option<String>,
+        head: Option<(String, Vec<Type>)>,
         start_span: Span,
     ) -> ParseResult<Expr> {
+        let (name, type_args) = head.map_or((None, Vec::new()), |(n, a)| (Some(n), a));
+
         // For named struct literals, the `{` comes after the name
         // For implicit struct literals, the `{` is already consumed
         if name.is_some() {
@@ -6453,6 +6573,7 @@ impl Parser {
             name,
             name_id,
             name_span,
+            type_args,
             fields,
             spreads,
             has_trailing_comma,
@@ -6514,7 +6635,7 @@ fn reject_resource_linearity(attrs: &[Attribute]) -> ParseResult<()> {
 /// not parse as a full CM path gives `Name`. Anything else is `Ok(None)`; a
 /// malformed argument count or type returns `Err` for the caller to report.
 fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>, String> {
-    if name == "canonical" {
+    if name == CANONICAL {
         let [namespace, function] = args else {
             return Err(format!(
                 "#[canonical] expects exactly 2 string arguments (namespace, name), got {}",
@@ -6529,7 +6650,7 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
             name: fname.clone(),
         }));
     }
-    if name == "cm" {
+    if name == CM {
         let [path, fields @ ..] = args else {
             return Err("#[cm] expects a string argument".to_string());
         };
@@ -6632,6 +6753,7 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
                 format!("{key} = [{}]", items.join(", "))
             }
             AttrArg::KeyIdent(key, named) => format!("{key} = {named}"),
+            AttrArg::KeyNumber(key, number) => format!("{key} = {number}"),
         })
         .collect();
 

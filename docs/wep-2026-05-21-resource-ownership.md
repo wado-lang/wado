@@ -433,6 +433,12 @@ disjoint and ignores the very write it was told about. One function mints the ke
 both sides compare (`place::field_owner`), so what a callee records and what a
 caller looks up cannot drift.
 
+A `&mut` that outlives the expression taking it (stored, captured, or kept by
+the callee's return) writes its root wherever its holder runs, which no point in
+the walk names. So no binding shares storage read out of such a root. The
+optimizer's alias query answers the same way: a write through a dereferenced
+field, payload or element reaches whatever the reference was taken from.
+
 An `Index` or a `Variant` step names no type of its own, so a `Field` past one
 answers for the element rather than for the container the caller holds. A path
 reached through either writes the whole of what its root was lent. Keying it by
@@ -516,11 +522,11 @@ aggregates pays a copy of each element even when the loop body only reads it.
 Nothing about the copy is required: the same walk written over `&list`, or as an
 index loop in one body, reads the element in place under the read-only share.
 
-Closing it needs both halves, in the same fixpoint: the recognizer must see the
-projection through the binding and the variant, _and_ the fold must then treat
-the materialization into that payload as a share rather than a copy. Neither the
-inliner nor any NIR pass can substitute — the copy is chosen before NIR exists,
-and `#[inline(always)]` on `next` leaves the expanded clone in the caller's loop
+Two halves of the one fixpoint miss it. The recognizer does not see the
+projection through the binding and the variant, and the fold reads the
+materialization into that payload as a copy. Neither the inliner nor any NIR
+pass can stand in: the copy is chosen before NIR exists, and
+`#[inline(always)]` on `next` leaves the expanded clone in the caller's loop
 untouched even with the cloned array provably unread.
 
 ### Known gap: a declared retention the walk does not confirm
@@ -538,8 +544,8 @@ reference itself. A parameter that only holds one is seeded, through
 `RefCarrying`: the memoized "can a value of this type hold a reference"
 predicate, which is what keeps `List::push(Sink { r: &it })` retaining `it` now
 that no frontend obligation makes the caller declare it. The projection arm is
-still the narrower reading, and closing it is what would let the walk follow a
-reference through an adapter chain rather than lose it at the first projection.
+still the narrower reading: the walk loses a reference at the first projection
+rather than following it through an adapter chain.
 
 ### Known gap: a generic resource a user module declares
 
@@ -555,6 +561,19 @@ declares has no import binding, so no program can obtain such a handle. Closing
 it means resolving `Name<args>` against the resource declarations in the
 elaborator's main type resolution, as `resolve_type_static_with_params` already
 does for the struct-field pre-pass.
+
+### Known gap: a `Stream` or `Future` handle nothing drops
+
+"Deterministic drop" says an owned, un-moved resource is dropped at scope exit
+on every path. Cleanup does not do that for `GenericResource`, meaning
+`Stream<T>` and `Future<T>`: it excludes them, so every path out of a function
+holding one has to call `drop` itself, and nothing diagnoses a path that does
+not. The handle leaks with no trace.
+
+A `?` or an early `return` inside the region holding the handle is the shape
+that admits it. `core:fs` drains the stream and drops before it decides what to
+return. `core:kiln` lends the handle to a helper, so the body that owns it
+cannot return early at all.
 
 ## Amendments to earlier WEPs
 
@@ -788,16 +807,14 @@ Verified against the tree.
 
 A pattern-destructured field's path is marked as borrowing, because the pattern
 carries no type saying whether that field does, and the mark refuses those paths
-a share outright. Closing it means carrying the field's type into the pattern.
-Every WIR golden is byte-identical with the mark removed, so nothing measured
-pays for it.
+a share outright. Every WIR golden is byte-identical with the mark removed, so
+nothing measured pays for it.
 
 ### Known gap: freshness does not read the fold's own wraps
 
-A copy hands its target storage nothing else reaches, but ownedness is computed
-from a local's source before any wrap site is chosen, so the fold does not read
-the wrap it has just decided as the freshness that wrap creates. Closing it means
-feeding the fold's own decisions back into freshness.
+A copy hands its target storage nothing else reaches. Ownedness is computed from
+a local's source before any wrap site is chosen, so a wrap the fold has just
+decided does not count as making its target fresh.
 
 No program reaches the imprecision. For a second read to pay a copy its move must
 be refused, and a copied local aliases nothing, so only a read that is not the

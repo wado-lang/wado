@@ -1,0 +1,15 @@
+//! A function type written inside a signature carries its own positions. Its
+//! parameters and return belong to that function and settle no pack of the
+//! signature naming it, so `a` and `b` are what settle `A` and `B` here.
+
+fn apply<..A, ..B>(f: fn([..A], [..B]) -> [..A, ..B], a: [..A], b: [..B]) -> [..A, ..B] {
+    return f(a, b);
+}
+
+test "a fn-typed parameter may return both packs" {
+    let g = |a: [i32], b: [bool, String]| [..a, ..b];
+    let r = apply(g, [1], [true, "x"]);
+    assert r.0 == 1;
+    assert r.1 == true;
+    assert r.2 == "x";
+}

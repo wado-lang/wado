@@ -146,7 +146,7 @@ binding is covered end to end and not only to the point of compiling.
 - `wado run` has no host for it, and does not gain one. wasmtime ships none;
   `wasi-gfx/wasi-gfx-runtime` does, as the `wasi-webgpu-wasmtime` crate, against
   the same `wasi:webgpu@0.3.0-rc.2` the module is generated from. It requires
-  wasmtime 48 where the workspace pins 47.0.3, and the GPU stack behind it is 31
+  wasmtime 48 where the workspace pins 49.0.0, and the GPU stack behind it is 31
   crates — naga, wgpu-core, wgpu-hal and ash among them — about 38 s of a clean
   release build and 3.1 MB of the binary. So the host is `wado-run-webgpu`, its
   own crate and its own workspace, reached through

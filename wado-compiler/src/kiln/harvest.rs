@@ -26,30 +26,37 @@ pub struct Harvest {
 /// Walk the local module graph from `entry_key` and `entry_ast`, parsing every
 /// `./` / `../` `.wado` import reachable from them.
 ///
-/// `load` receives the loader identity of a module, the key
-/// [`crate::loader`] reads it under, so a host that matches paths exactly
-/// serves this walk and the loader from one set of keys. The caller supplies
-/// the entry's tree because the loader does not read the entry through a host
-/// either.
+/// A module carries two names, seeded by `entry_key` and `entry_identity`: a
+/// clause path is spelled against the key, and the loader reads the module
+/// under the identity. They differ because a generator's own compile is rooted
+/// at its entry's directory while its invocations are rooted at its package.
+///
+/// `load` receives the loader identity. The caller supplies the entry's tree
+/// because the loader does not read the entry through a host either.
 ///
 /// A module that fails to load, or whose parse recovered from an error, is
 /// skipped: a mid-edit source must not trigger codegen side effects.
-pub async fn harvest_module_graph<L>(entry_key: &str, entry_ast: Module, load: L) -> Harvest
+pub async fn harvest_module_graph<L>(
+    entry_key: &str,
+    entry_identity: &str,
+    entry_ast: Module,
+    load: L,
+) -> Harvest
 where
     L: AsyncFn(&str) -> Option<String>,
 {
     let mut modules = IndexMap::<String, Module>::default();
     let mut identities = IndexMap::<String, String>::default();
 
-    let entry_dir = module_parent_dir(entry_key).to_string();
-    // The entry's key must stay byte-identical to its `EntryPoint.filename`
+    let entry_dir = module_parent_dir(entry_identity).to_string();
+    // The entry's identity must stay byte-identical to its `EntryPoint.filename`
     // (interned verbatim by the loader), so the redirect it keys is found at
     // resolve time — do not normalize it here.
-    identities.insert(entry_key.to_string(), entry_key.to_string());
+    identities.insert(entry_key.to_string(), entry_identity.to_string());
 
     let mut queue: VecDeque<(String, String, Option<Module>)> = VecDeque::from([(
         entry_key.to_string(),
-        entry_key.to_string(),
+        entry_identity.to_string(),
         Some(entry_ast),
     )]);
     while let Some((key, loader_id, ast)) = queue.pop_front() {
@@ -188,6 +195,7 @@ mod tests {
         ];
         let harvest = block_on(harvest_module_graph(
             "src/main.wado",
+            "src/main.wado",
             ast_of("use { a } from \"./lib.wado\";\n"),
             exact(sources),
         ));
@@ -208,6 +216,7 @@ mod tests {
     fn a_cycle_terminates() {
         let sources: &[(&str, &str)] = &[("./b.wado", "use { y } from \"./a.wado\";\n")];
         let harvest = block_on(harvest_module_graph(
+            "src/a.wado",
             "src/a.wado",
             ast_of("use { x } from \"./b.wado\";\n"),
             exact(sources),
@@ -293,6 +302,7 @@ mod tests {
     #[test]
     fn an_unloadable_module_is_skipped_not_fatal() {
         let harvest = block_on(harvest_module_graph(
+            "main.wado",
             "main.wado",
             ast_of("use { a } from \"./missing.wado\";\n"),
             async |_| None,

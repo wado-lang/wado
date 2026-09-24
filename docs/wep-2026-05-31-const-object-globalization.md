@@ -111,6 +111,13 @@ The walk skips into a qualifying `let`'s own value and into a hoisted argument,
 because hoisting both would nest one global's `GlobalVarSet` inside another's
 initializer — a shape the single-assignment classifier cannot see through.
 
+#### Identity
+
+Hoisting makes every evaluation of the binding yield one object, so a `==` by
+identity on two references to it may turn from false to true. The spec permits
+this (§Reference Identity): distinct objects of identical content may compare
+equal, and one object never compares unequal to itself. No gate guards identity.
+
 #### Gate: closed constant expression
 
 `is_globalizable_const` requires a side-effect-free constant with no free
@@ -121,10 +128,11 @@ A pure call on such constants qualifies too — it is deterministic and
 side-effect free, so it is a closed constant expression in the same sense.
 Purity comes from `optimize::mod_ref::FnEffect`, a per-callee summary resolved
 as a least fixpoint over the call graph, tracking globals, linear memory and
-component-model I/O. It deliberately excludes the GC heap: a callee that mutates
-objects it allocated itself stays deterministic to its caller, and retention is
-what would let a reference escape. Without that exclusion no `String`-building
-function would qualify.
+component-model I/O. Purity deliberately excludes the GC heap: a callee that
+mutates objects it allocated itself stays deterministic to its caller, and
+retention is what would let a reference escape. Without that exclusion no
+`String`-building function would qualify. A store into memory the callee did not
+allocate is tracked separately, and only deleting a call reads it.
 
 Reads of other globals are excluded — a non-const value cannot promote.
 
@@ -196,10 +204,16 @@ A bodyless callee has no body for the walk to reach, so its parameter is
 answered from what the declaration stated: `core:builtin` leaves the argument
 where the caller put it when it takes the position by `&` rather than `&mut`,
 and no `#[retain(p)]` clause names it. `#[retain(elements_of = p)]` keeps what
-`p` holds rather than `p` itself, so it leaves the argument object alone. The
-result is a way out of the call too, and no clause follows it: a return type
-that can hold a reference refuses the argument unless `#[result(owned)]` states
-that what comes back is freshly allocated. Only
+`p` holds rather than `p` itself, so it leaves the argument object alone.
+
+The result is a way out of the call too, and two clauses answer for it.
+`#[result(owned)]` says what comes back is freshly allocated, so the argument
+never leaves. `#[result(part_of = p)]` says the result _is_ `p` coming back. The
+callee keeps nothing then, and what becomes of the object is the caller's
+business. That is the question the result slot already asks of the whole
+program, so the parameter owes that slot rather than refusing. A return type
+that can hold a reference and states neither clause is a way out with nothing
+following it, so it refuses the argument. Only
 `core:builtin` answers this way — `#[retain]` is already what the value-copy
 plan trusts there, so a missing clause is a bug rather than a silence to read as
 consent, which is what it would be on a CM import or a `.wasm` asset export.
@@ -330,8 +344,8 @@ loop, and a pure call building a heap value from literals.
 - Only `core:builtin` answers the bodyless-callee question. A Component Model
   import and a `.wasm` asset export always refuse, however read-only they are,
   because `#[retain]` is not complete on them the way it is on `core:builtin`.
-  Closing it means deciding what an absent clause means on those two, which is a
-  language question rather than a pass one.
+  What an absent clause means on those two is a language question rather than a
+  pass one, and is undecided.
 - `#[immediate(p)]` is read by `const_object_globalization` alone. Any later
   pass that would substitute an argument has to consult it too, and nothing
   makes it. The declarations are complete as of the SIMD lane operands and

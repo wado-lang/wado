@@ -23,8 +23,9 @@ use {
     is_lexer_members,
 } from "./ir.wado";
 use { scan_string, scan_line_comment, scan_block_comment, is_id_start_char, is_id_continue_char } from "./g4/scan.wado";
-use { CodeWriter } from "./wadopoet.wado";
+use { CodeWriter } from "lib:wadopoet";
 use { to_snake_case } from "./ident.wado";
+use { collect_range, push_range } from "./text.wado";
 
 /// One synthesized effect operation, from a distinct `this.<method>` call site.
 /// `is_predicate` distinguishes a `{...}?` predicate call from a `{...}` action.
@@ -501,14 +502,6 @@ fn skip_ws(chars: &List<char>, start: i32, n: i32) -> i32 {
         i += 1;
     }
     return i;
-}
-
-fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
-    let mut s = String::with_capacity(if end > start { end - start } else { 0 });
-    for let mut i = start; i < end; i += 1 {
-        s.push(chars[i]);
-    }
-    return s;
 }
 
 /// Add a scanned call to the op set; the first occurrence of a name fixes its
@@ -989,11 +982,11 @@ pub fn rewrite_this_calls<S: AsStrSlice, S1: AsStrSlice>(body: S, base_name: S1,
         if end > i {
             let mut cur = i;
             for let s of &spans {
-                copy_span(&mut out, &chars, cur, s.0);
+                push_range(&mut out, &chars, cur, s.0);
                 out.push_str(&rewrite_this_calls(&collect_range(&chars, s.0, s.1), base_name, site));
                 cur = s.1;
             }
-            copy_span(&mut out, &chars, cur, end);
+            push_range(&mut out, &chars, cur, end);
             i = end;
             continue;
         }
@@ -1016,13 +1009,4 @@ pub fn rewrite_this_calls<S: AsStrSlice, S1: AsStrSlice>(body: S, base_name: S1,
         };
     }
     return out;
-}
-
-/// Copy `chars[start..end]` into `out` and return `end` — the scanner's next
-/// index, so a match arm reads `i = copy_span(...)`.
-fn copy_span(out: &mut String, chars: &List<char>, start: i32, end: i32) -> i32 {
-    for let mut i = start; i < end; i += 1 {
-        out.push(chars[i]);
-    }
-    return end;
 }

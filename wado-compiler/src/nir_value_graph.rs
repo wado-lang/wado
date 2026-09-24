@@ -12,7 +12,8 @@ use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_int_prim, 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::ExprId;
-use crate::tir::{PrimitiveType, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{TypeId, TypeTable};
 
 /// The constant a [`ValueKind`] denotes, as niri's
 /// [`crate::const_eval::Value`] — the one projection between the two, which
@@ -1122,7 +1123,7 @@ impl ValuePool {
                 return lhs;
             }
         }
-        // The same argument for the integer identities, which `sub_unchecked`
+        // The same argument for the integer identities, which `slice_unchecked`
         // plants as `self.start + x` wherever a view spans a whole string. The
         // kept operand is the one whose type the operator returns, so a pool
         // entry that recorded no type still folds.

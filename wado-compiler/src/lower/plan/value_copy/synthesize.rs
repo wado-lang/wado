@@ -198,6 +198,8 @@ fn generate_copy_function(
         effects: vec![],
         retains: vec![],
         immediates: vec![],
+        trap: None,
+        linear_memory: None,
         body: Some(body),
         span,
         local_count,
@@ -550,6 +552,7 @@ fn build_list_wrapper_copy(
         wire_name_override: None,
         serde_default: false,
         serde_positional: false,
+        serde_number: None,
         default_expr: None,
     };
     let used_field = TirField {
@@ -562,6 +565,7 @@ fn build_list_wrapper_copy(
         wire_name_override: None,
         serde_default: false,
         serde_positional: false,
+        serde_number: None,
         default_expr: None,
     };
     let fields = vec![
@@ -616,6 +620,7 @@ fn build_tuple_copy(
                 wire_name_override: None,
                 serde_default: false,
                 serde_positional: false,
+                serde_number: None,
                 default_expr: None,
             };
             TirStructField {

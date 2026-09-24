@@ -736,7 +736,8 @@ impl<'a> WirContext<'a> {
         type_table: &TypeTable,
         type_id: TypeId,
     ) -> Result<WirType, UnregisteredType> {
-        use crate::tir::{PrimitiveType, ResolvedType};
+        use crate::primitive::PrimitiveType;
+        use crate::tir::ResolvedType;
         Ok(match type_table.get(type_id) {
             ResolvedType::Primitive(prim) => match prim {
                 PrimitiveType::I8 => WirType::I8,
@@ -750,6 +751,9 @@ impl<'a> WirContext<'a> {
                 PrimitiveType::F32 => WirType::F32,
                 PrimitiveType::F64 => WirType::F64,
                 PrimitiveType::V128 => WirType::V128,
+                // A half is a `u16` below here: Wasm has no half precision
+                // value type, and its packed storage types are `i8` and `i16`.
+                PrimitiveType::F16 | PrimitiveType::Bf16 => WirType::U16,
                 PrimitiveType::Bool => WirType::Bool,
                 PrimitiveType::Char => WirType::Char,
             },

@@ -11,14 +11,15 @@
 //   `ParserExec/ReservedWordsEscaping` without the Wado-keyword rename.
 // - `leading_list` / `trailing_list` — a non-Repeat list label next to a label
 //   that wants the list element's own natural name, in both orders.
-// - `list_group` — the same, with a group as the list label's inner.
-// - `nested_list` — a list label whose block holds another labelled element;
-//   the surface walker used to accumulate it by hand instead of the builder.
+// - `list_group` — the same, with a set as the list label's inner.
 // - `lazy_plus` / `lazy_plus_after` — a label next to a non-greedy `+`, whose
 //   mandatory first iteration runs before the loop and so cannot be emitted
 //   inside it. Both orders: emit can rebind against a name the alternative has
 //   already bound, but not against one it binds later, so the iteration needs
 //   a scope of its own either way.
+// - `lazy_plus_list_after` — the same shape with a list label on the loop, so
+//   the mandatory first iteration has a container to push into before the
+//   loop that owns it starts.
 
 grammar label_list_collision;
 
@@ -38,10 +39,6 @@ list_group
     : tag_or_word = TAG  items += (TAG | WORD) EOF
     ;
 
-nested_list
-    : outer += ( inner += TAG ) EOF
-    ;
-
 lazy_plus
     : tag = TAG  (TAG WORD)+? END EOF
     ;
@@ -51,7 +48,7 @@ lazy_plus_after
     ;
 
 lazy_plus_list_after
-    : items += (TAG WORD)+? END  tag = TAG EOF
+    : items += (TAG | WORD)+? END  tag = TAG EOF
     ;
 
 TAG  : 'tag' ;

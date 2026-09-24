@@ -18,6 +18,7 @@ use crate::nir_value_graph::ValueKind;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
+use super::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use super::arena_query::{block_contains_loop, has_break_to};
 use super::condition_implication::{
     Binds, BoundKey, Conjunct, InductionStep, build_copy_bindings, capture_block_binding,
@@ -26,7 +27,7 @@ use super::condition_implication::{
     peel_capture_block, resolve_panic_ids, stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
-use super::dce::{build_callee_descriptors, callee_descriptor};
+use super::dce::{DescriptorCache, callee_descriptor};
 use super::elide_local::ElideRule;
 use crate::module_source::ModuleSource;
 use crate::nir::FuncId;
@@ -80,14 +81,14 @@ struct FastArm {
 }
 
 /// Version eligible loops in every function. Returns whether anything changed.
-pub(super) fn version_loops(project: &mut NirPackage) -> bool {
+pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCache) -> bool {
     let fill_id = project.intern_extern(&FunctionRef {
         module_source: ModuleSource::builtin(),
         name: "array_fill".to_string(),
         monomorph_info: None,
         method_info: None,
     });
-    let descriptors = build_callee_descriptors(project);
+    let descriptors = cache.descriptors(project);
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     // Only a body with a loop is versioned, so a program with none pays nothing.
@@ -96,11 +97,13 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
         .iter()
         .any(|f| f.borrow().body.as_ref().is_some_and(body_contains_loop))
     {
-        compute_fn_effects(&project.functions, &project.builtin_registry)
+        compute_fn_effects(project)
     } else {
         Vec::new()
     };
     let type_table = project.type_table.borrow();
+    let first_param_types = first_param_types(project);
+    let call_immutability = CallImmutability::new(project, &type_table);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -112,14 +115,30 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
             continue;
         }
         let stores_aliased = func.stores_aliased_locals.clone();
-        let NirFunction { body, locals, .. } = &mut *func;
+        let NirFunction {
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            ..
+        } = &mut *func;
         let body = body.as_mut().expect("checked above");
+        let (aliased, untrackable, mut_escaped) = builder_alias_sets(
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            &type_table,
+            &first_param_types,
+            &call_immutability,
+        );
         let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
 
-        let binds = build_copy_bindings(engine.body);
+        let binds = build_copy_bindings(&engine);
         let mut loops: Vec<(BlockId, StmtId, BlockId)> = Vec::new();
         collect_loops(engine.body, engine.body.root, &mut loops);
         let plans: Vec<Plan> = loops
@@ -154,7 +173,7 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
         // Fill idiom over the cleaned fast arms; sweep again if it fired.
         let mut filled = false;
         for (plan, arm) in plans.iter().zip(&fast_arms) {
-            filled |= try_fill_idiom(&mut engine, &binds, &descriptors, fill_id, plan, arm);
+            filled |= try_fill_idiom(&mut engine, &binds, descriptors, fill_id, plan, arm);
         }
         if filled {
             engine.run(&rules);

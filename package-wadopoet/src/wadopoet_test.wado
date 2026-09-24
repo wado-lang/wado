@@ -1,0 +1,643 @@
+use {
+    CodeWriter,
+    FieldSpec,
+    StructSpec,
+    VariantSpec,
+    EnumSpec,
+    ParamSpec,
+    FnSpec,
+    GlobalSpec,
+    ImplSpec,
+    Vis,
+    wado,
+    char_range_pat,
+} from "./wadopoet.wado";
+
+
+test "empty writer" {
+    let w = CodeWriter::new();
+    assert w.to_string() == "";
+}
+
+test "single line" {
+    let mut w = CodeWriter::new();
+    w.line("let x = 42;");
+    assert w.to_string() == "let x = 42;\n";
+}
+
+test "multiple lines" {
+    let mut w = CodeWriter::new();
+    w.line("let x = 1;");
+    w.line("let y = 2;");
+    assert w.to_string() == "let x = 1;\nlet y = 2;\n";
+}
+
+test "blank line" {
+    let mut w = CodeWriter::new();
+    w.line("let x = 1;");
+    w.blank();
+    w.line("let y = 2;");
+    assert w.to_string() == "let x = 1;\n\nlet y = 2;\n";
+}
+
+test "begin/end block" {
+    let mut w = CodeWriter::new();
+    w.begin("struct Foo");
+    w.line("x: i32,");
+    w.line("y: i32,");
+    w.end();
+    let expected = "struct Foo {\n    x: i32,\n    y: i32,\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "nested blocks" {
+    let mut w = CodeWriter::new();
+    w.begin("impl Foo");
+    w.begin("fn bar(&self) -> i32");
+    w.line("return self.x;");
+    w.end();
+    w.end();
+    let expected = "impl Foo {\n    fn bar(&self) -> i32 {\n        return self.x;\n    }\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "end_with suffix" {
+    let mut w = CodeWriter::new();
+    w.begin("variant Shape");
+    w.begin("Circle");
+    w.line("radius: f64,");
+    w.end_with(",");
+    w.end();
+    let expected = "variant Shape {\n    Circle {\n        radius: f64,\n    },\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "write with embedded newlines" {
+    let mut w = CodeWriter::new();
+    w.begin("fn foo()");
+    w.write("let x = 1;\nlet y = 2;\n");
+    w.end();
+    let expected = "fn foo() {\n    let x = 1;\n    let y = 2;\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "raw bypasses indentation" {
+    let mut w = CodeWriter::new();
+    w.raw("// raw header\n");
+    w.begin("fn foo()");
+    w.line("return 1;");
+    w.end();
+    let expected = "// raw header\nfn foo() {\n    return 1;\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "next_id generates unique ids" {
+    let mut w = CodeWriter::new();
+    let a = w.next_id();
+    let b = w.next_id();
+    let c = w.next_id();
+    assert a == 0;
+    assert b == 1;
+    assert c == 2;
+}
+
+test "else_begin for if/else-if chain" {
+    let mut w = CodeWriter::new();
+    w.begin("if x > 0");
+    w.line("positive();");
+    w.else_begin("else if x < 0");
+    w.line("negative();");
+    w.else_begin("else");
+    w.line("zero();");
+    w.end();
+    let expected = "if x > 0 {\n    positive();\n} else if x < 0 {\n    negative();\n} else {\n    zero();\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "manual indent/dedent" {
+    let mut w = CodeWriter::new();
+    w.line("outer");
+    w.indent();
+    w.line("inner");
+    w.dedent();
+    w.line("outer again");
+    assert w.to_string() == "outer\n    inner\nouter again\n";
+}
+
+
+test "StructSpec basic" {
+    let mut s = StructSpec::new("Point");
+    s.add_field("x", "i32");
+    s.add_field("y", "i32");
+
+    let mut w = CodeWriter::new();
+    s.emit(&mut w);
+    let expected = "struct Point {\n    x: i32,\n    y: i32,\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "StructSpec pub with pub fields" {
+    let mut s = StructSpec::new("Token", Vis::Pub);
+    s.add_pub_field("kind", "i32");
+    s.add_pub_field("text", "String");
+
+    let mut w = CodeWriter::new();
+    s.emit(&mut w);
+    let expected = "pub struct Token {\n    pub kind: i32,\n    pub text: String,\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "StructSpec mixed visibility fields" {
+    let mut s = StructSpec::new("Config", Vis::Pub);
+    s.add_pub_field("name", "String");
+    s.add_field("secret", "i32");
+
+    let mut w = CodeWriter::new();
+    s.emit(&mut w);
+    let expected = "pub struct Config {\n    pub name: String,\n    secret: i32,\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "StructSpec with FieldSpec" {
+    let mut s = StructSpec::new("Foo");
+    s.add_field_spec(FieldSpec::new_pub("x", "f64"));
+
+    let mut w = CodeWriter::new();
+    s.emit(&mut w);
+    assert w.to_string() == "struct Foo {\n    pub x: f64,\n}\n";
+}
+
+
+test "VariantSpec unit cases" {
+    let mut v = VariantSpec::new("TokenKind", Vis::Pub);
+    v.add_case("Number");
+    v.add_case("String");
+    v.add_case("Eof");
+
+    let mut w = CodeWriter::new();
+    v.emit(&mut w);
+    let expected = "pub variant TokenKind {\n    Number,\n    String,\n    Eof,\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "VariantSpec with payloads" {
+    let mut v = VariantSpec::new("Shape");
+    v.add_case_with_payload("Circle", "f64");
+    v.add_case_with_payload("Rect", "[f64, f64]");
+    v.add_case("Point");
+
+    let mut w = CodeWriter::new();
+    v.emit(&mut w);
+    let expected = "variant Shape {\n    Circle(f64),\n    Rect([f64, f64]),\n    Point,\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+
+test "EnumSpec basic" {
+    let mut e = EnumSpec::new("Color", Vis::Pub);
+    e.add_member("Red");
+    e.add_member("Green");
+    e.add_member("Blue");
+
+    let mut w = CodeWriter::new();
+    e.emit(&mut w);
+    let expected = "pub enum Color {\n    Red,\n    Green,\n    Blue,\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+
+test "FnSpec simple" {
+    let mut f = FnSpec::new("add");
+    f.add_param("a", "i32");
+    f.add_param("b", "i32");
+    f.set_return_type("i32");
+
+    let mut w = CodeWriter::new();
+    f.emit_begin(&mut w);
+    w.line("return a + b;");
+    w.end();
+    let expected = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "FnSpec with receiver" {
+    let mut f = FnSpec::new("len", Vis::Pub);
+    f.set_receiver("&self");
+    f.set_return_type("i32");
+
+    assert f.signature() == "pub fn len(&self) -> i32";
+}
+
+test "FnSpec with default-valued param" {
+    let mut f = FnSpec::new("parse_expr");
+    f.add_param("p", "&mut Parser");
+    f.add_param_spec(ParamSpec {
+        name: "min_prec",
+        type_str: "i32",
+        default_value: Option::<String>::Some("0"),
+    });
+    f.set_return_type("ExprNode");
+
+    assert f.signature() == "fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> ExprNode";
+}
+
+test "FnSpec no return type" {
+    let mut f = FnSpec::new("reset");
+    f.set_receiver("&mut self");
+
+    let mut w = CodeWriter::new();
+    f.emit_begin(&mut w);
+    w.line("self.x = 0;");
+    w.end();
+    let expected = "fn reset(&mut self) {\n    self.x = 0;\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "FnSpec signature string" {
+    let mut f = FnSpec::new("transform", Vis::Pub);
+    f.set_receiver("&self");
+    f.add_param("input", "&String");
+    f.add_param("scale", "f64");
+    f.set_return_type("String");
+
+    let sig = f.signature();
+    assert sig == "pub fn transform(&self, input: &String, scale: f64) -> String", `got: ${sig}`;
+}
+
+test "FnSpec export with effects" {
+    let mut f = FnSpec::new("run");
+    f.set_export();
+    f.add_effect("Stdout");
+    f.add_effect("Stderr");
+    f.add_effect("Environment");
+
+    let sig = f.signature();
+    assert sig == "export fn run() with (Stdout, Stderr, Environment)", `got: ${sig}`;
+}
+
+// A row of one goes bare; only a row of more than one takes parentheses.
+test "FnSpec with a single effect" {
+    let mut f = FnSpec::new("run");
+    f.set_export();
+    f.add_effect("Stdout");
+
+    let sig = f.signature();
+    assert sig == "export fn run() with Stdout", `got: ${sig}`;
+}
+
+test "FnSpec generic type parameter" {
+    let mut f = FnSpec::new("walk_stmt", Vis::Pub);
+    f.add_generic("V: Visitor");
+    f.add_param("v", "&mut V");
+    f.add_param("node", "&StmtNode");
+
+    let sig = f.signature();
+    assert sig == "pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode)", `got: ${sig}`;
+}
+
+test "FnSpec multiple generics" {
+    let mut f = FnSpec::new("zip");
+    f.add_generic("A");
+    f.add_generic("B");
+    f.add_param("a", "A");
+    f.add_param("b", "B");
+    f.set_return_type("[A, B]");
+
+    let sig = f.signature();
+    assert sig == "fn zip<A, B>(a: A, b: B) -> [A, B]", `got: ${sig}`;
+}
+
+
+test "GlobalSpec basic" {
+    let g = GlobalSpec::new("TK_EOF", "i32", "0");
+
+    let mut w = CodeWriter::new();
+    g.emit(&mut w);
+    assert w.to_string() == "global TK_EOF: i32 = 0;\n";
+}
+
+test "GlobalSpec pub" {
+    let mut g = GlobalSpec::new("COUNTER", "i32", "0", Vis::Pub);
+
+    let mut w = CodeWriter::new();
+    g.emit(&mut w);
+    assert w.to_string() == "pub global COUNTER: i32 = 0;\n";
+}
+
+// Integration: composing specs with CodeWriter
+
+test "struct + impl + fn composition" {
+    let mut w = CodeWriter::new();
+
+    // struct Lexer { chars: List<char>, pos: i32, }
+    let mut s = StructSpec::new("Lexer");
+    s.add_field("chars", "List<char>");
+    s.add_field("pos", "i32");
+    s.emit(&mut w);
+    w.blank();
+
+    // impl Lexer { fn new(...) -> Lexer { ... } }
+    w.begin("impl Lexer");
+
+    let mut f = FnSpec::new("new");
+    f.add_param("input", "&String");
+    f.set_return_type("Lexer");
+    f.emit_begin(&mut w);
+    w.line("return Lexer { chars: input.chars().collect(), pos: 0 };");
+    w.end();
+    w.blank();
+
+    let mut f2 = FnSpec::new("at_end");
+    f2.set_receiver("&self");
+    f2.set_return_type("bool");
+    f2.emit_begin(&mut w);
+    w.line("return self.pos >= self.chars.len();");
+    w.end();
+
+    w.end();
+
+    let expected = "struct Lexer {\n    chars: List<char>,\n    pos: i32,\n}\n\nimpl Lexer {\n    fn new(input: &String) -> Lexer {\n        return Lexer { chars: input.chars().collect(), pos: 0 };\n    }\n\n    fn at_end(&self) -> bool {\n        return self.pos >= self.chars.len();\n    }\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "variant + global composition" {
+    let mut w = CodeWriter::new();
+
+    let mut v = VariantSpec::new("TokenKind", Vis::Pub);
+    v.add_case("Number");
+    v.add_case("Eof");
+    v.add_case("Error");
+    v.emit(&mut w);
+    w.blank();
+
+    GlobalSpec::new("TK_Number", "i32", "0").emit(&mut w);
+    GlobalSpec::new("TK_EOF", "i32", "1").emit(&mut w);
+    GlobalSpec::new("TK_ERROR", "i32", "2").emit(&mut w);
+
+    let expected = "pub variant TokenKind {\n    Number,\n    Eof,\n    Error,\n}\n\nglobal TK_Number: i32 = 0;\nglobal TK_EOF: i32 = 1;\nglobal TK_ERROR: i32 = 2;\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "chaining builder methods" {
+    let mut s = StructSpec::new("Pair", Vis::Pub);
+    s.add_pub_field("first", "i32").add_pub_field("second", "i32");
+
+    let mut w = CodeWriter::new();
+    s.emit(&mut w);
+    let expected = "pub struct Pair {\n    pub first: i32,\n    pub second: i32,\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+
+test "wado writes a code hole verbatim" {
+    let name = "expr_list";
+    let index = 3;
+    assert wado`pos = ${name}(tokens, pos, ${index});` == "pos = expr_list(tokens, pos, 3);";
+}
+
+test "wado quotes a hole inside a string literal" {
+    let text = "foo";
+    assert wado`let s = "${text}";` == "let s = \"foo\";";
+}
+
+test "wado quotes an empty hole" {
+    let text = "";
+    assert wado`let s = "${text}";` == "let s = \"\";";
+}
+
+test "wado escapes quote and backslash inside a string literal" {
+    // input: a " \ b
+    let mut input = String::new();
+    input.push('a');
+    input.push('"');
+    input.push('\\');
+    input.push('b');
+    // expected literal text: "a\"\\b"
+    let mut expected = String::new();
+    expected.push('"');
+    expected.push('a');
+    expected.push('\\');
+    expected.push('"');
+    expected.push('\\');
+    expected.push('\\');
+    expected.push('b');
+    expected.push('"');
+    let got = wado`"${input}"`;
+    assert got == expected, `got: ${got}`;
+}
+
+test "wado keeps printable non-ASCII verbatim" {
+    // The key contract: Japanese text is NOT \u-escaped.
+    let text = "あ";
+    assert wado`"${text}"` == "\"あ\"";
+}
+
+test "wado escapes control chars" {
+    // input: newline, then U+0001 (no named escape)
+    let mut input = String::new();
+    input.push('\n');
+    input.push(char::from_u32_unchecked(1));
+    // expected literal text: "\n\u{1}"
+    let mut expected = String::new();
+    expected.push('"');
+    expected.push('\\');
+    expected.push('n');
+    expected.push('\\');
+    expected.push('u');
+    expected.push('{');
+    expected.push('1');
+    expected.push('}');
+    expected.push('"');
+    let got = wado`"${input}"`;
+    assert got == expected, `got: ${got}`;
+}
+
+test "wado writes a hole inside a char literal" {
+    let c = 'a';
+    assert wado`if ch == '${c}' { return; }` == "if ch == 'a' { return; }";
+}
+
+test "wado escapes a single quote inside a char literal" {
+    // expected literal text: '\''
+    let mut expected = String::new();
+    expected.push('\'');
+    expected.push('\\');
+    expected.push('\'');
+    expected.push('\'');
+    let c = '\'';
+    let got = wado`'${c}'`;
+    assert got == expected, `got: ${got}`;
+}
+
+test "wado escapes a named control char inside a char literal" {
+    // expected literal text: '\n'
+    let mut expected = String::new();
+    expected.push('\'');
+    expected.push('\\');
+    expected.push('n');
+    expected.push('\'');
+    let c = '\n';
+    let got = wado`'${c}'`;
+    assert got == expected, `got: ${got}`;
+}
+
+test "wado keeps a printable non-ASCII char verbatim" {
+    let c = 'あ';
+    assert wado`'${c}'` == "'あ'";
+}
+
+test "wado carries the context across an empty segment" {
+    let a = "a\"";
+    let b = "b";
+    assert wado`let s = "${a}${b}";` == "let s = \"a\\\"b\";";
+}
+
+test "a hole's value does not shift the context of the next hole" {
+    // The first hole renders an unbalanced quote; the second is still code.
+    let opener = "f(\"";
+    let text = "x";
+    assert wado`${opener}${text}");` == "f(\"x\");";
+}
+
+test "wado reads a quote in a line comment as text" {
+    let comment = "don't";
+    let text = "x\"y";
+    let got = wado`// ${comment}
+let s = "${text}";`;
+    assert got == "// don't\nlet s = \"x\\\"y\";", `got: ${got}`;
+}
+
+test "wado reads a lone slash as division, not a comment" {
+    let text = "x\"y";
+    let got = wado`let n = a / b; let s = "${text}";`;
+    assert got == "let n = a / b; let s = \"x\\\"y\";", `got: ${got}`;
+}
+
+test "wado reads an escaped quote as text inside a string literal" {
+    // The template writes `\\"` because it emits `\"`; the scan sees the
+    // backslash and the string stays open.
+    let text = "x\"y";
+    let got = wado`let s = "a\\"${text}";`;
+    assert got == "let s = \"a\\\"x\\\"y\";", `got: ${got}`;
+}
+
+test "wado applies a format specifier" {
+    let bits = 255;
+    assert wado`let mask = 0x${bits:x};` == "let mask = 0xff;";
+}
+
+test "wado nests generated code" {
+    let text = "a\"b";
+    let inner = wado`f("${text}")`;
+    assert wado`let x = ${inner};` == "let x = f(\"a\\\"b\");";
+}
+
+test "char_range_pat renders an inclusive range" {
+    assert `${char_range_pat('a'..='z')}` == "'a'..='z'";
+}
+
+test "char_range_pat collapses a singleton to one literal" {
+    assert `${char_range_pat('_'..='_')}` == "'_'";
+}
+
+test "char_range_pat escapes both endpoints" {
+    let mut expected = String::new();
+    expected.push_str("'\\t'..='\\n'");
+    assert `${char_range_pat('\t'..='\n')}` == expected, `got: ${char_range_pat('\t'..='\n')}`;
+}
+
+test "ImplSpec basic" {
+    let mut w = CodeWriter::new();
+    let i = ImplSpec::new("Point");
+    i.emit_begin(&mut w);
+    let mut f = FnSpec::new("origin");
+    f.set_return_type("Point");
+    f.emit_begin(&mut w);
+    w.line("return Point { x: 0, y: 0 };");
+    w.end();
+    w.end();
+    let expected = "impl Point {\n    fn origin() -> Point {\n        return Point { x: 0, y: 0 };\n    }\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "ImplSpec trait impl" {
+    let mut w = CodeWriter::new();
+    let i = ImplSpec::new_trait("Eq", "Point");
+    i.emit_begin(&mut w);
+    let mut f = FnSpec::new("eq");
+    f.set_receiver("&self");
+    f.add_param("other", "&Self");
+    f.set_return_type("bool");
+    f.emit_begin(&mut w);
+    w.line("return self.x == other.x && self.y == other.y;");
+    w.end();
+    w.end();
+    let expected = "impl Eq for Point {\n    fn eq(&self, other: &Self) -> bool {\n        return self.x == other.x && self.y == other.y;\n    }\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "struct + impl trait composition" {
+    let mut w = CodeWriter::new();
+
+    // struct
+    let mut s = StructSpec::new("Article", Vis::Pub);
+    s.add_pub_field("name", "String");
+    s.emit(&mut w);
+    w.blank();
+
+    // impl trait for struct
+    let i = ImplSpec::new_trait("Summary", "Article");
+    i.emit_begin(&mut w);
+    let mut f = FnSpec::new("title");
+    f.set_receiver("&self");
+    f.set_return_type("String");
+    f.emit_begin(&mut w);
+    w.line("return self.name;");
+    w.end();
+    w.end();
+
+    let expected = "pub struct Article {\n    pub name: String,\n}\n\nimpl Summary for Article {\n    fn title(&self) -> String {\n        return self.name;\n    }\n}\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "wado runs a block comment to its close, not to the first quote inside" {
+    // `/*` opens a state of its own: an unbalanced quote inside is comment
+    // text, so the hole after the close is still in a string.
+    let x = "a\"b";
+    assert wado`/* he said "hi */ let s = "${x}";` == "/* he said \"hi */ let s = \"a\\\"b\";";
+}
+
+test "wado leaves a block comment only on the star that precedes the slash" {
+    let x = "q\"r";
+    assert wado`/** doc **/ let s = "${x}";` == "/** doc **/ let s = \"q\\\"r\";";
+}
+
+test "wado reads an apostrophe inside a template as text, not as a char literal" {
+    // Without a template state the apostrophe would open `Ctx::Chr` and the
+    // hole would be escaped for `'`.
+    let x = "a`b";
+    assert wado`let m = \`don't ${x}\`;` == "let m = `don't a\\`b`;";
+}
+
+test "wado escapes a dollar in a template hole so it cannot open an interpolation" {
+    let x = "${evil}";
+    assert wado`let m = \`${x}\`;` == "let m = `\\${evil}`;";
+    // Outside a template a `$` is ordinary text.
+    assert wado`let s = "${x}";` == "let s = \"${evil}\";";
+}
+
+test "wado carries the state past a hole that completes an escape" {
+    // The `\n` is finished before the hole, so the hole sits in the string and
+    // the one after the closing quote sits in code.
+    let x = "q";
+    let y = "\"str\"";
+    assert wado`let s = "a\\n${x}"; let t = ${y};` == "let s = \"a\\nq\"; let t = \"str\";";
+}
+
+#[expect_trap]
+test "wado refuses a hole whose backslash is still pending" {
+    // The backslash would bind the hole's first byte, and which state that
+    // lands in depends on the value, so the scan cannot answer for what follows.
+    let x = "q";
+    let _ = wado`let s = "a\\${x}";`;
+}

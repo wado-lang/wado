@@ -67,13 +67,16 @@ What follows:
   delegate to it. The ones that answer with part of their input return a view,
   so working on part of a string does not copy it out. `to_string` is where a
   caller that wants an owned string asks for one.
+- A byte range is cut with `slice(start, end)` and `slice_unchecked`, the names
+  `Slice<T>` uses for the same cut. `sub` would read as the `Sub` operator's
+  method.
 
 ## Known gaps
 
 - A view passed to a function the inliner leaves alone is still materialized.
-  Closing it needs argument promotion, which `docs/optimizer.md` already lists
-  as not implemented: a callee taking an aggregate by value and only reading its
-  fields would take the fields instead.
+  `docs/optimizer.md` lists argument promotion as not implemented: a callee that
+  takes an aggregate by value and only reads its fields would take the fields
+  instead.
 - `String::push_str_range_unchecked` still takes a `(text, start, end)` triple
   rather than a view, and Kiln's generated parsers call it.
 - A cast between two references whose referents share one representation head

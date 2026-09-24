@@ -411,7 +411,7 @@ impl<'a> Resolver<'a> {
 
     fn bind_pattern(&mut self, pattern: &TirPattern, base: &Names) {
         match pattern {
-            TirPattern::Binding { local_index, .. } => {
+            TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } => {
                 self.bindings.set(*local_index, base.clone());
             }
             TirPattern::Struct {
@@ -517,8 +517,6 @@ fn is_index_accessor(func: &FunctionRef, items: &CompilerItems) -> bool {
         .iter()
         .any(|b| matches_builtin(&func.name, func.monomorph_info.as_ref(), b));
     }
-    // By `DefId`: the method's trait carries this impl's type arguments
-    // (`IndexValue<i32>`), which the item's own name does not.
     let Some(declared) = func
         .method_info
         .as_ref()
@@ -533,12 +531,7 @@ fn is_index_accessor(func: &FunctionRef, items: &CompilerItems) -> bool {
         CompilerItem::IndexRefMut,
     ]
     .iter()
-    .any(|item| {
-        items
-            .trait_fq_opt(*item)
-            .and_then(|fq| fq.canonical())
-            .is_some_and(|item_def| item_def == declared)
-    })
+    .any(|item| items.trait_def(*item) == Some(declared))
 }
 
 /// The root local a place expression is taken over. Needs no types, so a

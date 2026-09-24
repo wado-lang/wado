@@ -884,6 +884,7 @@ impl<'a> NirUnparser<'a> {
             ExprKind::Switch {
                 scrutinee,
                 min_value,
+                table,
                 arms,
                 default,
             } => {
@@ -891,14 +892,15 @@ impl<'a> NirUnparser<'a> {
                 let min_value = *min_value;
                 let default = *default;
                 let arms = arms.clone();
+                let table = table.clone();
                 self.output.push_str("switch ");
                 self.unparse_operand(body, scrutinee);
                 self.output.push_str(&format!(" (base={min_value}) {{\n"));
                 self.indent_level += 1;
                 for (i, arm) in arms.iter().enumerate() {
                     self.write_indent();
-                    self.output
-                        .push_str(&format!("{} => {{\n", min_value + i as i64));
+                    let cases = switch_arm_cases(&table, i, min_value);
+                    self.output.push_str(&format!("{cases} => {{\n"));
                     self.indent_level += 1;
                     self.unparse_block(body, *arm);
                     self.indent_level -= 1;
@@ -984,6 +986,24 @@ fn nir_unary_op_str(op: NirUnaryOp) -> &'static str {
     }
 }
 
+/// The values a `Switch` table sends to `arm`, as `a | b..=c` runs.
+fn switch_arm_cases(table: &[Option<usize>], arm: usize, min_value: i64) -> String {
+    let mut runs: Vec<String> = Vec::new();
+    let mut lo = min_value;
+    for run in table.chunk_by(|a, b| a == b) {
+        let hi = lo + run.len() as i64 - 1;
+        if run[0] == Some(arm) {
+            runs.push(if lo == hi {
+                format!("{lo}")
+            } else {
+                format!("{lo}..={hi}")
+            });
+        }
+        lo = hi + 1;
+    }
+    runs.join(" | ")
+}
+
 /// Public function to unparse NIR module to pseudo-Wado source
 pub fn unparse_nir(module: &NirModule) -> String {
     let type_table_ref = module.type_table.borrow();
@@ -995,14 +1015,7 @@ pub fn unparse_nir(module: &NirModule) -> String {
 pub fn unparse_nir_package(package: &NirPackage) -> String {
     let type_table_ref = package.type_table.borrow();
     let mut unparser = NirUnparser::new(&type_table_ref);
-    unparser.callees = package
-        .functions
-        .iter()
-        .map(|f| {
-            let f = f.borrow();
-            nir::FunctionRef::from_resolved(&f, f.module_source.clone())
-        })
-        .collect();
+    unparser.callees = package.callee_descriptors_from(0).collect();
 
     // Imports
     if !package.imports.is_empty() {

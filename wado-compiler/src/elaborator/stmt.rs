@@ -1,25 +1,31 @@
 //! Statement resolution (let, return, if, loop, break, continue, etc.).
 
 use crate::ast::{
-    self, AstId, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr, ExprStmt,
-    ForOfStmt, ForStmt, IfStmt, LetStmt, Literal, LoopStmt, Pattern, ReturnStmt, Stmt,
-    TaskReturnStmt, Type, WhileStmt,
+    self, AstId, AstVisitor, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr,
+    ExprStmt, ForOfStmt, ForStmt, IfStmt, Item, LetStmt, Literal, LoopStmt, Pattern, ReturnStmt,
+    Stmt, TaskReturnStmt, Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
-use crate::tir::{PrimitiveType, ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 
 use super::Elaborator;
-use super::types::{FunctionContext, TypeError};
+use super::types::{BindingSite, FunctionContext, TypeError};
 use super::util;
-use crate::ast::{RangeKind, StructPatternField};
+use crate::ast::{BinaryOp, RangeKind, StructPatternField, wire_numbers_of};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
-use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, StructFieldInfo};
-use crate::name::{mangle_local_item_name, namespace_member_alias};
+use crate::elaborator::types::{
+    GenericNewtypeInfo, ImplMemberKind, ParamSlot, RealTypeParams, StructFieldInfo,
+};
+use crate::name::{
+    constant_pattern_local_name, for_body_label, mangle_local_item_name, namespace_member_alias,
+};
 use crate::symbol_notation::render;
 use crate::tir::{StructDef, TirTypeParam};
 use crate::{IndexMap, hashmap, tir};
@@ -272,17 +278,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .insert(struct_decl.name.clone(), def);
         // The type parameters are final already — read off the AST, not
         // resolved — so only the fields are left for `resolve_local_struct`.
-        let type_param_type_ids: Vec<TypeId> = struct_decl
-            .type_params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_type_param(p.name.clone(), i as u32)
-            })
-            .collect();
+        let type_param_type_ids = Elaborator::<H>::slot_type_ids(
+            &ParamSlot::list(&struct_decl.type_params),
+            &self.tysys.type_table,
+        );
         self.sem.decls.local_struct_fields.insert(
             def,
             StructFieldInfo {
@@ -292,7 +291,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 fields: Vec::new(),
                 field_ast_ids: Vec::new(),
                 field_defaults: Vec::new(),
-                type_params: struct_decl.type_params.clone(),
+                field_wire_numbers: Vec::new(),
+                type_params: RealTypeParams::of(&struct_decl.type_params),
                 type_param_type_ids,
             },
         );
@@ -312,12 +312,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `field_defaults` below) and resolved into TIR by
         // `reify_local_struct`, matching `resolve_struct`/`reify_struct`'s
         // split for a top-level struct.
+        let mut field_ctx =
+            FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
         let mut fields = Vec::new();
         let mut field_ast_ids = Vec::new();
         let mut field_defaults = Vec::new();
         for field in &struct_decl.fields {
-            let type_id = scope.resolve_type(&field.ty);
-            scope.reject_unresolved_annotation(&field.ty);
+            let type_id = scope.resolve_struct_field(field, &mut field_ctx);
             fields.push((field.name.clone(), type_id, field.visibility));
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
@@ -356,12 +357,57 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         info.fields = fields;
         info.field_ast_ids = field_ast_ids;
         info.field_defaults = field_defaults;
+        info.field_wire_numbers = wire_numbers_of(&struct_decl.fields);
         // Local structs have no `Item::Struct` entry in `module.items` for
         // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
         // statement handling (`reify_local_struct`) is what discovers and
         // builds this declaration's `TirStruct`, from the `local_struct_fields`
         // entry just recorded above (annotate records facts; reify is the
         // sole TIR producer, matching every other declaration kind).
+    }
+
+    /// Report what a signature's written types cannot mean.
+    pub(super) fn reject_signature_annotations(
+        &mut self,
+        params: &[ast::Param],
+        return_type: Option<&ast::Type>,
+    ) {
+        for param in params {
+            self.reject_written_annotation(&param.ty);
+        }
+        if let Some(ty) = return_type {
+            self.reject_written_annotation(ty);
+        }
+    }
+
+    /// Report what a written type cannot mean: a name no declaration answers,
+    /// then a `..X` naming something that is not a pack.
+    pub(super) fn reject_written_annotation(&mut self, ty: &ast::Type) {
+        self.reject_unresolved_annotation(ty);
+        self.reject_non_pack_spreads(ty);
+    }
+
+    /// Report every `..X` in a written type whose `X` no type parameter list
+    /// declares a pack.
+    pub(super) fn reject_non_pack_spreads(&mut self, ty: &ast::Type) {
+        let bad: Vec<(String, Span)> = ty
+            .pack_spreads()
+            .into_iter()
+            .filter(|(name, _)| !self.binds_type_pack(name))
+            .map(|(name, span)| (name.to_string(), span))
+            .collect();
+        for (name, span) in bad {
+            let _ = self.emit(TypeError::SpreadOfNonPack { name, span });
+        }
+    }
+
+    /// Whether `name` is a type pack the enclosing declaration declares. A
+    /// scalar parameter spread in a tuple stands for one position, not a run.
+    pub(super) fn binds_type_pack(&self, name: &str) -> bool {
+        let Some(binder) = self.annotate_ctx.trait_ctx.type_params.get(name) else {
+            return false;
+        };
+        self.tysys.type_table.borrow().is_type_pack(binder.type_id)
     }
 
     /// Report a written type position naming a type no declaration answers
@@ -416,7 +462,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.sem.decls.local_generic_newtypes.insert(
                 def,
                 GenericNewtypeInfo {
-                    type_params: newtype_decl.type_params.clone(),
+                    type_params: RealTypeParams::of(&newtype_decl.type_params),
                     base_type_ast: newtype_decl.ty.clone(),
                 },
             );
@@ -588,13 +634,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (value_type, value_type)
         };
 
-        if let_stmt.ty.is_some() {
-            self.typecheck(value_type, type_id, ast_value.span());
-        }
-
+        // A `let … else` checks its annotation as the type pattern it is.
         if let Some(else_block) = &let_stmt.else_block {
             self.resolve_let_else(let_stmt, value_type, else_block, ctx);
             return;
+        }
+
+        if let_stmt.ty.is_some() {
+            if self
+                .tysys
+                .type_table
+                .borrow()
+                .is_resource_narrowing(value_type, type_id)
+            {
+                self.reject_refutable_narrowing(
+                    value_type,
+                    type_id,
+                    let_stmt.name_span,
+                    BindingSite::Let,
+                );
+            } else {
+                self.typecheck(value_type, type_id, ast_value.span());
+            }
         }
 
         // Reify rebuilds the `Let` / `LetDestructure`
@@ -634,13 +695,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
-                // Tuple / struct destructuring: binds the sub-patterns into
-                // `ctx` and records their local symbols.
                 self.resolve_let_pattern(
                     &let_stmt.pattern,
                     type_id,
                     let_stmt.is_mut,
                     let_stmt.span,
+                    BindingSite::Let,
                     ctx,
                 );
             }
@@ -649,7 +709,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // discarded; nothing to bind.
             }
             _ => {
-                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);
+                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span, BindingSite::Let);
             }
         }
     }
@@ -671,7 +731,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: else_block.span,
             });
         }
-        if self.let_else_pattern_is_irrefutable(&let_stmt.pattern, scrutinee_type) {
+        let pattern = let_stmt.else_pattern();
+        if self.let_else_pattern_is_irrefutable(&pattern, scrutinee_type) {
             let _ = self.emit(TypeError::InvalidPattern {
                 message: "irrefutable pattern in `let ... else`: the else block can never run; \
                           use a plain `let` instead"
@@ -679,7 +740,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: let_stmt.name_span,
             });
         }
-        self.resolve_if_pattern(&let_stmt.pattern, scrutinee_type, ctx, let_stmt.span);
+        self.resolve_if_pattern(&pattern, scrutinee_type, ctx, let_stmt.span);
     }
 
     /// Whether a `let ... else` pattern is definitely irrefutable (always
@@ -696,6 +757,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Pattern::Ident { name, .. } => {
                 !self.is_known_case_of_type(scrutinee_type, name, None)
                     && !self.is_immutable_global(name)
+            }
+            Pattern::Typed { pattern, ty, .. } => {
+                let target = self.resolve_type(ty);
+                !self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_resource_narrowing(scrutinee_type, target)
+                    && self.let_else_pattern_is_irrefutable(pattern, target)
             }
             // Destructuring may hold refutable sub-patterns; the rest are
             // refutable outright (or a parser-recovery placeholder). Never flag.
@@ -744,7 +814,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
             }
             _ => {
-                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);
+                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span, BindingSite::Let);
             }
         }
     }
@@ -756,49 +826,82 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// arms, `if let`, and `while let`.
     ///
     /// Emits a compile error and returns `false` if the pattern is refutable.
-    fn check_irrefutable_pattern(&mut self, pattern: &ast::Pattern, span: Span) -> bool {
-        match pattern {
+    fn check_irrefutable_pattern(
+        &mut self,
+        pattern: &ast::Pattern,
+        span: Span,
+        site: BindingSite,
+    ) -> bool {
+        let reason = match pattern {
             // `Pattern::Error` is a parser recovery placeholder; treat it as
             // irrefutable so it does not cascade a second "refutable" error.
             Pattern::Ident { .. }
             | Pattern::MutIdent { .. }
             | Pattern::Wildcard
-            | Pattern::Error(_) => true,
-            Pattern::Tuple(patterns, _) => patterns
-                .iter()
-                .all(|p| self.check_irrefutable_pattern(p, span)),
-            Pattern::Struct { fields, .. } => fields
-                .iter()
-                .all(|f| self.check_irrefutable_pattern(&f.pattern, span)),
-            Pattern::Literal(_) => {
-                let _ = self.emit(TypeError::InvalidPattern {
-                    message: "refutable pattern in `let` binding: literal patterns may not match; use `if let` instead".to_string(),
-                    span,
-                });
-                false
+            | Pattern::Error(_) => return true,
+            Pattern::Tuple(patterns, _) => {
+                return patterns
+                    .iter()
+                    .all(|p| self.check_irrefutable_pattern(p, span, site));
             }
-            Pattern::Variant { variant_name, .. } => {
-                let _ = self.emit(TypeError::InvalidPattern {
-                    message: format!("refutable pattern in `let` binding: `{variant_name}` may not match; use `if let` instead"),
-                    span,
-                });
-                false
+            Pattern::Struct { fields, .. } => {
+                return fields
+                    .iter()
+                    .all(|f| self.check_irrefutable_pattern(&f.pattern, span, site));
             }
-            Pattern::Or(_) => {
-                let _ = self.emit(TypeError::InvalidPattern {
-                    message: "refutable pattern in `let` binding: or-patterns may not match; use `if let` or `match` instead".to_string(),
-                    span,
-                });
-                false
+            // Whether the ascription narrows is a question of types, which
+            // the pattern's resolution answers.
+            Pattern::Typed { pattern, .. } => {
+                return self.check_irrefutable_pattern(pattern, span, site);
             }
-            Pattern::Range { .. } => {
-                let _ = self.emit(TypeError::InvalidPattern {
-                    message: "refutable pattern in `let` binding: range patterns may not match; use `if let` instead".to_string(),
-                    span,
-                });
-                false
+            Pattern::Literal(_)
+            | Pattern::Variant { .. }
+            | Pattern::Or(_)
+            | Pattern::Range { .. } => {
+                refutable_shape(pattern).expect("a testing pattern is refutable by its shape")
             }
+        };
+        self.reject_refutable(site, &reason, span);
+        false
+    }
+
+    /// Why `pattern` itself, apart from its parts, can fail against `scrutinee`.
+    /// A case of a one-case type cannot.
+    fn refutation(&mut self, pattern: &Pattern, scrutinee: TypeId) -> Option<String> {
+        match pattern {
+            Pattern::Variant { .. } if self.case_count(scrutinee) == 1 => None,
+            Pattern::Ident { name, .. } if self.is_immutable_global(name) => {
+                Some(format!("`{name}` may not match"))
+            }
+            _ => refutable_shape(pattern),
         }
+    }
+
+    fn case_count(&self, scrutinee: TypeId) -> usize {
+        let head = self
+            .tysys
+            .type_table
+            .borrow()
+            .scrutinee_structure_head(scrutinee);
+        match (self.variant_of_type(head), self.enum_of_type(head)) {
+            (Some(variant), _) => variant.cases.len(),
+            (None, Some(enumeration)) => enumeration.cases.len(),
+            (None, None) => 0,
+        }
+    }
+
+    fn reject_refutable(&mut self, site: BindingSite, reason: &str, span: Span) {
+        let (position, remedy) = match site {
+            BindingSite::Let => ("`let` binding", "use `let ... else` or `if let` instead"),
+            BindingSite::ForOf => (
+                "`for` binding",
+                "match on the element in the loop body instead",
+            ),
+        };
+        let _ = self.emit(TypeError::InvalidPattern {
+            message: format!("refutable pattern in {position}: {reason}; {remedy}"),
+            span,
+        });
     }
 
     /// Whether `case_name`, written under `qualifier`, is a case the scrutinee
@@ -1012,8 +1115,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_id: TypeId,
         is_mut: bool,
         span: Span,
+        site: BindingSite,
         ctx: &mut FunctionContext,
     ) {
+        self.check_irrefutable_pattern(pattern, span, site);
         // Match ergonomics for let patterns: peel references from the type
         // when the pattern is a compound (tuple/struct) pattern.
         let (peeled_type, ref_binding) = match pattern {
@@ -1041,7 +1146,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => (type_id, RefBinding::None),
         };
-        self.resolve_let_pattern_inner(pattern, peeled_type, is_mut, span, ctx, ref_binding);
+        self.resolve_let_pattern_inner(pattern, peeled_type, is_mut, span, site, ctx, ref_binding);
     }
 
     /// Whether a struct pattern's qualifier names the scrutinee's own head.
@@ -1098,6 +1203,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_id: TypeId,
         is_mut: bool,
         span: Span,
+        site: BindingSite,
         ctx: &mut FunctionContext,
         ref_binding: RefBinding,
     ) {
@@ -1158,7 +1264,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
                 ) {
-                    self.resolve_let_pattern_inner(p, elem_type, is_mut, span, ctx, ref_binding);
+                    self.resolve_let_pattern_inner(
+                        p,
+                        elem_type,
+                        is_mut,
+                        span,
+                        site,
+                        ctx,
+                        ref_binding,
+                    );
                 }
             }
             ast::Pattern::Struct {
@@ -1223,6 +1337,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         field_type,
                         is_mut,
                         field.span,
+                        site,
                         ctx,
                         ref_binding,
                     );
@@ -1259,6 +1374,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 let _ = has_rest;
+            }
+            ast::Pattern::Typed {
+                id,
+                pattern: inner,
+                ty,
+                span: typed_span,
+            } => {
+                let target = self.resolve_ascription(*id, ty);
+                if self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_resource_narrowing(type_id, target)
+                {
+                    self.reject_refutable_narrowing(type_id, target, *typed_span, site);
+                } else {
+                    self.check_ascription(type_id, target, *typed_span);
+                }
+                self.resolve_let_pattern_inner(inner, target, is_mut, span, site, ctx, ref_binding);
             }
             // Wildcard binds nothing. Refutable patterns (literal / variant /
             // or / range) in let position already had an error emitted by
@@ -1440,17 +1574,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// which in pattern position is a constant-value (refutable) match rather
     /// than a fresh binding.
     pub(super) fn is_immutable_global(&self, name: &str) -> bool {
-        self.sem
-            .decls
-            .current_module_globals
-            .get(name)
-            .is_some_and(|&(_ty, mutable)| !mutable)
-            || self
+        self.immutable_global_type(name).is_some()
+    }
+
+    /// The type of the immutable global `name` refers to, if it names one.
+    fn immutable_global_type(&self, name: &str) -> Option<TypeId> {
+        match self.sem.decls.current_module_globals.get(name) {
+            Some(&(ty, mutable)) => (!mutable).then_some(ty),
+            None => self
                 .sem
                 .decls
                 .imported_globals
                 .get(name)
-                .is_some_and(|(_m, _n, _ty, mutable)| !*mutable)
+                .and_then(|&(_, _, ty, mutable)| (!mutable).then_some(ty)),
+        }
+    }
+
+    /// A constant pattern matches where `scrutinee == constant` holds. Where
+    /// that `==` is a trait call, dispatch it on the pattern and reserve the
+    /// local reify holds the scrutinee in to make the call.
+    fn resolve_constant_pattern(
+        &mut self,
+        pattern_id: AstId,
+        scrutinee: TypeId,
+        constant: TypeId,
+        ctx: &mut FunctionContext,
+        span: Span,
+    ) {
+        {
+            let type_table = self.tysys.type_table.borrow();
+            // A scalar compares by instruction, and a wide int's constant is
+            // folded to a literal pattern.
+            if type_table.is_scalar_primitive_like(scrutinee) || type_table.is_wide_int(scrutinee) {
+                return;
+            }
+        }
+        self.resolve_binary_op(
+            scrutinee,
+            BinaryOp::Eq,
+            constant,
+            span,
+            span,
+            Some(pattern_id),
+        );
+        if self.sem.types.operator_dispatch.contains_key(&pattern_id) {
+            ctx.add_local(constant_pattern_local_name(), scrutinee, false, None);
+        }
     }
 
     /// Resolve a pattern in an if-pattern context with type information from the scrutinee.
@@ -1500,6 +1669,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         ref_binding: RefBinding,
     ) -> PatBindings {
+        if let Some(site) = ctx.irrefutable_site
+            && let Some(reason) = self.refutation(pattern, scrutinee_type)
+        {
+            self.reject_refutable(site, &reason, span);
+        }
         match pattern {
             Pattern::Wildcard => Vec::new(),
             Pattern::Ident {
@@ -1539,8 +1713,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Immutable global constant: a constant-value pattern that
                 // introduces no binding but reads the global — record the
                 // use→def edge so it is not flagged dead (mirrors the expr path).
-                if !is_mut && self.is_immutable_global(name) {
+                if !is_mut && let Some(constant) = self.immutable_global_type(name) {
                     self.record_item_reference_by_name(*id, name);
+                    self.resolve_constant_pattern(*id, scrutinee_type, constant, ctx, span);
                     return Vec::new();
                 }
                 let binding_type =
@@ -1657,19 +1832,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
                             })
                         });
+                        if let Some(id) = *name_id {
+                            self.resolve_constant_pattern(id, scrutinee_type, assoc.ty, ctx, *span);
+                        }
                         return Vec::new();
                     }
 
                     // `ns::NAME` naming an immutable global the namespace exports
                     // is a constant-value pattern, as the bare `NAME` is.
-                    if let Some(alias) = self
+                    if let Some((alias, constant)) = self
                         .sem
                         .imports
                         .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
-                        .filter(|alias| self.is_immutable_global(alias))
+                        .and_then(|alias| {
+                            let constant = self.immutable_global_type(&alias)?;
+                            Some((alias, constant))
+                        })
                     {
                         if let Some(id) = *name_id {
                             self.record_item_reference_by_name(id, &alias);
+                            self.resolve_constant_pattern(id, scrutinee_type, constant, ctx, *span);
                         }
                         return Vec::new();
                     }
@@ -2024,9 +2206,103 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_range_pattern(start, end, *kind, scrutinee_type, *range_span);
                 Vec::new()
             }
+            Pattern::Typed {
+                id,
+                pattern: inner,
+                ty,
+                span: typed_span,
+            } => {
+                let target = self.resolve_ascription(*id, ty);
+                if self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_resource_narrowing(scrutinee_type, target)
+                {
+                    match ctx.irrefutable_site {
+                        Some(site) => self.reject_refutable_narrowing(
+                            scrutinee_type,
+                            target,
+                            *typed_span,
+                            site,
+                        ),
+                        None => self.check_narrowing_shape(inner, ref_binding, *typed_span),
+                    }
+                } else {
+                    self.check_ascription(scrutinee_type, target, *typed_span);
+                }
+                self.resolve_if_pattern_inner(inner, target, ctx, span, ref_binding)
+            }
             // Parser error-recovery placeholder; inert.
             Pattern::Error(_) => Vec::new(),
         }
+    }
+
+    /// Resolve the type a type pattern ascribes, and record it for reify.
+    fn resolve_ascription(&mut self, id: AstId, ty: &Type) -> TypeId {
+        let target = self.resolve_type(ty);
+        self.reject_unresolved_annotation(ty);
+        self.sem.types.pattern_ascriptions.insert(id, target);
+        target
+    }
+
+    /// Check an ascription no host test decides: the scrutinee must be a
+    /// `target` already, and a type parameter names no type to narrow to.
+    fn check_ascription(&mut self, scrutinee: TypeId, target: TypeId, span: Span) {
+        let is_type_param = matches!(
+            self.tysys.type_table.borrow().get(target),
+            ResolvedType::TypeParam { .. }
+        );
+        if is_type_param && scrutinee != target {
+            let name = self.tysys.type_table.borrow().type_name(target);
+            let _ = self.emit(TypeError::InvalidPattern {
+                message: format!(
+                    "a type pattern needs a concrete type: `{name}` is a type parameter, \
+                     so nothing states whether it narrows"
+                ),
+                span,
+            });
+            return;
+        }
+        self.typecheck(scrutinee, target, span);
+    }
+
+    /// A narrowing is the host's answer about the value itself: it binds that
+    /// value whole, and not through a reference.
+    fn check_narrowing_shape(&mut self, inner: &Pattern, ref_binding: RefBinding, span: Span) {
+        let message = if ref_binding != RefBinding::None {
+            "a type pattern narrows a resource value, not a reference to one"
+        } else if !matches!(
+            inner,
+            Pattern::Ident { .. } | Pattern::MutIdent { .. } | Pattern::Wildcard
+        ) {
+            "a narrowing type pattern binds a name or `_`"
+        } else {
+            return;
+        };
+        let _ = self.emit(TypeError::InvalidPattern {
+            message: message.to_string(),
+            span,
+        });
+    }
+
+    /// A narrowing where the pattern cannot fail over to anything.
+    fn reject_refutable_narrowing(
+        &mut self,
+        value: TypeId,
+        target: TypeId,
+        span: Span,
+        site: BindingSite,
+    ) {
+        let reason = {
+            let tt = self.tysys.type_table.borrow();
+            format!(
+                "not every `{}` is `{}`",
+                tt.type_name(value),
+                tt.type_name(target)
+            )
+        };
+        self.reject_refutable(site, &reason, span);
     }
 
     /// True when the scrutinee is a variant type that has a `None` case, so a
@@ -2240,9 +2516,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_table
                 .as_tuple_through_ref(iterable_type_id)
                 .map(|(elems, by_ref)| {
-                    let has_type_pack = elems
-                        .iter()
-                        .any(|e| matches!(type_table.get(*e), ResolvedType::TypePack { .. }));
+                    let has_type_pack = elems.iter().any(|e| type_table.is_type_pack(*e));
                     (elems, has_type_pack, by_ref)
                 })
         };
@@ -2333,14 +2607,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         by_ref: bool,
         ctx: &mut FunctionContext,
     ) {
-        // Validate: no break/continue/return in variadic for-of
-        if let Some((kind, bad_span)) = Self::find_control_flow_in_block(&for_of.body) {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: format!(
-                    "`{kind}` is not allowed inside a variadic for-of loop (the loop is expanded at compile time)"
-                ),
-                span: bad_span,
-            });
+        if self.reject_expanded_control_flow(&for_of.body, "variadic") {
             return;
         }
 
@@ -2356,10 +2623,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .as_tuple_through_ref(iterable)
                     .unwrap_or_else(|| panic!("variadic for-of requires tuple iterable"));
                 // Prefer a direct TypePack element
-                if let Some(tp) = elems
-                    .iter()
-                    .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
-                {
+                if let Some(tp) = elems.iter().find(|e| type_table.is_type_pack(**e)) {
                     // A mapped pack `..F::method()` binds the loop variable to
                     // the (pack-independent) return type, not the pack itself.
                     match type_table.get(*tp) {
@@ -2392,17 +2656,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        // Resolve the body with the binding having the element type
+        if !self.check_irrefutable_pattern(&for_of.binding, for_of.span, BindingSite::ForOf) {
+            return;
+        }
+        let name_or_wildcard = |p: &Pattern| matches!(p, Pattern::Ident { .. } | Pattern::Wildcard);
+        let supported = match &for_of.binding {
+            Pattern::Tuple(elems, _) => elems.iter().all(name_or_wildcard),
+            binding => name_or_wildcard(binding),
+        };
+        if !supported {
+            let _ = self.emit(TypeError::InvalidPattern {
+                message: "a `for` over a type pack binds a name, `_`, or a tuple of them"
+                    .to_string(),
+                span: for_of.span,
+            });
+            return;
+        }
+
         let (binding_name, binding_id, binding_name_span) = match &for_of.binding {
             Pattern::Ident { id, name, span } => (name.clone(), Some(*id), Some(*span)),
-            Pattern::Tuple(..) => {
-                // For destructuring patterns like [a, b], use a synthetic name
-                // and resolve the destructuring in the body
-                (format!("$pattern_temp_{unique_id}"), None, None)
-            }
-            _ => {
-                panic!("variadic for-of does not support this binding pattern")
-            }
+            _ => (format!("$pattern_temp_{unique_id}"), None, None),
         };
 
         let is_mut = for_of.is_mut;
@@ -2430,8 +2703,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .as_tuple(binding_type)
-                .unwrap_or_else(|| vec![binding_type]);
+                .elem_types_or_self(binding_type);
             for (i, pat_elem) in tp.iter().enumerate() {
                 if let Pattern::Ident {
                     id,
@@ -2486,15 +2758,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         let span = for_of.span;
 
-        // Validate: break, continue, and return are not allowed inside tuple for-of
-        // because the loop is expanded at compile time into sequential blocks.
-        if let Some((kind, bad_span)) = Self::find_control_flow_in_block(&for_of.body) {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: format!(
-                    "`{kind}` is not allowed inside a tuple for-of loop (the loop is expanded at compile time)"
-                ),
-                span: bad_span,
-            });
+        if self.reject_expanded_control_flow(&for_of.body, "tuple") {
             return;
         }
         let unique_id = ctx.fresh_serial();
@@ -2546,6 +2810,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     enum_tuple_type,
                     for_of.is_mut,
                     span,
+                    BindingSite::ForOf,
                     ctx,
                 );
             } else {
@@ -2577,6 +2842,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             bind_elem_type,
                             for_of.is_mut,
                             span,
+                            BindingSite::ForOf,
                             ctx,
                         );
                     }
@@ -2812,7 +3078,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             for_of.binding.clone()
         };
+        ctx.irrefutable_site = Some(BindingSite::ForOf);
         self.resolve_if_pattern_inner(&binding, item_type, ctx, span, RefBinding::None);
+        ctx.irrefutable_site = None;
         self.resolve_block(&for_of.body, ctx, None);
         ctx.exit_scope();
 
@@ -2838,39 +3106,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Check if a block contains `break`, `continue`, or `return` at the top level
-    /// (not inside nested loops/functions where they would be valid).
-    /// Returns the kind name and span of the first offending statement.
-    fn find_control_flow_in_block(block: &Block) -> Option<(&'static str, Span)> {
-        for stmt in &block.stmts {
-            if let Some(found) = Self::find_control_flow_in_stmt(stmt) {
-                return Some(found);
-            }
-        }
-        None
-    }
-
-    fn find_control_flow_in_stmt(stmt: &Stmt) -> Option<(&'static str, Span)> {
-        match stmt {
-            Stmt::Break(b) => Some(("break", b.span)),
-            Stmt::Continue(c) => Some(("continue", c.span)),
-            // return and task return are allowed — they exit the enclosing function,
-            // which is well-defined even in compile-time-expanded blocks.
-            Stmt::Return(_) | Stmt::TaskReturn(_) => None,
-            // Recurse into blocks that don't introduce a new loop/function scope
-            Stmt::If(if_stmt) => {
-                if let Some(found) = Self::find_control_flow_in_block(&if_stmt.then_block) {
-                    return Some(found);
-                }
-                if let Some(else_block) = &if_stmt.else_block {
-                    return Self::find_control_flow_in_block(else_block);
-                }
-                None
-            }
-            Stmt::LabeledBlock(lb) => Self::find_control_flow_in_block(&lb.block),
-            // Don't recurse into loops/closures — break/continue/return there are valid
-            _ => None,
-        }
+    /// Report a `break` or `continue` written in a for-of the compiler expands:
+    /// the expansion leaves neither a loop to name. `kind` names the for-of.
+    fn reject_expanded_control_flow(&mut self, body: &Block, kind: &str) -> bool {
+        let mut finder = LoopControlFlowFinder { found: None };
+        finder.visit_block(body);
+        let Some((written, span)) = finder.found else {
+            return false;
+        };
+        let _ = self.emit(TypeError::InvalidPattern {
+            message: format!(
+                "`{written}` is not allowed inside a {kind} for-of loop (the loop is expanded at compile time)"
+            ),
+            span,
+        });
+        true
     }
 
     pub(super) fn resolve_break(&mut self, break_stmt: &BreakStmt, ctx: &mut FunctionContext) {
@@ -2968,7 +3218,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// reroutes a naked `continue` to, so control still falls through `update`.
     pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) {
         self.record_desugar(f.id, DesugarKind::CStyleFor);
-        let body_label = format!("$for_{}_body", ctx.fresh_serial());
+        let body_label = for_body_label(ctx.fresh_serial());
 
         // Mirror `resolve_loop` / `resolve_while` / `resolve_for_of`: clear the
         // continue-retarget stack at the loop boundary so the invariant
@@ -3122,6 +3372,23 @@ fn format_pattern_qualifier_type(ty: &Type) -> String {
     }
 }
 
+/// Why a pattern that tests its value can fail, read off its shape alone.
+fn refutable_shape(pattern: &Pattern) -> Option<String> {
+    match pattern {
+        Pattern::Literal(_) => Some("literal patterns may not match".to_string()),
+        Pattern::Variant { variant_name, .. } => Some(format!("`{variant_name}` may not match")),
+        Pattern::Or(_) => Some("or-patterns may not match".to_string()),
+        Pattern::Range { .. } => Some("range patterns may not match".to_string()),
+        Pattern::Ident { .. }
+        | Pattern::MutIdent { .. }
+        | Pattern::Wildcard
+        | Pattern::Tuple(..)
+        | Pattern::Struct { .. }
+        | Pattern::Typed { .. }
+        | Pattern::Error(_) => None,
+    }
+}
+
 /// The pattern with every identifier leaf made mutable.
 ///
 /// `for let mut …` carries the `mut` on the statement while the pattern walker
@@ -3174,6 +3441,17 @@ fn mut_bindings_of(pattern: &Pattern) -> Pattern {
         Pattern::Or(alternatives) => {
             Pattern::Or(alternatives.iter().map(mut_bindings_of).collect())
         }
+        Pattern::Typed {
+            id,
+            pattern,
+            ty,
+            span,
+        } => Pattern::Typed {
+            id: *id,
+            pattern: Box::new(mut_bindings_of(pattern)),
+            ty: ty.clone(),
+            span: *span,
+        },
         other => other.clone(),
     }
 }
@@ -3210,6 +3488,7 @@ pub(super) fn collect_ast_pattern_binding_ids(
                 collect_ast_pattern_binding_ids(first, out);
             }
         }
+        Pattern::Typed { pattern, .. } => collect_ast_pattern_binding_ids(pattern, out),
         Pattern::Wildcard | Pattern::Literal(_) | Pattern::Range { .. } | Pattern::Error(_) => {}
     }
 }
@@ -3233,6 +3512,12 @@ fn collect_pattern_bindings_with_index_inner(
             name,
             local_index,
             type_id,
+        }
+        | TirPattern::Narrow {
+            name: Some(name),
+            local_index,
+            type_id,
+            ..
         } => {
             out.push((name.clone(), *local_index, *type_id));
         }
@@ -3260,7 +3545,8 @@ fn collect_pattern_bindings_with_index_inner(
         | TirPattern::Literal(_)
         | TirPattern::Enum { .. }
         | TirPattern::ConstantValue { .. }
-        | TirPattern::Range { .. } => {}
+        | TirPattern::Range { .. }
+        | TirPattern::Narrow { name: None, .. } => {}
     }
 }
 
@@ -3270,6 +3556,14 @@ pub(super) fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) 
         TirPattern::Binding { local_index, .. } => {
             if *local_index == from {
                 *local_index = to;
+            }
+        }
+        TirPattern::Narrow {
+            local_index, test, ..
+        } => {
+            if *local_index == from {
+                *local_index = to;
+                remap_local_reads(test, from, to);
             }
         }
         TirPattern::Tuple(patterns, _) => {
@@ -3321,23 +3615,79 @@ pub(super) fn primitive_assoc_const_to_i128(
         | Type::Infer(_)
         | Type::Error(_) => return None,
     };
-    match (ty_name, const_name) {
-        ("i8", "MAX") => Some(i128::from(i8::MAX)),
-        ("i8", "MIN") => Some(i128::from(i8::MIN)),
-        ("i16", "MAX") => Some(i128::from(i16::MAX)),
-        ("i16", "MIN") => Some(i128::from(i16::MIN)),
-        ("i32", "MAX") => Some(i128::from(i32::MAX)),
-        ("i32", "MIN") => Some(i128::from(i32::MIN)),
-        ("i64", "MAX") => Some(i128::from(i64::MAX)),
-        ("i64", "MIN") => Some(i128::from(i64::MIN)),
-        ("u8", "MAX") => Some(i128::from(u8::MAX)),
-        ("u8", "MIN") => Some(i128::from(u8::MIN)),
-        ("u16", "MAX") => Some(i128::from(u16::MAX)),
-        ("u16", "MIN") => Some(i128::from(u16::MIN)),
-        ("u32", "MAX") => Some(i128::from(u32::MAX)),
-        ("u32", "MIN") => Some(i128::from(u32::MIN)),
-        ("u64", "MAX") => Some(i128::from(u64::MAX)),
-        ("u64", "MIN") => Some(i128::from(u64::MIN)),
+    primitive_int_bound(ty_name, const_name)
+}
+
+/// The value of a primitive integer's `MIN` / `MAX`, keyed by the names both
+/// are written with. `None` for every other pair.
+pub(super) fn primitive_int_bound(ty_name: &str, const_name: &str) -> Option<i128> {
+    let (min, max) = PrimitiveType::from_name(ty_name)?.int_range()?;
+    match const_name {
+        "MIN" => Some(min),
+        "MAX" => Some(max),
         _ => None,
     }
+}
+
+/// The first statement in a for-of's body that names the loop itself. The
+/// compiler expands such a loop, so no such name survives.
+struct LoopControlFlowFinder {
+    found: Option<(&'static str, Span)>,
+}
+
+impl AstVisitor for LoopControlFlowFinder {
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        if self.found.is_some() {
+            return;
+        }
+        match stmt {
+            Stmt::Break(b) if b.label.is_none() => self.found = Some(("break", b.span)),
+            Stmt::Continue(c) => self.found = Some(("continue", c.span)),
+            // A loop owns the `break` and `continue` its body writes. What
+            // drives the loop is still the enclosing block's, so the header is
+            // walked and the body is not.
+            Stmt::While(w) => self.visit_condition(&w.condition),
+            Stmt::For(f) => {
+                if let Some(init) = &f.init {
+                    self.visit_stmt(init);
+                }
+                if let Some(condition) = &f.condition {
+                    self.visit_condition(condition);
+                }
+                if let Some(update) = &f.update {
+                    self.visit_expr(update);
+                }
+            }
+            Stmt::ForOf(f) => self.visit_expr(&f.iterable),
+            Stmt::Loop(_) => {}
+            // `return` and `task return` leave the enclosing function and
+            // `break LABEL` leaves a labeled block. Expansion moves none of
+            // those targets, so each is walked for what it carries.
+            Stmt::Break(_)
+            | Stmt::Let(_)
+            | Stmt::Expr(_)
+            | Stmt::Return(_)
+            | Stmt::TaskReturn(_)
+            | Stmt::If(_)
+            | Stmt::Match(_)
+            | Stmt::Assert(_)
+            | Stmt::LabeledBlock(_)
+            | Stmt::Item(_)
+            | Stmt::Error(_) => walk_stmt(self, stmt),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        if self.found.is_some() {
+            return;
+        }
+        // A closure is a function boundary, so what it writes is its own.
+        if matches!(expr, Expr::Closure(_)) {
+            return;
+        }
+        walk_expr(self, expr);
+    }
+
+    /// A declaration written in the body carries its own bodies.
+    fn visit_item(&mut self, _item: &Item) {}
 }

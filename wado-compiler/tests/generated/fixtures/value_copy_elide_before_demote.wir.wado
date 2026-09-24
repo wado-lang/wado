@@ -56,14 +56,14 @@ fn "value_copy_elide_before_demote.wado/$cm_binding__Stdout_write_via_stream"(da
 fn "value_copy_elide_before_demote.wado/$cm_export__run"() {
     let handle: i32;
     let packed: i64;
-    let rx_8: i32;
-    let tx_9: i32;
-    rx_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_9 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "value_copy_elide_before_demote.wado/$cm_binding__Stdout_write_via_stream"(rx_8);
+    let rx_7: i32;
+    let tx_8: i32;
+    rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "value_copy_elide_before_demote.wado/$cm_binding__Stdout_write_via_stream"(rx_7);
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_fixed<u8>(111, 107);
-    "core:rt/write_string_to_stream"(tx_9, $mv_field_2, 2);
+    "core:rt/write_string_to_stream"(tx_8, $mv_field_2, 2);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
     "wasi/task-return"(0);
 }
@@ -138,7 +138,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l2;

@@ -386,12 +386,25 @@ pub(super) fn stmt_mentions_local(body: &Body, id: StmtId, idx: u32) -> bool {
     node_mentions_local(body, NodeRef::Stmt(id), idx)
 }
 
-/// Whether `idx` appears anywhere in what `op` reads, skeleton or promoted.
-pub(super) fn operand_mentions_local(body: &Body, op: Operand, idx: u32) -> bool {
+/// Every local `op` reads, skeleton or promoted.
+pub(super) fn operand_read_locals(body: &Body, op: Operand) -> IndexSet<u32> {
+    let mut out = IndexSet::default();
     match op {
-        Operand::Expr(e) => expr_mentions_local(body, e, idx),
-        Operand::Value(v) => body.values.value_reads_local(v, idx),
+        Operand::Value(v) => body.values.collect_opaque_locals(v, &mut out),
+        Operand::Expr(e) => body.for_each_live_node_under(NodeRef::Expr(e), |n| {
+            if let NodeRef::Expr(x) = n
+                && let ExprKind::Local { index, .. } = &body.exprs[x].kind
+            {
+                out.insert(*index);
+            }
+            body.for_each_operand(n, |o| {
+                if let Some(v) = o.as_value() {
+                    body.values.collect_opaque_locals(v, &mut out);
+                }
+            });
+        }),
     }
+    out
 }
 
 fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
@@ -638,13 +651,35 @@ pub(super) fn cast_truncates_a_float(
     types.is_float(body.operand_type(inner)) && types.is_integer(target)
 }
 
-/// Without a type table `Cast` is conservatively trap-capable; with one only a
-/// float source makes it trap.
+/// A `FieldAccess` traps only on a null receiver, and every type a field access
+/// can name is a non-null heap value in NIR — a struct, a reference, or a
+/// generic instance (tuple / `Box` / `List` / user generic). `Option` is the one
+/// nullable type, and it is read via `VariantPayload`, never `FieldAccess`; its
+/// null niche is a WIR representation, chosen after the NIR optimizer has run.
+/// Provable only with a type table.
+pub(super) fn field_receiver_nonnull(
+    body: &Body,
+    types: Option<&TypeTable>,
+    receiver: Operand,
+) -> bool {
+    let Some(types) = types else {
+        return false;
+    };
+    let ty = body.operand_type(receiver);
+    match types.get_pruned(ty) {
+        Some(ResolvedType::Struct { .. } | ResolvedType::Ref(_) | ResolvedType::MutRef(_)) => true,
+        Some(ResolvedType::GenericInstance { .. }) => types.as_option(ty).is_none(),
+        _ => false,
+    }
+}
+
+/// Without a type table `Cast` and `FieldAccess` are conservatively
+/// trap-capable.
 pub(super) fn expr_node_may_trap(body: &Body, id: ExprId) -> bool {
     expr_node_may_trap_typed(body, id, None)
 }
 
-/// [`expr_node_may_trap`], with a type table to settle a cast.
+/// [`expr_node_may_trap`], with a type table to settle a cast or a field read.
 pub(super) fn expr_node_may_trap_typed(body: &Body, id: ExprId, types: Option<&TypeTable>) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Binary { op, .. } => binary_op_may_trap(*op),
@@ -652,22 +687,21 @@ pub(super) fn expr_node_may_trap_typed(body: &Body, id: ExprId, types: Option<&T
         ExprKind::Cast { expr, target_type } => {
             cast_truncates_a_float(body, types, *expr, *target_type)
         }
-        // Heap projections on a possibly-null (or case-mismatched) receiver.
-        ExprKind::FieldAccess { .. }
-        | ExprKind::Index { .. }
+        ExprKind::FieldAccess { expr, .. } => !field_receiver_nonnull(body, types, *expr),
+        // Heap projections on a possibly-null (or case-mismatched, or short)
+        // receiver.
+        ExprKind::Index { .. }
         | ExprKind::VariantTag { .. }
         | ExprKind::VariantTest { .. }
         | ExprKind::VariantPayload { .. } => true,
         // A callee may trap (`panic`, OOB index, division, `unreachable`).
         ExprKind::Call { .. } | ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => true,
-        // A store through a projection traps on a null / OOB / mismatched
-        // receiver; a bare-local rebind does not, but classify the node
-        // conservatively — its sole consumer routes `Assign` through a
-        // dedicated arm, so this value never decides an elision.
-        ExprKind::Assign { .. } => true,
+        // A store traps exactly where reading its target would, and the target
+        // is a child node that answers for itself.
+        ExprKind::Assign { .. }
         // Pure value ops, constructors, constant leaves, global reads/writes,
         // and control-flow (whose sub-trees carry their own traps).
-        ExprKind::GlobalVarGet { .. }
+        | ExprKind::GlobalVarGet { .. }
         | ExprKind::GlobalVarSet { .. }
         | ExprKind::Local { .. }
         | ExprKind::PackedArray(_)
@@ -713,7 +747,7 @@ struct AliasEntry {
 }
 
 /// Root of a written-through place chain (an `Assign` target's receiver).
-enum WriteRoot {
+pub(super) enum WriteRoot {
     /// Chain bottoms out at a local (derefs of ref locals resolve through
     /// [`MutRefAliases`]).
     Local(u32),
@@ -725,7 +759,7 @@ enum WriteRoot {
     Temp,
 }
 
-fn write_root(body: &Body, e: ExprId, derefed: bool) -> WriteRoot {
+pub(super) fn write_root(body: &Body, e: ExprId, derefed: bool) -> WriteRoot {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => WriteRoot::Local(*index),
         ExprKind::Unary {
@@ -735,11 +769,21 @@ fn write_root(body: &Body, e: ExprId, derefed: bool) -> WriteRoot {
             Some(ie) => write_root(body, ie, true),
             None => WriteRoot::Aliased,
         },
+        // Below a deref, a projection reads the reference out of an aggregate.
+        ExprKind::FieldAccess { .. } | ExprKind::VariantPayload { .. } | ExprKind::Index { .. }
+            if derefed =>
+        {
+            WriteRoot::Aliased
+        }
+        // `*&place` is the place itself.
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        }
-        | ExprKind::Cast { expr: inner, .. }
+        } => match inner.as_expr() {
+            Some(ie) => write_root(body, ie, false),
+            None => WriteRoot::Temp,
+        },
+        ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::Index { expr: inner, .. } => match inner.as_expr() {

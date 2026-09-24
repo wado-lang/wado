@@ -1,0 +1,78 @@
+// Assigning a value into a field, a tuple element or a global stores a copy:
+// the place and the source are independent afterwards, as a local target is.
+
+struct O {
+    l: List<i32>,
+}
+
+impl O {
+    fn set(&mut self, x: List<i32>) {
+        self.l = x;
+    }
+}
+
+global mut A: List<i32> = [1, 2, 3];
+global mut B: List<i32> = A;
+global mut G: List<i32> = [];
+
+fn field_then_source_write() -> i32 {
+    let mut a: List<i32> = [1];
+    let mut o = O { l: [] };
+    o.l = a;
+    a.push(2);
+    return o.l.len() * 10 + a.len();
+}
+
+fn field_then_field_write() -> i32 {
+    let mut a: List<i32> = [1];
+    let mut o = O { l: [] };
+    o.l = a;
+    o.l.push(2);
+    return o.l.len() * 10 + a.len();
+}
+
+fn field_from_field() -> i32 {
+    let mut a = O { l: [1] };
+    let mut b = O { l: [] };
+    b.l = a.l;
+    a.l.push(2);
+    return b.l.len() * 10 + a.l.len();
+}
+
+fn tuple_element() -> i32 {
+    let mut c: List<i32> = [1];
+    let mut tup: [List<i32>, i32] = [[], 0];
+    tup.0 = c;
+    c.push(2);
+    return tup.0.len() * 10 + c.len();
+}
+
+fn through_self() -> i32 {
+    let mut x: List<i32> = [1];
+    let mut o = O { l: [] };
+    o.set(x);
+    x.push(2);
+    return o.l.len() * 10 + x.len();
+}
+
+fn global_from_local() -> i32 {
+    let mut g: List<i32> = [1];
+    G = g;
+    g.push(2);
+    return G.len() * 10 + g.len();
+}
+
+export fn run() {
+    assert field_then_source_write() == 12;
+    assert field_then_field_write() == 21;
+    assert field_from_field() == 12;
+    assert tuple_element() == 12;
+    assert through_self() == 12;
+    A.push(4);
+    assert B.len() == 3;
+    assert A.len() == 4;
+    assert global_from_local() == 12;
+}
+
+__DATA__
+{}

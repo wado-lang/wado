@@ -1,0 +1,16 @@
+// A bound written as `fn(...)` is a signature of its own: the caller supplies
+// the closure, so it has to be able to name what the closure takes.
+struct Hidden {
+    n: i32,
+}
+
+pub fn apply<F: fn(Hidden) -> i32>(f: F) -> i32 {
+    return f(Hidden { n: 1 });
+}
+
+export fn run() {
+    assert 1 == 1;
+}
+
+__DATA__
+{"compile_error": "names `Hidden`, which is private to its defining file"}

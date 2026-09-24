@@ -143,9 +143,12 @@ where
 
 /// FQ of the synthesized library world. Mirrors `lib_world_fq` in
 /// `wado-cli`: `namespace:name/name@version`.
-const LIB_WORLD_FQ: &str = "wado-lang:cm-catalog/cm-catalog@0.0.16";
+pub(crate) const LIB_WORLD_FQ: &str = concat!(
+    "wado-lang:cm-catalog/cm-catalog@",
+    env!("CARGO_PKG_VERSION")
+);
 
-const FIXTURE: &str = concat!(
+pub(crate) const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/tests/fixtures/cm_catalog.wado"
 );
@@ -275,6 +278,51 @@ fn cases() -> Vec<Case> {
             "id-assoc-array",
             Val::List(vec![Val::Tuple(vec![Val::String("k".into()), Val::U32(1)])]),
         ),
+        // `map<k, v>`: the same bytes as the association list above, under its
+        // own type constructor. A repeated key is legal on the wire and the
+        // guest normalises it, so every case here is already deduplicated —
+        // `map_last_wins_on_a_repeated_key` covers the other direction.
+        case(
+            "id-map-string-u32",
+            Val::Map(vec![
+                (Val::String("a".into()), Val::U32(1)),
+                (Val::String("bb".into()), Val::U32(2)),
+            ]),
+        ),
+        case(
+            "id-map-u32-string",
+            Val::Map(vec![
+                (Val::U32(7), Val::String("seven".into())),
+                (Val::U32(8), Val::String(String::new())),
+            ]),
+        ),
+        case(
+            "id-map-string-record",
+            Val::Map(vec![(Val::String("origin".into()), point())]),
+        ),
+        case(
+            "id-map-string-list",
+            Val::Map(vec![
+                (
+                    Val::String("bytes".into()),
+                    Val::List(vec![Val::U8(1), Val::U8(2)]),
+                ),
+                (Val::String("empty".into()), Val::List(vec![])),
+            ]),
+        ),
+        case("id-map-string-u32", Val::Map(vec![])),
+        case(
+            "id-option-map",
+            Val::Option(b(Val::Map(vec![(Val::String("k".into()), Val::U32(1))]))),
+        ),
+        case("id-option-map", Val::Option(None)),
+        case(
+            "id-list-map",
+            Val::List(vec![
+                Val::Map(vec![(Val::String("k".into()), Val::U32(1))]),
+                Val::Map(vec![]),
+            ]),
+        ),
         // Tuples carrying aggregate (non-primitive) elements.
         case("id-tuple-record", Val::Tuple(vec![point(), Val::U32(7)])),
         case(
@@ -311,6 +359,28 @@ fn cases() -> Vec<Case> {
         case(
             "id-tuple-flags",
             Val::Tuple(vec![flags(&["read", "execute"]), Val::U32(9)]),
+        ),
+        // A variant with no payload-bearing case is its bare discriminant, one
+        // CM byte, and only these read a stride or an offset.
+        case(
+            "id-payload-less-variant",
+            Val::Variant("inactive".into(), None),
+        ),
+        case(
+            "id-option-payload-less-variant",
+            Val::Option(b(Val::Variant("active".into(), None))),
+        ),
+        case("id-option-payload-less-variant", Val::Option(None)),
+        case(
+            "id-list-payload-less-variant",
+            Val::List(vec![
+                Val::Variant("active".into(), None),
+                Val::Variant("inactive".into(), None),
+            ]),
+        ),
+        case(
+            "id-tuple-payload-less-variant",
+            Val::Tuple(vec![Val::Variant("inactive".into(), None), Val::U8(200)]),
         ),
     ]
 }
@@ -1177,7 +1247,7 @@ struct Point {
 }
 
 const RECORD_FUTURE_SOURCE: &str = r#"
-struct Point {
+pub struct Point {
     x: f64,
     y: f64,
 }
@@ -1239,7 +1309,7 @@ fn cm_future_record_identity_o2() {
 }
 
 const RECORD_STREAM_SOURCE: &str = r#"
-struct Point {
+pub struct Point {
     x: f64,
     y: f64,
 }
@@ -1358,17 +1428,17 @@ wasmtime::component::flags! {
 /// `future<T>` / `stream<T>` over the named non-record shapes, which carry a
 /// discriminant — and, for `variant`, a per-case payload union.
 const NAMED_ASYNC_SOURCE: &str = r#"
-enum Color {
+pub enum Color {
     Red,
     Green,
     Blue,
 }
-variant Shape {
+pub variant Shape {
     Circle(f64),
     Rect([f64, f64]),
     Nothing,
 }
-flags Perms {
+pub flags Perms {
     Read,
     Write,
     Execute,
@@ -1799,7 +1869,7 @@ fn cm_lib_rejects_empty_record_boundary_type() {
 #[test]
 fn cm_lib_rejects_export_name_colliding_with_type_name() {
     let err = try_compile_lib(
-        "variant Shape {\n    Dot,\n    Line(u32),\n}\n\
+        "pub variant Shape {\n    Dot,\n    Line(u32),\n}\n\
          export fn shape(v: u32) -> u32 {\n    return v;\n}\n\
          export fn make(v: u32) -> Shape {\n    if v == 0 {\n        \
          return Shape::Dot;\n    } else {\n        return Shape::Line(v);\n    }\n}\n",
@@ -1833,8 +1903,8 @@ fn cm_lib_rejects_recursive_type_before_the_name_check_walks_it() {
 #[test]
 fn cm_lib_rejects_two_types_sharing_a_cm_name() {
     let err = try_compile_lib(
-        "struct HTTPServer {\n    port: u32,\n}\n\
-         struct HttpServer {\n    host: String,\n}\n\
+        "pub struct HTTPServer {\n    port: u32,\n}\n\
+         pub struct HttpServer {\n    host: String,\n}\n\
          export fn a(v: HTTPServer) -> u32 {\n    return v.port;\n}\n\
          export fn b(v: HttpServer) -> String {\n    return v.host;\n}\n",
     )
@@ -1842,6 +1912,95 @@ fn cm_lib_rejects_two_types_sharing_a_cm_name() {
     assert!(
         err.contains("http-server"),
         "expected a diagnostic naming the shared CM name, got: {err}"
+    );
+}
+
+/// The Component Model states that a `map` may carry a repeated key, and that a
+/// bindings generator may deduplicate it as long as the *last* pair wins. The
+/// guest lifts with `map[k] = v`, so it does; and it lowers from a `TreeMap`,
+/// which cannot repeat one. One round trip shows both halves.
+#[test]
+fn map_last_wins_on_a_repeated_key() {
+    let wasm = compile_catalog(OptLevel::O0);
+    let engine = engine();
+    let rt = runtime();
+
+    rt.block_on(async {
+        let component = Component::new(engine, &wasm).expect("instantiate component type");
+        let linker = linker(engine).expect("build linker");
+        let state = WasiState::new_with_pipes(
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+        );
+        let mut store = Store::new(engine, state);
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .expect("instantiate library component");
+        let iface = instance
+            .get_export(&mut store, None, LIB_WORLD_FQ)
+            .map(|(_, idx)| idx)
+            .expect("catalog interface");
+        let func = instance
+            .get_export(&mut store, Some(&iface), "id-map-string-u32")
+            .map(|(_, idx)| idx)
+            .and_then(|idx| instance.get_func(&mut store, idx))
+            .expect("id-map-string-u32 export");
+
+        let mut results = vec![Val::Bool(false)];
+        func.call_async(
+            &mut store,
+            &[Val::Map(vec![
+                (Val::String("k".into()), Val::U32(1)),
+                (Val::String("other".into()), Val::U32(9)),
+                (Val::String("k".into()), Val::U32(2)),
+            ])],
+            &mut results,
+        )
+        .await
+        .expect("call id-map-string-u32");
+
+        assert_eq!(
+            results[0],
+            Val::Map(vec![
+                (Val::String("k".into()), Val::U32(2)),
+                (Val::String("other".into()), Val::U32(9)),
+            ]),
+            "the last pair for a repeated key wins, and the key keeps the position \
+             its first appearance gave it"
+        );
+    });
+}
+
+/// WASI 0.3.1 requires the Component Model `map<K, V>` type, and `TreeMap` is
+/// its Wado spelling. The despecialized `list<tuple<K, V>>` already crosses the
+/// boundary, so what this pins is the specialization: the same bytes under a
+/// distinct type constructor.
+#[test]
+fn cm_lib_accepts_a_tree_map_boundary_type() {
+    try_compile_lib(
+        "use { TreeMap } from \"core:collections\";\n\
+         export fn id_map(v: TreeMap<String, u32>) -> TreeMap<String, u32> {\n    return v;\n}\n",
+    )
+    .expect("a `TreeMap` export should compile as `map<string, u32>`");
+}
+
+/// The Component Model's `keytype` is a deliberate subset of `valtype` — the
+/// primitives plus `string`. A record key has no `map` encoding, so it must be
+/// a diagnostic naming the key, not a silent fall back to `list<tuple<K, V>>`
+/// that would make the emitted WIT disagree with the source.
+#[test]
+fn cm_lib_rejects_a_map_key_outside_the_component_model_key_types() {
+    let err = try_compile_lib(
+        "use { TreeMap } from \"core:collections\";\n\
+         pub struct Point {\n    x: u32,\n    y: u32,\n}\n\
+         export fn id_map(v: TreeMap<Point, u32>) -> TreeMap<Point, u32> {\n    return v;\n}\n",
+    )
+    .expect_err("a record-keyed map export should fail to compile");
+    assert!(
+        err.contains("Point") && err.contains("key"),
+        "expected a map-key diagnostic naming the key type, got: {err}"
     );
 }
 

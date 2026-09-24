@@ -1,0 +1,14 @@
+// Narrowing tests a handle, so the scrutinee is the value, not a reference.
+use { Element, Node } from "web:dom";
+
+fn kind(n: &Node) -> i32 {
+    if let el: Element = n {
+        return 1;
+    }
+    return 0;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "a type pattern narrows a resource value, not a reference to one"}

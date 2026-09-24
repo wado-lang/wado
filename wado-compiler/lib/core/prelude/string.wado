@@ -3,7 +3,7 @@
 // Split from the prelude so other stdlib modules can depend on String without a cycle.
 
 
-use { Eq, Ord, Iterator, IntoIterator, Add, Default, From, Ordering } from "core:prelude/traits.wado";
+use { Eq, Ord, Iterator, IntoIterator, Add, Default, Display, Error, From, Ordering } from "core:prelude/traits.wado";
 use { LenientFromStr, LenientParseError } from "core:prelude/traits.wado";
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
 use { ReflectTemplate } from "core:prelude/traits.wado";
@@ -13,6 +13,56 @@ use { Slice } from "core:prelude/slice.wado";
 use { Array, seq_eq, seq_cmp } from "core:prelude/array.wado";
 use { List } from "core:prelude/list.wado";
 use { ByteSlice, ByteList, ByteArray, AsByteSlice } from "core:prelude/bytes.wado";
+
+/// Why a byte sequence is not valid UTF-8: where the valid part ends, and
+/// whether what follows is malformed or merely cut short.
+pub struct Utf8Error {
+    valid_up_to: i32,
+    error_len: Option<i32>,
+}
+
+impl Utf8Error {
+    /// A sequence no further byte could complete, `len` bytes long.
+    pub fn invalid(valid_up_to: i32, len: i32) -> Utf8Error {
+        assert len >= 1 && len <= 3;
+        return Utf8Error { valid_up_to, error_len: Option::Some(len) };
+    }
+
+    /// A sequence the input ends in the middle of.
+    pub fn incomplete(valid_up_to: i32) -> Utf8Error {
+        return Utf8Error { valid_up_to, error_len: Option::None };
+    }
+
+    /// Byte offset at which the first invalid sequence begins.
+    pub fn valid_up_to(&self) -> i32 {
+        return self.valid_up_to;
+    }
+
+    /// Length of the invalid sequence, or `None` when the input just ends short
+    /// and more bytes could still complete it.
+    pub fn error_len(&self) -> Option<i32> {
+        return self.error_len;
+    }
+
+    /// The same failure, with its offset read from `base` instead of from the
+    /// start of the decoded buffer. A caller decoding a stream in pieces owes
+    /// this, or it reports a position into a buffer its own caller never saw.
+    pub fn rebased(&self, base: i32) -> Utf8Error {
+        return Utf8Error { ..*self, valid_up_to: base + self.valid_up_to };
+    }
+}
+
+impl Display for Utf8Error {
+    fn fmt(&self, f: &mut Formatter) {
+        match self.error_len {
+            Some(n) => f.write_str(`invalid utf-8 sequence of ${n} bytes from index ${self.valid_up_to}`),
+            None => f.write_str(`incomplete utf-8 byte sequence from index ${self.valid_up_to}`),
+        }
+    }
+}
+
+impl Error for Utf8Error {
+}
 
 /// Byte length (1–4) of the UTF-8 sequence led by `b0`, assuming valid UTF-8.
 #[inline]
@@ -85,6 +135,23 @@ internal fn is_char_start(b: u8) -> bool {
     return b & 0xC0 != 0x80;
 }
 
+/// True when `b1` may follow the lead byte `b0`: a continuation byte, within
+/// the narrower range that rules out an overlong form, a surrogate, or a scalar
+/// above U+10FFFF.
+#[inline]
+fn utf8_second_byte_ok(b0: u8, b1: u8) -> bool {
+    if is_char_start(b1) {
+        return false;
+    }
+    return match b0 {
+        0xE0 => b1 >= 0xA0,
+        0xED => b1 < 0xA0,
+        0xF0 => b1 >= 0x90,
+        0xF4 => b1 <= 0x8F,
+        _ => true,
+    };
+}
+
 /// Return the start offset of the UTF-8 sequence containing byte `pos`.
 fn char_start_backward(repr: &Array<u8>, pos: i32) -> i32 {
     let mut p = pos;
@@ -121,6 +188,32 @@ fn boundary_at(repr: &Array<u8>, start: i32, len: i32, index: i32) -> bool {
     return is_char_start(repr[start + index]);
 }
 
+/// The nearest character boundary at or below `index`, counted from `start`;
+/// `len` when `index >= len`. Panics if `index` is negative.
+fn floor_boundary(repr: &Array<u8>, start: i32, len: i32, index: i32) -> i32 {
+    if index as u32 >= len as u32 {
+        builtin::cold_path();
+        assert index >= 0, "negative byte index";
+        return len;
+    }
+    return char_start_backward(repr, start + index) - start;
+}
+
+/// The nearest character boundary at or above `index`, counted from `start`;
+/// `len` when `index >= len`. Panics if `index` is negative.
+fn ceil_boundary(repr: &Array<u8>, start: i32, len: i32, index: i32) -> i32 {
+    if index as u32 >= len as u32 {
+        builtin::cold_path();
+        assert index >= 0, "negative byte index";
+        return len;
+    }
+    let mut p = index;
+    while p < len && !is_char_start(repr[start + p]) {
+        p += 1;
+    }
+    return p;
+}
+
 /// True if `needle[0..needle_len)` equals `haystack[pos..pos+needle_len)`.
 /// Caller ensures `pos + needle_len <= haystack.len()`.
 #[inline]
@@ -145,85 +238,29 @@ struct Utf8Scalar {
 
 /// Decode and validate the UTF-8 scalar at `bytes[start..len)`.
 fn decode_utf8_scalar(bytes: ByteSlice, start: i32, len: i32) -> Utf8Scalar {
-    let b0 = bytes.get_unchecked(start);
-    if b0 < 0x80 {
-        return Utf8Scalar { code: b0 as u32, advance: 1, valid: true };
-    }
-    if b0 < 0xC2 {
-        // Bare continuation byte (0x80–0xBF) or overlong 2-byte lead (0xC0, 0xC1)
+    let n = String::utf8_sequence_len(&bytes, start, len);
+    if n <= 0 {
         builtin::cold_path();
-        return Utf8Scalar { code: 0, advance: 1, valid: false };
+        // A malformed sequence skips the prefix that was accepted; a truncated
+        // one skips what the input holds, since no further byte will arrive.
+        let advance = if n == 0 { String::utf8_invalid_len(&bytes, start) } else { len - start };
+        return Utf8Scalar { code: 0, advance, valid: false };
     }
-    if b0 < 0xE0 {
-        if start + 1 >= len {
-            builtin::cold_path();
-            return Utf8Scalar { code: 0, advance: 1, valid: false };
-        }
-        let b1 = bytes.get_unchecked(start + 1);
-        if b1 < 0x80 || b1 > 0xBF {
-            builtin::cold_path();
-            return Utf8Scalar { code: 0, advance: 1, valid: false };
-        }
-        let code = (b0 as u32 & 0x1F) << 6 | b1 as u32 & 0x3F;
-        return Utf8Scalar { code, advance: 2, valid: true };
+    let b0 = bytes.get_unchecked(start) as u32;
+    if n == 1 {
+        return Utf8Scalar { code: b0, advance: 1, valid: true };
     }
-    if b0 < 0xF0 {
-        if start + 1 >= len {
-            builtin::cold_path();
-            return Utf8Scalar { code: 0, advance: 1, valid: false };
-        }
-        let b1 = bytes.get_unchecked(start + 1);
-        // Reject bad continuation, overlong (E0 < A0), and surrogates (ED >= A0)
-        if b1 < 0x80 || b1 > 0xBF || b0 == 0xE0 && b1 < 0xA0 || b0 == 0xED && b1 >= 0xA0 {
-            builtin::cold_path();
-            return Utf8Scalar { code: 0, advance: 1, valid: false };
-        }
-        if start + 2 >= len {
-            builtin::cold_path();
-            return Utf8Scalar { code: 0, advance: 2, valid: false };
-        }
-        let b2 = bytes.get_unchecked(start + 2);
-        if b2 < 0x80 || b2 > 0xBF {
-            builtin::cold_path();
-            return Utf8Scalar { code: 0, advance: 2, valid: false };
-        }
-        let code = (b0 as u32 & 0x0F) << 12 | (b1 as u32 & 0x3F) << 6 | b2 as u32 & 0x3F;
-        return Utf8Scalar { code, advance: 3, valid: true };
+    assert n >= 2 && n <= 4;
+    let lead_mask: u32 = match n {
+        2 => 0x1F,
+        3 => 0x0F,
+        _ => 0x07,
+    };
+    let mut code = b0 & lead_mask;
+    for let mut i = 1; i < n; i += 1 {
+        code = code << 6 | bytes.get_unchecked(start + i) as u32 & 0x3F;
     }
-    if b0 < 0xF5 {
-        if start + 1 >= len {
-            builtin::cold_path();
-            return Utf8Scalar { code: 0, advance: 1, valid: false };
-        }
-        let b1 = bytes.get_unchecked(start + 1);
-        // Reject bad continuation, overlong (F0 < 90), and out-of-range (F4 > 8F)
-        if b1 < 0x80 || b1 > 0xBF || b0 == 0xF0 && b1 < 0x90 || b0 == 0xF4 && b1 > 0x8F {
-            builtin::cold_path();
-            return Utf8Scalar { code: 0, advance: 1, valid: false };
-        }
-        if start + 2 >= len {
-            builtin::cold_path();
-            return Utf8Scalar { code: 0, advance: 2, valid: false };
-        }
-        let b2 = bytes.get_unchecked(start + 2);
-        if b2 < 0x80 || b2 > 0xBF {
-            builtin::cold_path();
-            return Utf8Scalar { code: 0, advance: 2, valid: false };
-        }
-        if start + 3 >= len {
-            builtin::cold_path();
-            return Utf8Scalar { code: 0, advance: 3, valid: false };
-        }
-        let b3 = bytes.get_unchecked(start + 3);
-        if b3 < 0x80 || b3 > 0xBF {
-            builtin::cold_path();
-            return Utf8Scalar { code: 0, advance: 3, valid: false };
-        }
-        let code = (b0 as u32 & 0x07) << 18 | (b1 as u32 & 0x3F) << 12 | (b2 as u32 & 0x3F) << 6 | b3 as u32 & 0x3F;
-        return Utf8Scalar { code, advance: 4, valid: true };
-    }
-    builtin::cold_path();
-    return Utf8Scalar { code: 0, advance: 1, valid: false };
+    return Utf8Scalar { code, advance: n, valid: true };
 }
 
 /// A UTF-8 encoded, growable string.
@@ -282,7 +319,7 @@ impl Iterator for StrCharIter {
 }
 
 /// Iterator over characters paired with their byte indices.
-internal struct StrCharIndicesIter {
+pub struct StrCharIndicesIter {
     repr: &Array<u8>,
     used: i32,
     byte_index: i32,
@@ -306,7 +343,7 @@ impl Iterator for StrCharIndicesIter {
 }
 
 /// Iterator over substrings split by a separator.
-internal struct StrSplitIter {
+pub struct StrSplitIter {
     repr: &Array<u8>,
     used: i32,
     pos: i32,
@@ -337,7 +374,7 @@ impl Iterator for StrSplitIter {
 }
 
 /// Iterator over substrings split by a separator, limited to `n` parts.
-internal struct StrSplitNIter {
+pub struct StrSplitNIter {
     repr: &Array<u8>,
     used: i32,
     pos: i32,
@@ -374,7 +411,7 @@ impl Iterator for StrSplitNIter {
 }
 
 /// Iterator over whitespace-separated substrings.
-internal struct StrSplitWhitespaceIter {
+pub struct StrSplitWhitespaceIter {
     repr: &Array<u8>,
     used: i32,
     pos: i32,
@@ -399,7 +436,7 @@ impl Iterator for StrSplitWhitespaceIter {
 }
 
 /// Iterator over the lines of a string (split on `\n` or `\r\n`).
-internal struct StrLinesIter {
+pub struct StrLinesIter {
     repr: &Array<u8>,
     used: i32,
     pos: i32,
@@ -636,7 +673,7 @@ impl String {
         if end <= start {
             return;
         }
-        self.push_str(s.as_str_slice().sub_unchecked(start, end));
+        self.push_str(s.as_str_slice().slice_unchecked(start, end));
     }
 
     /// Returns an iterator over the UTF-8 bytes of the string.
@@ -705,8 +742,8 @@ impl String {
         self.set_byte_unchecked(start, byte);
     }
 
-    /// Truncates the string to the given byte length.
-    /// Panics if `byte_len` is negative or not on a UTF-8 character boundary.
+    /// Truncates the string to the given byte length. Panics if `byte_len` is
+    /// negative or off a character boundary; round a budget with `floor_char_boundary`.
     pub fn truncate(&mut self, byte_len: i32) {
         if byte_len >= self.used {
             return;
@@ -735,6 +772,18 @@ impl String {
     /// UTF-8 character in this string.
     pub fn is_char_boundary(&self, byte_index: i32) -> bool {
         return boundary_at(&self.repr as &Array<u8>, 0, self.used, byte_index);
+    }
+
+    /// The largest character boundary `<= byte_index`, or `len()` beyond it:
+    /// cuts to a byte budget with `truncate` or `substr_bytes`. Panics if negative.
+    pub fn floor_char_boundary(&self, byte_index: i32) -> i32 {
+        return floor_boundary(&self.repr as &Array<u8>, 0, self.used, byte_index);
+    }
+
+    /// The smallest character boundary `>= byte_index`, or `len()` beyond it.
+    /// Panics if `byte_index` is negative.
+    pub fn ceil_char_boundary(&self, byte_index: i32) -> i32 {
+        return ceil_boundary(&self.repr as &Array<u8>, 0, self.used, byte_index);
     }
 
     /// Removes and returns the last character, or None if empty.
@@ -791,8 +840,8 @@ impl String {
         return self.as_str_slice().eq_ignore_ascii_case(other);
     }
 
-    /// Extract a substring by byte range `[start, end)`.
-    /// Panics if the range is out of bounds or either end is not on a UTF-8 boundary.
+    /// Extract a substring by byte range `[start, end)`. Panics if the range is out
+    /// of bounds or off a character boundary; round a budget with `floor_char_boundary`.
     pub fn substr_bytes(&self, start: i32, end: i32) -> String {
         return self.as_str_slice().substr_bytes(start, end);
     }
@@ -902,7 +951,7 @@ impl String {
     /// Removes and returns the character at the given byte index.
     /// Panics if the index is out of bounds or not on a UTF-8 character boundary.
     pub fn remove(&mut self, byte_index: i32) -> char {
-        assert byte_index >= 0 && byte_index < self.used, "index out of bounds";
+        assert 0 <= byte_index < self.used, "index out of bounds";
         assert self.is_char_boundary(byte_index), "remove index not on UTF-8 character boundary";
         return self.remove_unchecked(byte_index);
     }
@@ -952,18 +1001,18 @@ impl String {
     }
 
     /// Build a `String` from an iterable of bytes, validating UTF-8.
-    /// `Ok(String)` on success, `Err(message)` on invalid UTF-8.
-    pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String> {
+    pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, Utf8Error> {
         let collected: List<u8> = bytes.into_iter().collect();
         return String::from_utf8_slice(collected.as_slice() as ByteSlice);
     }
 
-    /// Validate a contiguous byte slice as UTF-8 and wrap it as a `String`.
-    pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, String> {
-        let bad = String::utf8_error_offset(&bytes);
-        if bad >= 0 {
+    /// Validate a contiguous byte slice as UTF-8 and wrap it as a `String`. A
+    /// sequence cut short at the end fails too, with `error_len() == None`.
+    pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, Utf8Error> {
+        let prefix = String::utf8_valid_prefix(&bytes);
+        if prefix != bytes.len() {
             builtin::cold_path();
-            return Result::Err(`invalid UTF-8 at byte ${bad}`);
+            return Result::Err(String::utf8_error_at(&bytes, prefix));
         }
         return Result::Ok(String {
             repr: bytes.to_array() as ByteArray,
@@ -971,27 +1020,81 @@ impl String {
         });
     }
 
-    /// Offset of the first malformed UTF-8 sequence in `bytes`, or `-1` when it
-    /// is well-formed. ASCII is tested here, `utf8_sequence_len` being a call.
-    internal fn utf8_error_offset(bytes: &ByteSlice) -> i32 {
+    /// Append the longest prefix of `bytes` that is complete, valid UTF-8, and
+    /// answer how many bytes that was. A trailing sequence cut short is left
+    /// behind rather than rejected, so a caller decoding a stream carries those
+    /// bytes into its next chunk.
+    ///
+    /// `Err` names a sequence no further byte could complete, offset from the
+    /// start of `bytes` — a stream decoder owes it `Utf8Error::rebased`. This
+    /// string is untouched: the prefix is validated before any of it is appended.
+    pub fn push_utf8<S: AsByteSlice>(&mut self, bytes: &S) -> Result<i32, Utf8Error> {
+        let slice = bytes.as_byte_slice();
+        let taken = String::utf8_valid_prefix(&slice);
+        if taken < 0 {
+            builtin::cold_path();
+            return Result::Err(String::utf8_error_at(&slice, taken));
+        }
+        self.push_bytes_unchecked(&slice.slice(0, taken));
+        return Result::Ok(taken);
+    }
+
+    /// Length of the longest prefix of `bytes` that is complete, valid UTF-8,
+    /// or `-1 - i` where `i` is the offset of a sequence no further byte could
+    /// complete. ASCII is tested here, `utf8_sequence_len` being a call.
+    internal fn utf8_valid_prefix(bytes: &ByteSlice) -> i32 {
         let len = bytes.len();
         let mut i = 0;
         while i < len {
             let mut advance = 1;
             if bytes.get_unchecked(i) >= 0x80 {
                 advance = String::utf8_sequence_len(bytes, i, len);
-                if advance == 0 {
+                if advance <= 0 {
                     builtin::cold_path();
-                    return i;
+                    // A short sequence ends the prefix; a malformed one is an
+                    // offset only the sign distinguishes.
+                    return if advance < 0 { i } else { -1 - i };
                 }
             }
             i += advance;
         }
-        return -1;
+        return len;
     }
 
-    /// Length (1–4) of the valid UTF-8 sequence at `bytes[start..len)`, or 0 when
-    /// it is malformed. The validating half of `decode_utf8_scalar`.
+    /// The failure a `utf8_valid_prefix` answer other than `len` stands for.
+    /// Measured here rather than in the scan, being off the hot path.
+    internal fn utf8_error_at(bytes: &ByteSlice, prefix: i32) -> Utf8Error {
+        assert prefix != bytes.len();
+        if prefix >= 0 {
+            return Utf8Error::incomplete(prefix);
+        }
+        let start = -1 - prefix;
+        return Utf8Error::invalid(start, String::utf8_invalid_len(bytes, start));
+    }
+
+    /// Length (1–3) of the malformed sequence at `start`: how many of its bytes
+    /// `utf8_sequence_len` accepted before the one nothing could rescue.
+    internal fn utf8_invalid_len(bytes: &ByteSlice, start: i32) -> i32 {
+        let b0 = bytes.get_unchecked(start);
+        if b0 < 0xC2 || b0 >= 0xF5 {
+            return 1;
+        }
+        if !utf8_second_byte_ok(b0, bytes.get_unchecked(start + 1)) {
+            return 1;
+        }
+        if is_char_start(bytes.get_unchecked(start + 2)) {
+            return 2;
+        }
+        return 3;
+    }
+
+    /// Length (1–4) of the valid UTF-8 sequence at `bytes[start..len)`, `0` when
+    /// it is malformed, and `-1` when it is merely cut short by `len`.
+    ///
+    /// `0` and `-1` are separate because only the caller knows whether more
+    /// bytes can arrive. Each continuation byte present is checked before the
+    /// length is, so a sequence no further byte could rescue answers `0` even
+    /// when short.
     internal fn utf8_sequence_len(bytes: &ByteSlice, start: i32, len: i32) -> i32 {
         let b0 = bytes.get_unchecked(start);
         if b0 < 0x80 {
@@ -1002,54 +1105,47 @@ impl String {
             builtin::cold_path();
             return 0;
         }
+        let available = len - start;
         if b0 < 0xE0 {
-            if start + 1 >= len {
+            if available < 2 {
                 builtin::cold_path();
-                return 0;
+                return -1;
             }
-            let b1 = bytes.get_unchecked(start + 1);
-            if b1 < 0x80 || b1 > 0xBF {
+            if !utf8_second_byte_ok(b0, bytes.get_unchecked(start + 1)) {
                 builtin::cold_path();
                 return 0;
             }
             return 2;
         }
         if b0 < 0xF0 {
-            if start + 2 >= len {
+            if available >= 2 && !utf8_second_byte_ok(b0, bytes.get_unchecked(start + 1)) {
                 builtin::cold_path();
                 return 0;
             }
-            let b1 = bytes.get_unchecked(start + 1);
-            // Reject bad continuation, overlong (E0 < A0), and surrogates (ED >= A0)
-            if b1 < 0x80 || b1 > 0xBF || b0 == 0xE0 && b1 < 0xA0 || b0 == 0xED && b1 >= 0xA0 {
+            if available < 3 {
                 builtin::cold_path();
-                return 0;
+                return -1;
             }
-            let b2 = bytes.get_unchecked(start + 2);
-            if b2 < 0x80 || b2 > 0xBF {
+            if is_char_start(bytes.get_unchecked(start + 2)) {
                 builtin::cold_path();
                 return 0;
             }
             return 3;
         }
         if b0 < 0xF5 {
-            if start + 3 >= len {
+            if available >= 2 && !utf8_second_byte_ok(b0, bytes.get_unchecked(start + 1)) {
                 builtin::cold_path();
                 return 0;
             }
-            let b1 = bytes.get_unchecked(start + 1);
-            // Reject bad continuation, overlong (F0 < 90), and out-of-range (F4 > 8F)
-            if b1 < 0x80 || b1 > 0xBF || b0 == 0xF0 && b1 < 0x90 || b0 == 0xF4 && b1 > 0x8F {
+            if available >= 3 && is_char_start(bytes.get_unchecked(start + 2)) {
                 builtin::cold_path();
                 return 0;
             }
-            let b2 = bytes.get_unchecked(start + 2);
-            if b2 < 0x80 || b2 > 0xBF {
+            if available < 4 {
                 builtin::cold_path();
-                return 0;
+                return -1;
             }
-            let b3 = bytes.get_unchecked(start + 3);
-            if b3 < 0x80 || b3 > 0xBF {
+            if is_char_start(bytes.get_unchecked(start + 3)) {
                 builtin::cold_path();
                 return 0;
             }
@@ -1061,7 +1157,7 @@ impl String {
 
     /// Whether `bytes` is well-formed UTF-8.
     pub fn is_valid_utf8(bytes: ByteSlice) -> bool {
-        return String::utf8_error_offset(&bytes) < 0;
+        return String::utf8_valid_prefix(&bytes) == bytes.len();
     }
 
     /// Build a `String` from an iterable of bytes, replacing invalid UTF-8 with U+FFFD.
@@ -1233,6 +1329,18 @@ impl StrSlice {
         return boundary_at(self.repr, self.start, self.len(), index);
     }
 
+    /// The largest character boundary `<= index`, or `len()` beyond it.
+    /// Panics if `index` is negative.
+    pub fn floor_char_boundary(&self, index: i32) -> i32 {
+        return floor_boundary(self.repr, self.start, self.len(), index);
+    }
+
+    /// The smallest character boundary `>= index`, or `len()` beyond it.
+    /// Panics if `index` is negative.
+    pub fn ceil_char_boundary(&self, index: i32) -> i32 {
+        return ceil_boundary(self.repr, self.start, self.len(), index);
+    }
+
     /// Byte end of the leading `char_count` characters, or `len()` when the
     /// view holds fewer.
     internal fn char_prefix_end(&self, char_count: i32) -> i32 {
@@ -1242,10 +1350,10 @@ impl StrSlice {
     /// A sub-view over `[start, end)`, counted from this view's start.
     /// Panics if the range is out of bounds or either end is off a character
     /// boundary.
-    pub fn sub(&self, start: i32, end: i32) -> StrSlice {
-        assert 0 <= start && start <= end && end <= self.len(), "byte range out of bounds";
+    pub fn slice(&self, start: i32, end: i32) -> StrSlice {
+        assert 0 <= start <= end <= self.len(), "byte range out of bounds";
         assert self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries";
-        return self.sub_unchecked(start, end);
+        return self.slice_unchecked(start, end);
     }
 
     /// A sub-view without bounds or UTF-8 boundary checks.
@@ -1254,7 +1362,7 @@ impl StrSlice {
     /// - `0 <= start <= end <= self.len()`.
     /// - `start` and `end` lie on UTF-8 character boundaries.
     #[inline]
-    pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice {
+    pub fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice {
         return StrSlice { repr: self.repr, start: self.start + start, end: self.start + end };
     }
 
@@ -1355,7 +1463,7 @@ impl StrSlice {
         if !self.starts_with(prefix) {
             return null;
         }
-        return Option::Some(self.sub_unchecked(start, self.len()));
+        return Option::Some(self.slice_unchecked(start, self.len()));
     }
 
     /// The view with `suffix` removed from the end, or None when it does not
@@ -1365,7 +1473,7 @@ impl StrSlice {
         if !self.ends_with(suffix) {
             return null;
         }
-        return Option::Some(self.sub_unchecked(0, self.len() - suffix_len));
+        return Option::Some(self.slice_unchecked(0, self.len() - suffix_len));
     }
 
     /// Byte order against any text, the `cmp` a generic body cannot reach:
@@ -1526,8 +1634,8 @@ impl StrSlice {
 
     fn cut_at(&self, at: i32, sep_len: i32) -> [StrSlice, StrSlice] {
         return [
-            self.sub_unchecked(0, at),
-            self.sub_unchecked(at + sep_len, self.len()),
+            self.slice_unchecked(0, at),
+            self.slice_unchecked(at + sep_len, self.len()),
         ];
     }
 
@@ -1556,11 +1664,11 @@ impl StrSlice {
     }
 
     pub fn substr_bytes(&self, start: i32, end: i32) -> String {
-        return self.sub(start, end).to_string();
+        return self.slice(start, end).to_string();
     }
 
     pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String {
-        return self.sub_unchecked(start, end).to_string();
+        return self.slice_unchecked(start, end).to_string();
     }
 
     pub fn contains_char(&self, ch: char) -> bool {
@@ -1627,7 +1735,7 @@ impl StrSlice {
             }
         }
         if pos < len {
-            result.push_str(self.sub_unchecked(pos, len));
+            result.push_str(self.slice_unchecked(pos, len));
         }
         return result;
     }
@@ -1663,12 +1771,20 @@ pub trait AsStrSlice: Eq<String> with () {
         return self.as_str_slice().is_char_boundary(index);
     }
 
-    fn sub(&self, start: i32, end: i32) -> StrSlice {
-        return self.as_str_slice().sub(start, end);
+    fn floor_char_boundary(&self, index: i32) -> i32 {
+        return self.as_str_slice().floor_char_boundary(index);
     }
 
-    fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice {
-        return self.as_str_slice().sub_unchecked(start, end);
+    fn ceil_char_boundary(&self, index: i32) -> i32 {
+        return self.as_str_slice().ceil_char_boundary(index);
+    }
+
+    fn slice(&self, start: i32, end: i32) -> StrSlice {
+        return self.as_str_slice().slice(start, end);
+    }
+
+    fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice {
+        return self.as_str_slice().slice_unchecked(start, end);
     }
 
     fn as_bytes(&self) -> ByteSlice {
@@ -1883,6 +1999,14 @@ impl<T: AsStrSlice> AsStrSlice for &T {
 
     fn is_char_boundary(&self, index: i32) -> bool {
         return (*self).is_char_boundary(index);
+    }
+
+    fn floor_char_boundary(&self, index: i32) -> i32 {
+        return (*self).floor_char_boundary(index);
+    }
+
+    fn ceil_char_boundary(&self, index: i32) -> i32 {
+        return (*self).ceil_char_boundary(index);
     }
 
     fn char_at_byte_unchecked(&self, byte_index: i32) -> char {

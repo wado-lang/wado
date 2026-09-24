@@ -874,3 +874,7 @@ test "gzip header preserves UTF-8 name and comment" {
     // The body still inflates correctly with non-ASCII header fields present.
     assert bytes_equal(&data, &inflate_gzip(&compressed).unwrap());
 }
+
+test "ZlibError renders its reason" {
+    assert `${uncompress(&([1 as u8] as ByteList)).unwrap_err()}` == "input is shorter than the smallest valid stream";
+}

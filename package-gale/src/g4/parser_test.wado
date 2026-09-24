@@ -2319,6 +2319,86 @@ test "a property escape cannot be a bound of a character range" {
     }
 }
 
+test "a label on a block ANTLR4 calls no set is rejected" {
+    // `error(130): label x assigned to a block which is not a set`. A set is
+    // two or more alternatives, each one terminal. Anything richer has no
+    // binding slot ANTLR4 names, so `(e)` is not the free wrapper it looks
+    // like. The rule covers both label forms, and a suffix on the block does
+    // not exempt it.
+    let bad: List<String> = [
+        "grammar Test;\nr : x=(A) ;", "grammar Test;\nr : x+=(A)+ ;", "grammar Test;\nr : x=(A B)+ ;",
+        "grammar Test;\nr : x+=(A*) ;", "grammar Test;\nr : x+=(A B)*? ;", "grammar Test;\nr : x=(A? B)? ;",
+        "grammar Test;\nr : x+=(y+=A) ;", "grammar Test;\nr : x+=(.|A) ;", "grammar Test;\nr : x+=(A|~B) ;",
+        "grammar Test;\nr : x=(.) ;", "grammar Test;\nr : x+=((A|B)) ;", "grammar Test;\nr : x+=(A|s) ;",
+        "grammar Test;\ns : A ;\nr : x+=(A|B { }) ;",
+    ];
+    for let src of &bad {
+        assert parse(*src) matches { Err(_) }, `expected a rejection for ${*src}`;
+    }
+}
+
+test "a label on a set, and on an atom, is still accepted" {
+    let good: List<String> = [
+        "grammar Test;\nr : x+=(A|B) ;", "grammar Test;\nr : x=(A|B) ;", "grammar Test;\nr : x+=(A|B)*? ;",
+        "grammar Test;\nr : x+=('a'|'b') ;", "grammar Test;\nr : x+=(A|B|C) ;", "grammar Test;\nr : x=. ;",
+        "grammar Test;\nr : x+=A* ;", "grammar Test;\nr : (x=A B)* ;", "grammar Test;\nr : x+=~A ;",
+    ];
+    for let src of &good {
+        assert parse(*src) matches { Ok(_) }, `expected acceptance for ${*src}`;
+    }
+}
+
+/// Each case is a grammar and the escape its error must name. Slicing the
+/// source at the reported span catches a report that names a prefix.
+fn assert_escape_errors(cases: &List<[String, String]>) {
+    for let mut i = 0; i < cases.len(); i += 1 {
+        let src = cases[i].0;
+        let esc = cases[i].1;
+        let err = parse(src).unwrap_err();
+        assert err.message == `invalid escape sequence ${esc}`, err.message;
+        let at = src.as_str_slice().slice(err.span.start, err.span.end).to_string();
+        assert at == esc, `${err.span.start}..${err.span.end} is "${at}", not "${esc}"`;
+    }
+}
+
+test "a char set rejects an escape ANTLR4 does not define" {
+    // `[` needs no escape inside a set, so `\[` is `invalid escape sequence`
+    // from the jar while Gale used to read it as the bare `[`. Accepting it is
+    // what let a grammar here compile in a shape the oracle scripts cannot run.
+    // `\'` and `\"` belong to string literals, and `\p` without `{` names no
+    // property.
+    assert_escape_errors(
+        &[
+            ["grammar Test;\nX : [\\[] ;", "\\["],
+            ["grammar Test;\nX : [\\s] ;", "\\s"],
+            ["grammar Test;\nX : ~[\\[\\r\\n] ;", "\\["],
+            ["grammar Test;\nX : [\\'] ;", "\\'"],
+            ["grammar Test;\nX : [\\\"] ;", "\\\""],
+            ["grammar Test;\nX : [\\p] ;", "\\p"],
+            ["grammar Test;\nX : [a-\\z] ;", "\\z"],
+        ],
+    );
+}
+
+test "a char set rejects a malformed unicode escape" {
+    // Four hex digits, or braces around at least one that names a code point.
+    assert_escape_errors(
+        &[
+            ["grammar Test;\nX : [\\u41] ;", "\\u41"],
+            ["grammar Test;\nX : [\\u{}] ;", "\\u{}"],
+            ["grammar Test;\nX : [\\u{110000}] ;", "\\u{110000}"],
+            ["grammar Test;\nX : [\\u{41] ;", "\\u{41"],
+        ],
+    );
+}
+
+test "the escapes a char set does define still read as themselves" {
+    let cc = class_of("grammar Test;\nX : [\\-\\]\\\\\\n\\u0041\\u{1F600}] ;");
+    for let c of &['-', ']', '\\', '\n', 'A', '\u{1F600}'] {
+        assert class_admits(&cc, *c), `the set must admit ${*c}`;
+    }
+}
+
 test "a dash beside a property escape is a literal, not a range" {
     // A `-` first or last in the set is an ordinary character, so neither of
     // these is a range and both stay accepted — the same line ANTLR4 draws.

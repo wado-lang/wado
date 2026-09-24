@@ -1,0 +1,30 @@
+//! The contraction axis is repeated across two operands, so an operand whose
+//! axis list disagrees with it is rejected. The packs settle from the
+//! turbofish, and the operand types are then ordinary types to compare.
+//! See docs/wep-2026-09-20-loam.md § "The Signature Is the Notation".
+
+struct Tensor<E, Axes> {
+    extents: List<i32>,
+}
+
+struct Batch {}
+struct Row {}
+struct Inner {}
+struct Other {}
+struct Col {}
+
+fn contract<..Pre, K, ..Post, ..QPre, ..QPost>(
+    a: &Tensor<f32, [..Pre, K, ..Post]>,
+    b: &Tensor<f32, [..QPre, K, ..QPost]>,
+) -> i32 {
+    return a.extents.len() + b.extents.len();
+}
+
+test "an operand disagreeing on the contraction axis" {
+    let a: Tensor<f32, [Batch, Inner, Row]> = Tensor { extents: [2, 3, 4] };
+    let b: Tensor<f32, [Other, Col]> = Tensor { extents: [3, 5] };
+    assert contract::<[Batch], Inner, [Row], [], [Col]>(&a, &b) == 5;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected '&Tensor<f32, [Inner, Col]>', found '&Tensor<f32, [Other, Col]>'"}

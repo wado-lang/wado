@@ -163,12 +163,11 @@ internal-implementation-with-public-facade pattern that
 `pub use`. One rule has to tell them apart, and which rule cannot be worked out
 from the shape alone.
 
-To close it: run the exact check over `package-gale` and the standard library
-with no size floor, look at what the forwarder-shaped matches actually turn out
-to be, and write the rule from that.
+Nobody has run the exact check over `package-gale` and the standard library to
+see what the forwarder-shaped matches actually are.
 
 The minimum body size is the same problem. Below some node count every getter
-collides with every other getter. The number comes out of the same measurement.
+collides with every other getter, and no measurement says where that is.
 
 The near-duplicate threshold and the minimum subtree size are also unmeasurable
 until the exact check has run on a real corpus. `package-gale` is the corpus to

@@ -12,8 +12,8 @@
 //! variation-tolerant (§4.1): it accepts any well-formed encoding, preferred or
 //! not, definite or indefinite length. `to_bytes_canonical` emits the Core
 //! Deterministic Encoding profile (§4.2.1) for COSE-style signing, with the
-//! documented float caveat (Wado has no `f16`, so the canonical float ladder
-//! stops at binary32).
+//! documented float caveat (this encoder never emits binary16, so the canonical
+//! float ladder stops at binary32).
 //!
 //! The spec is vendored verbatim at `wado-compiler/ref/rfc8949.txt`; comments
 //! cite section numbers from it.
@@ -97,12 +97,12 @@ global TAG_BIGNUM_NEG: u64 = 3;  // §3.4.3 — negative bignum
 global TAG_UUID: u64 = 37;  // IANA CBOR tags — binary UUID
 global TAG_SELF_DESCRIBED: u64 = 55799;  // §3.4.6 — self-described CBOR marker
 
-// The quiet binary32 NaN — the single canonical NaN, since Wado has no f16.
+// The quiet binary32 NaN — the single canonical NaN, the ladder's shortest.
 global CANONICAL_NAN_F32_BITS: u64 = 0x7fc00000;
 
 // Boundary magnitudes for the bignum / range checks, as u128.
-global U64_MAX_AS_U128: u128 = 18446744073709551615;
-global I128_MAX_AS_U128: u128 = 170141183460469231731687303715884105727;
+global U64_MAX_AS_U128: u128 = u64::MAX as u128;
+global I128_MAX_AS_U128: u128 = i128::MAX as u128;
 
 // Container type-mismatch diagnostics, referenced by `begin_container` so the
 // success path allocates no message (only the cold error path copies one).
@@ -249,19 +249,19 @@ fn write_bytes(buf: &mut ByteList, v: ByteSlice) {
     push_byte_slice(buf, v);
 }
 
-struct CborSeqSerializer {
+pub struct CborSeqSerializer {
     buf: &mut ByteList,
 }
 
-struct CborMapSerializer {
+pub struct CborMapSerializer {
     buf: &mut ByteList,
 }
 
-struct CborStructSerializer {
+pub struct CborStructSerializer {
     buf: &mut ByteList,
 }
 
-struct CborVariantSerializer {
+pub struct CborVariantSerializer {
     buf: &mut ByteList,
 }
 
@@ -367,16 +367,16 @@ impl Serializer for CborSerializer {
     }
 
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
-        // binary32 head. Wado has no f16, so the preferred encoder never uses
-        // the 16-bit form. NaN/Inf encode natively.
+        // binary32 head: the preferred encoder never uses the 16-bit form.
+        // NaN/Inf encode natively.
         self.buf.push(INIT_F32);
-        push_be(self.buf, v.to_bits() as u32 as u64, 4);
+        push_be(self.buf, v.to_bits() as u64, 4);
         return Result::Ok(());
     }
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
         self.buf.push(INIT_F64);
-        push_be(self.buf, v.to_bits() as u64, 8);
+        push_be(self.buf, v.to_bits(), 8);
         return Result::Ok(());
     }
 
@@ -473,11 +473,11 @@ pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
 //   1. Map and struct keys are emitted in ascending bytewise order of their
 //      *encoded* form: entries are encoded into side buffers and sorted before
 //      emission.
-//   2. Floats use the shortest form that preserves the value, but — since Wado
-//      has no `f16` — the ladder stops at binary32. `to_bytes_canonical` is thus
-//      byte-identical to a reference deterministic encoder for integers, map
-//      order, and lengths, but may differ on float-bearing values (a documented
-//      COSE/CWT interoperability caveat; see the WEP).
+//   2. Floats use the shortest form that preserves the value, but the ladder
+//      stops at binary32: nothing here emits a binary16. `to_bytes_canonical`
+//      is thus byte-identical to a reference deterministic encoder for
+//      integers, map order, and lengths, but may differ on float-bearing
+//      values (a documented COSE/CWT interoperability caveat; see the WEP).
 
 /// Append a binary32 head + the low 32 bits of `bits`.
 fn push_f32_head(buf: &mut ByteList, bits: u64) {
@@ -487,26 +487,26 @@ fn push_f32_head(buf: &mut ByteList, bits: u64) {
 
 fn write_canonical_f64(buf: &mut ByteList, v: f64) {
     if v.is_nan() {
-        // One canonical NaN (quiet, binary32) since there is no f16.
+        // One canonical NaN: quiet, binary32, the ladder's shortest.
         push_f32_head(buf, CANONICAL_NAN_F32_BITS);
         return;
     }
     let n32 = v as f32;
     if n32 as f64 == v {
-        push_f32_head(buf, n32.to_bits() as u32 as u64);
+        push_f32_head(buf, n32.to_bits() as u64);
     } else {
         buf.push(INIT_F64);
-        push_be(buf, v.to_bits() as u64, 8);
+        push_be(buf, v.to_bits(), 8);
     }
 }
 
 fn write_canonical_f32(buf: &mut ByteList, v: f32) {
-    // binary32 is already the shortest form available (no f16).
+    // binary32 is already the shortest form this encoder writes.
     if v.is_nan() {
         push_f32_head(buf, CANONICAL_NAN_F32_BITS);
         return;
     }
-    push_f32_head(buf, v.to_bits() as u32 as u64);
+    push_f32_head(buf, v.to_bits() as u64);
 }
 
 fn append_all(buf: &mut ByteList, src: &ByteList) {
@@ -530,22 +530,22 @@ fn canonical_encode<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>
     return Result::Ok(buf as ByteList);
 }
 
-struct CanonicalCborSeqSerializer {
+pub struct CanonicalCborSeqSerializer {
     buf: &mut ByteList,
 }
 
-struct CanonicalCborMapSerializer {
+pub struct CanonicalCborMapSerializer {
     buf: &mut ByteList,
     entries: List<[ByteList, ByteList]>,
     pending_key: ByteList,
 }
 
-struct CanonicalCborStructSerializer {
+pub struct CanonicalCborStructSerializer {
     buf: &mut ByteList,
     entries: List<[ByteList, ByteList]>,
 }
 
-struct CanonicalCborVariantSerializer {
+pub struct CanonicalCborVariantSerializer {
     buf: &mut ByteList,
 }
 
@@ -744,9 +744,8 @@ impl Serializer for CanonicalCborSerializer {
 /// Equal values produce byte-identical output regardless of map insertion order
 /// — use this for COSE/CWT signing or content addressing.
 ///
-/// Float caveat: Wado has no `f16`, so the canonical float ladder stops at
-/// binary32. Output is byte-identical to a reference deterministic encoder for
-/// integers, lengths, and map order, but may differ on float-bearing values.
+/// Float caveat: the ladder stops at binary32, so output may differ from a
+/// reference deterministic encoder on float-bearing values.
 pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
     let mut buf = ByteList::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = CanonicalCborSerializer { buf: &mut buf };
@@ -758,12 +757,12 @@ pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, Serialize
 /// field directly. Used by the binary16 widening path; `e` stays within the
 /// normal `f64` exponent range there, so the result is exact.
 fn exp2(e: i32) -> f64 {
-    return f64::from_bits((e + 1023) as i64 << 52);
+    return f64::from_bits((e + 1023) as u64 << 52);
 }
 
 /// Widen a CBOR binary16 (half-precision) bit pattern to `f64` (exact: every
-/// binary16 value is representable in `f64`). Wado has no `f16`, so a decoded
-/// half maps onto `f32`/`f64` (RFC 8949 §3, half-precision in major type 7).
+/// binary16 value is representable in `f64`). A decoded half reaches serde as
+/// an `f32` / `f64` (RFC 8949 §3, half-precision in major type 7).
 fn decode_half(bits: u64) -> f64 {
     let h = (bits & 0xffff) as i32;
     let sign = h >> 15 & 1;
@@ -796,8 +795,8 @@ fn decode_half(bits: u64) -> f64 {
 /// is one of the three float codes.
 fn simple_float_to_f64(ai: u8, bits: u64) -> f64 {
     return match ai {
-        AI_8BYTE => f64::from_bits(bits as i64),
-        AI_4BYTE => f32::from_bits(bits as i32) as f64,
+        AI_8BYTE => f64::from_bits(bits),
+        AI_4BYTE => f32::from_bits(bits as u32) as f64,
         _ => decode_half(bits),
     };
 }
@@ -946,7 +945,7 @@ impl CborDeserializer {
             Err(e) => {
                 builtin::cold_path();
                 return Result::Err(DeserializeError::malformed(
-                    `text string contains ${e}`,
+                    `text string contains ${e.rebased(self.pos)}`,
                     self.pos as i64,
                 ));
             },
@@ -1273,7 +1272,7 @@ impl CborDeserializer {
     }
 }
 
-struct CborSeqAccess {
+pub struct CborSeqAccess {
     de: &mut CborDeserializer,
     depth: i32,
     remaining: i64,
@@ -1284,21 +1283,21 @@ struct CborSeqAccess {
     done: bool,
 }
 
-struct CborMapAccess {
+pub struct CborMapAccess {
     de: &mut CborDeserializer,
     depth: i32,
     remaining: i64,
     indef: bool,
 }
 
-struct CborStructAccess {
+pub struct CborStructAccess {
     de: &mut CborDeserializer,
     depth: i32,
     remaining: i64,
     indef: bool,
 }
 
-struct CborVariantAccess {
+pub struct CborVariantAccess {
     de: &mut CborDeserializer,
     depth: i32,
     variant: String,
@@ -2019,10 +2018,10 @@ impl Deserializer for CborDeserializer {
                             return visitor.visit_f64(decode_half(arg));
                         },
                         AI_4BYTE => {
-                            return visitor.visit_f64(f32::from_bits(arg as i32) as f64);
+                            return visitor.visit_f64(f32::from_bits(arg as u32) as f64);
                         },
                         AI_8BYTE => {
-                            return visitor.visit_f64(f64::from_bits(arg as i64));
+                            return visitor.visit_f64(f64::from_bits(arg));
                         },
                         _ => {
                         },

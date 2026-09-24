@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fmt::Write as _;
 use std::io::BufWriter;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -135,7 +136,16 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let mut runtime_knobs = RuntimeKnobs::default();
     let mut knobs = CompileKnobs::default();
 
-    while let Some(arg) = args::next_arg(&mut parser)? {
+    // Whether a `--` has already ended this command's options. Only the one
+    // that does that job is `wado run`'s; any other belongs to the guest.
+    let mut options_ended = false;
+    loop {
+        options_ended |= parser
+            .try_raw_args()
+            .is_some_and(|raw| raw.peek() == Some(OsStr::new("--")));
+        let Some(arg) = args::next_arg(&mut parser)? else {
+            break;
+        };
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;
         } else if let Some(r) = args::match_opt(&arg, RuntimeKnobOpt::ALL, |r| r.spec()) {
@@ -154,8 +164,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
             }
         } else if let Value(val) = arg {
             input = Some(val.to_string_lossy().into_owned());
-            // Everything after the input file (flags included) is forwarded to the guest.
-            if let Some(raw) = parser.try_raw_args() {
+            // Everything after the input file goes to the guest, less the `--`
+            // ending this command's options where none has ended them yet.
+            if let Some(mut raw) = parser.try_raw_args() {
+                if !options_ended {
+                    raw.next_if(|first| first == "--");
+                }
                 for raw_arg in raw {
                     program_args.push(raw_arg.to_string_lossy().into_owned());
                 }
@@ -280,7 +294,7 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
     // builds the cli/command world through the shared build core (metadata
     // embedded, written to build/), then executes it; a bare file with no
     // project stays on the in-memory compile primitive.
-    let wasm = build_for_driver(&opts.input, "wasi:cli/command", &flags).await?;
+    let wasm = Box::pin(build_for_driver(&opts.input, "wasi:cli/command", &flags)).await?;
 
     run_cli_component(
         &wasm,

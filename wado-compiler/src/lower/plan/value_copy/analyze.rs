@@ -297,7 +297,7 @@ fn match_result_is_fresh(
 /// parts can be treated as fresh in the arm body.
 pub(crate) fn collect_pattern_bindings(pattern: &TirPattern, out: &mut IndexSet<u32>) {
     match pattern {
-        TirPattern::Binding { local_index, .. } => {
+        TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } => {
             out.insert(*local_index);
         }
         TirPattern::Tuple(subs, _) | TirPattern::Variant { bindings: subs, .. } => {

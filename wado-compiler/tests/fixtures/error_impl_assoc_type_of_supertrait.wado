@@ -1,0 +1,45 @@
+// A supertrait's associated type belongs to the impl answering `T: Super`.
+// Binding it in the subtrait's impl records it where no projection through
+// `Base` reads it, so `Base::Load` stays unbound and reaches codegen.
+
+trait Base with () {
+    type Load;
+
+    fn load() -> Self::Load;
+}
+
+trait Stacked: Base with () {
+    fn depth() -> i32;
+}
+
+struct Wrong {
+}
+
+struct Crate {
+}
+
+impl Base for Crate {
+    type Load = Wrong;
+
+    fn load() -> Wrong {
+        return Wrong {};
+    }
+}
+
+impl Stacked for Crate {
+    type Load = Wrong;
+
+    fn depth() -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    let _ = Crate::depth();
+}
+
+__DATA__
+{
+    "compile_error": "trait 'Stacked' declares no associated type 'Load'",
+    "compile_error_codes": ["TRAIT_DECL_INVALID"]
+}

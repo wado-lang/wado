@@ -60,14 +60,14 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:opt_labeled_block_copy_mutation.wado::$const_obj_0: ref null Array<u8> = array.new_fixed<u8>(116, 61);
 global global:opt_labeled_block_copy_mutation.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(115, 61);
-global global:opt_labeled_block_copy_mutation.wado::$const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 };
+global global:opt_labeled_block_copy_mutation.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(98);
 
 fn "opt_labeled_block_copy_mutation.wado/run"() with Stdout {
+    let $load_0: ref Array<u8>;
     let s: ref "core:prelude/string.wado//String";
     let x: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4_4: ref "core:prelude/string.wado//String";
-    let other_8: ref "core:prelude/string.wado//String";
     let start_20: i32;
     let handle_25: i32;
     let n_47: i32;
@@ -83,15 +83,14 @@ fn "opt_labeled_block_copy_mutation.wado/run"() with Stdout {
     let rx_94: i32;
     let tx_95: i32;
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
-    x = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = s.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>(1); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, 1); $array_clone_dst_2), used: 1 };
-    other_8 = global:opt_labeled_block_copy_mutation.wado::$const_obj_2;
-    if @unlikely(2 > builtin::array_len(s.repr)) {
+    x = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = local.tee $load_0(s.repr); let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>(1); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, 1); $array_clone_dst_2), used: 1 };
+    if @unlikely(2 > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, 2);
     }
     start_20 = s.used;
     s.used = 2;
-    builtin::array_copy<u8>(s.repr, start_20, other_8.repr, 0, 1);
+    builtin::array_copy<u8>(s.repr, start_20, global:opt_labeled_block_copy_mutation.wado::$const_obj_2, 0, 1);
     let $array_clone_src_4: ref Array<u8>;
     $array_clone_src_4 = x.repr;
     let $array_clone_dst_5: ref Array<u8>;
@@ -160,19 +159,20 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -235,7 +235,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l7;

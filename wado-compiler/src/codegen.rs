@@ -14,83 +14,102 @@ mod component;
 mod component_context;
 mod emit;
 
+/// A binary the WIR pipeline produced that does not validate, with the
+/// diagnosis and the bytes themselves. Saving it is the host's to do.
+pub struct InvalidArtifact {
+    /// What failed to validate, for the message: `core Wasm module` or
+    /// `component`.
+    pub subject: &'static str,
+    /// What the host names the saved bytes after.
+    pub file_stem: &'static str,
+    pub wasm: Vec<u8>,
+    /// Everything known about the failure, ready to print.
+    pub report: String,
+}
+
 /// Emit a Wasm component binary from a linked package and its WIR module.
 pub fn emit_wasm(
     package: &NirPackage,
     wir_package: &WirPackage,
     providers: &[ProviderComponent],
-) -> Vec<u8> {
+) -> Result<Vec<u8>, Box<InvalidArtifact>> {
     // Step 1: Emit core module bytes from WirPackage
     let core_module =
         emit::emit_core_module(wir_package, package.strip_names, package.codegen_flags);
 
     // Step 2: Validate core module (catch errors before component wrapping)
-    if !package.skip_validation {
-        validate_core_module(&core_module, &package.entry_module_source);
+    if !package.skip_validation
+        && let Some(invalid) = validate_core_module(&core_module, &package.entry_module_source)
+    {
+        return Err(Box::new(invalid));
     }
 
     // Step 3: Wrap in Component Model
     let wasm = component::build_component(package, &core_module, wir_package, providers);
 
     // Step 4: Validate
-    if !package.skip_validation {
-        validate_wasm(&wasm, &package.entry_module_source);
+    if !package.skip_validation
+        && let Some(invalid) = validate_wasm(&wasm, &package.entry_module_source)
+    {
+        return Err(Box::new(invalid));
     }
 
-    wasm
+    Ok(wasm)
 }
 
-/// Validate `wasm`, and on failure save it beside a panic carrying whatever
-/// `describe` can say about where the failure landed.
-fn validate_or_panic(
+/// Validate `wasm`, answering what `describe` can say about where a failure
+/// landed. Performs no I/O: the bytes travel to the host that can save them.
+fn validate_or_report(
     wasm: &[u8],
     entry_module: &ModuleSource,
-    subject: &str,
-    artifact_path: &str,
-    describe: impl FnOnce(&[u8], usize) -> Option<String>,
+    subject: &'static str,
+    file_stem: &'static str,
+    describe: impl FnOnce(&[u8], u64) -> Option<String>,
     undescribed: &str,
-) {
+) -> Option<InvalidArtifact> {
     let mut validator = wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
     let Err(e) = validator.validate_all(wasm) else {
-        return;
+        return None;
     };
-    let _ = std::fs::write(artifact_path, wasm);
     let context = describe(wasm, e.offset()).unwrap_or_else(|| undescribed.to_string());
     let context = context.trim_end();
-    panic!(
-        "Internal compiler error: WIR pipeline generated an invalid {subject}\n\
-         Entry module: {entry_module}\n\
-         Validation error: {e}\n\
-         {context}\n\
-         The full invalid {subject} was written to {artifact_path} \
-         (inspect with `wasm-tools print`)."
-    );
+    Some(InvalidArtifact {
+        subject,
+        file_stem,
+        wasm: wasm.to_vec(),
+        report: format!(
+            "Internal compiler error: WIR pipeline generated an invalid {subject}\n\
+             Entry module: {entry_module}\n\
+             Validation error: {e}\n\
+             {context}"
+        ),
+    })
 }
 
 /// Validate core Wasm module (before component wrapping).
-fn validate_core_module(wasm: &[u8], entry_module: &ModuleSource) {
-    validate_or_panic(
+fn validate_core_module(wasm: &[u8], entry_module: &ModuleSource) -> Option<InvalidArtifact> {
+    validate_or_report(
         wasm,
         entry_module,
         "core Wasm module",
-        "/tmp/invalid_core.wasm",
+        "invalid-core",
         describe_offending_location,
         "  (could not locate the offending function)",
-    );
+    )
 }
 
 /// Describe where a core-Wasm validation error landed: the containing function
 /// (index + demangled name), the body-relative byte offset, and a disassembled
 /// window of operators around the failure so the failing instruction is named
 /// rather than left as a raw module offset.
-fn describe_offending_location(wasm: &[u8], offset: usize) -> Option<String> {
+fn describe_offending_location(wasm: &[u8], offset: u64) -> Option<String> {
     use crate::hashmap::IndexMap;
     use wasmparser::{Name, Parser, Payload};
     let mut import_funcs = 0u32;
     let mut defined = 0u32;
     let mut names: IndexMap<u32, String> = IndexMap::default();
     // The function whose body contains `offset`, as (index, body start, ops).
-    let mut hit: Option<(u32, usize, Vec<(usize, String)>)> = None;
+    let mut hit: Option<(u32, u64, Vec<(u64, String)>)> = None;
     for payload in Parser::new(0).parse_all(wasm) {
         match payload.ok()? {
             Payload::ImportSection(reader) => {
@@ -211,13 +230,13 @@ fn describe_component_instances(wasm: &[u8]) -> Option<String> {
 }
 
 /// Validate the wrapped component (after `validate_core_module`).
-fn validate_wasm(wasm: &[u8], entry_module: &ModuleSource) {
-    validate_or_panic(
+fn validate_wasm(wasm: &[u8], entry_module: &ModuleSource) -> Option<InvalidArtifact> {
+    validate_or_report(
         wasm,
         entry_module,
         "component",
-        "/tmp/invalid_component.wasm",
+        "invalid-component",
         |wasm, _| describe_component_instances(wasm),
         "  (could not read the component's instances)",
-    );
+    )
 }

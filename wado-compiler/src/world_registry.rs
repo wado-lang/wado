@@ -380,6 +380,7 @@ mod tests {
         self, AstId, Attribute, CmBoundary, CmImport, GenericType, NamedType, Visibility,
         WorldExportFn,
     };
+    use crate::attribute::CM;
     use crate::component_model::CmInterfaceRegistry;
     use crate::token::Span;
 
@@ -396,7 +397,7 @@ mod tests {
             name: "Command".to_string(),
             visibility: Visibility::Private,
             attrs: vec![Attribute {
-                name: "cm".to_string(),
+                name: CM.to_string(),
                 args: vec![ast::AttrArg::Str("wasi:cli/command@0.3.0".to_string())],
                 cm_boundary: Some(CmBoundary::Import(
                     CmImport::parse("wasi:cli/command@0.3.0").unwrap(),

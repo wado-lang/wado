@@ -263,6 +263,37 @@ test "truncate_chars exact count" {
     assert s == "abc";
 }
 
+test "floor_char_boundary cuts a String to a byte budget" {
+    let s = "ab日本";  // 8 bytes: 1+1+3+3
+    assert s.substr_bytes(0, s.floor_char_boundary(4)) == "ab";
+    assert s.substr_bytes(0, s.floor_char_boundary(5)) == "ab日";
+    assert s.substr_bytes(0, s.floor_char_boundary(200)) == "ab日本";
+
+    let mut t = s;
+    t.truncate(t.floor_char_boundary(7));
+    assert t == "ab日";
+}
+
+test "ceil_char_boundary on a String" {
+    let s = "ab日本";
+    assert s.ceil_char_boundary(3) == 5;
+    assert s.ceil_char_boundary(5) == 5;
+    assert s.ceil_char_boundary(200) == 8;
+}
+
+test "char boundaries through a reference" {
+    let s = "日本";
+    let r = &s;
+    assert r.floor_char_boundary(4) == 3;
+    assert r.ceil_char_boundary(4) == 6;
+}
+
+#[expect_trap]
+test "String floor_char_boundary rejects a negative index" {
+    let s = "abc";
+    s.floor_char_boundary(-1);
+}
+
 test "is_ascii_whitespace true cases" {
     assert ' '.is_ascii_whitespace();
     assert '\t'.is_ascii_whitespace();
@@ -654,61 +685,88 @@ test "String::from_utf8 from bytes iter" {
     assert String::from_utf8("日本語".bytes()) matches { Ok(s) && s == "日本語" };
 }
 
+fn utf8_err(bytes: List<u8>) -> Utf8Error {
+    return String::from_utf8(bytes).unwrap_err();
+}
+
 test "String::from_utf8 lonely continuation byte" {
-    assert String::from_utf8([0x80] as List<u8>) matches { Err(_) };
+    assert utf8_err([0x80] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
 test "String::from_utf8 overlong 2-byte 0xC0" {
-    assert String::from_utf8([0xC0, 0x80] as List<u8>) matches { Err(_) };
+    assert utf8_err([0xC0, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
 test "String::from_utf8 overlong 2-byte 0xC1" {
-    assert String::from_utf8([0xC1, 0xBF] as List<u8>) matches { Err(_) };
+    assert utf8_err([0xC1, 0xBF] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
 test "String::from_utf8 bad continuation byte in 2-byte" {
     // 0xC3 should be followed by 0x80-0xBF; 0x41 ('A') is invalid
-    assert String::from_utf8([0xC3, 0x41] as List<u8>) matches { Err(_) };
+    assert utf8_err([0xC3, 0x41] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
 test "String::from_utf8 truncated 2-byte" {
-    assert String::from_utf8([0xC3] as List<u8>) matches { Err(_) };
+    assert utf8_err([0xC3] as List<u8>) == Utf8Error::incomplete(0);
 }
 
 test "String::from_utf8 truncated 3-byte" {
-    assert String::from_utf8([0xE6, 0x97] as List<u8>) matches { Err(_) };
+    assert utf8_err([0xE6, 0x97] as List<u8>) == Utf8Error::incomplete(0);
 }
 
 test "String::from_utf8 truncated 4-byte" {
-    assert String::from_utf8([0xF0, 0x9F, 0x98] as List<u8>) matches { Err(_) };
+    assert utf8_err([0xF0, 0x9F, 0x98] as List<u8>) == Utf8Error::incomplete(0);
 }
 
 test "String::from_utf8 overlong 3-byte" {
     // 0xE0 followed by < 0xA0 is overlong
-    assert String::from_utf8([0xE0, 0x80, 0x80] as List<u8>) matches { Err(_) };
+    assert utf8_err([0xE0, 0x80, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
 test "String::from_utf8 surrogate" {
     // U+D800 encoded as UTF-8: 0xED 0xA0 0x80
-    assert String::from_utf8([0xED, 0xA0, 0x80] as List<u8>) matches { Err(_) };
+    assert utf8_err([0xED, 0xA0, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
 test "String::from_utf8 overlong 4-byte" {
     // 0xF0 followed by < 0x90 is overlong
-    assert String::from_utf8([0xF0, 0x80, 0x80, 0x80] as List<u8>) matches { Err(_) };
+    assert utf8_err([0xF0, 0x80, 0x80, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
 test "String::from_utf8 out of range 4-byte" {
     // 0xF4 followed by > 0x8F encodes > U+10FFFF
-    assert String::from_utf8([0xF4, 0x90, 0x80, 0x80] as List<u8>) matches { Err(_) };
+    assert utf8_err([0xF4, 0x90, 0x80, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
 test "String::from_utf8 invalid byte 0xF5" {
-    assert String::from_utf8([0xF5, 0x80, 0x80, 0x80] as List<u8>) matches { Err(_) };
+    assert utf8_err([0xF5, 0x80, 0x80, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
 test "String::from_utf8 invalid byte 0xFF" {
-    assert String::from_utf8([0xFF] as List<u8>) matches { Err(_) };
+    assert utf8_err([0xFF] as List<u8>) == Utf8Error::invalid(0, 1);
+}
+
+test "Utf8Error counts the bytes the bad sequence got through" {
+    assert utf8_err([0xE6, 0x97, 0x41] as List<u8>) == Utf8Error::invalid(0, 2);
+    assert utf8_err([0xF0, 0x9F, 0x98, 0x41] as List<u8>) == Utf8Error::invalid(0, 3);
+}
+
+test "Utf8Error points past the valid prefix" {
+    let e = utf8_err([0x41, 0xC3, 0xB1, 0xFF] as List<u8>);
+    assert e.valid_up_to() == 3;
+    assert e.error_len() == Option::Some(1);
+}
+
+test "Utf8Error::rebased shifts the offset and keeps the rest" {
+    let e = utf8_err([0x41, 0xC3, 0xB1, 0xFF] as List<u8>);
+    assert e.rebased(100) == Utf8Error::invalid(103, 1);
+    assert utf8_err([0x41, 0xC3] as List<u8>).rebased(100) == Utf8Error::incomplete(101);
+    assert e.rebased(0) == e;
+}
+
+test "Utf8Error Display names the offset and what it found" {
+    assert `${utf8_err([0x41, 0xFF] as List<u8>)}` == "invalid utf-8 sequence of 1 bytes from index 1";
+    assert `${utf8_err([0x41, 0xC3] as List<u8>)}` == "incomplete utf-8 byte sequence from index 1";
 }
 
 test "String::from_utf8_lossy empty" {
@@ -1093,7 +1151,7 @@ test "char_indices multibyte" {
 
 test "char_indices counts from the view's start" {
     let s: String = "abcdef";
-    let indices: List<[i32, char]> = s.as_str_slice().sub(2, 5).char_indices().collect();
+    let indices: List<[i32, char]> = s.as_str_slice().slice(2, 5).char_indices().collect();
     assert indices.len() == 3;
     assert indices[0].0 == 0;
     assert indices[0].1 == 'c';
@@ -1297,12 +1355,16 @@ test "String::from_utf8_slice roundtrip matches from_utf8" {
 test "String::from_utf8_slice rejects invalid UTF-8" {
     // lonely continuation, overlong, bad continuation, truncated,
     // surrogate codepoint, out-of-Unicode-range — one per error class.
-    assert String::from_utf8_slice(([0x80] as List<u8>).as_slice() as ByteSlice) matches { Err(_) };
-    assert String::from_utf8_slice(([0xC0, 0x80] as List<u8>).as_slice() as ByteSlice) matches { Err(_) };
-    assert String::from_utf8_slice(([0xC3, 0x41] as List<u8>).as_slice() as ByteSlice) matches { Err(_) };
-    assert String::from_utf8_slice(([0xE6, 0x97] as List<u8>).as_slice() as ByteSlice) matches { Err(_) };
-    assert String::from_utf8_slice(([0xED, 0xA0, 0x80] as List<u8>).as_slice() as ByteSlice) matches { Err(_) };
-    assert String::from_utf8_slice(([0xF4, 0x90, 0x80, 0x80] as List<u8>).as_slice() as ByteSlice) matches { Err(_) };
+    assert slice_utf8_err([0x80] as List<u8>) == Utf8Error::invalid(0, 1);
+    assert slice_utf8_err([0xC0, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
+    assert slice_utf8_err([0xC3, 0x41] as List<u8>) == Utf8Error::invalid(0, 1);
+    assert slice_utf8_err([0xE6, 0x97] as List<u8>) == Utf8Error::incomplete(0);
+    assert slice_utf8_err([0xED, 0xA0, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
+    assert slice_utf8_err([0xF4, 0x90, 0x80, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
+}
+
+fn slice_utf8_err(bytes: List<u8>) -> Utf8Error {
+    return String::from_utf8_slice(bytes.as_slice() as ByteSlice).unwrap_err();
 }
 
 test "strip_suffix removes a matching suffix" {
@@ -1343,4 +1405,64 @@ test "rsplit_once cuts at the last separator" {
 test "an empty separator splits at either end" {
     assert "abc".split_once("") matches { Some(p) && p.0 == "" && p.1 == "abc" };
     assert "abc".rsplit_once("") matches { Some(p) && p.0 == "abc" && p.1 == "" };
+}
+
+test "push_utf8 takes a whole well-formed buffer" {
+    let mut s = String::with_capacity(8);
+    assert s.push_utf8(&([0x68, 0x69] as ByteList)) matches { Ok(2) };
+    assert s == "hi";
+    // 2-, 3- and 4-byte sequences all land complete.
+    assert s.push_utf8(&([0xC3, 0xB1, 0xE6, 0x97, 0xA5] as ByteList)) matches { Ok(5) };
+    assert s == "hiñ日";
+}
+
+test "push_utf8 leaves a sequence cut short by the buffer's end" {
+    let mut s = String::with_capacity(8);
+    // `日` is E6 97 A5; only its first two bytes are here.
+    assert s.push_utf8(&([0x61, 0xE6, 0x97] as ByteList)) matches { Ok(1) };
+    assert s == "a";
+    // Feeding the carried bytes with the rest completes it.
+    assert s.push_utf8(&([0xE6, 0x97, 0xA5] as ByteList)) matches { Ok(3) };
+    assert s == "a日";
+}
+
+test "push_utf8 rejects a byte that can lead no sequence" {
+    let mut s = String::with_capacity(8);
+    // 0x80 is a bare continuation byte: no following byte makes it valid.
+    assert s.push_utf8(&([0x61, 0x80] as ByteList)) matches { Err(e) && e == Utf8Error::invalid(1, 1) };
+    // A rejected buffer appends nothing, not even the good bytes ahead of it.
+    assert s == "";
+}
+
+test "push_utf8 rejects a surrogate rather than deferring it" {
+    let mut s = String::with_capacity(8);
+    // ED A0 80 is the CESU-8 encoding of a surrogate, complete and illegal.
+    assert s.push_utf8(&([0xED, 0xA0, 0x80] as ByteList)) matches { Err(e) && e == Utf8Error::invalid(0, 1) };
+}
+
+test "push_utf8 on an empty buffer takes nothing" {
+    let mut s = String::with_capacity(4);
+    assert s.push_utf8(&([] as ByteList)) matches { Ok(0) };
+    assert s == "";
+}
+
+test "push_utf8 rejects a short tail no further byte could rescue" {
+    let mut s = String::with_capacity(8);
+    // E6 leads a 3-byte sequence and 0x41 is not a continuation byte, so the
+    // pair is already wrong however many bytes follow.
+    assert s.push_utf8(&([0xE6, 0x41] as ByteList)) matches { Err(e) && e == Utf8Error::invalid(0, 1) };
+    // E0 80 is overlong: E0 admits only A0..BF second bytes.
+    assert s.push_utf8(&([0xE0, 0x80] as ByteList)) matches { Err(e) && e == Utf8Error::invalid(0, 1) };
+    // F4 90 is past U+10FFFF.
+    assert s.push_utf8(&([0xF4, 0x90] as ByteList)) matches { Err(e) && e == Utf8Error::invalid(0, 1) };
+    // A short tail whose bytes are all valid so far is still pending.
+    assert s.push_utf8(&([0xE6, 0x97] as ByteList)) matches { Ok(0) };
+}
+
+test "a whole buffer ending mid-character is malformed, not pending" {
+    // `from_utf8` holds the entire input, so there is no later chunk to wait
+    // for and a cut-short sequence is an error — one `error_len` reports as
+    // incomplete rather than invalid.
+    assert utf8_err([0xE6, 0x97] as List<u8>) == Utf8Error::incomplete(0);
+    assert utf8_err([0xC3] as List<u8>) == Utf8Error::incomplete(0);
 }

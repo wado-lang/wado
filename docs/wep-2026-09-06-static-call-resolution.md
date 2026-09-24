@@ -80,6 +80,13 @@ against `impl Enc<A> for M` beside `impl Enc<B> for M` (`docs/spec.md`, "A
 trait's associated function"). So `Take::<i64>::take()` names no receiver at
 all, and is reported as that rather than as an unknown function.
 
+A namespace qualifies the head, not the argument list. `ns::Take::<i64>::take(…)`
+asks the same questions of the same declaration, reaching it through the
+`ns$Take` alias the import tier keys. So the head is read off the node that wrote
+it: its site, and the spelling a lookup asks by. A bare name and a namespaced one
+then reach the same answer. Reading the head as a bare `Type::Generic` would
+leave the namespaced spelling to fall through to an unknown function.
+
 ### Four outcomes, each meaning one thing
 
 |              |                                                        |
@@ -420,7 +427,5 @@ picked rather than to pick it.
 
 - The identity question resolves twice. `is_static_method_at` runs the whole
   walk and keeps only whether it answered, and the branch it guards then runs it
-  again. Asking the resolution rather than a second index is this WEP's point,
-  so the fix is to remember the answer, not to look it up another way. It has
-  one caller and runs once per static call, never in a loop, and nothing here
-  measures what the repeat costs.
+  again. It has one caller and runs once per static call, never in a loop, and
+  nothing here measures what the repeat costs.

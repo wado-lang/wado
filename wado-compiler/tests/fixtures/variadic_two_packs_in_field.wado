@@ -1,0 +1,14 @@
+//! A struct field holding two type packs in one tuple. The annotation settles
+//! both packs, so the field's tuple is checked against the arity they fix
+//! rather than searched for a boundary.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+
+struct Joined<..A, ..B> {
+    both: [..A, ..B],
+}
+
+test "an annotation settles both packs of a field" {
+    let j: Joined<[i32], [bool]> = Joined { both: [1, true] };
+    assert j.both.0 == 1;
+    assert j.both.1 == true;
+}

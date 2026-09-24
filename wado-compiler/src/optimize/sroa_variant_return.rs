@@ -12,7 +12,8 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeKey, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
 use crate::token::Span;
 
 use cranelift_entity::EntityRef;
@@ -859,7 +860,10 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
             | PrimitiveType::U8
             | PrimitiveType::U16
             | PrimitiveType::U32
-            | PrimitiveType::U64 => Some(SlotShape::Direct(Pad::Int(payload))),
+            | PrimitiveType::U64
+            // A half is a `u16`, so it pads with an integer literal.
+            | PrimitiveType::F16
+            | PrimitiveType::Bf16 => Some(SlotShape::Direct(Pad::Int(payload))),
             PrimitiveType::F32 | PrimitiveType::F64 => Some(SlotShape::Direct(Pad::Float(payload))),
             PrimitiveType::Bool => Some(SlotShape::Direct(Pad::Bool)),
             PrimitiveType::Char => Some(SlotShape::Direct(Pad::Char)),

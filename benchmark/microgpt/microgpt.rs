@@ -4,6 +4,8 @@
 // Copyright (c) Andrej Karpathy, MIT License.
 // https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95
 //
+// Python seeds Mersenne Twister, so the numbers here are not the original's.
+//
 // The same program as microgpt.wado, with one forced difference. Wado's
 // `Graph::value` hands back a `&mut Value` into a list that keeps growing, and
 // a node holds those handles as its children. Rust has no way to say that: a
@@ -52,23 +54,40 @@ const SAMPLES: usize = 24;
 const TEMPERATURE: f64 = 0.5;
 const SEED: u64 = 42;
 
-// Let there be a deterministic source of chaos: SplitMix64 plus Box-Muller.
-// Python seeds Mersenne Twister, so the two draw different numbers.
+// Let there be a deterministic source of chaos. This is `core:prng`'s, which the
+// Wado arm draws from: SplitMix64 expands the seed, then xoshiro256++ runs.
+fn splitmix(state: &mut u64) -> u64 {
+    *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut z = *state;
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
 struct Rng {
-    state: u64,
+    s: [u64; 4],
 }
 
 impl Rng {
     fn new(seed: u64) -> Rng {
-        Rng { state: seed }
+        let mut state = seed;
+        let s0 = splitmix(&mut state);
+        let s1 = splitmix(&mut state);
+        let s2 = splitmix(&mut state);
+        let s3 = splitmix(&mut state);
+        Rng { s: [s0, s1, s2, s3] }
     }
 
     fn next_u64(&mut self) -> u64 {
-        self.state = self.state.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        let mut z = self.state;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-        z ^ (z >> 31)
+        let result = self.s[0].wrapping_add(self.s[3]).rotate_left(23).wrapping_add(self.s[0]);
+        let t = self.s[1] << 17;
+        self.s[2] ^= self.s[0];
+        self.s[3] ^= self.s[1];
+        self.s[1] ^= self.s[2];
+        self.s[0] ^= self.s[3];
+        self.s[2] ^= t;
+        self.s[3] = self.s[3].rotate_left(45);
+        result
     }
 
     // 53 bits, the mantissa of an f64, scaled into [0, 1).

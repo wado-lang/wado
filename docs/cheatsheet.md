@@ -197,6 +197,12 @@ bool
 // wide integers (GC types, work like primitives)
 i128, u128
 
+// half precision: storage only, no arithmetic and no `as` cast.
+// Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32`.
+// Every comparison hands the widened value to f32's, so `==` and `<` are IEEE
+// and `Ord` is the total order — the same split f32 has.
+f16, bf16
+
 // Composites
 String                  // UTF-8 string
 List<T>                 // dynamic array
@@ -317,6 +323,10 @@ println(`${point:#?}`);                   // pretty-print with indentation (Insp
 let n = s.len();                         // UTF8 byte length
 let chars = s.chars().count();           // character count based on Unicode scalars
 
+// Byte indices must sit on a character boundary, or substr_bytes/truncate panic.
+// Round a byte budget down to one first; past len() it clamps to len().
+let head = s.substr_bytes(0, s.floor_char_boundary(200));
+
 // String building
 let mut builder = String::with_capacity(20);
 let part: String = "Hello";
@@ -337,7 +347,7 @@ reference to one, or a view of one — Wado's answer to Rust's `AsRef<str>`. See
 
 ```wado
 let v = "banana".as_str_slice();
-let part = v.sub(1, 4);          // "ana"; panics off a character boundary
+let part = v.slice(1, 4);        // "ana"; panics off a character boundary
 part.len();                      // 3, in bytes
 part.to_string();                // copies out, here and only here
 for let c of part.chars() { ... }
@@ -401,6 +411,9 @@ let c = ServerConfig { host: "localhost" };  // port=8080, debug=false
 // Construction
 let p = Point { x: 10, y: 20 };
 let b = Pair { first: 0, second: 1 };  // F and S are inferred as i32
+
+// Turbofish, where the fields do not settle the parameters
+let q = Pair::<i64, String> { first: 0, second: "one" };
 
 // Functional update: `..base` (leading, single) fills unlisted fields from a
 // same-type value; listed fields override, base is evaluated once, unchanged.
@@ -716,6 +729,15 @@ let grade = match score {
     _ => "invalid",
 };
 
+// Type patterns: `p: T` in any pattern position; a `let` annotation is one.
+// Narrowing a resource to one that extends it asks the host, so it is
+// refutable, and a match over type patterns ends in `_`.
+let value = match node {
+    input: HtmlInputElement => input.value(),
+    _ => "",
+};
+let input: HtmlInputElement = el else { return; };
+
 // Constant patterns: an immutable global or associated const matches by
 // value, not a binding. TK_FOO/TK_BAR are `global`s, and a namespace prefix
 // reaches one the same way (`tok::TK_FOO`).
@@ -964,6 +986,20 @@ fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
     return [a, ..rest];  // value spread: splice rest into tuple
 }
 
+// More than one pack: each is settled by the argument carrying it alone, so a
+// turbofish spells each as its own tuple. `[..A, ..B]` settles neither, so
+// something else must — a sibling parameter, a turbofish, or an annotation.
+fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
+    return [..a, ..b];
+}
+concat([1, "x"], [true]);                 // A = [i32, String], B = [bool]
+concat::<[i32], [bool, String]>([1], [true, "x"]);
+
+// A pack on either side of a scalar: nothing settles the ends, so spell them.
+fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { ... }
+middle::<[i32], String, [bool]>([1, "mid", true]);   // 3
+// middle([1, "mid", true]);              // ERROR: cannot infer `Pre`, `Post`
+
 // Value spread (works with any tuple, not just packs)
 let a = [1, "hello"];
 let b = [..a, true];   // [i32, String, bool]
@@ -988,6 +1024,18 @@ fn head<A, ..T>(t: &[A, ..T]) -> A {
     return t.0;          // OK: ahead of the pack
     // return t.1;       // Error: lands on the pack
 }
+
+// That limit is on reading a value. In type position a pack takes a scalar on
+// either side, and the match splits the tuple type across them. `Tag` here is
+// any type carrying the list as a parameter.
+fn drop_last<..Rest, Last>(t: &Tag<[..Rest, Last]>) -> Tag<[..Rest]> { ... }
+fn drop_ends<First, ..Mid, Last>(t: &Tag<[First, ..Mid, Last]>) -> Tag<[..Mid]> { ... }
+
+// This shortens a type, never a value. Over a bare tuple the same signature is
+// declarable but not implementable: returning the argument is a type error, a
+// comprehension keeps the arity it walked, and nothing else builds the shorter
+// tuple.
+// fn drop_last<..Rest, Last>(t: [..Rest, Last]) -> [..Rest]
 
 // A pack bound through another parameter's associated type is projected from
 // it, so the call site names neither.
@@ -1019,14 +1067,15 @@ export fn run() { }           // library API + CM boundary
 import site (file-private, or `internal` from another package) is a compile
 error. Struct fields take the same modifiers.
 
-A `use` with a visibility modifier re-exports at that reach, independent of the
-original's visibility — so `pub use { x }` can publish an `internal` `x` (the
-"internal impl, public facade" pattern):
+A `use` with a visibility modifier re-exports at that reach. It may narrow what
+it names but never widen it, so `pub use { x }` requires a `pub` `x`. The facade
+pattern is the narrowing one: the entry module publishes the API under its own
+names, and consumers never name the files behind it.
 
 ```wado
-internal fn compute() { }                  // package-internal
-pub use { compute } from "./impl.wado";    // re-exported as public API
-internal use { helper } from "./impl.wado"; // re-exported package-internal
+pub fn compute() { }                        // the implementation file's API
+pub use { compute } from "./impl.wado";     // published under this module's name
+internal use { helper } from "./impl.wado"; // a `pub` helper, kept in the package
 ```
 
 ## Traits
@@ -1076,7 +1125,11 @@ trait Add<Rhs = Self> { type Output; fn add(&self, rhs: &Rhs) -> Self::Output; }
 // For == and != operators
 trait Eq<Rhs = Self> { fn eq(&self, other: &Rhs) -> bool; }
 
-// For <, <=, >, >= operators
+// A total order: what `sort()`, `TreeMap` and a `T: Ord` bound read. On a
+// float it is IEEE 754-2019 `totalOrder`, as C++20's `std::strong_order` is:
+// -NaN < -Inf < -0 < +0 < +Inf < +NaN. The comparison operators keep IEEE's
+// answers on every float, so `sort()` and `<` disagree about a NaN — see
+// WEP: The Operator Order and the Total Order. Any other type reads `cmp`.
 trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }
 
 // For default value (implemented for primitives, String, List<T>,
@@ -1092,21 +1145,33 @@ trait IndexAssign<I> { type Output; fn index_assign(&mut self, index: I, value: 
 // For string template interpolation
 pub trait Display { fn fmt(&self, f: &mut Formatter); }         // stringify with specifiers
 
-// For parsing a value from a string. `from_str_slice` is the required
-// fundamental operation, so parsing a field out of a larger buffer allocates
-// no substring; `from_str` is defaulted to view the whole string.
+// What every error type is. It adds nothing to Display, so `E: Error` says
+// only that the failure has a readable reason.
+pub trait Error: Display { }
+
+// For parsing a value from a string. The parameter takes a `StrSlice` among
+// the rest, so parsing a field out of a larger buffer allocates no substring.
+// `Err: Error`, so a caller reaching it through the bound can always report
+// the reason.
 pub trait FromStr {
-    type Err;
-    fn from_str_slice(s: &StrSlice) -> Result<Self, Self::Err>;
-    fn from_str(s: &String) -> Result<Self, Self::Err> { /* default */ }
+    type Err: Error;
+    fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
 
 // Forgiving sibling of FromStr for human-supplied strings: accepts casing,
 // radix prefixes (0x/0o/0b), `_` digit separators, and alternate bool words
 // (1/0). Never trims whitespace. See WEP: Lenient String Parsing.
 pub trait LenientFromStr {
-    type Err;  // built-in impls all use LenientParseError
-    fn from_str_lenient(s: &String) -> Result<Self, Self::Err>;
+    type Err: Error;  // built-in impls all use LenientParseError
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
+}
+
+// Value-to-value conversion. `Err: Error` for the same reason FromStr's is.
+// The stdlib impls all use `ConvertError`.
+pub trait From<T> { fn from(value: T) -> Self; }
+pub trait TryFrom<T> {
+    type Err: Error;
+    fn try_from(value: T) -> Result<Self, Self::Err>;
 }
 ```
 
@@ -1159,9 +1224,32 @@ struct Broken { retries: i32 = 3, name: String }
 impl Default for Broken;   // ERROR: `name` has no default expression
 ```
 
+`From` takes the same marker. Nothing derives it from a use, so the marker is
+what asks for one. On a variant, `impl From<T> for V;` wraps the value into the
+single case whose payload is `T`.
+
+```wado
+variant ServiceError { Network(NetworkError), Timeout(TimeoutError) }
+impl From<NetworkError> for ServiceError;   // -> ServiceError::Network(e)
+```
+
 `${x:?}` / `${x:#?}` (`Inspect`, plainly or indented) work for every type. `${x}` (`Display`) uses the type's `impl Display`: primitives, `String`, plain enums (bare case name, e.g. `Red`), and newtypes (inherited from the base) have one; other types need a hand-written impl, else `${x}` is a compile error and `${x:?}` gives the debug form. `${x:#}` runs the same `Display` with `Formatter.alternate` set.
 
 A hand-written `impl Trait for T { … }` always wins. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+
+Every standard library error type implements `Display` and `Error`, so
+`` `${e}` `` renders the reason. A wider error that carries a narrower one
+interpolates it rather than wording the failure again. It declares
+`impl From<Narrower> for Wider`, so `?` converts at the call site:
+
+```wado
+impl From<Utf8Error> for ParseError;
+
+fn percent_decode(input: String) -> Result<String, ParseError> {
+    let bytes = decode_octets(input)?;
+    return Result::Ok(String::from_utf8(bytes)?);   // Utf8Error -> ParseError
+}
+```
 
 ## Associated Constants
 
@@ -1192,7 +1280,7 @@ f64::from_str("3.14")                 // Result<f64, ParseFloatError>
 i32::from_str("42")                   // Result<i32, ParseIntError>
 i32::from_str_hex("ff")               // Result<i32, ParseIntError> (radix 16)
 i32::from_str_radix("1010", 2)        // Result<i32, ParseIntError> (radix 2..=36)
-i32::from_str_slice(&"xyz42abc".as_str_slice().sub(3, 5))  // no substring alloc
+i32::from_str("xyz42abc".as_str_slice().slice(3, 5))  // no substring alloc
 
 i32::min(a, b)  i32::max(a, b)
 i32::clamp(v, lo, hi)                 // traps when lo > hi
@@ -1558,23 +1646,50 @@ if let Some(home) = env("HOME") { println(`HOME=${home}`); }
 ### core:fs
 
 Whole-file I/O against the first preopened directory (`wado run` grants the
-current one). `""` and `"."` name that directory. See
+current one), and the path text that reaches it. `""` and `"."` name that
+directory. Every call that reaches the filesystem resolves its path when it
+runs, so ask-then-act (`exists` and then `read`) races; act and read the
+error. The path functions resolve nothing. See
 [`core:fs`](./stdlib-core-fs.md) and
 [WEP: core:fs](./wep-2026-09-12-core-fs.md).
 
 ```wado
 use fs from "core:fs";
+use { Preopens } from "core:fs";                 // the effect, re-exported: no wasi import
 
 let text = fs::read_to_string("docs/spec.md")?;  // Result<String, FsError>
 let bytes = fs::read("icon.png")?;               // Result<ByteList, FsError>
-fs::write("build/out.json", &text)?;             // any AsByteSlice; creates/truncates
+fs::write("build/out.json", &text)?;             // any AsByteSlice; replaces via rename
+                                                 // (a non-regular file is refused)
+fs::write_in_place("big.bin", &bytes)?;          // truncates instead of replacing
+fs::rename("build/a.txt", "build/b.txt")?;       // replaces what b.txt named
 fs::create_dir_all("build/reports")?;            // mkdir -p
 fs::create_dir("build/reports/today")?;          // one level; parent must exist
 fs::remove_file("build/stale.txt")?;
+fs::remove_dir("build/empty")?;                  // the directory must be empty
+fs::remove_dir_all("build/site")?;               // rm -rf; a missing path is Ok
+                                                 // (a path resolving to the preopen is refused)
+
+if fs::exists("wado.toml") { ... }               // no error to discard
+fs::try_exists("wado.toml")?;                    // absence only; anything else is the error
+let meta = fs::metadata("icon.png")?;            // Metadata { type, size, modified }
 
 for let entry of fs::read_dir("src")? {          // DirEntry { name, type }
     if entry.type matches { Directory } { continue; }
 }
+for let found of fs::walk_dir("src")? {          // WalkEntry { path, type }, deep
+    println(`${found.path}`);
+}
+// `e.path` reaches the entry from the walk's root, so a name is compared as one
+fs::walk_dir(".", |e| fs::file_name(&e.path).unwrap() != ".git")?;
+
+// Path text, no I/O: `/`-separated and preopen-relative, never URL rules
+fs::join("build", "out.json");                   // "build/out.json"
+fs::parent("a/b/c");                             // Some("a/b")
+fs::file_name("a/b.txt");                        // Some("b.txt"); None on `.` or `..`
+fs::file_stem("a/b.txt");                        // Some("b")
+fs::extension("a/b.txt");                        // Some("txt")
+fs::normalize("a/./b/../c")?;                    // "a/c"; ".." past the preopen fails
 
 if let Err(e) = fs::read_to_string("missing.txt") {
     eprintln(`error: ${e}`);            // "missing.txt: no such file or directory"
@@ -1590,6 +1705,10 @@ Streaming a file (rather than holding it) stays on `wasi:filesystem`; see
 
 `TreeMap<K, V>` and `TreeSet<T>`, iterating in insertion order. See
 [`core:collections`](./stdlib-core-collections.md).
+
+`TreeMap<K, V>` is also the Wado spelling of the Component Model `map<K, V>`, so
+it crosses a component boundary. There `K` must be `bool`, `char`, `String`, or
+an integer. A repeated key on the wire takes the last pair's value.
 
 ```wado
 use { TreeMap, TreeSet } from "core:collections";
@@ -1617,8 +1736,12 @@ Format-agnostic `Serialize` / `Deserialize` framework.
 A plain struct derives with no marker; `impl Serialize for T;` attaches
 `#[wire(...)]` customization. Wire keys default to the field name; override
 with `#[wire(name_policy = "...")]` (per type) or `#[wire(name = "...")]`
-(per field). See [`core:serde`](./stdlib-core-serde.md) and
-[WEP: Serde](./wep-2026-02-28-serde.md).
+(per field). A format keyed by numbers rather than names reads
+`#[wire(number = N)]`, which a struct carries on every field or on none; such a
+type satisfies `WireNumbered`, the bound those formats require. See
+[`core:serde`](./stdlib-core-serde.md),
+[WEP: Serde](./wep-2026-02-28-serde.md) and
+[WEP: Grog](./wep-2026-09-22-grog.md).
 
 ```wado
 struct Point { x: i32, y: i32 }         // serializable, no marker needed
@@ -1669,6 +1792,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 
 ### Other core modules
 
+- [`core:protobuf`](./stdlib-core-protobuf.md) — the Protocol Buffers wire
+  format, keyed by `#[wire(number = N)]`
 - [`core:json_nsd`](./stdlib-core-json_nsd.md) — non-self-describing JSON
 - [`core:args`](./stdlib-core-args.md) — command-line argument parsing via serde
 - [`core:value`](./stdlib-core-value.md) — dynamic, format-agnostic value
@@ -1681,7 +1806,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:prng`](./stdlib-core-prng.md) — seedable, reproducible pseudo-randomness
   for simulation: `Rng`, `VectorRng`, and the keyed `Squares64`
 - [`core:secure_random`](./stdlib-core-secure_random.md) — unpredictable
-  randomness, buffered from `wasi:random`, and `seed()` for `core:prng`
+  randomness from `wasi:random`: `bytes`, the `token_*` generators,
+  `with_buffered`, and `seed()` for `core:prng`
 - [`core:uuid`](./stdlib-core-uuid.md) — UUID v4 / v7
 - [`core:temporal`](./stdlib-core-temporal.md) — date/time on the TC39 Temporal
   model (`Instant`, `ZonedDateTime`, `Duration`, `Plain*`)

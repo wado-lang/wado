@@ -195,7 +195,7 @@ enum Callee {
     /// A `core:builtin` declaration; `array` marks the array intrinsics, which
     /// write only the array they are handed.
     Builtin {
-        declaration: BuiltinDeclaration,
+        declaration: Box<BuiltinDeclaration>,
         array: bool,
     },
     /// No body and nothing declared: it may read, write and keep anything it is
@@ -557,7 +557,7 @@ fn classify_callee(f: &NirFunction, project: &NirPackage) -> Callee {
         .or_else(|| reference.builtin_name())
         .is_some_and(|name| name.starts_with("builtin::array_"));
     Callee::Builtin {
-        declaration: declaration.clone(),
+        declaration: Box::new(declaration.clone()),
         array,
     }
 }

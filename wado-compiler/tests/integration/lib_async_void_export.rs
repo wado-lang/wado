@@ -8,8 +8,9 @@ use wasmtime::component::{Component, Val};
 
 use crate::common::{WasiState, compile_lib_world, engine, lib_func, limit_store, linker, runtime};
 
-/// FQ of the synthesized library world; any stable name works.
-const LIB_WORLD_FQ: &str = "wado-lang:cm-catalog/cm-catalog@0.0.23";
+/// FQ of the synthesized library world. A name of this test's own, so no reader
+/// takes the version for one that tracks a real package.
+const LIB_WORLD_FQ: &str = "test:void-async/void-async@0.1.0";
 
 /// Bounds runaway guest work, as every metered test does. An undelivered task
 /// does not reach it: the async lift traps the call.

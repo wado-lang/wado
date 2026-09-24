@@ -5,22 +5,28 @@
 //! `FunctionContext` must land the same locals, at the same indices, annotate did.
 
 use super::sig::AssocConstSig;
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
+use crate::attribute::{
+    self, ALLOC, AMBIENT, BENIGN, EXPORT_NAME, IMMEDIATE, INLINE, LINEAR_MEMORY, PARAM, RESULT,
+    RETAIN, SECRET, TRAP, WIRE,
+};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
+use crate::module_source::ModuleSource;
+use crate::name::{
+    FqTypeName, IDENTITY_TEST_METHOD, INTERNAL_PREFIX, NARROWING_TEST_METHOD, Receiver,
+    global_init_function, global_name,
+};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
     TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirModule,
     TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl,
-    TypeId, TypeTable,
+    TypeId, TypeTable, transpose_tuple_expr,
 };
 
 use super::coercion::{
@@ -31,7 +37,10 @@ use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
 use super::util;
-use crate::ast::{AttrArg, Attribute, InterfaceDecl, Visibility};
+use crate::ast::{
+    AttrArg, Attribute, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
+    WIRE_NUMBER_RESERVED, wire_number_of, wire_number_written,
+};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
@@ -50,7 +59,8 @@ use crate::elaborator::sem::types::{
     SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
 };
 use crate::elaborator::stmt::{
-    collect_pattern_bindings_with_index, primitive_assoc_const_to_i128, remap_pattern_local,
+    collect_pattern_bindings_with_index, primitive_assoc_const_to_i128, primitive_int_bound,
+    remap_pattern_local,
 };
 use crate::elaborator::trait_query::{
     assoc_const_owner, assoc_const_owner_of_path, trait_sig_of_with,
@@ -65,8 +75,9 @@ use crate::escape::{
 };
 use crate::format_spec::{FormatKind, TemplateFormatSpec};
 use crate::name::{
-    LocalMethodName, MethodName, deref_capture_name, display_function_name,
-    effect_default_impl_name, mangle_local_item_name, test_function_name,
+    LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
+    display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
+    test_function_name,
 };
 use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
@@ -101,6 +112,13 @@ macro_rules! reify_annotation_accessors {
             }
         )+
     };
+}
+
+/// What one `#[trap(...)]` attribute states; `never` states nothing.
+#[derive(Default)]
+struct TrapClause {
+    check: Option<tir::TrapCheck<String>>,
+    result_len: Option<String>,
 }
 
 /// Whether a compound-assign target sub-piece may be left inline (duplicated
@@ -243,6 +261,13 @@ fn build_literal_from_call(array: TirExpr, call: &LiteralFromCall, span: Span) -
     )
 }
 
+/// What `==` compares when it compares by identity.
+enum Identity {
+    Reference,
+    /// A resource handle, compared under this chain root.
+    Handle(TypeId),
+}
+
 /// Cast a `from` result to the newtype the literal targeted, where it targeted
 /// one.
 fn cast_to_newtype(built: TirExpr, newtype_cast_to: Option<tir::TypeId>, span: Span) -> TirExpr {
@@ -350,17 +375,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     pub(crate) current_module_source: ModuleSource,
     /// Items of the current module, set before per-Item dispatch.
     pub(crate) current_module_items: &'a [Item],
-    /// `ModuleSource` interner. Shared with annotate so cross-pass
-    /// references resolve to the same `ModuleSource` identity.
-    pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
-    /// Type-parameter names in scope for the function/method body
-    /// currently being reified (impl params first, then method-level
-    /// params, matching the index layout reify builds in
-    /// `reify_method` / `reify_function`). Empty outside a body walk.
-    /// `resolve_type` consults this so a turbofish type argument naming
-    /// an enclosing type param (`v.serialize::<S>(s)` inside a generic
-    /// method) resolves to its `TypeParam` slot instead of `unknown`.
-    pub(crate) current_type_param_names: Vec<String>,
     /// Names of the effect parameters (`<effect E>`) in scope for the
     /// function / method currently being reified. `reify_effects` and
     /// `apply_function_type_effects` consult this so an effect name that is a
@@ -522,7 +536,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         symbols: &'a SymbolTable,
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
         logger: &'a Logger<'a, H>,
-        interner: Rc<RefCell<ModuleSourceInterner>>,
         emit_live: Option<&'a IndexSet<AstId>>,
     ) -> Self {
         Self {
@@ -534,8 +547,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             logger,
             current_module_source: ModuleSource::entry_point_uninitialized(),
             current_module_items: &[],
-            interner,
-            current_type_param_names: Vec::new(),
             current_effect_param_names: Vec::new(),
             tuple_overlay_stack: Vec::new(),
             tuple_overlay_visits: IndexMap::default(),
@@ -671,25 +682,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect()
     }
 
-    /// Resolve an AST [`ast::Type`] to a [`TypeId`] without recording
-    /// any use→def edge. Reify uses this for type-level resolutions
-    /// (type-param defaults, resource method params, …) — annotate
-    /// already recorded the edges during its body walk.
-    ///
-    /// Delegates to the existing
-    /// [`super::Elaborator::resolve_type_static`] helper, which is
-    /// host-agnostic and operates over the [`TypeLookup`] view above.
-    fn resolve_type(&mut self, ty: &ast::Type) -> TypeId {
+    /// A global's declared type, resolved without recording a use→def edge;
+    /// annotate recorded them during its body walk.
+    // Read in the declaration's own module scope, never in the type parameters
+    // of whatever body referenced the global.
+    fn resolve_global_type(&mut self, ty: &ast::Type) -> TypeId {
         let lookup = self.type_lookup();
-        // Resolve within the current body's type-parameter scope so a
-        // turbofish argument that names an enclosing type param resolves
-        // to its `TypeParam` slot. Outside a body walk the scope is empty,
-        // so this is identical to the scope-free path.
-        let resolved = Elaborator::<H>::resolve_type_static_with_params(
+        let resolved = Elaborator::<H>::resolve_type_static(
             ty,
             &mut self.tysys.type_table.borrow_mut(),
             &lookup,
-            &self.current_type_param_names,
         );
         self.apply_function_type_effects(ty, resolved)
     }
@@ -1040,6 +1042,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
 
+        let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
         let mut fields = Vec::with_capacity(struct_decl.fields.len());
         for (index, field) in struct_decl.fields.iter().enumerate() {
             let type_id = field_types[index];
@@ -1057,7 +1060,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let serde_positional = field
                 .attrs
                 .iter()
-                .any(|a| a.name == "wire" && a.has_arg("positional"));
+                .any(|a| a.name == WIRE && a.has_arg("positional"));
 
             fields.push(TirField {
                 name: field.name.clone(),
@@ -1065,10 +1068,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 type_id,
                 index: index as u32,
                 span: field.span,
-                is_secret: field.attrs.iter().any(|a| a.name == "secret"),
+                is_secret: field.attrs.iter().any(|a| a.name == SECRET),
                 wire_name_override,
                 serde_default,
                 serde_positional,
+                serde_number: wire_numbers[index],
                 default_expr,
             });
         }
@@ -1142,6 +1146,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // (no self, no other fields in scope), matching `reify_struct`.
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
+        let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
         let fields: Vec<TirField> = info
             .fields
             .iter()
@@ -1159,12 +1164,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     type_id: *type_id,
                     index: index as u32,
                     span: field.map_or(struct_decl.span, |f| f.span),
-                    is_secret: attrs.iter().any(|a| a.name == "secret"),
+                    is_secret: attrs.iter().any(|a| a.name == SECRET),
                     wire_name_override: wire_name_override_of(attrs),
                     serde_default: field.is_some_and(|f| f.default.is_some()),
                     serde_positional: attrs
                         .iter()
-                        .any(|a| a.name == "wire" && a.has_arg("positional")),
+                        .any(|a| a.name == WIRE && a.has_arg("positional")),
+                    serde_number: wire_numbers.get(index).copied().flatten(),
                     default_expr,
                 }
             })
@@ -1354,16 +1360,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ctx.task_return_type = self.declared_task_return(func, return_type);
         }
 
-        // Real type params only (effect params and `<F: fn(...)>` bounds
-        // are excluded), so the positional indices stay dense and match
-        // the emitted `type_params` and monomorph's substitution keys.
-        let type_param_names: Vec<String> = func
-            .type_params
-            .iter()
-            .filter(|p| p.is_real_type_param())
-            .map(|p| p.name.clone())
-            .collect();
-
         // Effect params (`<effect E>`) drive `Param` effect resolution in
         // function-type params; publish them for the body walk.
         let effect_param_names: Vec<String> = func
@@ -1374,10 +1370,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect();
         let saved_effect_param_names =
             std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
-
-        // Publish the body's type-param scope (see `reify_method`).
-        let saved_type_param_names =
-            std::mem::replace(&mut self.current_type_param_names, type_param_names);
 
         // Single source of truth: read the resolved param types
         // `resolve_function` recorded (in `func.params` order, with `<F: fn>`
@@ -1418,7 +1410,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .as_ref()
             .map(|b| self.reify_block(b, &mut ctx, None));
 
-        self.current_type_param_names = saved_type_param_names;
         self.current_effect_param_names = saved_effect_param_names;
 
         // Single source of truth: read the TIR type params `resolve_function`
@@ -1433,10 +1424,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &params,
             return_type,
             body.is_some(),
-            self.reify_return_convention_attr(&func.attrs, &params, body.is_some()),
+            self.reify_return_convention_attr(&func.attrs, &params),
         );
-        let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
-        let immediates = self.reify_immediate_attrs(&func.attrs, &params, body.is_some());
+        let retains = self.reify_retain_attrs(&func.attrs, &params);
+        let immediates = self.reify_immediate_attrs(&func.attrs, &params);
+        let trap = self.reify_trap_attrs(&func.attrs, &params);
+        let linear_memory = self.reify_linear_memory_attr(&func.attrs);
+        if body.is_some() {
+            self.reject_bodyless_attrs_on_body(&func.attrs);
+        }
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1461,6 +1457,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
             retains,
             immediates,
+            trap,
+            linear_memory,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1699,35 +1697,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                  impl method reify emits",
             );
 
-        // Type-param scope for the method's own param/return types. Every
-        // impl-self-type arg occupies its positional slot, concrete ones
-        // (`String` in `TreeMap<String, V>`) included — monomorph substitutes
-        // those back by identity. Method-level params continue after the impl
-        // param count, the same base `func_inst::instantiate_function` uses.
-        let mut type_param_names: Vec<String> = Vec::new();
-        for p in &impl_type_params {
-            let idx = p.index as usize;
-            if type_param_names.len() <= idx {
-                type_param_names.resize(idx + 1, String::new());
-            }
-            type_param_names[idx].clone_from(&p.name);
-        }
-        let mut next_idx = impl_type_params.len();
-        for p in &func.type_params {
-            // Skip `<F: fn(...)>` bounds: the elaborator realises them
-            // eagerly to the bound's function type (already baked into the
-            // recorded param/return types), so they must not consume a
-            // positional type-param slot or the real method params shift index.
-            if !p.is_real_type_param() || type_param_names.iter().any(|n| n == &p.name) {
-                continue;
-            }
-            if type_param_names.len() <= next_idx {
-                type_param_names.resize(next_idx + 1, String::new());
-            }
-            type_param_names[next_idx].clone_from(&p.name);
-            next_idx += 1;
-        }
-
         // Method-level effect params (`<effect E>`) drive `Param` effect
         // resolution in function-type params; publish them for the method
         // body walk.
@@ -1798,12 +1767,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ctx.task_return_type = self.declared_task_return(func, return_type);
         }
 
-        // Publish the body's type-param scope so turbofish args in the
-        // body (`v.serialize::<S>(s)`) resolve against it. Restored before
-        // returning so decl-level resolution stays scope-free.
-        let saved_type_param_names =
-            std::mem::replace(&mut self.current_type_param_names, type_param_names.clone());
-
         // Single source of truth: read the resolved param types
         // `resolve_method` recorded (in `func.params` order, receiver
         // included), rather than re-resolving each here.
@@ -1842,7 +1805,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .as_ref()
             .map(|b| self.reify_block(b, &mut ctx, None));
 
-        self.current_type_param_names = saved_type_param_names;
         self.current_effect_param_names = saved_effect_param_names;
 
         // Single source of truth: read the method-level type params
@@ -1857,10 +1819,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &params,
             return_type,
             body.is_some(),
-            self.reify_return_convention_attr(&func.attrs, &params, body.is_some()),
+            self.reify_return_convention_attr(&func.attrs, &params),
         );
-        let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
-        let immediates = self.reify_immediate_attrs(&func.attrs, &params, body.is_some());
+        let retains = self.reify_retain_attrs(&func.attrs, &params);
+        let immediates = self.reify_immediate_attrs(&func.attrs, &params);
+        let trap = self.reify_trap_attrs(&func.attrs, &params);
+        let linear_memory = self.reify_linear_memory_attr(&func.attrs);
+        if body.is_some() {
+            self.reject_bodyless_attrs_on_body(&func.attrs);
+        }
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1885,6 +1852,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
             retains,
             immediates,
+            trap,
+            linear_memory,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1955,6 +1924,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             effects: vec![],
             retains: vec![],
             immediates: vec![],
+            trap: None,
+            linear_memory: None,
             body: Some(body),
             span: test_decl.span,
             local_count: ctx.local_count(),
@@ -2083,6 +2054,96 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
     }
 
+    /// Report each attribute that describes a declaration with no body, written
+    /// on a function that has one. Its arguments were read already, so a
+    /// malformed one reports that too.
+    fn reject_bodyless_attrs_on_body(&self, attrs: &[ast::Attribute]) {
+        for (attr, name, bodyless) in attribute::bodyless(attrs) {
+            self.attr_error(
+                Code::AttrMisuse,
+                attr,
+                format!(
+                    "#[{name}] belongs to a declaration with no body: {}",
+                    bodyless.on_body
+                ),
+            );
+        }
+    }
+
+    /// Report a malformed `#[wire(number = …)]` at the field it was written on.
+    fn wire_number_error(&self, span: &Span, message: String) {
+        let _ = self.logger.error_in(
+            &self.current_module_source,
+            Diagnostic {
+                severity: Severity::Error,
+                code: Code::WireNumber,
+                message,
+                span: Some(DiagnosticSpan::from_span(span, None)),
+            },
+        );
+    }
+
+    /// Each field's `#[wire(number = N)]`, by field position. A struct numbers
+    /// every field or none, so the result is all `Some` or all `None`, and
+    /// anything else is reported here. See
+    /// [WEP: Grog](../../docs/wep-2026-09-22-grog.md).
+    fn checked_wire_numbers(&self, fields: &[ast::StructField]) -> Vec<Option<u32>> {
+        let written: Vec<Option<&str>> = fields
+            .iter()
+            .map(|field| wire_number_written(&field.attrs))
+            .collect();
+        self.check_numbers_are_all_or_none(fields, &written);
+
+        let mut numbers: Vec<Option<u32>> = Vec::with_capacity(fields.len());
+        let mut taken: Vec<(u32, &str)> = Vec::new();
+        for (field, written) in fields.iter().zip(&written) {
+            let Some(written) = *written else {
+                numbers.push(None);
+                continue;
+            };
+            let Some(number) = wire_number_of(&field.attrs) else {
+                self.wire_number_error(&field.span, wire_number_fault(written));
+                numbers.push(None);
+                continue;
+            };
+            if let Some((_, owner)) = taken.iter().find(|(taken, _)| *taken == number) {
+                self.wire_number_error(
+                    &field.span,
+                    format!("`#[wire(number = {number})]` is already `{owner}`'s number"),
+                );
+                numbers.push(None);
+                continue;
+            }
+            taken.push((number, &field.name));
+            numbers.push(Some(number));
+        }
+        numbers
+    }
+
+    /// One numbered field makes the rest owe a number, since a format that
+    /// reads numbers has nothing to put on the wire for a field without one.
+    fn check_numbers_are_all_or_none(&self, fields: &[ast::StructField], written: &[Option<&str>]) {
+        let Some(numbered) = written
+            .iter()
+            .position(Option::is_some)
+            .map(|index| &fields[index].name)
+        else {
+            return;
+        };
+        for (field, written) in fields.iter().zip(written) {
+            if written.is_none() {
+                self.wire_number_error(
+                    &field.span,
+                    format!(
+                        "`{}` carries no `#[wire(number = …)]` and `{numbered}` does: \
+                         a struct numbers every field or none",
+                        field.name
+                    ),
+                );
+            }
+        }
+    }
+
     /// Extract and structurally validate a `#[param]` attribute on a global.
     ///
     /// Returns `Some(ParamSpec)` for a well-formed `#[param]`, `None` when the
@@ -2091,7 +2152,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// resolution itself (overrides, env, conversion) happens later in the
     /// param-resolution pass — see `wep-2026-04-26-compile-time-params.md`.
     fn reify_param_attr(&self, global_decl: &ast::GlobalDecl) -> Option<tir::ParamSpec> {
-        let attr = global_decl.attributes.iter().find(|a| a.name == "param")?;
+        let attr = global_decl.attributes.iter().find(|a| a.name == PARAM)?;
         let emit = |message: String| self.attr_error(Code::ParamAttr, attr, message);
 
         let mut ok = true;
@@ -2105,7 +2166,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ast::AttrArg::KeyValue(k, _) if k == "name" || k == "from_env" => {}
                 ast::AttrArg::KeyValue(k, _)
                 | ast::AttrArg::KeyArray(k, _)
-                | ast::AttrArg::KeyIdent(k, _) => {
+                | ast::AttrArg::KeyIdent(k, _)
+                | ast::AttrArg::KeyNumber(k, _) => {
                     emit(format!("unknown #[param] argument: {k}"));
                     ok = false;
                 }
@@ -2161,7 +2223,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Option<tir::ReturnConvention> {
         // The attribute, not what it resolved to: one that failed to resolve was
         // reported already, and asking for it again says nothing new.
-        let states_one = func.attrs.iter().any(|attr| attr.name == "result");
+        let states_one = func.attrs.iter().any(|attr| attr.name == RESULT);
         if has_body || states_one || reserves_a_name_only(func) {
             return declared;
         }
@@ -2194,9 +2256,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attrs: &[ast::Attribute],
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Option<tir::ReturnConvention> {
-        let attr = attrs.iter().find(|a| a.name == "result")?;
+        let attr = attrs.iter().find(|a| a.name == RESULT)?;
         let emit = |message: String| {
             self.attr_error(Code::ResultAttr, attr, message);
             None
@@ -2206,22 +2267,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 "#[result] takes one convention: `owned` or `part_of = param`".to_string(),
             );
         };
-        // After the argument, so an attribute that is both malformed and
-        // misplaced reports what it got wrong rather than only where it sits.
-        let placed = |convention| {
-            if has_body {
-                return emit(
-                    "#[result] belongs to a declaration with no body; a body states what it returns"
-                        .to_string(),
-                );
-            }
-            Some(convention)
-        };
         match arg {
-            ast::AttrArg::Ident(name) if name == "owned" => placed(tir::ReturnConvention::Owned),
+            ast::AttrArg::Ident(name) if name == "owned" => Some(tir::ReturnConvention::Owned),
             ast::AttrArg::KeyIdent(key, named) if key == "part_of" => {
                 match params.iter().position(|p| &p.name == named) {
-                    Some(index) => placed(tir::ReturnConvention::PartOf(index)),
+                    Some(index) => Some(tir::ReturnConvention::PartOf(index)),
                     None => emit(format!("#[result(part_of = {named})] names no parameter")),
                 }
             }
@@ -2235,19 +2285,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// The `#[retain(...)]` clauses, one per attribute. A function with a body
-    /// states what it retains in that body, so an attribute there is reported
-    /// and dropped rather than read.
+    /// The `#[retain(...)]` clauses, one per attribute.
     fn reify_retain_attrs(
         &self,
         attrs: &[ast::Attribute],
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Vec<tir::RetainSpec<String>> {
         attrs
             .iter()
-            .filter(|a| a.name == "retain")
-            .filter_map(|attr| self.reify_retain_attr(attr, params, has_body))
+            .filter(|a| a.name == RETAIN)
+            .filter_map(|attr| self.reify_retain_attr(attr, params))
             .collect()
     }
 
@@ -2255,7 +2302,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attr: &ast::Attribute,
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Option<tir::RetainSpec<String>> {
         let emit = |message: String| {
             self.attr_error(Code::RetainAttr, attr, message);
@@ -2303,15 +2349,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 "#[retain] names one retained thing; repeat the attribute for another".to_string(),
             );
         }
-
-        // After the arguments, so an attribute that is both malformed and
-        // misplaced reports what it got wrong rather than only where it sits.
-        if has_body {
-            return emit(
-                "#[retain] belongs to a declaration with no body; a body states what it retains"
-                    .to_string(),
-            );
-        }
         Some(tir::RetainSpec {
             source,
             elements,
@@ -2325,12 +2362,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attrs: &[ast::Attribute],
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Vec<String> {
         attrs
             .iter()
-            .filter(|a| a.name == "immediate")
-            .filter_map(|attr| self.reify_immediate_attr(attr, params, has_body))
+            .filter(|a| a.name == IMMEDIATE)
+            .filter_map(|attr| self.reify_immediate_attr(attr, params))
             .collect()
     }
 
@@ -2338,7 +2374,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attr: &ast::Attribute,
         params: &[tir::TirParam],
-        has_body: bool,
     ) -> Option<String> {
         let emit = |message: String| {
             self.attr_error(Code::ImmediateAttr, attr, message);
@@ -2355,14 +2390,123 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 "#[immediate] names one parameter; repeat the attribute for another".to_string(),
             );
         }
-        if has_body {
-            return emit(
-                "#[immediate] belongs to a declaration with no body: it describes how codegen \
-                 lowers the call, and a body is called rather than lowered"
-                    .to_string(),
-            );
-        }
         Some(name.clone())
+    }
+
+    /// The `#[trap(...)]` attributes as one spec, `None` where there are none.
+    /// A malformed one is reported and the whole spec dropped: silence is "may
+    /// trap", the reading that deletes nothing.
+    fn reify_trap_attrs(
+        &self,
+        attrs: &[ast::Attribute],
+        params: &[tir::TirParam],
+    ) -> Option<tir::TrapSpec<String>> {
+        let written: Vec<&ast::Attribute> = attrs.iter().filter(|a| a.name == TRAP).collect();
+        let mut spec = tir::TrapSpec {
+            checks: Vec::new(),
+            result_len: None,
+        };
+        let mut sound = true;
+        for attr in &written {
+            let emit = |message: String| self.attr_error(Code::TrapAttr, attr, message);
+            match self.reify_trap_attr(attr, params, written.len()) {
+                Ok(clause) => {
+                    spec.checks.extend(clause.check);
+                    if let Some(len) = clause.result_len {
+                        if spec.result_len.is_some() {
+                            emit("#[trap] states `result_len` once".to_string());
+                            sound = false;
+                        }
+                        spec.result_len = Some(len);
+                    }
+                }
+                Err(message) => {
+                    emit(message);
+                    sound = false;
+                }
+            }
+        }
+        (sound && !written.is_empty()).then_some(spec)
+    }
+
+    /// The `#[linear_memory(...)]` access, `None` where there is none. A
+    /// malformed one is reported and read as a write, which reorders nothing.
+    fn reify_linear_memory_attr(&self, attrs: &[ast::Attribute]) -> Option<tir::LinearMemory> {
+        let mut written = attrs.iter().filter(|a| a.name == LINEAR_MEMORY);
+        let attr = written.next()?;
+        let emit = |message: &str| {
+            self.attr_error(Code::LinearMemoryAttr, attr, message.to_string());
+            Some(tir::LinearMemory::Write)
+        };
+        if written.next().is_some() {
+            return emit("#[linear_memory] is written once");
+        }
+        match attr.args.as_slice() {
+            [ast::AttrArg::Ident(word)] if word == "read" => Some(tir::LinearMemory::Read),
+            [ast::AttrArg::Ident(word)] if word == "write" => Some(tir::LinearMemory::Write),
+            _ => emit("#[linear_memory] takes `read` or `write`"),
+        }
+    }
+
+    fn reify_trap_attr(
+        &self,
+        attr: &ast::Attribute,
+        params: &[tir::TirParam],
+        attr_count: usize,
+    ) -> Result<TrapClause, String> {
+        if let [ast::AttrArg::Ident(word)] = attr.args.as_slice()
+            && word == "never"
+        {
+            if attr_count > 1 {
+                return Err("#[trap(never)] stands alone".to_string());
+            }
+            return Ok(TrapClause::default());
+        }
+        let mut named: IndexMap<&str, String> = IndexMap::default();
+        for arg in &attr.args {
+            let ast::AttrArg::KeyIdent(key, param) = arg else {
+                return Err(format!(
+                    "#[trap] takes `never` or `key = param` pairs, not {}",
+                    arg.name()
+                ));
+            };
+            if !matches!(
+                key.as_str(),
+                "negative" | "outside" | "unset" | "at" | "len" | "result_len"
+            ) {
+                return Err(format!("unknown #[trap] key: {key}"));
+            }
+            if !params.iter().any(|p| &p.name == param) {
+                return Err(format!("#[trap({key} = {param})] names no parameter"));
+            }
+            if named.insert(key, param.clone()).is_some() {
+                return Err(format!("#[trap] names `{key}` twice"));
+            }
+        }
+        let mut take = |key: &str| named.shift_remove(key);
+        let check = match (take("negative"), take("outside"), take("unset")) {
+            (None, None, None) => None,
+            (Some(p), None, None) => Some(tir::TrapCheck::Negative(p)),
+            (None, Some(array), None) => Some(tir::TrapCheck::Outside {
+                array,
+                at: take("at"),
+                len: take("len"),
+            }),
+            (None, None, Some(array)) => Some(tir::TrapCheck::Unset(array)),
+            _ => {
+                return Err(
+                    "#[trap] states one check; repeat the attribute for another".to_string()
+                );
+            }
+        };
+        let result_len = take("result_len");
+        if let Some(key) = named.keys().next() {
+            return Err(format!("#[trap({key} = ...)] belongs with `outside`"));
+        }
+        if check.is_none() && result_len.is_none() {
+            return Err("#[trap] takes `never` or at least one `key = param`".to_string());
+        }
+        Ok(TrapClause { check, result_len })
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -2561,7 +2705,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let else_type = tir::block_result_type(&self.tysys.type_table.borrow(), &else_block);
         let else_span = else_block.span;
 
-        let tir_pattern = self.reify_pattern(&l.pattern, scrutinee_type, ctx);
+        let tir_pattern = self.reify_pattern(&l.else_pattern(), scrutinee_type, ctx);
 
         let cont_stmts =
             self.reify_positioned_stmts(rest, block_span, ctx, expected_type, tail_value);
@@ -2732,7 +2876,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify `let pat[: T] = expr;`.
     fn reify_let(&mut self, let_stmt: &ast::LetStmt, ctx: &mut FunctionContext) -> TirStmt {
-        use crate::tir::{TirStmtKind, TypeTable};
+        use crate::tir::TirStmtKind;
         // Uninitialised `let x: T;` — the parser guarantees `ty`
         // is present. The WIR builder zero-initialises the slot;
         // reify emits a Unit placeholder as the `value` and the
@@ -2888,14 +3032,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let_stmt.span,
                 )
             }
+            ast::Pattern::Typed { .. } => {
+                unreachable!("the parser keeps a `let`'s top-level ascription in `LetStmt::ty`")
+            }
             ast::Pattern::Literal(_) | ast::Pattern::Or(_) | ast::Pattern::Range { .. } => {
-                let _ = type_id;
-                let _ = TypeTable::UNKNOWN;
-                // `let 42 = expr;` etc. are refutable patterns and the
-                // elaborator rejects them at annotate time (only
-                // irrefutable patterns are valid in `let`). Hitting
-                // this branch means annotate let a refutable pattern
-                // through — surface the invariant violation here.
+                // Annotate rejects a refutable `let` pattern.
                 panic!(
                     "reify_let: refutable pattern {:?} in let binding (annotate should have rejected)",
                     let_stmt.pattern
@@ -3943,12 +4084,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // lets `-f bare-asserts` (see `lower::bare_asserts`) replace assertion
         // failures with a bare trap, dropping this diagnostic without touching
         // explicit `panic(...)` calls. It behaves identically to `panic`.
-        let assert_failed_module_source = self.interner.borrow_mut().core("rt");
+        let (module_source, name) = {
+            let type_table = self.tysys.type_table.borrow();
+            let (module, name) = type_table
+                .compiler_items()
+                .require_function(CompilerItem::AssertFailed);
+            (module.clone(), name.to_string())
+        };
         let panic_call = TirExpr::new(
             TirExprKind::Call {
                 func: Box::new(FunctionRef {
-                    module_source: assert_failed_module_source,
-                    name: "assert_failed".to_string(),
+                    module_source,
+                    name,
                     monomorph_info: None,
                     method_info: None,
                 }),
@@ -4433,12 +4580,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let type_table = self.tysys.type_table.borrow();
             match type_table.as_tuple_through_ref(iterable.type_id) {
                 Some((elems, by_ref)) => {
-                    let inner = elems
-                        .iter()
-                        .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
-                        .or_else(|| elems.first())
-                        .copied()
-                        .unwrap_or(TypeTable::UNKNOWN);
+                    // A `.zip()` binds its one element, the pair `[..A, ..B]`,
+                    // so its pack sits a level down. Everywhere else the pack is
+                    // an element: `resolve_for_of` sends a tuple carrying none
+                    // down the concrete path instead.
+                    let inner = if let Some(&pack) =
+                        elems.iter().find(|e| type_table.is_type_pack(**e))
+                    {
+                        pack
+                    } else {
+                        let is_zip = matches!(
+                            actual_iterable,
+                            ast::Expr::MethodCall(mc) if mc.method == "zip" && mc.args.is_empty()
+                        );
+                        assert!(
+                            is_zip,
+                            "variadic for-of over a tuple carrying no pack: {}",
+                            type_table.type_name(iterable.type_id)
+                        );
+                        elems.first().copied().unwrap_or(TypeTable::UNKNOWN)
+                    };
                     // A mapped pack (`[..Case<T, P>]`) binds the loop variable to
                     // the mapped element, not the pack itself.
                     let inner = match type_table.get(inner) {
@@ -4474,7 +4635,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 name,
                 span: name_span,
             } => (name.clone(), Some(*id), *name_span),
-            ast::Pattern::Tuple(..) => {
+            ast::Pattern::Tuple(..) | ast::Pattern::Wildcard => {
                 (format!("$pattern_temp_{unique_id}"), None, Span::default())
             }
             _ => {
@@ -4505,8 +4666,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .as_tuple(binding_type)
-                .unwrap_or_else(|| vec![binding_type]);
+                .elem_types_or_self(binding_type);
             for (i, pat_elem) in tp.iter().enumerate() {
                 if let ast::Pattern::Ident {
                     id,
@@ -4636,8 +4796,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .as_tuple(binding_type)
-                .unwrap_or_else(|| vec![binding_type]);
+                .elem_types_or_self(binding_type);
             for (i, elem) in elems.iter().enumerate() {
                 let ast::Pattern::Ident {
                     id,
@@ -4714,7 +4873,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::{TirBlock, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable};
 
         let span = f.span;
-        let body_label = format!("$for_{}_body", ctx.fresh_serial());
+        let body_label = for_body_label(ctx.fresh_serial());
 
         let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
         ctx.enter_scope();
@@ -5205,6 +5364,56 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// The method call an operator annotate dispatched to a trait method
+    /// stands for: `left.method(right)`, each side adjusted as the method
+    /// declares it.
+    fn binary_operator_call(
+        &mut self,
+        dispatch: OperatorDispatch,
+        left: TirExpr,
+        right: TirExpr,
+        span: Span,
+    ) -> TirExpr {
+        let receiver = adjust_receiver_for_self_kind(
+            left,
+            dispatch.self_kind,
+            /* is_ref_impl */ false,
+            span,
+            &self.tysys.type_table,
+        );
+        let call_args: Vec<CallArg> = std::iter::once(right)
+            .zip(dispatch.arg_ref_wraps.iter().copied())
+            .map(|(arg, wrap)| {
+                let arg_expr = if wrap {
+                    let arg_ref_type = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Ref(arg.type_id));
+                    TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(arg),
+                        },
+                        arg_ref_type,
+                        span,
+                    )
+                } else {
+                    arg
+                };
+                CallArg::new(arg_expr, false)
+            })
+            .collect();
+        build_tir_method_call(
+            receiver,
+            dispatch.function_ref,
+            vec![],
+            call_args,
+            dispatch.return_type,
+            span,
+        )
+    }
+
     /// Reify a binary expression. When the elaborator dispatched the
     /// operator to a trait method, the
     /// `sem.types.operator_dispatch[binary.id]` entry carries the
@@ -5218,7 +5427,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{CallArg, ResolvedType, TirBinaryOp, TirExprKind, TirUnaryOp, TypeTable};
+        use crate::tir::{TirExprKind, TirUnaryOp, TypeTable};
 
         // Mirror `resolve_binary_operands_with_coercion`:
         // a numeric-literal operand is typed from the *other* operand (or,
@@ -5284,88 +5493,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             (left, right)
         };
 
-        // Reference equality: when both operands are references, the
-        // elaborator emits `RefEq` / `RefNotEq` (identity comparison)
-        // rather than dispatching to `Eq` — and records no operator
-        // dispatch. The decision is from operand types alone, so reify
-        // reproduces it here.
-        if matches!(binary.op, ast::BinaryOp::Eq | ast::BinaryOp::NotEq) {
-            let both_refs = {
-                let tt = self.tysys.type_table.borrow();
-                matches!(
-                    (tt.get(left.type_id), tt.get(right.type_id)),
-                    (ResolvedType::Ref(_), ResolvedType::Ref(_))
-                        | (ResolvedType::MutRef(_), ResolvedType::MutRef(_))
-                )
-            };
-            if both_refs {
-                let op = if binary.op == ast::BinaryOp::Eq {
-                    TirBinaryOp::RefEq
-                } else {
-                    TirBinaryOp::RefNotEq
-                };
-                return TirExpr::new(
-                    TirExprKind::Binary {
-                        op,
-                        left: Box::new(left),
-                        right: Box::new(right),
-                    },
-                    TypeTable::BOOL,
-                    binary.span,
-                );
-            }
+        if let Some(identity) = self.identity_of(binary.op, left.type_id, right.type_id) {
+            return self.identity_comparison(identity, binary.op, left, right, binary.span);
         }
 
         if let Some(dispatch) = self.ann_operator_dispatch(binary.id) {
-            // Operator-trait dispatch path. Reuse the shared receiver
-            // adjuster (statically; no Elaborator needed) and the
-            // shared arg-wrap helper to produce TIR identical to what
-            // `build_trait_op_method_call_on_resolved` emitted.
-            let receiver = adjust_receiver_for_self_kind(
-                left,
-                dispatch.self_kind,
-                /* is_ref_impl */ false,
-                binary.span,
-                &self.tysys.type_table,
-            );
-            let args = vec![right];
-            let call_args: Vec<CallArg> = args
-                .into_iter()
-                .zip(dispatch.arg_ref_wraps.iter().copied())
-                .map(|(arg, wrap)| {
-                    let arg_expr = if wrap {
-                        let arg_ref_type = self
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .intern(ResolvedType::Ref(arg.type_id));
-                        TirExpr::new(
-                            TirExprKind::Unary {
-                                op: TirUnaryOp::Ref,
-                                expr: Box::new(arg),
-                            },
-                            arg_ref_type,
-                            binary.span,
-                        )
-                    } else {
-                        arg
-                    };
-                    CallArg::new(arg_expr, false)
-                })
-                .collect();
-            let call = build_tir_method_call(
-                receiver,
-                dispatch.function_ref,
-                vec![],
-                call_args,
-                dispatch.return_type,
-                binary.span,
-            );
-            // Comparison operators dispatch to `Eq::eq` / `Ord::cmp` but
-            // the source operator decides the wrapping the elaborator
-            // applies after the call: `!=` negates the `eq` result, and
-            // `<` / `>` / `<=` / `>=` compare the `cmp` `Ordering` against
-            // the variant that makes the operator true.
+            let call = self.binary_operator_call(dispatch, left, right, binary.span);
+            // `!=` negates `eq`, and an ordering operator reads `cmp`'s
+            // `Ordering`; an `OperatorOrd` method already answers a `bool`.
             return match binary.op {
                 ast::BinaryOp::NotEq if call.type_id == TypeTable::BOOL => TirExpr::new(
                     TirExprKind::Unary {
@@ -5379,7 +5514,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | ast::BinaryOp::Gt
                 | ast::BinaryOp::LtEq
                 | ast::BinaryOp::GtEq
-                    if call.type_id != TypeTable::ERROR =>
+                    if call.type_id
+                        == self
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_compiler_enum(CompilerItem::Ordering) =>
                 {
                     ord_bool_from_cmp(call, binary.op, binary.span, &self.tysys.type_table)
                 }
@@ -6565,11 +6705,105 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a comparison chain `a < b < c …` into
-    /// `(a < m_0) && (m_0 < m_1) && …` inside a block holding one `$mK` binding
-    /// per middle term, so no term is re-evaluated. Non-primitive operands
-    /// dispatch through the `operator_dispatch` record on the chain's own
-    /// `AstId` — the synthesised inner comparisons have no source id.
+    /// One link of a comparison chain. A non-primitive operand stays a
+    /// `Binary`, which monomorphization turns into its `Eq` / `Ord` call.
+    fn chain_comparison(
+        &mut self,
+        op: ast::BinaryOp,
+        left: TirExpr,
+        right: TirExpr,
+        span: Span,
+    ) -> TirExpr {
+        use crate::tir::{TirExprKind, TypeTable};
+
+        if let Some(identity) = self.identity_of(op, left.type_id, right.type_id) {
+            return self.identity_comparison(identity, op, left, right, span);
+        }
+        TirExpr::new(
+            TirExprKind::Binary {
+                left: Box::new(left),
+                op: ast_binary_op_to_tir(op),
+                right: Box::new(right),
+            },
+            TypeTable::BOOL,
+            span,
+        )
+    }
+
+    /// How `==` / `!=` compares these operands by identity, if it does.
+    fn identity_of(&self, op: ast::BinaryOp, left: TypeId, right: TypeId) -> Option<Identity> {
+        use crate::tir::ResolvedType;
+
+        if !matches!(op, ast::BinaryOp::Eq | ast::BinaryOp::NotEq) {
+            return None;
+        }
+        let mut type_table = self.tysys.type_table.borrow_mut();
+        if matches!(
+            (type_table.get(left), type_table.get(right)),
+            (ResolvedType::Ref(_), ResolvedType::Ref(_))
+                | (ResolvedType::MutRef(_), ResolvedType::MutRef(_))
+        ) {
+            return Some(Identity::Reference);
+        }
+        type_table.identity_root(left, right).map(Identity::Handle)
+    }
+
+    /// `==` / `!=` by identity: `ref.eq` on references, the host's `is-same`
+    /// on resource handles.
+    fn identity_comparison(
+        &mut self,
+        identity: Identity,
+        op: ast::BinaryOp,
+        left: TirExpr,
+        right: TirExpr,
+        span: Span,
+    ) -> TirExpr {
+        use crate::tir::{CallArg, TirBinaryOp, TirExprKind, TirUnaryOp, TypeTable};
+
+        let is_eq = op == ast::BinaryOp::Eq;
+        let same = match identity {
+            Identity::Reference => {
+                let op = if is_eq {
+                    TirBinaryOp::RefEq
+                } else {
+                    TirBinaryOp::RefNotEq
+                };
+                return TirExpr::new(
+                    TirExprKind::Binary {
+                        op,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                );
+            }
+            Identity::Handle(root) => TirExpr::new(
+                TirExprKind::method_call(
+                    Box::new(left),
+                    self.lang_predicate_ref(root, IDENTITY_TEST_METHOD),
+                    vec![],
+                    vec![CallArg::new(right, false)],
+                ),
+                TypeTable::BOOL,
+                span,
+            ),
+        };
+        if is_eq {
+            return same;
+        }
+        TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Not,
+                expr: Box::new(same),
+            },
+            TypeTable::BOOL,
+            span,
+        )
+    }
+
+    /// Reify a comparison chain `a < b < c …` into `(a < $m0) & ($m0 < c) …`
+    /// in a block binding each middle term once.
     fn reify_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
@@ -6577,110 +6811,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::{TirBinaryOp, TirBlock, TirExprKind, TirStmtKind, TypeTable};
 
-        if chain.comparisons.is_empty() {
-            // Degenerate parse — annotate emits `chain.first` as-is.
-            return self.reify_expr(&chain.first, ctx, None);
-        }
-
-        if chain.comparisons.len() == 1 {
-            let cmp = &chain.comparisons[0];
-            let (left, right) = if Elaborator::<H>::takes_shape_from_expected_type(&chain.first)
-                && !Elaborator::<H>::takes_shape_from_expected_type(&cmp.right)
-            {
-                let right = self.reify_expr(&cmp.right, ctx, None);
-                let left = self.reify_expr(&chain.first, ctx, Some(right.type_id));
-                (left, right)
-            } else {
-                let left = self.reify_expr(&chain.first, ctx, None);
-                let right = self.reify_expr(&cmp.right, ctx, Some(left.type_id));
-                (left, right)
-            };
-
-            // Non-primitive comparison dispatches through `Eq::eq` /
-            // `Ord::cmp`; the recording fires on `chain.id`.
-            if let Some(dispatch) = self.ann_operator_dispatch(chain.id) {
-                let receiver = adjust_receiver_for_self_kind(
-                    left,
-                    dispatch.self_kind,
-                    /* is_ref_impl */ false,
-                    chain.span,
-                    &self.tysys.type_table,
-                );
-                let args = vec![right];
-                let call_args: Vec<CallArg> = args
-                    .into_iter()
-                    .zip(dispatch.arg_ref_wraps.iter().copied())
-                    .map(|(arg, wrap)| {
-                        let arg_expr = if wrap {
-                            let arg_ref_type = self
-                                .tysys
-                                .type_table
-                                .borrow_mut()
-                                .intern(ResolvedType::Ref(arg.type_id));
-                            TirExpr::new(
-                                TirExprKind::Unary {
-                                    op: TirUnaryOp::Ref,
-                                    expr: Box::new(arg),
-                                },
-                                arg_ref_type,
-                                chain.span,
-                            )
-                        } else {
-                            arg
-                        };
-                        CallArg::new(arg_expr, false)
-                    })
-                    .collect();
-                let method_call = build_tir_method_call(
-                    receiver,
-                    dispatch.function_ref,
-                    vec![],
-                    call_args,
-                    dispatch.return_type,
-                    chain.span,
-                );
-
-                // Ord ops wrap `cmp(...) ==/!= Less/Greater`;
-                // `!=` via `Eq::eq` wraps with `!`.
-                use ast::BinaryOp;
-                if matches!(
-                    cmp.op,
-                    BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
-                ) {
-                    return ord_bool_from_cmp(
-                        method_call,
-                        cmp.op,
-                        chain.span,
-                        &self.tysys.type_table,
-                    );
-                }
-                if cmp.op == BinaryOp::NotEq && method_call.type_id == TypeTable::BOOL {
-                    return TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Not,
-                            expr: Box::new(method_call),
-                        },
-                        TypeTable::BOOL,
-                        chain.span,
-                    );
-                }
-                return method_call;
-            }
-
-            let recorded_type = self
-                .ann_expression_types(chain.id)
-                .unwrap_or(TypeTable::BOOL);
-            return TirExpr::new(
-                TirExprKind::Binary {
-                    left: Box::new(left),
-                    op: ast_binary_op_to_tir(cmp.op),
-                    right: Box::new(right),
-                },
-                recorded_type,
-                cmp.op_span,
-            );
-        }
-
+        assert!(
+            chain.comparisons.len() >= 2,
+            "the parser makes a single comparison a `Binary`"
+        );
         ctx.enter_scope();
         let mut stmts: Vec<TirStmt> = Vec::new();
 
@@ -6713,15 +6847,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             chain.span,
         );
 
-        let mut acc_tir = TirExpr::new(
-            TirExprKind::Binary {
-                left: Box::new(first_tir),
-                op: ast_binary_op_to_tir(cmp0.op),
-                right: Box::new(m0_ref.clone()),
-            },
-            TypeTable::BOOL,
-            cmp0.op_span,
-        );
+        let mut acc_tir = self.chain_comparison(cmp0.op, first_tir, m0_ref.clone(), cmp0.op_span);
         let mut prev_tir = m0_ref;
 
         let last_idx = chain.comparisons.len() - 1;
@@ -6756,15 +6882,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             };
             let next_prev = right_tir.clone();
-            let cmp_tir = TirExpr::new(
-                TirExprKind::Binary {
-                    left: Box::new(prev_tir),
-                    op: ast_binary_op_to_tir(cmp.op),
-                    right: Box::new(right_tir),
-                },
-                TypeTable::BOOL,
-                cmp.op_span,
-            );
+            let cmp_tir = self.chain_comparison(cmp.op, prev_tir, right_tir, cmp.op_span);
             acc_tir = TirExpr::new(
                 TirExprKind::Binary {
                     left: Box::new(acc_tir),
@@ -7194,12 +7312,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             elem.span(),
                         ));
                     } else {
-                        elem_types.push(spread_expr.type_id);
+                        let spread_type_id = spread_expr.type_id;
+                        elem_types.extend(
+                            self.tysys
+                                .type_table
+                                .borrow()
+                                .elem_types_or_self(spread_type_id),
+                        );
                         elements.push(TirExpr::new(
                             TirExprKind::TupleSpread {
                                 expr: Box::new(spread_expr),
                             },
-                            *elem_types.last().unwrap(),
+                            spread_type_id,
                             elem.span(),
                         ));
                     }
@@ -7693,7 +7817,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
     ) -> TirExpr {
         use super::expr::UnionSource;
-        use crate::tir::{TirBlock, TirExprKind, TirStmt, TirStmtKind, TirStructField};
+        use crate::tir::TirStructField;
 
         // `resolve_anonymous_struct_literal` records the synthesised `$anon_{…}`
         // name (and the union flag) on the `GenericInstantiation` slot.
@@ -7798,15 +7922,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             struct_lit.span,
         );
 
-        if stmts.is_empty() {
-            return literal;
-        }
-        stmts.push(TirStmt::new(TirStmtKind::Expr(literal), struct_lit.span));
-        TirExpr::new(
-            TirExprKind::Block(TirBlock::new(stmts, struct_lit.span)),
-            struct_type,
-            struct_lit.span,
-        )
+        Self::hoist_block(literal, stmts)
     }
 
     /// Bind `expr` to a fresh `{prefix}_N` temporary (pushed onto `stmts`) so it
@@ -7818,7 +7934,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         prefix: &str,
         stmts: &mut Vec<TirStmt>,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TirStmt, TirStmtKind};
         if matches!(expr.kind, TirExprKind::Local { .. }) {
             return expr;
         }
@@ -7839,6 +7954,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         ));
         TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
+    }
+
+    /// `value` inside the block holding the [`Self::hoist_once`] temporaries it
+    /// reads, or `value` alone when nothing was hoisted.
+    fn hoist_block(value: TirExpr, mut stmts: Vec<TirStmt>) -> TirExpr {
+        if stmts.is_empty() {
+            return value;
+        }
+        let (span, type_id) = (value.span, value.type_id);
+        stmts.push(TirStmt::new(TirStmtKind::Expr(value), span));
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, span)),
+            type_id,
+            span,
+        )
     }
 
     /// Reify a `MatchExpr`. The scrutinee is walked; each arm enters
@@ -8865,78 +8995,33 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         )
                     }
                     "zip" => {
+                        let span = method_call.span;
+                        // Bound ahead of the branch so the deferred expansion
+                        // inherits it: the monomorphizer allocates no locals.
+                        let mut stmts = Vec::new();
+                        let receiver = self.hoist_once(ctx, receiver, "$zip", &mut stmts);
                         // A concrete tuple-of-tuples transposes inline here;
                         // only a type-pack receiver defers expansion to the
                         // monomorphiser via `TupleZip`. Non-generic bodies
                         // never reach the monomorphiser, so emitting
                         // `TupleZip` here would hit `lower::translate`'s
                         // `unreachable!`.
-                        if self.type_contains_pack(base_type_id) {
+                        let transposed = if self.type_contains_pack(base_type_id) {
                             TirExpr::new(
                                 TirExprKind::TupleZip {
                                     expr: Box::new(receiver),
                                 },
                                 recorded_type,
-                                method_call.span,
+                                span,
                             )
                         } else {
-                            // [[A0, A1], [B0, B1]].zip() → [[A0, B0], [A1, B1]]
-                            let outer_elems = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .as_tuple(base_type_id)
-                                .unwrap();
-                            let inner_arities: Vec<Vec<TypeId>> = outer_elems
-                                .iter()
-                                .map(|e| self.tysys.type_table.borrow().as_tuple(*e).unwrap())
-                                .collect();
-                            let arity = inner_arities[0].len();
-                            let num_rows = outer_elems.len();
-                            let mut col_exprs = Vec::with_capacity(arity);
-                            for col in 0..arity {
-                                let mut row_exprs = Vec::with_capacity(num_rows);
-                                for (row, row_types) in inner_arities.iter().enumerate() {
-                                    let row_access = TirExpr::new(
-                                        TirExprKind::FieldAccess {
-                                            expr: Box::new(receiver.clone()),
-                                            field_index: row as u32,
-                                            field_name: row.to_string(),
-                                        },
-                                        outer_elems[row],
-                                        method_call.span,
-                                    );
-                                    let cell = TirExpr::new(
-                                        TirExprKind::FieldAccess {
-                                            expr: Box::new(row_access),
-                                            field_index: col as u32,
-                                            field_name: col.to_string(),
-                                        },
-                                        row_types[col],
-                                        method_call.span,
-                                    );
-                                    row_exprs.push(cell);
-                                }
-                                let col_types: Vec<TypeId> =
-                                    inner_arities.iter().map(|row| row[col]).collect();
-                                let col_tuple_type =
-                                    self.tysys.type_table.borrow_mut().make_tuple(col_types);
-                                col_exprs.push(TirExpr::new(
-                                    TirExprKind::TupleLiteral {
-                                        elements: row_exprs,
-                                    },
-                                    col_tuple_type,
-                                    method_call.span,
-                                ));
-                            }
-                            TirExpr::new(
-                                TirExprKind::TupleLiteral {
-                                    elements: col_exprs,
-                                },
-                                recorded_type,
-                                method_call.span,
+                            transpose_tuple_expr(
+                                &receiver,
+                                span,
+                                &mut self.tysys.type_table.borrow_mut(),
                             )
-                        }
+                        };
+                        Self::hoist_block(transposed, stmts)
                     }
                     _ => unreachable!(),
                 };
@@ -9290,9 +9375,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // this branch only fires for a snapshot-rehydrated callee module,
             // which carries no `current_module_globals`. So resolve the declared
             // type from the AST — the one re-resolution the completeness rule
-            // sanctions (WEP 2026-05-26 §"Reify — mechanical"), and reify's
-            // only `resolve_type` call site.
-            let ty = self.resolve_type(&global_decl.ty);
+            // sanctions (WEP 2026-05-26 §"Reify — mechanical").
+            let ty = self.resolve_global_type(&global_decl.ty);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
                     module_source: self.current_module_source.clone(),
@@ -9543,6 +9627,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
     }
 
+    /// Which wide-integer prelude struct `head` is, with the name its methods mangle under.
+    fn wide_int_of(&self, head: TypeId) -> Option<(CompilerItem, FqTypeName)> {
+        let tt = self.tysys.type_table.borrow();
+        Some((tt.wide_int_item(head)?, tt.fq_base_type_name(head)))
+    }
+
     /// Replay an `i128` / `u128` numeric-literal coercion recorded by annotate,
     /// returning `None` for every other shape. The 128-bit types are prelude
     /// structs, so the value is materialized by a `from_u64` / `from_i64` /
@@ -9554,24 +9644,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return None;
         }
         let target_type = choice.target_type;
-        let name = match self.tysys.type_table.borrow().get(target_type).clone() {
-            ResolvedType::Struct { def, .. }
-                if matches!(
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .struct_head_name(def)
-                        .as_str(),
-                    "u128" | "i128"
-                ) =>
-            {
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .fq_base_type_name(target_type)
-            }
-            _ => return None,
-        };
+        let (item, name) = self.wide_int_of(target_type)?;
 
         // Every shape the coercion admits, the negated `-NUM` among them, whose
         // coercion is keyed on the enclosing `Unary` node. Reading the one
@@ -9584,7 +9657,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             NumericLiteralKind::Byte(raw) => unescape_byte(raw).ok()?.to_string(),
         };
 
-        let parse_result = if name.decl_name() == "u128" {
+        let parse_result = if item == CompilerItem::U128 {
             parse_u128_literal(&repr).map(|v| v as i128)
         } else if negated {
             parse_i128_literal(&format!("-{repr}"))
@@ -9594,6 +9667,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let value = parse_result.ok()?;
 
         Some(build_int128_literal_call(
+            item,
             &name,
             value,
             &repr,
@@ -9616,36 +9690,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .type_table
             .borrow()
             .representation_head(target_type);
-        let name = match self.tysys.type_table.borrow().get(target_base).clone() {
-            ResolvedType::Struct { def, .. }
-                if matches!(
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .struct_head_name(def)
-                        .as_str(),
-                    "u128" | "i128"
-                ) =>
-            {
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .fq_base_type_name(target_base)
-            }
-            _ => return None,
-        };
+        let (item, name) = self.wide_int_of(target_base)?;
 
         // Literal operand: `1042 as u128`.
         if let ast::Expr::Literal(lit) = &cast.expr
             && let Some(repr) = int_literal_repr(lit)
         {
-            let parsed = if name.decl_name() == "u128" {
+            let parsed = if item == CompilerItem::U128 {
                 parse_u128_literal(repr).map(|v| v as i128)
             } else {
                 parse_i128_literal(repr)
             };
             if let Ok(value) = parsed {
                 return Some(build_int128_literal_call(
+                    item,
                     &name,
                     value,
                     repr,
@@ -9657,7 +9715,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         // Negated literal operand (i128 only): `-170... as i128`.
-        if name.decl_name() == "i128"
+        if item == CompilerItem::I128
             && let ast::Expr::Unary(unary) = &cast.expr
             && unary.op == ast::UnaryOp::Neg
             && let ast::Expr::Literal(ast::LiteralExpr {
@@ -9668,6 +9726,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && let Ok(value) = parse_i128_literal(&format!("-{repr}"))
         {
             return Some(build_int128_literal_call(
+                item,
                 &name,
                 value,
                 repr,
@@ -9696,7 +9755,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 cast.span,
             ));
         }
-        let intermediate_type = if name.decl_name() == "u128" {
+        let intermediate_type = if item == CompilerItem::U128 {
             TypeTable::U64
         } else {
             TypeTable::I64
@@ -9710,6 +9769,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cast.span,
         );
         Some(build_int128_from_intermediate(
+            item,
             &name,
             casted,
             target_type,
@@ -9731,8 +9791,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         target_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
-        use crate::compiler_item::CompilerItem;
-        use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
+        use crate::primitive::PrimitiveType;
+        use crate::tir::{ResolvedType, TypeTable};
 
         let source_type = self.ann_expression_types(cast.expr.id())?;
         // Newtypes share their base's representation, so dispatch on the
@@ -9745,22 +9805,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 tt.representation_head(target_type),
             )
         };
-        let source_name = match self.tysys.type_table.borrow().get(source_base).clone() {
-            ResolvedType::Struct { def, .. }
-                if matches!(
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .struct_head_name(def)
-                        .as_str(),
-                    "u128" | "i128"
-                ) =>
-            {
-                self.tysys.type_table.borrow().struct_head_name(def)
-            }
-            _ => return None,
+        let (source_item, target_item) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.wide_int_item(source_base)?,
+                tt.wide_int_item(target_base),
+            )
         };
-        let signed_source = source_name == "i128";
+        let signed_source = source_item == CompilerItem::I128;
 
         enum Lowering {
             /// `i128 as i128` / `u128 as u128` — no-op.
@@ -9793,29 +9845,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | PrimitiveType::I8
                 | PrimitiveType::U8,
             ) => Lowering::LowThenCast,
-            ResolvedType::Struct { def, .. }
-                if self.tysys.type_table.borrow().struct_head_name(def) == source_name =>
-            {
-                if target_type == source_type {
-                    Lowering::Identity
-                } else {
-                    // Same wide base but a newtype on either side: the
-                    // bare `Cast` emitted by the caller is the correct
-                    // repr-compatible reinterpret.
-                    return None;
+            _ => match target_item {
+                Some(item) if item == source_item => {
+                    if target_type == source_type {
+                        Lowering::Identity
+                    } else {
+                        // Same wide base but a newtype on either side: the
+                        // bare `Cast` emitted by the caller is the correct
+                        // repr-compatible reinterpret.
+                        return None;
+                    }
                 }
-            }
-            ResolvedType::Struct { def, .. }
-                if self.tysys.type_table.borrow().struct_head_name(def) == "i128" =>
-            {
-                Lowering::Reinterpret(CompilerItem::I128FromU128)
-            }
-            ResolvedType::Struct { def, .. }
-                if self.tysys.type_table.borrow().struct_head_name(def) == "u128" =>
-            {
-                Lowering::Reinterpret(CompilerItem::U128FromI128)
-            }
-            _ => return None,
+                Some(CompilerItem::I128) => Lowering::Reinterpret(CompilerItem::I128FromU128),
+                Some(CompilerItem::U128) => Lowering::Reinterpret(CompilerItem::U128FromI128),
+                Some(other) => unreachable!("wide_int_item answered {other:?}"),
+                None => return None,
+            },
         };
 
         let make_func_ref = |tysys: &TypeSystem, item: CompilerItem| {
@@ -10335,6 +10380,41 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         None
     }
 
+    /// A constant pattern whose `==` annotate dispatched to `Eq`: the scrutinee
+    /// held in the local annotate reserved, matching where the call holds.
+    fn compare_constant_by_eq(
+        &mut self,
+        pattern_id: Option<AstId>,
+        pattern: TirPattern,
+        scrutinee_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> TirPattern {
+        let TirPattern::ConstantValue { expr: constant } = &pattern else {
+            return pattern;
+        };
+        let Some(dispatch) = pattern_id.and_then(|id| self.ann_operator_dispatch(id)) else {
+            return pattern;
+        };
+        let span = constant.span;
+        let name = constant_pattern_local_name();
+        let local_index = ctx.add_local(name.clone(), scrutinee_type, false, None);
+        let scrutinee = TirExpr::new(
+            TirExprKind::Local {
+                index: local_index,
+                name,
+            },
+            scrutinee_type,
+            span,
+        );
+        let test = self.binary_operator_call(dispatch, scrutinee, (**constant).clone(), span);
+        TirPattern::Narrow {
+            name: None,
+            local_index,
+            type_id: scrutinee_type,
+            test: Box::new(test),
+        }
+    }
+
     /// Wrap `inner` in the reference kind of `scrutinee_type` for match
     /// ergonomics. Walks the reference layers of the scrutinee: a `&mut`
     /// sets `&mut` unless a `&` is also present (most restrictive wins),
@@ -10393,7 +10473,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return self.reify_nullary_variant_case(scrutinee_type, name);
                 }
                 if let Some(const_pat) = self.reify_immutable_global_pattern(name, *span) {
-                    return const_pat;
+                    return self.compare_constant_by_eq(Some(*id), const_pat, scrutinee_type, ctx);
                 }
                 let local_index = ctx.add_local_at(
                     name.clone(),
@@ -10508,6 +10588,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Pattern::Variant {
                 variant_name,
                 variant_qualifier,
+                name_id,
                 bindings,
                 span,
                 ..
@@ -10528,7 +10609,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         ctx,
                     )
                 {
-                    return const_pat;
+                    return self.compare_constant_by_eq(*name_id, const_pat, scrutinee_type, ctx);
                 }
 
                 // `ns::NAME` naming an immutable global the namespace exports
@@ -10540,7 +10621,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
                     && let Some(const_pat) = self.reify_immutable_global_pattern(&alias, *span)
                 {
-                    return const_pat;
+                    return self.compare_constant_by_eq(*name_id, const_pat, scrutinee_type, ctx);
                 }
 
                 // Variant patterns appear in `match Some(x) { Some(v) => …
@@ -10658,11 +10739,113 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Pattern::Struct {
                 fields, has_rest, ..
             } => self.reify_struct_pattern(fields, *has_rest, scrutinee_type, ctx),
+            ast::Pattern::Typed {
+                id,
+                pattern: inner,
+                span,
+                ..
+            } => {
+                let target = self
+                    .ann_pattern_ascription(*id)
+                    .expect("annotate records every type pattern's target");
+                let narrows = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_resource_narrowing(scrutinee_type, target);
+                if narrows {
+                    self.reify_narrowing(inner, target, *span, ctx)
+                } else {
+                    let binding_ty = self.ascribed_binding_type(scrutinee_type, target);
+                    self.reify_pattern(inner, binding_ty, ctx)
+                }
+            }
             // `build_tir_from_state` skips reify for modules with syntax
             // errors, so reify never walks an `Error` placeholder.
             ast::Pattern::Error(_) => {
                 unreachable!("reify does not run on modules with syntax errors")
             }
+        }
+    }
+
+    /// A type pattern that does not narrow keeps the scrutinee's reference kind
+    /// on a target that drops it.
+    fn ascribed_binding_type(&self, scrutinee_type: TypeId, target: TypeId) -> TypeId {
+        let tt = self.tysys.type_table.borrow();
+        if tt.type_key(scrutinee_type) == tt.type_key(target) || tt.peel_refs(target) != target {
+            return target;
+        }
+        drop(tt);
+        self.apply_scrutinee_ref_kind(scrutinee_type, target)
+    }
+
+    /// `name: R` over a supertype of `R`: the value binds at `R`, and the pattern
+    /// holds only when the handle's `is-r` import answers true.
+    fn reify_narrowing(
+        &mut self,
+        inner: &ast::Pattern,
+        target: TypeId,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirPattern {
+        let (name, local_name, local_index) = match inner {
+            ast::Pattern::Ident { id, name, span } | ast::Pattern::MutIdent { id, name, span } => {
+                let is_mut = matches!(inner, ast::Pattern::MutIdent { .. });
+                let local_index = ctx.add_local_at(name.clone(), target, is_mut, Some(*id), *span);
+                (Some(name.clone()), name.clone(), local_index)
+            }
+            ast::Pattern::Wildcard => {
+                let local_name = format!("{INTERNAL_PREFIX}narrowed");
+                let local_index = ctx.add_local(local_name.clone(), target, false, None);
+                (None, local_name, local_index)
+            }
+            other => panic!("annotate rejects a narrowing over {other:?}"),
+        };
+        let receiver = TirExpr::new(
+            TirExprKind::Local {
+                index: local_index,
+                name: local_name,
+            },
+            target,
+            span,
+        );
+        let test = TirExpr::new(
+            TirExprKind::method_call(
+                Box::new(receiver),
+                self.lang_predicate_ref(target, NARROWING_TEST_METHOD),
+                vec![],
+                vec![],
+            ),
+            TypeTable::BOOL,
+            span,
+        );
+        TirPattern::Narrow {
+            name,
+            local_index,
+            type_id: target,
+            test: Box::new(test),
+        }
+    }
+
+    /// `R::method`, one of the host's `lang` predicates over `resource`'s handles.
+    fn lang_predicate_ref(&self, resource: TypeId, method: &str) -> tir::FunctionRef {
+        let method_info = LocalMethodName::new(
+            self.tysys.fq_receiver_of_impl(resource, false),
+            None,
+            method.to_string(),
+        );
+        let module_source = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_head(resource)
+            .map(|(_, m)| m)
+            .expect("a `lang` predicate's receiver is a declared resource");
+        tir::FunctionRef {
+            module_source,
+            name: method_info.to_mangled_name(),
+            monomorph_info: None,
+            method_info: Some(method_info),
         }
     }
 
@@ -10798,7 +10981,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 /// the AST alone, which is what the completeness rule lets reify re-derive, so
 /// these need no recorded fact and no elaborator to run.
 fn extract_is_ambient_attr(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(|a| a.name == "ambient")
+    attrs.iter().any(|a| a.name == AMBIENT)
 }
 
 /// Collect the effect names from every `#[benign(E, ...)]` attribute; multiple
@@ -10807,14 +10990,14 @@ fn extract_is_ambient_attr(attrs: &[Attribute]) -> bool {
 fn extract_benign_effect_names(attrs: &[Attribute]) -> Vec<String> {
     attrs
         .iter()
-        .filter(|a| a.name == "benign")
+        .filter(|a| a.name == BENIGN)
         .flat_map(|a| a.args.iter().map(AttrArg::as_str))
         .map(str::to_string)
         .collect()
 }
 
 fn extract_inline_hint_attr(attrs: &[Attribute]) -> tir::InlineHint {
-    let Some(attr) = attrs.iter().find(|a| a.name == "inline") else {
+    let Some(attr) = attrs.iter().find(|a| a.name == INLINE) else {
         return tir::InlineHint::Auto;
     };
     match attr.args.first().map(AttrArg::as_str) {
@@ -10828,7 +11011,7 @@ fn extract_inline_hint_attr(attrs: &[Attribute]) -> tir::InlineHint {
 fn extract_export_name_attr(attrs: &[Attribute]) -> Option<String> {
     attrs
         .iter()
-        .find(|a| a.name == "export_name")
+        .find(|a| a.name == EXPORT_NAME)
         .and_then(|a| a.args.first())
         .map(|a| a.as_str().to_string())
 }
@@ -10836,7 +11019,7 @@ fn extract_export_name_attr(attrs: &[Attribute]) -> Option<String> {
 fn extract_allocator_tag_attr(attrs: &[Attribute]) -> Option<String> {
     attrs
         .iter()
-        .find(|a| a.name == "allocator")
+        .find(|a| a.name == ALLOC)
         .and_then(|a| a.args.first())
         .map(|a| a.as_str().to_string())
 }
@@ -10859,41 +11042,13 @@ fn arg_is_unannotated_closure(arg: &ast::Expr) -> bool {
 /// `reify_ident` to resolve such constants when they are not present in
 /// `associated_constants` — e.g. a default-argument expression reified
 /// under a stdlib-snapshot callee module whose `associated_constants` map
-/// was not rehydrated. The value table mirrors
-/// [`super::stmt::primitive_assoc_const_to_i128`].
+/// was not rehydrated.
 fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, tir::TypeId)> {
     use crate::tir::TypeTable;
-    let ty = match prefix {
-        "i8" => TypeTable::I8,
-        "i16" => TypeTable::I16,
-        "i32" => TypeTable::I32,
-        "i64" => TypeTable::I64,
-        "u8" => TypeTable::U8,
-        "u16" => TypeTable::U16,
-        "u32" => TypeTable::U32,
-        "u64" => TypeTable::U64,
-        _ => return None,
-    };
-    let value = match (prefix, suffix) {
-        ("i8", "MAX") => i128::from(i8::MAX),
-        ("i8", "MIN") => i128::from(i8::MIN),
-        ("i16", "MAX") => i128::from(i16::MAX),
-        ("i16", "MIN") => i128::from(i16::MIN),
-        ("i32", "MAX") => i128::from(i32::MAX),
-        ("i32", "MIN") => i128::from(i32::MIN),
-        ("i64", "MAX") => i128::from(i64::MAX),
-        ("i64", "MIN") => i128::from(i64::MIN),
-        ("u8", "MAX") => i128::from(u8::MAX),
-        ("u8", "MIN") => i128::from(u8::MIN),
-        ("u16", "MAX") => i128::from(u16::MAX),
-        ("u16", "MIN") => i128::from(u16::MIN),
-        ("u32", "MAX") => i128::from(u32::MAX),
-        ("u32", "MIN") => i128::from(u32::MIN),
-        ("u64", "MAX") => i128::from(u64::MAX),
-        ("u64", "MIN") => i128::from(u64::MIN),
-        _ => return None,
-    };
-    Some((value, ty))
+    Some((
+        primitive_int_bound(prefix, suffix)?,
+        TypeTable::primitive_by_name(prefix)?,
+    ))
 }
 
 /// Build the receiver node the recorded `(self_kind, is_ref_impl)` pair asks
@@ -11083,6 +11238,7 @@ fn deref_to_value(
 /// Build the `from_pair` call that materializes a 128-bit value from its
 /// `(low: u64, high: u64/i64)` halves.
 fn build_int128_from_pair(
+    item: CompilerItem,
     type_name: &FqTypeName,
     low: u64,
     high: i64,
@@ -11102,7 +11258,7 @@ fn build_int128_from_pair(
             value: high.cast_unsigned(),
             repr: high.to_string(),
         },
-        if type_name.decl_name() == "u128" {
+        if item == CompilerItem::U128 {
             TypeTable::U64
         } else {
             TypeTable::I64
@@ -11137,6 +11293,7 @@ fn build_int128_from_pair(
 /// admits the cheaper `from_u64` / `from_i64`; the negated `-NUM` shape denies
 /// it and always takes `from_pair`.
 fn build_int128_literal_call(
+    item: CompilerItem,
     name: &FqTypeName,
     value: i128,
     repr: &str,
@@ -11145,14 +11302,14 @@ fn build_int128_literal_call(
     span: Span,
 ) -> TirExpr {
     let use_small = allow_small
-        && if name.decl_name() == "u128" {
+        && if item == CompilerItem::U128 {
             u64::try_from(value).is_ok()
         } else {
             i64::try_from(value).is_ok()
         };
 
     if use_small {
-        let (inner_type, method_name, store_value) = if name.decl_name() == "u128" {
+        let (inner_type, method_name, store_value) = if item == CompilerItem::U128 {
             (
                 TypeTable::U64,
                 "from_u64",
@@ -11198,18 +11355,19 @@ fn build_int128_literal_call(
     }
 
     let (low, high) = unpack_i128(value);
-    build_int128_from_pair(name, low, high, target_type, span)
+    build_int128_from_pair(item, name, low, high, target_type, span)
 }
 
 /// Build `u128::from_u64(inner)` / `i128::from_i64(inner)` for the general
 /// (non-literal) `expr as i128/u128` cast. `intermediate` is already `u64`/`i64`.
 fn build_int128_from_intermediate(
+    item: CompilerItem,
     name: &FqTypeName,
     intermediate: TirExpr,
     target_type: TypeId,
     span: Span,
 ) -> TirExpr {
-    let method_name = if name.decl_name() == "u128" {
+    let method_name = if item == CompilerItem::U128 {
         "from_u64"
     } else {
         "from_i64"
@@ -11357,7 +11515,7 @@ fn ast_binary_op_to_tir(op: ast::BinaryOp) -> TirBinaryOp {
 /// `#[wire(name = "...")]` on a struct field, enum case, or variant case.
 fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
     attrs.iter().find_map(|a| {
-        if a.name == "wire" {
+        if a.name == WIRE {
             a.kv_value("name").map(str::to_string)
         } else {
             None
@@ -11365,10 +11523,27 @@ fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
     })
 }
 
+/// Why a written field number is not one, said to whoever wrote it.
+fn wire_number_fault(written: &str) -> String {
+    if written
+        .parse::<u32>()
+        .is_ok_and(|n| WIRE_NUMBER_RESERVED.contains(&n))
+    {
+        return format!(
+            "`#[wire(number = {written})]`: {} to {} are reserved by the wire format",
+            WIRE_NUMBER_RESERVED.start(),
+            WIRE_NUMBER_RESERVED.end()
+        );
+    }
+    format!(
+        "`#[wire(number = {written})]`: a field number runs from {WIRE_NUMBER_MIN} to {WIRE_NUMBER_MAX}"
+    )
+}
+
 /// `#[wire(name_policy = "...")]` on a struct, enum, or variant declaration.
 fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
     attrs.iter().find_map(|a| {
-        if a.name == "wire" {
+        if a.name == WIRE {
             a.kv_value("name_policy").map(str::to_string)
         } else {
             None

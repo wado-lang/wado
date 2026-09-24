@@ -1,7 +1,5 @@
-//! `wado check` — CI-side integrity check for committed-source Kiln
-//! workflows. Re-runs every Kiln invocation, byte-compares each output
-//! against the on-disk file, and treats Kiln warnings as errors by
-//! default.
+//! `wado check` — a build's diagnostics without its output. Runs the Kiln
+//! pipeline as `wado compile` does and treats Kiln warnings as errors.
 //!
 //! See [WEP: Kiln](../../docs/wep-2026-04-12-kiln.md), section "The
 //! `wado check` command".
@@ -14,10 +12,12 @@ use wado_compiler::Code;
 
 use crate::args::{self, CliExit};
 use crate::build;
-use crate::compile::{attach_manifest_and_component_deps, load_nearest_manifest, prepare_kiln};
+use crate::compile::{
+    KilnRun, attach_manifest_and_component_deps, load_nearest_manifest, prepare_kiln,
+};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
-use crate::kiln_driver::{CheckOutcome, PipelineError, check_pipeline};
+use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::knobs::{CompileKnobOpt, CompileKnobs};
 use crate::manifest;
 
@@ -72,21 +72,21 @@ impl Opt {
 
 fn format_usage() -> String {
     let mut buf = String::new();
-    writeln!(buf, "Usage: wado check [options] [file.wado]").unwrap();
+    writeln!(buf, "Usage: wado check [options] [file.wado | dir]").unwrap();
     writeln!(buf).unwrap();
     writeln!(
         buf,
         "Verify Wado sources (and their Kiln generators) without emitting Wasm.\n\
-         With no file, checks every world wado.toml declares — the targets\n\
-         `wado build` builds — and stops after the analysis.",
+         Given a directory, or nothing, checks every world that directory's\n\
+         wado.toml declares — the targets `wado build` builds.",
     )
     .unwrap();
     writeln!(buf).unwrap();
     writeln!(
         buf,
-        "Re-runs every Kiln generator and compares the output against the on-disk\n\
-         source. By default, any Kiln divergence (modified, regenerated, or stale\n\
-         output) exits non-zero — suitable for CI gates on committed-source workflows.",
+        "Runs every Kiln generator as a build does, writing what it produces. By\n\
+         default a Kiln warning exits non-zero, which is what gates CI; --warn\n\
+         keeps warnings as warnings.",
     )
     .unwrap();
     writeln!(buf).unwrap();
@@ -137,9 +137,16 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
 
 pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     let Some(input) = opts.input.clone() else {
-        return check_declared_worlds(&opts).await;
+        let project = build::project_here(NO_PROJECT)?;
+        return check_declared_worlds(&project, &opts).await;
     };
     let path = PathBuf::from(&input);
+    // A directory names the project to check, as it does for `test` and
+    // `format`; `wado.toml` then supplies the entries.
+    if path.is_dir() {
+        let project = build::project_at(&path, NO_PROJECT)?;
+        return check_declared_worlds(&project, &opts).await;
+    }
     let world = check_world(
         opts.target_world.as_deref(),
         &path,
@@ -148,14 +155,16 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     check_entry(&path, world, &opts).await
 }
 
+const NO_PROJECT: &str = "no wado.toml found; name a file to check \
+                          (`wado check <file.wado>`) or a directory under a project";
+
 /// Check every world `wado.toml` declares, selected the way `wado build`
 /// selects its targets. Same analysis as a single file, once per entry.
-async fn check_declared_worlds(opts: &CheckOptions) -> Result<(), CliExit> {
-    let project = build::project_here(
-        "no wado.toml found; name a file to check \
-         (`wado check <file.wado>`) or run from a project directory",
-    )?;
-    let mut targets = build::declared_worlds(&project)?;
+async fn check_declared_worlds(
+    project: &manifest::ProjectManifest,
+    opts: &CheckOptions,
+) -> Result<(), CliExit> {
+    let mut targets = build::declared_worlds(project)?;
     if let Some(world_fq) = &opts.target_world {
         build::retain_world(&mut targets, world_fq)?;
     }
@@ -194,30 +203,28 @@ async fn check_entry(path: &Path, world: CheckWorld, opts: &CheckOptions) -> Res
     .await
     .map_err(CliExit::error)?;
 
-    // Same setup `wado compile` runs its generators through — only the pipeline
-    // below differs: `check` dry-runs and byte-compares instead of writing.
-    let kiln = prepare_kiln(path, &host, opts.knobs.no_cache, manifest_pair)
-        .await
-        .map_err(silent_or_reported)?;
+    // The pipeline a build runs, writes included. A route of its own would be a
+    // second behaviour to hold in step with this one.
+    let kiln = prepare_kiln(
+        path,
+        None,
+        &host,
+        &KilnRun::entry(manifest_pair, opts.knobs.no_cache),
+    )
+    .await
+    .map_err(silent_or_reported)?;
     let outcome = match kiln {
-        None => CheckOutcome::default(),
+        None => PipelineOutcome::default(),
         Some(mut kiln) => {
-            let mut outcome = check_pipeline(
-                &kiln.manifest,
-                &kiln.manifest_root,
-                &kiln.host,
-                &kiln.provider,
-                std::mem::take(&mut kiln.invocations),
-            )
-            .await
-            .map_err(|e| CliExit::error(FormatPipelineError(&e)))?;
+            let mut outcome = kiln
+                .run()
+                .await
+                .map_err(|e| CliExit::error(FormatPipelineError(&e)))?;
             kiln.remap_conflicts(&mut outcome.invocations, &host)
                 .map_err(silent_or_reported)?;
             outcome
         }
     };
-
-    let kiln_drift = !outcome.stale.is_empty() || !outcome.missing.is_empty();
 
     // Drive the rest of the compile pipeline so type/resolve errors also gate
     // `wado check`. At `O0`, since the component is discarded: the optimization
@@ -246,11 +253,10 @@ async fn check_entry(path: &Path, world: CheckWorld, opts: &CheckOptions) -> Res
     if has_compile_errors {
         return Err(CliExit::silent_failure(1));
     }
-    if !opts.warn_only && (kiln_drift || has_kiln_warnings) {
+    if !opts.warn_only && has_kiln_warnings {
         return Err(CliExit::error(
             "wado check: Kiln integrity check failed — \
-             one or more generators produced output that differs from on-disk source. \
-             Pass --warn to keep warnings as warnings.",
+             see the warnings above. Pass --warn to keep warnings as warnings.",
         ));
     }
     Ok(())
@@ -312,15 +318,16 @@ fn silent_or_reported(e: PipelineError) -> CliExit {
     }
 }
 
+/// Not `KilnGeneratedRegenerated`: the check writes what it generates, so an
+/// overwrite is what an edited input is supposed to produce.
 fn is_kiln_diagnostic(code: &Code) -> bool {
     matches!(
         code,
         Code::KilnStaleCache
             | Code::KilnGeneratorForbiddenImport
             | Code::KilnMissingWith
+            | Code::KilnNoGeneratedModule
             | Code::KilnGeneratedModified
-            | Code::KilnGeneratedRegenerated
-            | Code::KilnGeneratedStaleOnDisk
     )
 }
 

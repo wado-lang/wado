@@ -1,0 +1,20 @@
+// A user function that shares the name of `core:rt`'s assertion-failure marker
+// is an ordinary function: calling it neither panics nor traps.
+
+use { println, Stdout } from "core:cli";
+
+fn assert_failed(msg: String) with Stdout {
+    println(`user: ${msg}`);
+}
+
+export fn run() with Stdout {
+    assert_failed("called");
+    let x = builtin::black_box(1);
+    assert x == 1;
+    println("done");
+}
+
+__DATA__
+{
+    "stdout": "user: called\ndone\n"
+}

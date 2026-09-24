@@ -204,6 +204,7 @@ pub fn inject_kiln_request_adapter(
                 name: Some("NoOptions".to_string()),
                 name_id: Some(module.alloc_ast_id()),
                 name_span: Some(span),
+                type_args: Vec::new(),
                 fields: Vec::new(),
                 spreads: Vec::new(),
                 has_trailing_comma: false,
@@ -218,6 +219,7 @@ pub fn inject_kiln_request_adapter(
         name: Some("Request".to_string()),
         name_id: Some(module.alloc_ast_id()),
         name_span: Some(span),
+        type_args: Vec::new(),
         fields: vec![primary_field, inputs_field, options_field],
         spreads: Vec::new(),
         has_trailing_comma: false,
@@ -322,6 +324,7 @@ fn ensure_kiln_imports(module: &mut Module, span: Span, needed: &[&str]) {
     // No existing core:kiln use — synthesize one at the top.
     let decl = UseDecl {
         id: module.alloc_ast_id(),
+        attrs: Vec::new(),
         visibility: Visibility::Private,
         source: "core:kiln".to_string(),
         source_span: span,

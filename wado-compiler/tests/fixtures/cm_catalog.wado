@@ -26,6 +26,8 @@
 //!   instantiates; the `export fn`s are dropped in the test world, so that run
 //!   does not exercise lift/lower.
 
+use { TreeMap } from "core:collections";
+
 // --- Named types referenced by the identity exports below ---
 
 pub struct Point {
@@ -55,6 +57,13 @@ pub flags Perms {
     Read,
     Write,
     Execute,
+}
+
+// A variant with no payload-bearing case lays out as its bare discriminant,
+// one byte here, not the handle width an unknown name defaults to.
+pub variant Status {
+    Active,
+    Inactive,
 }
 
 pub type Meters = f64;
@@ -213,6 +222,33 @@ export fn id_assoc_array(v: List<[String, u32]>) -> List<[String, u32]> {
     return v;
 }
 
+// --- Maps (`map<k, v>`) ---
+//
+// A `map` carries the association list above byte for byte; what these pin is
+// the specialization, which travels under its own type constructor and comes
+// back as a `TreeMap`. The key set is the Component Model's `keytype`, so one
+// row per key shape that lowers differently: a pointer-and-length `string` and
+// a scalar. The value side reuses the value-type surface.
+
+export fn id_map_string_u32(v: TreeMap<String, u32>) -> TreeMap<String, u32> {
+    return v;
+}
+export fn id_map_u32_string(v: TreeMap<u32, String>) -> TreeMap<u32, String> {
+    return v;
+}
+export fn id_map_string_record(v: TreeMap<String, Point>) -> TreeMap<String, Point> {
+    return v;
+}
+export fn id_map_string_list(v: TreeMap<String, List<u8>>) -> TreeMap<String, List<u8>> {
+    return v;
+}
+export fn id_option_map(v: Option<TreeMap<String, u32>>) -> Option<TreeMap<String, u32>> {
+    return v;
+}
+export fn id_list_map(v: List<TreeMap<String, u32>>) -> List<TreeMap<String, u32>> {
+    return v;
+}
+
 // --- Tuples carrying aggregate (non-primitive) elements ---
 
 export fn id_tuple_record(v: [Point, u32]) -> [Point, u32] {
@@ -238,6 +274,22 @@ export fn id_list_flags(v: List<Perms>) -> List<Perms> {
     return v;
 }
 export fn id_tuple_flags(v: [Perms, u32]) -> [Perms, u32] {
+    return v;
+}
+
+// --- Payload-less variant nested in aggregates ---
+// Only a composite reads a stride or an offset. `[Status, u8]` is the sharpest:
+// nothing in it forces padding, so a wider discriminant moves the second element.
+export fn id_payload_less_variant(v: Status) -> Status {
+    return v;
+}
+export fn id_option_payload_less_variant(v: Option<Status>) -> Option<Status> {
+    return v;
+}
+export fn id_list_payload_less_variant(v: List<Status>) -> List<Status> {
+    return v;
+}
+export fn id_tuple_payload_less_variant(v: [Status, u8]) -> [Status, u8] {
     return v;
 }
 
@@ -568,6 +620,39 @@ export fn id_tuple_future(v: [Future<u32>, u32]) -> [Future<u32>, u32] {
 }
 export fn id_record_future(v: FutureCell) -> FutureCell {
     return v;
+}
+
+// --- Narrow scalars in the indirect params buffer ---
+// Five flat params put the call on the one-buffer path. There a scalar stored
+// wider than its CM size writes past its slot, and past the end.
+export async fn narrow_scalars_in_params_buffer(c: Color, o: Option<u8>, p: Perms, s: Status) -> u32 {
+    let tag: u32 = match c {
+        Red => 1,
+        Green => 2,
+        Blue => 3,
+    };
+    let seen: u32 = match s {
+        Active => 1,
+        Inactive => 2,
+    };
+    // Each field gets a band wider than its own range, so one slot read wrong
+    // cannot land on a total another set of inputs would reach.
+    task return seen + p as u32 * 10 + o.unwrap_or(0) as u32 * 1000 + tag * 1000000;
+}
+
+// Five flat params put the call on the one-buffer path, where the `map` is
+// stored as its `(ptr, count)` and what follows must land past both halves.
+export async fn map_in_params_buffer(m: TreeMap<String, u32>, o: Option<u8>, tail: u8) -> u32 {
+    let mut total: u32 = 0;
+    for let [_, v] of m.entries() {
+        total += *v;
+    }
+    task return total * 10000 + o.unwrap_or(0) as u32 * 100 + tail as u32;
+}
+
+// Within four flat params an async call passes them directly, `Option` included.
+export async fn option_passed_flat(o: Option<u32>) -> u32 {
+    task return o.unwrap_or(0) + 1;
 }
 
 // The empty test block makes `e2e.rs` accept this as a test-world fixture: it

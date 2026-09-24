@@ -44,9 +44,13 @@ history is the SSoT.
 
 Roadmap and Known gaps split on commitment, not on size. A roadmap item will be
 done, so it is ordered and each entry says what finishing it means. A known gap
-is known and unowned: what is missing and what closing it would take, with no
-claim that it will be. Demoting a roadmap item to a gap, or promoting a gap, is
-the human's call.
+is known and unowned: what is missing and what it admits, with no claim that it
+will be closed. Demoting a roadmap item to a gap, or promoting a gap, is the
+human's call.
+
+A gap does not say how to close it. Whoever comes to it should think from zero.
+A written approach anchors them to what its writer saw before the problem was
+understood.
 
 No "out of scope" section: an unfinished mechanism is a known gap. A deliberate
 omission goes in Decision.
@@ -182,6 +186,7 @@ omission goes in Decision.
 - [Compiler Fuzzing](./wep-2026-08-19-compiler-fuzzing.md)
 - [Power-Assert Coverage](./wep-2026-08-19-power-assert-coverage.md)
 - [Literal Coercion as `From<Array<…>>`](./wep-2026-08-24-literal-from-array.md)
+- [The Component Model `map<K, V>` Type](./wep-2026-08-25-cm-map-type.md)
 - [Markup Dialect — Where the Top Level Lives](./wep-2026-08-29-markup-dialect.md)
 - [Stream Copy Results](./wep-2026-08-30-stream-copy-result.md)
 - [`wado lint` — Corpus Checks](./wep-2026-08-31-wado-lint.md)
@@ -197,3 +202,7 @@ omission goes in Decision.
 - [Random Number Generation (`core:prng`)](./wep-2026-09-18-core-prng.md)
 - [`wasi:webgpu` Bindings](./wep-2026-09-19-wasi-webgpu.md)
 - [External Subcommands](./wep-2026-09-19-external-subcommands.md)
+- [Loam — Lowered Operators, Ahead-of-time Modules](./wep-2026-09-20-loam.md)
+- [Grog — Protocol Buffers for Wado](./wep-2026-09-22-grog.md)
+- [Half-Precision Primitives (`f16` / `bf16`)](./wep-2026-09-22-half-precision-primitives.md)
+- [The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md)

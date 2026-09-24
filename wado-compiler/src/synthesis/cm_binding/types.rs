@@ -9,18 +9,17 @@ use std::cell::RefCell;
 use crate::ast::{AstId, GenericType, NamedType, Type};
 use crate::cm_abi;
 use crate::compiler_item::CompilerItem;
-use crate::component_model::CmInterfaceRegistry;
+use crate::component_model::{CmInterfaceRegistry, CmTypeKind, cm_layout_with_registry};
 use crate::hashmap::IndexMap;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
+use crate::primitive::PrimitiveType;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
+    ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
     TirVariantDecl, TypeId, TypeTable,
 };
 
-use crate::cm_abi::align_to;
-use crate::component_model::{
-    cm_align_with_registry, future_payload_rejection, stream_payload_rejection,
-};
+use crate::component_model::map_key_rejection;
+use crate::component_model::{future_payload_rejection, stream_payload_rejection};
 use crate::defs::DefId;
 use crate::name::{FqTraitName, FqTypeName};
 use crate::synthesis::common::{binary, builtin_call, cast, i32_const, i64_const, synth_span};
@@ -55,9 +54,16 @@ pub struct CmStdlibNames {
     pub index_value: FqTraitName,
     /// `List`'s head, likewise the declaration the registry records.
     pub array_fq: FqTypeName,
+    /// `TreeMap`'s name, or `None` where `core:collections` was never loaded.
+    pub tree_map: Option<String>,
 }
 
 impl CmStdlibNames {
+    /// Whether `generic` is a `TreeMap<K, V>`, the Wado spelling of CM `map<K, V>`.
+    pub fn is_tree_map(&self, generic: &GenericType) -> bool {
+        self.tree_map.as_deref() == Some(generic.name.as_str()) && generic.args.len() == 2
+    }
+
     /// Look up every name through the [`CompilerItems`] registry.
     /// Cheap (a handful of registry hits + clones). Each synthesis entry
     /// point builds the snapshot once per binding — the lower side threads
@@ -85,6 +91,9 @@ impl CmStdlibNames {
             err_index,
             index_value: items.trait_fq(CompilerItem::IndexValue),
             array_fq: type_table.compiler_struct_fq_name(CompilerItem::List),
+            tree_map: items
+                .struct_name_opt(CompilerItem::TreeMap)
+                .map(str::to_string),
         }
     }
 }
@@ -139,9 +148,17 @@ impl LiftContext<'_> {
     /// a name rather than following a reference site.
     pub(super) fn cm_decl(&self, source: &str, name: &str) -> DefId {
         let module_source = self.module_source_for(source);
-        self.type_table
-            .borrow()
+        let type_table = self.type_table.borrow();
+        type_table
             .cm_decl_in(name, &module_source)
+            // A lib-local type defined in a submodule: the interface FQ maps to
+            // the entry module, so resolve via the type's own recorded module.
+            // One name reaches one declaration here, since a surface carrying
+            // the same public name twice is refused before synthesis.
+            .or_else(|| {
+                let own = self.cm_interface_registry.lib_local_type_source(name)?;
+                type_table.cm_decl_in(name, own)
+            })
             .unwrap_or_else(|| panic!("CM type `{source}#{name}` names no declaration"))
     }
 
@@ -153,7 +170,7 @@ impl LiftContext<'_> {
     pub(super) fn cm_type_id(&self, ty: &Type, tt: &mut TypeTable) -> TypeId {
         match ty {
             Type::Named(n) => {
-                if let Some(src) = self.cm_interface_registry.resolve_cm_source_for(n, None)
+                if let Some(src) = self.cm_interface_registry.resolve_cm_source_for(n)
                     && self
                         .cm_interface_registry
                         .cm_interface_module_source_of(&src)
@@ -319,7 +336,7 @@ pub fn cm_type_to_type_id(
                 // signature, and its package is one flat module (`web:dom`),
                 // not a module per interface.
                 .or_else(|| {
-                    let source = registry.resolve_cm_source_for(named, Some(wasi_package))?;
+                    let source = registry.resolve_cm_source_for(named)?;
                     if !registry.is_unrestricted_resource(&source, &named.name) {
                         return None;
                     }
@@ -330,13 +347,11 @@ pub fn cm_type_to_type_id(
                 // registered GC type. Anything else without a TypeId would
                 // miscompile (e.g. FieldAccess on an i32), so fail loudly.
                 .unwrap_or_else(|| {
-                    let is_resource = registry
-                        .resolve_cm_source_for(named, Some(wasi_package))
-                        .is_some_and(|s| {
-                            registry
-                                .get_resource_cm_name_by_source(&s, &named.name)
-                                .is_some()
-                        });
+                    let is_resource = registry.resolve_cm_source_for(named).is_some_and(|s| {
+                        registry
+                            .get_resource_cm_name_by_source(&s, &named.name)
+                            .is_some()
+                    });
                     if is_resource {
                         TypeTable::I32
                     } else {
@@ -355,6 +370,17 @@ pub fn cm_type_to_type_id(
                 let elem_type =
                     cm_held_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 return type_table.make_list(elem_type);
+            }
+            // `core:collections` is not auto-imported, so a program that never
+            // names `TreeMap` has no registration to compare against.
+            let tree_map_name = type_table
+                .compiler_items()
+                .struct_name_opt(CompilerItem::TreeMap)
+                .map(str::to_string);
+            if tree_map_name.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 {
+                let key = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let value = cm_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
+                return type_table.make_tree_map(key, value);
             }
             let option_name = type_table
                 .compiler_variant_name(CompilerItem::Option)
@@ -457,14 +483,7 @@ pub(super) fn canonical_cm_package<'a>(
     registry: &'a CmInterfaceRegistry,
     name: &str,
 ) -> Option<(CmNamespace, &'a str)> {
-    for kind in [
-        "variants",
-        "enums",
-        "resources",
-        "structs",
-        "flags",
-        "newtypes",
-    ] {
+    for kind in CmTypeKind::ALL {
         if let Some(source) = registry.bare_name_owner(kind, name)
             && let Some(found) = cm_package_from_source(source)
         {
@@ -528,27 +547,6 @@ pub(crate) fn kebab_to_pascal(s: &str) -> String {
     s.to_upper_camel_case()
 }
 
-pub(super) fn is_gc_passthrough_param(
-    ty: &Type,
-    cm_interface_registry: &CmInterfaceRegistry,
-    names: &CmStdlibNames,
-) -> bool {
-    match ty {
-        Type::Named(n) if n.name == names.string => true,
-        Type::Named(n) => cm_interface_registry.source_interface(n).is_some_and(|s| {
-            cm_interface_registry
-                .get_variant_cases_by_source(&s, &n.name)
-                .is_some()
-                || cm_interface_registry
-                    .get_struct_fields_by_source(&s, &n.name)
-                    .is_some()
-        }),
-        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => true,
-        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => true,
-        _ => false,
-    }
-}
-
 pub(super) fn is_wasm_flat_type(type_id: TypeId) -> bool {
     matches!(
         type_id,
@@ -578,7 +576,8 @@ fn check_cm_boundary_representable_inner(
     names: &CmStdlibNames,
     visited: &mut Vec<TypeId>,
 ) -> Result<(), String> {
-    use crate::tir::{PrimitiveType, ResolvedType as R};
+    use crate::primitive::PrimitiveType;
+    use crate::tir::ResolvedType as R;
 
     if visited.contains(&type_id) {
         // `visited` is the recursion path (pushed on entry, popped on exit),
@@ -623,11 +622,14 @@ fn check_cm_boundary_representable_inner(
         // exactly the bug this check exists to prevent. New variants must be
         // classified explicitly.
         match type_table.get(type_id) {
-            // No CM value representation in any world.
-            R::Primitive(PrimitiveType::V128) => Err(format!(
-                "`{}` has no Component Model value representation",
-                type_table.type_name(type_id)
-            )),
+            // No CM value representation in any world: `defvaltype` stops at
+            // `f32`, and a half lowered as its `u16` would read as an integer.
+            R::Primitive(PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16) => {
+                Err(format!(
+                    "`{}` has no Component Model value representation",
+                    type_table.type_name(type_id)
+                ))
+            }
             // Scalars, plain discriminants, bitflags, and plain resource
             // handles lower to an i32 handle identically in every world.
             R::Primitive(_) | R::Unit | R::Enum { .. } | R::Flags { .. } | R::Resource { .. } => {
@@ -708,6 +710,20 @@ fn check_cm_boundary_representable_inner(
                         recurse(a, visited)?;
                     }
                     Ok(())
+                } else if type_table
+                    .compiler_item_def(CompilerItem::TreeMap)
+                    .is_some_and(|tree_map| tree_map == *def)
+                {
+                    // `map<K, V>`: the key comes from the CM's `keytype`
+                    // subset, the value from any representable valtype.
+                    let [key, value] = type_args.as_slice() else {
+                        panic!("`TreeMap` is declared with two type parameters");
+                    };
+                    let (key, value) = (*key, *value);
+                    if let Some(reason) = map_key_rejection(type_table, key) {
+                        return Err(reason);
+                    }
+                    recurse(value, visited)
                 } else {
                     Err(format!(
                         "generic type `{}` has no Component Model value \
@@ -859,7 +875,7 @@ pub fn flatten_param_type(
         .collect()
 }
 
-pub use crate::cm_abi::{cm_enum_byte_size, cm_flags_byte_size};
+pub use crate::cm_abi::{OPTION_OR_RESULT_CASES, cm_discriminant_byte_size, cm_flags_byte_size};
 
 /// Core-wasm load op for a CM discriminant of the given byte size.
 /// Discriminants are unsigned, so 1/2-byte widths zero-extend.
@@ -882,69 +898,48 @@ pub(super) fn disc_store_op(byte_size: u32) -> &'static str {
     }
 }
 
+/// The stores that write a string, list, or direct param's flat values into an
+/// async call's params buffer, at offsets from its slot.
 pub(super) fn cm_param_store_plan(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
     names: &CmStdlibNames,
 ) -> Vec<(u32, &'static str)> {
-    if let Type::Named(named) = ty {
-        if named.name == names.string {
-            return vec![(0, "i32_store"), (4, "i32_store")];
-        }
-        let source = cm_interface_registry
-            .source_interface(named)
-            .filter(|s| s.starts_with("wasi:"));
-        // Check WASI flags types.
-        if let Some(members) = source
-            .as_deref()
-            .and_then(|s| cm_interface_registry.get_flags_members_by_source(s, &named.name))
-        {
-            let store = match cm_flags_byte_size(members.len()) {
-                0 => return vec![],
-                size @ (1 | 2 | 4) => disc_store_op(size),
-                size => panic!(
-                    "flags `{}` with {} members ({size} bytes) exceeds the single-i32 store plan",
-                    named.name,
-                    members.len()
-                ),
-            };
-            return vec![(0, store)];
-        }
-        // Check WASI enum types.
-        if let Some(variants) = source
-            .as_deref()
-            .and_then(|s| cm_interface_registry.get_enum_variants_by_source(s, &named.name))
-        {
-            let store = disc_store_op(cm_enum_byte_size(variants.len()));
-            return vec![(0, store)];
-        }
-        // Standard named types
-        return match named.name.as_str() {
-            "bool" | "u8" | "i8" => vec![(0, "i32_store8")],
-            "u16" | "i16" => vec![(0, "i32_store16")],
-            "i64" | "u64" => vec![(0, "i64_store")],
-            "f32" => vec![(0, "f32_store")],
-            "f64" => vec![(0, "f64_store")],
-            // i32, u32, char, resource handles
-            _ => vec![(0, "i32_store")],
-        };
-    }
     match ty {
-        Type::Reference(_) | Type::MutReference(_) => vec![(0, "i32_store")],
-        Type::Generic(g) if g.name == names.array => vec![(0, "i32_store"), (4, "i32_store")],
-        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
-            // option<T>: disc (u8) at offset 0, payload at align_to(1, align(T))
-            let inner_align = cm_align_with_registry(&g.args[0], cm_interface_registry);
-            let payload_offset = align_to(1, inner_align);
-            let inner_store = cm_param_store_plan(&g.args[0], cm_interface_registry, names);
-            let mut stores = vec![(0, "i32_store8")]; // discriminant
-            for (sub_offset, store_name) in inner_store {
-                stores.push((payload_offset + sub_offset, store_name));
-            }
-            stores
+        Type::Named(named) if named.name == names.string => {
+            vec![(0, "i32_store"), (4, "i32_store")]
         }
-        Type::Generic(_) => vec![(0, "i32_store")],
+        Type::Named(named) if named.name == "f32" => vec![(0, "f32_store")],
+        Type::Named(named) if named.name == "f64" => vec![(0, "f64_store")],
+        Type::Named(_) => vec![(0, scalar_store_op(ty, cm_interface_registry, names))],
+        Type::Generic(g) if g.name == names.array => vec![(0, "i32_store"), (4, "i32_store")],
         _ => vec![(0, "i32_store")],
+    }
+}
+
+/// The CM size and alignment of `ty` as the i32 pair a `realloc` argument or a
+/// buffer stride takes.
+pub(super) fn cm_layout_i32(ty: &Type, registry: &CmInterfaceRegistry) -> (i32, i32) {
+    let (size, align) = cm_layout_with_registry(ty, registry);
+    (size as i32, align as i32)
+}
+
+/// The integer store for one flat value of `ty`, at the width its CM layout
+/// gives it. A type arriving as several values is not one store.
+pub(super) fn scalar_store_op(
+    ty: &Type,
+    cm_interface_registry: &CmInterfaceRegistry,
+    names: &CmStdlibNames,
+) -> &'static str {
+    if flatten_param_type(ty, cm_interface_registry, names).len() != 1 {
+        return "i32_store";
+    }
+    match cm_layout_with_registry(ty, cm_interface_registry).0 {
+        1 => "i32_store8",
+        2 => "i32_store16",
+        4 => "i32_store",
+        8 => "i64_store",
+        other => panic!("a one-value CM type cannot be {other} bytes wide: {ty:?}"),
     }
 }
 
@@ -1018,7 +1013,9 @@ fn flatten_export_type_inner(
                 }
             }
         },
-        Type::Generic(generic) if generic.name == names.array => {
+        Type::Generic(generic) if generic.name == names.array || names.is_tree_map(generic) => {
+            // `map<K, V>` despecializes to `list<tuple<K, V>>` and carries that
+            // type's `(ptr, count)`.
             out.push(cm_abi::CmValType::I32); // ptr
             out.push(cm_abi::CmValType::I32); // len
         }
@@ -1134,8 +1131,8 @@ fn flat_types_from_type_id_inner(
             PrimitiveType::I64 | PrimitiveType::U64 => out.push(cm_abi::CmValType::I64),
             PrimitiveType::F32 => out.push(cm_abi::CmValType::F32),
             PrimitiveType::F64 => out.push(cm_abi::CmValType::F64),
-            PrimitiveType::V128 => {
-                panic!("v128 cannot appear at CM boundary")
+            PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16 => {
+                panic!("{} cannot appear at CM boundary", p.as_str())
             }
         },
         ResolvedType::Unit => {} // no flat values
@@ -1191,7 +1188,9 @@ fn flat_types_from_type_id_inner(
                     names,
                 );
                 out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
-            } else if name == &names.array {
+            } else if name == &names.array || names.tree_map.as_deref() == Some(name.as_str()) {
+                // A `map<K, V>` despecializes to `list<tuple<K, V>>`, so it
+                // carries that type's pair.
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
             } else {
@@ -1380,17 +1379,6 @@ pub(super) fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
     }
 }
 
-/// The interface `module` registers `name` under, as an owned FQ.
-fn declaring_interface(
-    registry: &CmInterfaceRegistry,
-    module: &ModuleSource,
-    name: &str,
-) -> Option<String> {
-    registry
-        .interface_declaring(module, name)
-        .map(str::to_string)
-}
-
 /// Reconstruct a minimal AST `Type` from a TIR `TypeId`, for callers that need
 /// to re-enter the AST-shaped match arms. Only the top-level name and immediate
 /// type args are filled in; deeper structure is looked up lazily. A named type
@@ -1409,15 +1397,19 @@ pub(super) fn type_id_to_ast_type(
     // another module's `ErrorCode` and lift a record as its enum.
     let cm_named = |name: &str, ms: &ModuleSource| {
         let nt = NamedType::new(AstId::fresh(), name.to_string(), span);
-        let source = declaring_interface(cm_interface_registry, ms, name).or_else(|| match ms {
-            ModuleSource::Binding { interface, .. } => {
-                cm_interface_registry.resolve_cm_source_for(&nt, interface.split('/').next())
-            }
-            ModuleSource::Core { name: core } if core == "kiln" || core.starts_with("kiln/") => {
-                cm_interface_registry.resolve_cm_source_for(&nt, None)
-            }
-            _ => None,
-        });
+        let searchable = match ms {
+            ModuleSource::Binding { .. } => true,
+            ModuleSource::Core { name: core } => core == "kiln" || core.starts_with("kiln/"),
+            _ => false,
+        };
+        let source = cm_interface_registry
+            .interface_declaring(ms, name)
+            .map(str::to_string)
+            .or_else(|| {
+                searchable
+                    .then(|| cm_interface_registry.resolve_cm_source_for(&nt))
+                    .flatten()
+            });
         if let Some(source) = source {
             cm_interface_registry.set_source_interface(nt.id, source);
         }
@@ -1437,7 +1429,9 @@ pub(super) fn type_id_to_ast_type(
                 .expect("a nominal type names a declaration");
             cm_named(&name, &module_source)
         }
-        ResolvedType::Resource { def } => named_no_source(type_table.def_name(*def)),
+        ResolvedType::Resource { def } => {
+            cm_named(type_table.def_name(*def), type_table.def_module(*def))
+        }
         ResolvedType::GenericInstance { def, type_args } => {
             let name = &type_table.def_name(*def).to_string();
 

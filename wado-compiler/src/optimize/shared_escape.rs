@@ -7,7 +7,9 @@ use std::ops::ControlFlow;
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionRef, NirFunction};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
+use crate::nir_arena::{
+    ArenaStructPatternField, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind,
+};
 use crate::nir_package::NirPackage;
 use crate::tir::TypeTable;
 
@@ -28,6 +30,11 @@ enum Slot {
 }
 
 /// Memoized [`Slot`] verdicts over one `NirPackage`.
+///
+/// Every query reads bodies and writes none, so it shares its borrows with the
+/// caller's: a pass asks while walking a body of its own, and both hold a
+/// `Ref`. Asking one while a `RefMut` is out is the caller's bug — answering it
+/// with a verdict would make the analysis depend on who else held a borrow.
 pub(super) struct SharedEscape<'a> {
     project: &'a NirPackage,
     /// Settled verdicts, which no assumption stands behind.
@@ -37,6 +44,9 @@ pub(super) struct SharedEscape<'a> {
     in_flight: RefCell<IndexSet<Slot>>,
     /// Whether the query in progress leaned on such an assumption.
     assumed: Cell<bool>,
+    /// Per-body seed census, built on first ask. Every slot is asked of every
+    /// body, so rediscovering one body's reads per slot is quadratic.
+    census: RefCell<IndexMap<usize, BodyCensus>>,
 }
 
 impl<'a> SharedEscape<'a> {
@@ -46,7 +56,24 @@ impl<'a> SharedEscape<'a> {
             verdicts: RefCell::new(IndexMap::default()),
             in_flight: RefCell::new(IndexSet::default()),
             assumed: Cell::new(false),
+            census: RefCell::new(IndexMap::default()),
         }
+    }
+
+    /// Whether `body` can read the slot at all. A function that cannot is left
+    /// alone, so an unrelated one never refuses the query.
+    fn can_read(
+        &self,
+        func_idx: usize,
+        body: &Body,
+        seed_field: Option<&str>,
+        seed_call: Option<FuncId>,
+    ) -> bool {
+        let mut census = self.census.borrow_mut();
+        census
+            .entry(func_idx)
+            .or_insert_with(|| BodyCensus::of(body, &self.project.type_table.borrow()))
+            .can_read(seed_field, seed_call)
     }
 
     /// Whether a constant handed to `func_id`'s parameter at `pos` may be
@@ -85,11 +112,7 @@ impl<'a> SharedEscape<'a> {
         }
         let mut obligations: IndexSet<Slot> = IndexSet::default();
         for (idx, func) in self.project.functions.iter().enumerate() {
-            let Ok(func) = func.try_borrow() else {
-                // A body already borrowed elsewhere cannot be read, and an
-                // unread body is one whose writes are unseen.
-                return false;
-            };
+            let func = func.borrow();
             if !self.scan_function(slot, idx, &func, &mut obligations) {
                 compiler_trace!("shared_escape", "{slot:?} refused in {}", func.name);
                 return false;
@@ -99,27 +122,21 @@ impl<'a> SharedEscape<'a> {
         obligations.iter().all(|next| self.slot_ok(next))
     }
 
-    /// The verdict for a slot whose owner has no body, where the program walk
-    /// would clear it having looked at nothing. `None` where the owner has one.
+    /// The verdict for a parameter of a bodyless owner, which the program walk
+    /// would clear having looked at nothing. `None` leaves it to that walk.
     fn declared_slot(&self, slot: &Slot) -> Option<bool> {
-        let (Slot::Param(id, _) | Slot::Ret(id)) = slot else {
+        // A bodyless owner's result is no dead end, so `Slot::Ret` stays with
+        // the walk: a pass-through hands the object to its caller, and the walk
+        // is what reads it there.
+        let Slot::Param(id, pos) = slot else {
             return None;
         };
-        let Some(owner) = self.project.functions.get(id.index()) else {
-            return Some(false);
-        };
-        let Ok(owner) = owner.try_borrow() else {
-            return Some(false);
-        };
+        let owner = self.project.functions[id.index()].borrow();
         if owner.body.is_some() {
             return None;
         }
-        // A `Ret` slot is raised only for a body the walk has just read, so a
-        // bodyless owner leaves the parameter as the only case.
-        let Slot::Param(_, pos) = slot else {
-            unreachable!("`{slot:?}` names a result of the bodyless `{}`", owner.name)
-        };
-        let verdict = self.reads_arg(&owner, *pos);
+        let clauses = self.declared_arg(&owner, *pos);
+        let verdict = clauses.reads && (!clauses.hands_back || self.slot_ok(&Slot::Ret(*id)));
         compiler_trace!(
             "shared_escape",
             "{slot:?} bodyless `{}` declares {verdict}",
@@ -166,12 +183,7 @@ impl<'a> SharedEscape<'a> {
             if seed_field.is_none() && seed_call.is_none() {
                 return true;
             }
-            if !has_seed(
-                body,
-                &self.project.type_table.borrow(),
-                seed_field,
-                seed_call,
-            ) {
+            if !self.can_read(func_idx, body, seed_field, seed_call) {
                 return true;
             }
         }
@@ -185,7 +197,19 @@ impl<'a> SharedEscape<'a> {
             exprs: IndexSet::default(),
         };
         taint.saturate();
-        self.check_uses(&taint, FuncId::new(func_idx), obligations)
+        let raised_from = obligations.len();
+        let ok = self.check_uses(&taint, FuncId::new(func_idx), obligations);
+        // Names the body each obligation came out of, which the `FuncId` in the
+        // slot itself does not.
+        if obligations.len() != raised_from {
+            compiler_trace!(
+                "shared_escape",
+                "{slot:?} through `{}` raises {:?}",
+                func.name,
+                &obligations.as_slice()[raised_from..]
+            );
+        }
+        ok
     }
 
     /// Every use of a tainted value, refused or turned into an obligation. A
@@ -300,13 +324,12 @@ impl<'a> SharedEscape<'a> {
         }
     }
 
-    /// Whether a bodyless callee leaves the argument at `pos` and everything it
-    /// holds where the caller put them.
-    fn reads_arg(&self, callee: &NirFunction, pos: usize) -> bool {
+    /// What a bodyless callee's clauses say about the argument at `pos`.
+    fn declared_arg(&self, callee: &NirFunction, pos: usize) -> ArgClauses {
         // Only `core:builtin` answers, where the value-copy plan already trusts
         // `#[retain]`. Elsewhere an absent clause is silence, not consent.
         if !callee.module_source.is_core_builtin() {
-            return false;
+            return ArgClauses::REFUSED;
         }
         let reference = FunctionRef::from_resolved(callee, callee.module_source.clone());
         let declarations = &self.project.builtin_declarations;
@@ -318,17 +341,36 @@ impl<'a> SharedEscape<'a> {
             .retain_specs(&reference)
             .any(|r| r.source == pos && r.elements)
         {
-            return false;
+            return ArgClauses::REFUSED;
         }
-        // A result that can hold a reference is a way out with no body to follow
-        // it through. `#[result(owned)]` is the one clause saying otherwise.
-        if !declarations.returns_owned(&reference)
-            && holds_reference(&self.project.type_table.borrow(), callee.return_type)
-        {
-            return false;
+        // Only a result that can hold a reference is a way out of the call. Two
+        // clauses answer for it: `#[result(owned)]` says the object handed back
+        // is not the one given, and `#[result(part_of = p)]` says it is — which
+        // makes the result the caller's to account for, under `Slot::Ret`.
+        let escapes = holds_reference(&self.project.type_table.borrow(), callee.return_type);
+        let hands_back = escapes && declarations.part_of(&reference) == Some(pos);
+        if escapes && !hands_back && !declarations.returns_owned(&reference) {
+            return ArgClauses::REFUSED;
         }
-        declarations.reads_param(&reference, pos)
+        ArgClauses {
+            reads: declarations.reads_param(&reference, pos),
+            hands_back,
+        }
     }
+}
+
+/// Whether a callee leaves an argument and everything it holds alone, and
+/// whether its result is that argument coming back.
+struct ArgClauses {
+    reads: bool,
+    hands_back: bool,
+}
+
+impl ArgClauses {
+    const REFUSED: Self = Self {
+        reads: false,
+        hands_back: false,
+    };
 }
 
 /// The tainted expressions and locals of one body, saturated to a fixpoint.
@@ -531,63 +573,73 @@ fn promoted_reference(body: &Body, type_table: &TypeTable, op: Operand) -> Promo
     PromotedRef::Unknown
 }
 
-/// The sub-patterns `pat` binds out of the field named `field`. Destructuring
-/// reads a field by naming it here, leaving no `ExprKind::FieldAccess` to match.
+/// The fields `pat` names. Destructuring reads a field by naming it here,
+/// leaving no `ExprKind::FieldAccess` to match.
+fn struct_pattern_fields(body: &Body, pat: PatId) -> &[ArenaStructPatternField] {
+    match &body.pats[pat].kind {
+        PatKind::Struct { fields, .. } => fields,
+        _ => &[],
+    }
+}
+
+/// The sub-patterns `pat` binds out of the field named `field`.
 fn pattern_field_reads<'a>(
     body: &'a Body,
     pat: PatId,
     field: Option<&'a str>,
 ) -> impl Iterator<Item = PatId> + 'a {
-    let fields = match (&body.pats[pat].kind, field) {
-        (PatKind::Struct { fields, .. }, Some(_)) => Some(fields),
-        _ => None,
-    };
-    fields
-        .into_iter()
-        .flatten()
+    struct_pattern_fields(body, pat)
+        .iter()
         .filter(move |f| field == Some(f.field_name.as_str()))
         .map(|f| f.pattern)
 }
 
-/// Whether `body` can read the slot at all. A function that cannot is left
-/// alone, so an unrelated one never refuses the query.
-fn has_seed(
-    body: &Body,
-    type_table: &TypeTable,
-    seed_field: Option<&str>,
-    seed_call: Option<FuncId>,
-) -> bool {
-    let mut found = false;
-    body.for_each_reachable_node(|node| {
-        if found {
-            return;
-        }
-        match node {
-            NodeRef::Expr(e) => {
-                found = match &body.exprs[e].kind {
+/// What one body can read, as the sets every seed question is asked against.
+#[derive(Default)]
+struct BodyCensus {
+    fields_read: IndexSet<String>,
+    /// A field read promoted to a value carries no name to match, so it counts
+    /// as a read of any field.
+    reads_unnamed_field: bool,
+    callees: IndexSet<FuncId>,
+}
+
+impl BodyCensus {
+    /// One walk answering every seed question this body will be asked.
+    fn of(body: &Body, type_table: &TypeTable) -> Self {
+        let mut census = Self::default();
+        body.for_each_reachable_node(|node| {
+            match node {
+                NodeRef::Expr(e) => match &body.exprs[e].kind {
                     ExprKind::FieldAccess { field_name, .. } => {
-                        seed_field == Some(field_name.as_str())
+                        census.fields_read.insert(field_name.clone());
                     }
-                    ExprKind::Call { func_id, .. } => seed_call == Some(*func_id),
-                    _ => false,
-                };
+                    ExprKind::Call { func_id, .. } => {
+                        census.callees.insert(*func_id);
+                    }
+                    _ => {}
+                },
+                NodeRef::Pat(p) => {
+                    for f in struct_pattern_fields(body, p) {
+                        census.fields_read.insert(f.field_name.clone());
+                    }
+                }
+                NodeRef::Stmt(_) | NodeRef::Block(_) => {}
             }
-            NodeRef::Pat(p) => {
-                found = pattern_field_reads(body, p, seed_field).next().is_some();
-            }
-            NodeRef::Stmt(_) | NodeRef::Block(_) => {}
-        }
-        if !found {
-            body.for_each_operand(node, |op| {
-                // A field read promoted to a value carries no name to match, so
-                // it counts as a possible read of any field.
-                found |= seed_field.is_some()
-                    && matches!(
+            if !census.reads_unnamed_field {
+                body.for_each_operand(node, |op| {
+                    census.reads_unnamed_field |= matches!(
                         promoted_reference(body, type_table, op),
                         PromotedRef::Unknown
                     );
-            });
-        }
-    });
-    found
+                });
+            }
+        });
+        census
+    }
+
+    fn can_read(&self, seed_field: Option<&str>, seed_call: Option<FuncId>) -> bool {
+        seed_field.is_some_and(|f| self.reads_unnamed_field || self.fields_read.contains(f))
+            || seed_call.is_some_and(|id| self.callees.contains(&id))
+    }
 }

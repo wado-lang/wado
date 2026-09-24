@@ -100,6 +100,7 @@ impl Monomorphizer {
                     wire_name_override: field.wire_name_override.clone(),
                     serde_default: field.serde_default,
                     serde_positional: field.serde_positional,
+                    serde_number: field.serde_number,
                     default_expr: None,
                 }
             })

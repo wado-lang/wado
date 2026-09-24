@@ -3,6 +3,7 @@
 //! pure. Both read [`Semantics`] rather than the emitted TIR, so they see every
 //! source function and run on the LSP path. Violations are returned.
 
+use crate::attribute::{AMBIENT, BENIGN};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
@@ -911,7 +912,7 @@ fn check_function_effects_sem(
     };
     // `#[ambient]` bypasses the effect system; test helpers implicitly hold
     // every effect.
-    if func.attrs.iter().any(|attr| attr.name == "ambient") || is_test_function(&func.name) {
+    if func.attrs.iter().any(|attr| attr.name == AMBIENT) || is_test_function(&func.name) {
         return;
     }
     let caller_key = func.id;
@@ -1177,7 +1178,7 @@ fn add_signature_resources(
 fn benign_effect_names(attrs: &[Attribute]) -> Vec<String> {
     attrs
         .iter()
-        .filter(|attr| attr.name == "benign")
+        .filter(|attr| attr.name == BENIGN)
         .flat_map(|attr| attr.args.iter().map(AttrArg::as_str))
         .map(str::to_string)
         .collect()

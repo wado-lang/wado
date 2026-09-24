@@ -1,0 +1,20 @@
+//! `zip` transposes row by row, so rows must be equally long. Two distinct
+//! packs are never known to be, which is why WEP §6 puts multi-pack `zip` out
+//! of scope. Monomorphize took the first row's arity and indexed the rest by
+//! it, so unequal rows panicked instead of reporting.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+
+fn zipped<..A, ..B>(a: [..A], b: [..B]) -> i32 {
+    let mut n = 0;
+    for let p of [[..a], [..b]].zip() {
+        n += 1;
+    }
+    return n;
+}
+
+test "zip over two packs is rejected where it is written" {
+    assert zipped([1, "x"], [true]) == 2;
+}
+
+__DATA__
+{"compile_error": "every row must be the same length"}

@@ -200,14 +200,14 @@ global global:core:prelude/types.wado::$const_obj_14: ref null Array<u8> = array
 global global:core:prelude/types.wado::$const_obj_15: ref null Array<u8> = array.new_fixed<u8>(32, 97, 116, 32);
 global global:core:prelude/types.wado::$const_obj_16: ref null Array<u8> = array.new_fixed<u8>(99, 109, 95, 115, 117, 98, 116, 97, 115, 107, 95, 115, 101, 116, 116, 108, 101, 100);
 global global:core:prelude/types.wado::$const_obj_17: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
-global global:wasi_clocks_full.wado::$const_obj_19: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(77, 97, 114, 107), used: 4 };
+global global:wasi_clocks_full.wado::$const_obj_19: ref null Array<u8> = array.new_fixed<u8>(77, 97, 114, 107);
 global global:wasi_clocks_full.wado::$const_obj_20: ref null Array<u8> = array.new_fixed<u8>(32, 97, 115, 32);
 global global:wasi_clocks_full.wado::$const_obj_21: ref null Array<u8> = array.new_fixed<u8>(116, 49, 58, 32);
 global global:wasi_clocks_full.wado::$const_obj_25: ref null Array<u8> = array.new_fixed<u8>(116, 50, 58, 32);
 global global:wasi_clocks_full.wado::$const_obj_26: ref null Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 116, 50, 32, 62, 61, 32, 116, 49, 10);
 global global:wasi_clocks_full.wado::$const_obj_28: ref null Array<u8> = array.new_fixed<u8>(119, 97, 115, 105, 95, 99, 108, 111, 99, 107, 115, 95, 102, 117, 108, 108, 46, 119, 97, 100, 111);
 global global:wasi_clocks_full.wado::$const_obj_30: ref null Array<u8> = array.new_fixed<u8>(36, 116, 101, 115, 116, 95, 48, 95, 109, 111, 110, 111, 116, 111, 110, 105, 99, 95, 95, 110, 111, 119, 95, 105, 115, 95, 110, 111, 110, 95, 100, 101, 99, 114, 101, 97, 115, 105, 110, 103);
-global global:wasi_clocks_full.wado::$const_obj_33: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(68, 117, 114, 97, 116, 105, 111, 110), used: 8 };
+global global:wasi_clocks_full.wado::$const_obj_33: ref null Array<u8> = array.new_fixed<u8>(68, 117, 114, 97, 116, 105, 111, 110);
 global global:wasi_clocks_full.wado::$const_obj_35: ref null Array<u8> = array.new_fixed<u8>(114, 101, 115, 58, 32);
 global global:wasi_clocks_full.wado::$const_obj_36: ref null Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 114, 101, 115, 32, 62, 32, 48, 10);
 global global:wasi_clocks_full.wado::$const_obj_40: ref null Array<u8> = array.new_fixed<u8>(36, 116, 101, 115, 116, 95, 49, 95, 109, 111, 110, 111, 116, 111, 110, 105, 99, 95, 95, 114, 101, 115, 111, 108, 117, 116, 105, 111, 110, 95, 105, 115, 95, 112, 111, 115, 105, 116, 105, 118, 101);
@@ -410,6 +410,9 @@ fn "wasi_clocks_full.wado/$cm_export__$test_8_system_clock__two_reads_are_consis
 }
 
 fn "wasi_clocks_full.wado/$test_0_monotonic__now_is_non_decreasing$cold0"(t1, t2) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_20: ref Array<u8>;
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4: ref "core:prelude/format.wado//Formatter";
     let self_16: ref Array<u8>;
@@ -429,7 +432,6 @@ fn "wasi_clocks_full.wado/$test_0_monotonic__now_is_non_decreasing$cold0"(t1, t2
     let self_62: ref "core:prelude/string.wado//String";
     let new_used_74: i32;
     let start_75: i32;
-    let s_78: ref "core:prelude/string.wado//String";
     let self_79: ref "core:prelude/string.wado//String";
     let new_used_91: i32;
     let start_92: i32;
@@ -441,7 +443,6 @@ fn "wasi_clocks_full.wado/$test_0_monotonic__now_is_non_decreasing$cold0"(t1, t2
     let self_115: ref "core:prelude/string.wado//String";
     let new_used_127: i32;
     let start_128: i32;
-    let s_131: ref "core:prelude/string.wado//String";
     let self_132: ref "core:prelude/string.wado//String";
     let new_used_144: i32;
     let start_145: i32;
@@ -449,18 +450,18 @@ fn "wasi_clocks_full.wado/$test_0_monotonic__now_is_non_decreasing$cold0"(t1, t2
     let start_158: i32;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(136), used: 0 };
     $local_3.used = 86;
-    self_16 = $local_3.repr;
+    self_16 = local.tee $load_0($local_3.repr);
     builtin::array_copy<u8>(self_16, 0, global:core:prelude/types.wado::$const_obj_17, 0, 20);
-    self_20 = $local_3.repr;
+    self_20 = $load_0;
     offset_21 = 0 + 20;
     builtin::array_copy<u8>(self_20, offset_21, global:wasi_clocks_full.wado::$const_obj_30, 0, 40);
-    self_24 = $local_3.repr;
+    self_24 = $load_0;
     offset_25 = 0 + 60;
     builtin::array_copy<u8>(self_24, offset_25, global:core:prelude/types.wado::$const_obj_15, 0, 4);
-    self_28 = $local_3.repr;
+    self_28 = $load_0;
     offset_29 = 0 + 64;
     builtin::array_copy<u8>(self_28, offset_29, global:wasi_clocks_full.wado::$const_obj_28, 0, 21);
-    self_32 = $local_3.repr;
+    self_32 = $load_0;
     offset_33 = 0 + 85;
     builtin::array_copy<u8>(self_32, offset_33, global:core:prelude/types.wado::$const_obj_13, 0, 1);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -472,9 +473,9 @@ fn "wasi_clocks_full.wado/$test_0_monotonic__now_is_non_decreasing$cold0"(t1, t2
     }
     start_44 = $local_3.used;
     $local_3.used = new_used_43;
-    self_46 = $local_3.repr;
+    self_46 = local.tee $load_5($local_3.repr);
     builtin::array_copy<u8>(self_46, start_44, global:wasi_clocks_full.wado::$const_obj_26, 0, 21);
-    self_50 = $local_3.repr;
+    self_50 = $load_5;
     offset_51 = start_44 + 21;
     builtin::array_copy<u8>(self_50, offset_51, global:wasi_clocks_full.wado::$const_obj_25, 0, 4);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -488,7 +489,6 @@ fn "wasi_clocks_full.wado/$test_0_monotonic__now_is_non_decreasing$cold0"(t1, t2
     start_75 = self_62.used;
     self_62.used = new_used_74;
     builtin::array_copy<u8>(self_62.repr, start_75, global:wasi_clocks_full.wado::$const_obj_20, 0, 4);
-    s_78 = global:wasi_clocks_full.wado::$const_obj_19;
     self_79 = $local_4.buf;
     new_used_91 = self_79.used + 4;
     if @unlikely(new_used_91 > builtin::array_len(self_79.repr)) {
@@ -497,7 +497,7 @@ fn "wasi_clocks_full.wado/$test_0_monotonic__now_is_non_decreasing$cold0"(t1, t2
     }
     start_92 = self_79.used;
     self_79.used = new_used_91;
-    builtin::array_copy<u8>(self_79.repr, start_92, s_78.repr, 0, 4);
+    builtin::array_copy<u8>(self_79.repr, start_92, global:wasi_clocks_full.wado::$const_obj_19, 0, 4);
     new_used_96 = $local_3.used + 5;
     if @unlikely(new_used_96 > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -505,9 +505,9 @@ fn "wasi_clocks_full.wado/$test_0_monotonic__now_is_non_decreasing$cold0"(t1, t2
     }
     start_97 = $local_3.used;
     $local_3.used = new_used_96;
-    self_99 = $local_3.repr;
+    self_99 = local.tee $load_20($local_3.repr);
     builtin::array_copy<u8>(self_99, start_97, global:core:prelude/types.wado::$const_obj_8, 0, 1);
-    self_103 = $local_3.repr;
+    self_103 = $load_20;
     offset_104 = start_97 + 1;
     builtin::array_copy<u8>(self_103, offset_104, global:wasi_clocks_full.wado::$const_obj_21, 0, 4);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -521,7 +521,6 @@ fn "wasi_clocks_full.wado/$test_0_monotonic__now_is_non_decreasing$cold0"(t1, t2
     start_128 = self_115.used;
     self_115.used = new_used_127;
     builtin::array_copy<u8>(self_115.repr, start_128, global:wasi_clocks_full.wado::$const_obj_20, 0, 4);
-    s_131 = global:wasi_clocks_full.wado::$const_obj_19;
     self_132 = $local_4.buf;
     new_used_144 = self_132.used + 4;
     if @unlikely(new_used_144 > builtin::array_len(self_132.repr)) {
@@ -530,7 +529,7 @@ fn "wasi_clocks_full.wado/$test_0_monotonic__now_is_non_decreasing$cold0"(t1, t2
     }
     start_145 = self_132.used;
     self_132.used = new_used_144;
-    builtin::array_copy<u8>(self_132.repr, start_145, s_131.repr, 0, 4);
+    builtin::array_copy<u8>(self_132.repr, start_145, global:wasi_clocks_full.wado::$const_obj_19, 0, 4);
     new_used_157 = $local_3.used + 1;
     if @unlikely(new_used_157 > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -544,6 +543,8 @@ fn "wasi_clocks_full.wado/$test_0_monotonic__now_is_non_decreasing$cold0"(t1, t2
 }
 
 fn "wasi_clocks_full.wado/$test_1_monotonic__resolution_is_positive$cold0"(res) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_2: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/format.wado//Formatter";
     let self_13: ref Array<u8>;
@@ -563,7 +564,6 @@ fn "wasi_clocks_full.wado/$test_1_monotonic__resolution_is_positive$cold0"(res) 
     let self_59: ref "core:prelude/string.wado//String";
     let new_used_71: i32;
     let start_72: i32;
-    let s_75: ref "core:prelude/string.wado//String";
     let self_76: ref "core:prelude/string.wado//String";
     let new_used_88: i32;
     let start_89: i32;
@@ -571,18 +571,18 @@ fn "wasi_clocks_full.wado/$test_1_monotonic__resolution_is_positive$cold0"(res) 
     let start_102: i32;
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(115), used: 0 };
     $local_2.used = 87;
-    self_13 = $local_2.repr;
+    self_13 = local.tee $load_0($local_2.repr);
     builtin::array_copy<u8>(self_13, 0, global:core:prelude/types.wado::$const_obj_17, 0, 20);
-    self_17 = $local_2.repr;
+    self_17 = $load_0;
     offset_18 = 0 + 20;
     builtin::array_copy<u8>(self_17, offset_18, global:wasi_clocks_full.wado::$const_obj_40, 0, 41);
-    self_21 = $local_2.repr;
+    self_21 = $load_0;
     offset_22 = 0 + 61;
     builtin::array_copy<u8>(self_21, offset_22, global:core:prelude/types.wado::$const_obj_15, 0, 4);
-    self_25 = $local_2.repr;
+    self_25 = $load_0;
     offset_26 = 0 + 65;
     builtin::array_copy<u8>(self_25, offset_26, global:wasi_clocks_full.wado::$const_obj_28, 0, 21);
-    self_29 = $local_2.repr;
+    self_29 = $load_0;
     offset_30 = 0 + 86;
     builtin::array_copy<u8>(self_29, offset_30, global:core:prelude/types.wado::$const_obj_13, 0, 1);
     $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
@@ -594,9 +594,9 @@ fn "wasi_clocks_full.wado/$test_1_monotonic__resolution_is_positive$cold0"(res) 
     }
     start_41 = $local_2.used;
     $local_2.used = new_used_40;
-    self_43 = $local_2.repr;
+    self_43 = local.tee $load_5($local_2.repr);
     builtin::array_copy<u8>(self_43, start_41, global:wasi_clocks_full.wado::$const_obj_36, 0, 20);
-    self_47 = $local_2.repr;
+    self_47 = $load_5;
     offset_48 = start_41 + 20;
     builtin::array_copy<u8>(self_47, offset_48, global:wasi_clocks_full.wado::$const_obj_35, 0, 5);
     $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
@@ -610,7 +610,6 @@ fn "wasi_clocks_full.wado/$test_1_monotonic__resolution_is_positive$cold0"(res) 
     start_72 = self_59.used;
     self_59.used = new_used_71;
     builtin::array_copy<u8>(self_59.repr, start_72, global:wasi_clocks_full.wado::$const_obj_20, 0, 4);
-    s_75 = global:wasi_clocks_full.wado::$const_obj_33;
     self_76 = $local_3.buf;
     new_used_88 = self_76.used + 8;
     if @unlikely(new_used_88 > builtin::array_len(self_76.repr)) {
@@ -619,7 +618,7 @@ fn "wasi_clocks_full.wado/$test_1_monotonic__resolution_is_positive$cold0"(res) 
     }
     start_89 = self_76.used;
     self_76.used = new_used_88;
-    builtin::array_copy<u8>(self_76.repr, start_89, s_75.repr, 0, 8);
+    builtin::array_copy<u8>(self_76.repr, start_89, global:wasi_clocks_full.wado::$const_obj_33, 0, 8);
     new_used_101 = $local_2.used + 1;
     if @unlikely(new_used_101 > builtin::array_len($local_2.repr)) {
         cold_path;
@@ -633,6 +632,8 @@ fn "wasi_clocks_full.wado/$test_1_monotonic__resolution_is_positive$cold0"(res) 
 }
 
 fn "wasi_clocks_full.wado/$test_2_monotonic__wait_for_elapses_at_least_the_requested_duration$cold0"(elapsed) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4: ref "core:prelude/format.wado//Formatter";
     let self_14: ref Array<u8>;
@@ -652,7 +653,6 @@ fn "wasi_clocks_full.wado/$test_2_monotonic__wait_for_elapses_at_least_the_reque
     let self_60: ref "core:prelude/string.wado//String";
     let new_used_72: i32;
     let start_73: i32;
-    let s_76: ref "core:prelude/string.wado//String";
     let self_77: ref "core:prelude/string.wado//String";
     let new_used_89: i32;
     let start_90: i32;
@@ -660,21 +660,21 @@ fn "wasi_clocks_full.wado/$test_2_monotonic__wait_for_elapses_at_least_the_reque
     let start_103: i32;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(132), used: 0 };
     $local_3.used = 113;
-    self_14 = $local_3.repr;
+    self_14 = local.tee $load_0($local_3.repr);
     builtin::array_copy<u8>(self_14, 0, global:core:prelude/types.wado::$const_obj_17, 0, 20);
-    self_18 = $local_3.repr;
+    self_18 = $load_0;
     offset_19 = 0 + 20;
     if ref.is_null(global:wasi_clocks_full.wado::$const_obj_50) {
         global:wasi_clocks_full.wado::$const_obj_50 = array.new_data<u8>("$test_2_monotonic__wait_for_elapses_at_least_the_requested_duration");
     }
     builtin::array_copy<u8>(self_18, offset_19, global:wasi_clocks_full.wado::$const_obj_50, 0, 67);
-    self_22 = $local_3.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 87;
     builtin::array_copy<u8>(self_22, offset_23, global:core:prelude/types.wado::$const_obj_15, 0, 4);
-    self_26 = $local_3.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 91;
     builtin::array_copy<u8>(self_26, offset_27, global:wasi_clocks_full.wado::$const_obj_28, 0, 21);
-    self_30 = $local_3.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 112;
     builtin::array_copy<u8>(self_30, offset_31, global:core:prelude/types.wado::$const_obj_13, 0, 1);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -686,9 +686,9 @@ fn "wasi_clocks_full.wado/$test_2_monotonic__wait_for_elapses_at_least_the_reque
     }
     start_42 = $local_3.used;
     $local_3.used = new_used_41;
-    self_44 = $local_3.repr;
+    self_44 = local.tee $load_5($local_3.repr);
     builtin::array_copy<u8>(self_44, start_42, global:wasi_clocks_full.wado::$const_obj_46, 0, 33);
-    self_48 = $local_3.repr;
+    self_48 = $load_5;
     offset_49 = start_42 + 33;
     builtin::array_copy<u8>(self_48, offset_49, global:wasi_clocks_full.wado::$const_obj_45, 0, 9);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -702,7 +702,6 @@ fn "wasi_clocks_full.wado/$test_2_monotonic__wait_for_elapses_at_least_the_reque
     start_73 = self_60.used;
     self_60.used = new_used_72;
     builtin::array_copy<u8>(self_60.repr, start_73, global:wasi_clocks_full.wado::$const_obj_20, 0, 4);
-    s_76 = global:wasi_clocks_full.wado::$const_obj_19;
     self_77 = $local_4.buf;
     new_used_89 = self_77.used + 4;
     if @unlikely(new_used_89 > builtin::array_len(self_77.repr)) {
@@ -711,7 +710,7 @@ fn "wasi_clocks_full.wado/$test_2_monotonic__wait_for_elapses_at_least_the_reque
     }
     start_90 = self_77.used;
     self_77.used = new_used_89;
-    builtin::array_copy<u8>(self_77.repr, start_90, s_76.repr, 0, 4);
+    builtin::array_copy<u8>(self_77.repr, start_90, global:wasi_clocks_full.wado::$const_obj_19, 0, 4);
     new_used_102 = $local_3.used + 1;
     if @unlikely(new_used_102 > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -725,6 +724,9 @@ fn "wasi_clocks_full.wado/$test_2_monotonic__wait_for_elapses_at_least_the_reque
 }
 
 fn "wasi_clocks_full.wado/$test_3_monotonic__wait_until_reaches_target$cold0"(target, after) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_20: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_17: ref Array<u8>;
@@ -744,7 +746,6 @@ fn "wasi_clocks_full.wado/$test_3_monotonic__wait_until_reaches_target$cold0"(ta
     let self_63: ref "core:prelude/string.wado//String";
     let new_used_75: i32;
     let start_76: i32;
-    let s_79: ref "core:prelude/string.wado//String";
     let self_80: ref "core:prelude/string.wado//String";
     let new_used_92: i32;
     let start_93: i32;
@@ -756,7 +757,6 @@ fn "wasi_clocks_full.wado/$test_3_monotonic__wait_until_reaches_target$cold0"(ta
     let self_116: ref "core:prelude/string.wado//String";
     let new_used_128: i32;
     let start_129: i32;
-    let s_132: ref "core:prelude/string.wado//String";
     let self_133: ref "core:prelude/string.wado//String";
     let new_used_145: i32;
     let start_146: i32;
@@ -764,18 +764,18 @@ fn "wasi_clocks_full.wado/$test_3_monotonic__wait_until_reaches_target$cold0"(ta
     let start_159: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(150), used: 0 };
     $local_4.used = 90;
-    self_17 = $local_4.repr;
+    self_17 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_17, 0, global:core:prelude/types.wado::$const_obj_17, 0, 20);
-    self_21 = $local_4.repr;
+    self_21 = $load_0;
     offset_22 = 0 + 20;
     builtin::array_copy<u8>(self_21, offset_22, global:wasi_clocks_full.wado::$const_obj_64, 0, 44);
-    self_25 = $local_4.repr;
+    self_25 = $load_0;
     offset_26 = 0 + 64;
     builtin::array_copy<u8>(self_25, offset_26, global:core:prelude/types.wado::$const_obj_15, 0, 4);
-    self_29 = $local_4.repr;
+    self_29 = $load_0;
     offset_30 = 0 + 68;
     builtin::array_copy<u8>(self_29, offset_30, global:wasi_clocks_full.wado::$const_obj_28, 0, 21);
-    self_33 = $local_4.repr;
+    self_33 = $load_0;
     offset_34 = 0 + 89;
     builtin::array_copy<u8>(self_33, offset_34, global:core:prelude/types.wado::$const_obj_13, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -787,9 +787,9 @@ fn "wasi_clocks_full.wado/$test_3_monotonic__wait_until_reaches_target$cold0"(ta
     }
     start_45 = $local_4.used;
     $local_4.used = new_used_44;
-    self_47 = $local_4.repr;
+    self_47 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_47, start_45, global:wasi_clocks_full.wado::$const_obj_60, 0, 28);
-    self_51 = $local_4.repr;
+    self_51 = $load_5;
     offset_52 = start_45 + 28;
     builtin::array_copy<u8>(self_51, offset_52, global:wasi_clocks_full.wado::$const_obj_59, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -803,7 +803,6 @@ fn "wasi_clocks_full.wado/$test_3_monotonic__wait_until_reaches_target$cold0"(ta
     start_76 = self_63.used;
     self_63.used = new_used_75;
     builtin::array_copy<u8>(self_63.repr, start_76, global:wasi_clocks_full.wado::$const_obj_20, 0, 4);
-    s_79 = global:wasi_clocks_full.wado::$const_obj_19;
     self_80 = $local_5.buf;
     new_used_92 = self_80.used + 4;
     if @unlikely(new_used_92 > builtin::array_len(self_80.repr)) {
@@ -812,7 +811,7 @@ fn "wasi_clocks_full.wado/$test_3_monotonic__wait_until_reaches_target$cold0"(ta
     }
     start_93 = self_80.used;
     self_80.used = new_used_92;
-    builtin::array_copy<u8>(self_80.repr, start_93, s_79.repr, 0, 4);
+    builtin::array_copy<u8>(self_80.repr, start_93, global:wasi_clocks_full.wado::$const_obj_19, 0, 4);
     new_used_97 = $local_4.used + 9;
     if @unlikely(new_used_97 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -820,9 +819,9 @@ fn "wasi_clocks_full.wado/$test_3_monotonic__wait_until_reaches_target$cold0"(ta
     }
     start_98 = $local_4.used;
     $local_4.used = new_used_97;
-    self_100 = $local_4.repr;
+    self_100 = local.tee $load_20($local_4.repr);
     builtin::array_copy<u8>(self_100, start_98, global:core:prelude/types.wado::$const_obj_8, 0, 1);
-    self_104 = $local_4.repr;
+    self_104 = $load_20;
     offset_105 = start_98 + 1;
     builtin::array_copy<u8>(self_104, offset_105, global:wasi_clocks_full.wado::$const_obj_55, 0, 8);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -836,7 +835,6 @@ fn "wasi_clocks_full.wado/$test_3_monotonic__wait_until_reaches_target$cold0"(ta
     start_129 = self_116.used;
     self_116.used = new_used_128;
     builtin::array_copy<u8>(self_116.repr, start_129, global:wasi_clocks_full.wado::$const_obj_20, 0, 4);
-    s_132 = global:wasi_clocks_full.wado::$const_obj_19;
     self_133 = $local_5.buf;
     new_used_145 = self_133.used + 4;
     if @unlikely(new_used_145 > builtin::array_len(self_133.repr)) {
@@ -845,7 +843,7 @@ fn "wasi_clocks_full.wado/$test_3_monotonic__wait_until_reaches_target$cold0"(ta
     }
     start_146 = self_133.used;
     self_133.used = new_used_145;
-    builtin::array_copy<u8>(self_133.repr, start_146, s_132.repr, 0, 4);
+    builtin::array_copy<u8>(self_133.repr, start_146, global:wasi_clocks_full.wado::$const_obj_19, 0, 4);
     new_used_158 = $local_4.used + 1;
     if @unlikely(new_used_158 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -859,6 +857,9 @@ fn "wasi_clocks_full.wado/$test_3_monotonic__wait_until_reaches_target$cold0"(ta
 }
 
 fn "wasi_clocks_full.wado/$test_4_monotonic__wait_for_zero_returns_immediately$cold0"(before, after) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_20: ref Array<u8>;
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4: ref "core:prelude/format.wado//Formatter";
     let self_16: ref Array<u8>;
@@ -878,7 +879,6 @@ fn "wasi_clocks_full.wado/$test_4_monotonic__wait_for_zero_returns_immediately$c
     let self_62: ref "core:prelude/string.wado//String";
     let new_used_74: i32;
     let start_75: i32;
-    let s_78: ref "core:prelude/string.wado//String";
     let self_79: ref "core:prelude/string.wado//String";
     let new_used_91: i32;
     let start_92: i32;
@@ -890,7 +890,6 @@ fn "wasi_clocks_full.wado/$test_4_monotonic__wait_for_zero_returns_immediately$c
     let self_115: ref "core:prelude/string.wado//String";
     let new_used_127: i32;
     let start_128: i32;
-    let s_131: ref "core:prelude/string.wado//String";
     let self_132: ref "core:prelude/string.wado//String";
     let new_used_144: i32;
     let start_145: i32;
@@ -898,18 +897,18 @@ fn "wasi_clocks_full.wado/$test_4_monotonic__wait_for_zero_returns_immediately$c
     let start_158: i32;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(150), used: 0 };
     $local_3.used = 98;
-    self_16 = $local_3.repr;
+    self_16 = local.tee $load_0($local_3.repr);
     builtin::array_copy<u8>(self_16, 0, global:core:prelude/types.wado::$const_obj_17, 0, 20);
-    self_20 = $local_3.repr;
+    self_20 = $load_0;
     offset_21 = 0 + 20;
     builtin::array_copy<u8>(self_20, offset_21, global:wasi_clocks_full.wado::$const_obj_78, 0, 52);
-    self_24 = $local_3.repr;
+    self_24 = $load_0;
     offset_25 = 0 + 72;
     builtin::array_copy<u8>(self_24, offset_25, global:core:prelude/types.wado::$const_obj_15, 0, 4);
-    self_28 = $local_3.repr;
+    self_28 = $load_0;
     offset_29 = 0 + 76;
     builtin::array_copy<u8>(self_28, offset_29, global:wasi_clocks_full.wado::$const_obj_28, 0, 21);
-    self_32 = $local_3.repr;
+    self_32 = $load_0;
     offset_33 = 0 + 97;
     builtin::array_copy<u8>(self_32, offset_33, global:core:prelude/types.wado::$const_obj_13, 0, 1);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -921,9 +920,9 @@ fn "wasi_clocks_full.wado/$test_4_monotonic__wait_for_zero_returns_immediately$c
     }
     start_44 = $local_3.used;
     $local_3.used = new_used_43;
-    self_46 = $local_3.repr;
+    self_46 = local.tee $load_5($local_3.repr);
     builtin::array_copy<u8>(self_46, start_44, global:wasi_clocks_full.wado::$const_obj_74, 0, 28);
-    self_50 = $local_3.repr;
+    self_50 = $load_5;
     offset_51 = start_44 + 28;
     builtin::array_copy<u8>(self_50, offset_51, global:wasi_clocks_full.wado::$const_obj_59, 0, 7);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -937,7 +936,6 @@ fn "wasi_clocks_full.wado/$test_4_monotonic__wait_for_zero_returns_immediately$c
     start_75 = self_62.used;
     self_62.used = new_used_74;
     builtin::array_copy<u8>(self_62.repr, start_75, global:wasi_clocks_full.wado::$const_obj_20, 0, 4);
-    s_78 = global:wasi_clocks_full.wado::$const_obj_19;
     self_79 = $local_4.buf;
     new_used_91 = self_79.used + 4;
     if @unlikely(new_used_91 > builtin::array_len(self_79.repr)) {
@@ -946,7 +944,7 @@ fn "wasi_clocks_full.wado/$test_4_monotonic__wait_for_zero_returns_immediately$c
     }
     start_92 = self_79.used;
     self_79.used = new_used_91;
-    builtin::array_copy<u8>(self_79.repr, start_92, s_78.repr, 0, 4);
+    builtin::array_copy<u8>(self_79.repr, start_92, global:wasi_clocks_full.wado::$const_obj_19, 0, 4);
     new_used_96 = $local_3.used + 9;
     if @unlikely(new_used_96 > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -954,9 +952,9 @@ fn "wasi_clocks_full.wado/$test_4_monotonic__wait_for_zero_returns_immediately$c
     }
     start_97 = $local_3.used;
     $local_3.used = new_used_96;
-    self_99 = $local_3.repr;
+    self_99 = local.tee $load_20($local_3.repr);
     builtin::array_copy<u8>(self_99, start_97, global:core:prelude/types.wado::$const_obj_8, 0, 1);
-    self_103 = $local_3.repr;
+    self_103 = $load_20;
     offset_104 = start_97 + 1;
     builtin::array_copy<u8>(self_103, offset_104, global:wasi_clocks_full.wado::$const_obj_69, 0, 8);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -970,7 +968,6 @@ fn "wasi_clocks_full.wado/$test_4_monotonic__wait_for_zero_returns_immediately$c
     start_128 = self_115.used;
     self_115.used = new_used_127;
     builtin::array_copy<u8>(self_115.repr, start_128, global:wasi_clocks_full.wado::$const_obj_20, 0, 4);
-    s_131 = global:wasi_clocks_full.wado::$const_obj_19;
     self_132 = $local_4.buf;
     new_used_144 = self_132.used + 4;
     if @unlikely(new_used_144 > builtin::array_len(self_132.repr)) {
@@ -979,7 +976,7 @@ fn "wasi_clocks_full.wado/$test_4_monotonic__wait_for_zero_returns_immediately$c
     }
     start_145 = self_132.used;
     self_132.used = new_used_144;
-    builtin::array_copy<u8>(self_132.repr, start_145, s_131.repr, 0, 4);
+    builtin::array_copy<u8>(self_132.repr, start_145, global:wasi_clocks_full.wado::$const_obj_19, 0, 4);
     new_used_157 = $local_3.used + 1;
     if @unlikely(new_used_157 > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -993,6 +990,8 @@ fn "wasi_clocks_full.wado/$test_4_monotonic__wait_for_zero_returns_immediately$c
 }
 
 fn "wasi_clocks_full.wado/$test_5_monotonic__wait_until_past_returns_immediately$cold0"(after) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_2: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/format.wado//Formatter";
     let self_13: ref Array<u8>;
@@ -1012,7 +1011,6 @@ fn "wasi_clocks_full.wado/$test_5_monotonic__wait_until_past_returns_immediately
     let self_59: ref "core:prelude/string.wado//String";
     let new_used_71: i32;
     let start_72: i32;
-    let s_75: ref "core:prelude/string.wado//String";
     let self_76: ref "core:prelude/string.wado//String";
     let new_used_88: i32;
     let start_89: i32;
@@ -1020,18 +1018,18 @@ fn "wasi_clocks_full.wado/$test_5_monotonic__wait_until_past_returns_immediately
     let start_102: i32;
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(119), used: 0 };
     $local_2.used = 100;
-    self_13 = $local_2.repr;
+    self_13 = local.tee $load_0($local_2.repr);
     builtin::array_copy<u8>(self_13, 0, global:core:prelude/types.wado::$const_obj_17, 0, 20);
-    self_17 = $local_2.repr;
+    self_17 = $load_0;
     offset_18 = 0 + 20;
     builtin::array_copy<u8>(self_17, offset_18, global:wasi_clocks_full.wado::$const_obj_88, 0, 54);
-    self_21 = $local_2.repr;
+    self_21 = $load_0;
     offset_22 = 0 + 74;
     builtin::array_copy<u8>(self_21, offset_22, global:core:prelude/types.wado::$const_obj_15, 0, 4);
-    self_25 = $local_2.repr;
+    self_25 = $load_0;
     offset_26 = 0 + 78;
     builtin::array_copy<u8>(self_25, offset_26, global:wasi_clocks_full.wado::$const_obj_28, 0, 21);
-    self_29 = $local_2.repr;
+    self_29 = $load_0;
     offset_30 = 0 + 99;
     builtin::array_copy<u8>(self_29, offset_30, global:core:prelude/types.wado::$const_obj_13, 0, 1);
     $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
@@ -1043,9 +1041,9 @@ fn "wasi_clocks_full.wado/$test_5_monotonic__wait_until_past_returns_immediately
     }
     start_41 = $local_2.used;
     $local_2.used = new_used_40;
-    self_43 = $local_2.repr;
+    self_43 = local.tee $load_5($local_2.repr);
     builtin::array_copy<u8>(self_43, start_41, global:wasi_clocks_full.wado::$const_obj_84, 0, 22);
-    self_47 = $local_2.repr;
+    self_47 = $load_5;
     offset_48 = start_41 + 22;
     builtin::array_copy<u8>(self_47, offset_48, global:wasi_clocks_full.wado::$const_obj_59, 0, 7);
     $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
@@ -1059,7 +1057,6 @@ fn "wasi_clocks_full.wado/$test_5_monotonic__wait_until_past_returns_immediately
     start_72 = self_59.used;
     self_59.used = new_used_71;
     builtin::array_copy<u8>(self_59.repr, start_72, global:wasi_clocks_full.wado::$const_obj_20, 0, 4);
-    s_75 = global:wasi_clocks_full.wado::$const_obj_19;
     self_76 = $local_3.buf;
     new_used_88 = self_76.used + 4;
     if @unlikely(new_used_88 > builtin::array_len(self_76.repr)) {
@@ -1068,7 +1065,7 @@ fn "wasi_clocks_full.wado/$test_5_monotonic__wait_until_past_returns_immediately
     }
     start_89 = self_76.used;
     self_76.used = new_used_88;
-    builtin::array_copy<u8>(self_76.repr, start_89, s_75.repr, 0, 4);
+    builtin::array_copy<u8>(self_76.repr, start_89, global:wasi_clocks_full.wado::$const_obj_19, 0, 4);
     new_used_101 = $local_2.used + 1;
     if @unlikely(new_used_101 > builtin::array_len($local_2.repr)) {
         cold_path;
@@ -1082,6 +1079,8 @@ fn "wasi_clocks_full.wado/$test_5_monotonic__wait_until_past_returns_immediately
 }
 
 fn "wasi_clocks_full.wado/$test_6_system_clock__now_returns_valid_instant$cold0"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/format.wado//Formatter";
     let self_18: ref Array<u8>;
@@ -1102,18 +1101,18 @@ fn "wasi_clocks_full.wado/$test_6_system_clock__now_returns_valid_instant$cold0"
     let start_72: i32;
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(166), used: 0 };
     $local_7.used = 93;
-    self_18 = $local_7.repr;
+    self_18 = local.tee $load_0($local_7.repr);
     builtin::array_copy<u8>(self_18, 0, global:core:prelude/types.wado::$const_obj_17, 0, 20);
-    self_22 = $local_7.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 20;
     builtin::array_copy<u8>(self_22, offset_23, global:wasi_clocks_full.wado::$const_obj_96, 0, 47);
-    self_26 = $local_7.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 67;
     builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/types.wado::$const_obj_15, 0, 4);
-    self_30 = $local_7.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 71;
     builtin::array_copy<u8>(self_30, offset_31, global:wasi_clocks_full.wado::$const_obj_28, 0, 21);
-    self_34 = $local_7.repr;
+    self_34 = $load_0;
     offset_35 = 0 + 92;
     builtin::array_copy<u8>(self_34, offset_35, global:core:prelude/types.wado::$const_obj_13, 0, 1);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -1125,9 +1124,9 @@ fn "wasi_clocks_full.wado/$test_6_system_clock__now_returns_valid_instant$cold0"
     }
     start_46 = $local_7.used;
     $local_7.used = new_used_45;
-    self_48 = $local_7.repr;
+    self_48 = local.tee $load_5($local_7.repr);
     builtin::array_copy<u8>(self_48, start_46, global:wasi_clocks_full.wado::$const_obj_92, 0, 55);
-    self_52 = $local_7.repr;
+    self_52 = $load_5;
     offset_53 = start_46 + 55;
     builtin::array_copy<u8>(self_52, offset_53, global:wasi_clocks_full.wado::$const_obj_91, 0, 21);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -1145,6 +1144,8 @@ fn "wasi_clocks_full.wado/$test_6_system_clock__now_returns_valid_instant$cold0"
 }
 
 fn "wasi_clocks_full.wado/$test_6_system_clock__now_returns_valid_instant$cold1"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_5: ref "core:prelude/string.wado//String";
     let $local_6: ref "core:prelude/format.wado//Formatter";
     let self_18: ref Array<u8>;
@@ -1165,18 +1166,18 @@ fn "wasi_clocks_full.wado/$test_6_system_clock__now_returns_valid_instant$cold1"
     let start_72: i32;
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(139), used: 0 };
     $local_5.used = 93;
-    self_18 = $local_5.repr;
+    self_18 = local.tee $load_0($local_5.repr);
     builtin::array_copy<u8>(self_18, 0, global:core:prelude/types.wado::$const_obj_17, 0, 20);
-    self_22 = $local_5.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 20;
     builtin::array_copy<u8>(self_22, offset_23, global:wasi_clocks_full.wado::$const_obj_96, 0, 47);
-    self_26 = $local_5.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 67;
     builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/types.wado::$const_obj_15, 0, 4);
-    self_30 = $local_5.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 71;
     builtin::array_copy<u8>(self_30, offset_31, global:wasi_clocks_full.wado::$const_obj_28, 0, 21);
-    self_34 = $local_5.repr;
+    self_34 = $load_0;
     offset_35 = 0 + 92;
     builtin::array_copy<u8>(self_34, offset_35, global:core:prelude/types.wado::$const_obj_13, 0, 1);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
@@ -1188,9 +1189,9 @@ fn "wasi_clocks_full.wado/$test_6_system_clock__now_returns_valid_instant$cold1"
     }
     start_46 = $local_5.used;
     $local_5.used = new_used_45;
-    self_48 = $local_5.repr;
+    self_48 = local.tee $load_5($local_5.repr);
     builtin::array_copy<u8>(self_48, start_46, global:wasi_clocks_full.wado::$const_obj_100, 0, 32);
-    self_52 = $local_5.repr;
+    self_52 = $load_5;
     offset_53 = start_46 + 32;
     builtin::array_copy<u8>(self_52, offset_53, global:wasi_clocks_full.wado::$const_obj_99, 0, 17);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
@@ -1208,6 +1209,8 @@ fn "wasi_clocks_full.wado/$test_6_system_clock__now_returns_valid_instant$cold1"
 }
 
 fn "wasi_clocks_full.wado/$test_7_system_clock__resolution_is_positive$cold0"(res) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_2: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/format.wado//Formatter";
     let self_13: ref Array<u8>;
@@ -1227,7 +1230,6 @@ fn "wasi_clocks_full.wado/$test_7_system_clock__resolution_is_positive$cold0"(re
     let self_59: ref "core:prelude/string.wado//String";
     let new_used_71: i32;
     let start_72: i32;
-    let s_75: ref "core:prelude/string.wado//String";
     let self_76: ref "core:prelude/string.wado//String";
     let new_used_88: i32;
     let start_89: i32;
@@ -1235,18 +1237,18 @@ fn "wasi_clocks_full.wado/$test_7_system_clock__resolution_is_positive$cold0"(re
     let start_102: i32;
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(115), used: 0 };
     $local_2.used = 90;
-    self_13 = $local_2.repr;
+    self_13 = local.tee $load_0($local_2.repr);
     builtin::array_copy<u8>(self_13, 0, global:core:prelude/types.wado::$const_obj_17, 0, 20);
-    self_17 = $local_2.repr;
+    self_17 = $load_0;
     offset_18 = 0 + 20;
     builtin::array_copy<u8>(self_17, offset_18, global:wasi_clocks_full.wado::$const_obj_114, 0, 44);
-    self_21 = $local_2.repr;
+    self_21 = $load_0;
     offset_22 = 0 + 64;
     builtin::array_copy<u8>(self_21, offset_22, global:core:prelude/types.wado::$const_obj_15, 0, 4);
-    self_25 = $local_2.repr;
+    self_25 = $load_0;
     offset_26 = 0 + 68;
     builtin::array_copy<u8>(self_25, offset_26, global:wasi_clocks_full.wado::$const_obj_28, 0, 21);
-    self_29 = $local_2.repr;
+    self_29 = $load_0;
     offset_30 = 0 + 89;
     builtin::array_copy<u8>(self_29, offset_30, global:core:prelude/types.wado::$const_obj_13, 0, 1);
     $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
@@ -1258,9 +1260,9 @@ fn "wasi_clocks_full.wado/$test_7_system_clock__resolution_is_positive$cold0"(re
     }
     start_41 = $local_2.used;
     $local_2.used = new_used_40;
-    self_43 = $local_2.repr;
+    self_43 = local.tee $load_5($local_2.repr);
     builtin::array_copy<u8>(self_43, start_41, global:wasi_clocks_full.wado::$const_obj_36, 0, 20);
-    self_47 = $local_2.repr;
+    self_47 = $load_5;
     offset_48 = start_41 + 20;
     builtin::array_copy<u8>(self_47, offset_48, global:wasi_clocks_full.wado::$const_obj_35, 0, 5);
     $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
@@ -1274,7 +1276,6 @@ fn "wasi_clocks_full.wado/$test_7_system_clock__resolution_is_positive$cold0"(re
     start_72 = self_59.used;
     self_59.used = new_used_71;
     builtin::array_copy<u8>(self_59.repr, start_72, global:wasi_clocks_full.wado::$const_obj_20, 0, 4);
-    s_75 = global:wasi_clocks_full.wado::$const_obj_33;
     self_76 = $local_3.buf;
     new_used_88 = self_76.used + 8;
     if @unlikely(new_used_88 > builtin::array_len(self_76.repr)) {
@@ -1283,7 +1284,7 @@ fn "wasi_clocks_full.wado/$test_7_system_clock__resolution_is_positive$cold0"(re
     }
     start_89 = self_76.used;
     self_76.used = new_used_88;
-    builtin::array_copy<u8>(self_76.repr, start_89, s_75.repr, 0, 8);
+    builtin::array_copy<u8>(self_76.repr, start_89, global:wasi_clocks_full.wado::$const_obj_33, 0, 8);
     new_used_101 = $local_2.used + 1;
     if @unlikely(new_used_101 > builtin::array_len($local_2.repr)) {
         cold_path;
@@ -1297,6 +1298,9 @@ fn "wasi_clocks_full.wado/$test_7_system_clock__resolution_is_positive$cold0"(re
 }
 
 fn "wasi_clocks_full.wado/$test_8_system_clock__two_reads_are_consistent$cold0"($v0, $v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_8: ref "core:prelude/string.wado//String";
     let $local_9: ref "core:prelude/format.wado//Formatter";
     let self_21: ref Array<u8>;
@@ -1322,18 +1326,18 @@ fn "wasi_clocks_full.wado/$test_8_system_clock__two_reads_are_consistent$cold0"(
     let start_93: i32;
     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(184), used: 0 };
     $local_8.used = 92;
-    self_21 = $local_8.repr;
+    self_21 = local.tee $load_0($local_8.repr);
     builtin::array_copy<u8>(self_21, 0, global:core:prelude/types.wado::$const_obj_17, 0, 20);
-    self_25 = $local_8.repr;
+    self_25 = $load_0;
     offset_26 = 0 + 20;
     builtin::array_copy<u8>(self_25, offset_26, global:wasi_clocks_full.wado::$const_obj_124, 0, 46);
-    self_29 = $local_8.repr;
+    self_29 = $load_0;
     offset_30 = 0 + 66;
     builtin::array_copy<u8>(self_29, offset_30, global:core:prelude/types.wado::$const_obj_15, 0, 4);
-    self_33 = $local_8.repr;
+    self_33 = $load_0;
     offset_34 = 0 + 70;
     builtin::array_copy<u8>(self_33, offset_34, global:wasi_clocks_full.wado::$const_obj_28, 0, 21);
-    self_37 = $local_8.repr;
+    self_37 = $load_0;
     offset_38 = 0 + 91;
     builtin::array_copy<u8>(self_37, offset_38, global:core:prelude/types.wado::$const_obj_13, 0, 1);
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
@@ -1345,9 +1349,9 @@ fn "wasi_clocks_full.wado/$test_8_system_clock__two_reads_are_consistent$cold0"(
     }
     start_49 = $local_8.used;
     $local_8.used = new_used_48;
-    self_51 = $local_8.repr;
+    self_51 = local.tee $load_5($local_8.repr);
     builtin::array_copy<u8>(self_51, start_49, global:wasi_clocks_full.wado::$const_obj_120, 0, 45);
-    self_55 = $local_8.repr;
+    self_55 = $load_5;
     offset_56 = start_49 + 45;
     builtin::array_copy<u8>(self_55, offset_56, global:wasi_clocks_full.wado::$const_obj_119, 0, 16);
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
@@ -1359,9 +1363,9 @@ fn "wasi_clocks_full.wado/$test_8_system_clock__two_reads_are_consistent$cold0"(
     }
     start_67 = $local_8.used;
     $local_8.used = new_used_66;
-    self_69 = $local_8.repr;
+    self_69 = local.tee $load_10($local_8.repr);
     builtin::array_copy<u8>(self_69, start_67, global:core:prelude/types.wado::$const_obj_8, 0, 1);
-    self_73 = $local_8.repr;
+    self_73 = $load_10;
     offset_74 = start_67 + 1;
     builtin::array_copy<u8>(self_73, offset_74, global:wasi_clocks_full.wado::$const_obj_117, 0, 16);
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
@@ -1476,6 +1480,9 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/types.wado/cm_subtask_settled$cold0"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4: ref "core:prelude/format.wado//Formatter";
     let self_14: ref Array<u8>;
@@ -1501,22 +1508,22 @@ fn "core:prelude/types.wado/cm_subtask_settled$cold0"($v0) {
     let start_86: i32;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(180), used: 0 };
     $local_3.used = 66;
-    self_14 = $local_3.repr;
+    self_14 = local.tee $load_0($local_3.repr);
     builtin::array_copy<u8>(self_14, 0, global:core:prelude/types.wado::$const_obj_17, 0, 20);
-    self_18 = $local_3.repr;
+    self_18 = $load_0;
     offset_19 = 0 + 20;
     builtin::array_copy<u8>(self_18, offset_19, global:core:prelude/types.wado::$const_obj_16, 0, 18);
-    self_22 = $local_3.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 38;
     builtin::array_copy<u8>(self_22, offset_23, global:core:prelude/types.wado::$const_obj_15, 0, 4);
-    self_26 = $local_3.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 42;
     builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/types.wado::$const_obj_14, 0, 23);
-    self_30 = $local_3.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 65;
     builtin::array_copy<u8>(self_30, offset_31, global:core:prelude/types.wado::$const_obj_13, 0, 1);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(432, $local_4.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(434, $local_4.buf);
     new_used_41 = $local_3.used + 55;
     if @unlikely(new_used_41 > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -1524,9 +1531,9 @@ fn "core:prelude/types.wado/cm_subtask_settled$cold0"($v0) {
     }
     start_42 = $local_3.used;
     $local_3.used = new_used_41;
-    self_44 = $local_3.repr;
+    self_44 = local.tee $load_5($local_3.repr);
     builtin::array_copy<u8>(self_44, start_42, global:core:prelude/types.wado::$const_obj_12, 0, 43);
-    self_48 = $local_3.repr;
+    self_48 = $load_5;
     offset_49 = start_42 + 43;
     builtin::array_copy<u8>(self_48, offset_49, global:core:prelude/types.wado::$const_obj_11, 0, 12);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -1538,9 +1545,9 @@ fn "core:prelude/types.wado/cm_subtask_settled$cold0"($v0) {
     }
     start_60 = $local_3.used;
     $local_3.used = new_used_59;
-    self_62 = $local_3.repr;
+    self_62 = local.tee $load_10($local_3.repr);
     builtin::array_copy<u8>(self_62, start_60, global:core:prelude/types.wado::$const_obj_8, 0, 1);
-    self_66 = $local_3.repr;
+    self_66 = $load_10;
     offset_67 = start_60 + 1;
     builtin::array_copy<u8>(self_66, offset_67, global:core:prelude/types.wado::$const_obj_9, 0, 18);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -1558,19 +1565,20 @@ fn "core:prelude/types.wado/cm_subtask_settled$cold0"($v0) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -1668,7 +1676,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l86;

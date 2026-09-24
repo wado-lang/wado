@@ -1,0 +1,16 @@
+//! `..A` where `A` is a scalar type parameter. A scalar stands for one
+//! position, so spreading it says nothing a bare `A` does not, and the
+//! declaration is rejected where the spread is written rather than at a call
+//! that cannot infer `A`.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+
+fn head<A>(t: [..A]) -> i32 {
+    return 0;
+}
+
+test "spreading a scalar type parameter" {
+    assert head([1, 2]) == 0;
+}
+
+__DATA__
+{"compile_error": "`..A` spreads `A`, which is not a type pack"}

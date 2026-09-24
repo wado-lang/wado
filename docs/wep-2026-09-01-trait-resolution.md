@@ -59,6 +59,28 @@ dispatch paths select without it:
 
 These paths do not yet follow this order: see Known gaps.
 
+### A bound's trait arguments
+
+A bound writes its trait's arguments in the body's own parameter space, so what
+they name is settled at the instantiation, not where they are written. `T:
+Make<U>` reaches `impl Make<String>` once the call settles `U` to `String`, and
+`T: Make<T::Base>` reaches it once `T = UserName` makes `T::Base` the `String`
+that impl binds. A call through the bound therefore lands on the same impl the
+bound check held the type to.
+
+The arguments travel as part of the trait's name. A projection travels there as
+a base, a member, and the trait declaring it, never as a spelling: substituting
+the base of a spelling would mean splitting the spelling back apart, and no
+split is correct in general. The declaring trait is there because two traits may
+bind one member name on one type
+([Declaration Identity](./wep-2026-08-12-declaration-identity.md)).
+
+Substitution reaches every position a type stands in, so a projection nested
+inside an argument is answered as one standing alone is: `Make<List<T::Base>>`
+reaches `impl Make<List<String>>`. A position whose base the frame does not bind
+stays as written; an instance still inside a template needs that. A function
+type is the exception, and Known gaps says what it costs.
+
 ### The candidates
 
 A call's candidates come from three places.
@@ -506,6 +528,17 @@ Method lookup decides nothing of its own: it asks the order, materializes a
 match from each impl the order names, and reports what the order tied.
 
 ## Known gaps
+
+### A projection inside a function type is never answered
+
+A trait argument spelled as a function type carries its projection unanswered.
+`U: Uses<fn(P::Item) -> i32>` passes `wado check` and then fails where the call
+is monomorphized, reported as `User` not implementing `Uses<fn(P::Item)->i32>`.
+A function type stands in a trait's name as one opaque spelling, holding no
+position a substitution can reach, so `P::Item` stays written there while every
+other shape answers it — `Uses<P::Item>` and `Uses<List<P::Item>>` both
+dispatch. This admits a valid program the compiler rejects, at that one shape,
+naming a parameter the call site never wrote.
 
 ### Scope gates method calls, not the bounds path
 

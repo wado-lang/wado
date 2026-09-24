@@ -1,0 +1,22 @@
+// Reading a slot `array_new` left at its default traps when the element is a
+// reference, however in bounds the index: the call stays although nothing
+// reads its result.
+use { println, Stdout } from "core:cli";
+
+struct Point { x: i32 }
+
+#[inline(never)]
+fn first_of_fresh() -> Point {
+    let arr: Array<Point> = builtin::array_new(1);
+    return builtin::array_get_value(&arr, 0);
+}
+
+export fn run() with Stdout {
+    first_of_fresh();
+    println("unreachable");
+}
+
+__DATA__
+{
+    "trapped": true
+}

@@ -16,19 +16,21 @@ use crate::tir::{
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, expr_stmt,
-    generic_method_call, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
-    local_ref, loop_stmt, split_packed_ptr_len, synth_span,
+    generic_method_call, generic_method_call_monomorphized, i32_const, i64_const, if_stmt,
+    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, split_packed_ptr_len, synth_span,
 };
 
+use super::lift::tree_map_instance;
 use super::types::{
-    LowerContext, binary_add, cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower,
-    field_access, flatten_param_type, kebab_to_pascal, variant_tag, variant_test,
+    LowerContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size, cm_layout_i32,
+    cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower, disc_store_op, field_access,
+    flatten_param_type, kebab_to_pascal, scalar_store_op, variant_tag, variant_test,
 };
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{cm_align_with_registry_scoped, cm_size_with_registry_scoped};
 use crate::name::FqTypeName;
 use crate::synthesis::cm_binding::types::{cm_val_type_to_type_id, cm_zero};
 use crate::tir::TirBlock;
+use crate::tir::TirUnaryOp;
 
 /// Join two CM flat slot types via the single Canonical ABI join
 /// ([`cm_abi::CmValType::join`]) so a lowered flat arg matches the core import's
@@ -143,9 +145,11 @@ pub fn synthesize_lower(
                     TypeTable::UNIT,
                 ))]
             }
-            // Unknown named types: treat as i32 handles (enums, resources)
+            // A declaration the registry can size — an enum, a flags, a
+            // payload-less variant — stores at that width; a resource handle
+            // and anything unresolved keep the 4-byte default.
             _ => vec![expr_stmt(builtin_call(
-                "i32_store",
+                scalar_store_op(ty, ctx.cm_interface_registry, &ctx.names),
                 vec![addr, value],
                 TypeTable::UNIT,
             ))],
@@ -189,11 +193,7 @@ pub(super) fn synthesize_lower_tuple(
     locals: &mut Vec<TirLocal>,
     ctx: &LowerContext<'_>,
 ) -> Vec<TirStmt> {
-    let layout = cm_abi::layout_tuple_with_registry_scoped(
-        elems,
-        ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
-    );
+    let layout = cm_abi::layout_tuple_with_registry(elems, ctx.cm_interface_registry);
     let mut stmts = Vec::new();
 
     // Element TypeIds come from the tuple's own type arguments — the
@@ -288,7 +288,7 @@ fn synthesize_lower_variant_to_memory(
     stmts.push(let_stmt("$variant_val", value_local, value_type_id, value));
 
     stmts.push(expr_stmt(builtin_call(
-        "i32_store8",
+        disc_store_op(cm_discriminant_byte_size(cases.len())),
         vec![
             addr.clone(),
             disc_of(local_ref(value_local, "$variant_val", value_type_id)),
@@ -296,12 +296,12 @@ fn synthesize_lower_variant_to_memory(
         TypeTable::UNIT,
     )));
 
-    let payload_offset = cm_abi::variant_payload_offset_with_registry_scoped(
+    let payload_offset = cm_abi::variant_payload_offset_with_registry(
+        cases.len(),
         cases
             .iter()
             .filter_map(|(_, _, p)| p.as_ref().map(|(ty, _)| ty)),
         ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
     );
     let payload_addr = if payload_offset == 0 {
         addr
@@ -392,18 +392,12 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
     ctx: &LowerContext<'_>,
 ) {
     let name = named.name.as_str();
-    let Some(cases) = ctx
+    let cases = ctx
         .cm_interface_registry
         .get_variant_cases_by_source(source, name)
-    else {
-        // Fallback: store as i32
-        stmts.push(expr_stmt(builtin_call(
-            "i32_store8",
-            vec![addr, variant_tag(value)],
-            TypeTable::UNIT,
-        )));
-        return;
-    };
+        .unwrap_or_else(|| {
+            panic!("variant `{name}` resolved to `{source}`, which registers no cases for it")
+        });
     let mem_cases: Vec<CmMemCase> = cases
         .iter()
         .cloned()
@@ -453,11 +447,10 @@ pub(super) fn synthesize_lower_option_to_memory(
     let value_local = alloc_local(next_local, locals, value_type_id);
     stmts.push(let_stmt("$opt_val", value_local, value_type_id, value));
 
-    // Store discriminant byte: variant_test(Some) → 1 = Some, 0 = None.
-    // Use variant_test (ref.test) rather than variant_tag (struct.get)
-    // because variant_tag traps on null refs.
+    // `variant_test` (ref.test) rather than `variant_tag` (struct.get), which
+    // traps on a null ref.
     stmts.push(expr_stmt(builtin_call(
-        "i32_store8",
+        disc_store_op(cm_discriminant_byte_size(OPTION_OR_RESULT_CASES)),
         vec![
             addr.clone(),
             variant_test(
@@ -469,12 +462,8 @@ pub(super) fn synthesize_lower_option_to_memory(
         TypeTable::UNIT,
     )));
 
-    let payload_offset = cm_abi::layout_option_with_registry_scoped(
-        inner_type,
-        ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
-    )
-    .offsets[1];
+    let payload_offset =
+        cm_abi::layout_option_with_registry(inner_type, ctx.cm_interface_registry).payload_offset();
 
     let payload_addr = if payload_offset == 0 {
         addr
@@ -643,16 +632,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
     let list_type_id = value.type_id;
     let elem_resolved = ctx.cm_interface_registry.value_type(elem_type);
 
-    let elem_size = cm_size_with_registry_scoped(
-        &elem_resolved,
-        ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
-    ) as i32;
-    let elem_align = cm_align_with_registry_scoped(
-        &elem_resolved,
-        ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
-    ) as i32;
+    let (elem_size, elem_align) = cm_layout_i32(&elem_resolved, ctx.cm_interface_registry);
     // Take the element TypeId from the list's own type arguments — it is the
     // elaborator-registered type (correct module source), unlike a fresh
     // `cm_type_to_type_id`, which can't resolve a lib-local struct's source and
@@ -816,18 +796,9 @@ pub(super) fn synthesize_lower_list_to_buffer(
     (stmts, base_local, len_local)
 }
 
-/// Lower a `List<T>` (GC value) to a CM `list` at `addr`: an element buffer in
-/// linear memory plus the `(ptr, len)` pair stored at `addr` / `addr + 4`.
-pub(super) fn synthesize_lower_list_to_memory(
-    elem_type: &Type,
-    value: TirExpr,
-    addr: TirExpr,
-    next_local: &mut u32,
-    locals: &mut Vec<TirLocal>,
-    ctx: &LowerContext<'_>,
-) -> Vec<TirStmt> {
-    let (mut stmts, base_local, len_local) =
-        synthesize_lower_list_to_buffer(elem_type, value, next_local, locals, ctx);
+/// Store a lowered buffer's `(ptr, count)` at `addr` — the tail every CM
+/// `list`, and the `map` that despecializes to one, ends with.
+fn store_ptr_len(addr: TirExpr, base_local: u32, len_local: u32, stmts: &mut Vec<TirStmt>) {
     stmts.push(expr_stmt(builtin_call(
         "i32_store",
         vec![
@@ -844,6 +815,325 @@ pub(super) fn synthesize_lower_list_to_memory(
         ],
         TypeTable::UNIT,
     )));
+}
+
+/// Lower a `TreeMap<K, V>` (GC value) to a CM `map` at `addr`.
+pub(super) fn synthesize_lower_map_to_memory(
+    key_type: &Type,
+    value_type: &Type,
+    value: TirExpr,
+    addr: TirExpr,
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+    ctx: &LowerContext<'_>,
+) -> Vec<TirStmt> {
+    let (mut stmts, base_local, len_local) =
+        synthesize_lower_map_to_buffer(key_type, value_type, value, next_local, locals, ctx);
+    store_ptr_len(addr, base_local, len_local, &mut stmts);
+    stmts
+}
+
+/// The pair buffer of a `TreeMap<K, V>` as `(stmts, base, len)`, walked through
+/// `entries()` because a removal's tombstone parts position from index.
+pub(super) fn synthesize_lower_map_to_buffer(
+    key_type: &Type,
+    value_type: &Type,
+    value: TirExpr,
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+    ctx: &LowerContext<'_>,
+) -> (Vec<TirStmt>, u32, u32) {
+    let pair = [
+        ctx.cm_interface_registry.resolve_type(key_type),
+        ctx.cm_interface_registry.resolve_type(value_type),
+    ];
+    let layout = cm_abi::layout_tuple_with_registry(&pair, ctx.cm_interface_registry);
+    let pair_size = layout.size as i32;
+    let pair_align = layout.align as i32;
+
+    let (map_type_id, key_tid, value_tid) =
+        tree_map_instance(&ctx.type_table.borrow(), value.type_id)
+            .expect("a `map` lower is handed a `TreeMap<K, V>`");
+
+    let (
+        map_head,
+        map_source,
+        iter_tid,
+        iter_source,
+        next_method,
+        len_method,
+        entries_method,
+        pair_tid,
+        opt_tid,
+    ) = {
+        let mut tt = ctx.type_table.borrow_mut();
+        let ref_pair = {
+            let key_ref = tt.make_ref(key_tid);
+            let value_ref = tt.make_ref(value_tid);
+            tt.make_tuple(vec![key_ref, value_ref])
+        };
+        let opt = tt.make_option(ref_pair);
+        let iter_def = tt
+            .compiler_item_def(CompilerItem::TreeMapEntriesIter)
+            .expect("the TreeMap entries iterator is a registered compiler item");
+        let iter = tt.make_generic_instance(iter_def, vec![key_tid, value_tid]);
+        let map_head = tt.compiler_struct_fq_name(CompilerItem::TreeMap);
+        let iter_head = tt.compiler_struct_fq_name(CompilerItem::TreeMapEntriesIter);
+        let items = tt.compiler_items();
+        let map_source = items.require_struct(CompilerItem::TreeMap).0.clone();
+        let iter_source = items
+            .require_struct(CompilerItem::TreeMapEntriesIter)
+            .0
+            .clone();
+        let next = LocalMethodName::new(
+            iter_head,
+            Some(items.trait_fq(CompilerItem::Iterator)),
+            items
+                .method_name(CompilerItem::TreeMapEntriesIterNext)
+                .to_string(),
+        );
+        let len_method = items.method_name(CompilerItem::TreeMapLen).to_string();
+        let entries_method = items.method_name(CompilerItem::TreeMapEntries).to_string();
+        (
+            map_head,
+            map_source,
+            iter,
+            iter_source,
+            next,
+            len_method,
+            entries_method,
+            ref_pair,
+            opt,
+        )
+    };
+
+    let mut stmts = Vec::new();
+
+    let map_local = alloc_local(next_local, locals, map_type_id);
+    stmts.push(let_stmt("$val", map_local, map_type_id, value));
+
+    // `len` counts live pairs, so it both sizes the buffer and bounds the walk.
+    let len_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_stmt(
+        "$len",
+        len_local,
+        TypeTable::I32,
+        generic_method_call_monomorphized(
+            local_ref(map_local, "$val", map_type_id),
+            &map_head,
+            &len_method,
+            map_source.clone(),
+            vec![key_tid, value_tid],
+            vec![],
+            TypeTable::I32,
+        ),
+    ));
+
+    let base_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_stmt(
+        "$base",
+        base_local,
+        TypeTable::I32,
+        builtin_call(
+            "realloc",
+            vec![
+                i32_const(0),
+                i32_const(0),
+                i32_const(pair_align),
+                binary(
+                    TirBinaryOp::Mul,
+                    local_ref(len_local, "$len", TypeTable::I32),
+                    i32_const(pair_size),
+                    TypeTable::I32,
+                ),
+            ],
+            TypeTable::I32,
+        ),
+    ));
+
+    let iter_local = alloc_local(next_local, locals, iter_tid);
+    stmts.push(let_mut_stmt(
+        "$map_iter",
+        iter_local,
+        iter_tid,
+        generic_method_call_monomorphized(
+            local_ref(map_local, "$val", map_type_id),
+            &map_head,
+            &entries_method,
+            map_source,
+            vec![key_tid, value_tid],
+            vec![],
+            iter_tid,
+        ),
+    ));
+
+    let i_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_mut_stmt("$i", i_local, TypeTable::I32, i32_const(0)));
+
+    let mut loop_body = Vec::new();
+    loop_body.push(if_stmt(
+        binary(
+            TirBinaryOp::GtEq,
+            local_ref(i_local, "$i", TypeTable::I32),
+            local_ref(len_local, "$len", TypeTable::I32),
+            TypeTable::BOOL,
+        ),
+        block(vec![break_stmt()]),
+        None,
+    ));
+
+    let next_local_slot = alloc_local(next_local, locals, opt_tid);
+    let next_mangled = next_method.to_mangled_name();
+    loop_body.push(let_stmt(
+        "$map_next",
+        next_local_slot,
+        opt_tid,
+        TirExpr::new(
+            TirExprKind::method_call(
+                Box::new(local_ref(iter_local, "$map_iter", iter_tid)),
+                FunctionRef {
+                    module_source: iter_source,
+                    name: next_mangled,
+                    monomorph_info: None,
+                    method_info: Some(next_method),
+                },
+                vec![],
+                vec![],
+            ),
+            opt_tid,
+            synth_span(),
+        ),
+    ));
+
+    let pair_addr_local = alloc_local(next_local, locals, TypeTable::I32);
+    loop_body.push(let_stmt(
+        "$elem_addr",
+        pair_addr_local,
+        TypeTable::I32,
+        binary(
+            TirBinaryOp::Add,
+            local_ref(base_local, "$base", TypeTable::I32),
+            binary(
+                TirBinaryOp::Mul,
+                local_ref(i_local, "$i", TypeTable::I32),
+                i32_const(pair_size),
+                TypeTable::I32,
+            ),
+            TypeTable::I32,
+        ),
+    ));
+
+    // `None` cannot occur under the `len` bound above — `entries` yields
+    // exactly the live pairs `len` counts — so its arm is empty.
+    let pair_binding_local = alloc_local(next_local, locals, pair_tid);
+    let pair_binding_name = format!("$map_pair_{pair_binding_local}");
+    let mut case_stmts = Vec::new();
+    for (slot, slot_ty) in pair.iter().enumerate() {
+        let slot_tid = if slot == 0 { key_tid } else { value_tid };
+        let slot_ref_tid = ctx.type_table.borrow_mut().make_ref(slot_tid);
+        let field = TirExpr::new(
+            TirExprKind::FieldAccess {
+                expr: Box::new(local_ref(pair_binding_local, &pair_binding_name, pair_tid)),
+                field_index: slot as u32,
+                field_name: slot.to_string(),
+            },
+            slot_ref_tid,
+            synth_span(),
+        );
+        let deref = TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: Box::new(field),
+            },
+            slot_tid,
+            synth_span(),
+        );
+        let slot_addr = binary_add(
+            local_ref(pair_addr_local, "$elem_addr", TypeTable::I32),
+            i32_const(layout.offsets[slot] as i32),
+        );
+        case_stmts.extend(synthesize_lower_wasi_type_to_memory(
+            slot_ty, deref, slot_addr, next_local, locals, ctx,
+        ));
+    }
+
+    let span = synth_span();
+    let names = &ctx.names;
+    let some_arm = TirMatchArm {
+        pattern: TirPattern::Variant {
+            enum_type: opt_tid,
+            variant_name: names.some_name.clone(),
+            case_index: names.some_index,
+            bindings: vec![TirPattern::Binding {
+                name: pair_binding_name,
+                local_index: pair_binding_local,
+                type_id: pair_tid,
+            }],
+            payload_type: pair_tid,
+        },
+        guard: None,
+        body: TirExpr::new(
+            TirExprKind::Block(TirBlock::new(case_stmts, span)),
+            TypeTable::UNIT,
+            span,
+        ),
+        span,
+    };
+    let none_arm = TirMatchArm {
+        pattern: TirPattern::Variant {
+            enum_type: opt_tid,
+            variant_name: names.none_name.clone(),
+            case_index: names.none_index,
+            bindings: Vec::new(),
+            payload_type: TypeTable::UNIT,
+        },
+        guard: None,
+        body: TirExpr::new(
+            TirExprKind::Block(TirBlock::new(Vec::new(), span)),
+            TypeTable::UNIT,
+            span,
+        ),
+        span,
+    };
+    loop_body.push(TirStmt::new(
+        TirStmtKind::Expr(TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(local_ref(next_local_slot, "$map_next", opt_tid)),
+                arms: vec![some_arm, none_arm],
+            },
+            TypeTable::UNIT,
+            span,
+        )),
+        span,
+    ));
+
+    loop_body.push(expr_stmt(assign(
+        local_ref(i_local, "$i", TypeTable::I32),
+        binary(
+            TirBinaryOp::Add,
+            local_ref(i_local, "$i", TypeTable::I32),
+            i32_const(1),
+            TypeTable::I32,
+        ),
+    )));
+    stmts.push(loop_stmt(block(loop_body)));
+
+    (stmts, base_local, len_local)
+}
+
+/// Lower a `List<T>` (GC value) to a CM `list` at `addr`: an element buffer in
+/// linear memory plus the `(ptr, len)` pair stored at `addr` / `addr + 4`.
+pub(super) fn synthesize_lower_list_to_memory(
+    elem_type: &Type,
+    value: TirExpr,
+    addr: TirExpr,
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+    ctx: &LowerContext<'_>,
+) -> Vec<TirStmt> {
+    let (mut stmts, base_local, len_local) =
+        synthesize_lower_list_to_buffer(elem_type, value, next_local, locals, ctx);
+    store_ptr_len(addr, base_local, len_local, &mut stmts);
     stmts
 }
 
@@ -1098,6 +1388,14 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             let (list_stmts, base_local, len_local) =
                 synthesize_lower_list_to_buffer(&g.args[0], value, next_local, locals, ctx);
             stmts.extend(list_stmts);
+            flat_args.push(local_ref(base_local, "$list_base", TypeTable::I32));
+            flat_args.push(local_ref(len_local, "$list_len", TypeTable::I32));
+        }
+        Type::Generic(g) if names.is_tree_map(g) => {
+            let (map_stmts, base_local, len_local) = synthesize_lower_map_to_buffer(
+                &g.args[0], &g.args[1], value, next_local, locals, ctx,
+            );
+            stmts.extend(map_stmts);
             flat_args.push(local_ref(base_local, "$list_base", TypeTable::I32));
             flat_args.push(local_ref(len_local, "$list_len", TypeTable::I32));
         }
@@ -1603,9 +1901,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             // `core:kiln/*` records share one path. Resolution goes through the
             // registry, which also finds a lib-local record — carrying no
             // `source_interface` — under its package's default-interface FQ.
-            let source = ctx
-                .cm_interface_registry
-                .resolve_cm_source_for(n, Some(ctx.wasi_package));
+            let source = ctx.cm_interface_registry.resolve_cm_source_for(n);
             if let Some(fields) = source.as_deref().and_then(|s| {
                 ctx.cm_interface_registry
                     .get_struct_fields_with_wado_names_by_source(s, &n.name)
@@ -1614,10 +1910,9 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                     .iter()
                     .map(|(wn, _, ft)| (wn.clone(), ctx.cm_interface_registry.value_type(ft)))
                     .collect();
-                let offsets = cm_abi::layout_fields_with_registry_scoped(
+                let offsets = cm_abi::layout_fields_with_registry(
                     resolved_fields.iter().map(|(_, ty)| ty),
                     ctx.cm_interface_registry,
-                    Some(ctx.wasi_package),
                 )
                 .offsets;
                 let mut stmts = Vec::new();
@@ -1689,6 +1984,9 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
         Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
             synthesize_lower_list_to_memory(&g.args[0], value, addr, next_local, locals, ctx)
         }
+        Type::Generic(g) if names.is_tree_map(g) => synthesize_lower_map_to_memory(
+            &g.args[0], &g.args[1], value, addr, next_local, locals, ctx,
+        ),
         Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
             let ok = ctx.cm_interface_registry.value_type(&g.args[0]);
             let err = ctx.cm_interface_registry.value_type(&g.args[1]);

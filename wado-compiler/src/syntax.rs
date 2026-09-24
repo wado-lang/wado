@@ -8,6 +8,7 @@
 //! (`SyntaxDefinition::wado`, consumed by wado-cli) all derive from the
 //! [`KEYWORDS`] / [`OPERATORS`] tables below, so they cannot drift apart.
 
+use crate::primitive::PrimitiveType;
 use crate::token::TokenKind;
 
 /// Editorial role of a keyword, chosen so the `TextMate` generator can map
@@ -241,6 +242,7 @@ pub const CONTEXTUAL_KEYWORDS: &[(&str, KeywordCategory)] = &[
     ("forward", KeywordCategory::Control),
     ("test", KeywordCategory::Other),
     ("self", KeywordCategory::Constant),
+    ("Self", KeywordCategory::StorageType),
 ];
 
 /// Keywords the parser also accepts as a name (`let type = 1`), which
@@ -276,6 +278,9 @@ pub struct SyntaxDefinition {
     pub file_extensions: Vec<&'static str>,
     pub keywords: KeywordCategories,
     pub operators: OperatorCategories,
+    /// Every primitive spelling, `i128` / `u128` included.
+    pub primitive_types: Vec<&'static str>,
+    /// The prelude types and traits a highlighter colours as builtins.
     pub builtin_types: Vec<&'static str>,
     pub constants: Vec<&'static str>,
     /// Compile-time literals introduced with `#`, e.g. `#file`, `#line`, `#include_str`.
@@ -354,26 +359,18 @@ impl SyntaxDefinition {
                     ops
                 },
             },
+            primitive_types: {
+                let mut names = PrimitiveType::all_primitive_names();
+                names.extend(["i128", "u128"]);
+                names
+            },
             builtin_types: vec![
-                "i8",
-                "i16",
-                "i32",
-                "i64",
-                "i128",
-                "u8",
-                "u16",
-                "u32",
-                "u64",
-                "u128",
-                "f32",
-                "f64",
-                "bool",
-                "char",
                 "String",
                 "List",
+                "Dict",
+                "Fn",
                 "Option",
                 "Result",
-                "Default",
                 "Eq",
                 "Ord",
                 "Ordering",

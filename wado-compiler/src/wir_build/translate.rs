@@ -8,7 +8,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::global_name;
 use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
@@ -981,6 +982,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     },
                     multi_value_results_taken: false,
                     force_fixed_string_repr: false,
+                    discovered_local_types: IndexMap::default(),
                 };
                 translator.translate_block(body.root)
             };
@@ -1047,6 +1049,9 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     /// Saved/restored around the `GlobalVarSet` case, so it never leaks into
     /// a sibling literal.
     pub(super) force_fixed_string_repr: bool,
+    /// Local types read off the body's `Let` statements, for a function that
+    /// reaches here without the lower phase's local allocation.
+    discovered_local_types: IndexMap<u32, TypeId>,
 }
 
 impl FunctionTranslator<'_, '_> {
@@ -1072,17 +1077,18 @@ impl FunctionTranslator<'_, '_> {
         if (index as usize) < param_count {
             let type_id = self.tir_func.params[index as usize].type_id;
             self.wir_type(type_id)
-        } else if !self.tir_func.locals.is_empty() {
+        } else {
             // `locals` is indexed absolutely (entries 0..param_count are
             // params, entries param_count.. are non-param locals), matching
             // DeclareLocal generation.
-            if let Some(local) = self.tir_func.locals.get(index as usize) {
-                self.wir_type(local.type_id)
-            } else {
-                WirType::I32
-            }
-        } else {
-            WirType::I32
+            let type_id = self
+                .tir_func
+                .locals
+                .get(index as usize)
+                .map(|local| local.type_id)
+                .or_else(|| self.discovered_local_types.get(&index).copied())
+                .unwrap_or_else(|| panic!("[WIR] local {index} is read but no `let` declared it"));
+            self.wir_type(type_id)
         }
     }
 
@@ -1115,20 +1121,30 @@ impl FunctionTranslator<'_, '_> {
         struct_type_id: &WirTypeId,
         field_name: &str,
     ) -> WirType {
-        if let Some(WirTypeDef::Struct(st)) = self.ctx.types.get(struct_type_id.index() as usize)
-            && let Some(f) = st.fields.iter().find(|f| f.name == field_name)
-        {
-            return f.ty.clone();
-        }
-        WirType::I32
+        let Some(WirTypeDef::Struct(st)) = self.ctx.types.get(struct_type_id.index() as usize)
+        else {
+            panic!(
+                "[WIR] field `{field_name}` read from type {}, which is not a registered struct",
+                struct_type_id.index()
+            );
+        };
+        st.fields
+            .iter()
+            .find(|f| f.name == field_name)
+            .unwrap_or_else(|| panic!("[WIR] struct `{}` has no field `{field_name}`", st.name.fq))
+            .ty
+            .clone()
     }
 
     /// Look up the element WIR type of an array type.
     pub(super) fn array_element_wir_type(&self, array_type_id: &WirTypeId) -> WirType {
-        if let Some(WirTypeDef::Array(at)) = self.ctx.types.get(array_type_id.index() as usize) {
-            return at.element_type.clone();
-        }
-        WirType::I32
+        let Some(WirTypeDef::Array(at)) = self.ctx.types.get(array_type_id.index() as usize) else {
+            panic!(
+                "[WIR] element read from type {}, which is not a registered array",
+                array_type_id.index()
+            );
+        };
+        at.element_type.clone()
     }
 
     /// Build a `StructNew` instruction, wrapping each field value with `RefAsNonNull`
@@ -1749,9 +1765,10 @@ impl FunctionTranslator<'_, '_> {
         instrs
     }
 
-    /// Scan statements recursively to discover Let declarations and emit `DeclareLocal`.
-    /// Used when `local_types` is empty (for functions from library modules).
-    fn declare_locals_from_stmts(&self, instrs: &mut Vec<WirInstr>, stmts: &[StmtId]) {
+    /// Recover each `let`'s local from the statements, as a `DeclareLocal` and
+    /// as its type. Used when `locals` is empty, as a library module's are.
+    fn declare_locals_from_stmts(&mut self, instrs: &mut Vec<WirInstr>, stmts: &[StmtId]) {
+        let param_count = u32::try_from(self.tir_func.params.len()).unwrap();
         for stmt_id in stmts {
             match &self.body.stmts[*stmt_id].kind {
                 StmtKind::Let {
@@ -1759,9 +1776,10 @@ impl FunctionTranslator<'_, '_> {
                     type_id,
                     ..
                 } => {
-                    // Skip params (they are already declared via param_names)
-                    let param_count = u32::try_from(self.tir_func.params.len()).unwrap();
+                    // Params are already declared via param_names.
                     if *local_index >= param_count {
+                        // `locals` has no entry to answer a read of it.
+                        self.discovered_local_types.insert(*local_index, *type_id);
                         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, *type_id);
                         // Skip unit-type locals (unit has no Wasm representation)
                         if !matches!(wir_type, WirType::Unit) {
@@ -2911,9 +2929,10 @@ impl FunctionTranslator<'_, '_> {
             ExprKind::Switch {
                 scrutinee,
                 min_value,
+                table,
                 arms,
                 default,
-            } => self.translate_switch(*scrutinee, *min_value, arms, *default, expr.type_id),
+            } => self.translate_switch(*scrutinee, *min_value, table, arms, *default, expr.type_id),
 
             ExprKind::VariantTag { expr: inner } => {
                 // Get discriminant field from variant base type
@@ -2931,11 +2950,7 @@ impl FunctionTranslator<'_, '_> {
                     }
                 } else {
                     // A plain `enum` lowers to a bare i32 discriminant (see
-                    // `EnumConstruct` below), so the value already *is* the
-                    // tag — pass it through. The previous `I32Const(0)` stub
-                    // silently mis-tagged every plain enum (the case never
-                    // arose until enums began flowing through CM-import
-                    // binding synthesis via `variant_tag`).
+                    // `EnumConstruct` below), so the value already is the tag.
                     val
                 }
             }

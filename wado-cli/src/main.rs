@@ -81,7 +81,8 @@ impl Cmd {
 
     const fn args(self) -> &'static str {
         match self {
-            Self::Run | Self::Serve | Self::Check => "[options] [file.wado]",
+            Self::Run | Self::Serve => "[options] [file.wado]",
+            Self::Check => "[options] [file.wado | dir]",
             Self::Compile => "[options] <file.wado>",
             Self::Wit => "[options] [file.wado | dir]",
             Self::Test => "[options] [files or dirs...]",
@@ -196,6 +197,10 @@ fn main() {
     // threads (the tokio runtime below) start, so the whole process — including
     // the embedded LSP server — shares one configured cache location.
     wado_cli::cache::init_root_from_config();
+
+    // A dev build takes the stdlib from its host. Installing it here means no
+    // subcommand can reach the stdlib before it is there.
+    wado_lsp::host::install_dev_stdlib();
 
     // The compiler is recursive-descent end to end (parser, type resolution,
     // TIR/NIR/WIR walks), so compiling a large generated source — e.g. a Gale

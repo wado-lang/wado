@@ -339,6 +339,9 @@ struct AstSpans {
     /// the binding it reads, which would colour it `variable` wherever a
     /// snapshot exists.
     field_names: IndexSet<usize>,
+    /// byte start of every declared or called method name, where `self` and
+    /// `Self` are names rather than keywords.
+    method_names: IndexSet<usize>,
     /// byte start of every token the parse read against its lexical class: an
     /// identifier read as a keyword (`test "…" { }`), or a keyword read as a
     /// name (`let type = 1`). Every other token is what it lexes as.
@@ -368,6 +371,14 @@ impl AstSpans {
 
     fn is_field_name(&self, start: usize) -> bool {
         self.field_names.contains(&start)
+    }
+
+    fn mark_method_name(&mut self, start: usize) {
+        self.method_names.insert(start);
+    }
+
+    fn is_member_name(&self, start: usize) -> bool {
+        self.field_names.contains(&start) || self.method_names.contains(&start)
     }
 
     fn is_contextual(&self, start: usize) -> bool {
@@ -445,6 +456,11 @@ impl AstVisitor for SpanCollector {
         {
             self.mark_attr_keys(&attributes.entries);
         }
+        if let Item::Struct(def) = item {
+            for field in &def.fields {
+                self.mark_field_name(field.name_span);
+            }
+        }
         ast::walk_item(self, item);
     }
 
@@ -453,19 +469,25 @@ impl AstVisitor for SpanCollector {
             self.spans.mark_param(param.id);
         }
         self.mark_effect_names(&func.effect_ids);
+        self.spans.mark_method_name(func.name_span.start);
         ast::walk_function(self, func);
     }
 
     fn visit_expr(&mut self, expr: &Expr) {
-        if let Expr::Closure(c) = expr {
-            for param in &c.params {
-                self.spans.mark_param(param.id);
+        match expr {
+            Expr::Closure(c) => {
+                for param in &c.params {
+                    self.spans.mark_param(param.id);
+                }
             }
-        }
-        if let Expr::StructLiteral(literal) = expr {
-            for field in &literal.fields {
-                self.mark_field_name(field.name_span);
+            Expr::StructLiteral(literal) => {
+                for field in &literal.fields {
+                    self.mark_field_name(field.name_span);
+                }
             }
+            Expr::MethodCall(call) => self.spans.mark_method_name(call.method_span.start),
+            Expr::FieldAccess(access) => self.mark_field_name(access.field_span),
+            _ => {}
         }
         ast::walk_expr(self, expr);
     }
@@ -556,12 +578,18 @@ fn classify_token(
         Some(category) => classify_keyword(category),
 
         None => match &token.kind {
-            // `self` is the one contextual keyword the language reserves —
-            // `Wado.g4`'s `identifier` rule accepts every other one as a name,
-            // but not this — so it needs no AST position to be recognised, and
-            // the registry files it under `Constant`. Without this it colours
-            // as the parameter binding it resolves to.
-            TokenKind::Ident(name) if name == "self" => CONSTANT,
+            // Keywords wherever they are not a member's name, which colours as
+            // the member.
+            TokenKind::Ident(name)
+                if name == "self" && !ast_spans.is_member_name(token.span.start) =>
+            {
+                CONSTANT
+            }
+            TokenKind::Ident(name)
+                if name == "Self" && !ast_spans.is_member_name(token.span.start) =>
+            {
+                KEYWORD
+            }
 
             // The mirror case: `test`, `do`, `resume`, `task`, `trap` and
             // `forward` lex as identifiers and are read as keywords here.
@@ -1322,6 +1350,49 @@ mod tests {
         }
     }
 
+    /// `self` and `Self` are names where a member is named, as a field or a method.
+    #[test]
+    fn self_as_a_member_name_is_a_member() {
+        let src = concat!(
+            "struct S { self: i32, Self: i32 }\n",
+            "impl S {\n",
+            "    fn Self(&self) -> i32 { return self.self + self.Self; }\n",
+            "}\n",
+            "fn run() {}\n",
+        );
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+        let at = |line: u32, col: usize| {
+            tokens
+                .iter()
+                .find(|t| t.line == line && t.start_char == col as u32)
+                .unwrap_or_else(|| panic!("no token at {line}:{col}"))
+                .token_type
+        };
+        let decl = src.lines().next().expect("line");
+        assert_eq!(
+            at(0, decl.find("self").expect("self")),
+            token_type::PROPERTY
+        );
+        assert_eq!(
+            at(0, decl.find("Self").expect("Self")),
+            token_type::PROPERTY
+        );
+        let body = src.lines().nth(2).expect("line");
+        assert_eq!(
+            at(2, body.find("Self").expect("Self")),
+            token_type::FUNCTION
+        );
+        assert_eq!(
+            at(2, body.find(".self").expect(".self") + 1),
+            token_type::PROPERTY
+        );
+        assert_eq!(
+            at(2, body.find(".Self").expect(".Self") + 1),
+            token_type::PROPERTY
+        );
+    }
+
     /// A `__DATA__` tail is not Wado, and no token carries it. `classify_all`
     /// mutes it; `compute` drops the run because it spans lines, which is what
     /// leaves the editor's embedded-JSON highlighting in place.
@@ -1461,7 +1532,7 @@ mod tests {
             "}\n",
         );
         let tokens = compute(src, None);
-        assert_eq!(kind_of(&tokens, src, 1, "type"), token_type::VARIABLE);
+        assert_eq!(kind_of(&tokens, src, 1, "type"), token_type::PROPERTY);
         assert_eq!(kind_of(&tokens, src, 5, "type"), token_type::PROPERTY);
         assert_eq!(kind_of(&tokens, src, 5, "match"), token_type::PROPERTY);
     }

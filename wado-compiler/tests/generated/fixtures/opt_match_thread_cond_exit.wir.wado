@@ -110,7 +110,7 @@ fn "opt_match_thread_cond_exit.wado/run"() with Stdout {
     };
     let $match_scrut_1: i32;
     $match_scrut_1 = $sroa_slot_50;
-    $cond_3 = (if select i32($match_scrut_1 == 1, $sroa_slot_51 == -1, 0) -> bool {
+    $cond_3 = (if ($match_scrut_1 == 1) & ($sroa_slot_51 == -1) -> bool {
         1;
     } else {
         0;
@@ -229,7 +229,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l7;

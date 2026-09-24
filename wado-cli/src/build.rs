@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags, CompileOptions};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
-use crate::manifest;
+use crate::manifest::{self, openable_dir};
 
 pub struct BuildOptions {
     /// `--world <fq>`: build only this hosted world. Mutually exclusive with `lib`.
@@ -188,7 +188,12 @@ pub fn declared_worlds(project: &manifest::ProjectManifest) -> Result<Vec<BuildT
 pub fn project_here(missing: &'static str) -> Result<manifest::ProjectManifest, CliExit> {
     let cwd = std::env::current_dir()
         .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
-    let project = manifest::discover(&cwd)
+    project_at(&cwd, missing)
+}
+
+/// The project enclosing `dir`, its manifest warnings emitted.
+pub fn project_at(dir: &Path, missing: &'static str) -> Result<manifest::ProjectManifest, CliExit> {
+    let project = manifest::discover(openable_dir(dir))
         .map_err(CliExit::error)?
         .ok_or_else(|| CliExit::error(missing))?;
     manifest::emit_manifest_warnings(&project);

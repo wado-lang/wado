@@ -1,0 +1,16 @@
+// A signature is a promise the caller has to be able to write down, so an item
+// may not name a declaration that reaches less far than the item itself.
+struct Hidden {
+    n: i32,
+}
+
+pub fn make() -> Hidden {
+    return Hidden { n: 1 };
+}
+
+export fn run() {
+    assert make().n == 1;
+}
+
+__DATA__
+{"compile_error": "names `Hidden`, which is private to its defining file"}

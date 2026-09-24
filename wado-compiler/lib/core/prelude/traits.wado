@@ -42,12 +42,22 @@ impl<T> Eq for &mut T {
     }
 }
 
-/// Trait for ordering comparisons.
-/// Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
+/// A total order over the type: what `sort`, `TreeMap` and a `T: Ord` bound
+/// read. A float's is IEEE 754-2019 `totalOrder`, which its `<` is not.
 #[compiler_item("ord")]
 pub trait Ord: Eq with () {
     /// Compares self with other and returns an Ordering.
     fn cmp(&self, other: &Self) -> Ordering;
+}
+
+/// What `<`, `<=`, `>` and `>=` mean where the operator order is not the total
+/// order. A float's instructions already carry that split; a half has none.
+#[compiler_item("operator_ord")]
+internal trait OperatorOrd with () {
+    fn lt(&self, other: &Self) -> bool;
+    fn le(&self, other: &Self) -> bool;
+    fn gt(&self, other: &Self) -> bool;
+    fn ge(&self, other: &Self) -> bool;
 }
 
 /// Trait for providing a default value for a type.
@@ -446,6 +456,7 @@ pub struct StructField<T, F> {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 impl<T, F> StructField<T, F> {
@@ -462,6 +473,12 @@ impl<T, F> StructField<T, F> {
     /// Whether the field is marked `#[secret]`.
     pub fn is_secret(&self) -> bool {
         return self.is_secret;
+    }
+
+    /// The field's `#[wire(number = N)]`, or `0` where it carries none: a
+    /// field number starts at 1, so zero is the format's own non-number.
+    pub fn wire_number(&self) -> i32 {
+        return self.wire_number;
     }
 
     /// The value of this field in `v`.
@@ -791,6 +808,11 @@ pub trait Shr with () {
 pub trait Display with () {
     /// Formats the value and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
+}
+
+/// What every standard library error type is: a failure carrying a reason a
+/// person can read. It adds nothing to `Display`, so a bound on it says only that.
+pub trait Error: Display with () {
 }
 
 /// Trait for debug/inspect formatting.
@@ -1492,13 +1514,13 @@ pub trait From<T> with () {
     fn from(value: T) -> Self;
 }
 
-/// Fallible conversion trait.
-/// Returns `Result<Self, Self::Error>` so callers can handle conversion failures.
+/// Fallible conversion trait. `Err: Error`, so a caller reaching the failure
+/// through the bound can always report its reason.
 pub trait TryFrom<T> with () {
-    type Error;
+    type Err: Error;
 
     /// Attempts to convert a value of type `T` into `Self`.
-    fn try_from(value: T) -> Result<Self, Self::Error>;
+    fn try_from(value: T) -> Result<Self, Self::Err>;
 }
 
 /// Error type returned by fallible conversions.
@@ -1510,6 +1532,15 @@ impl ConvertError {
     pub fn new(message: String) -> ConvertError {
         return ConvertError { message };
     }
+}
+
+impl Display for ConvertError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.message);
+    }
+}
+
+impl Error for ConvertError {
 }
 
 /// Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
@@ -1575,27 +1606,20 @@ pub trait LiteralSpread with () {
     fn spread_literal(&mut self, base: Self);
 }
 
-/// Parse a value from a string.
-///
-/// `from_str_slice` is the fundamental operation: a `StrSlice` names part of a
-/// string without allocating a substring, so parsing a field out of a larger
-/// buffer copies nothing. `from_str` is a default that views the whole string.
+/// Parse a value from text that may not denote one, where `From<String>` is
+/// for text that always does. The parameter takes a `StrSlice` among the rest,
+/// so a field is parsed out of a larger buffer with no substring allocation.
 pub trait FromStr with () {
-    type Err;
-
-    /// Parse the view as `Self`.
-    fn from_str_slice(s: &StrSlice) -> Result<Self, Self::Err>;
+    type Err: Error;
 
     /// Parse the whole of any `AsStrSlice` text as `Self`.
-    fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err> {
-        return Self::from_str_slice(&s.as_str_slice());
-    }
+    fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
 
 /// Error returned by the lenient string parsers (`LenientFromStr`). All
 /// built-in impls share this single type, carrying a short human-readable
 /// reason. See `docs/wep-2026-06-22-lenient-from-str.md`.
-internal struct LenientParseError {
+pub struct LenientParseError {
     reason: String,
 }
 
@@ -1610,6 +1634,15 @@ impl LenientParseError {
     }
 }
 
+impl Display for LenientParseError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.reason);
+    }
+}
+
+impl Error for LenientParseError {
+}
+
 /// Forgiving sibling of `FromStr`: parse a human-supplied string, accepting
 /// the common spelling variations for the type (casing, radix prefixes,
 /// digit separators, alternate boolean words). Leniency widens accepted
@@ -1617,7 +1650,7 @@ impl LenientParseError {
 /// is never trimmed (that is the caller's concern). See
 /// `docs/wep-2026-06-22-lenient-from-str.md`.
 pub trait LenientFromStr with () {
-    type Err;
+    type Err: Error;
 
     /// Parse the entire string as `Self`, accepting forgiving spellings.
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;

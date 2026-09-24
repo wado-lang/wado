@@ -1,0 +1,25 @@
+// A narrowing nested in a variant payload or a tuple is tested like any
+// other refutable sub-pattern.
+use { Element, HtmlInputElement } from "web:dom";
+
+fn in_payload(o: Option<Option<Element>>) -> i32 {
+    return match o {
+        Some(Some(el: HtmlInputElement)) => 1,
+        _ => 0,
+    };
+}
+
+fn in_tuple(t: [Option<Element>, i32]) -> i32 {
+    return match t {
+        [Some(el: HtmlInputElement), _] => 1,
+        _ => 0,
+    };
+}
+
+export fn run() {
+    let _ = in_payload(null);
+    let _ = in_tuple([null, 0]);
+}
+
+__DATA__
+{"compile_only": true}

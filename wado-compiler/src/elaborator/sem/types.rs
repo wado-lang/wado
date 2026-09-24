@@ -233,6 +233,9 @@ macro_rules! with_body_facts {
             /// per-element types, leaving the whole-pattern annotation
             /// nowhere else to land.
             ann_let_annotated_type => let_annotated_types: $crate::tir::TypeId,
+            /// The type a type pattern (`p: T`) ascribes, keyed by the
+            /// pattern's [`AstId`] — the `LetStmt`'s for a `let … else`.
+            ann_pattern_ascription => pattern_ascriptions: $crate::tir::TypeId,
             /// The type a bare case (`Red`, `Some(x)`) was read as a case of:
             /// the expected type at the site, so reify constructs what
             /// annotate typed.

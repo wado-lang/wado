@@ -5,8 +5,10 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::synth::ArgSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
-use crate::tir::{FunctionRef, PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
+use crate::unparse::binary_op_str;
 
 use super::Elaborator;
 use super::coercion::{is_numeric_literal_expr, numeric_literal_pair_order};
@@ -211,25 +213,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// True when an operand type has no native Wasm binary-op instruction
-    /// and must therefore dispatch through a trait implementation. Used to
-    /// detect operator misuse symmetrically: either operand being such a
-    /// type means the operator cannot fall through to a primitive
-    /// instruction.
+    /// Whether `-x` / `~x` on `type_id` needs a trait impl, because the WIR
+    /// unary lowering has no opcode for it (`primitive_ops::scalar_kind`).
+    fn unary_operand_requires_trait(&self, op: UnaryOp, type_id: TypeId) -> bool {
+        let tt = self.type_table.borrow();
+        match op {
+            UnaryOp::Neg => !tt.is_scalar_primitive_like(type_id),
+            // `bool` complements through `i32.eqz`; a float has no complement.
+            UnaryOp::BitNot => {
+                tt.representation_head(type_id) != TypeTable::BOOL
+                    && (tt.is_float(type_id) || !tt.is_scalar_primitive_like(type_id))
+            }
+            UnaryOp::Not | UnaryOp::Ref | UnaryOp::MutRef | UnaryOp::Deref => false,
+        }
+    }
+
+    /// The primitive whose `core:prelude` impl answers an operator on `operand`
+    /// that no Wasm instruction carries. `head` is `operand`'s representation head.
+    fn primitive_op_receiver(&self, operand: TypeId, head: TypeId) -> Option<String> {
+        if !self.binop_operand_requires_trait(operand) {
+            return None;
+        }
+        let tt = self.type_table.borrow();
+        matches!(tt.get(head), ResolvedType::Primitive(_))
+            .then(|| tt.fq_base_type_name(head).into_string())
+    }
+
+    /// Whether a binary operator on `type_id` needs a trait impl. Either
+    /// operand answering true means no primitive instruction can carry it.
     fn binop_operand_requires_trait(&self, type_id: TypeId) -> bool {
         let tt = self.type_table.borrow();
         match tt.get(type_id) {
             ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
             ResolvedType::Newtype { base_type, .. } => {
                 let ultimate = tt.representation_head(*base_type);
-                matches!(
-                    tt.get(ultimate),
-                    ResolvedType::Struct { .. }
-                        | ResolvedType::GenericInstance { .. }
-                        // SIMD aliases (`type f32x4 = v128`) — see the
-                        // `Primitive(V128)` arm below.
-                        | ResolvedType::Primitive(PrimitiveType::V128)
-                )
+                match tt.get(ultimate) {
+                    ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
+                    // SIMD aliases (`type f32x4 = v128`) and half aliases —
+                    // see the `Primitive` arm below.
+                    ResolvedType::Primitive(p) => *p == PrimitiveType::V128 || p.is_half(),
+                    _ => false,
+                }
             }
             // Types with no native Wasm binary-op support and no prelude
             // trait impl. Without rejection, codegen emits `ref.eq` /
@@ -244,14 +268,11 @@ impl TypeSystem {
             // lowering for BuiltinArray"). Its comparison dispatches through the
             // element-wise `Eq` / `Ord` impls in `core:prelude/array.wado`.
             ResolvedType::BuiltinArray(_) => true,
-            // `v128` (and its SIMD type aliases) is a 128-bit vector with no
-            // scalar binary-op semantics: Wasm has no `v128`-to-bool `==`, and
-            // a fall-through to `i32.eq` produces invalid core Wasm
-            // ("type mismatch: expected i32, found v128"). SIMD comparison is
-            // lane-wise via the `core:simd` builtins / methods, so reject the
-            // scalar operator and route to the requires-trait diagnostic
-            // (there is no `Eq`/`Ord`/`Add`/… impl for `v128`).
-            ResolvedType::Primitive(PrimitiveType::V128) => true,
+            // No Wasm instruction: `i32.eq` on a `v128` is invalid, and a half's
+            // `u16` would add bit patterns. Their `core:prelude` impls answer.
+            ResolvedType::Primitive(
+                PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16,
+            ) => true,
             // `()` pushes nothing, so the `i32.eq` below it underflows the
             // stack; its `Eq` / `Ord` are the prelude's impls for `()`, and
             // the other operators have none. `Never` is deliberately absent:
@@ -313,7 +334,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else if both_refs {
                 // All operators other than == and != are invalid on reference types
                 let type_name = self.tysys.type_table.borrow().type_name(left);
-                let op_str = binary_op_symbol(op);
+                let op_str = binary_op_str(op);
                 let _ = self.emit(TypeError::OperatorNotApplicable {
                     op: op_str.to_string(),
                     operands: vec![type_name],
@@ -324,6 +345,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // If left is a reference but right is not (e.g., &i32 == i32),
             // fall through to the normal type mismatch error below.
+        }
+
+        // Handles compare by host identity; reify rebuilds the `$same` call.
+        if matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
+            && self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .identity_root(left, right)
+                .is_some()
+        {
+            return TypeTable::BOOL;
         }
 
         let is_comparison = matches!(
@@ -376,6 +409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .into_string(),
                     )
                 }
+                ResolvedType::Primitive(_) => self.tysys.primitive_op_receiver(left, left),
                 // No written impl answers, so the derivation the representation
                 // carries does — named by that head, not by one peel, which on a
                 // chain (`type B = A; type A = Point`) lands on another newtype.
@@ -388,7 +422,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | ResolvedType::Variant { .. } => {
                             Some(tt.fq_base_type_name(ultimate).into_string())
                         }
-                        _ => None,
+                        _ => self.tysys.primitive_op_receiver(left, ultimate),
                     }
                 }
                 _ => None,
@@ -403,23 +437,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Handle Eq trait (== and !=)
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
-                    let eq_trait_name = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .compiler_trait_name(CompilerItem::Eq)
-                        .to_string();
                     let eq_method = self.operator_method_name(CompilerItem::Eq);
-                    let Some(eq_trait) = self.tysys.compiler_trait_def(CompilerItem::Eq) else {
-                        return TypeTable::ERROR;
-                    };
-                    let Some(resolved) = self.resolve_trait_method_for_op(
+                    let Some(resolved) = self.resolve_comparison_method(
+                        CompilerItem::Eq,
+                        &eq_method,
                         &struct_name,
                         lookup_type_id,
-                        eq_trait,
-                        &eq_trait_name,
-                        &eq_method,
-                        false,
                         Some(&ArgClass::Exact(right)),
                     ) else {
                         let type_name = self.tysys.type_table.borrow().type_name(left);
@@ -451,25 +474,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) {
-                    let ord_trait_name = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .compiler_trait_name(CompilerItem::Ord)
-                        .to_string();
-                    let ord_method = self.operator_method_name(CompilerItem::Ord);
-                    let Some(ord_trait) = self.tysys.compiler_trait_def(CompilerItem::Ord) else {
-                        return TypeTable::ERROR;
-                    };
-                    let Some(resolved) = self.resolve_trait_method_for_op(
-                        &struct_name,
-                        lookup_type_id,
-                        ord_trait,
-                        &ord_trait_name,
-                        &ord_method,
-                        false,
-                        None,
-                    ) else {
+                    // A half's `cmp` is the total order and its `<` is IEEE, so
+                    // `OperatorOrd` goes first where a type writes one.
+                    let resolved = self
+                        .resolve_operator_ord_method(&struct_name, lookup_type_id, op)
+                        .or_else(|| {
+                            let cmp = self.operator_method_name(CompilerItem::Ord);
+                            self.resolve_comparison_method(
+                                CompilerItem::Ord,
+                                &cmp,
+                                &struct_name,
+                                lookup_type_id,
+                                None,
+                            )
+                        });
+                    let Some(resolved) = resolved else {
                         let type_name = self.tysys.type_table.borrow().type_name(left);
                         let op_str = match op {
                             BinaryOp::Lt => "<",
@@ -486,14 +505,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         return TypeTable::ERROR;
                     };
-                    let cmp_call = self.dispatch_trait_op_method(
+                    let call = self.dispatch_trait_op_method(
                         left,
                         vec![(right, right_span)],
                         &resolved,
                         span,
                         origin,
                     );
-                    if cmp_call == TypeTable::ERROR {
+                    if call == TypeTable::ERROR {
                         return TypeTable::ERROR;
                     }
                     return TypeTable::BOOL;
@@ -889,7 +908,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod
             ) && matches!(left_resolved, ResolvedType::Flags { .. });
             if is_flags_arith {
-                let op_char = binary_op_symbol(op);
+                let op_char = binary_op_str(op);
                 let type_name = self.tysys.type_table.borrow().type_name(left);
                 let _ = self.emit(TypeError::OperatorNotApplicable {
                     op: op_char.to_string(),
@@ -925,7 +944,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     | BinaryOp::BitAnd
                     | BinaryOp::BitOr
                     | BinaryOp::BitXor => Some((
-                        binary_op_symbol(op),
+                        binary_op_str(op),
                         "bitwise and shift operators are integer-only".to_string(),
                     )),
                     _ => None,
@@ -962,7 +981,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_table = self.tysys.type_table.borrow();
                 let left_name = type_table.type_name(left);
                 let right_name = type_table.type_name(right);
-                let op_char = binary_op_symbol(op);
+                let op_char = binary_op_str(op);
                 drop(type_table);
                 if left_name == right_name {
                     // Both operands share a type that lacks the operator's
@@ -1124,9 +1143,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `resolve_trait_method_for_op` + `dispatch_trait_op_method`
         // pipeline as binary operators.  The builder handles the zero-arg
         // case via `resolved.param_types.is_empty()`.
-        if let Some((method_name, item)) = match unary.op {
-            UnaryOp::Neg => Some(("neg", CompilerItem::Neg)),
-            UnaryOp::BitNot => Some(("bitnot", CompilerItem::BitNot)),
+        if let Some((method_name, item, op_symbol)) = match unary.op {
+            UnaryOp::Neg => Some(("neg", CompilerItem::Neg, "-")),
+            UnaryOp::BitNot => Some(("bitnot", CompilerItem::BitNot, "~")),
             _ => None,
         } {
             let trait_name = self
@@ -1230,6 +1249,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         Some(unary.id),
                     );
                 }
+            }
+
+            // No impl answered, and the WIR lowering has no opcode for this
+            // operand, so reject here: `scalar_kind` would panic instead.
+            if expr_type != TypeTable::ERROR
+                && self.tysys.unary_operand_requires_trait(unary.op, expr_type)
+            {
+                let operand = self.tysys.type_table.borrow().type_name(expr_type);
+                let _ = self.emit(TypeError::OperatorNotApplicable {
+                    op: op_symbol.to_string(),
+                    operands: vec![operand],
+                    note: Some(format!("type does not implement `{trait_name}`")),
+                    span: unary.span,
+                });
+                return TypeTable::ERROR;
             }
         }
 
@@ -1777,42 +1811,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         chain: &ast::ComparisonChainExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        if chain.comparisons.is_empty() {
-            // Degenerate parse — no chain expansion fires, so this is not
-            // a desugar site. Do not record `ComparisonChain` here.
-            return self.resolve_expr(&chain.first, ctx, None);
-        }
-
-        // Single comparison: no middle term to bind, just one Binary.
-        // Same reasoning: no chain expansion took place.
-        if chain.comparisons.len() == 1 {
-            let cmp = &chain.comparisons[0];
-            let (left_tir, right_tir) = self.resolve_binary_operands_with_coercion(
-                &chain.first,
-                cmp.op,
-                &cmp.right,
-                ctx,
-                None,
-            );
-            // When the comparison
-            // takes the operator-trait dispatch path inside
-            // `resolve_binary_op` (non-primitive operands → Eq /
-            // Ord trait methods), tag the recording with the chain's
-            // AstId so reify can replay the same method-call + Ord
-            // wrap shape.
-            return self.resolve_binary_op(
-                left_tir,
-                cmp.op,
-                right_tir,
-                cmp.right.span(),
-                cmp.op_span,
-                Some(chain.id),
-            );
-        }
-
-        // Multi-comparison: actual chain expansion. Tag the node so the
-        // future `reify` pass can replay the same `(a < b) & (b < c)`
-        // shape with the same `$mK` middle bindings.
+        assert!(
+            chain.comparisons.len() >= 2,
+            "the parser makes a single comparison a `Binary`"
+        );
         self.record_desugar(chain.id, DesugarKind::ComparisonChain);
 
         // Enter a fresh scope for the `$mK` bindings so they don't leak
@@ -1914,24 +1916,73 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(trait_) = self.tysys.trait_env.trait_def_of_fq(found_trait) else {
             return operand_type_id;
         };
-        if self
-            .tysys
-            .trait_env
-            .trait_decl_headers
-            .get(&trait_)
-            .is_none_or(|header| !header.assoc_types.iter().any(|a| a.name == "Output"))
-        {
+        if !self.tysys.trait_env.declares_assoc_type(&trait_, "Output") {
             return operand_type_id;
         }
-        let param_name =
-            bound_param_name(self.tysys.type_table.borrow().get(operand_type_id)).cloned();
-        let Some(name) = param_name else {
+        let Some(name) = self.tysys.binder_name(operand_type_id) else {
             return operand_type_id;
         };
         self.frame_projection_of_trait(&name, trait_, "Output")
             .unwrap_or_else(|| {
-                self.make_frame_projection_of_trait(operand_type_id, &name, Some(trait_), "Output")
+                self.make_frame_projection_of_trait(operand_type_id, &name, trait_, "Output")
             })
+    }
+
+    /// A comparison operator's trait method on `struct_name`, named through
+    /// the compiler item that anchors the trait.
+    fn resolve_comparison_method(
+        &mut self,
+        item: CompilerItem,
+        method: &str,
+        struct_name: &str,
+        lookup_type_id: TypeId,
+        rhs: Option<&ArgClass>,
+    ) -> Option<ResolvedTraitMethod> {
+        let trait_ = self.tysys.compiler_trait_def(item)?;
+        let trait_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_trait_name(item)
+            .to_string();
+        self.resolve_trait_method_for_op(
+            struct_name,
+            lookup_type_id,
+            trait_,
+            &trait_name,
+            method,
+            false,
+            rhs,
+        )
+    }
+
+    /// The `OperatorOrd` method an ordering operator reads, for a type that
+    /// writes one. `None` leaves the operator on `Ord::cmp`, which is every
+    /// type but the halves.
+    fn resolve_operator_ord_method(
+        &mut self,
+        struct_name: &str,
+        lookup_type_id: TypeId,
+        op: BinaryOp,
+    ) -> Option<ResolvedTraitMethod> {
+        let method = match op {
+            BinaryOp::Lt => "lt",
+            BinaryOp::LtEq => "le",
+            BinaryOp::Gt => "gt",
+            BinaryOp::GtEq => "ge",
+            _ => unreachable!("resolve_operator_ord_method takes an ordering operator"),
+        };
+        let mut resolved = self.resolve_comparison_method(
+            CompilerItem::OperatorOrd,
+            method,
+            struct_name,
+            lookup_type_id,
+            None,
+        )?;
+        // The impl lookup defaults a trait with no `type Output` to the
+        // receiver's type; every `OperatorOrd` method answers `bool`.
+        resolved.return_type = TypeTable::BOOL;
+        Some(resolved)
     }
 
     /// Dispatch an operator to a trait method, unary and binary alike, over
@@ -2096,29 +2147,5 @@ fn projected_subscripts_of_place(target: &ast::Expr) -> Vec<AstId> {
             ast::Expr::FieldAccess(field) => at = &field.expr,
             _ => return subscripts,
         }
-    }
-}
-
-/// The source spelling of a binary operator, for diagnostics.
-pub(super) fn binary_op_symbol(op: BinaryOp) -> &'static str {
-    match op {
-        BinaryOp::Add => "+",
-        BinaryOp::Sub => "-",
-        BinaryOp::Mul => "*",
-        BinaryOp::Div => "/",
-        BinaryOp::Mod => "%",
-        BinaryOp::BitAnd => "&",
-        BinaryOp::BitOr => "|",
-        BinaryOp::BitXor => "^",
-        BinaryOp::Shl => "<<",
-        BinaryOp::Shr => ">>",
-        BinaryOp::And => "&&",
-        BinaryOp::Or => "||",
-        BinaryOp::Eq => "==",
-        BinaryOp::NotEq => "!=",
-        BinaryOp::Lt => "<",
-        BinaryOp::LtEq => "<=",
-        BinaryOp::Gt => ">",
-        BinaryOp::GtEq => ">=",
     }
 }

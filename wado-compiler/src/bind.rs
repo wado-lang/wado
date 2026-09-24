@@ -66,6 +66,18 @@ pub enum BindError {
     UseBeforeInit { name: String, span: Span },
 }
 
+/// How the names a pattern binds enter the current scope.
+#[derive(Clone, Copy)]
+enum BindingKind {
+    /// A `let` with an initializer, or a `for-of` binding.
+    Initialized { is_mut: bool, is_reactive: bool },
+    /// A `let x: T;`, which every read before an assignment reports.
+    Uninitialized { is_mut: bool, is_reactive: bool },
+    /// A pattern that may not match: `if let`, `while let`, a `match` arm,
+    /// `matches`. A name the scope already holds is that same binding.
+    Refutable,
+}
+
 impl From<BindError> for Diagnostic {
     fn from(e: BindError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
@@ -556,128 +568,121 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             // Initialized let: bind the initializer first (uses outer scope vars)
             self.bind_expr(value)?;
 
-            // Check if this is a same-scope shadowing with self-reference
-            // (e.g., `let x = x + 1`). The old binding must remain in scope
-            // during bind_expr above so the RHS can reference it. Now that
-            // the RHS is bound, remove the old binding before define() so it
-            // won't report a duplicate.
-            if let Pattern::Ident { name, .. } | Pattern::MutIdent { name, .. } = &let_stmt.pattern
-            {
-                let is_duplicate_in_scope = self
-                    .scopes
-                    .last()
-                    .is_some_and(|scope| scope.bindings.contains_key(name));
-                if is_duplicate_in_scope && expr_references_var(value, name) {
-                    self.scopes
-                        .last_mut()
-                        .unwrap()
-                        .bindings
-                        .shift_remove(name.as_str());
-                }
-            }
-
             // Bind the else block before the pattern bindings, so it cannot
             // see them — they escape to the enclosing scope, not the else block.
             if let Some(else_block) = &let_stmt.else_block {
                 self.bind_block(else_block)?;
             }
 
-            // Define the variables from the pattern as initialized
-            self.bind_let_pattern(
+            // `let x = x + 1` and `let Some(x) = x else { … x … }` shadow a
+            // binding both the initializer and the else block may read, so it
+            // leaves scope only here, before `define` would call it a duplicate.
+            for_each_pattern_name(&let_stmt.pattern, &mut |name, _| {
+                let shadowed = self
+                    .scopes
+                    .last()
+                    .is_some_and(|scope| scope.bindings.contains_key(name));
+                if shadowed && expr_references_var(value, name) {
+                    self.scopes.last_mut().unwrap().bindings.shift_remove(name);
+                }
+            });
+
+            self.bind_pattern_as(
                 &let_stmt.pattern,
-                let_stmt.is_mut,
-                let_stmt.is_reactive,
+                BindingKind::Initialized {
+                    is_mut: let_stmt.is_mut,
+                    is_reactive: let_stmt.is_reactive,
+                },
                 let_stmt.span,
             )
         } else {
-            // Uninitialized let (`let x: T;`): define as possibly uninitialized.
-            // Type annotation is guaranteed by the parser.
-            self.bind_let_pattern_uninit(
+            // `let x: T;`, which the parser guarantees is annotated.
+            self.bind_pattern_as(
                 &let_stmt.pattern,
-                let_stmt.is_mut,
-                let_stmt.is_reactive,
+                BindingKind::Uninitialized {
+                    is_mut: let_stmt.is_mut,
+                    is_reactive: let_stmt.is_reactive,
+                },
                 let_stmt.span,
             )
         }
     }
 
-    /// Like `bind_let_pattern` but registers variables as possibly uninitialized.
-    fn bind_let_pattern_uninit(
+    /// Enter each name `pattern` binds, as `kind` defines them. One walk for
+    /// every kind: a walk apiece once dropped `Variant` from two of them.
+    fn bind_pattern_as(
         &mut self,
         pattern: &Pattern,
-        is_mut: bool,
-        is_reactive: bool,
+        kind: BindingKind,
         span: Span,
     ) -> Result<(), Bail> {
         match pattern {
-            Pattern::Ident { name, .. } | Pattern::MutIdent { name, .. } => {
-                self.define_uninit(name, is_mut, is_reactive, span)?;
-            }
+            Pattern::Ident { name, .. } => self.define_as(name, kind, false, span)?,
+            // `let Some(mut n) = …` and `if let Some(mut n) = …` carry the
+            // `mut` on the binding; a `let mut` carries it on every binding.
+            Pattern::MutIdent { name, .. } => self.define_as(name, kind, true, span)?,
             Pattern::Tuple(patterns, _) => {
                 for p in patterns {
-                    self.bind_let_pattern_uninit(p, is_mut, is_reactive, span)?;
+                    self.bind_pattern_as(p, kind, span)?;
                 }
             }
-            Pattern::Wildcard => {}
+            Pattern::Variant {
+                bindings,
+                span: variant_span,
+                ..
+            } => {
+                for p in bindings {
+                    self.bind_pattern_as(p, kind, *variant_span)?;
+                }
+            }
             Pattern::Struct { fields, .. } => {
                 for field in fields {
-                    self.bind_let_pattern_uninit(&field.pattern, is_mut, is_reactive, span)?;
+                    self.bind_pattern_as(&field.pattern, kind, span)?;
                 }
             }
-            Pattern::Literal(_)
-            | Pattern::Variant { .. }
-            | Pattern::Range { .. }
-            | Pattern::Error(_) => {}
+            // Every alternative binds the same names, so the first speaks for
+            // all of them.
             Pattern::Or(alternatives) => {
-                // Bind variables from the first alternative (all alternatives must bind the same names)
                 if let Some(first) = alternatives.first() {
-                    self.bind_let_pattern_uninit(first, is_mut, is_reactive, span)?;
+                    self.bind_pattern_as(first, kind, span)?;
                 }
+            }
+            Pattern::Typed { pattern, .. } => self.bind_pattern_as(pattern, kind, span)?,
+            Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {
             }
         }
         Ok(())
     }
 
-    /// Bind a let pattern with mutability and reactivity information
-    fn bind_let_pattern(
+    /// Enter one name from a pattern. `pattern_mut` is a `mut` written on the
+    /// binding itself, which adds to whatever the statement declared.
+    fn define_as(
         &mut self,
-        pattern: &Pattern,
-        is_mut: bool,
-        is_reactive: bool,
+        name: &str,
+        kind: BindingKind,
+        pattern_mut: bool,
         span: Span,
     ) -> Result<(), Bail> {
-        match pattern {
-            Pattern::Ident { name, .. } | Pattern::MutIdent { name, .. } => {
-                self.define(name, is_mut, is_reactive, span)?;
-            }
-            Pattern::Tuple(patterns, _) => {
-                for p in patterns {
-                    self.bind_let_pattern(p, is_mut, is_reactive, span)?;
+        match kind {
+            BindingKind::Initialized {
+                is_mut,
+                is_reactive,
+            } => self.define(name, is_mut || pattern_mut, is_reactive, span),
+            BindingKind::Uninitialized {
+                is_mut,
+                is_reactive,
+            } => self.define_uninit(name, is_mut || pattern_mut, is_reactive, span),
+            BindingKind::Refutable => {
+                let taken = self
+                    .scopes
+                    .last()
+                    .is_some_and(|scope| scope.bindings.contains_key(name));
+                if !pattern_mut && taken {
+                    return Ok(());
                 }
-            }
-            Pattern::Wildcard => {
-                // No variable introduced for wildcard
-            }
-            Pattern::Struct { fields, .. } => {
-                for field in fields {
-                    self.bind_let_pattern(&field.pattern, is_mut, is_reactive, span)?;
-                }
-            }
-            Pattern::Or(alternatives) => {
-                if let Some(first) = alternatives.first() {
-                    self.bind_let_pattern(first, is_mut, is_reactive, span)?;
-                }
-            }
-            Pattern::Literal(_)
-            | Pattern::Variant { .. }
-            | Pattern::Range { .. }
-            | Pattern::Error(_) => {
-                // Literal, variant, and range patterns are not valid in let statements
-                // This would be caught by the type checker.
-                // Pattern::Error is a parser recovery placeholder: nothing to bind.
+                self.define(name, pattern_mut, false, span)
             }
         }
-        Ok(())
     }
 
     /// Bind an expression statement
@@ -789,11 +794,12 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         // Enter a new scope for the loop binding and body
         self.enter_scope();
 
-        // Define the loop variable(s)
-        self.bind_let_pattern(
+        self.bind_pattern_as(
             &for_of_stmt.binding,
-            for_of_stmt.is_mut,
-            false, // not reactive
+            BindingKind::Initialized {
+                is_mut: for_of_stmt.is_mut,
+                is_reactive: false,
+            },
             for_of_stmt.span,
         )?;
 
@@ -1161,47 +1167,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     /// so duplicate bare names like `[Null, Null]` in a match pattern are valid
     /// (the elaborator disambiguates them using type information).
     fn bind_pattern(&mut self, pattern: &Pattern, span: Span) -> Result<(), Bail> {
-        match pattern {
-            Pattern::Ident { name, .. } => {
-                let scope = self.scopes.last().unwrap();
-                if !scope.bindings.contains_key(name) {
-                    self.define(name, false, false, span)?;
-                }
-            }
-            Pattern::MutIdent { name, .. } => {
-                self.define(name, true, false, span)?;
-            }
-            Pattern::Tuple(patterns, _) => {
-                for p in patterns {
-                    self.bind_pattern(p, span)?;
-                }
-            }
-            Pattern::Variant {
-                bindings,
-                span: variant_span,
-                ..
-            } => {
-                // Bind nested patterns in variant
-                for p in bindings {
-                    self.bind_pattern(p, *variant_span)?;
-                }
-            }
-            Pattern::Struct { fields, .. } => {
-                for field in fields {
-                    self.bind_pattern(&field.pattern, span)?;
-                }
-            }
-            Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {
-                // No variables introduced
-            }
-            Pattern::Or(alternatives) => {
-                // Bind variables from the first alternative (all alternatives must bind the same names)
-                if let Some(first) = alternatives.first() {
-                    self.bind_pattern(first, span)?;
-                }
-            }
-        }
-        Ok(())
+        self.bind_pattern_as(pattern, BindingKind::Refutable, span)
     }
 
     /// Bind a closure

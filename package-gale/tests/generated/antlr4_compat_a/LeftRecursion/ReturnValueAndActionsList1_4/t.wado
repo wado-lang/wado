@@ -1107,66 +1107,58 @@ impl Lexer {
 fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
-    let mut alts_ok_0 = false;
-    alts_0_0: {
-        pos = alts_saved_0;
-        if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_0_0; }
-        pos += 1;
-        alts_ok_0 = true;
-    }
-    if !alts_ok_0 {
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_0_0; }
+            pos += 1;
+            break alts_done_0;
+        }
         alts_0_1: {
             pos = alts_saved_0;
             if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_0_1; }
             pos += 1;
-            alts_ok_0 = true;
+            break alts_done_0;
         }
-        if !alts_ok_0 {
-            alts_0_2: {
-                pos = alts_saved_0;
-                if pos >= chars.len() || chars[pos] != '_' { break alts_0_2; }
-                pos += 1;
-                alts_ok_0 = true;
-            }
+        alts_0_2: {
+            pos = alts_saved_0;
+            if pos >= chars.len() || chars[pos] != '_' { break alts_0_2; }
+            pos += 1;
+            break alts_done_0;
         }
+        return -1;
     }
-    if !alts_ok_0 { return -1; }
     loop {
         let rep_saved_1 = pos;
         rep_1: {
             let alts_saved_2 = pos;
-            let mut alts_ok_2 = false;
-            alts_2_0: {
-                pos = alts_saved_2;
-                if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_2_0; }
-                pos += 1;
-                alts_ok_2 = true;
-            }
-            if !alts_ok_2 {
+            alts_done_2: {
+                alts_2_0: {
+                    pos = alts_saved_2;
+                    if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_2_0; }
+                    pos += 1;
+                    break alts_done_2;
+                }
                 alts_2_1: {
                     pos = alts_saved_2;
                     if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_2_1; }
                     pos += 1;
-                    alts_ok_2 = true;
+                    break alts_done_2;
                 }
-                if !alts_ok_2 {
-                    alts_2_2: {
-                        pos = alts_saved_2;
-                        if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break alts_2_2; }
-                        pos += 1;
-                        alts_ok_2 = true;
-                    }
-                    if !alts_ok_2 {
-                        alts_2_3: {
-                            pos = alts_saved_2;
-                            if pos >= chars.len() || chars[pos] != '_' { break alts_2_3; }
-                            pos += 1;
-                            alts_ok_2 = true;
-                        }
-                    }
+                alts_2_2: {
+                    pos = alts_saved_2;
+                    if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break alts_2_2; }
+                    pos += 1;
+                    break alts_done_2;
                 }
+                alts_2_3: {
+                    pos = alts_saved_2;
+                    if pos >= chars.len() || chars[pos] != '_' { break alts_2_3; }
+                    pos += 1;
+                    break alts_done_2;
+                }
+                break rep_1;
             }
-            if !alts_ok_2 { break rep_1; }
             continue;
         }
         pos = rep_saved_1;
@@ -1194,19 +1186,19 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_star(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_STAR(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '*' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_comma(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_COMMA(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ',' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_gtgt(chars: &List<char>, start: i32) -> i32 {
+fn try_lit_GTGT(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '>' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '>' { return -1; }
@@ -1223,24 +1215,28 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '\t' | '\n' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { '*' } {
-            end = try_lit_star(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
-        } else if first_char matches { ',' } {
-            end = try_lit_comma(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
-        } else if first_char matches { '>' } {
-            end = try_lit_gtgt(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GTGT; }
-        } else if first_char matches { '_' | 'a'..='z' | 'A'..='Z' } {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
+        match first_char {
+            '\t' | '\n' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            '*' => {
+                end = try_lit_STAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
+            },
+            ',' => {
+                end = try_lit_COMMA(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
+            },
+            '>' => {
+                end = try_lit_GTGT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_GTGT; }
+            },
+            'A'..='Z' | '_' | 'a'..='z' => {
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

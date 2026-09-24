@@ -18,18 +18,21 @@
 /// Bump allocator heap pointer. Starts at 8 to avoid returning address 0 (null sentinel).
 global mut heap_offset: i32 = 8;
 
+/// The Wasm linear memory page size, the unit `memory.size` and `memory.grow` count in.
+global PAGE_SIZE: i32 = 65536;
+
 /// Grow linear memory using a doubling strategy up to 16 MB, then 16 MB steps.
 /// Traps when the host refuses to grow, rather than handing out a pointer past
 /// the end of memory.
 fn grow_memory(new_offset: i32) {
-    let current_bytes = builtin::memory_size() * 65536;
+    let current_bytes = builtin::memory_size() * PAGE_SIZE;
     let deficit = new_offset - current_bytes;
     // Normal growth: double current size, capped at 16 MB
     let sixteen_mb = 16 * 1024 * 1024;
     let normal_grow = if current_bytes < sixteen_mb { current_bytes } else { sixteen_mb };
     // If deficit exceeds normal growth, round up to next power of two
     let grow_bytes = if deficit > normal_grow { 1 << 32 - builtin::i32_clz(deficit - 1) } else { normal_grow };
-    let grow_pages = (grow_bytes + 65535) / 65536;
+    let grow_pages = (grow_bytes + PAGE_SIZE - 1) / PAGE_SIZE;
     if builtin::memory_grow(grow_pages) < 0 {
         builtin::unreachable();
     }
@@ -51,7 +54,7 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
     let aligned = builtin::i32_and(heap_offset + align - 1, 0 - align);
     let new_offset = aligned + newsize;
 
-    if new_offset > builtin::memory_size() * 65536 {
+    if new_offset > builtin::memory_size() * PAGE_SIZE {
         builtin::cold_path();
         grow_memory(new_offset);
     }
@@ -77,7 +80,7 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
     let aligned = builtin::i32_and(heap_offset + align - 1, 0 - align);
     let new_offset = aligned + newsize;
 
-    if new_offset > builtin::memory_size() * 65536 {
+    if new_offset > builtin::memory_size() * PAGE_SIZE {
         builtin::cold_path();
         grow_memory(new_offset);
     }
@@ -297,7 +300,7 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
     // No fit: bump-allocate a fresh block at the heap frontier.
     let block = heap_offset;
     let new_offset = block + size;
-    if new_offset > builtin::memory_size() * 65536 {
+    if new_offset > builtin::memory_size() * PAGE_SIZE {
         builtin::cold_path();
         grow_memory(new_offset);
     }

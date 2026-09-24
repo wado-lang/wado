@@ -123,8 +123,6 @@ use {
     parse_f64_from_str,
     lenient_int_preprocess,
     lenient_float_preprocess,
-    lenient_int_error,
-    lenient_float_error,
 } from "core:prelude/intparse.wado";
 
 /// Copy bytes from linear memory to a new GC array (internal helper)
@@ -326,21 +324,25 @@ fn write_u64_base_digits(
     }
 }
 
-internal type i8;
-internal type i16;
-internal type i32;
-internal type i64;
-internal type u8;
-internal type u16;
-internal type u32;
-internal type u64;
-internal type f32;
-internal type f64;
-internal type v128;
-internal type bool;
-internal type char;
-internal type ();
-internal type !;
+// A builtin type name is in scope in every module of every package, so `pub`
+// is the reach it already has.
+pub type i8;
+pub type i16;
+pub type i32;
+pub type i64;
+pub type u8;
+pub type u16;
+pub type u32;
+pub type u64;
+pub type f32;
+pub type f64;
+pub type f16;
+pub type bf16;
+pub type v128;
+pub type bool;
+pub type char;
+pub type ();
+pub type !;
 
 impl () {
     pub fn to_string(&self) -> String {
@@ -362,6 +364,34 @@ impl bool {
     }
 }
 
+/// Error returned by `bool::from_str`, which takes `true` and `false` alone.
+pub struct ParseBoolError {
+}
+
+impl Display for ParseBoolError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str("provided string was not `true` or `false`");
+    }
+}
+
+impl Error for ParseBoolError {
+}
+
+impl FromStr for bool {
+    type Err = ParseBoolError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<bool, ParseBoolError> {
+        return match s.as_str_slice() {
+            "true" => Result::Ok(true),
+            "false" => Result::Ok(false),
+            _ => {
+                builtin::cold_path();
+                Result::Err(ParseBoolError {});
+            },
+        };
+    }
+}
+
 impl LenientFromStr for bool {
     type Err = LenientParseError;
 
@@ -373,6 +403,7 @@ impl LenientFromStr for bool {
         if text.eq_ignore_ascii_case("false") || text == "0" {
             return Result::Ok(false);
         }
+        builtin::cold_path();
         return Result::Err(LenientParseError::new("invalid boolean string"));
     }
 }
@@ -505,7 +536,7 @@ impl char {
     /// Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
     pub fn is_hexdigit(&self) -> bool {
         let c = *self;
-        return c.is_ascii_digit() || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
+        return c.is_ascii_digit() || 'a' <= c <= 'f' || 'A' <= c <= 'F';
     }
 
     /// Returns the numeric value of an ASCII hexadecimal digit (0–15).
@@ -515,10 +546,10 @@ impl char {
         if c.is_ascii_digit() {
             return c as i32 - '0' as i32;
         }
-        if c >= 'a' && c <= 'f' {
+        if 'a' <= c <= 'f' {
             return c as i32 - 'a' as i32 + 10;
         }
-        if c >= 'A' && c <= 'F' {
+        if 'A' <= c <= 'F' {
             return c as i32 - 'A' as i32 + 10;
         }
         panic("char::hex_digit_value: not a hex digit");
@@ -567,18 +598,75 @@ impl char {
     }
 }
 
+/// Kind of failure returned by char parsing.
+pub enum CharErrorKind {
+    /// The input string was empty.
+    Empty,
+    /// The input held more than one Unicode scalar.
+    TooManyChars,
+}
+
+/// Error returned by char parsing.
+pub struct ParseCharError {
+    pub kind: CharErrorKind,
+}
+
+impl ParseCharError {
+    pub fn new(kind: CharErrorKind) -> ParseCharError {
+        return ParseCharError { kind };
+    }
+
+    pub fn kind(&self) -> CharErrorKind {
+        return self.kind;
+    }
+}
+
+impl Display for ParseCharError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match self.kind {
+            Empty => "cannot parse char from empty string",
+            TooManyChars => "too many characters in string",
+        };
+        f.write_str(&message);
+    }
+}
+
+impl Error for ParseCharError {
+}
+
+impl From<ParseCharError> for LenientParseError {
+    fn from(e: ParseCharError) -> LenientParseError {
+        let reason: String = match e.kind() {
+            Empty => "empty char string",
+            TooManyChars => "char string holds more than one character",
+        };
+        return LenientParseError::new(reason);
+    }
+}
+
+impl FromStr for char {
+    type Err = ParseCharError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<char, ParseCharError> {
+        let mut iter = s.as_str_slice().chars();
+        let Some(first) = iter.next() else {
+            builtin::cold_path();
+            return Result::Err(ParseCharError::new(CharErrorKind::Empty));
+        };
+        if iter.next() matches { Some(_) } {
+            builtin::cold_path();
+            return Result::Err(ParseCharError::new(CharErrorKind::TooManyChars));
+        }
+        return Result::Ok(first);
+    }
+}
+
+/// Leniency adds nothing here: one Unicode scalar has one spelling.
 impl LenientFromStr for char {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<char, LenientParseError> {
-        let mut iter = s.as_str_slice().chars();
-        let Some(first) = iter.next() else {
-            return Result::Err(LenientParseError::new("expected exactly one character, got none"));
-        };
-        if iter.next() matches { Some(_) } {
-            return Result::Err(LenientParseError::new("expected exactly one character, got more"));
-        }
-        return Result::Ok(first);
+        return Result::Ok(char::from_str(s)?);
     }
 }
 
@@ -616,21 +704,15 @@ impl i8 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i8, ParseIntError> {
-        return match parse_i64_radix(&s.as_str_slice(), radix, 127, 128) {
-            Ok(v) => Result::Ok(v as i8),
-            Err(e) => Result::Err(e),
-        };
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), radix, i8::MAX as i64, i8::MAX as u64 + 1)? as i8);
     }
 }
 
 impl FromStr for i8 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<i8, ParseIntError> {
-        return match parse_i64_radix(s, 10, 127, 128) {
-            Ok(v) => Result::Ok(v as i8),
-            Err(e) => Result::Err(e),
-        };
+    fn from_str<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError> {
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), 10, i8::MAX as i64, i8::MAX as u64 + 1)? as i8);
     }
 }
 
@@ -638,16 +720,8 @@ impl LenientFromStr for i8 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i8, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match i8::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(i8::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -737,21 +811,15 @@ impl u8 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u8, ParseIntError> {
-        return match parse_u64_radix(&s.as_str_slice(), radix, 255) {
-            Ok(v) => Result::Ok(v as u8),
-            Err(e) => Result::Err(e),
-        };
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), radix, u8::MAX as u64)? as u8);
     }
 }
 
 impl FromStr for u8 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<u8, ParseIntError> {
-        return match parse_u64_radix(s, 10, 255) {
-            Ok(v) => Result::Ok(v as u8),
-            Err(e) => Result::Err(e),
-        };
+    fn from_str<S: AsStrSlice>(s: S) -> Result<u8, ParseIntError> {
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), 10, u8::MAX as u64)? as u8);
     }
 }
 
@@ -759,16 +827,8 @@ impl LenientFromStr for u8 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u8, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match u8::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(u8::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -806,21 +866,15 @@ impl i16 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i16, ParseIntError> {
-        return match parse_i64_radix(&s.as_str_slice(), radix, 32767, 32768) {
-            Ok(v) => Result::Ok(v as i16),
-            Err(e) => Result::Err(e),
-        };
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), radix, i16::MAX as i64, i16::MAX as u64 + 1)? as i16);
     }
 }
 
 impl FromStr for i16 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<i16, ParseIntError> {
-        return match parse_i64_radix(s, 10, 32767, 32768) {
-            Ok(v) => Result::Ok(v as i16),
-            Err(e) => Result::Err(e),
-        };
+    fn from_str<S: AsStrSlice>(s: S) -> Result<i16, ParseIntError> {
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), 10, i16::MAX as i64, i16::MAX as u64 + 1)? as i16);
     }
 }
 
@@ -828,16 +882,8 @@ impl LenientFromStr for i16 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i16, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match i16::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(i16::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -875,21 +921,15 @@ impl u16 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u16, ParseIntError> {
-        return match parse_u64_radix(&s.as_str_slice(), radix, 65535) {
-            Ok(v) => Result::Ok(v as u16),
-            Err(e) => Result::Err(e),
-        };
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), radix, u16::MAX as u64)? as u16);
     }
 }
 
 impl FromStr for u16 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<u16, ParseIntError> {
-        return match parse_u64_radix(s, 10, 65535) {
-            Ok(v) => Result::Ok(v as u16),
-            Err(e) => Result::Err(e),
-        };
+    fn from_str<S: AsStrSlice>(s: S) -> Result<u16, ParseIntError> {
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), 10, u16::MAX as u64)? as u16);
     }
 }
 
@@ -897,16 +937,8 @@ impl LenientFromStr for u16 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u16, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match u16::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(u16::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -967,21 +999,15 @@ impl i32 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i32, ParseIntError> {
-        return match parse_i64_radix(&s.as_str_slice(), radix, 2147483647, 2147483648) {
-            Ok(v) => Result::Ok(v as i32),
-            Err(e) => Result::Err(e),
-        };
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), radix, i32::MAX as i64, i32::MAX as u64 + 1)? as i32);
     }
 }
 
 impl FromStr for i32 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<i32, ParseIntError> {
-        return match parse_i64_radix(s, 10, 2147483647, 2147483648) {
-            Ok(v) => Result::Ok(v as i32),
-            Err(e) => Result::Err(e),
-        };
+    fn from_str<S: AsStrSlice>(s: S) -> Result<i32, ParseIntError> {
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), 10, i32::MAX as i64, i32::MAX as u64 + 1)? as i32);
     }
 }
 
@@ -989,16 +1015,8 @@ impl LenientFromStr for i32 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i32, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match i32::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(i32::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -1043,21 +1061,15 @@ impl u32 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u32, ParseIntError> {
-        return match parse_u64_radix(&s.as_str_slice(), radix, 4294967295) {
-            Ok(v) => Result::Ok(v as u32),
-            Err(e) => Result::Err(e),
-        };
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), radix, u32::MAX as u64)? as u32);
     }
 }
 
 impl FromStr for u32 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<u32, ParseIntError> {
-        return match parse_u64_radix(s, 10, 4294967295) {
-            Ok(v) => Result::Ok(v as u32),
-            Err(e) => Result::Err(e),
-        };
+    fn from_str<S: AsStrSlice>(s: S) -> Result<u32, ParseIntError> {
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), 10, u32::MAX as u64)? as u32);
     }
 }
 
@@ -1065,16 +1077,8 @@ impl LenientFromStr for u32 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u32, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match u32::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(u32::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -1136,15 +1140,15 @@ impl i64 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i64, ParseIntError> {
-        return parse_i64_radix(&s.as_str_slice(), radix, 9223372036854775807, 9223372036854775808);
+        return parse_i64_radix(&s.as_str_slice(), radix, i64::MAX, i64::MAX as u64 + 1);
     }
 }
 
 impl FromStr for i64 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<i64, ParseIntError> {
-        return parse_i64_radix(s, 10, 9223372036854775807, 9223372036854775808);
+    fn from_str<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError> {
+        return parse_i64_radix(&s.as_str_slice(), 10, i64::MAX, i64::MAX as u64 + 1);
     }
 }
 
@@ -1152,16 +1156,8 @@ impl LenientFromStr for i64 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i64, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match i64::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(i64::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -1237,8 +1233,8 @@ impl u64 {
 impl FromStr for u64 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<u64, ParseIntError> {
-        return parse_u64_radix(s, 10, u64::MAX);
+    fn from_str<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError> {
+        return parse_u64_radix(&s.as_str_slice(), 10, u64::MAX);
     }
 }
 
@@ -1246,16 +1242,8 @@ impl LenientFromStr for u64 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u64, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match u64::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(u64::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -1566,25 +1554,22 @@ impl f32 {
         return *self - *self == 0.0;
     }
 
-    /// Reinterprets the bits of this f32 as an i32.
-    pub fn to_bits(&self) -> i32 {
-        return builtin::i32_reinterpret_f32(*self);
+    /// Reinterprets the bits of this f32 as a u32.
+    pub fn to_bits(&self) -> u32 {
+        return builtin::i32_reinterpret_f32(*self) as u32;
     }
 
     /// Creates an f32 from its bit representation.
-    pub fn from_bits(bits: i32) -> f32 {
-        return builtin::f32_reinterpret_i32(bits);
+    pub fn from_bits(bits: u32) -> f32 {
+        return builtin::f32_reinterpret_i32(bits as i32);
     }
 }
 
 impl FromStr for f32 {
     type Err = ParseFloatError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<f32, ParseFloatError> {
-        return match parse_f64_from_str(s) {
-            Ok(v) => Result::Ok(v as f32),
-            Err(e) => Result::Err(e),
-        };
+    fn from_str<S: AsStrSlice>(s: S) -> Result<f32, ParseFloatError> {
+        return Result::Ok(parse_f64_from_str(&s.as_str_slice())? as f32);
     }
 }
 
@@ -1593,10 +1578,7 @@ impl LenientFromStr for f32 {
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f32, LenientParseError> {
         let cleaned = lenient_float_preprocess(s);
-        return match f32::from_str(cleaned) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_float_error(e)),
-        };
+        return Result::Ok(f32::from_str(cleaned)?);
     }
 }
 
@@ -1959,22 +1941,22 @@ impl f64 {
         return *self - *self == 0.0;
     }
 
-    /// Reinterprets the bits of this f64 as an i64.
-    pub fn to_bits(&self) -> i64 {
-        return builtin::i64_reinterpret_f64(*self);
+    /// Reinterprets the bits of this f64 as a u64.
+    pub fn to_bits(&self) -> u64 {
+        return builtin::i64_reinterpret_f64(*self) as u64;
     }
 
     /// Creates an f64 from its bit representation.
-    pub fn from_bits(bits: i64) -> f64 {
-        return builtin::f64_reinterpret_i64(bits);
+    pub fn from_bits(bits: u64) -> f64 {
+        return builtin::f64_reinterpret_i64(bits as i64);
     }
 }
 
 impl FromStr for f64 {
     type Err = ParseFloatError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<f64, ParseFloatError> {
-        return parse_f64_from_str(s);
+    fn from_str<S: AsStrSlice>(s: S) -> Result<f64, ParseFloatError> {
+        return parse_f64_from_str(&s.as_str_slice());
     }
 }
 
@@ -1983,10 +1965,7 @@ impl LenientFromStr for f64 {
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f64, LenientParseError> {
         let cleaned = lenient_float_preprocess(s);
-        return match f64::from_str(cleaned) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_float_error(e)),
-        };
+        return Result::Ok(f64::from_str(cleaned)?);
     }
 }
 
@@ -2091,6 +2070,16 @@ impl Eq for () {
 impl Ord for () {
     pub fn cmp(&self, other: &Self) -> Ordering {
         return Ordering::Equal;
+    }
+}
+
+/// All 128 bits equal. The lane-typed aliases are all the same `v128`, so
+/// there is no lane type whose own equality this could defer to, and a float
+/// lane's NaN is a bit pattern here rather than a value. Compare as `f32x4`
+/// where the IEEE reading is the one wanted.
+impl Eq for v128 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return builtin::i8x16_all_true(builtin::i8x16_eq(*self, *other));
     }
 }
 
@@ -2703,27 +2692,34 @@ impl Ord for u64 {
     }
 }
 
+/// A float's bits reordered into IEEE 754-2019 `totalOrder`, which is C++20's
+/// `std::strong_order`: a negative flips whole, a positive flips its sign bit.
+fn total_order_key_32(bits: u32) -> u32 {
+    if bits & 0x8000_0000 != 0 {
+        return ~bits;
+    }
+    return bits | 0x8000_0000;
+}
+
+fn total_order_key_64(bits: u64) -> u64 {
+    if bits & 0x8000_0000_0000_0000 != 0 {
+        return ~bits;
+    }
+    return bits | 0x8000_0000_0000_0000;
+}
+
+// `Ord` is a total order, so it separates the two zeroes and puts every NaN at
+// one end rather than calling it equal to whatever it met. `==` and `<` keep
+// IEEE's answers, as C++20 splits `operator<=>` from `strong_order`.
 impl Ord for f32 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other {
-            return Ordering::Less;
-        }
-        if *self > *other {
-            return Ordering::Greater;
-        }
-        return Ordering::Equal;
+        return total_order_key_32(self.to_bits()).cmp(&total_order_key_32(other.to_bits()));
     }
 }
 
 impl Ord for f64 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other {
-            return Ordering::Less;
-        }
-        if *self > *other {
-            return Ordering::Greater;
-        }
-        return Ordering::Equal;
+        return total_order_key_64(self.to_bits()).cmp(&total_order_key_64(other.to_bits()));
     }
 }
 
@@ -2935,10 +2931,11 @@ impl From<bool> for i32 {
 }
 
 impl TryFrom<i64> for i32 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i64) -> Result<i32, ConvertError> {
         if value < i32::MIN as i64 || value > i32::MAX as i64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for i32`));
         }
         return Result::Ok(value as i32);
@@ -2946,10 +2943,11 @@ impl TryFrom<i64> for i32 {
 }
 
 impl TryFrom<i64> for i16 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i64) -> Result<i16, ConvertError> {
         if value < i16::MIN as i64 || value > i16::MAX as i64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for i16`));
         }
         return Result::Ok(value as i16);
@@ -2957,10 +2955,11 @@ impl TryFrom<i64> for i16 {
 }
 
 impl TryFrom<i64> for i8 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i64) -> Result<i8, ConvertError> {
         if value < i8::MIN as i64 || value > i8::MAX as i64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for i8`));
         }
         return Result::Ok(value as i8);
@@ -2968,10 +2967,11 @@ impl TryFrom<i64> for i8 {
 }
 
 impl TryFrom<i32> for i16 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i32) -> Result<i16, ConvertError> {
         if value < i16::MIN as i32 || value > i16::MAX as i32 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for i16`));
         }
         return Result::Ok(value as i16);
@@ -2979,10 +2979,11 @@ impl TryFrom<i32> for i16 {
 }
 
 impl TryFrom<i32> for i8 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i32) -> Result<i8, ConvertError> {
         if value < i8::MIN as i32 || value > i8::MAX as i32 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for i8`));
         }
         return Result::Ok(value as i8);
@@ -2990,10 +2991,11 @@ impl TryFrom<i32> for i8 {
 }
 
 impl TryFrom<i16> for i8 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i16) -> Result<i8, ConvertError> {
         if value < i8::MIN as i16 || value > i8::MAX as i16 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for i8`));
         }
         return Result::Ok(value as i8);
@@ -3001,10 +3003,11 @@ impl TryFrom<i16> for i8 {
 }
 
 impl TryFrom<i32> for u32 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i32) -> Result<u32, ConvertError> {
         if value < 0 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for u32`));
         }
         return Result::Ok(value as u32);
@@ -3012,10 +3015,11 @@ impl TryFrom<i32> for u32 {
 }
 
 impl TryFrom<i64> for u64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i64) -> Result<u64, ConvertError> {
         if value < 0 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for u64`));
         }
         return Result::Ok(value as u64);
@@ -3023,10 +3027,11 @@ impl TryFrom<i64> for u64 {
 }
 
 impl TryFrom<i64> for u32 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i64) -> Result<u32, ConvertError> {
         if value < 0 || value > u32::MAX as i64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for u32`));
         }
         return Result::Ok(value as u32);
@@ -3034,10 +3039,11 @@ impl TryFrom<i64> for u32 {
 }
 
 impl TryFrom<u64> for i64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u64) -> Result<i64, ConvertError> {
         if value > i64::MAX as u64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for i64`));
         }
         return Result::Ok(value as i64);
@@ -3045,10 +3051,11 @@ impl TryFrom<u64> for i64 {
 }
 
 impl TryFrom<u64> for u32 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u64) -> Result<u32, ConvertError> {
         if value > u32::MAX as u64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for u32`));
         }
         return Result::Ok(value as u32);
@@ -3056,10 +3063,11 @@ impl TryFrom<u64> for u32 {
 }
 
 impl TryFrom<u32> for u16 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u32) -> Result<u16, ConvertError> {
         if value > u16::MAX as u32 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for u16`));
         }
         return Result::Ok(value as u16);
@@ -3067,10 +3075,11 @@ impl TryFrom<u32> for u16 {
 }
 
 impl TryFrom<u32> for u8 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u32) -> Result<u8, ConvertError> {
         if value > u8::MAX as u32 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for u8`));
         }
         return Result::Ok(value as u8);
@@ -3078,10 +3087,11 @@ impl TryFrom<u32> for u8 {
 }
 
 impl TryFrom<u16> for u8 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u16) -> Result<u8, ConvertError> {
         if value > u8::MAX as u16 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for u8`));
         }
         return Result::Ok(value as u8);
@@ -3089,11 +3099,12 @@ impl TryFrom<u16> for u8 {
 }
 
 impl TryFrom<i64> for f32 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i64) -> Result<f32, ConvertError> {
         let f = value as f32;
         if f as i64 != value {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} cannot be exactly represented as f32`));
         }
         return Result::Ok(f);
@@ -3101,11 +3112,12 @@ impl TryFrom<i64> for f32 {
 }
 
 impl TryFrom<i64> for f64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i64) -> Result<f64, ConvertError> {
         let f = value as f64;
         if f as i64 != value {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} cannot be exactly represented as f64`));
         }
         return Result::Ok(f);
@@ -3113,10 +3125,11 @@ impl TryFrom<i64> for f64 {
 }
 
 impl TryFrom<u64> for f64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u64) -> Result<f64, ConvertError> {
         if value > 9007199254740992 as u64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} cannot be exactly represented as f64`));
         }
         return Result::Ok(value as f64);
@@ -3124,10 +3137,11 @@ impl TryFrom<u64> for f64 {
 }
 
 impl TryFrom<u64> for f32 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u64) -> Result<f32, ConvertError> {
         if value > 16777216 as u64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} cannot be exactly represented as f32`));
         }
         return Result::Ok(value as f32);

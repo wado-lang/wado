@@ -64,25 +64,17 @@ impl std::fmt::Display for Severity {
 /// The actual details go in the `Diagnostic::message` field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Code {
-    // Lexer errors
-    /// Invalid character in source
-    InvalidCharacter,
-    /// Unterminated string literal
-    UnterminatedString,
-    /// Invalid escape sequence
-    InvalidEscape,
-
-    // Parser errors
-    /// Unexpected token encountered
-    UnexpectedToken,
-    /// Expected a specific token
-    ExpectedToken,
-    /// Invalid syntax
+    // Lexer and parser errors
+    /// Source the lexer or the parser could not read as Wado
     InvalidSyntax,
 
-    // Binding errors
-    /// Variable not found in scope
+    // Name resolution and binding errors
+    /// A name that reaches no declaration, binding, or labeled block
     UndefinedVariable,
+    /// A receiver type that has no member by the name the call spells
+    MethodNotFound,
+    /// A `use` naming a symbol its module does not export
+    ImportNotFound,
     /// Duplicate definition
     DuplicateDefinition,
     /// Cannot assign to immutable variable
@@ -97,8 +89,35 @@ pub enum Code {
     Unavailable,
 
     // Type errors
-    /// Type mismatch
+    /// A value whose type is not the one the position requires
     TypeMismatch,
+    /// A count the declaration does not take: arguments, type arguments, or a
+    /// trait method's parameters
+    ArityMismatch,
+    /// A callee whose type is not a function
+    NotCallable,
+    /// Inference has nothing to settle a type from, so the site must spell it
+    NeedsTypeAnnotation,
+    /// A type that does not implement a trait a bound requires
+    TraitBoundNotSatisfied,
+    /// More than one candidate applies, and nothing ranks them
+    AmbiguousCandidate,
+    /// A method reached through a trait that is not imported here
+    TraitNotImported,
+    /// A trait or `impl` declaration that cannot stand as written
+    TraitDeclInvalid,
+    /// A receiver whose mode or presence does not match the declaration
+    ReceiverMismatch,
+    /// A struct literal whose fields do not match the declaration
+    StructFieldMismatch,
+    /// A path that must deliver a value and does not
+    MissingReturn,
+    /// A closure written where its form is not admitted
+    ClosureInvalid,
+    /// A type with no representation at the Component Model boundary
+    CmBoundaryType,
+    /// A `with ... do` whose handler does not implement the effect
+    EffectHandlerInvalid,
     /// Unknown type name
     UnknownType,
     /// Invalid type cast
@@ -109,12 +128,12 @@ pub enum Code {
     GenericFunctionRef,
 
     // Module errors
-    /// Module not found
+    /// An import path that resolves to no module
     ModuleNotFound,
     /// Circular dependency detected
     CircularDependency,
-    /// Failed to parse module
-    ModuleParseError,
+    /// A `#![stdlib]` that does not name a bundled stdlib module
+    StdlibAttr,
     /// Import of a symbol that is not visible at the import site
     /// (file-private, or `internal` reached from another package).
     PrivateSymbol,
@@ -122,8 +141,6 @@ pub enum Code {
     // I/O errors
     /// File read error
     FileReadError,
-    /// Network error
-    NetworkError,
 
     // Coherence errors
     /// Orphan rule violation
@@ -174,6 +191,9 @@ pub enum Code {
     /// A `use ... from "<path>"` whose source is a non-`.wado` schema is missing
     /// the required `with { generator: { ... } }` clause.
     KilnMissingWith,
+    /// A `use ... from "<path>"` names a generator, but no invocation produced a
+    /// module for it, so there is nothing to import.
+    KilnNoGeneratedModule,
     /// A generated `.wado` file on disk has been modified after generation
     /// (cache key matches the per-invocation `<primary>.kiln.json` cache file
     /// but on-disk content does not). The edit is honored — compilation
@@ -182,14 +202,16 @@ pub enum Code {
     /// On a cache miss, the generator produced bytes that differ from the
     /// pre-existing file at the same path. The new bytes overwrite the old.
     KilnGeneratedRegenerated,
-    /// `wado check` re-ran the generator and the output bytes differ from
-    /// the on-disk (committed) file. Promoted to error in CI default.
-    KilnGeneratedStaleOnDisk,
     /// Two distinct generator invocations resolve to the same loader identity
     /// and `from` schema but redirect to different generated modules. The
     /// redirect index cannot represent both, so the conflict is reported
     /// instead of silently dropping one.
     KilnRedirectConflict,
+    /// An attribute no schema in `crate::attribute` describes.
+    UnknownAttr,
+    /// An attribute written where it does not belong, or with arguments its
+    /// schema does not admit.
+    AttrMisuse,
     /// A `#[compiler_item("...")]` attribute is malformed — the name
     /// is unknown, the attribute is attached to the wrong declaration
     /// kind, or it appears outside a `core::*` stdlib module.
@@ -203,6 +225,15 @@ pub enum Code {
     /// An `#[immediate(...)]` attribute is malformed, names something that is
     /// not a parameter, or sits on a declaration with a body.
     ImmediateAttr,
+    /// A `#[trap(...)]` attribute is malformed, names something that is not a
+    /// parameter, or sits on a declaration with a body.
+    TrapAttr,
+    /// A `#[linear_memory(...)]` attribute is malformed, repeated, or sits on a
+    /// declaration with a body.
+    LinearMemoryAttr,
+    /// A `#[wire(number = N)]` is out of range, reserved, repeated within one
+    /// struct, or written on some of a struct's fields and not the rest.
+    WireNumber,
     ResourceExtends,
 
     // Compile-time parameters (`#[param]`)
@@ -229,13 +260,10 @@ impl Code {
 impl std::fmt::Display for Code {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = match self {
-            Code::InvalidCharacter => "INVALID_CHARACTER",
-            Code::UnterminatedString => "UNTERMINATED_STRING",
-            Code::InvalidEscape => "INVALID_ESCAPE",
-            Code::UnexpectedToken => "UNEXPECTED_TOKEN",
-            Code::ExpectedToken => "EXPECTED_TOKEN",
             Code::InvalidSyntax => "INVALID_SYNTAX",
             Code::UndefinedVariable => "UNDEFINED_VARIABLE",
+            Code::MethodNotFound => "METHOD_NOT_FOUND",
+            Code::ImportNotFound => "IMPORT_NOT_FOUND",
             Code::DuplicateDefinition => "DUPLICATE_DEFINITION",
             Code::ImmutableAssignment => "IMMUTABLE_ASSIGNMENT",
             Code::UninitializedVariable => "UNINITIALIZED_VARIABLE",
@@ -243,14 +271,26 @@ impl std::fmt::Display for Code {
             Code::MalformedUnavailable => "MALFORMED_UNAVAILABLE",
             Code::Unavailable => "UNAVAILABLE",
             Code::TypeMismatch => "TYPE_MISMATCH",
+            Code::ArityMismatch => "ARITY_MISMATCH",
+            Code::NotCallable => "NOT_CALLABLE",
+            Code::NeedsTypeAnnotation => "NEEDS_TYPE_ANNOTATION",
+            Code::TraitBoundNotSatisfied => "TRAIT_BOUND_NOT_SATISFIED",
+            Code::AmbiguousCandidate => "AMBIGUOUS_CANDIDATE",
+            Code::TraitNotImported => "TRAIT_NOT_IMPORTED",
+            Code::TraitDeclInvalid => "TRAIT_DECL_INVALID",
+            Code::ReceiverMismatch => "RECEIVER_MISMATCH",
+            Code::StructFieldMismatch => "STRUCT_FIELD_MISMATCH",
+            Code::MissingReturn => "MISSING_RETURN",
+            Code::ClosureInvalid => "CLOSURE_INVALID",
+            Code::CmBoundaryType => "CM_BOUNDARY_TYPE",
+            Code::EffectHandlerInvalid => "EFFECT_HANDLER_INVALID",
             Code::UnknownType => "UNKNOWN_TYPE",
             Code::InvalidCast => "INVALID_CAST",
             Code::ModuleNotFound => "MODULE_NOT_FOUND",
             Code::CircularDependency => "CIRCULAR_DEPENDENCY",
-            Code::ModuleParseError => "MODULE_PARSE_ERROR",
+            Code::StdlibAttr => "STDLIB_ATTR",
             Code::PrivateSymbol => "PRIVATE_SYMBOL",
             Code::FileReadError => "FILE_READ_ERROR",
-            Code::NetworkError => "NETWORK_ERROR",
             Code::OrphanRule => "ORPHAN_RULE",
             Code::CodegenError => "CODEGEN_ERROR",
             Code::UnsupportedFeature => "UNSUPPORTED_FEATURE",
@@ -269,14 +309,19 @@ impl std::fmt::Display for Code {
             Code::KilnStaleCache => "KILN_STALE_CACHE",
             Code::KilnGeneratorForbiddenImport => "KILN_GENERATOR_FORBIDDEN_IMPORT",
             Code::KilnMissingWith => "KILN_MISSING_WITH",
+            Code::KilnNoGeneratedModule => "KILN_NO_GENERATED_MODULE",
             Code::KilnGeneratedModified => "KILN_GENERATED_MODIFIED",
             Code::KilnGeneratedRegenerated => "KILN_GENERATED_REGENERATED",
-            Code::KilnGeneratedStaleOnDisk => "KILN_GENERATED_STALE_ON_DISK",
             Code::KilnRedirectConflict => "KILN_REDIRECT_CONFLICT",
+            Code::UnknownAttr => "UNKNOWN_ATTR",
+            Code::AttrMisuse => "ATTR_MISUSE",
             Code::CompilerItemAttr => "COMPILER_ITEM_ATTR",
             Code::ResultAttr => "RESULT_ATTR",
             Code::RetainAttr => "RETAIN_ATTR",
             Code::ImmediateAttr => "IMMEDIATE_ATTR",
+            Code::TrapAttr => "TRAP_ATTR",
+            Code::LinearMemoryAttr => "LINEAR_MEMORY_ATTR",
+            Code::WireNumber => "WIRE_NUMBER",
             Code::ResourceExtends => "RESOURCE_EXTENDS",
             Code::ParamAttr => "PARAM_ATTR",
             Code::ParamUnknown => "PARAM_UNKNOWN",
@@ -425,6 +470,15 @@ pub trait CompilerHost: Send + Sync {
     /// a list, send to an LSP client, etc.
     fn emit_diagnostic(&self, diagnostic: Diagnostic);
 
+    /// Save bytes the compiler produced but cannot explain, under a name of
+    /// the host's choosing carrying `file_stem`, and answer where they landed.
+    /// The default keeps none: a host with no filesystem has nowhere to put
+    /// them.
+    fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String> {
+        let _ = (file_stem, bytes);
+        None
+    }
+
     /// Execute a Kiln generator component and return its response. The host
     /// instantiates `component_wasm` and links `core:kiln/host` so
     /// `emit-diagnostic` forwards back into itself. The default `Unsupported`
@@ -436,6 +490,18 @@ pub trait CompilerHost: Send + Sync {
         _request: GeneratorRequest,
     ) -> impl Future<Output = Result<GeneratorResponse, GeneratorRunnerError>> + Send {
         async move { Err(GeneratorRunnerError::Unsupported) }
+    }
+
+    /// Ask a generator how many leading bytes of each input determine its
+    /// output, one answer per file in declaration order. `None` in a slot —
+    /// and the default empty answer — means the whole file, which is what a
+    /// generator exporting no `probe` gets. Protocol: WEP 2026-04-12.
+    fn probe_generator(
+        &self,
+        _component_wasm: &[u8],
+        _request: &GeneratorRequest,
+    ) -> impl Future<Output = Result<Vec<Option<u64>>, GeneratorRunnerError>> + Send {
+        async move { Ok(Vec::new()) }
     }
 
     /// Resolve `[dependencies]` for bare-name `use { … } from "<name>"`.
@@ -494,13 +560,27 @@ pub struct GeneratorRequest {
     pub options: CanonicalOptions,
 }
 
+impl GeneratorRequest {
+    /// Every input file, primary first. This is the order a probe answers in
+    /// and the order extents are recorded in, so it lives here rather than
+    /// being re-spelled at each site that walks them.
+    pub fn files(&self) -> impl Iterator<Item = &GeneratorInputFile> {
+        std::iter::once(&self.primary).chain(self.inputs.iter())
+    }
+
+    /// [`Self::files`], for a caller that rewrites what it walks.
+    pub fn files_mut(&mut self) -> impl Iterator<Item = &mut GeneratorInputFile> {
+        std::iter::once(&mut self.primary).chain(self.inputs.iter_mut())
+    }
+}
+
 /// One schema file passed to a Kiln generator.
 #[derive(Debug, Clone)]
 pub struct GeneratorInputFile {
     pub path: String,
-    /// UTF-8 content of the file. Kiln schemas are text (proto,
-    /// graphql, g4, wit, ...), so string is the natural wire form.
-    pub content: String,
+    /// Raw bytes of the file. A checkpoint is not text, and the generator
+    /// receives these as a `stream<u8>` it reads only as far as it needs.
+    pub content: Vec<u8>,
 }
 
 /// Response returned by a Kiln generator.
@@ -701,7 +781,7 @@ mod tests {
                 let req = GeneratorRequest {
                     primary: GeneratorInputFile {
                         path: "schema.proto".to_string(),
-                        content: "syntax = \"proto3\";".to_string(),
+                        content: b"syntax = \"proto3\";".to_vec(),
                     },
                     inputs: vec![],
                     options: CanonicalOptions::default(),
@@ -727,7 +807,7 @@ mod tests {
     fn test_diagnostic_display() {
         let diag = Diagnostic {
             severity: Severity::Error,
-            code: Code::UnexpectedToken,
+            code: Code::InvalidSyntax,
             message: "expected ';' but found '}'".to_string(),
             span: Some(DiagnosticSpan {
                 file: "test.wado".to_string(),
@@ -755,7 +835,7 @@ mod tests {
         ] {
             assert!(code.is_unused_lint(), "{code} should be an unused lint");
         }
-        for code in [Code::TypeMismatch, Code::UnexpectedToken, Code::Log] {
+        for code in [Code::TypeMismatch, Code::InvalidSyntax, Code::Log] {
             assert!(!code.is_unused_lint(), "{code} is not an unused lint");
         }
     }

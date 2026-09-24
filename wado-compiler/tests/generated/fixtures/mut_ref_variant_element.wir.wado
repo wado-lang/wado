@@ -81,6 +81,8 @@ global global:mut_ref_variant_element.wado::$const_obj_1: ref null "core:prelude
 global global:mut_ref_variant_element.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(114, 101, 110, 97, 109, 101, 100);
 
 fn "mut_ref_variant_element.wado/run"() with Stdout {
+    let $load_0: ref "core:prelude/string.wado//String";
+    let $load_3: ref "core:prelude/string.wado//String";
     let r_1: ref "mut_ref_variant_element.wado//Named";
     let $cond_2: bool;
     let $cond_4: bool;
@@ -117,8 +119,8 @@ fn "mut_ref_variant_element.wado/run"() with Stdout {
     $cond_2 = (if ref.is_null($match_13) == 0 -> bool {
         r_1 = ref.as_non_null($match_13);
         $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
-            a_73 = r_1.name.repr;
-            a_end_75 = r_1.name.used;
+            a_73 = local.tee $load_0(r_1.name).repr;
+            a_end_75 = $load_0.used;
             b_76 = global:mut_ref_variant_element.wado::$const_obj_2;
             if a_end_75 != 7 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
@@ -163,8 +165,8 @@ fn "mut_ref_variant_element.wado/run"() with Stdout {
     $cond_6 = (if ref.is_null($match_14) == 0 -> bool {
         r_5 = ref.as_non_null($match_14);
         $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
-            a_83 = r_5.name.repr;
-            a_end_85 = r_5.name.used;
+            a_83 = local.tee $load_3(r_5.name).repr;
+            a_end_85 = $load_3.used;
             b_86 = global:mut_ref_variant_element.wado::$const_obj_2;
             if a_end_85 != 7 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
@@ -313,7 +315,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l17;

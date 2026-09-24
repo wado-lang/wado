@@ -19,6 +19,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::call::{DefaultTypeBinding, slot_type_bindings};
 use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
+use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
@@ -37,10 +38,14 @@ use crate::elaborator::sem::types::{
     AssignPlace, DesugarKind, FromCallFacts, GenericInstantiation, OperatorDispatch,
 };
 use crate::elaborator::trait_env::written_type_arg;
-use crate::elaborator::types::{ImplMemberKind, StructFieldInfo, newtype_member_owner};
+use crate::elaborator::types::{
+    ImplMemberKind, RealTypeParams, StructFieldInfo, newtype_member_owner,
+};
 use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
-use crate::tir::{AnonStructId, PrimitiveType, StructDef};
+use crate::primitive::PrimitiveType;
+use crate::tir::{AnonStructId, StructDef};
+use std::rc::Rc;
 
 /// Outcome of trying to derive type arguments for a generic function
 /// reference from an expected `fn(...)` (or `&fn(...)`) type. Distinguishes
@@ -219,6 +224,43 @@ fn agrees_with_target(ty: TypeId, target: TypeId) -> bool {
     ty == target || ty == TypeTable::NEVER
 }
 
+/// The reason a cast naming `f16` or `bf16` is refused, or `None` where it
+/// names neither or is the newtype step every type admits (WEP 2026-09-22).
+fn half_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    let from_half = tt.primitive_head(source).filter(|p| p.is_half());
+    let to_half = tt.primitive_head(target).filter(|p| p.is_half());
+    let half = from_half.or(to_half)?.as_str();
+    if tt.representation_head(source) == tt.representation_head(target) {
+        return None;
+    }
+    let source_half = from_half.is_some();
+    Some(if source_half && to_half.is_some() {
+        "neither direction is exact: `f16` has the shorter exponent range and \
+         `bf16` the shorter mantissa"
+            .to_string()
+    } else if source_half {
+        if tt.is_float(target) {
+            format!(
+                "`as` does not convert `{half}`; use `{}::from(x)`",
+                tt.type_name(target)
+            )
+        } else if tt.is_integer(target) {
+            format!("`as` converts a value; use `to_bits()` to read the bits of `{half}`")
+        } else {
+            format!("`{half}` converts only through `to_bits()` and `From`")
+        }
+    } else if tt.is_float(source) {
+        format!(
+            "`as` does not convert to `{half}`; use `{half}::from_f32(x)` to round or \
+             `{half}::try_from(x)` to require an exact value"
+        )
+    } else if tt.is_integer(source) {
+        format!("`as` converts a value; use `{half}::from_bits(x)` to reinterpret the bits")
+    } else {
+        format!("`{half}` is built only by `from_bits`, `from_f32` and `try_from`")
+    })
+}
+
 /// A struct-literal field as the body walk knows it: the name it was written
 /// under, its declared position, and the type its value resolved to.
 pub(super) struct ResolvedField {
@@ -244,25 +286,6 @@ fn declared_pairs<'a>(
         }
         declared.get(slot).map(|&type_id| (field, type_id))
     })
-}
-
-/// Shape projection of a match-arm pattern, used solely for exhaustiveness /
-/// overlap analysis on the AST. It captures exactly the pattern shape the
-/// checks read, one distinction per `TirPattern` distinction they depend on:
-/// catch-all (wildcard / binding / reversed-or-empty range / bad range bound),
-/// enum / variant case names, bool literals, integer ranges and points, an
-/// opaque `Other` (strings, structs, tuples, constant-value patterns), and
-/// `Or` alternatives.
-enum ExhPattern {
-    CatchAll,
-    EnumCase(String),
-    VariantCase(String),
-    BoolLit(bool),
-    /// Inclusive integer range `[lo, hi]`.
-    Range(i128, i128),
-    IntLit(i128),
-    Other,
-    Or(Vec<ExhPattern>),
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -441,6 +464,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The expectation a branching expression takes as its result type: one
+    /// still holding an inference variable is for its branches to answer.
+    fn settled_result_expectation(&self, expected_type: Option<TypeId>) -> Option<TypeId> {
+        expected_type.filter(|&t| !self.type_has_infer_hole(t))
+    }
+
+    /// Whether a branch's type waits on its siblings: one still unresolved,
+    /// or one carrying an inference variable the branches are to answer.
+    fn is_undecided_branch(&self, branch: TypeId) -> bool {
+        self.tysys.type_table.borrow().is_indefinite(branch) || self.type_has_infer_hole(branch)
+    }
+
     /// The type of a labeled block expression: its `break` values and its
     /// fall-through tail unified into one, every disagreement reported.
     fn unify_labeled_block(
@@ -449,12 +484,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         break_types: &[TypeId],
         expected_type: Option<TypeId>,
     ) -> TypeId {
+        let expected_type = self.settled_result_expectation(expected_type);
         let tail_type = self.labeled_block_tail_type(lb);
-        let branch_types: Vec<TypeId> = break_types
+        let mut branch_types: Vec<TypeId> = break_types
             .iter()
             .copied()
             .chain(std::iter::once(tail_type))
             .collect();
+        self.settle_branch_holes(&mut branch_types, expected_type);
         let result_type =
             expected_type.unwrap_or_else(|| self.representative_branch_type(&branch_types));
 
@@ -1436,10 +1473,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         index: usize,
     ) -> Result<TypeId, String> {
         let table = type_table.borrow();
-        let Some(pack_pos) = elements
-            .iter()
-            .position(|&t| matches!(table.get(t), ResolvedType::TypePack { .. }))
-        else {
+        let Some(pack_pos) = elements.iter().position(|&t| table.is_type_pack(t)) else {
             return elements.get(index).copied().ok_or_else(|| {
                 format!(
                     "tuple index {index} out of bounds, tuple has {} elements",
@@ -2046,6 +2080,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 ctx.exit_scope();
 
+                let expected_type = self.settled_result_expectation(expected_type);
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
@@ -2130,6 +2165,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.resolve_block_value(b, ctx, expected_type);
                 }
 
+                let expected_type = self.settled_result_expectation(expected_type);
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
@@ -2380,7 +2416,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 then_type = t;
             }
         }
-        (then_type, else_type)
+        let mut branches = [then_type, else_type];
+        self.settle_branch_holes(&mut branches, None);
+        branches.into()
     }
 
     /// Give a numeric-literal branch tail the type a sibling branch fixed, as
@@ -2534,6 +2572,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         agreed
     }
 
+    /// Solve the inference holes `branches` carry against the expected type, or
+    /// else a settled sibling, and apply them.
+    pub(super) fn settle_branch_holes(
+        &mut self,
+        branches: &mut [TypeId],
+        expected_type: Option<TypeId>,
+    ) {
+        if !branches.iter().any(|&t| self.type_has_infer_hole(t)) {
+            return;
+        }
+        let target = expected_type
+            .filter(|&t| t != TypeTable::UNKNOWN)
+            .or_else(|| {
+                branches
+                    .iter()
+                    .copied()
+                    .find(|&t| t != TypeTable::NEVER && !self.is_undecided_branch(t))
+            });
+        if let Some(target) = target {
+            for &branch in &*branches {
+                self.solve_infer_holes_against(branch, target);
+            }
+        }
+        for branch in branches {
+            *branch = self.apply_infer_holes(*branch);
+        }
+    }
+
     fn agree_two_branches(&self, a: TypeId, b: TypeId) -> Option<TypeId> {
         if a == b {
             return Some(a);
@@ -2544,14 +2610,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if b == TypeTable::NEVER {
             return Some(a);
         }
-        let (a_unknown, b_unknown) = {
-            let tt = self.tysys.type_table.borrow();
-            (tt.is_indefinite(a), tt.is_indefinite(b))
-        };
-        if a_unknown && !b_unknown {
+        let (a_undecided, b_undecided) = (self.is_undecided_branch(a), self.is_undecided_branch(b));
+        if a_undecided && !b_undecided {
             return Some(b);
         }
-        if b_unknown && !a_unknown {
+        if b_undecided && !a_undecided {
             return Some(a);
         }
         self.tysys.type_table.borrow().resource_join(a, b)
@@ -2573,33 +2636,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx, expected_type))
             .collect();
+        let expected_type = self.settled_result_expectation(expected_type);
 
-        // A hole from a generic scrutinee (`match gen() { … }`) flows through
-        // the bindings into the arm bodies (same `TypeId`). Solve it against the
-        // expected type or a concrete sibling arm and concretise before the
-        // result-type selection below.
-        if arm_bodies.iter().any(|&(t, _)| self.type_has_infer_hole(t))
-            || self.type_has_infer_hole(scrutinee_type)
-        {
-            let target = expected_type
-                .filter(|&t| t != TypeTable::UNKNOWN && !self.type_has_infer_hole(t))
-                .or_else(|| {
-                    arm_bodies.iter().map(|(t, _)| *t).find(|&t| {
-                        t != TypeTable::NEVER
-                            && !self.type_has_infer_hole(t)
-                            && !self.tysys.type_table.borrow().is_indefinite(t)
-                    })
-                });
-            if let Some(target) = target {
-                for &(arm_type, _) in &arm_bodies {
-                    self.solve_infer_holes_against(arm_type, target);
-                }
-            }
-            for (t, _) in &mut arm_bodies {
-                *t = self.apply_infer_holes(*t);
-            }
-            scrutinee_type = self.apply_infer_holes(scrutinee_type);
+        let mut arm_types: Vec<TypeId> = arm_bodies.iter().map(|&(t, _)| t).collect();
+        self.settle_branch_holes(&mut arm_types, expected_type);
+        for ((t, _), settled) in arm_bodies.iter_mut().zip(arm_types) {
+            *t = settled;
         }
+        // A hole from a generic scrutinee (`match gen() { … }`) flows through
+        // the bindings into the arm bodies (same `TypeId`).
+        scrutinee_type = self.apply_infer_holes(scrutinee_type);
 
         self.check_match_exhaustiveness(&match_expr.arms, scrutinee_type, match_expr.span);
 
@@ -2735,152 +2781,89 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (body_type, arm.body.span())
     }
 
-    /// Exhaustiveness runs on the AST: the body walk materializes no
-    /// `TirMatchArm` / `TirPattern` to check. Each arm pattern is classified
-    /// into an [`ExhPattern`] — a shape projection carrying every distinction
-    /// the checks make (case-name disambiguation, range bounds,
-    /// const-vs-literal, reversed/empty-range → catch-all) — and the checks
-    /// read that projection.
+    /// Report the values no guardless arm covers, and the arms no value can
+    /// reach. Guarded arms take part in neither.
     fn check_match_exhaustiveness(
         &mut self,
         arms: &[MatchArm],
         scrutinee_type: TypeId,
         span: Span,
     ) {
-        // Coverage is asked of the structure the scrutinee's cases come from, so
-        // that it agrees with what pattern resolution asks.
-        let scrutinee_type = self
-            .tysys
-            .type_table
-            .borrow()
-            .scrutinee_structure_head(scrutinee_type);
-
-        // Classify each arm pattern once (shape only), pairing it with whether
-        // the arm is guardless (guarded arms never contribute to coverage).
-        let classified: Vec<(bool, ExhPattern)> = arms
-            .iter()
-            .map(|arm| {
-                let guardless = arm.guard.is_none();
-                (guardless, self.exh_pattern(&arm.pattern, scrutinee_type))
-            })
-            .collect();
-
-        // Always check for overlapping range patterns first.
-        self.check_range_overlaps(&classified, span);
-
-        // If any arm has a wildcard or binding pattern (without a guard), the match is exhaustive
-        if classified
-            .iter()
-            .any(|(guardless, pat)| *guardless && Self::is_catch_all_pattern(pat))
-        {
+        // An ill-typed scrutinee was reported where it was typed; its patterns
+        // classify as nothing.
+        if matches!(scrutinee_type, TypeTable::ERROR | TypeTable::UNKNOWN) {
             return;
         }
+        let classified: Vec<(bool, Pat)> = arms
+            .iter()
+            .map(|arm| {
+                (
+                    arm.guard.is_none(),
+                    self.exh_pattern(&arm.pattern, scrutinee_type),
+                )
+            })
+            .collect();
+        self.check_range_overlaps(&classified, span);
+        self.check_shadowed_narrowings(arms, &classified);
 
-        let tt = self.tysys.type_table.borrow();
-        let resolved = tt.get(scrutinee_type).clone();
-        drop(tt);
-
-        match &resolved {
-            ResolvedType::Enum { .. } => {
-                if let Some(enum_info) = self.enum_of_type(scrutinee_type) {
-                    let all_cases: IndexSet<&str> =
-                        enum_info.cases.iter().map(|c| c.name.as_str()).collect();
-                    let covered: IndexSet<&str> = {
-                        let mut names = Vec::new();
-                        for (_, pat) in &classified {
-                            Self::collect_enum_case_names(pat, &mut names);
-                        }
-                        names.into_iter().collect()
-                    };
-                    let missing: Vec<&&str> = all_cases.difference(&covered).collect();
-                    if !missing.is_empty() {
-                        let missing_names: Vec<String> =
-                            missing.iter().map(|s| (*s).to_string()).collect();
-                        let _ = self.emit(TypeError::InvalidPattern {
-                            message: format!(
-                                "non-exhaustive match: missing {}",
-                                Self::format_missing_cases(&missing_names),
-                            ),
-                            span,
-                        });
-                    }
-                }
-            }
-            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
-                self.check_variant_exhaustiveness(&classified, scrutinee_type, span);
-            }
-            ResolvedType::Primitive(PrimitiveType::Bool) => {
-                let has_true = classified
-                    .iter()
-                    .any(|(_, pat)| Self::pattern_contains_bool(pat, true));
-                let has_false = classified
-                    .iter()
-                    .any(|(_, pat)| Self::pattern_contains_bool(pat, false));
-                if !has_true || !has_false {
-                    let mut missing = Vec::new();
-                    if !has_true {
-                        missing.push("true".to_string());
-                    }
-                    if !has_false {
-                        missing.push("false".to_string());
-                    }
-                    let _ = self.emit(TypeError::InvalidPattern {
-                        message: format!(
-                            "non-exhaustive match: missing {}",
-                            Self::format_missing_cases(&missing),
-                        ),
-                        span,
-                    });
-                }
-            }
-            ResolvedType::Primitive(prim) => {
-                if let Some((type_min, type_max)) = Self::primitive_range(*prim) {
-                    self.check_integer_range_exhaustiveness(&classified, type_min, type_max, span);
-                }
-            }
-            _ => {
-                // For other types (strings, structs, etc.) we don't check exhaustiveness.
-            }
+        let guardless: Vec<&Pat> = classified
+            .iter()
+            .filter(|(guardless, _)| *guardless)
+            .map(|(_, pattern)| pattern)
+            .collect();
+        let missing = exhaustiveness::uncovered(&guardless);
+        if missing.is_empty() {
+            return;
         }
+        let message = if matches!(missing.as_slice(), [Witness::Wild]) {
+            let is_resource = matches!(
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .get(self.structure_head(scrutinee_type)),
+                ResolvedType::Resource { .. }
+            );
+            if is_resource {
+                "non-exhaustive match: type patterns cannot cover every type the host may \
+                 hand back; add a final `_` arm"
+            } else {
+                "non-exhaustive match: add a final `_` arm"
+            }
+            .to_string()
+        } else {
+            let rendered: Vec<String> = missing.iter().map(ToString::to_string).collect();
+            format!(
+                "non-exhaustive match: missing {}",
+                Self::format_missing_cases(&rendered)
+            )
+        };
+        let _ = self.emit(TypeError::InvalidPattern { message, span });
     }
 
-    /// Project an AST match-arm pattern onto the shape exhaustiveness reads,
-    /// mirroring `resolve_if_pattern_inner`'s `TirPattern`-shape decisions.
-    fn exh_pattern(&mut self, pattern: &ast::Pattern, scrutinee_type: TypeId) -> ExhPattern {
+    fn structure_head(&self, type_id: TypeId) -> TypeId {
+        self.tysys
+            .type_table
+            .borrow()
+            .scrutinee_structure_head(type_id)
+    }
+
+    /// Project an AST pattern onto the shape coverage reads, asked of the
+    /// structure its type wraps, as pattern resolution asks it.
+    fn exh_pattern(&mut self, pattern: &ast::Pattern, scrutinee_type: TypeId) -> Pat {
+        let scrutinee_type = self.structure_head(scrutinee_type);
         match pattern {
-            ast::Pattern::Wildcard | ast::Pattern::Error(_) => ExhPattern::CatchAll,
+            ast::Pattern::Wildcard | ast::Pattern::Error(_) => Pat::Wild,
             ast::Pattern::Ident { name, .. } | ast::Pattern::MutIdent { name, .. } => {
-                // A bare identifier is a case when it names one (delegates to the
-                // Variant branch), an opaque constant-value pattern when it names
-                // an immutable global, or otherwise a binding (catch-all).
-                if !matches!(pattern, ast::Pattern::MutIdent { .. })
-                    && self.is_known_case_of_type(scrutinee_type, name, None)
-                {
-                    return self.exh_pattern(
-                        &ast::Pattern::Variant {
-                            variant_name: name.clone(),
-                            variant_qualifier: None,
-                            name_id: None,
-                            name_span: Span::default(),
-                            bindings: vec![],
-                            span: Span::default(),
-                        },
-                        scrutinee_type,
-                    );
+                // A bare identifier is a case when it names one, a constant-value
+                // pattern when it names an immutable global, else a binding.
+                let is_mut = matches!(pattern, ast::Pattern::MutIdent { .. });
+                if !is_mut && self.is_known_case_of_type(scrutinee_type, name, None) {
+                    return self.exh_case(scrutinee_type, name, None);
                 }
-                if !matches!(pattern, ast::Pattern::MutIdent { .. }) {
-                    if let Some(&(_ty, mutable)) = self.sem.decls.current_module_globals.get(name)
-                        && !mutable
-                    {
-                        return ExhPattern::Other;
-                    }
-                    if let Some((_m, _n, _ty, mutable)) = self.sem.decls.imported_globals.get(name)
-                        && !*mutable
-                    {
-                        return ExhPattern::Other;
-                    }
+                if !is_mut && self.is_immutable_global(name) {
+                    return Pat::Opaque;
                 }
-                ExhPattern::CatchAll
+                Pat::Wild
             }
             ast::Pattern::Literal(lit) => self.exh_literal(lit, scrutinee_type),
             ast::Pattern::Variant {
@@ -2894,7 +2877,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 bindings,
                 scrutinee_type,
             ),
-            ast::Pattern::Or(alternatives) => ExhPattern::Or(
+            ast::Pattern::Or(alternatives) => Pat::Or(
                 alternatives
                     .iter()
                     .map(|alt| self.exh_pattern(alt, scrutinee_type))
@@ -2903,7 +2886,121 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Pattern::Range {
                 start, end, kind, ..
             } => self.exh_range(start, end, *kind, scrutinee_type),
-            ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => ExhPattern::Other,
+            ast::Pattern::Tuple(patterns, _) => {
+                let Some(types) = self.tysys.type_table.borrow().as_tuple(scrutinee_type) else {
+                    return Pat::Wild;
+                };
+                let elements = types
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &ty)| {
+                        patterns
+                            .get(i)
+                            .map_or(Pat::Wild, |p| self.exh_pattern(p, ty))
+                    })
+                    .collect();
+                Pat::Product {
+                    fields: None,
+                    elements,
+                }
+            }
+            ast::Pattern::Struct { fields, .. } => {
+                let Some(declared) = self.struct_field_types(scrutinee_type) else {
+                    return Pat::Wild;
+                };
+                let elements = declared
+                    .iter()
+                    .map(|(name, ty)| {
+                        fields
+                            .iter()
+                            .find(|f| f.field_name == *name)
+                            .map_or(Pat::Wild, |f| self.exh_pattern(&f.pattern, *ty))
+                    })
+                    .collect();
+                Pat::Product {
+                    fields: Some(declared.into_iter().map(|(name, _)| name).collect()),
+                    elements,
+                }
+            }
+            ast::Pattern::Typed {
+                id, pattern: inner, ..
+            } => {
+                let target = *self.sem.types.pattern_ascriptions.get(id).expect(
+                    "a match arm's type pattern is resolved before its exhaustiveness is checked",
+                );
+                if self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_resource_narrowing(scrutinee_type, target)
+                {
+                    Pat::Narrow(target)
+                } else {
+                    self.exh_pattern(inner, target)
+                }
+            }
+        }
+    }
+
+    /// A struct's fields in declaration order, typed at this instance.
+    fn struct_field_types(&self, struct_type: TypeId) -> Option<Vec<(String, TypeId)>> {
+        let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
+        let (info, type_args) = match resolved {
+            ResolvedType::Struct { def, .. } => (self.lookup_struct_fields_of(def)?, Vec::new()),
+            ResolvedType::GenericInstance { type_args, .. } => {
+                (self.struct_fields_of_type(struct_type)?, type_args)
+            }
+            _ => return None,
+        };
+        Some(
+            info.fields
+                .iter()
+                .map(|(name, ty, _)| {
+                    (
+                        name.clone(),
+                        self.tysys.substitute_type_params(*ty, &type_args),
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    /// Report a type-pattern arm an earlier guardless one always takes first:
+    /// every value of its type is already a value of the earlier arm's.
+    fn check_shadowed_narrowings(&self, arms: &[MatchArm], classified: &[(bool, Pat)]) {
+        let mut shadowed = Vec::new();
+        {
+            let tt = self.tysys.type_table.borrow();
+            for (later, (_, pattern)) in classified.iter().enumerate() {
+                let Pat::Narrow(target) = pattern else {
+                    continue;
+                };
+                let earlier =
+                    classified[..later]
+                        .iter()
+                        .find_map(|(guardless, earlier)| match earlier {
+                            Pat::Narrow(earlier) if *guardless => {
+                                let takes = tt.type_key(*earlier) == tt.type_key(*target)
+                                    || tt.is_resource_narrowing(*earlier, *target);
+                                takes.then_some(*earlier)
+                            }
+                            _ => None,
+                        });
+                if let Some(earlier) = earlier {
+                    shadowed.push((
+                        arms[later].span,
+                        format!(
+                            "unreachable arm: every `{}` is `{}`, which an earlier arm \
+                             already takes",
+                            tt.type_name(*target),
+                            tt.type_name(earlier)
+                        ),
+                    ));
+                }
+            }
+        }
+        for (span, message) in shadowed {
+            let _ = self.emit(TypeError::InvalidPattern { message, span });
         }
     }
 
@@ -2914,67 +3011,116 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .is_unsigned_int(scrutinee_type)
     }
 
-    fn exh_literal(&self, lit: &Literal, scrutinee_type: TypeId) -> ExhPattern {
-        match lit {
-            Literal::Number(repr) => {
-                if util::is_float_only_literal(repr) {
-                    // Old path returned `Wildcard` (a catch-all) after emitting
-                    // the float-literal error during binding.
-                    return ExhPattern::CatchAll;
-                }
-                if self.exh_is_unsigned(scrutinee_type) {
-                    match util::parse_u128_literal(repr) {
-                        Ok(v) => ExhPattern::IntLit(v as i128),
-                        Err(_) => ExhPattern::IntLit(0),
-                    }
-                } else {
-                    match util::parse_i128_literal(repr) {
-                        Ok(v) => ExhPattern::IntLit(v),
-                        Err(_) => ExhPattern::IntLit(0),
-                    }
-                }
-            }
-            Literal::Bool(b) => ExhPattern::BoolLit(*b),
-            Literal::Char(raw) => {
-                ExhPattern::IntLit(escape::unescape_char(raw).unwrap_or('\0') as i128)
-            }
-            Literal::Byte(raw) => {
-                ExhPattern::IntLit(i128::from(escape::unescape_byte(raw).unwrap_or(0)))
-            }
-            Literal::Null => {
-                // `null` coerces to a `None` variant pattern when the scrutinee
-                // has a `None` case; otherwise it is an opaque `Null` literal.
-                if self.exh_null_none_case(scrutinee_type).is_some() {
-                    ExhPattern::VariantCase(
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .compiler_variant_case_name(CompilerItem::OptionNone)
-                            .to_string(),
-                    )
-                } else {
-                    ExhPattern::Other
-                }
-            }
-            _ => ExhPattern::Other,
+    /// The values an integer pattern of this type may take.
+    fn int_domain(&self, scrutinee_type: TypeId) -> Option<IntDomain> {
+        let ResolvedType::Primitive(prim) = *self.tysys.type_table.borrow().get(scrutinee_type)
+        else {
+            return None;
+        };
+        Self::primitive_range(prim).map(|(min, max)| IntDomain {
+            min,
+            max,
+            is_char: prim == PrimitiveType::Char,
+        })
+    }
+
+    fn exh_int(&self, lo: i128, hi: i128, scrutinee_type: TypeId) -> Pat {
+        Pat::Int {
+            lo,
+            hi,
+            domain: self.int_domain(scrutinee_type),
         }
     }
 
-    /// Mirrors `try_null_as_none_pattern`: returns the `None` case name when the
-    /// scrutinee is a variant type that has a `None` case.
-    fn exh_null_none_case(&self, scrutinee_type: TypeId) -> Option<()> {
-        let variant_info = self.variant_of_type(scrutinee_type)?;
-        let none_case_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_variant_case_name(CompilerItem::OptionNone)
-            .to_string();
-        variant_info
+    fn exh_literal(&mut self, lit: &Literal, scrutinee_type: TypeId) -> Pat {
+        // A literal that does not parse was reported where it was lexed or
+        // resolved, and takes no value here.
+        let value = match lit {
+            Literal::Number(repr) if util::is_float_only_literal(repr) => return Pat::Wild,
+            Literal::Number(repr) => {
+                if self.exh_is_unsigned(scrutinee_type) {
+                    util::parse_u128_literal(repr).map(|v| v as i128).ok()
+                } else {
+                    util::parse_i128_literal(repr).ok()
+                }
+            }
+            Literal::Bool(b) => return Pat::Bool(*b),
+            Literal::Char(raw) => escape::unescape_char(raw).ok().map(|c| c as i128),
+            Literal::Byte(raw) => escape::unescape_byte(raw).ok().map(i128::from),
+            // `null` is the `None` case where the scrutinee has one.
+            Literal::Null => {
+                let none = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .compiler_variant_case_name(CompilerItem::OptionNone)
+                    .to_string();
+                return if self.is_known_case_of_type(scrutinee_type, &none, None) {
+                    self.exh_case(scrutinee_type, &none, None)
+                } else {
+                    Pat::Opaque
+                };
+            }
+            _ => return Pat::Opaque,
+        };
+        value.map_or(Pat::Opaque, |v| self.exh_int(v, v, scrutinee_type))
+    }
+
+    /// The case `name` of the enum or variant `scrutinee_type`, its payload
+    /// pattern classified at the payload's type.
+    fn exh_case(
+        &mut self,
+        scrutinee_type: TypeId,
+        name: &str,
+        payload: Option<&ast::Pattern>,
+    ) -> Pat {
+        if let Some(enum_info) = self.enum_of_type(scrutinee_type) {
+            let cases: Rc<[Case]> = enum_info
+                .cases
+                .iter()
+                .map(|c| Case {
+                    name: c.name.clone(),
+                    has_payload: false,
+                })
+                .collect();
+            let Some(index) = cases.iter().position(|c| c.name == name) else {
+                return Pat::Wild;
+            };
+            return Pat::Case {
+                cases,
+                index,
+                payload: None,
+            };
+        }
+        let Some(variant_info) = self.variant_of_type(scrutinee_type).cloned() else {
+            return Pat::Wild;
+        };
+        let Some(index) = variant_info.cases.iter().position(|c| c.name == name) else {
+            return Pat::Wild;
+        };
+        let cases: Rc<[Case]> = variant_info
             .cases
             .iter()
-            .any(|c| c.name == none_case_name)
-            .then_some(())
+            .map(|c| Case {
+                name: c.name.clone(),
+                has_payload: c.payload != TypeTable::UNIT,
+            })
+            .collect();
+        let payload = payload.filter(|_| cases[index].has_payload).map(|p| {
+            let type_args = match self.tysys.type_table.borrow().get(scrutinee_type) {
+                ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                _ => Vec::new(),
+            };
+            let payload_type = self
+                .tysys
+                .substitute_type_params(variant_info.cases[index].payload, &type_args);
+            Box::new(self.exh_pattern(p, payload_type))
+        });
+        Pat::Case {
+            cases,
+            index,
+            payload,
+        }
     }
 
     fn exh_variant(
@@ -2983,74 +3129,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         variant_qualifier: Option<&ast::Type>,
         bindings: &[ast::Pattern],
         scrutinee_type: TypeId,
-    ) -> ExhPattern {
+    ) -> Pat {
         let normalized = self
             .strip_ns_prefix(variant_name)
             .unwrap_or(variant_name)
             .to_string();
 
-        // Bare uppercase identifier that is not a known case: an associated
-        // constant resolves to a `Literal` (if the const body is a literal) or
-        // an opaque `ConstantValue`; otherwise it is a binding (catch-all).
+        // A bare name that is no case: an associated constant is its value or
+        // an opaque constant-value pattern; anything else is a binding.
         if bindings.is_empty()
             && !self.is_known_case_of_type(scrutinee_type, &normalized, variant_qualifier)
         {
-            if let Some(AssocConstSig {
+            let Some(AssocConstSig {
                 value: const_expr, ..
             }) = self.associated_constant_qualified(variant_qualifier, variant_name)
-            {
-                if let ast::Expr::Literal(lit) = &const_expr {
-                    match &lit.value {
-                        Literal::Number(repr) if !util::is_float_only_literal(repr) => {
-                            if self.exh_is_unsigned(scrutinee_type) {
-                                if let Ok(v) = util::parse_u128_literal(repr) {
-                                    return ExhPattern::IntLit(v as i128);
-                                }
-                            } else if let Ok(v) = util::parse_i128_literal(repr) {
-                                return ExhPattern::IntLit(v);
-                            }
-                        }
-                        Literal::Bool(v) => return ExhPattern::BoolLit(*v),
-                        Literal::Char(raw) => {
-                            let c = escape::unescape_char(raw).unwrap_or('\0');
-                            return ExhPattern::IntLit(c as i128);
-                        }
-                        Literal::Byte(raw) => {
-                            return ExhPattern::IntLit(i128::from(
-                                escape::unescape_byte(raw).unwrap_or(0),
-                            ));
-                        }
-                        _ => {}
+            else {
+                return Pat::Wild;
+            };
+            return match &const_expr {
+                ast::Expr::Literal(lit) if !matches!(lit.value, Literal::Null) => {
+                    match self.exh_literal(&lit.value, scrutinee_type) {
+                        pattern @ (Pat::Int { .. } | Pat::Bool(_)) => pattern,
+                        _ => Pat::Opaque,
                     }
                 }
-                // Opaque constant-value pattern.
-                return ExhPattern::Other;
-            }
-            // Binding (catch-all).
-            return ExhPattern::CatchAll;
+                _ => Pat::Opaque,
+            };
         }
 
-        // Qualifier mismatch → old path returned `Wildcard` (catch-all).
+        // A mismatched qualifier was reported where the pattern was resolved.
         if !self.pattern_qualifier_matches_scrutinee(scrutinee_type, variant_qualifier) {
-            return ExhPattern::CatchAll;
+            return Pat::Wild;
         }
-
-        let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-        match &resolved {
-            ResolvedType::Enum { .. } => {
-                if let Some(enum_info) = self.enum_of_type(scrutinee_type)
-                    && enum_info.find_case(&normalized).is_some()
-                {
-                    return ExhPattern::EnumCase(normalized);
-                }
-                // Unknown enum / case → old path returned `Wildcard`.
-                ExhPattern::CatchAll
-            }
-            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
-                ExhPattern::VariantCase(normalized)
-            }
-            _ => ExhPattern::CatchAll,
-        }
+        self.exh_case(scrutinee_type, &normalized, bindings.first())
     }
 
     fn exh_range(
@@ -3059,95 +3170,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         end: &ast::Pattern,
         kind: ast::RangeKind,
         scrutinee_type: TypeId,
-    ) -> ExhPattern {
+    ) -> Pat {
+        // Bad or empty bounds were reported where the pattern was resolved.
         let is_unsigned = self.exh_is_unsigned(scrutinee_type);
         let (Some(start_val), Some(end_val)) = (
             util::range_endpoint_to_i128(start, is_unsigned),
             util::range_endpoint_to_i128(end, is_unsigned),
         ) else {
-            // Bad bounds → old path returned `Wildcard` (catch-all).
-            return ExhPattern::CatchAll;
+            return Pat::Wild;
         };
         let inclusive = matches!(kind, ast::RangeKind::Inclusive);
-        // Reversed / empty ranges → old path returned `Wildcard` (catch-all).
         let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
         if order.is_gt() || (!inclusive && order.is_ge()) {
-            return ExhPattern::CatchAll;
+            return Pat::Wild;
         }
         let hi = if inclusive { end_val } else { end_val - 1 };
-        ExhPattern::Range(start_val, hi)
-    }
-
-    fn check_variant_exhaustiveness(
-        &self,
-        classified: &[(bool, ExhPattern)],
-        scrutinee_type: TypeId,
-        span: Span,
-    ) {
-        if let Some(variant_info) = self.variant_of_type(scrutinee_type) {
-            let all_cases: IndexSet<&str> =
-                variant_info.cases.iter().map(|c| c.name.as_str()).collect();
-            let covered: IndexSet<&str> = {
-                let mut names = Vec::new();
-                for (_, pat) in classified {
-                    Self::collect_variant_case_names(pat, &mut names);
-                }
-                names.into_iter().collect()
-            };
-            let missing: Vec<&&str> = all_cases.difference(&covered).collect();
-            if !missing.is_empty() {
-                let missing_names: Vec<String> = missing.iter().map(|s| (*s).to_string()).collect();
-                let _ = self.emit(TypeError::InvalidPattern {
-                    message: format!(
-                        "non-exhaustive match: missing {}",
-                        Self::format_missing_cases(&missing_names),
-                    ),
-                    span,
-                });
-            }
-        }
-    }
-
-    fn is_catch_all_pattern(pattern: &ExhPattern) -> bool {
-        match pattern {
-            ExhPattern::CatchAll => true,
-            ExhPattern::Or(alternatives) => alternatives.iter().any(Self::is_catch_all_pattern),
-            _ => false,
-        }
-    }
-
-    fn collect_enum_case_names<'a>(pattern: &'a ExhPattern, out: &mut Vec<&'a str>) {
-        match pattern {
-            ExhPattern::EnumCase(case_name) => out.push(case_name),
-            ExhPattern::Or(alternatives) => {
-                for alt in alternatives {
-                    Self::collect_enum_case_names(alt, out);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn collect_variant_case_names<'a>(pattern: &'a ExhPattern, out: &mut Vec<&'a str>) {
-        match pattern {
-            ExhPattern::VariantCase(variant_name) => out.push(variant_name),
-            ExhPattern::Or(alternatives) => {
-                for alt in alternatives {
-                    Self::collect_variant_case_names(alt, out);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn pattern_contains_bool(pattern: &ExhPattern, value: bool) -> bool {
-        match pattern {
-            ExhPattern::BoolLit(b) => *b == value,
-            ExhPattern::Or(alternatives) => alternatives
-                .iter()
-                .any(|p| Self::pattern_contains_bool(p, value)),
-            _ => false,
-        }
+        self.exh_int(start_val, hi, scrutinee_type)
     }
 
     fn format_missing_cases(cases: &[String]) -> String {
@@ -3165,99 +3203,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The values an integer literal may take at `prim`. `char` is included:
+    /// a `\u{…}` escape is checked against the scalar range the same way.
     fn primitive_range(prim: PrimitiveType) -> Option<(i128, i128)> {
-        use crate::tir::PrimitiveType;
         match prim {
-            PrimitiveType::I8 => Some((i128::from(i8::MIN), i128::from(i8::MAX))),
-            PrimitiveType::I16 => Some((i128::from(i16::MIN), i128::from(i16::MAX))),
-            PrimitiveType::I32 => Some((i128::from(i32::MIN), i128::from(i32::MAX))),
-            PrimitiveType::I64 => Some((i128::from(i64::MIN), i128::from(i64::MAX))),
-            PrimitiveType::U8 => Some((0, i128::from(u8::MAX))),
-            PrimitiveType::U16 => Some((0, i128::from(u16::MAX))),
-            PrimitiveType::U32 => Some((0, i128::from(u32::MAX))),
-            PrimitiveType::U64 => Some((0, i128::from(u64::MAX))),
             PrimitiveType::Char => Some((0, 0x0010_FFFF)),
-            _ => None,
+            other => other.int_range(),
         }
     }
 
-    fn collect_ranges_from_pattern(pattern: &ExhPattern) -> Vec<(i128, i128)> {
+    fn collect_ranges_from_pattern(pattern: &Pat) -> Vec<(i128, i128)> {
         match pattern {
-            ExhPattern::Range(start, end) => vec![(*start, *end)],
-            ExhPattern::IntLit(v) => vec![(*v, *v)],
-            ExhPattern::BoolLit(b) => vec![(i128::from(*b), i128::from(*b))],
-            ExhPattern::Or(alts) => {
-                let mut result = Vec::new();
-                for alt in alts {
-                    result.extend(Self::collect_ranges_from_pattern(alt));
-                }
-                result
-            }
+            Pat::Int { lo, hi, .. } => vec![(*lo, *hi)],
+            Pat::Bool(b) => vec![(i128::from(*b), i128::from(*b))],
+            Pat::Or(alts) => alts
+                .iter()
+                .flat_map(Self::collect_ranges_from_pattern)
+                .collect(),
             _ => vec![],
         }
     }
 
-    fn check_integer_range_exhaustiveness(
-        &self,
-        classified: &[(bool, ExhPattern)],
-        type_min: i128,
-        type_max: i128,
-        span: Span,
-    ) {
-        // Collect all ranges from all arms (only arms without guards count)
-        let mut all_ranges: Vec<(i128, i128)> = Vec::new();
-        let mut has_catch_all = false;
-
-        for (guardless, pat) in classified {
-            if *guardless && Self::is_catch_all_pattern(pat) {
-                has_catch_all = true;
-            }
-            if !*guardless {
-                continue;
-            }
-            all_ranges.extend(Self::collect_ranges_from_pattern(pat));
-        }
-
-        if has_catch_all {
-            return;
-        }
-
-        // Check exhaustiveness: sort ranges and verify they cover [type_min, type_max]
-        if all_ranges.is_empty() {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: "non-exhaustive match: integer type requires a wildcard `_` or full range coverage".to_string(),
-                span,
-            });
-            return;
-        }
-
-        all_ranges.sort_unstable();
-        // Merge overlapping/adjacent ranges
-        let mut merged: Vec<(i128, i128)> = Vec::new();
-        for (lo, hi) in all_ranges {
-            if let Some(last) = merged.last_mut() {
-                if lo <= last.1 + 1 {
-                    last.1 = last.1.max(hi);
-                } else {
-                    merged.push((lo, hi));
-                }
-            } else {
-                merged.push((lo, hi));
-            }
-        }
-
-        // Check if merged ranges cover [type_min, type_max]
-        let covers = merged.len() == 1 && merged[0].0 <= type_min && merged[0].1 >= type_max;
-        if !covers {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: "non-exhaustive match: not all values in the integer range are covered"
-                    .to_string(),
-                span,
-            });
-        }
-    }
-
-    fn check_range_overlaps(&self, classified: &[(bool, ExhPattern)], span: Span) {
+    fn check_range_overlaps(&self, classified: &[(bool, Pat)], span: Span) {
         // Collect ranges per arm (only guardless arms)
         let mut arm_ranges: Vec<Vec<(i128, i128)>> = Vec::new();
         for (guardless, pat) in classified {
@@ -3407,42 +3374,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .representation_head(target_type);
-        let struct_name = match self.tysys.type_table.borrow().get(repr_target).clone() {
-            ResolvedType::Struct { .. } => {
-                let tt = self.tysys.type_table.borrow();
-                tt.nominal_def(repr_target).map(|def| {
-                    (
-                        FqTypeName::declared(tt.defs(), def),
-                        tt.def_name(def).to_string(),
-                    )
-                })
-            }
-            _ => None,
-        };
-
-        if let Some((ref name, ref simple)) = struct_name
-            && (simple == "u128" || simple == "i128")
-        {
+        let wide_target = self.tysys.type_table.borrow().wide_int_item(repr_target);
+        if let Some(item) = wide_target {
+            let name = item.attr_name();
             // Handle number literal cast specially to support values > u64
             if let ast::Expr::Literal(lit) = &cast.expr
                 && let Literal::Number(repr) = &lit.value
                 && !util::is_float_only_literal(repr)
             {
-                let parse_result = if simple == "u128" {
+                let parse_result = if item == CompilerItem::U128 {
                     util::parse_u128_literal(repr).map(|v| v as i128)
                 } else {
                     util::parse_i128_literal(repr)
                 };
 
-                match parse_result {
-                    Ok(_) => return target_type,
-                    Err(_) => {
-                        let _ = self.emit(TypeError::InvalidLiteral {
-                            message: format!("invalid {name} literal: {repr}"),
-                            span: lit.span,
-                        });
-                    }
+                if parse_result.is_err() {
+                    let _ = self.emit(TypeError::InvalidLiteral {
+                        message: format!("invalid {name} literal: {repr}"),
+                        span: lit.span,
+                    });
                 }
+                return target_type;
             }
 
             // Handle negated number literal cast: -170... as i128
@@ -3451,17 +3403,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let ast::Expr::Literal(lit) = &unary.expr
                 && let Literal::Number(repr) = &lit.value
                 && !util::is_float_only_literal(repr)
-                && simple == "i128"
+                && item == CompilerItem::I128
             {
                 // Parse the negated value directly using Rust's i128
                 let negated_repr = format!("-{repr}");
-                if util::parse_i128_literal(&negated_repr).is_ok() {
-                    return target_type;
+                if util::parse_i128_literal(&negated_repr).is_err() {
+                    let _ = self.emit(TypeError::InvalidLiteral {
+                        message: format!("invalid i128 literal: -{repr}"),
+                        span: unary.span,
+                    });
                 }
-                let _ = self.emit(TypeError::InvalidLiteral {
-                    message: format!("invalid i128 literal: -{repr}"),
-                    span: unary.span,
-                });
+                return target_type;
             }
 
             // General expression cast (not a literal)
@@ -3495,26 +3447,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
+        let half_cast = {
+            let tt = self.tysys.type_table.borrow();
+            half_cast_hint(&tt, source_type, target_type)
+                .map(|hint| (tt.type_name(source_type), tt.type_name(target_type), hint))
+        };
+        if let Some((from, to, hint)) = half_cast {
+            let _ = self.emit(TypeError::InvalidCast {
+                from,
+                to,
+                hint,
+                span: cast.span,
+            });
+            return target_type;
+        }
+
         // Every coercion above declined, so nothing relates these two: `as`
         // between aggregates is only ever a newtype step, which shares a base.
         let unrelated_aggregate = {
             let tt = self.tysys.type_table.borrow();
-            // `i128` / `u128` are structs here; their rules below cover a
-            // wide-int source only, so such a target never exempts an aggregate.
-            let wide_int = |id| {
-                matches!(tt.get(tt.representation_head(id)), ResolvedType::Struct { def, .. }
-                    if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128")
-            };
+            // `i128` / `u128` are stored as structs but are scalars to `as`;
+            // the wide-int rules below judge them.
             // A tuple is a `GenericInstance` of a tuple head, so no arm of its own.
+            let is_aggregate = |id| {
+                !tt.is_wide_int(id)
+                    && matches!(
+                        tt.get(tt.representation_head(id)),
+                        ResolvedType::Struct { .. }
+                            | ResolvedType::GenericInstance { .. }
+                            | ResolvedType::Variant { .. }
+                    )
+            };
+            // Only a settled scalar is known to share nothing with an aggregate:
+            // a reference reads through, and a parameter settles later.
             let source_base = tt.representation_head(source_type);
-            let source_is_aggregate = !wide_int(source_type)
-                && matches!(
-                    tt.get(source_base),
-                    ResolvedType::Struct { .. }
-                        | ResolvedType::GenericInstance { .. }
-                        | ResolvedType::Variant { .. }
-                );
-            source_is_aggregate && source_base != tt.representation_head(target_type)
+            let source_is_scalar = matches!(
+                tt.get(source_base),
+                ResolvedType::Primitive(_)
+                    | ResolvedType::Unit
+                    | ResolvedType::Enum { .. }
+                    | ResolvedType::Flags { .. }
+            );
+            (is_aggregate(source_type) || (source_is_scalar && is_aggregate(target_type)))
+                && source_base != tt.representation_head(target_type)
         };
         if unrelated_aggregate {
             let tt = self.tysys.type_table.borrow();
@@ -3550,33 +3525,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the wide-int struct ref into codegen. `char` targets are
         // excluded: the char-cast diagnostic below already covers them.
         {
-            use crate::tir::PrimitiveType;
+            use crate::primitive::PrimitiveType;
             let tt = self.tysys.type_table.borrow();
-            let source_is_wide_int = matches!(
-                tt.get(tt.representation_head(source_type)),
-                ResolvedType::Struct { def, .. }
-                    if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128"
-            );
-            let target_supported = !source_is_wide_int
-                || match tt.get(tt.representation_head(target_type)) {
+            let target_supported = !tt.is_wide_int(source_type)
+                || tt.is_wide_int(target_type)
+                || matches!(
+                    tt.get(tt.representation_head(target_type)),
                     ResolvedType::Primitive(
                         PrimitiveType::F64
-                        | PrimitiveType::F32
-                        | PrimitiveType::I64
-                        | PrimitiveType::U64
-                        | PrimitiveType::I32
-                        | PrimitiveType::U32
-                        | PrimitiveType::I16
-                        | PrimitiveType::U16
-                        | PrimitiveType::I8
-                        | PrimitiveType::U8
-                        | PrimitiveType::Char,
-                    ) => true,
-                    ResolvedType::Struct { def, .. } => {
-                        tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128"
-                    }
-                    _ => false,
-                };
+                            | PrimitiveType::F32
+                            | PrimitiveType::I64
+                            | PrimitiveType::U64
+                            | PrimitiveType::I32
+                            | PrimitiveType::U32
+                            | PrimitiveType::I16
+                            | PrimitiveType::U16
+                            | PrimitiveType::I8
+                            | PrimitiveType::U8
+                            | PrimitiveType::Char,
+                    )
+                );
             if !target_supported {
                 let from_name = tt.type_name(source_type);
                 let to_name = tt.type_name(target_type);
@@ -3718,6 +3686,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|def| self.tysys.resolutions.defs().name(def).to_string())
             .unwrap_or_else(|| struct_name.clone());
 
+        // `Box::<i32> { … }` says what `let b: Box<i32> = …` says, so it
+        // resolves as that annotation and takes its place, arity and bound
+        // checks included.
+        let expected_type = if struct_lit.type_args.is_empty() {
+            expected_type
+        } else {
+            let (site, written) = struct_lit
+                .name_id
+                .zip(name.as_deref())
+                .expect("only a named literal parses a turbofish");
+            Some(self.resolve_generic_type(site, written, &struct_lit.type_args, struct_lit.span))
+        };
+
         // Get expected field types using (name, module_source) lookup.
         //
         // An annotation naming this struct's instantiation pins the declared
@@ -3821,12 +3802,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_reference_to_def(use_id, def_id);
         }
 
-        // Resolve field expressions, converting tuple literals to arrays when needed.
-        // For generic structs, tuple-to-sequence coercion may be deferred to a second
-        // pass after type arguments are inferred from field values.
-        // Indexes into `struct_lit.fields`, not into `fields`, which is sorted
-        // into declaration order before the second pass reads it.
-        let mut deferred_coercions: Vec<usize> = Vec::new();
+        // A generic struct's field waits for the second pass, where the type
+        // arguments inferred from the field values are in hand. Indexes into
+        // `struct_lit.fields`, not into `fields`, which is sorted into
+        // declaration order before that pass reads it.
+        let mut deferred_fields: Vec<usize> = Vec::new();
         let fields: Vec<ResolvedField> = struct_lit
             .fields
             .iter()
@@ -3839,10 +3819,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .find(|(name, _)| name == &field.name)
                     .map(|(_, type_id)| *type_id);
 
-                // For tuple literals in generic struct fields where the field type
-                // contains type params (e.g., List<T>), skip providing the expected
-                // type so the tuple isn't coerced yet. Instead, resolve as a plain
-                // tuple and defer coercion to after type inference.
+                // A tuple literal under a field type naming a slot (`List<T>`)
+                // resolves as a plain tuple: the coercion needs the argument
+                // these very values are about to fix.
                 let needs_deferred_coercion = is_tuple_literal
                     && expected_field_type
                         .is_some_and(|t| self.tysys.type_table.borrow().contains_type_param(t));
@@ -3852,38 +3831,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     expected_field_type
                 };
 
-                // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
                 let type_id = self.resolve_expr(&field.value, ctx, effective_expected);
 
-                // Track tuple literals whose coercion was deferred because the field
-                // type had unresolved type parameters. After type inference, we'll
-                // re-coerce with the concrete type (the second pass below records
-                // the coercion via `try_coerce_tuple_to_sequence`; reify replays
-                // it). The test is read from the AST — a spread tuple used to
-                // resolve to a block (never deferred), so only spread-free tuple
-                // literals are deferred here.
+                // Read from the AST, because a spread tuple used to resolve to
+                // a block and so was never deferred.
                 let tuple_is_spread_free = matches!(
                     &field.value,
                     ast::Expr::TupleLiteral(t)
                         if !t.elements.iter().any(|e| matches!(e, Expr::Spread(..)))
                 );
                 let coercion_deferred = needs_deferred_coercion && tuple_is_spread_free;
-                if coercion_deferred {
-                    deferred_coercions.push(provided_idx);
-                }
                 // A field whose declared type names a slot is not a constraint
-                // on the value — the value is what fixes the slot. Fields
+                // on the value; the value is what fixes the slot. Fields
                 // sharing a slot are compared to each other in
-                // `infer_struct_type_args`; comparing one against the
-                // *inferred* argument instead reads back whatever the caller's
-                // expected type put there, not this literal's answer.
+                // `infer_struct_type_args`.
                 let field_names_slot = expected_field_type
                     .is_some_and(|t| self.tysys.type_table.borrow().contains_rigid_param(t));
                 let check_deferred = coercion_deferred || field_names_slot;
+                if check_deferred {
+                    deferred_fields.push(provided_idx);
+                }
 
-                // Check field name exists in struct definition
-                if struct_fields_known && !struct_field_types.iter().any(|(n, _)| n == &field.name)
-                {
+                if struct_fields_known && expected_field_type.is_none() {
                     let _ = self.emit(TypeError::ExtraField {
                         struct_name: display_name.clone(),
                         field_name: field.name.clone(),
@@ -3891,16 +3860,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 }
 
-                // Check field value type against declared struct field type.
-                // A field whose coercion was deferred still holds its literal
-                // shape — the sequence coercion has not run — so checking it
+                // A deferred field still holds its literal shape, so checking it
                 // here would compare `[…]` against the sequence it is about to
                 // become. The second pass checks it once coerced.
-                if !check_deferred
-                    && let Some((_, expected_type_id)) =
-                        struct_field_types.iter().find(|(n, _)| n == &field.name)
-                {
-                    self.typecheck(type_id, *expected_type_id, field.value.span());
+                if !check_deferred && let Some(expected_type_id) = expected_field_type {
+                    self.typecheck(type_id, expected_type_id, field.value.span());
                 }
 
                 let decl_idx = struct_field_types
@@ -4067,11 +4031,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             };
 
-            // Second pass: apply deferred tuple-to-sequence coercion now that
-            // concrete type arguments are known. For example, [10, 20, 30] in
-            // `Container<i32> { items: [10, 20, 30] }` needs List<i32> coercion,
-            // but at first pass the field type was List<T> (type param).
-            for &ast_idx in &deferred_coercions {
+            // Second pass: coerce and check what the first pass deferred, now
+            // that the type arguments are known. `[10, 20, 30]` in
+            // `Container<i32> { items: [10, 20, 30] }` needs its `List<i32>`
+            // coercion, which the first pass saw only as `List<T>`. Every
+            // deferred field is revisited, coercion or not: a deferral that
+            // reaches no second pass is no check at all.
+            for &ast_idx in &deferred_fields {
                 let ast_field = &struct_lit.fields[ast_idx];
                 let Some(concrete_type) = struct_field_types
                     .iter()
@@ -4094,22 +4060,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     fields[field_idx].type_id = coerced;
                 }
-                // The check the first pass skipped — but only once the slot is
-                // actually filled. A field type that still names a rigid
-                // parameter is one this literal did not pin, and comparing
-                // against a declaration's own slot is the very thing the first
-                // pass was skipping.
-                if !self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .contains_rigid_param(concrete_type)
-                {
-                    self.typecheck(
-                        fields[field_idx].type_id,
-                        concrete_type,
-                        ast_field.value.span(),
-                    );
+                // Either side still naming a slot this literal could fill is
+                // the case the first pass was skipping: comparing it reads back
+                // an inferred argument rather than this literal's answer.
+                let value_type = fields[field_idx].type_id;
+                let settled = {
+                    let table = self.tysys.type_table.borrow();
+                    !table.contains_fillable_slot(concrete_type)
+                        && !table.contains_fillable_slot(value_type)
+                };
+                if settled {
+                    self.typecheck(value_type, concrete_type, ast_field.value.span());
                 }
             }
 
@@ -4469,7 +4430,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect(),
             field_ast_ids: Vec::new(),
             field_defaults: vec![None; fields.len()],
-            type_params: Vec::new(),
+            field_wire_numbers: vec![None; fields.len()],
+            type_params: RealTypeParams::default(),
             type_param_type_ids: Vec::new(),
         };
         self.sem.decls.anon_struct_fields.insert(shape, field_info);
@@ -4487,6 +4449,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 wire_name_override: None,
                 serde_default: false,
                 serde_positional: false,
+                serde_number: None,
                 default_expr: None,
             })
             .collect();
@@ -4600,6 +4563,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
                 // A struct literal has no turbofish; its fields name the slots.
                 type_args: &[],
+                self_binding: None,
             },
         );
         let decl_field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();
@@ -4708,9 +4672,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .and_then(|def| self.declared_default_type_arg(def, slot, &inferred[..slot]))
                 .unwrap_or(decl_param);
         }
+        self.report_uninferred_struct_type_args(&struct_info, &inferred, span);
         self.record_instantiation(&inst, &inferred);
         self.blame_unsolved(&inst, &inferred);
         inferred
+    }
+
+    /// Report a struct literal's type parameter that nothing settled, as a call
+    /// site reports its own.
+    fn report_uninferred_struct_type_args(
+        &mut self,
+        struct_info: &StructFieldInfo,
+        inferred: &[TypeId],
+        span: Span,
+    ) {
+        // A body that declares the same parameter is forwarding its own, not
+        // leaving one unanswered: `List { … }` inside `impl<T> List<T>`.
+        let scope_params = self.scope_type_param_ids();
+        let names: Vec<String> = struct_info
+            .type_param_type_ids
+            .iter()
+            .zip(inferred.iter())
+            // The declaration's own parameter standing as its own answer is what
+            // marks a slot unsettled. An answer that is some *other* variable is
+            // still open, and a later constraint fills it (`Paired { v: null, k:
+            // 1 }` settles `T` from `k` after `v` left a hole).
+            .filter(|&(&decl_param, &answer)| {
+                answer == decl_param && !scope_params.contains(&answer)
+            })
+            .filter_map(|(&decl_param, _)| {
+                util::bound_param_name(self.tysys.type_table.borrow().get(decl_param)).cloned()
+            })
+            .collect();
+        if names.is_empty() {
+            return;
+        }
+        let struct_name = &struct_info.name;
+        let _ = self.emit(TypeError::cannot_infer(
+            &names,
+            &format!("struct `{struct_name}`"),
+            &format!("`{struct_name}::<...> {{ … }}`"),
+            span,
+        ));
     }
 
     /// Check if a type contains a `TypePack` (variadic pack parameter).
@@ -4855,8 +4858,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .type_table
                     .borrow()
-                    .as_tuple(binding_type)
-                    .unwrap_or_else(|| vec![binding_type]);
+                    .elem_types_or_self(binding_type);
                 for (i, elem) in elems.iter().enumerate() {
                     if let ast::Pattern::Ident { id, name, span } = elem {
                         let elem_type = inner.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
@@ -4909,11 +4911,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Expr::Spread(inner, _span) = elem {
                 let spread_type_id = self.resolve_expr(inner, ctx, None);
                 if self.type_contains_pack(spread_type_id) {
-                    // A direct `TypePack` (`[..T::method()]`) or a tuple
-                    // containing one (`[..rest]` where `rest: [..T]`): the
-                    // spread element keeps the spread's own type; monomorphize
-                    // expands it later.
-                    elem_types.push(spread_type_id);
+                    // A tuple carrying packs (`[..rest]` where `rest: [..T]`)
+                    // splices its own elements, so each pack lands directly in
+                    // the literal's type and monomorphize expands it there. A
+                    // bare `TypePack` (`[..T::method()]`) is already one.
+                    elem_types.extend(
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .elem_types_or_self(spread_type_id),
+                    );
                 } else if let Some(mapped) = self.spread_pack_map_type(inner, spread_type_id) {
                     // Pack-map `..F::method()` whose return type is
                     // pack-independent: a homogeneous pack of the return type,

@@ -8,9 +8,10 @@
 // and `int128.wado`).
 
 use { String, StrSlice, AsStrSlice } from "core:prelude/string.wado";
+use { Formatter } from "core:prelude/format.wado";
 use { Option, Result } from "core:prelude/types.wado";
 use { u128 } from "core:prelude/int128.wado";
-use { LenientParseError } from "core:prelude/traits.wado";
+use { Display, Error, From, LenientParseError } from "core:prelude/traits.wado";
 
 
 use { parse_text } from "core:prelude/fpfmt.wado";
@@ -69,24 +70,26 @@ internal fn lenient_int_preprocess<T: AsStrSlice>(text: T) -> Result<[String, u3
     return Result::Ok([cleaned, radix]);
 }
 
-/// Render a `ParseIntError` as a `LenientParseError` reason.
-internal fn lenient_int_error(e: ParseIntError) -> LenientParseError {
-    let reason = match e.kind() {
-        Empty => "empty integer string",
-        InvalidDigit => "invalid digit in integer string",
-        PosOverflow => "integer string overflows the target type",
-        NegOverflow => "integer string underflows the target type",
-    };
-    return LenientParseError::new(reason);
+impl From<ParseIntError> for LenientParseError {
+    fn from(e: ParseIntError) -> LenientParseError {
+        let reason: String = match e.kind() {
+            Empty => "empty integer string",
+            InvalidDigit => "invalid digit in integer string",
+            PosOverflow => "integer string overflows the target type",
+            NegOverflow => "integer string underflows the target type",
+        };
+        return LenientParseError::new(reason);
+    }
 }
 
-/// Render a `ParseFloatError` as a `LenientParseError` reason.
-internal fn lenient_float_error(e: ParseFloatError) -> LenientParseError {
-    let reason = match e.kind() {
-        Empty => "empty float string",
-        Invalid => "invalid float string",
-    };
-    return LenientParseError::new(reason);
+impl From<ParseFloatError> for LenientParseError {
+    fn from(e: ParseFloatError) -> LenientParseError {
+        let reason: String = match e.kind() {
+            Empty => "empty float string",
+            Invalid => "invalid float string",
+        };
+        return LenientParseError::new(reason);
+    }
 }
 
 /// Strip `_` separators from the digit body of a human-supplied float string
@@ -143,10 +146,24 @@ impl ParseIntError {
         return ParseIntError { kind };
     }
 
-    /// Returns the kind of this error.
     pub fn kind(&self) -> IntErrorKind {
         return self.kind;
     }
+}
+
+impl Display for ParseIntError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match self.kind {
+            Empty => "cannot parse integer from empty string",
+            InvalidDigit => "invalid digit found in string",
+            PosOverflow => "number too large to fit in target type",
+            NegOverflow => "number too small to fit in target type",
+        };
+        f.write_str(&message);
+    }
+}
+
+impl Error for ParseIntError {
 }
 
 /// Kind of failure returned by float parsing.
@@ -167,10 +184,22 @@ impl ParseFloatError {
         return ParseFloatError { kind };
     }
 
-    /// Returns the kind of this error.
     pub fn kind(&self) -> FloatErrorKind {
         return self.kind;
     }
+}
+
+impl Display for ParseFloatError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match self.kind {
+            Empty => "cannot parse float from empty string",
+            Invalid => "invalid float literal",
+        };
+        f.write_str(&message);
+    }
+}
+
+impl Error for ParseFloatError {
 }
 
 /// Translate an ASCII byte into a digit value in the range [0, 36).
@@ -261,7 +290,7 @@ internal fn split_sign(s: &StrSlice) -> Result<[bool, StrSlice], IntErrorKind> {
     if has_sign && len == 1 {
         return Result::Err(IntErrorKind::InvalidDigit);
     }
-    return Result::Ok([is_negative, s.sub_unchecked(if has_sign { 1 } else { 0 }, len)]);
+    return Result::Ok([is_negative, s.slice_unchecked(if has_sign { 1 } else { 0 }, len)]);
 }
 
 /// Split a leading `+` (if any) off the view, returning the digits after it.
@@ -277,7 +306,7 @@ internal fn split_plus(s: &StrSlice) -> Result<StrSlice, IntErrorKind> {
         if len == 1 {
             return Result::Err(IntErrorKind::InvalidDigit);
         }
-        return Result::Ok(s.sub_unchecked(1, len));
+        return Result::Ok(s.slice_unchecked(1, len));
     }
     return Result::Ok(*s);
 }

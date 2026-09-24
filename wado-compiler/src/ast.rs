@@ -1,5 +1,11 @@
 // AST definitions for Wado
 
+use crate::attribute::{
+    ALLOW, CM, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS, TIMEOUT_MS, TODO, UNAVAILABLE,
+    WASM_MODULE, WIRE,
+};
+use std::borrow::Cow;
+
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
@@ -400,6 +406,12 @@ pub trait AstVisitor: Sized {
     /// `visit_*` methods instead.
     fn visit_id(&mut self, _id: AstId, _span: Span) {}
 
+    /// A `with` clause's reference site, kept apart from [`Self::visit_id`]
+    /// because `effect_check` answers for it and the name resolver does not.
+    fn visit_effect_id(&mut self, id: AstId, span: Span) {
+        self.visit_id(id, span);
+    }
+
     fn visit_item(&mut self, item: &Item) {
         walk_item(self, item);
     }
@@ -458,6 +470,7 @@ pub fn type_head_name(ty: &Type) -> Option<&str> {
     match ty {
         Type::Named(n) => Some(n.name.as_str()),
         Type::Generic(g) => Some(g.name.as_str()),
+        Type::NamespacedGeneric(g) => Some(g.name.as_str()),
         _ => None,
     }
 }
@@ -710,7 +723,7 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
         v.visit_type(ret);
     }
     for (id, span) in &func.effect_ids {
-        v.visit_id(*id, *span);
+        v.visit_effect_id(*id, *span);
     }
     if let Some(body) = &func.body {
         v.visit_block(body);
@@ -946,6 +959,9 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
             if let (Some(name_id), Some(name_span)) = (s.name_id, s.name_span) {
                 v.visit_id(name_id, name_span);
             }
+            for ty in &s.type_args {
+                v.visit_type(ty);
+            }
             for field in &s.fields {
                 v.visit_id(field.name_id, field.name_span);
                 v.visit_expr(&field.value);
@@ -1028,6 +1044,10 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
                 v.visit_pattern(p);
             }
         }
+        Pattern::Typed { pattern, ty, .. } => {
+            v.visit_pattern(pattern);
+            v.visit_type(ty);
+        }
         Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {}
     }
 }
@@ -1102,7 +1122,7 @@ fn walk_function_type<V: AstVisitor>(v: &mut V, ft: &FunctionType) {
     }
     v.visit_type(&ft.return_type);
     for (id, span) in &ft.effect_ids {
-        v.visit_id(*id, *span);
+        v.visit_effect_id(*id, *span);
     }
 }
 
@@ -1142,19 +1162,19 @@ impl Module {
 
     /// Returns true if the module has the `#![no_prelude]` attribute.
     pub fn has_no_prelude(&self) -> bool {
-        self.inner_attributes.iter().any(|a| a.name == "no_prelude")
+        self.inner_attributes.iter().any(|a| a.name == NO_PRELUDE)
     }
 
     /// Returns true if the module has the `#![TODO]` attribute.
     /// All tests in a TODO module must fail; passing tests become failures.
     pub fn has_todo(&self) -> bool {
-        self.inner_attributes.iter().any(|a| a.name == "TODO")
+        self.inner_attributes.iter().any(|a| a.name == TODO)
     }
 
     /// Returns true if the module has the `#![generated]` attribute.
     /// Indicates machine-generated code (e.g. wado-from-idl, gale).
     pub fn has_generated(&self) -> bool {
-        self.inner_attributes.iter().any(|a| a.name == "generated")
+        self.inner_attributes.iter().any(|a| a.name == GENERATED)
     }
 
     /// Returns the `wasm_module` name if `#![wasm_module("name")]` is present.
@@ -1167,9 +1187,7 @@ impl Module {
     /// The attribute itself, for a diagnostic's span.
     #[must_use]
     pub fn wasm_module_attribute(&self) -> Option<&InnerAttribute> {
-        self.inner_attributes
-            .iter()
-            .find(|a| a.name == "wasm_module")
+        self.inner_attributes.iter().find(|a| a.name == WASM_MODULE)
     }
 
     /// Returns the canonical bundled-stdlib import path declared by
@@ -1190,7 +1208,7 @@ impl Module {
     /// The attribute itself: a malformed one has no identity, but has a span.
     #[must_use]
     pub fn stdlib_identity_attribute(&self) -> Option<&InnerAttribute> {
-        self.inner_attributes.iter().find(|a| a.name == "stdlib")
+        self.inner_attributes.iter().find(|a| a.name == STDLIB)
     }
 
     /// Returns the value of a scalar `key = "value"` argument on any
@@ -1203,7 +1221,7 @@ impl Module {
     pub fn generated_meta(&self, key: &str) -> Option<&str> {
         self.inner_attributes
             .iter()
-            .filter(|a| a.name == "generated")
+            .filter(|a| a.name == GENERATED)
             .find_map(|a| a.kv_value(key))
     }
 
@@ -1215,7 +1233,7 @@ impl Module {
     pub fn generated_meta_array(&self, key: &str) -> Option<&[String]> {
         self.inner_attributes
             .iter()
-            .filter(|a| a.name == "generated")
+            .filter(|a| a.name == GENERATED)
             .find_map(|a| a.kv_array(key))
     }
 
@@ -1350,7 +1368,8 @@ impl Item {
         }
     }
 
-    /// The attributes written before the item.
+    /// The attributes written before the item. Exhaustive on purpose: a new
+    /// item kind that carries attributes must name them here to be read at all.
     pub fn attrs(&self) -> &[Attribute] {
         match self {
             Item::Function(d) => &d.attrs,
@@ -1362,14 +1381,14 @@ impl Item {
             Item::Interface(d) => &d.attrs,
             Item::Resource(d) => &d.attrs,
             Item::TupleTypeDecl(d) => &d.attrs,
+            Item::BuiltinTypeDecl(d) => &d.attrs,
+            Item::Use(d) => &d.attrs,
+            Item::Impl(d) => &d.attrs,
+            Item::World(d) => &d.attrs,
+            Item::Test(d) => &d.attributes,
             Item::Global(d) => &d.attributes,
             Item::Flags(d) => d.attributes.as_deref().unwrap_or_default(),
-            Item::BuiltinTypeDecl(_)
-            | Item::Use(_)
-            | Item::Impl(_)
-            | Item::World(_)
-            | Item::Test(_)
-            | Item::Error(_) => &[],
+            Item::Error(_) => &[],
         }
     }
 }
@@ -1409,11 +1428,11 @@ impl TestDecl {
     /// `#[synopsis]` attributes. `module_is_todo` folds in a module-level `#[TODO]`.
     pub fn metadata(&self, module_is_todo: bool) -> TestMetadata {
         TestMetadata {
-            expect_trap: self.attributes.iter().any(|a| a.name == "expect_trap"),
-            is_todo: module_is_todo || self.attributes.iter().any(|a| a.name == "TODO"),
-            is_synopsis: self.attributes.iter().any(|a| a.name == "synopsis"),
+            expect_trap: self.attributes.iter().any(|a| a.name == EXPECT_TRAP),
+            is_todo: module_is_todo || self.attributes.iter().any(|a| a.name == TODO),
+            is_synopsis: self.attributes.iter().any(|a| a.name == SYNOPSIS),
             timeout_ms: self.attributes.iter().find_map(|a| {
-                if a.name == "timeout_ms" {
+                if a.name == TIMEOUT_MS {
                     a.args
                         .first()
                         .and_then(|arg| arg.as_str().parse::<u64>().ok())
@@ -1461,6 +1480,9 @@ pub enum AttrArg {
     /// A `key = ident` pair, whose value names something in the source rather
     /// than carrying text, e.g. `part_of = arr`.
     KeyIdent(String, String),
+    /// A `key = 3` pair, whose value is a number rather than text, e.g.
+    /// `#[wire(number = 3)]`.
+    KeyNumber(String, String),
 }
 
 impl AttrArg {
@@ -1469,7 +1491,7 @@ impl AttrArg {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
-            Self::KeyValue(_, v) | Self::KeyIdent(_, v) => v,
+            Self::KeyValue(_, v) | Self::KeyIdent(_, v) | Self::KeyNumber(_, v) => v,
             Self::KeyArray(_, vs) => vs.first().map(String::as_str).unwrap_or(""),
         }
     }
@@ -1480,14 +1502,49 @@ impl AttrArg {
     pub fn name(&self) -> &str {
         match self {
             Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
-            Self::KeyValue(k, _) | Self::KeyArray(k, _) | Self::KeyIdent(k, _) => k,
+            Self::KeyValue(k, _)
+            | Self::KeyArray(k, _)
+            | Self::KeyIdent(k, _)
+            | Self::KeyNumber(k, _) => k,
         }
     }
 }
 
-/// The attribute a declaration carries in place of a body.
-/// See [WEP: Declared Absence](../../docs/wep-2026-09-13-declared-absence.md).
-pub const UNAVAILABLE: &str = "unavailable";
+/// The field numbers the wire format admits, from the protobuf specification's
+/// "Assigning Field Numbers".
+pub const WIRE_NUMBER_MIN: u32 = 1;
+pub const WIRE_NUMBER_MAX: u32 = 536_870_911;
+pub const WIRE_NUMBER_RESERVED: std::ops::RangeInclusive<u32> = 19_000..=19_999;
+
+/// The `#[wire(number = …)]` text these attributes carry, as written. Every
+/// `#[wire]` is read, since a field may spell one adjustment per attribute.
+#[must_use]
+pub fn wire_number_written(attrs: &[Attribute]) -> Option<&str> {
+    attrs.iter().find_map(|a| {
+        if a.name == WIRE {
+            a.kv_number("number")
+        } else {
+            None
+        }
+    })
+}
+
+/// The `#[wire(number = N)]` these attributes carry, where it is a number the
+/// wire format admits. The diagnostics for one it does not are the
+/// elaborator's, which is where a declaration is checked.
+#[must_use]
+pub fn wire_number_of(attrs: &[Attribute]) -> Option<u32> {
+    wire_number_written(attrs)
+        .and_then(|written| written.parse::<u32>().ok())
+        .filter(|n| (WIRE_NUMBER_MIN..=WIRE_NUMBER_MAX).contains(n))
+        .filter(|n| !WIRE_NUMBER_RESERVED.contains(n))
+}
+
+/// One entry per field, in declaration order, as `StructInfo` holds them.
+#[must_use]
+pub fn wire_numbers_of(fields: &[StructField]) -> Vec<Option<u32>> {
+    fields.iter().map(|f| wire_number_of(&f.attrs)).collect()
+}
 
 /// Attribute like #[cm("...")]
 #[derive(Debug, Clone)]
@@ -1523,7 +1580,7 @@ pub mod lint {
 pub fn attrs_allow(attrs: &[Attribute], lint: &str) -> bool {
     attrs
         .iter()
-        .any(|attr| attr.name == "allow" && args_name(&attr.args, lint))
+        .any(|attr| attr.name == ALLOW && args_name(&attr.args, lint))
 }
 
 /// [`attrs_allow`] for a module's `#![allow(...)]`, which waives the lint for
@@ -1532,7 +1589,7 @@ pub fn attrs_allow(attrs: &[Attribute], lint: &str) -> bool {
 pub fn inner_attrs_allow(attrs: &[InnerAttribute], lint: &str) -> bool {
     attrs
         .iter()
-        .any(|attr| attr.name == "allow" && args_name(&attr.args, lint))
+        .any(|attr| attr.name == ALLOW && args_name(&attr.args, lint))
 }
 
 fn args_name(args: &[AttrArg], lint: &str) -> bool {
@@ -1547,6 +1604,19 @@ impl Attribute {
     pub fn kv_value(&self, key: &str) -> Option<&str> {
         self.args.iter().find_map(|arg| {
             if let AttrArg::KeyValue(k, v) = arg {
+                if k == key { Some(v.as_str()) } else { None }
+            } else {
+                None
+            }
+        })
+    }
+
+    /// The literal text of a `key = <number>` argument, as written.
+    ///
+    /// For `#[wire(number = 3)]`, `attr.kv_number("number")` returns `Some("3")`.
+    pub fn kv_number(&self, key: &str) -> Option<&str> {
+        self.args.iter().find_map(|arg| {
+            if let AttrArg::KeyNumber(k, v) = arg {
                 if k == key { Some(v.as_str()) } else { None }
             } else {
                 None
@@ -1571,7 +1641,7 @@ impl Attribute {
 
     /// The linearity `#[cm(..., linearity=...)]` declares, if any.
     pub fn cm_resource_linearity(&self) -> Option<CmResourceLinearity> {
-        if self.name != "cm" {
+        if self.name != CM {
             return None;
         }
         self.kv_value("linearity")
@@ -2120,6 +2190,9 @@ impl Visibility {
 #[derive(Debug, Clone)]
 pub struct UseDecl {
     pub id: AstId,
+    /// Leading `#[…]` attributes, distinct from the `with { … }` clause the
+    /// `attributes` field carries.
+    pub attrs: Vec<Attribute>,
     /// Re-export visibility; `Private` is a local import, not re-exported.
     pub visibility: Visibility,
     /// Import source (e.g., "core:cli", "wasi:filesystem", "./utils.wado")
@@ -2325,6 +2398,22 @@ pub struct LetStmt {
     /// scope, otherwise this block runs and must diverge.
     pub else_block: Option<Block>,
     pub span: Span,
+}
+
+impl LetStmt {
+    /// The pattern a `let … else` tests: an annotation is the type pattern it
+    /// ascribes, keyed by this statement's id.
+    pub fn else_pattern(&self) -> Cow<'_, Pattern> {
+        match &self.ty {
+            Some(ty) => Cow::Owned(Pattern::Typed {
+                id: self.id,
+                pattern: Box::new(self.pattern.clone()),
+                ty: ty.clone(),
+                span: self.name_span.merge(&ty.span()),
+            }),
+            None => Cow::Borrowed(&self.pattern),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -2858,6 +2947,9 @@ pub struct StructLiteralExpr {
     /// Span of just the type name token.
     /// Always `Some` iff `name` is `Some`.
     pub name_span: Option<Span>,
+    /// Turbofish arguments pinning a generic struct's parameters,
+    /// `Box::<i32> { value: 1 }`. Empty where the literal writes none.
+    pub type_args: Vec<Type>,
     pub fields: Vec<StructLiteralField>,
     /// Spread bases (`{ ..a, field: v, ..b }`) in source order, each supplying
     /// the fields the literal does not list explicitly. See WEP: Literal Spread.
@@ -3317,6 +3409,14 @@ pub enum Pattern {
         kind: RangeKind,
         span: Span,
     },
+    /// Type pattern: `input: HtmlInputElement`. Matches a value of `ty`, which
+    /// `pattern` then binds. A `let` keeps a top-level ascription in `LetStmt::ty`.
+    Typed {
+        id: AstId,
+        pattern: Box<Pattern>,
+        ty: Type,
+        span: Span,
+    },
     /// Placeholder for a pattern that failed to parse, emitted by error
     /// recovery (e.g. a broken element in a tuple pattern or match-arm pattern)
     /// so the surrounding pattern list survives. Inert in every later phase;
@@ -3476,24 +3576,75 @@ impl Type {
         }
     }
 
-    /// Whether `name` is spelled anywhere in this type. Exhaustive, as
-    /// [`Self::mentioned_names`] is: a spelling a walk like this skips reads as
-    /// a name the type does not mention, which is never what a caller wants.
+    /// Whether `pred` holds of this type or of any within it, outermost first.
+    /// The one recursion a type predicate takes; a hand-spelled walk forgets arms.
+    #[must_use]
+    pub fn any(&self, pred: &mut impl FnMut(&Type) -> bool) -> bool {
+        if pred(self) {
+            return true;
+        }
+        match self {
+            Type::Generic(g) => g.args.iter().any(|a| a.any(pred)),
+            Type::NamespacedGeneric(g) => g.args.iter().any(|a| a.any(pred)),
+            Type::Function(f) => f.params.iter().any(|p| p.any(pred)) || f.return_type.any(pred),
+            Type::Tuple(elems) => elems.iter().any(|e| e.any(pred)),
+            Type::Reference(inner) | Type::MutReference(inner) => inner.any(pred),
+            Type::Named(_) | Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => false,
+        }
+    }
+
+    /// Whether `name` is spelled anywhere in this type.
     #[must_use]
     pub fn mentions(&self, name: &str) -> bool {
-        match self {
+        self.any(&mut |ty| match ty {
             Type::Named(n) => n.name == name,
-            Type::Generic(g) => g.name == name || g.args.iter().any(|a| a.mentions(name)),
+            Type::Generic(g) => g.name == name,
+            Type::NamespacedGeneric(g) => g.namespace == name || g.name == name,
+            Type::TypePackSpread(spread, _) => spread == name,
+            Type::Function(_)
+            | Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::Infer(_)
+            | Type::Error(_) => false,
+        })
+    }
+
+    /// Every `..X` this type spells, with where it is written. Exhaustive, as
+    /// [`Self::mentioned_names`] is.
+    #[must_use]
+    pub fn pack_spreads(&self) -> Vec<(&str, Span)> {
+        let mut out = Vec::new();
+        self.collect_pack_spreads(&mut out);
+        out
+    }
+
+    fn collect_pack_spreads<'a>(&'a self, out: &mut Vec<(&'a str, Span)>) {
+        match self {
+            Type::Generic(g) => {
+                for a in &g.args {
+                    a.collect_pack_spreads(out);
+                }
+            }
             Type::NamespacedGeneric(g) => {
-                g.namespace == name || g.name == name || g.args.iter().any(|a| a.mentions(name))
+                for a in &g.args {
+                    a.collect_pack_spreads(out);
+                }
             }
             Type::Function(f) => {
-                f.params.iter().any(|p| p.mentions(name)) || f.return_type.mentions(name)
+                for p in &f.params {
+                    p.collect_pack_spreads(out);
+                }
+                f.return_type.collect_pack_spreads(out);
             }
-            Type::Tuple(elems) => elems.iter().any(|e| e.mentions(name)),
-            Type::Reference(inner) | Type::MutReference(inner) => inner.mentions(name),
-            Type::TypePackSpread(spread, _) => spread == name,
-            Type::Infer(_) | Type::Error(_) => false,
+            Type::Tuple(elems) => {
+                for e in elems {
+                    e.collect_pack_spreads(out);
+                }
+            }
+            Type::Reference(inner) | Type::MutReference(inner) => inner.collect_pack_spreads(out),
+            Type::TypePackSpread(name, span) => out.push((name, *span)),
+            Type::Named(_) | Type::Infer(_) | Type::Error(_) => {}
         }
     }
 
@@ -3673,6 +3824,26 @@ pub struct TraitBound {
     pub resolved: Option<DefId>,
 }
 
+impl TraitBound {
+    /// Whether the bound names a trait to check against. An `fn(…)` bound names
+    /// none: it is already realised in the bounded parameter's own type.
+    pub fn names_a_trait(&self) -> bool {
+        self.fn_signature.is_none()
+    }
+
+    /// Whether any type the bound writes is rooted at `Self`, so reading it
+    /// needs the frame that wrote it. Every position a bound writes a type in,
+    /// an `fn` bound's own signature included.
+    pub fn writes_self(&self) -> bool {
+        let in_signature = self.fn_signature.as_ref().is_some_and(|sig| {
+            sig.return_type.mentions("Self") || sig.params.iter().any(|ty| ty.mentions("Self"))
+        });
+        in_signature
+            || self.type_args.iter().any(|ty| ty.mentions("Self"))
+            || self.assoc_types.iter().any(|c| c.ty.mentions("Self"))
+    }
+}
+
 /// Generic type parameter declaration: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Builder<Output = T>>`
 /// Effect parameter declaration: `<effect E>` — represents a set of effects
 #[derive(Debug, Clone)]
@@ -3701,7 +3872,7 @@ impl GenericParam {
     pub fn real_bounds(&self) -> Vec<TraitBound> {
         self.bounds
             .iter()
-            .filter(|b| b.fn_signature.is_none())
+            .filter(|b| b.names_a_trait())
             .cloned()
             .collect()
     }
@@ -3716,7 +3887,7 @@ impl GenericParam {
     /// Such params are erased before codegen, so they occupy no positional
     /// monomorphization slot.
     pub fn has_fn_bound(&self) -> bool {
-        self.bounds.iter().any(|b| b.fn_signature.is_some())
+        self.bounds.iter().any(|b| !b.names_a_trait())
     }
 
     /// Whether this param occupies a dense, positional slot — the "real" type
@@ -3729,6 +3900,13 @@ impl GenericParam {
     /// reify.
     pub fn is_real_type_param(&self) -> bool {
         !self.is_effect && (self.is_pack || !self.has_fn_bound())
+    }
+
+    /// Whether this parameter of an `impl` head takes an argument position.
+    /// A `fn`-bound one can still be a target argument — `Holder<F>` puts `F`
+    /// at position 0 — so only an effect parameter, which is no type, is out.
+    pub fn fills_impl_slot(&self) -> bool {
+        !self.is_effect
     }
 }
 
@@ -3926,6 +4104,7 @@ pub struct AssociatedTypeDecl {
 #[derive(Debug, Clone)]
 pub struct AssociatedTypeBinding {
     pub id: AstId,
+    pub attrs: Vec<Attribute>,
     pub name: String,
     pub ty: Type,
     pub span: Span,
@@ -3936,6 +4115,7 @@ pub struct AssociatedTypeBinding {
 #[derive(Debug, Clone)]
 pub struct AssociatedConst {
     pub id: AstId,
+    pub attrs: Vec<Attribute>,
     pub name: String,
     pub visibility: Visibility,
     pub ty: Type,
@@ -4039,6 +4219,7 @@ pub struct RestClauseDecl {
 #[derive(Debug, Clone)]
 pub struct ImplBlock {
     pub id: AstId,
+    pub attrs: Vec<Attribute>,
     /// Generic type parameters: `impl<T> Box<T> { ... }`
     pub type_params: Vec<GenericParam>,
     /// The trait being implemented, if any: `impl Trait for Type`

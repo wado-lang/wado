@@ -1149,24 +1149,33 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_set_mode: i32 = -1;
         let mut best_more = false;
         if current_mode == 0 {
-            if first_char matches { '\'' } {
-                end = try_BeginString(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_BeginString; best_push_mode = 1; best_pop_mode = false; best_set_mode = -1; best_more = true; }
+            match first_char {
+                '\'' => {
+                    end = try_BeginString(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_BeginString; best_push_mode = 1; best_pop_mode = false; best_set_mode = -1; best_more = true; }
+                },
+                _ => {},
             }
         } else if current_mode == 1 {
-            if first_char matches { 'x' } {
-                end = try_StringMode_X(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_StringMode_X; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = true; }
-                end = try_StringMode_Done(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_StringMode_Done; best_push_mode = -1; best_pop_mode = false; best_set_mode = 2; best_more = true; }
-            } else {
-                end = try_StringMode_Done(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_StringMode_Done; best_push_mode = -1; best_pop_mode = false; best_set_mode = 2; best_more = true; }
+            match first_char {
+                'x' => {
+                    end = try_StringMode_X(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_StringMode_X; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = true; }
+                    end = try_StringMode_Done(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_StringMode_Done; best_push_mode = -1; best_pop_mode = false; best_set_mode = 2; best_more = true; }
+                },
+                _ => {
+                    end = try_StringMode_Done(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_StringMode_Done; best_push_mode = -1; best_pop_mode = false; best_set_mode = 2; best_more = true; }
+                },
             }
         } else if current_mode == 2 {
-            if first_char matches { '\'' } {
-                end = try_EndString(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_EndString; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; }
+            match first_char {
+                '\'' => {
+                    end = try_EndString(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_EndString; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; }
+                },
+                _ => {},
             }
         }
         if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode && best_set_mode < 0) {

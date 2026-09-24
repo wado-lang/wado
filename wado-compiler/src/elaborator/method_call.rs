@@ -1,18 +1,18 @@
 //! Method call and static method call resolution.
 
-use super::trait_env::ImplTargetKey;
+use super::trait_env::{ImplTargetKey, written_arg_nodes};
 use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TypeId, TypeTable,
+    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TupleSlot, TypeId, TypeTable,
 };
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::{SigChoice, merge_turbofish_type_args, turbofish_leaves_slot};
+use super::call::{SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot};
 use super::callee::StaticMethodRef;
 use super::coercion::is_numeric_literal_arg;
 use super::expr::IndexAccess;
@@ -20,12 +20,13 @@ use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
+use super::scope::ScopedBound;
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
+use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
-use super::util::bound_param_name;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
 use crate::elaborator::call::slot_type_bindings;
@@ -37,7 +38,7 @@ use crate::elaborator::trait_env::{
     BlanketBound, BlanketReceiver, ImplHeader, get_type_name_static,
 };
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
-use crate::name::{DeclName, FqTraitName};
+use crate::name::{DeclName, FqTraitName, unalias_namespace_member};
 use crate::resolve::Resolution;
 use crate::unparse::unparse_type_into;
 use crate::{hashmap, tir};
@@ -276,13 +277,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .nominal_head(base_type_id)
                 .expect("a nominal type names a declaration"),
-            // Primitive types have impl blocks in core:prelude/primitive
-            ResolvedType::Primitive(_) => (
+            // `v128` has no prelude impl block of its own, and lookup finds its
+            // `core:simd` methods by name from this key anyway.
+            ResolvedType::Primitive(prim) => (
                 self.tysys
                     .type_table
                     .borrow()
                     .mangle_type_name(base_type_id),
-                ModuleSource::primitive(),
+                ModuleSource::of_primitive(*prim),
             ),
             // Unit type () has impl blocks in core:prelude/primitive
             ResolvedType::Unit => (
@@ -316,36 +318,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
         };
 
-        // Extract receiver type args for generic types (used for resolving associated types)
-        let type_args_source_id = {
-            let tt = self.tysys.type_table.borrow();
-            if matches!(tt.get(base_type_id), ResolvedType::Newtype { .. }) {
-                tt.representation_head(base_type_id)
-            } else {
-                base_type_id
-            }
-        };
-        let receiver_type_args_for_trait: Option<Vec<TypeId>> = match self
-            .tysys
-            .type_table
-            .borrow()
-            .get(type_args_source_id)
-            .clone()
-        {
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. }
-                if !type_args.is_empty() =>
-            {
-                Some(type_args)
-            }
-            // The raw GC array `Array<T>` carries its element as a single
-            // type arg, so a trait method's associated types (e.g.
-            // `IntoIterator::Iter` / `Item` for `impl IntoIterator for
-            // Array<T>`) resolve against `[elem]` just like a generic
-            // container's.
-            ResolvedType::BuiltinArray(elem) => Some(vec![elem]),
-            _ => None,
-        };
+        let receiver_type_args_for_trait = self.tysys.impl_position_args(base_type_id);
 
         let mut method_info: Option<MethodInfo> = None;
         let mut trait_name: Option<FqTraitName> = None;
@@ -476,11 +449,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // If still not found and receiver is a TypeParam, try trait bounds
         // e.g., T: Ord -> look up cmp() in Ord trait declaration
         if method_info.is_none() {
-            let type_param_name =
-                bound_param_name(self.tysys.type_table.borrow().get(base_type_id)).cloned();
             // Resolved into a local so the probe's borrow ends here: a `let`
             // chain would hold it across the body, which still needs the probe.
-            let from_bounds = type_param_name
+            let from_bounds = self
+                .tysys
+                .binder_name(base_type_id)
                 .and_then(|name| {
                     self.annotate_ctx
                         .trait_ctx
@@ -532,23 +505,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // would collapse them back into one.
                     let mut resolved: hashmap::IndexMap<AstId, FqTraitName> =
                         hashmap::IndexMap::default();
-                    let bounds: Vec<ast::TraitBound> = named
+                    // Each carries no written argument, so no frame answers for
+                    // one: `None` is the whole truth here, not a default.
+                    let bounds: Vec<ScopedBound> = named
                         .iter()
                         .map(|b| {
                             let id = AstId::fresh();
                             resolved.insert(id, b.clone());
-                            ast::TraitBound {
-                                id,
-                                name: b.base_name().to_string(),
-                                type_args: Vec::new(),
-                                assoc_types: Vec::new(),
-                                span,
-                                fn_signature: None,
-                                // The referent this bound was rebuilt from.
-                                // Recorded on the bound, so nothing has to
-                                // resolve `name` at an id the walk never saw.
-                                resolved: b.canonical(),
-                            }
+                            ScopedBound::new(
+                                ast::TraitBound {
+                                    id,
+                                    name: b.base_name().to_string(),
+                                    type_args: Vec::new(),
+                                    assoc_types: Vec::new(),
+                                    span,
+                                    fn_signature: None,
+                                    // Recorded on the bound, so nothing has to
+                                    // resolve `name` at an id the walk never saw.
+                                    resolved: b.canonical(),
+                                },
+                                None,
+                            )
                         })
                         .collect();
                     self.find_method_in_trait_bounds_with(
@@ -644,12 +621,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Before anything counts slots, since a pack's arguments are one per
         // element until they are grouped.
         let mut type_args = type_args;
-        self.group_variadic_type_args_of(&method_own_params, &mut type_args);
-        // What the turbofish alone already says, ahead of the value-default
-        // walk that resolves against it. An empty list is no turbofish at all.
-        if !type_args.is_empty() {
-            self.settle_empty_pack_of(&method_own_params, &mut type_args);
+        if self.group_variadic_type_args_of(method_name, &method_own_params, &mut type_args, span) {
+            return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
         }
+        // An argument reaches a pack through a parameter and an expected type
+        // through the return, so closing either empty answers the call first.
+        let mut reached = self.packs_args_reach(&param_types, args_ast.len());
+        if expected_type.is_some() {
+            reached.extend(self.tysys.type_table.borrow().pack_names(return_type));
+        }
+        self.settle_unreached_packs(&method_own_params, &mut type_args, &reached);
 
         self.check_inherent_member_visibility(
             inherent_visibility,
@@ -673,6 +654,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // or leaves the expansion to monomorphization when a `..T` pack is
         // present; `return_type` already says what it yields.
         if method_name == "zip" && self.tysys.type_table.borrow().is_tuple(base_type_id) {
+            if let Some(row) = self.zip_row_of_unprovable_arity(base_type_id) {
+                let _ = self.emit(TypeError::ZipOverUnequalPacks { row, span });
+                return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
+            }
             return MethodCallOutcome::no_dispatch(return_type);
         }
 
@@ -721,6 +706,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name: method_name,
                 span,
                 type_args: &type_args,
+                self_binding: Some(SelfBinding {
+                    type_id: self.tysys.get_base_type(receiver),
+                    declaring_trait: trait_name.as_ref().and_then(FqTraitName::canonical),
+                }),
             },
         );
 
@@ -763,15 +752,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_args.clone()
             };
             // The solve above has seen every written argument, so a pack still
-            // open here is one the call left nothing over for.
-            self.settle_empty_pack_of(&method_own_params, &mut known);
-            default_type_bindings.extend(self.value_default_slot_bindings(
+            // open here is one the call left nothing over for — unless an
+            // argument reached it, which makes it the solve's failure.
+            let reached = self.packs_args_reach(&expected_param_types, args.len());
+            self.settle_unreached_packs(&method_own_params, &mut known, &reached);
+            let own = self.value_default_slot_bindings(
                 &method_own_params,
                 &method_type_param_ids,
                 base_type_id,
+                trait_name.as_ref().and_then(FqTraitName::canonical),
                 known,
                 defaults_module.clone(),
-            ));
+            );
+            bind_nearer(&mut default_type_bindings, own);
         }
         self.fill_trailing_defaults(
             &mut args,
@@ -1121,9 +1114,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .borrow()
                             .nominal_head(base_id)
                             .map(|(_, m)| m),
-                        ResolvedType::Primitive(_) | ResolvedType::Unit => {
-                            Some(ModuleSource::primitive())
-                        }
+                        ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
+                        ResolvedType::Unit => Some(ModuleSource::primitive()),
                         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
                         _ => None,
                     }
@@ -1195,20 +1187,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether `Trait::method` names a trait's instance method, making a call
-    /// on it the trait-qualified (UFCS) form `Trait::method(recv, args…)`
-    /// (WEP 2026-07-31). A trait's *static* method is not included: it has no
-    /// receiver argument to bind `Self` from.
-    pub(super) fn is_trait_instance_method(&self, trait_name: &str, method_name: &str) -> bool {
-        self.trait_declares_method(self.decl_key_or_local(trait_name), method_name, |kind| {
-            kind != ast::SelfKind::None
-        })
-    }
-
-    /// [`Self::is_trait_instance_method`] asked of the site that wrote the
-    /// trait's name. A namespaced spelling (`ns::Trait::method`) reaches its
-    /// declaration through the `ns$Trait` alias the resolve walk recorded,
-    /// where the importing module can name no `Trait` of its own.
+    /// Whether the trait named at `head_site` declares `method_name` with a
+    /// receiver, making a call on it the trait-qualified (UFCS) form
+    /// `Trait::method(recv, args…)` (WEP 2026-07-31).
     pub(super) fn is_trait_instance_method_at(
         &self,
         head_site: AstId,
@@ -1222,13 +1203,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// [`Self::is_trait_instance_method`] for the receiver-less kind — what
+    /// [`Self::is_trait_instance_method_at`] for the receiver-less kind — what
     /// `Trait::<T>::method(…)` binds `Self` for, since it has no receiver
     /// argument to pin it.
-    pub(super) fn is_trait_static_method(&self, trait_name: &str, method_name: &str) -> bool {
-        self.trait_declares_method(self.decl_key_or_local(trait_name), method_name, |kind| {
-            kind == ast::SelfKind::None
-        })
+    pub(super) fn is_trait_static_method_at(
+        &self,
+        head_site: AstId,
+        trait_name: &str,
+        method_name: &str,
+    ) -> bool {
+        self.trait_declares_method(
+            self.decl_key_at(head_site, trait_name),
+            method_name,
+            |kind| kind == ast::SelfKind::None,
+        )
     }
 
     fn trait_declares_method(
@@ -1266,7 +1254,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.resolutions.get(site)
             }),
             args: None,
-            display: self.declared_trait_name(trait_name),
+            display: self.declared_trait_name(head_site, trait_name),
         };
         let type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
         // The edge for jump-to-definition is recorded against the method name,
@@ -1421,16 +1409,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resolve: intercept and route to `T`'s synthesized `T^Trait::method`.
         // It is the only spelling — a bare `T::members()` never resolves, so
         // type namespaces stay the author's.
-        if let ast::Type::Generic(g) = &static_call.target_type
-            && let Some(dispatch) = self.reflect_dispatch_of(&g.name, &static_call.method)
+        let head = self.written_head(&static_call.target_type);
+        if let Some(head) = &head
+            && let Some(dispatch) = self.reflect_dispatch_of(&head.name, &static_call.method)
         {
-            let [self_ty_ast] = g.args.as_slice() else {
+            let [self_ty_ast] = head.args else {
                 let _ = self.emit(TypeError::UnknownFunction {
                     name: format!(
                         "{}::<…>::{} (one subject type argument, found {})",
-                        g.name,
+                        unalias_namespace_member(&head.name),
                         static_call.method,
-                        g.args.len()
+                        head.args.len()
                     ),
                     span: static_call.span,
                 });
@@ -1462,9 +1451,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `Tag::<Point>::tag()` where `Tag` is a trait resolves to no type;
         // unreported it types `unknown` and lowering builds an invalid module.
         if target_type_id == TypeTable::UNKNOWN
-            && let ast::Type::Generic(g) = &static_call.target_type
+            && let Some(head) = &head
             && self
-                .decl_key_at(g.id, &g.name)
+                .decl_key_at(head.site, &head.name)
                 .is_some_and(|key| self.tysys.trait_env.declares_trait(&key))
         {
             // `Take::<A>::take(recv, …)` — the trait-turbofish qualified call
@@ -1476,18 +1465,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // zero-parameter trait the turbofish cannot be trait arguments
             // (`Shape::<Sq>::area` writes the receiver — a pre-existing
             // misuse), so that shape keeps its unknown-function error.
-            if self.is_trait_instance_method(&g.name, &static_call.method)
-                && self
-                    .decl_key_at(g.id, &g.name)
-                    .and_then(|key| self.trait_decl_type_params_of(&key))
-                    .is_some_and(|params| !params.is_empty() && params.len() == g.args.len())
+            let trait_params = self
+                .decl_key_at(head.site, &head.name)
+                .and_then(|key| self.trait_decl_type_params_of(&key))
+                .unwrap_or_default();
+            if self.is_trait_instance_method_at(head.site, &head.name, &static_call.method)
+                && !trait_params.is_empty()
+                && trait_params.len() == head.args.len()
             {
-                let declared_head = self.declared_trait_name(&g.name);
-                let trait_args: Vec<TypeId> = g.args.iter().map(|a| self.resolve_type(a)).collect();
-                let args_spelled: Vec<String> =
-                    g.args.iter().map(|a| self.get_type_name_full(a)).collect();
+                let declared_head = self.declared_trait_name(Some(head.site), &head.name);
+                let trait_args: Vec<TypeId> =
+                    head.args.iter().map(|a| self.resolve_type(a)).collect();
+                let args_spelled: Vec<String> = head
+                    .args
+                    .iter()
+                    .map(|a| self.get_type_name_full(a))
+                    .collect();
                 let required = RequiredTrait {
-                    decl: self.tysys.resolutions.get(g.id),
+                    decl: self.tysys.resolutions.get(head.site),
                     args: Some(trait_args),
                     display: format!("{declared_head}<{}>", args_spelled.join(", ")),
                 };
@@ -1511,12 +1506,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // where the trait declares no parameters of its own: the branch
             // above claims the turbofish for a trait that does, and there is
             // then nowhere left to write `Self`.
-            if let [self_ty_ast] = g.args.as_slice()
-                && self.is_trait_static_method(&g.name, &static_call.method)
-                && self
-                    .decl_key_at(g.id, &g.name)
-                    .and_then(|key| self.trait_decl_type_params_of(&key))
-                    .is_none_or(|params| params.is_empty())
+            if let [self_ty_ast] = head.args
+                && self.is_trait_static_method_at(head.site, &head.name, &static_call.method)
+                && trait_params.is_empty()
                 && self.resolve_type(self_ty_ast) != TypeTable::UNKNOWN
             {
                 let mut on_self = static_call.clone();
@@ -1524,20 +1516,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Restricted to the named trait: the rewritten spelling reads
                 // as `V::tag(…)`, and without it a case or an inherent static
                 // `V` declares of that name answers in the trait's place.
-                let required = self.tysys.resolutions.declared(g.id);
+                let required = self.tysys.resolutions.declared(head.site);
                 return self.resolve_static_method_call_of_trait(&on_self, required, ctx);
             }
             // The same spelling on a trait that does declare parameters: the
             // turbofish is already spoken for, so say that rather than let the
             // call read as an unknown function.
-            if self.is_trait_static_method(&g.name, &static_call.method)
-                && self
-                    .decl_key_at(g.id, &g.name)
-                    .and_then(|key| self.trait_decl_type_params_of(&key))
-                    .is_some_and(|params| !params.is_empty())
+            if self.is_trait_static_method_at(head.site, &head.name, &static_call.method)
+                && !trait_params.is_empty()
             {
                 let _ = self.emit(TypeError::StaticNeedsWrittenReceiver {
-                    trait_name: self.declared_trait_name(&g.name),
+                    trait_name: self.declared_trait_name(Some(head.site), &head.name),
                     method: static_call.method.clone(),
                     span: static_call.span,
                 });
@@ -1693,22 +1682,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // element until they are grouped.
         if let Some(sig) = callee_sig.as_ref() {
             let own_params = sig.own_params.clone();
-            self.group_variadic_type_args_of(&own_params, &mut method_type_args);
+            if self.group_variadic_type_args_of(
+                &static_call.method,
+                &own_params,
+                &mut method_type_args,
+                static_call.span,
+            ) {
+                return TypeTable::ERROR;
+            }
         }
 
         // Not folded into `lookup_static_method_param_types`: variant
         // constructors need its answer to stay empty.
         {
-            let has_type_args = matches!(&static_call.target_type, ast::Type::Generic(_))
-                || !method_type_args.is_empty();
+            // `ns::Wrapper<T>` supplies the target's arguments as `Wrapper<T>`
+            // does; the namespace is the head's question, not the list's.
+            let declaring_args: Vec<TypeId> = written_arg_nodes(&static_call.target_type)
+                .iter()
+                .map(|t| self.resolve_type(t))
+                .collect();
+            let has_type_args = !declaring_args.is_empty() || !method_type_args.is_empty();
             if has_type_args
                 && !param_types.is_empty()
                 && let Some(sig) = callee_sig.as_ref()
             {
-                let declaring_args: Vec<TypeId> = match &static_call.target_type {
-                    ast::Type::Generic(g) => g.args.iter().map(|t| self.resolve_type(t)).collect(),
-                    _ => vec![],
-                };
                 // `TreeMap::<String, i32>` spells the *target's* arguments;
                 // `impl … for TreeMap<String, V>` numbers only `V`. The
                 // declaring block is what aligns the two.
@@ -1753,6 +1750,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut arg_spans: Vec<Span> = static_call.args.iter().map(Expr::span).collect();
 
         let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
+        let declaring_trait = callee_sig
+            .as_ref()
+            .and_then(|sig| self.tysys.signatures.declaring_trait(sig));
         let own_type_param_ids = callee_sig
             .as_ref()
             .map(MethodSig::own_type_param_ids)
@@ -1810,16 +1810,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && !defaulted
                 && strict
             {
-                let _ = self.emit(TypeError::UninferredStaticTypeArg {
+                let _ = self.emit(TypeError::UninferredMethodTypeArgs {
                     receiver,
                     method: static_call.method.clone(),
-                    param: sig.own_params[i].name.clone(),
+                    params: vec![sig.own_params[i].name.clone()],
                     span: static_call.span,
                 });
                 return TypeTable::ERROR;
             }
             merge_turbofish_type_args(&mut method_type_args, &inferred);
-            self.settle_empty_pack_of(&sig.own_params, &mut method_type_args);
+            let reached = self.packs_args_reach(&param_types, args.len());
+            self.settle_unreached_packs(&sig.own_params, &mut method_type_args, &reached);
             let declaring_args = self
                 .receiver_declaring_args(Some(target_type_id), &[])
                 .unwrap_or_default();
@@ -1860,21 +1861,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // last source is the one the block above cannot reach: it runs only
         // where the declaring block has slots of its own, and a block with none
         // leaves the method's unbound rather than wrong.
-        if static_method_defaults.iter().any(|(_, d)| d.is_some()) {
-            static_type_bindings.extend(self.value_default_slot_bindings(
+        let own = if static_method_defaults.iter().any(|(_, d)| d.is_some()) {
+            self.value_default_slot_bindings(
                 &own_params,
                 &own_type_param_ids,
                 target_type_id,
+                declaring_trait,
                 method_type_args.clone(),
                 static_method_module.clone(),
-            ));
+            )
         } else {
-            static_type_bindings.extend(slot_type_bindings(
+            slot_type_bindings(
                 &self.tysys.type_table,
                 &own_type_param_ids,
                 &method_type_args,
-            ));
-        }
+            )
+        };
+        bind_nearer(&mut static_type_bindings, own);
         self.fill_trailing_defaults(
             &mut args,
             &param_types,
@@ -2148,7 +2151,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 ResolvedType::Primitive(prim) => (
                     prim.as_str().to_string(),
-                    ModuleSource::primitive(),
+                    ModuleSource::of_primitive(*prim),
                     FqTypeName::builtin(prim.as_str()),
                     vec![],
                 ),
@@ -2282,7 +2285,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             }
                             ResolvedType::Primitive(prim) => (
                                 prim.as_str().to_string(),
-                                ModuleSource::primitive(),
+                                ModuleSource::of_primitive(prim),
                                 FqTypeName::builtin(prim.as_str()),
                                 vec![],
                             ),
@@ -2400,12 +2403,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // The receiver as the match above resolved it, which carries the
+        // declaring module. Re-deriving it from `struct_name` asks the call
+        // site's own scope, where `geo::Wrapper::<i64>::make(…)` has no bare
+        // `Wrapper` to find and mints a shape head under the wrong module.
+        let receiver_name = mangled_struct_name.head_only();
+
         // Build monomorph_info for generic instantiations
         let monomorph_info = if struct_type_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
             let generic_name = MethodName::format_local(
-                &self.qualified_receiver_name(&struct_name),
+                &receiver_name,
                 trait_name_opt.as_ref(),
                 &static_call.method,
             );
@@ -2427,12 +2436,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         // Build method_info with base struct name and trait name (if applicable)
-        let mut method_info = LocalMethodName::new(
-            self.qualified_receiver_name(&struct_name),
-            trait_name_opt,
-            static_call.method.clone(),
-        )
-        .with_type_args(&impl_only_type_arg_names, &method_type_arg_names);
+        let mut method_info =
+            LocalMethodName::new(receiver_name, trait_name_opt, static_call.method.clone())
+                .with_type_args(&impl_only_type_arg_names, &method_type_arg_names);
 
         // The `#[cm("...")]` import the callee binds, off the signature this
         // call resolved to, at the receiver it resolved at.
@@ -2675,6 +2681,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .make_type_param(blanket_param.to_string(), 0)
+    }
+
+    /// The first row of a tuple `zip` whose layout differs from row zero's, so
+    /// nothing says the two are equally long. Two distinct packs never are,
+    /// which is why the variadic WEP §6 puts `zip` over them out of scope.
+    fn zip_row_of_unprovable_arity(&self, tuple: TypeId) -> Option<String> {
+        let table = self.tysys.type_table.borrow();
+        let rows = table.as_tuple(tuple)?;
+        // A row that is no tuple has no layout, and is no transpose either.
+        let layouts: Vec<Vec<TupleSlot>> = rows
+            .iter()
+            .map(|&row| table.tuple_layout(row))
+            .collect::<Option<_>>()?;
+        // Only a pack leaves two rows' lengths unprovable. Without one, the
+        // "no method" message already said everything.
+        if !layouts
+            .iter()
+            .flatten()
+            .any(|slot| matches!(slot, TupleSlot::Pack(_)))
+        {
+            return None;
+        }
+        let first = &layouts[0];
+        let odd = layouts.iter().position(|l| l != first)?;
+        Some(table.type_name(rows[odd]))
     }
 
     /// A qualified method's own type parameters — the slots past the declaring
@@ -3249,28 +3280,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> StaticArgSurvey {
         let mut survey = StaticArgSurvey::default();
         for impl_def in self.trait_impls_for_receiver(recv.name, recv.key) {
+            let Some(trait_decl) = self.tysys.signatures.impl_trait(impl_def) else {
+                continue;
+            };
             // A qualified spelling names a trait, so another trait's impl is
-            // not a candidate to weigh against — the same rule the resolution
+            // not a candidate to weigh against: the same rule the resolution
             // applies, asked where the arguments are surveyed.
-            if let Some(required) = recv.required_trait
-                && self
-                    .tysys
-                    .signatures
-                    .impl_sig(impl_def)
-                    .and_then(|sig| sig.trait_decl)
-                    != Some(required)
+            if recv
+                .required_trait
+                .is_some_and(|required| required != trait_decl)
             {
                 continue;
             }
             let header = &self.tysys.trait_env.impl_headers[&impl_def];
-            let Some(trait_decl) = self
-                .tysys
-                .signatures
-                .impl_sig(impl_def)
-                .and_then(|sig| sig.trait_decl)
-            else {
-                continue;
-            };
             // The same walk the rules read, so a body the block inherits is a
             // candidate here too.
             let Some(offer) =
@@ -3698,11 +3720,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(sig) => {
                 let own_ids = sig.own_type_param_ids();
                 let own_params = sig.own_params.clone();
+                let declaring_trait = self.tysys.signatures.declaring_trait(sig);
                 let receiver = self.resolve_unsited_type_name(&actual_struct_name, span);
                 self.value_default_slot_bindings(
                     &own_params,
                     &own_ids,
                     receiver,
+                    declaring_trait,
                     method_type_args.to_vec(),
                     callee_params.defaults_module.clone(),
                 )

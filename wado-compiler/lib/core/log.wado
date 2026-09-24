@@ -18,7 +18,7 @@
 //! per event on stderr. Installing a sink replaces that for its scope; `NopSink`
 //! is how a program asks for silence.
 
-use { Serialize } from "core:serde";
+use { Serialize, SerializeError } from "core:serde";
 use { Value, to_value } from "core:value";
 use { TreeMap } from "core:collections";
 use { to_string } from "core:json";
@@ -177,10 +177,18 @@ pub fn log_level() -> Level {
     return RUNTIME_LEVEL;
 }
 
+/// The fields as a `Value`. Fields that will not serialize are replaced by the
+/// reason, under a key of this module's own: the failure reaches whoever is
+/// listening through the sink they installed, rather than around it.
 fn box_fields<T: Serialize>(fields: T) -> Value {
     return match to_value(&fields) {
         Ok(v) => v,
-        Err(_) => Value::Null,
+        Err(e) => {
+            builtin::cold_path();
+            let mut reported = TreeMap::<String, Value>::new();
+            reported["log.fields_error"] = Value::String(`${e}`);
+            Value::Object(reported);
+        },
     };
 }
 
@@ -632,9 +640,17 @@ impl<C: Clock> JsonSink<C> {
         obj["fields"] = event.fields;
         return match to_string(&Value::Object(obj)) {
             Ok(line) => line,
-            Err(_) => "{}",
+            Err(e) => json_error_line(e),
         };
     }
+}
+
+/// A one-field JSON object naming why the event could not be encoded. Built
+/// through the encoder so the reason is escaped, and empty if even that fails.
+fn json_error_line(reason: SerializeError) -> String {
+    let mut obj = TreeMap::<String, Value>::new();
+    obj["error"] = Value::String(`${reason}`);
+    return to_string(&Value::Object(obj)).unwrap_or("{}");
 }
 
 impl<C: Clock> Log for JsonSink<C> {
@@ -937,7 +953,7 @@ fn write_value_text(value: &Value, out: &mut String) {
         _ => {
             match to_string(value) {
                 Ok(s) => out.push_str(&s),
-                Err(_) => out.push_str("?"),
+                Err(e) => out.push_str(`<${e}>`),
             }
         },
     }

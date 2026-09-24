@@ -7,7 +7,6 @@ use {
     normalize_caches,
     assert_canonical_shape,
     canonicalize_empty_alt_groups,
-    unwrap_labeled_transparent_groups,
     alias_parser_literals,
     assign_atn_call_sites,
     assign_atn_decisions,
@@ -58,7 +57,7 @@ use { gen_highlight } from "./highlight_gen.wado";
 use { HighlightRule } from "./highlight_query.wado";
 use { GenContext } from "./gen_context.wado";
 use { SCAN_GATE_HANDLE, SCAN_GATE_TYPE, scan_gate_fields } from "./scan_gate.wado";
-use { CodeWriter, EnumSpec, Vis } from "./wadopoet.wado";
+use { CodeWriter, EnumSpec, Vis } from "lib:wadopoet";
 use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
@@ -127,8 +126,6 @@ pub fn canonicalize_for_analysis(grammar: &mut Grammar) -> TokenKinds {
     // before any structural pass (lowering, ATN build) sees them, so both
     // the emitter and `build_atn` agree on the canonical repeat shape.
     canonicalize_empty_alt_groups(grammar);
-    // Before the stamping passes, so lower and emit see the same shape.
-    unwrap_labeled_transparent_groups(grammar);
     // Canonicalization is done; everything downstream may assume its shape.
     assert_canonical_shape(grammar);
     // Number every surface `RuleRef` call site so `build_atn`'s

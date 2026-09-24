@@ -69,6 +69,7 @@ struct TreeMapNode<K> {
 ///
 /// This is similar to Rust's `indexmap::IndexMap` but uses a tree instead
 /// of a hash table for key lookups.
+#[compiler_item("tree_map")]
 pub struct TreeMap<K, V> {
     root: Option<i32>,
     nodes: List<TreeMapNode<K>>,
@@ -90,6 +91,7 @@ impl<K: Ord, V> TreeMap<K, V> {
     }
 
     /// Returns the number of key-value pairs in the map.
+    #[compiler_item("tree_map_len")]
     pub fn len(&self) -> i32 {
         return self.size;
     }
@@ -320,6 +322,7 @@ impl<K: Ord, V> TreeMap<K, V> {
     }
 
     /// The key-value pairs, in insertion order.
+    #[compiler_item("tree_map_entries")]
     pub fn entries(&self) -> TreeMapEntriesRefIter<K, V> {
         return TreeMapEntriesRefIter { entries: &self.entries, index: 0 };
     }
@@ -387,6 +390,7 @@ impl<V: Ref> TreeMap<String, V> {
 impl<K: Ord, V> IndexAssign<K> for TreeMap<K, V> {
     type Output = V;
 
+    #[compiler_item("tree_map_index_assign")]
     fn index_assign(&mut self, key: K, value: Self::Output) {
         self.insert(key, value);
     }
@@ -459,7 +463,7 @@ impl<V> LiteralSpread for TreeMap<String, V> {
 // is live can skip or repeat an entry, since `compact` reindexes. Collect first
 // (`iter_value().collect()`) to traverse a snapshot.
 
-struct TreeSetRefIter<T> {
+pub struct TreeSetRefIter<T> {
     entries: &List<TreeMapEntry<T, ()>>,
     index: i32,
 }
@@ -485,7 +489,7 @@ impl<T> TreeSetRefIter<T> {
     }
 }
 
-struct TreeSetValueIter<T> {
+pub struct TreeSetValueIter<T> {
     entries: &List<TreeMapEntry<T, ()>>,
     index: i32,
 }
@@ -505,7 +509,7 @@ impl<T> Iterator for TreeSetValueIter<T> {
     }
 }
 
-struct TreeMapKeysRefIter<K, V> {
+pub struct TreeMapKeysRefIter<K, V> {
     entries: &List<TreeMapEntry<K, V>>,
     index: i32,
 }
@@ -531,7 +535,7 @@ impl<K, V> TreeMapKeysRefIter<K, V> {
     }
 }
 
-struct TreeMapKeysValueIter<K, V> {
+pub struct TreeMapKeysValueIter<K, V> {
     entries: &List<TreeMapEntry<K, V>>,
     index: i32,
 }
@@ -551,7 +555,7 @@ impl<K, V> Iterator for TreeMapKeysValueIter<K, V> {
     }
 }
 
-struct TreeMapValuesRefIter<K, V> {
+pub struct TreeMapValuesRefIter<K, V> {
     entries: &List<TreeMapEntry<K, V>>,
     index: i32,
 }
@@ -579,7 +583,7 @@ impl<K, V> TreeMapValuesRefIter<K, V> {
 
 /// The doubled word is the axis meeting a projection already named `values`:
 /// the map's *values*, yielded by *value*.
-struct TreeMapValuesValueIter<K, V> {
+pub struct TreeMapValuesValueIter<K, V> {
     entries: &List<TreeMapEntry<K, V>>,
     index: i32,
 }
@@ -599,7 +603,8 @@ impl<K, V> Iterator for TreeMapValuesValueIter<K, V> {
     }
 }
 
-struct TreeMapEntriesRefIter<K, V> {
+#[compiler_item("tree_map_entries_iter")]
+pub struct TreeMapEntriesRefIter<K, V> {
     entries: &List<TreeMapEntry<K, V>>,
     index: i32,
 }
@@ -607,6 +612,7 @@ struct TreeMapEntriesRefIter<K, V> {
 impl<K, V> Iterator for TreeMapEntriesRefIter<K, V> {
     type Item = [&K, &V];
 
+    #[compiler_item("tree_map_entries_iter_next")]
     fn next(&mut self) -> Option<[&K, &V]> {
         while self.index < self.entries.len() {
             let i = self.index;
@@ -625,7 +631,7 @@ impl<K, V> TreeMapEntriesRefIter<K, V> {
     }
 }
 
-struct TreeMapEntriesValueIter<K, V> {
+pub struct TreeMapEntriesValueIter<K, V> {
     entries: &List<TreeMapEntry<K, V>>,
     index: i32,
 }

@@ -1,0 +1,88 @@
+// A binding read out of a local that a `&mut` outlives keeps its own copy: the
+// write through that `&mut` can land after the binding, wherever the borrow is
+// held.
+
+struct P {
+    a: i32,
+}
+
+struct W {
+    r: &mut P,
+}
+
+fn poke(r: &mut P) {
+    r.a = 5;
+}
+
+fn poke_held(w: &W) {
+    w.r.a = 5;
+}
+
+fn poke_listed(l: &List<&mut P>) {
+    l[0].a = 5;
+}
+
+fn mk(r: &mut P) -> W {
+    return W { r };
+}
+
+fn through_local() -> i32 {
+    let mut y = P { a: 1 };
+    let r = &mut y;
+    let d = y;
+    poke(r);
+    return d.a * 10 + y.a;
+}
+
+fn through_struct() -> i32 {
+    let mut y = P { a: 1 };
+    let w = W { r: &mut y };
+    let d = y;
+    poke_held(&w);
+    return d.a * 10 + y.a;
+}
+
+fn through_struct_inline() -> i32 {
+    let mut y = P { a: 1 };
+    let w = W { r: &mut y };
+    w.r.a = 5;
+    return y.a;
+}
+
+fn through_closure() -> i32 {
+    let mut y = P { a: 1 };
+    let mut f = || {
+        y.a = 5;
+    };
+    let d = y;
+    f();
+    return d.a * 10 + y.a;
+}
+
+fn through_list() -> i32 {
+    let mut y = P { a: 1 };
+    let l: List<&mut P> = [&mut y];
+    let d = y;
+    poke_listed(&l);
+    return d.a * 10 + y.a;
+}
+
+fn through_call_result() -> i32 {
+    let mut y = P { a: 1 };
+    let w = mk(&mut y);
+    let d = y;
+    poke_held(&w);
+    return d.a * 10 + y.a;
+}
+
+export fn run() {
+    assert through_local() == 15;
+    assert through_struct() == 15;
+    assert through_struct_inline() == 5;
+    assert through_closure() == 15;
+    assert through_list() == 15;
+    assert through_call_result() == 15;
+}
+
+__DATA__
+{}

@@ -1,0 +1,15 @@
+//! Settling both packs makes the joined tuple checkable, so an argument whose
+//! arity the packs do not account for is rejected. Without the check the split
+//! would absorb any surplus.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+
+fn joined<..A, ..B>(split: [[..A], [..B]], both: [..A, ..B]) -> i32 {
+    return both.len();
+}
+
+test "a surplus element the settled packs do not account for" {
+    assert joined([[1], [true]], [1, true, "x"]) == 3;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected '[i32, bool]', found '[i32, bool, String]'"}

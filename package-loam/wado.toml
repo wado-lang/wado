@@ -1,0 +1,17 @@
+[package]
+name = "loam"
+description = "Loam — tensor compilation for Wado: shapes checked at build time"
+repository-directory = "package-loam"
+lib = "src/lib.wado"
+# version / repository / namespace / license / authors inherited from [workspace.package]
+
+[world]
+"core:kiln/generator" = "src/generator.wado"
+
+[dependencies]
+"lib:wadopoet" = { path = "../package-wadopoet", package = "wado-lang:wadopoet", version = "^0.0.28" }
+
+[test]
+# Kiln intermediates are not standalone source files. Keep this exclusion
+# when the package is used outside the repository's `.gitignore` coverage.
+exclude = ["build/**"]

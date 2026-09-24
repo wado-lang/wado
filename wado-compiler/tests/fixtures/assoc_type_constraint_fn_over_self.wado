@@ -1,0 +1,44 @@
+// `Self` under a constraint's function type is rejected for the same reason a
+// trait argument is: a free function binds no implementing type, so the
+// constraint would go unchecked rather than be deferred to anything.
+
+trait Src with () {
+    type Item;
+}
+
+trait Sink with () {
+    type Cb;
+
+    fn run(&self, cb: Self::Cb) -> i32;
+}
+
+struct Holder {
+    n: i32,
+}
+
+impl Src for Holder {
+    type Item = i32;
+}
+
+impl Sink for Holder {
+    type Cb = fn(i32) -> i32;
+
+    fn run(&self, cb: fn(i32) -> i32) -> i32 {
+        return cb(self.n);
+    }
+}
+
+fn add_one(x: i32) -> i32 {
+    return x + 1;
+}
+
+fn drive<T: Src + Sink<Cb = fn(Self::Item) -> i32>>(t: &T, cb: T::Cb) -> i32 {
+    return t.run(cb);
+}
+
+test "Self under a constraint in a free function's bound is rejected" {
+    assert drive(&Holder { n: 7 }, add_one) == 8;
+}
+
+__DATA__
+{"test": {}, "compile_error": "names no implementing type here"}

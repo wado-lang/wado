@@ -1,0 +1,44 @@
+// A supertrait clause that projects is owed by every impl in the chain, not
+// only the one writing the binding: `Extra` inherits `Make<Self::Base>` through
+// `Constrained`, and `impl Extra for UserName` writes no `Base` of its own.
+
+trait Make<T> with () {
+    fn make(v: T) -> Self;
+}
+
+trait Constrained: Make<Self::Base> with () {
+    type Base;
+}
+
+trait Extra: Constrained with () {
+    fn tag(&self) -> i32;
+}
+
+struct UserName {
+    value: String,
+}
+
+impl Make<String> for UserName {
+    fn make(v: String) -> UserName {
+        return UserName { value: v };
+    }
+}
+
+impl Constrained for UserName {
+    type Base = String;
+}
+
+impl Extra for UserName {
+    fn tag(&self) -> i32 {
+        return self.value.len();
+    }
+}
+
+fn build<E: Extra>(b: E::Base) -> i32 {
+    let e = E::make(b);
+    return e.tag();
+}
+
+test "an inherited projecting clause is answered off the implementing type" {
+    assert build::<UserName>("gfx") == 3;
+}

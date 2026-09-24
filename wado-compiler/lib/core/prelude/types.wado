@@ -136,18 +136,12 @@ impl<T, E> Result<T, E> {
 
     /// Returns true if this is an Ok value.
     pub fn is_ok(&self) -> bool {
-        if let Ok(_) = *self {
-            return true;
-        }
-        return false;
+        return *self matches { Ok(_) };
     }
 
     /// Returns true if this is an Err value.
     pub fn is_err(&self) -> bool {
-        if let Err(_) = *self {
-            return true;
-        }
-        return false;
+        return !self.is_ok();
     }
 
     /// Returns the contained Ok value, panicking with `msg` (and the Err value) if Err.
@@ -225,6 +219,8 @@ pub resource Future<T> {
     fn read(&self) -> Option<T>;
 
     /// Cancel an in-progress read. Blocks until cancellation completes.
+    /// Traps if this end is still joined to a `WaitableSet` — leave the set
+    /// first.
     #[cm("future-cancel-read")]
     fn cancel_read(&self);
 
@@ -242,6 +238,8 @@ pub resource FutureWritable<T> {
     fn write(&self, value: T);
 
     /// Cancel an in-progress write. Blocks until cancellation completes.
+    /// Traps if this end is still joined to a `WaitableSet` — leave the set
+    /// first.
     #[cm("future-cancel-write")]
     fn cancel_write(&self);
 
@@ -294,6 +292,8 @@ pub resource Stream<T> {
     fn read(&self, max: i32) -> StreamChunk<T>;
 
     /// Cancel an in-progress read. Blocks until cancellation completes.
+    /// Traps if this end is still joined to a `WaitableSet` — leave the set
+    /// first.
     #[cm("stream-cancel-read")]
     fn cancel_read(&self);
 
@@ -343,6 +343,8 @@ pub resource StreamWritable<T> {
     fn write_raw(&self, data: Slice<T>) -> StreamWrite;
 
     /// Cancel an in-progress write. Blocks until cancellation completes.
+    /// Traps if this end is still joined to a `WaitableSet` — leave the set
+    /// first.
     #[cm("stream-cancel-write")]
     fn cancel_write(&self);
 
@@ -560,6 +562,9 @@ impl<T> AsyncCall<T> {
     pub fn cancel(&self) {
         let handle = self.__cm_packed >> 4;
         if handle != 0 {
+            // `subtask.cancel` traps on a waitable still in a set. Joining set 0
+            // leaves whatever set it is in, whether or not the caller joined one.
+            builtin::waitable_join(handle, 0);
             let raw = handle as Subtask;
             raw.cancel();
             raw.drop();

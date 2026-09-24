@@ -54,6 +54,8 @@ Each capture records where the frame building the closure reads the value from: 
 
 A binding is boxed by the frame that owns it, whatever depth the write comes from. The frames in between pass the box along, so they all see the one cell. The owning frame binds a `&mut` proxy for that box in a local slot annotate reserves, and reify's own allocation has to land on it.
 
+A binding the closure only reads takes a `&` proxy the same way, bound by lowering rather than annotate, where its reference is a box and the owning frame may write it while the closure lives: a write after the closure is built, one sharing a loop with it, or a borrow of the binding anywhere. Anywhere else the environment holds the value itself. Nothing can change the binding then, so the value reads what the reference would, and the binding stays unboxed. A binding whose `&` is its own GC handle needs no proxy either way.
+
 Which slot holds what is decided once. The annotate walk settles a closure's environment and records it. Reify opens the frame with those slots already in place, so its own walk reads them rather than deciding again, and a binding that reaches no slot means the two walks disagree, which the frame reports on the spot. How each binding is reached stays that frame's own question: a local of the enclosing frame, or a slot of its environment, answered against its own parent. No capture index crosses between the walks.
 
 ### Wasm GC representation
@@ -107,7 +109,7 @@ A host callback does not need one to: the closure stays in a guest-side registry
 
 ## Open
 
-- [ ] **Value-copy analysis does not model an environment read.** The escape, liveness and `carries` walks in the lower phase have no case for a capture read, so a value flowing out of one frame's environment into a nested closure's is invisible to them. No program is known where that changes a decision, since the read is synthesized after those walks run. Closing it takes a capture case in each walk, attributing the read to the environment rather than to a local.
+- [ ] **Value-copy analysis does not model an environment read.** The escape, liveness and `carries` walks in the lower phase have no case for a capture read, so a value flowing out of one frame's environment into a nested closure's is invisible to them. No program is known where that changes a decision, since the read is synthesized after those walks run.
 - [ ] **Detect mutation through a call.** A closure is tagged `fn mut` from assignments to captured bindings, and nothing else counts: `xs.push(1)` on a captured `xs`, or passing one as `&mut n`, leaves the closure typed `fn`, so the binding is never boxed and the write lands on a copy with no diagnostic. The walk runs before method resolution, so it cannot ask whether a receiver is `&mut self`. Reading every call on a captured binding as a write would box more and mark more closures `fn mut`, which changes what compiles.
 - [ ] **Return `Iterator<Item = ...>` from adapters.** They return named structs (`IterMap<Self, U>`, `IterFilter<Self>`); the anonymous form needs the elaborator to elaborate a trait-object-style return type.
 - [ ] **Effect-polymorphic iterator methods** (`<effect E>`). Closure literals already inherit caller effects, so this is convenience rather than a correctness fix.

@@ -11,19 +11,16 @@
 use crate::ast::{
     AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EnumCase, EnumDecl, FlagsDecl,
     FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module, NamedType,
-    Newtype, Param, SelfKind, StructDecl, StructField, Type, VariantCase, VariantDecl, Visibility,
+    Newtype, Param, SelfKind, StructDecl, StructField, Type, UseDecl, UseItem, VariantCase,
+    VariantDecl, Visibility,
 };
+use crate::attribute::{CM, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
 use crate::hashmap;
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use wit_parser::{Resolve, Type as WitType, TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem};
-
-/// Inner-attribute name carrying a component's host-leaf import FQs on its
-/// synthesized module, so effect reconstruction can recover them from the AST
-/// alone (see [Effect Reconstruction from CM Component Imports]).
-pub const CM_HOST_IMPORTS_ATTR: &str = "cm_host_imports";
 
 /// The Wado bindings synthesized from one decoded imported component.
 pub struct ComponentBindings {
@@ -44,14 +41,13 @@ pub struct ComponentBindings {
     pub source_interfaces: SourceInterfaceBatch,
 }
 
-/// Read the host-leaf import FQs a component-binding module carries in its
-/// [`CM_HOST_IMPORTS_ATTR`] inner attribute. Empty for a non-component module
-/// or a component that imports nothing.
+/// The host-leaf import FQs a component-binding module carries in its
+/// [`CM_HOST_IMPORTS`] inner attribute. Empty where it carries none.
 pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
     module
         .inner_attributes
         .iter()
-        .find(|a| a.name == CM_HOST_IMPORTS_ATTR)
+        .find(|a| a.name == CM_HOST_IMPORTS)
         .map(|a| {
             a.args
                 .iter()
@@ -137,7 +133,7 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
         Vec::new()
     } else {
         vec![InnerAttribute {
-            name: CM_HOST_IMPORTS_ATTR.to_string(),
+            name: CM_HOST_IMPORTS.to_string(),
             args: host_leaf_imports
                 .iter()
                 .cloned()
@@ -147,6 +143,10 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
         }]
     };
 
+    if b.uses_tree_map {
+        let tree_map_use = b.tree_map_use();
+        b.items.insert(0, tree_map_use);
+    }
     let source_interfaces = b.source_interfaces;
     let module = Module::with_metadata(
         b.items,
@@ -176,6 +176,7 @@ struct Builder {
     items: Vec<Item>,
     errors: Vec<String>,
     source_interfaces: SourceInterfaceBatch,
+    uses_tree_map: bool,
 }
 
 impl Builder {
@@ -186,7 +187,30 @@ impl Builder {
             items: Vec::new(),
             errors: Vec::new(),
             source_interfaces: SourceInterfaceBatch::default(),
+            uses_tree_map: false,
         }
+    }
+
+    /// `use { TreeMap } from "core:collections";`, the one binding type the
+    /// prelude does not supply.
+    fn tree_map_use(&mut self) -> Item {
+        Item::Use(UseDecl {
+            id: self.id(),
+            attrs: Vec::new(),
+            visibility: Visibility::Private,
+            source: "core:collections".to_string(),
+            source_span: syn(),
+            source_id: self.id(),
+            items: vec![UseItem::Simple {
+                id: self.id(),
+                name: "TreeMap".to_string(),
+                name_span: syn(),
+                alias: None,
+            }],
+            items_span: Some(syn()),
+            attributes: None,
+            span: syn(),
+        })
     }
 
     fn id(&mut self) -> AstId {
@@ -200,7 +224,7 @@ impl Builder {
         let mut cm = CmImport::parse(fq).expect("interface FQ is well-formed");
         cm.function = frag.map(str::to_string);
         Attribute {
-            name: "cm".to_string(),
+            name: CM.to_string(),
             args: Vec::new(),
             cm_boundary: Some(CmBoundary::Import(cm)),
             span: syn(),
@@ -210,7 +234,7 @@ impl Builder {
     /// `#[cm]` as a world-level function-import boundary (Phase 9).
     fn cm_world_import_attr(&self, func_name: &str) -> Attribute {
         Attribute {
-            name: "cm".to_string(),
+            name: CM.to_string(),
             args: Vec::new(),
             cm_boundary: Some(CmBoundary::WorldImport(func_name.to_string())),
             span: syn(),
@@ -220,7 +244,7 @@ impl Builder {
     /// `#[cm("kebab-name")]` as a bare CM-name boundary (fields, cases, flags).
     fn cm_name_attr(&self, name: &str) -> Attribute {
         Attribute {
-            name: "cm".to_string(),
+            name: CM.to_string(),
             args: Vec::new(),
             cm_boundary: Some(CmBoundary::Name(name.to_string())),
             span: syn(),
@@ -271,7 +295,7 @@ impl Builder {
             let attrs = vec![
                 self.cm_import_attr(fq, Some(fname)),
                 Attribute {
-                    name: "cm_params".to_string(),
+                    name: CM_PARAMS.to_string(),
                     args: cm_params,
                     cm_boundary: None,
                     span: syn(),
@@ -357,7 +381,7 @@ impl Builder {
         let attrs = vec![
             self.cm_world_import_attr(&func.name),
             Attribute {
-                name: "cm_params".to_string(),
+                name: CM_PARAMS.to_string(),
                 args: cm_params,
                 cm_boundary: None,
                 span: syn(),
@@ -528,6 +552,12 @@ impl Builder {
                 let inner = self.map_type(resolve, t, current_fq);
                 self.generic("List", vec![inner])
             }
+            CmShape::Map(k, v) => {
+                let key = self.map_type(resolve, k, current_fq);
+                let value = self.map_type(resolve, v, current_fq);
+                self.uses_tree_map = true;
+                self.generic("TreeMap", vec![key, value])
+            }
             CmShape::Tuple(ts) => {
                 let mut elems = Vec::with_capacity(ts.len());
                 for t in ts {
@@ -635,6 +665,7 @@ fn classify_wit(resolve: &Resolve, ty: WitType) -> CmShape<WitType> {
     match &td.kind {
         TypeDefKind::Option(t) => CmShape::Option(*t),
         TypeDefKind::List(t) => CmShape::List(*t),
+        TypeDefKind::Map(k, v) => CmShape::Map(*k, *v),
         TypeDefKind::Tuple(t) => CmShape::Tuple(t.types.clone()),
         TypeDefKind::Result(r) => CmShape::Result {
             ok: r.ok,
@@ -707,16 +738,27 @@ mod tests {
         }
     }
 
+    /// The fixture's own interface FQ, read from the component. The binary is
+    /// committed, so a version taken from anywhere else drifts from it.
+    fn catalog_fq(resolve: &Resolve) -> String {
+        let name = resolve
+            .packages
+            .iter()
+            .map(|(_, package)| &package.name)
+            .find(|name| name.name == "cm-catalog")
+            .expect("the fixture declares the cm-catalog package");
+        let version = name.version.as_ref().expect("the fixture is versioned");
+        format!("{}:{}/cm-catalog@{version}", name.namespace, name.name)
+    }
+
     #[test]
     fn builds_catalog_bindings() {
         let (resolve, world) = decode_fixture();
         let b = build_bindings(&resolve, world).expect("build bindings");
+        let catalog_fq = catalog_fq(&resolve);
         let registry = CmInterfaceRegistry::new();
         registry.extend_source_interfaces(b.source_interfaces.clone());
-        assert_eq!(
-            b.interface_fqs,
-            vec!["wado-lang:cm-catalog/cm-catalog@0.0.16"]
-        );
+        assert_eq!(b.interface_fqs, vec![catalog_fq.clone()]);
         // cm-catalog performs no I/O, so the ambient panic path imports nothing
         // (`log_stderr` rides an existing stderr import or traps — see
         // `provides_ambient_stdio_sink`). Its one host-leaf import is
@@ -747,10 +789,7 @@ mod tests {
         // A primitive identity and a named-type identity, with cm metadata.
         let id_u32 = iface.methods.iter().find(|m| m.name == "id_u32").unwrap();
         let cm = cm_import_of(&id_u32.attrs).unwrap();
-        assert_eq!(
-            cm.interface_path(),
-            "wado-lang:cm-catalog/cm-catalog@0.0.16"
-        );
+        assert_eq!(cm.interface_path(), catalog_fq);
         assert_eq!(cm.function.as_deref(), Some("id-u32"));
 
         let id_record = iface
@@ -763,7 +802,7 @@ mod tests {
                 assert_eq!(n.name, "Point");
                 assert_eq!(
                     registry.source_interface(n).as_deref(),
-                    Some("wado-lang:cm-catalog/cm-catalog@0.0.16")
+                    Some(catalog_fq.as_str())
                 );
             }
             other => panic!("expected Named Point, got {other:?}"),
@@ -785,7 +824,7 @@ mod tests {
                 assert_eq!(n.name, "Meters");
                 assert_eq!(
                     registry.source_interface(n).as_deref(),
-                    Some("wado-lang:cm-catalog/cm-catalog@0.0.16")
+                    Some(catalog_fq.as_str())
                 );
             }
             other => panic!("expected Named Meters, got {other:?}"),

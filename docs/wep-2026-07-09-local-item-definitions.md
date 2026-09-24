@@ -91,33 +91,25 @@ whether reify or this WEP's eager annotate-time emission produced it.
   error fits how it was referenced, not a dedicated message. Local
   `enum`/`variant`/`flags` surfaces as `unknown identifier` for a case path
   (e.g. `Color::Red`) or `unknown function` for variant construction. Local
-  generic `type` surfaces as a type mismatch, since it needs a different
-  mechanism — `GenericNewtypeInfo` + AST substitution, not the monomorphized
-  template generic structs use — that this WEP does not wire up. Methods on
-  any local type surface as `no method 'x' found on type`.
+  generic `type` surfaces as a type mismatch: it does not go through the
+  monomorphized template a generic struct uses, and this WEP wires up nothing in
+  its place. Methods on any local type surface as `no method 'x' found on type`.
 
 ## Known gap: methods on a local type
 
 Two module-wide registries are built before any function body is walked, and a
 local `impl` needs both.
 
-- `TraitEnv` indexes `module.items`, so no local block reaches it. A body walk
-  can be added: the target's head has its own reference site, and a block whose
-  target is a function-local declaration is scoped by that identity, since two
-  sibling blocks' same-named types are two declarations.
+- `TraitEnv` indexes `module.items`, so no local block reaches it. A block whose
+  target is a function-local declaration is scoped by that declaration's
+  identity, since two sibling blocks' same-named types are two declarations.
 - `Signatures` is assembled between the declaration pass and the body walk and
   is read-only after. A local `impl`'s target is a block-local type whose
   `TypeId` is interned _during_ that walk, so its method signatures cannot
   exist before the freeze.
 
-Closing it means either giving a local type declaration its durable identity
-and `TypeId` in the declaration pass — `declare_local_struct` needs only the
-`DefId`, which `DefTable::build` already mints, and sits in the body walk for
-_visibility_ — or making `Signatures` extensible after assembly, which gives up
-the read-only rule [`wep-2026-05-26`](./wep-2026-05-26-elaborator-rearchitecture.md)
-rests on.
-
-Two things a first attempt hits: the orphan rule reads a function-local target
-as foreign, because `type_decl_index` holds module-level declarations only; and
-indexing `TraitEnv` alone is _worse_ than the gap, since the header then
-resolves where the signature does not and the diagnostic becomes a panic.
+Two things reach past the two registries. The orphan rule reads a function-local
+target as foreign, because `type_decl_index` holds module-level declarations
+only. And a `TraitEnv` that reaches a local block while `Signatures` does not is
+worse than the gap: the header resolves where no signature exists, so the
+diagnostic becomes a panic.

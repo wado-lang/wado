@@ -9,7 +9,8 @@ use std::rc::Rc;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{Body, Operand};
 use crate::nir_value_graph::value_kind_to_const;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// A typed compile-time value produced by the interpreter.
 #[derive(Debug, Clone, PartialEq)]
@@ -176,6 +177,8 @@ impl Value {
             PrimitiveType::F32 | PrimitiveType::F64 => Some(Self::Float { value: 0.0, prim }),
             PrimitiveType::Bool => Some(Self::Bool(false)),
             PrimitiveType::Char => Some(Self::Char('\0')),
+            // A zero half is `0x0000`, which is `+0.0` in both formats.
+            PrimitiveType::F16 | PrimitiveType::Bf16 => Some(Self::Int { value: 0, prim }),
             PrimitiveType::V128 => None,
         }
     }
@@ -534,7 +537,20 @@ pub(crate) fn float_to_int(
 ) -> Option<Value> {
     let value = match prim {
         PrimitiveType::F32 => f64::from(value as f32),
-        _ => value,
+        PrimitiveType::I8
+        | PrimitiveType::I16
+        | PrimitiveType::I32
+        | PrimitiveType::I64
+        | PrimitiveType::U8
+        | PrimitiveType::U16
+        | PrimitiveType::U32
+        | PrimitiveType::U64
+        | PrimitiveType::F64
+        | PrimitiveType::F16
+        | PrimitiveType::Bf16
+        | PrimitiveType::Bool
+        | PrimitiveType::Char
+        | PrimitiveType::V128 => value,
     };
     Some(Value::Int {
         value: truncate_int(trunc_to_int(value, target)?, target),
@@ -570,6 +586,8 @@ fn trunc_to_int(value: f64, target: PrimitiveType) -> Option<u64> {
             .then_some(truncated as u64),
         PrimitiveType::F32
         | PrimitiveType::F64
+        | PrimitiveType::F16
+        | PrimitiveType::Bf16
         | PrimitiveType::Bool
         | PrimitiveType::Char
         | PrimitiveType::V128 => panic!("trunc_to_int: non-integer target {target:?}"),
@@ -590,6 +608,9 @@ pub(crate) fn eval_bool_binary(l: bool, op: NirBinaryOp, r: bool) -> Option<Valu
     match op {
         NirBinaryOp::And => Some(Value::Bool(l && r)),
         NirBinaryOp::Or => Some(Value::Bool(l || r)),
+        NirBinaryOp::BitAnd => Some(Value::Bool(l & r)),
+        NirBinaryOp::BitOr => Some(Value::Bool(l | r)),
+        NirBinaryOp::BitXor => Some(Value::Bool(l ^ r)),
         NirBinaryOp::Eq => Some(Value::Bool(l == r)),
         NirBinaryOp::NotEq => Some(Value::Bool(l != r)),
         // bool implements Ord with `false < true`. Spelled with `&&`
@@ -813,7 +834,21 @@ pub(crate) fn eval_float_binary(
     match prim {
         PrimitiveType::F32 => eval_f32_binary(lval, op, rval),
         PrimitiveType::F64 => eval_f64_binary(lval, op, rval),
-        _ => None,
+        // `Value::Float` is built for `f32` and `f64` alone: a half holds its
+        // `u16` pattern, and `v128` has no scalar value here.
+        PrimitiveType::I8
+        | PrimitiveType::I16
+        | PrimitiveType::I32
+        | PrimitiveType::I64
+        | PrimitiveType::U8
+        | PrimitiveType::U16
+        | PrimitiveType::U32
+        | PrimitiveType::U64
+        | PrimitiveType::F16
+        | PrimitiveType::Bf16
+        | PrimitiveType::Bool
+        | PrimitiveType::Char
+        | PrimitiveType::V128 => None,
     }
 }
 
@@ -878,10 +913,15 @@ pub(crate) fn is_signed_int(prim: PrimitiveType) -> bool {
 pub(crate) fn int_bit_width(prim: PrimitiveType) -> u32 {
     match prim {
         PrimitiveType::I8 | PrimitiveType::U8 => 8,
-        PrimitiveType::I16 | PrimitiveType::U16 => 16,
-        PrimitiveType::I32 | PrimitiveType::U32 => 32,
-        PrimitiveType::I64 | PrimitiveType::U64 => 64,
-        _ => 32,
+        // A half is a `u16`, so its pattern is 16 bits wide.
+        PrimitiveType::I16 | PrimitiveType::U16 | PrimitiveType::F16 | PrimitiveType::Bf16 => 16,
+        PrimitiveType::I32
+        | PrimitiveType::U32
+        | PrimitiveType::F32
+        | PrimitiveType::Bool
+        | PrimitiveType::Char => 32,
+        PrimitiveType::I64 | PrimitiveType::U64 | PrimitiveType::F64 => 64,
+        PrimitiveType::V128 => 128,
     }
 }
 
@@ -915,7 +955,13 @@ pub(crate) fn truncate_int(value: u64, prim: PrimitiveType) -> u64 {
         PrimitiveType::I16 => i64::from(value as i16) as u64,
         PrimitiveType::I32 => i64::from(value as i32) as u64,
         PrimitiveType::I64 => value,
-        _ => value,
+        // A half holds a `u16`, so it truncates as one.
+        PrimitiveType::F16 | PrimitiveType::Bf16 => value & 0xFFFF,
+        PrimitiveType::F32
+        | PrimitiveType::F64
+        | PrimitiveType::Bool
+        | PrimitiveType::Char
+        | PrimitiveType::V128 => value,
     }
 }
 

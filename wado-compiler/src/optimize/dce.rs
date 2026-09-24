@@ -29,7 +29,6 @@ use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
 use crate::optimize::arena_query::{
     expr_node_may_trap, is_pure_nontrapping_expr_typed, promoted_local_reads,
 };
-use crate::optimize::mod_ref::compute_fn_effects;
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable};
 use crate::{hashmap, nir, tir};
 
@@ -137,48 +136,48 @@ impl DceAnalysis {
 /// pure mutator over the matching field. The split also puts type reachability
 /// before `remove_unreachable_globals` mutates function bodies — those mutations
 /// expose no new types, but the ordering makes that invariant observable.
-pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
-    // The callee descriptor for every `FuncId`, materialized once from the
-    // function records (borrow-safe: a plain pass, no body walk). A call's
-    // callee is identified by its stamped `func_id` (born resolved, authoritative
-    // — `wir_build` never falls back to name resolution for a NIR call), and the
-    // record at that id carries the identical identity (name / module /
-    // method_info / monomorph_info) the call node's `FunctionRef` used to. Indexed
-    // by `func_id.index()` (== store position, Phase 4a), so the reachability
-    // walk reads identity by id without a self-borrowing `store[id]` deref.
-    let descriptors = build_callee_descriptors(project);
+pub(super) fn analyze_dce(project: &mut NirPackage, cache: &mut DescriptorCache) -> DceAnalysis {
+    // The callee descriptor for every `FuncId`. A call's callee is identified by
+    // its stamped `func_id` (born resolved, authoritative — `wir_build` never
+    // falls back to name resolution for a NIR call), and the record at that id
+    // carries the identical identity (name / module / method_info /
+    // monomorph_info) the call node's `FunctionRef` used to. Indexed by
+    // `func_id.index()` (== store position, Phase 4a), so the reachability walk
+    // reads identity by id without a self-borrowing `store[id]` deref.
+    let descriptors = cache.descriptors(project);
 
     // Single AST walk per function body: build the call graph and
     // collect per-function used-globals / used-types in one go.
-    let mut graph = build_analysis_graph(project, &descriptors);
+    let mut graph = build_analysis_graph(project, descriptors);
 
     let mut analysis = DceAnalysis::empty();
-    analysis.functions = compute_function_reachability(project, &descriptors, &mut graph);
+    analysis.functions = compute_function_reachability(project, descriptors, &mut graph);
     analysis.globals = compute_global_reachability(&graph, &analysis.functions);
-    populate_type_reachability(project, &descriptors, &graph, &mut analysis);
+    populate_type_reachability(project, descriptors, &graph, &mut analysis);
     analysis
 }
 
 /// Callers relevant to interprocedural facts, including cached rewrite targets.
 pub(super) fn reachable_function_positions(
     project: &mut NirPackage,
+    cache: &mut DescriptorCache,
     cached: impl IntoIterator<Item = FuncId>,
 ) -> IndexSet<usize> {
     use cranelift_entity::EntityRef;
 
-    let descriptors = build_callee_descriptors(project);
-    let mut graph = build_analysis_graph(project, &descriptors);
-    let mut reachable = compute_function_reachability(project, &descriptors, &mut graph);
-    for id in cached {
-        let function = function_id_for(&project.functions[id.index()].borrow());
-        let callees = compute_reachable(&graph.call_graph, &function);
-        reachable.extend(compute_reachable_positions(&callees, &graph.func_positions));
-    }
+    let descriptors = cache.descriptors(project);
+    let mut graph = build_analysis_graph(project, descriptors);
+    let mut reachable = compute_function_reachability(project, descriptors, &mut graph);
+    let roots = cached
+        .into_iter()
+        .map(|id| function_id_for(&project.functions[id.index()].borrow()));
+    let callees = compute_reachable(&graph.call_graph, roots);
+    reachable.extend(compute_reachable_positions(&callees, &graph.func_positions));
     reachable
 }
 
-/// The table of [`build_callee_descriptors`], appended to across the fixed-point
-/// loop's rounds rather than rebuilt.
+/// `NirPackage::callee_descriptors_from` held across the whole of optimization,
+/// appended to as functions are minted rather than rebuilt.
 #[derive(Default)]
 pub(super) struct DescriptorCache {
     refs: Vec<FunctionRef>,
@@ -193,11 +192,8 @@ impl DescriptorCache {
             self.refs.len() <= project.functions.len(),
             "descriptor cache outlived a function removal"
         );
-        for func_rc in &project.functions[self.refs.len()..] {
-            let f = func_rc.borrow();
-            self.refs
-                .push(FunctionRef::from_resolved(&f, f.module_source.clone()));
-        }
+        self.refs
+            .extend(project.callee_descriptors_from(self.refs.len()));
         #[cfg(debug_assertions)]
         self.assert_one_fresh(project);
         &self.refs
@@ -222,20 +218,6 @@ impl DescriptorCache {
         );
         self.cursor += 1;
     }
-}
-
-/// The callee [`FunctionRef`] descriptor for every function, indexed by
-/// `func_id.index()` (== store position). Used so a call site's identity is read
-/// by its stamped `func_id` rather than the call node's own `FunctionRef`.
-pub(super) fn build_callee_descriptors(project: &NirPackage) -> Vec<FunctionRef> {
-    project
-        .functions
-        .iter()
-        .map(|f| {
-            let f = f.borrow();
-            FunctionRef::from_resolved(&f, f.module_source.clone())
-        })
-        .collect()
 }
 
 /// Resolve a call node's stamped `func_id` to its callee descriptor. `func_id`
@@ -352,9 +334,7 @@ fn extend_reachable_for_optimizer_passes(
     // `Ctx::resolve` reads the compiler item off an entry this pass leaves in
     // place.
     if append_ids.iter().any(|id| reachable.contains(id)) {
-        for id in fused {
-            reachable.extend(compute_reachable(call_graph, &id));
-        }
+        reachable.extend(compute_reachable(call_graph, fused));
     }
 
     // An `array_clone::<T>` site reaches its helper through the element type
@@ -398,21 +378,17 @@ fn extend_reachable_for_optimizer_passes(
     // inner helpers for chains like `List<List<List<T>>>`, panicking
     // codegen with `WirInstr::ArrayClone references unknown helper ...`.
     loop {
-        let mut added_this_round = false;
-        for (func_id, helpers) in &candidates {
-            if !reachable.contains(func_id) {
-                continue;
-            }
-            for helper_id in helpers {
-                if !reachable.contains(helper_id) {
-                    reachable.extend(compute_reachable(call_graph, helper_id));
-                    added_this_round = true;
-                }
-            }
-        }
-        if !added_this_round {
+        let fresh: Vec<FunctionId> = candidates
+            .iter()
+            .filter(|(func_id, _)| reachable.contains(func_id))
+            .flat_map(|(_, helpers)| helpers)
+            .filter(|helper_id| !reachable.contains(*helper_id))
+            .cloned()
+            .collect();
+        if fresh.is_empty() {
             break;
         }
+        reachable.extend(compute_reachable(call_graph, fresh));
     }
 }
 
@@ -460,24 +436,16 @@ fn compute_reachable_from_entries(
     project: &NirPackage,
     call_graph: &CallGraph,
 ) -> IndexSet<FunctionId> {
-    let mut reachable = IndexSet::default();
-
-    for func_rc in &project.functions {
+    let roots = project.functions.iter().filter_map(|func_rc| {
         let func = func_rc.borrow();
-
         let is_root = func.is_cm_export
             || (func.is_export
                 && project
                     .wasm_module_sources
                     .contains_key(&func.module_source));
-
-        if is_root {
-            let func_id = FunctionId::free(&func.module_source, &func.name);
-            reachable.extend(compute_reachable(call_graph, &func_id));
-        }
-    }
-
-    reachable
+        is_root.then(|| FunctionId::free(&func.module_source, &func.name))
+    });
+    compute_reachable(call_graph, roots)
 }
 
 /// Resolve WASI imports and populate `project.imports` and `project.used_wasi_functions`
@@ -1151,7 +1119,7 @@ impl<'a> DceWalker<'a> {
                     add_to_string_callee(receiver_type, self.type_table, &mut self.analysis);
                 }
                 let method_id = FunctionId::Method(MethodName::new(
-                    ModuleSource::primitive(),
+                    ModuleSource::of_primitive(prim),
                     FqTypeName::builtin(prim.as_str()),
                     trait_name,
                     method_name,
@@ -1406,7 +1374,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
     match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => {
             let method_id = FunctionId::Method(MethodName::new(
-                ModuleSource::primitive(),
+                ModuleSource::of_primitive(*prim),
                 FqTypeName::builtin(prim.as_str()),
                 None,
                 "to_string".to_string(),
@@ -1427,13 +1395,14 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
     }
 }
 
-/// Worklist BFS over `call_graph` starting at `entry`.
+/// Worklist BFS over `call_graph` from all of `entries` at once. A separate
+/// walk per root would re-visit whatever the roots share.
 fn compute_reachable(
     call_graph: &IndexMap<FunctionId, IndexSet<FunctionId>>,
-    entry: &FunctionId,
+    entries: impl IntoIterator<Item = FunctionId>,
 ) -> IndexSet<FunctionId> {
     let mut reachable = IndexSet::default();
-    let mut worklist = vec![entry.clone()];
+    let mut worklist: Vec<FunctionId> = entries.into_iter().collect();
 
     while let Some(func) = worklist.pop() {
         if reachable.contains(&func) {
@@ -1967,7 +1936,7 @@ pub(super) fn deletable_value(
                     .get(func_id.index())
                     .copied()
                     .unwrap_or_else(FnEffect::opaque);
-                (!effect.is_pure() || effect.may_trap).then_some(())
+                (!effect.is_deletable()).then_some(())
             }
             ExprKind::GlobalVarSet { .. }
             | ExprKind::Assign { .. }
@@ -2189,15 +2158,21 @@ fn dead_pure_binding(
 /// holds its whole initializer in the binary for no observer. The
 /// `is_uninitialized` guard and a read bound to an unmentioned local do not
 /// count as observing, provided the value is a `deletable_value`.
-pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
-    let descriptors = build_callee_descriptors(project);
-    let effects = compute_fn_effects(&project.functions, &project.builtin_registry);
+///
+/// Answers whether any body changed, so a caller holding `effects` knows
+/// whether they still describe the IR.
+pub(super) fn unhoist_unobserved_globals(
+    project: &mut NirPackage,
+    cache: &mut DescriptorCache,
+    effects: &[FnEffect],
+) -> bool {
+    let descriptors = cache.descriptors(project);
     let type_table = project.type_table.clone();
     let types = type_table.borrow();
     let mut guards = GlobalGuards {
-        descriptors: &descriptors,
+        descriptors,
         types: &types,
-        effects: &effects,
+        effects,
         inert_functions: IndexSet::default(),
     };
     loop {
@@ -2246,7 +2221,7 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
     }
     let unobserved: IndexSet<(String, String)> = guarded.difference(&observed).cloned().collect();
     if unobserved.is_empty() {
-        return;
+        return false;
     }
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -2262,6 +2237,7 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
             );
         }
     }
+    true
 }
 
 /// Whether a reachable expression still reads one of `globals`. The pass drops
@@ -2352,9 +2328,10 @@ fn compute_global_reachability(
 /// `GlobalVarSet` for a dead global from surviving function bodies
 /// (covers both the original `$initialize_module` and any inlined
 /// copies).
-pub fn remove_unreachable_globals(
+pub(super) fn remove_unreachable_globals(
     project: &mut NirPackage,
     used_globals: &IndexSet<(String, String)>,
+    effects: &[FnEffect],
 ) {
     project.globals.retain(|global| {
         let global_module_key = global.module_source.to_path().join("::");
@@ -2366,19 +2343,26 @@ pub fn remove_unreachable_globals(
         let mut func = func_rc.borrow_mut();
         if let Some(body) = func.body.as_mut() {
             let root = body.root;
-            remove_dead_global_sets(body, NodeRef::Block(root), used_globals, &type_table);
+            remove_dead_global_sets(
+                body,
+                NodeRef::Block(root),
+                used_globals,
+                &type_table,
+                effects,
+            );
         }
     }
 }
 
 /// Strip every store to a dead global from `node`'s subtree, wherever it sits:
 /// a statement store goes with its statement, an operand one leaves its unit.
-/// A value that may have an effect or trap is kept, evaluated where the store was.
+/// A value that is not [`deletable_value`] is kept, evaluated where the store was.
 fn remove_dead_global_sets(
     body: &mut Body,
     node: NodeRef,
     used: &IndexSet<(String, String)>,
     type_table: &TypeTable,
+    effects: &[FnEffect],
 ) {
     if let NodeRef::Block(block) = node {
         let old = std::mem::take(&mut body.blocks[block].stmts);
@@ -2392,7 +2376,7 @@ fn remove_dead_global_sets(
                 kept.push(s);
                 continue;
             };
-            if let Some(effect) = kept_effect(body, value, type_table) {
+            if let Some(effect) = kept_effect(body, value, type_table, effects) {
                 body.stmts[s].kind = StmtKind::Expr(effect.into());
                 kept.push(s);
             }
@@ -2411,7 +2395,7 @@ fn remove_dead_global_sets(
     for store in stores {
         let value = dead_store_value(body, store, used).expect("collected as a dead store");
         let unit = body.exprs[store].type_id;
-        if let Some(effect) = kept_effect(body, value, type_table) {
+        if let Some(effect) = kept_effect(body, value, type_table, effects) {
             let span = body.exprs[store].span;
             let stmt = body.stmts.push(StmtNode {
                 kind: StmtKind::Expr(effect.into()),
@@ -2431,7 +2415,7 @@ fn remove_dead_global_sets(
     let mut children: Vec<NodeRef> = Vec::new();
     body.for_each_child(node, |c| children.push(c));
     for child in children {
-        remove_dead_global_sets(body, child, used, type_table);
+        remove_dead_global_sets(body, child, used, type_table, effects);
     }
 }
 
@@ -2451,10 +2435,15 @@ fn dead_store_value(body: &Body, e: ExprId, used: &IndexSet<(String, String)>) -
 
 /// The part of a dead store's value that must still run: all of it, unless it
 /// is provably pure and cannot trap.
-fn kept_effect(body: &Body, value: Operand, type_table: &TypeTable) -> Option<ExprId> {
+fn kept_effect(
+    body: &Body,
+    value: Operand,
+    type_table: &TypeTable,
+    effects: &[FnEffect],
+) -> Option<ExprId> {
     value
         .as_expr()
-        .filter(|&e| !is_pure_nontrapping_expr_typed(body, e, Some(type_table)))
+        .filter(|_| !deletable_value(body, value, type_table, effects))
 }
 
 #[cfg(test)]
@@ -2472,7 +2461,7 @@ mod tests {
         let mut interner = ModuleSourceInterner::new();
         let call_graph = IndexMap::default();
         let entry = free_fn(&mut interner, "run");
-        let reachable = compute_reachable(&call_graph, &entry);
+        let reachable = compute_reachable(&call_graph, [entry]);
         assert!(reachable.contains(&free_fn(&mut interner, "run")));
         assert_eq!(reachable.len(), 1);
     }
@@ -2495,7 +2484,7 @@ mod tests {
             IndexSet::from_iter([free_fn(&mut interner, "bar")]),
         );
 
-        let reachable = compute_reachable(&call_graph, &free_fn(&mut interner, "run"));
+        let reachable = compute_reachable(&call_graph, [free_fn(&mut interner, "run")]);
         assert!(reachable.contains(&free_fn(&mut interner, "run")));
         assert!(reachable.contains(&free_fn(&mut interner, "foo")));
         assert!(reachable.contains(&free_fn(&mut interner, "bar")));

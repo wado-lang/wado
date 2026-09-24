@@ -430,10 +430,9 @@ the newtype kind. What remains is what a schema library reads and
 nothing else yet does.
 
 - `Member::doc()`. The trait carries `name()` and `wire_name_override()` only,
-  so `description` / `title` have no source. The fact is not lost — a doc
-  comment lives in the `TriviaMap` that `wado doc` reads — so closing this is
-  plumbing that string through `TirField` into the synthesized member, beside
-  the wire-name override that already travels that path.
+  so `description` / `title` have no source. The fact is not lost: a doc comment
+  lives in the `TriviaMap` that `wado doc` reads, and nothing carries it as far
+  as a synthesized member.
 - `TypeInfo` is unimplemented: the root answers `type_name()` but not yet
   `type_info()`, so an instantiation cannot be told from its declaration.
   Nothing in the tree needs a new mechanism — it is a sealed value minted like a

@@ -283,14 +283,14 @@ unrelated `impl`'s `type Item = …` answers for a type parameter's, and
 recursion through the right-hand side has no fixpoint. An unanswered name
 stays abstract.
 
-### Name-keyed facts belong to `TraitEnv`, `TypeId`-level facts to `Signatures`
+### AST-shaped facts belong to `TraitEnv`, `TypeId`-level facts to `Signatures`
 
 Both are declaration facts, and the phase that asks decides which structure
 can answer. `TraitEnv::build` runs before any decl pass; `Signatures` is
 assembled after all of them. So a fact the decl pass needs _about itself_ —
 which trait declares `Self::X`, asked while resolving that trait's own method
-signatures — can only live on `TraitEnv`, alongside `assoc_type_bound_index`.
-Filing it in the digest type-checks and silently answers `None`.
+signatures — can only live on `TraitEnv`, alongside `TraitDeclHeader`. Filing
+it in the digest type-checks and silently answers `None`.
 
 ### One place per question
 
@@ -534,6 +534,48 @@ historically, so dropping a dead function silently suppressed its error.
 monomorph clones, synthesised CM bindings, effect-dispatch helpers — that
 never passes through `Semantics`; it retires only from diagnostic emission.
 
+### The prune before `lower`
+
+`liveness` answers source-level reachability. `prelower_reach` asks the same
+question again over the monomorphized TIR, which holds a different population.
+It walks from the roots and drops every function no root reaches, so `lower`
+never translates it and `optimize` never walks it. Compiling the Gale generator
+at `-O1`, that is 11825 of 23267 functions: `lower` falls from 3.76s to 2.89s
+and `optimize` from 19.75s to 18.27s.
+
+A root is a CM export, a `.wasm` asset's export, a compiler item, a per-type
+bridge, a global initializer, or an impl of `Eq`, `Ord` or `ReflectVariant`.
+Those three traits are the ones `lower` dispatches to from a node that names no
+callee: a match pattern, a wide-int literal comparison, a `builtin::variant_tag`
+marker. Every other call `lower` writes is spelled through a `CompilerItem`,
+which is a root already.
+
+An impl is matched by the trait's declaration identity, not by its spelling,
+because an impl writes the trait with its own type arguments — `StrSlice`
+implements `Eq<String>`, which no spelling of `Eq` matches.
+
+The root set has to be this narrow to be worth anything. Rooting every impl of
+every compiler-item trait leaves 693 functions pruned instead of 11825, because
+`Inspect` alone is derived for every type and reaches 8837 of them.
+
+Enumerating the minters is not a fix for the class, since the next one added
+breaks it again. The net goes in `Interner::resolve`, where every minted call
+lands: a debug build asserts there that it never stubs a name the prune dropped, and
+the panic names the callee and what `is_root` owes it. A new minter then fails
+in CI on the first fixture that exercises it, rather than surfacing as an
+unresolved call at WIR build. `WADO_NO_PRELOWER_PRUNE` holds the prune back, so
+a missing root is a flag to flip rather than a compiler to rebuild.
+
+The two checks answer different questions and both are needed.
+`WADO_TRACE=prelower_reach` reports per compile how much of the TIR the walk
+reached, which is how to size a root set. Comparing the output bytes of every
+fixture compiled both ways is the correctness check: 1996 are byte-identical,
+none differ, and none fail in one arm alone. Around 840 fail to compile under
+`--world test` either way, so compare the arms rather than count failures. A
+larger program can still differ in the serial of a `$Closure_N` name. `lower`
+hands those out in translation order, so a smaller population renumbers them;
+the code around them is the same.
+
 ### Naming
 
 `elaborate` survives as the umbrella term and physical directory name;
@@ -596,9 +638,8 @@ A method reached through a generic bound instantiates the recorded
   bound (`I: IntoIterator<Item = u8>` answers `I::Item`) or from a
   projection receiver's own bindings. Use-site data, so it enters as
   `SlotProjections`, never as a re-resolution.
-- The `ast::TraitBound` lists behind both. Declaration facts, but name-keyed
-  and AST-shaped, so they stay on `TraitEnv` — `assoc_type_bound_index` and
-  `TraitDeclHeader::assoc_types`.
+- The `ast::TraitBound` lists behind both. Declaration facts, but AST-shaped,
+  so they stay on `TraitEnv` as `TraitDeclHeader::assoc_types`.
 
 The query writes no walk state: no scope to enter, no `self_type` to set, no
 `assoc_type_bindings` to seed and restore.
@@ -640,8 +681,7 @@ Each is a grep:
 | `TirTypeParam { … }` literals                                 | 1      | 8   |
 | `is_real_type_param` re-spelled inline                        | 0      | 2   |
 | Name-keyed AST predicates                                     | 0      | 1   |
-| AST-level type-param substitution helpers                     | 0      | 1   |
-| `substitute_type_params_by_map` call sites                    | 0      | 5   |
+| AST-level type-param substitution helpers                     | 0      | 0   |
 | `mem::replace` / `mem::take` on walk state outside `scope.rs` | 0      | 29  |
 | `with_module_perspective_for` call sites                      | 2      | 2   |
 | `with_reference_recording_suppressed` call sites              | 1      | 1   |
@@ -652,12 +692,13 @@ walker frame rather than a query: both perspective swaps are the callee-scope
 retry a parameter default needs when the caller cannot name the callee's type
 ([`wep-2026-04-11-default-arguments.md`](./wep-2026-04-11-default-arguments.md)),
 and the surviving suppression is the argument-classification probe. Every row
-whose count exceeds its target is a [known gap](#known-gaps).
+whose count exceeds its target is on the [roadmap](#roadmap).
 
-## Known gaps
+## Roadmap
 
-Each gap below is a measurement over the tree, and each says what closing it
-takes. Three rules order them.
+Each item below is a measurement over the tree, and each says what finishing it
+means. An item that waits on another says so. Three rules are what they are
+measured against.
 
 - One list. A set the compiler must keep in step is written once and everything
   else generated from it; a field-by-field copy is a defect that has not fired
@@ -666,6 +707,27 @@ takes. Three rules order them.
   the partial ones are deleted rather than wrapped.
 - One home. A fact is recorded where it is decided and read where it is
   recorded; a phase recomputing a fact it could have read is re-deciding.
+
+### A data declaration admits an effect parameter it then ignores
+
+`struct Holder<effect E, T>` and `variant Maybe<effect E, T>` parse and compile.
+The dense type-argument space holds no position for `E` (`RealTypeParams`), so
+the parameter names nothing a use site can fill and nothing a body can read. A
+declaration whose parameter means nothing is a declaration the language should
+not admit. Derivation sees the same shape and stops short of it: at `-O0`,
+`Maybe::Just(3)` on the power-assert operand path reports
+`Maybe<i32> does not implement ReflectVariant` from `core:prelude`, which names
+neither the effect parameter nor the declaration that wrote it.
+
+An `impl` head admits one on the same terms, where it named a slot no argument
+filled until `register_impl_block_params` stopped counting it.
+
+Finishing it takes a decision on the language rule: reject the parameter at its
+own span when a `struct`, `variant`, newtype or `impl` declares one, and both
+the silent drop and that diagnostic go away. Until then, the slot is filtered
+rather than refused, which is what
+`tests/fixtures/data_decl_non_real_type_param_slot.wado` and
+`tests/fixtures/impl_assoc_type_non_real_param_slot.wado` pin.
 
 ### A trait's default body answers to no package boundary
 
@@ -678,7 +740,7 @@ whose consumer would reach the method. No package in the tree hits it:
 `wado check` over the `lib` entry of `package-gale`, `package-jade`,
 `package-marl` and `package-cm-catalog` reports no such warning.
 
-Closing it takes a decision on which rule a declared method follows. The
+Finishing it means a decision on which rule a declared method follows. The
 question behind it is whether liveness roots a package's external surface at all
 once the compile has an entry program, whose world exports are the only roots
 the emitted component keeps. `Item::Impl` leaves the same question open, rooting
@@ -701,9 +763,10 @@ bodyless declarations are gone from the package, and every call to one mints an
 extern stub instead. `CompilerItem` records some of these and nothing records
 the rest.
 
-Closing it takes that list, one entry per entity named after `liveness` runs,
-with the pass that names it stating its trigger. Read the gap below first: it
-tried that on the `lower` side, and says what the list does not settle.
+Finishing it means that list, one entry per entity named after `liveness` runs,
+with the pass that names it stating its trigger. "The prune before `lower`"
+above answers the same question on the `lower` side, and says what a list alone
+does not settle.
 
 Two things bound the work. The rest of the closure is held by real edges from
 the format and parse impls that `CompilerItem::dispatched_by_synthesis` roots,
@@ -716,63 +779,6 @@ defect until it compares identities.
 from its exports and global initializers. Count them with `grep '^fn '` over
 `wado dump` and it reads 196 instead, because the dump writes `pub fn` for most
 of them.
-
-### A prune before `lower` is guessing
-
-A program's bodies are what `lower` translates and `optimize` then walks. A
-trivial program carries 1213 of them to reach 23, so dropping the unreachable
-ones before `lower` is worth having. Measured over 450 fixtures, with the arms
-interleaved and each taken at its best of two:
-
-| Measurement     | Base    | Pruned  | Change |
-| --------------- | ------- | ------- | ------ |
-| 450 fixtures    | 175.94s | 155.14s | −11.8% |
-| `lower` span    | 0.070s  | 0.039s  | −44%   |
-| `optimize` span | 0.694s  | 0.612s  | −12%   |
-
-Precision in the root set is not where that time is. Rooting strictly rather
-than over-approximating prunes 1950 of the 1973 instead of 1251, and gains
-0.02s.
-
-`prelower_reach` implements the prune behind `WADO_PRELOWER_PRUNE`, off by
-default because it is unsound. `lower` names callees from nodes that are not
-calls, and a reachability walk over TIR expressions cannot see them:
-
-- a match pattern mints `T^Eq::eq` (`lower/translate/pattern.rs`)
-- a wide-int literal mints `Eq::eq` and the `I128From*` constructors
-  (`lower/wide_int_literal.rs`)
-- a `builtin::variant_tag` marker mints `V^ReflectVariant::discriminant`
-  (`lower/translate.rs`), a method on the user's own type, so it carries neither
-  a compiler-item tag nor a `$` prefix
-- a synthesized closure-functor body mints `Formatter::write_str`
-  (`lower/plan/closure.rs`), inside `LowerPlan` and so before translation
-
-Compiling every fixture with and without the flag and comparing the output bytes
-found all four: 1765 fixtures are byte-identical, 1 differs, and 43 fail. The
-audit finds none of them, because it reports only functions that survive
-`optimize`, and a prune that drops a minter's target panics in `wir_build` long
-before. A clean audit is not a clean bill.
-
-Enumerating the four is not a fix for the class, since the next minter added
-breaks it again. Every one of them lands in `Interner::resolve`, which mints
-each call's id whatever node produced it, so that is where a sound prune has to
-be answered. Two ways to answer it there:
-
-- Lower on demand: pruned functions go to a side table, `resolve` revives on a
-  miss, and a worklist runs to fixpoint. No minter list exists, so none can be
-  incomplete. `LowerPlan` is the obstacle. It is computed whole-program before
-  translation, so a revived function has no plan data.
-- Complete the roots, and have `resolve` assert in debug builds that it never
-  stubs a name the prune dropped. The roots stay enumerated, but a new minter
-  then fails in CI on the first fixture that exercises it.
-
-Either way, two checks answer different questions and both are needed.
-`WADO_TRACE=prelower_reach` reports per compile how much of the TIR the walk
-reached, and which survivors it did not, which is how to size a root set. The
-corpus comparison above is the correctness check: a fixture that fails only
-under `WADO_PRELOWER_PRUNE` names a minting site, and one whose bytes differ
-names a subtler one. Around 680 fixtures fail to compile under `--world test`
-either way, so compare the arms rather than count failures.
 
 ### A call to an operation with nothing to reach panics at WIR
 
@@ -792,7 +798,7 @@ export fn run() with Widget {
 }
 ```
 
-Closing it takes a check over the dispatch a call records, which is the only
+Finishing it means a check over the dispatch a call records, which is the only
 place total over both spellings: `Widget::poke(&w, 3)` records a
 `StaticMethodDispatch` and `w.poke(3)` a `MethodDispatch`, and each carries the
 `method_def` whose parent says the operation is a resource's. `wir_build` cannot
@@ -820,7 +826,7 @@ rest assemble the callee's parameter list themselves, and nothing in a
 signature says which of the two questions — "what does this name declare" and
 "which declaration does this call select" — a given lookup answers.
 
-Closing it: one `check_args(sig, args, spans)` every call path calls, fed by
+Finishing it: one `check_args(sig, args, spans)` every call path calls, fed by
 one lookup that returns a selected signature or says it selected none. The
 selection stays with the overload path, which is the only place that holds the
 arguments.
@@ -829,9 +835,10 @@ arguments.
 
 The completeness rule holds for the facts that exist; what is left is the
 facts that do not. Reify carries `symbols` and `loaded_modules` for 7 reads,
-runs `type_lookup()` at 14 sites, and keeps `current_type_param_names` and
-`current_effect_param_names` so its one surviving `resolve_type` has a scope —
-in a phase whose contract is that it resolves no names.
+runs `type_lookup()` at 14 sites, and keeps `current_effect_param_names` so an
+effect name that is a parameter resolves — in a phase whose contract is that it
+resolves no names. Its one surviving resolution, `resolve_global_type`, reads a
+global's declared type in that global's own module scope.
 
 The reads that remain are also fail-safe where the contract is fail-loud: 84
 `unwrap_or*` defaults against 48 `.expect`s. Most are legitimately optional
@@ -840,11 +847,11 @@ emitted TIR — an unknown field name writes field 0, a malformed literal emits
 `0` — and `unescape_checked` is the model for that group: the body walk already
 rejected the input, so the reify-side read is an `.expect`.
 
-Closing it: a recorded fact per question reify re-asks — the callee's shape on
-a `CallExpr`, the field's index and type on a `FieldAccessExpr`, the owner and
-case index on every case identifier and pattern, the resolved effects on the
-written `fn(…) with E` node — after which the two borrowed AST inputs, the two
-type-param name lists and the surviving `resolve_type` have no caller left.
+Finishing it means one recorded fact per question reify re-asks: the callee's
+shape on a `CallExpr`, the field's index and type on a `FieldAccessExpr`, the
+owner and case index on every case identifier and pattern, and the resolved
+effects on the written `fn(…) with E` node. The two borrowed AST inputs, the
+effect-param name list and `resolve_global_type` then have no caller left.
 
 ### The same shape is written several times
 
@@ -872,7 +879,7 @@ four places, two of them inside the decl pass's loops with eight empty maps
 declared beside them, where a constructor and a `ModuleDecls::default()` would
 do.
 
-Closing it: each row is a mechanical merge, and none changes what the language
+Finishing it: each row is a mechanical merge, and none changes what the language
 accepts — the e2e corpus is the verification. The operator row is the largest
 single win: `resolve_binary_op` is 789 lines and contains three of the four
 ladders.
@@ -886,7 +893,7 @@ collector that needs namespace imports and again per iteration of the newtype
 fixpoint. So a new declaration fact defaults to a new scan rather than a place
 in an existing walk.
 
-Closing it: one walk the collectors hang off, and `TypeLookup::new(…)` plus a
+Finishing it: one walk the collectors hang off, and `TypeLookup::new(…)` plus a
 hoisted `ModuleDecls::default()` in place of the two literals and their empty
 maps.
 
@@ -904,27 +911,12 @@ interner, invocations, entry module) are still five separate fields threaded
 identically through `module_elaborator` and `Reify::new` rather than one
 `ElabEnv`.
 
-Closing it: move each query that names no walk state onto `TypeSystem`, with
+Finishing it: move each query that names no walk state onto `TypeSystem`, with
 `typecheck.rs`'s three layers (pure function, `TypeSystem` method returning
 data, walker method that emits) as the template; then dissolve
 `AnnotateState`, with `tysys`, `module_semantics`, `liveness` and
 `world_registry` landing on `Semantics` and the rest becoming driver locals or
 `ElabEnv` fields.
-
-### Type-parameter substitution has five implementations
-
-`TypeTable::substitute_type_params` and `substitute_type_params_with` are the
-one implementation and its empty case. `TypeSystem::substitute_type_params` is
-a positional adapter over them. The other two are not:
-`type_resolution.rs::substitute_type_params` replaces parameters by _name_ over
-an `ast::Type`, and `expr.rs::substitute_type_params_by_map` is a hand-rolled
-recursion over a handful of `ResolvedType` arms, so it is partial by
-construction wherever the arm list is — it descends no tuple, function type or
-projection, and has five call sites.
-
-Closing it: route both through `TypeTable::substitute_type_params_with` and
-delete them. The AST-level one goes when the base type it substitutes into is
-resolved once at its declaration instead of re-resolved per use.
 
 ### Transient walk state without guards
 
@@ -936,7 +928,7 @@ insert / `shift_remove` pair around a call that can return early;
 on drop; `FunctionContext`'s `for_continue_labels` and `compound_hoist_types`
 are saved and restored by hand. None is panic-safe.
 
-Closing it: `with_scope_field` is the pattern, and `assoc_binding_stack` moves
+Finishing it: `with_scope_field` is the pattern, and `assoc_binding_stack` moves
 onto `Scope` where the membership rule puts it.
 
 ### The hole sweep is still a hand list
@@ -946,7 +938,7 @@ hold a `TypeId` by hand — 16 of the 20 — so a map added to `with_body_facts!
 sweeps only if someone remembers. The four it omits carry none today; nothing
 in the type system says so.
 
-Closing it: a substitution implementation per fact value type and a loop
+Finishing it: a substitution implementation per fact value type and a loop
 generated from the same list, so an omission is a missing impl rather than a
 silent leak of an unsolved variable into reify.
 
@@ -959,7 +951,7 @@ walk, so a check reasoning about a value's type inside a tuple `for-of` body
 sees the first element's. A body binding a resource in one element and a plain
 value in another is checked against one of them.
 
-Closing it: either a cursor that scopes a `Semantics` query to one
+Finishing it: either a cursor that scopes a `Semantics` query to one
 instantiation's walk — which is what reify's overlay stack already is — or
 moving the per-element part of those checks into the annotate walk, where the
 element is the frame being walked. Which of the two is a design question, not a

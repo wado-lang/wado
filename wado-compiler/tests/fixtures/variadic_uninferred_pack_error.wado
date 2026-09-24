@@ -1,0 +1,15 @@
+//! Two packs in one tuple determine neither, so a `fn` parameter written that
+//! way leaves both unsettled. The call must say which parameters it could not
+//! infer, not close them to the empty tuple and report the shape that leaves.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+
+fn apply<..A, ..B>(f: fn([..A, ..B]) -> i32) -> i32 {
+    return 0;
+}
+
+test "a pack a written argument cannot settle" {
+    assert apply(|t: [i32, bool]| 7) == 0;
+}
+
+__DATA__
+{"compile_error": "cannot infer type parameter `A`, `B` of function `apply`"}

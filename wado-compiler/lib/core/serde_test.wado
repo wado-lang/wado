@@ -145,6 +145,16 @@ impl Serializer for MockSerializer {
         return Result::Ok(());
     }
 
+    fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
+        self.w.buf.push_str(`${v}`);
+        return Result::Ok(());
+    }
+
+    fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
+        self.w.buf.push_str(`${v}`);
+        return Result::Ok(());
+    }
+
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
         self.w.buf.push_str(`${v as f64}`);
         return Result::Ok(());
@@ -230,11 +240,18 @@ test "error type construction" {
     assert se.message == "test";
 
     let de = DeserializeError::missing_field("name");
-    assert de.message == "name";
+    assert de.message == "missing field: name";
     assert de.offset == -1;
 
     let de2 = DeserializeError::malformed("bad json", 10);
     assert de2.offset == 10;
+}
+
+test "a positionless DeserializeError omits the offset rather than saying 0" {
+    assert DeserializeError::malformed("bad json").offset == -1;
+    assert DeserializeError::invalid_value("bad value").offset == -1;
+    assert `${DeserializeError::malformed("bad json")}` == "bad json";
+    assert `${DeserializeError::malformed("bad json", 0)}` == "bad json at offset 0";
 }
 
 test "serialize i32" {

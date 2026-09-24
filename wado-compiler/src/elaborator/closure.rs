@@ -8,7 +8,7 @@ use crate::hashmap::IndexSet;
 
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
-use crate::name::mut_capture_ref_name;
+use crate::name::capture_ref_name;
 use crate::tir::{CaptureSource, ResolvedType, TirCapture, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -197,7 +197,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let inner_type = local.type_id;
                 let outer_index = local.index;
                 let ref_type = self.tysys.type_table.borrow_mut().make_mut_ref(inner_type);
-                let ref_name = mut_capture_ref_name(var_name);
+                let ref_name = capture_ref_name(var_name);
                 let ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
                 ctx.address_taken_locals.insert(outer_index);
 
@@ -297,7 +297,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let return_type = if let Some(dt) = declared_return {
             dt
         } else if let ast::Expr::Block(ref block) = closure.body {
-            match self.ast_find_return_type_in_block(block) {
+            let mut return_types = self.ast_return_types_in_block(block);
+            self.settle_branch_holes(&mut return_types, None);
+            match return_types.first().copied() {
                 Some(t) => {
                     if !self.ast_block_always_exits(block)
                         && body_type != t

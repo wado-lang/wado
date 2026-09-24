@@ -9,6 +9,7 @@ use crate::defs::{DefId, DefTable};
 use crate::kiln::InvocationIndex;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::path::{normalize, relative_path};
+use crate::primitive::PrimitiveType;
 use crate::tir::ResolvedType;
 use crate::{ast, tir};
 use std::fmt;
@@ -34,6 +35,14 @@ pub const INTERNAL_PREFIX: &str = "$";
 /// anchor would have nothing to bind to. A `const` is the right shape.
 pub const CLOSURE_CALL_METHOD: &str = "$call";
 
+/// Method a narrowing type pattern calls on its target resource: the
+/// receiver's `is-<resource>` import, which answers whether the handle is one.
+pub const NARROWING_TEST_METHOD: &str = "$is";
+
+/// Method `==` calls on the root of two unrestricted handles' chain: the
+/// package's `is-same` import, which answers whether both name one host object.
+pub const IDENTITY_TEST_METHOD: &str = "$same";
+
 /// Separator between a namespace-import alias and the imported member in the
 /// canonical `ns$member` name a `ns::member` reference resolves to. `$` is not
 /// a valid Wado identifier character, so the alias is a single `::`-free token
@@ -45,6 +54,12 @@ pub const NAMESPACE_MEMBER_SEP: char = '$';
 /// Build the `ns$member` alias for a namespace-imported symbol.
 pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
     format!("{namespace}{NAMESPACE_MEMBER_SEP}{member}")
+}
+
+/// Read a `ns$member` alias back as the `ns::member` its author wrote, for a
+/// diagnostic. Any other name is already its own spelling.
+pub fn unalias_namespace_member(name: &str) -> String {
+    name.replacen(NAMESPACE_MEMBER_SEP, "::", 1)
 }
 
 /// Separator between a local item's declared name and its disambiguating
@@ -371,10 +386,34 @@ pub fn deref_capture_name(index: u32) -> String {
     format!("{INTERNAL_PREFIX}deref_cap_{index}")
 }
 
-/// The `&mut` proxy an owning frame binds for a binding a closure writes.
+/// The label on a C-style `for` loop's body, which `continue` breaks out of.
 #[must_use]
-pub fn mut_capture_ref_name(var_name: &str) -> String {
+pub fn for_body_label(serial: u32) -> String {
+    format!("{INTERNAL_PREFIX}for_{serial}_body")
+}
+
+/// Whether `label` is one [`for_body_label`] minted: what runs after it in the
+/// loop is the header's update, which acts on the next iteration's bindings.
+#[must_use]
+pub fn is_for_body_label(label: &str) -> bool {
+    label
+        .strip_prefix(INTERNAL_PREFIX)
+        .and_then(|rest| rest.strip_prefix("for_"))
+        .and_then(|rest| rest.strip_suffix("_body"))
+        .is_some_and(|serial| serial.parse::<u32>().is_ok())
+}
+
+/// The reference proxy an owning frame binds for a binding a closure captures
+/// by reference.
+#[must_use]
+pub fn capture_ref_name(var_name: &str) -> String {
     format!("{INTERNAL_PREFIX}ref_{var_name}")
+}
+
+/// The local a constant pattern compared by `Eq` holds its scrutinee in.
+#[must_use]
+pub fn constant_pattern_local_name() -> String {
+    format!("{INTERNAL_PREFIX}constant")
 }
 
 /// Local holding one flattened field of a variant-return slot. `slot_local`
@@ -738,8 +777,6 @@ pub enum Receiver {
     /// A universal reference receiver `&T` / `&mut T`; the pointee rides in the
     /// receiver's type-arg list, not here.
     Ref(RefKind),
-    /// An associated-type projection `Base::Assoc` (`S::SeqSerializer`).
-    Projection { base: String, assoc: String },
 }
 
 impl Receiver {
@@ -750,8 +787,15 @@ impl Receiver {
         match self {
             Receiver::Type(n) => MangledName::new(n.to_mangled()),
             Receiver::Ref(k) => MangledName::new(k.prefix()),
-            Receiver::Projection { base, assoc } => MangledName::new(format!("{base}::{assoc}")),
         }
+    }
+
+    /// Whether this receiver names a declaration, whose type arguments stand
+    /// one per declared parameter. A tuple, a reference or a projection spreads
+    /// its parts over that list instead.
+    #[must_use]
+    pub fn is_declared_type(&self) -> bool {
+        matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Declared(_)))
     }
 
     /// Whether this receiver is one of the binders `names` declares — how a
@@ -772,9 +816,10 @@ impl Receiver {
                 | TypeHead::Shape { .. }
                 | TypeHead::ParamBucket { .. }
                 | TypeHead::Builtin(_)
+                | TypeHead::Projection { .. }
                 | TypeHead::Tuple => None,
             },
-            Receiver::Ref(_) | Receiver::Projection { .. } => None,
+            Receiver::Ref(_) => None,
         }
     }
 
@@ -812,7 +857,6 @@ impl Receiver {
         match self {
             Receiver::Type(n) => n.decl_name(),
             Receiver::Ref(k) => DeclName::new(k.prefix()),
-            Receiver::Projection { base, assoc } => DeclName::new(format!("{base}::{assoc}")),
         }
     }
 
@@ -843,12 +887,6 @@ impl Receiver {
             Receiver::Ref(k) => Some(*k),
             _ => None,
         }
-    }
-
-    /// Whether the receiver is an associated-type projection (`S::SeqSerializer`).
-    #[must_use]
-    pub fn is_assoc_projection(&self) -> bool {
-        matches!(self, Receiver::Projection { .. })
     }
 }
 
@@ -918,12 +956,8 @@ impl LocalMethodName {
     pub fn fq_base_struct_name(&self) -> FqTypeName {
         match &self.receiver {
             Receiver::Type(fq) => fq.clone(),
-            // A `&` / `&mut` head and a projection name no declaration, so no
-            // module qualifies them.
+            // A `&` / `&mut` head names no declaration, so no module qualifies it.
             Receiver::Ref(kind) => FqTypeName::builtin(kind.prefix()),
-            Receiver::Projection { base, assoc } => {
-                FqTypeName::builtin(&format!("{base}::{assoc}"))
-            }
         }
     }
 
@@ -965,12 +999,6 @@ impl LocalMethodName {
     #[must_use]
     pub fn ref_receiver(&self) -> Option<RefKind> {
         self.receiver.ref_kind()
-    }
-
-    /// Whether the receiver is an associated-type projection (`S::SeqSerializer`).
-    #[must_use]
-    pub fn receiver_is_assoc_projection(&self) -> bool {
-        self.receiver.is_assoc_projection()
     }
 
     /// Create a new `LocalMethodName` directly from components.
@@ -1494,6 +1522,18 @@ pub fn resolve_import(
 /// invocation's generated entry module under `build/kiln/…`, everything else
 /// falls through to [`resolve_import_with_entry`]. Use this in place of
 /// [`resolve_import`] wherever an index is available.
+/// The file a declaration in `source` is written in, as a [`InvocationIndex`]
+/// keys it and a diagnostic names it. Empty for a source that holds no path.
+#[must_use]
+pub fn decl_file_of(source: &ModuleSource) -> &str {
+    match source {
+        ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.as_str(),
+        ModuleSource::EntryPoint { filename } => filename.as_str(),
+        ModuleSource::Redirected { uri } => uri.as_str(),
+        _ => "",
+    }
+}
+
 pub fn resolve_import_with_invocations(
     interner: &mut ModuleSourceInterner,
     from_module: &ModuleSource,
@@ -1502,12 +1542,7 @@ pub fn resolve_import_with_invocations(
     invocations: &InvocationIndex,
 ) -> ModuleSource {
     if !invocations.is_empty() {
-        let decl_file = match from_module {
-            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.as_str(),
-            ModuleSource::EntryPoint { filename } => filename.as_str(),
-            ModuleSource::Redirected { uri } => uri.as_str(),
-            _ => "",
-        };
+        let decl_file = decl_file_of(from_module);
         if let Some(entry_uri) = invocations.redirect(decl_file, import_source) {
             return interner.redirected(entry_uri);
         }
@@ -2513,27 +2548,10 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
             None => name,
         }
     }
+    let head = head_of(name);
     name.starts_with('&')
-        || matches!(
-            head_of(name),
-            "i8" | "i16"
-                | "i32"
-                | "i64"
-                | "u8"
-                | "u16"
-                | "u32"
-                | "u64"
-                | "f32"
-                | "f64"
-                | "v128"
-                | "bool"
-                | "char"
-                | "()"
-                | "!"
-                | "Array"
-                | "[]"
-                | "Fn"
-        )
+        || PrimitiveType::is_primitive_name(head)
+        || matches!(head, "()" | "!" | "Array" | "[]" | "Fn")
 }
 
 /// A receiver name in the form a mangled name may embed, carrying the declaring
@@ -2579,6 +2597,16 @@ pub enum TypeHead {
     /// `Head<a,b>` like every other instantiated shape, which is what a
     /// `Builtin("[]")` carrying arguments would render as.
     Tuple,
+    /// An associated type of another name (`T::Base`), answering a type once
+    /// the base is concrete.
+    Projection {
+        base: Box<FqTypeName>,
+        assoc: String,
+        /// The trait declaring `assoc`, part of the identity: two traits
+        /// declaring one name on a type bind it to different types
+        /// (WEP-2026-08-12).
+        owning_trait: DeclaredHead,
+    },
 }
 
 impl TypeHead {
@@ -2603,13 +2631,15 @@ impl TypeHead {
             Self::Shape { name, .. }
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
-            | Self::Binder { name, .. } => name,
+            | Self::Binder { name, .. }
+            | Self::Projection { assoc: name, .. } => name,
             Self::Tuple => TUPLE_TYPE_NAME,
         }
     }
 
     /// The spelling a mangle embeds — the head alone. What a binder's owner and
-    /// a bucket's module add to it, [`FqTypeName::to_mangled`] adds.
+    /// a bucket's module add to it, [`FqTypeName::to_mangled`] adds, as it adds
+    /// a projection's base.
     #[must_use]
     pub fn rendered(&self) -> &str {
         match self {
@@ -2617,7 +2647,8 @@ impl TypeHead {
             Self::Shape { name, .. }
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
-            | Self::Binder { name, .. } => name,
+            | Self::Binder { name, .. }
+            | Self::Projection { assoc: name, .. } => name,
             Self::Tuple => TUPLE_TYPE_NAME,
         }
     }
@@ -2632,6 +2663,7 @@ impl TypeHead {
             | Self::ParamBucket { .. }
             | Self::Builtin(_)
             | Self::Binder { .. }
+            | Self::Projection { .. }
             | Self::Tuple => None,
         }
     }
@@ -2642,7 +2674,7 @@ impl TypeHead {
         match self {
             Self::Declared(head) => Some(head.module()),
             Self::Shape { module, .. } | Self::ParamBucket { module, .. } => Some(module),
-            Self::Builtin(_) | Self::Binder { .. } | Self::Tuple => None,
+            Self::Builtin(_) | Self::Binder { .. } | Self::Projection { .. } | Self::Tuple => None,
         }
     }
 }
@@ -2713,6 +2745,17 @@ impl FqTypeName {
         Self::of_head_kind(TypeHead::ParamBucket {
             module: module.clone(),
             name: name.to_string(),
+        })
+    }
+
+    /// The associated type `assoc` of `base`, as `owning_trait` declares it
+    /// (`T::Base`).
+    #[must_use]
+    pub fn projection(base: FqTypeName, assoc: &str, defs: &DefTable, owning_trait: DefId) -> Self {
+        Self::of_head_kind(TypeHead::Projection {
+            base: Box::new(base),
+            assoc: assoc.to_string(),
+            owning_trait: DeclaredHead::new(defs, owning_trait),
         })
     }
 
@@ -2808,8 +2851,35 @@ impl FqTypeName {
     /// name in some template's own parameter space rather than a type.
     #[must_use]
     pub fn mentions_binder(&self) -> bool {
-        matches!(self.head, TypeHead::Binder { .. })
-            || self.args.iter().any(FqTypeName::mentions_binder)
+        let head_mentions = match &self.head {
+            TypeHead::Binder { .. } => true,
+            TypeHead::Projection { base, .. } => base.mentions_binder(),
+            _ => false,
+        };
+        head_mentions || self.args.iter().any(FqTypeName::mentions_binder)
+    }
+
+    /// The base, associated-type name, and declaring trait this projects off,
+    /// `None` for any other shape.
+    #[must_use]
+    pub fn projected(&self) -> Option<(&FqTypeName, &str, DefId)> {
+        match &self.head {
+            TypeHead::Projection {
+                base,
+                assoc,
+                owning_trait,
+            } => Some((base, assoc, owning_trait.def())),
+            _ => None,
+        }
+    }
+
+    /// The binder this name is, `None` for a name that is not one.
+    #[must_use]
+    pub fn binder_name(&self) -> Option<&str> {
+        match &self.head {
+            TypeHead::Binder { name, .. } => Some(name),
+            _ => None,
+        }
     }
 
     /// The mangled spelling embedded in a mangled method name.
@@ -2839,6 +2909,16 @@ impl FqTypeName {
                 Some(owner) => out.push_str(&format!("{name}#{}", owner.rendered())),
                 None => out.push_str(name),
             },
+            TypeHead::Projection {
+                base,
+                assoc,
+                owning_trait,
+            } => out.push_str(&format!(
+                "{}::{assoc}#{}/{}",
+                base.to_mangled(),
+                owning_trait.module(),
+                owning_trait.rendered()
+            )),
             TypeHead::Tuple => unreachable!("handled above"),
         }
         if !self.args.is_empty() {
@@ -2866,24 +2946,63 @@ impl FqTypeName {
         // A reference's pointee substitutes on its own: `&T` is `T` under a
         // prefix, and `old` naming the pointee must reach it however many
         // prefixes stand in front.
-        if let Some((outer, inner)) = self.reference.split_first() {
-            let pointee = FqTypeName {
-                reference: inner.to_vec(),
-                head: self.head.clone(),
-                args: self.args.clone(),
-            };
-            return pointee.substitute(old, new).with_reference(*outer);
+        if let Some((outer, pointee)) = self.split_reference() {
+            return pointee.substitute(old, new).with_reference(outer);
         }
-        FqTypeName {
-            reference: Vec::new(),
-            head: self.head.clone(),
-            args: self.args.iter().map(|a| a.substitute(old, new)).collect(),
+        self.descend(&|inner| inner.substitute(old, new))
+    }
+
+    /// This name with `at` applied at every position a type stands in, a
+    /// position it answers for replaced whole.
+    #[must_use]
+    pub fn rewrite(&self, at: &impl Fn(&FqTypeName) -> Option<FqTypeName>) -> FqTypeName {
+        if let Some((outer, pointee)) = self.split_reference() {
+            return pointee.rewrite(at).with_reference(outer);
+        }
+        match at(self) {
+            Some(replacement) => replacement,
+            None => self.descend(&|inner| inner.rewrite(at)),
         }
     }
 
-    ///
-    /// Modules dropped from the head and,
-    /// recursively, from every type argument. Diagnostics only.
+    /// The outermost `&` prefix and what it points at, `None` for a name
+    /// carrying no prefix.
+    fn split_reference(&self) -> Option<(RefKind, FqTypeName)> {
+        let (outer, inner) = self.reference.split_first()?;
+        Some((
+            *outer,
+            FqTypeName {
+                reference: inner.to_vec(),
+                head: self.head.clone(),
+                args: self.args.clone(),
+            },
+        ))
+    }
+
+    /// This name rebuilt with `at` applied to each name it holds: its type
+    /// arguments and a projection's base, never the head's own spelling.
+    fn descend(&self, at: &impl Fn(&FqTypeName) -> FqTypeName) -> FqTypeName {
+        let head = match &self.head {
+            TypeHead::Projection {
+                base,
+                assoc,
+                owning_trait,
+            } => TypeHead::Projection {
+                base: Box::new(at(base)),
+                assoc: assoc.clone(),
+                owning_trait: owning_trait.clone(),
+            },
+            head => head.clone(),
+        };
+        FqTypeName {
+            reference: Vec::new(),
+            head,
+            args: self.args.iter().map(at).collect(),
+        }
+    }
+
+    /// The spelling a diagnostic prints: modules dropped from the head and,
+    /// recursively, from every type argument.
     #[must_use]
     pub fn to_display(&self) -> String {
         let mut out = String::new();
@@ -2895,7 +3014,11 @@ impl FqTypeName {
             out.push_str(&mangle_tuple_type(&args));
             return out;
         }
-        out.push_str(self.head.name());
+        if let TypeHead::Projection { base, assoc, .. } = &self.head {
+            out.push_str(&format!("{}::{assoc}", base.to_display()));
+        } else {
+            out.push_str(self.head.name());
+        }
         if !args.is_empty() {
             out.push('<');
             out.push_str(&args.join(","));

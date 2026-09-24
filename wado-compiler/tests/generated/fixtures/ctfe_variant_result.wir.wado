@@ -81,6 +81,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:ctfe_variant_result.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(115, 113, 117, 97, 114, 101, 32);
 global global:ctfe_variant_result.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(99, 105, 114, 99, 108, 101, 32);
+global global:ctfe_variant_result.wado::$const_obj_3: ref null "ctfe_variant_result.wado//Shape" = struct.new "ctfe_variant_result.wado//Shape::Circle" { discriminant: 0, payload_0: 27 };
 
 fn "ctfe_variant_result.wado/run"() with Stdout {
     let s: ref "ctfe_variant_result.wado//Shape";
@@ -100,7 +101,7 @@ fn "ctfe_variant_result.wado/run"() with Stdout {
     let packed_64: i64;
     let rx_65: i32;
     let tx_66: i32;
-    s = black_box(struct.new "ctfe_variant_result.wado//Shape::Circle" { discriminant: 0, payload_0: 27 });
+    s = black_box(global:ctfe_variant_result.wado::$const_obj_3);
     if ref.test "ctfe_variant_result.wado//Shape::Circle"(s) {
         r = ref.cast "ctfe_variant_result.wado//Shape::Circle"(s).payload_0;
         $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
@@ -220,19 +221,20 @@ fn "core:rt/write_string_to_stream$spec0"(tx, $mv$message$repr, $mv$message$used
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -295,7 +297,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l25;

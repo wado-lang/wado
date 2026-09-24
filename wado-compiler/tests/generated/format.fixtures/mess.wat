@@ -40,16 +40,18 @@
                     (i32.const 1))))))
           (else
             (local.get 3))))
+      (@metadata.code.branch_hint "\00")
       (if ;; label = @1
         (i32.lt_s
           (memory.grow
             (i32.div_s
-              (i32.add
-                (local.get 4)
-                (i32.const 65535))
+              (i32.sub
+                (i32.add
+                  (local.get 4)
+                  (i32.const 65536))
+                (i32.const 1))
               (i32.const 65536)))
           (i32.const 0))
-        (@metadata.code.branch_hint "\00")
         (then
           (unreachable)))
     )
@@ -83,13 +85,13 @@
                 (i32.const 0)
                 (local.get 2))))
           (local.get 3)))
+      (@metadata.code.branch_hint "\00")
       (if ;; label = @1
         (i32.gt_s
           (local.get 5)
           (i32.mul
             (memory.size)
             (i32.const 65536)))
-        (@metadata.code.branch_hint "\00")
         (then
           (call $grow_memory
             (local.get 5))))

@@ -16,7 +16,7 @@ use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
 use crate::const_eval::{MAX_SEQ_ELEMENTS, Value};
 use crate::nir_value_graph::value_kind_to_const;
 use crate::niri::{CtfeBuiltin, CtfeBuiltinMap};
-use crate::tir::PrimitiveType;
+use crate::primitive::PrimitiveType;
 use crate::{compiler_trace, tir};
 
 /// Per-function heap-version tracker: every node that may write the heap bumps
@@ -57,24 +57,30 @@ impl HeapState {
     }
 
     /// The effective version a read of `root.field` sees: the max of every
-    /// generation that could have invalidated it. `root` is `None` when the
-    /// receiver is not a determinable bare `Local`, so per-slot / per-local
-    /// precision does not apply — only `field_global` and `default`.
+    /// generation that could have invalidated it. With no known `root`, that is
+    /// every generation that could have touched `field` under any root.
     fn version_of(&self, root: Option<u32>, field: u32, root_escaped: bool) -> HeapVersion {
         let mut v = self.default_version;
         if let Some(&fg) = self.field_global.get(&field) {
             v = v.max(fg);
         }
+        let Some(r) = root else {
+            v = v.max(self.escaped_version);
+            v = self.per_local.values().fold(v, |acc, &pl| acc.max(pl));
+            return self
+                .per_slot
+                .iter()
+                .filter(|((_, f), _)| *f == field)
+                .fold(v, |acc, (_, &ps)| acc.max(ps));
+        };
         if root_escaped {
             v = v.max(self.escaped_version);
         }
-        if let Some(r) = root {
-            if let Some(&pl) = self.per_local.get(&r) {
-                v = v.max(pl);
-            }
-            if let Some(&ps) = self.per_slot.get(&(r, field)) {
-                v = v.max(ps);
-            }
+        if let Some(&pl) = self.per_local.get(&r) {
+            v = v.max(pl);
+        }
+        if let Some(&ps) = self.per_slot.get(&(r, field)) {
+            v = v.max(ps);
         }
         v
     }
@@ -248,6 +254,7 @@ pub(crate) fn build_scoped(
     body: &mut Body,
     block: BlockId,
     skip: usize,
+    param_locals: &[u32],
     seed: &IndexMap<u32, ValueId>,
     aliased: &IndexSet<u32>,
     untrackable: &IndexSet<u32>,
@@ -262,6 +269,7 @@ pub(crate) fn build_scoped(
         body,
         block,
         skip,
+        param_locals,
         seed,
         aliased,
         untrackable,
@@ -296,6 +304,7 @@ pub(crate) fn walk_scoped(
     body: &Body,
     block: BlockId,
     skip: usize,
+    param_locals: &[u32],
     seed: &IndexMap<u32, ValueId>,
     aliased: &IndexSet<u32>,
     untrackable: &IndexSet<u32>,
@@ -307,6 +316,7 @@ pub(crate) fn walk_scoped(
 ) -> ScopedWalk {
     let pool = std::mem::take(scratch);
     let mut b = Builder::new(body, aliased, untrackable, mut_escaped, type_table, pool);
+    b.seed_params(param_locals);
     // The same per-call verdicts the whole-body build gets. Withholding them
     // does not merely forgo a forward: a call the walk cannot call pure bumps
     // every escaped local's heap version, and a field read of one then matches
@@ -316,7 +326,7 @@ pub(crate) fn walk_scoped(
     b.receiver_immutable_calls
         .clone_from(calls.receiver_immutable);
     b.ctfe_builtins.clone_from(calls.ctfe_builtins);
-    b.current_value.clone_from(seed);
+    b.current_value.extend(seed.iter().map(|(&l, &v)| (l, v)));
     // Seed the heap with the caller's version state at the call site so a
     // spliced field read carries the version a fresh whole-function build
     // would assign (a fresh `INITIAL` heap collapses distinct versions — e.g.
@@ -639,6 +649,16 @@ impl<'a> Builder<'a> {
                 return Some(v);
             }
         }
+        // The eager `&` / `|` / `^` over bools obey the identities too, but not
+        // the absorbing folds: the other side was evaluated, and may trap.
+        if let Some(identity) = op.bool_identity() {
+            if self.pool.kind(lhs).as_bool() == Some(identity) {
+                return Some(rhs);
+            }
+            if self.pool.kind(rhs).as_bool() == Some(identity) {
+                return Some(lhs);
+            }
+        }
         let lv = self.value_to_const(lhs, left, tt)?;
         let rv = self.value_to_const(rhs, right, tt)?;
         let result = const_eval::eval_binary(lv, op, rv)?;
@@ -788,14 +808,18 @@ impl<'a> Builder<'a> {
 
     /// The bare-`Local` root of a (possibly nested) field-access place, or
     /// `None` if the receiver is not rooted in a `Local` (a call result, an
-    /// index, a deref, …). `a.b.f` roots at `a`.
+    /// index, a deref, …). `a.b.f`, `(a as T).f` and `{ …; a }.f` root at `a`.
     fn receiver_root(&self, recv_expr: ExprId) -> Option<u32> {
         match &self.body.exprs[recv_expr].kind {
             ExprKind::Local { index, .. } => Some(*index),
-            ExprKind::FieldAccess { expr, .. } => {
+            ExprKind::FieldAccess { expr, .. } | ExprKind::Cast { expr, .. } => {
                 expr.as_expr().and_then(|e| self.receiver_root(e))
             }
-            _ => None,
+            _ => self
+                .body
+                .block_yield(recv_expr)
+                .and_then(Operand::as_expr)
+                .and_then(|e| self.receiver_root(e)),
         }
     }
 
@@ -1010,12 +1034,12 @@ impl<'a> Builder<'a> {
                     self.fresh_invalidations.clear();
                     let saved_cur = self.current_value.clone();
                     let rhs = self.walk_operand(right);
+                    // A local the rhs bound for the first time is as conditional
+                    // as one it rebound.
                     let changed: IndexSet<u32> = self
                         .current_value
                         .iter()
-                        .filter_map(|(&k, &v)| {
-                            saved_cur.get(&k).and_then(|s| (*s != v).then_some(k))
-                        })
+                        .filter_map(|(&k, &v)| (saved_cur.get(&k) != Some(&v)).then_some(k))
                         .collect();
                     for &k in &changed {
                         let opaque = self.pool.fresh_opaque();
@@ -2406,6 +2430,26 @@ mod tests {
             unreachable!("int_lit yields a pool value")
         };
         assert_eq!(body.values.type_of(v), Some(TypeTable::I32));
+    }
+
+    /// A read whose receiver has no known root may be any root's, so every
+    /// bump that could reach its field must move its version.
+    #[test]
+    fn unknown_root_read_sees_every_bump_of_its_field() {
+        let mut heap = HeapState::new();
+        let bumps: [fn(&mut HeapState); 3] = [
+            |h| h.bump_slot(3, 0),
+            |h| h.bump_local(5),
+            HeapState::bump_escaped,
+        ];
+        for bump in bumps {
+            let before = heap.version_of(None, 0, false);
+            bump(&mut heap);
+            assert_ne!(heap.version_of(None, 0, false), before);
+        }
+        let before = heap.version_of(None, 0, false);
+        heap.bump_slot(3, 1);
+        assert_eq!(heap.version_of(None, 0, false), before);
     }
 
     /// `f(); a + b`, where locals `a` (0) and `b` (1) are both mutably escaped:

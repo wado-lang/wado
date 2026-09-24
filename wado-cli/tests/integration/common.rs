@@ -47,6 +47,33 @@ pub fn runtime() -> tokio::runtime::Runtime {
         .unwrap()
 }
 
+/// A one-schema Kiln project under `root`: `generator` turns `src/schema.bin`
+/// into a `hello()` that `src/main.wado` prints.
+pub fn write_kiln_project(root: &Path, package: &str, generator: &str, schema: &[u8]) {
+    std::fs::write(
+        root.join("wado.toml"),
+        format!(
+            "[package]\nname = \"{package}\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n"
+        ),
+    )
+    .unwrap();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::write(root.join("src/gen.wado"), generator).unwrap();
+    std::fs::write(root.join("src/schema.bin"), schema).unwrap();
+    std::fs::write(
+        root.join("src/main.wado"),
+        r#"use { println, Stdout } from "core:cli";
+use { hello } from "./schema.bin"
+    with { generator: { module: "./gen.wado" } };
+
+export fn run() with Stdout {
+    println(`${hello()}`);
+}
+"#,
+    )
+    .unwrap();
+}
+
 /// The custom sections `(name, payload)` of a compiled component at `wasm_path`.
 pub fn custom_sections(wasm_path: &Path) -> Vec<(String, Vec<u8>)> {
     let bytes = std::fs::read(wasm_path).unwrap();
