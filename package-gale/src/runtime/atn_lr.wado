@@ -8,6 +8,7 @@ use {
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
 } from "./atn.wado";
+use { atn_predict_with_stack } from "./atn_predict.wado";
 
 pub fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
     let mut out = sim;
@@ -21,8 +22,34 @@ pub fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
     if out.tr_kind.contains(&ATN_TR_PRECEDENCE) {
         atn_compute_first_nullable(&mut out);
         atn_compute_state_cont(&mut out);
+        atn_compute_collapse(&mut out);
     }
     return out;
+}
+
+fn atn_compute_collapse(sim: &mut AtnSim) {
+    let nstates = sim.state_kind.len();
+    for let mut st = 0; st < nstates; st += 1 {
+        sim.state_collapse_to.push(atn_lr_entry_reached(sim, st));
+    }
+}
+
+fn atn_lr_entry_reached(sim: &AtnSim, from: i32) -> i32 {
+    let mut st = from;
+    for let mut steps = 0; steps < 8; steps += 1 {
+        let s = sim.state_tr_start[st];
+        let c = sim.state_tr_count[st];
+        for let mut j = 0; j < c; j += 1 {
+            if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE {
+                return if steps > 0 { st } else { -1 };
+            }
+        }
+        if c != 1 || sim.tr_kind[s] != ATN_TR_EPSILON {
+            return -1;
+        }
+        st = sim.tr_target[s];
+    }
+    return -1;
 }
 
 fn atn_compute_state_cont(sim: &mut AtnSim) {
@@ -198,21 +225,20 @@ pub fn atn_lr_loop_decision(
     let s = sim.state_tr_start[dstate];
     let c = sim.state_tr_count[dstate];
     let exit_alt = c - 1;
-    if atn_caller_mandates(sim, rule_stack, t, eof) {
-        return exit_alt;
-    }
+    let mut enter = -1;
     for let mut j = 0; j < c; j += 1 {
-        if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE {
-            if sim.tr_prec[s + j] < min_prec {
-                continue;
-            }
-            let tgt = sim.tr_target[s + j];
-            if atn_state_cont_admits(sim, tgt, t, eof) {
-                return j;
-            }
+        if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE && sim.tr_prec[s + j] >= min_prec && atn_state_cont_admits(sim, sim.tr_target[s + j], t, eof) {
+            enter = j;
+            break;
         }
     }
-    return exit_alt;
+    if enter < 0 {
+        return exit_alt;
+    }
+    if !atn_caller_mandates(sim, rule_stack, t, eof) {
+        return enter;
+    }
+    return atn_predict_with_stack(sim, decision, rule_stack, tokens, pos, eof, min_prec);
 }
 
 fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -> bool {

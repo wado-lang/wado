@@ -1,7 +1,5 @@
 #![generated(by = "gale", sources = ["tests/antlr4-compat/grammars/LeftRecursion/JavaExpressions_2.g4"])]
 
-use { TreeMap } from "core:collections";
-
 pub struct Span {
     pub start: i32,
     pub end: i32,
@@ -972,6 +970,7 @@ pub struct AtnSim {
     pub cont_first_label: List<i32> = [],
     pub cont_neg_label: List<i32> = [],
     pub state_cont_first_open: List<bool> = [],
+    pub state_collapse_to: List<i32> = [],
 }
 
 fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
@@ -1083,10 +1082,66 @@ global CTX_BOUNDARY: i32 = -3;
 
 global CTX_EMPTY: i32 = 0;
 
+struct AtnKeyMap {
+    keys: List<i64>,
+    vals: List<i32>,
+    len: i32,
+}
+
+impl AtnKeyMap {
+    fn new() -> AtnKeyMap {
+        return AtnKeyMap::with_slots(64);
+    }
+
+    fn with_slots(slots: i32) -> AtnKeyMap {
+        assert slots & slots - 1 == 0, "slot count is a power of two";
+        let mut keys: List<i64> = List::with_capacity(slots);
+        let mut vals: List<i32> = List::with_capacity(slots);
+        for let mut i = 0; i < slots; i += 1 {
+            keys.push(-1);
+            vals.push(-1);
+        }
+        return AtnKeyMap { keys, vals, len: 0 };
+    }
+
+    fn slot_of(&self, k: i64) -> i32 {
+        assert k >= 0, "keys are non-negative";
+        let mask = self.keys.len() - 1;
+        let mut i = ((k ^ k >> 29) * 0x5851F42D4C957F2D >> 32) as i32 & mask;
+        while self.keys[i] >= 0 && self.keys[i] != k {
+            i = i + 1 & mask;
+        }
+        return i;
+    }
+
+    fn get(&self, k: i64) -> i32 {
+        return self.vals[self.slot_of(k)];
+    }
+
+    fn set(&mut self, k: i64, v: i32) {
+        if (self.len + 1) * 2 > self.keys.len() {
+            let mut grown = AtnKeyMap::with_slots(self.keys.len() * 2);
+            for let mut i = 0; i < self.keys.len(); i += 1 {
+                if self.keys[i] >= 0 {
+                    grown.set(self.keys[i], self.vals[i]);
+                }
+            }
+            *self = grown;
+        }
+        let i = self.slot_of(k);
+        if self.keys[i] < 0 {
+            self.keys[i] = k;
+            self.len += 1;
+        }
+        self.vals[i] = v;
+    }
+}
+
 struct CtxArena {
     edges: List<List<[i32, i32, i32]>>,
-    intern: TreeMap<i64, List<i32>>,
-    merge_cache: TreeMap<i64, i32>,
+    intern_head: AtnKeyMap,
+    intern_next: List<i32>,
+    merge_cache: AtnKeyMap,
 }
 
 struct AtnConfig {
@@ -1102,8 +1157,9 @@ impl CtxArena {
         let empty: List<[i32, i32, i32]> = [];
         return CtxArena {
             edges: [empty],
-            intern: TreeMap::<i64, List<i32>>::new(),
-            merge_cache: TreeMap::<i64, i32>::new(),
+            intern_head: AtnKeyMap::new(),
+            intern_next: [-1],
+            merge_cache: AtnKeyMap::new(),
         };
     }
 
@@ -1122,22 +1178,18 @@ impl CtxArena {
             return CTX_EMPTY;
         }
         let h = CtxArena::hash_of(sorted);
-        if let Some(cands) = self.intern.get(h) {
-            for let id of &cands {
-                if edge_lists_eq(&self.edges[*id], sorted) {
-                    return *id;
-                }
+        let head = self.intern_head.get(h);
+        let mut cand = head;
+        while cand >= 0 {
+            if edge_lists_eq(&self.edges[cand], sorted) {
+                return cand;
             }
+            cand = self.intern_next[cand];
         }
         let id = self.edges.len();
         self.edges.push(*sorted);
-        let mut cands = if let Some(c) = self.intern.get(h) {
-            c;
-        } else {
-            [] as List<i32>;
-        };
-        cands.push(id);
-        self.intern[h] = cands;
+        self.intern_next.push(head);
+        self.intern_head.set(h, id);
         return id;
     }
 
@@ -1165,8 +1217,9 @@ impl CtxArena {
         let hi = if a < b { b } else { a };
         assert ATN_MERGE_CACHE_STRIDE > ATN_ARENA_CAP as i64, "the merge-cache stride must exceed the arena cap, or two arena id pairs alias onto one key";
         let ck = lo as i64 * ATN_MERGE_CACHE_STRIDE + hi as i64;
-        if let Some(id) = self.merge_cache.get(ck) {
-            return id;
+        let cached = self.merge_cache.get(ck);
+        if cached >= 0 {
+            return cached;
         }
         let ea = self.edges_view(a);
         let eb = self.edges_view(b);
@@ -1196,7 +1249,7 @@ impl CtxArena {
         }
         sort_ctx_edges(&mut merged);
         let id = self.intern_edges(&merged);
-        self.merge_cache[ck] = id;
+        self.merge_cache.set(ck, id);
         return id;
     }
 }
@@ -1251,7 +1304,7 @@ struct CfgSet {
     rs: List<i32>,
     pr: List<i32>,
     pctx: List<i32>,
-    index: TreeMap<i64, i32>,
+    index: AtnKeyMap,
 }
 
 impl CfgSet {
@@ -1262,7 +1315,7 @@ impl CfgSet {
             rs: [],
             pr: [],
             pctx: [],
-            index: TreeMap::<i64, i32>::new(),
+            index: AtnKeyMap::new(),
         };
     }
 
@@ -1272,11 +1325,12 @@ impl CfgSet {
         assert rs + 2 < CFG_KEY_RS_SLOT, `ATN config caller-stack depth ${rs} exceeds packed-key slot`;
         assert state + 2 < CFG_KEY_STATE_SLOT, `ATN config state ${state} exceeds packed-key slot`;
         let k = (((state + 2) as i64 * CFG_KEY_RS_SLOT as i64 + (rs + 2) as i64) * CFG_KEY_ALT_SLOT as i64 + (alt + 1) as i64) * CFG_KEY_PR_SLOT as i64 + (pr + 2) as i64;
-        if let Some(i) = self.index.get(k) {
-            let merged = arena.merge(self.pctx[i], pctx);
-            let changed = merged != self.pctx[i];
-            self.pctx[i] = merged;
-            return [i, changed];
+        let found = self.index.get(k);
+        if found >= 0 {
+            let merged = arena.merge(self.pctx[found], pctx);
+            let changed = merged != self.pctx[found];
+            self.pctx[found] = merged;
+            return [found, changed];
         }
         let i = self.state.len();
         self.state.push(state);
@@ -1284,7 +1338,7 @@ impl CfgSet {
         self.rs.push(rs);
         self.pr.push(pr);
         self.pctx.push(pctx);
-        self.index[k] = i;
+        self.index.set(k, i);
         return [i, true];
     }
 
@@ -1350,25 +1404,67 @@ fn atn_expand(
         rset.add(arena, cur.state, cur.alt, cur.rs, cur.pr, cur.pctx);
         return;
     }
+    let pctx = atn_collapse_into_caller_loop(sim, arena, cur, rstk, work);
+    if pctx < 0 {
+        return;
+    }
     let start = sim.state_tr_start[cur.state];
     let cnt = sim.state_tr_count[cur.state];
     for let mut j = 0; j < cnt; j += 1 {
         let k = sim.tr_kind[start + j];
         let target = sim.tr_target[start + j];
         if k == ATN_TR_EPSILON {
-            work.push(AtnConfig { state: target, alt: cur.alt, pctx: cur.pctx, rs: cur.rs, pr: cur.pr });
+            work.push(AtnConfig { state: target, alt: cur.alt, pctx, rs: cur.rs, pr: cur.pr });
         } else if k == ATN_TR_PRECEDENCE {
             if sim.tr_prec[start + j] >= cur.pr {
-                work.push(AtnConfig { state: target, alt: cur.alt, pctx: cur.pctx, rs: cur.rs, pr: cur.pr });
+                work.push(AtnConfig { state: target, alt: cur.alt, pctx, rs: cur.rs, pr: cur.pr });
             }
         } else if k == ATN_TR_RULE {
             if target < 0 || arena.edges.len() >= ATN_ARENA_CAP {
                 continue;
             }
-            let npctx = arena.push(sim.tr_follow[start + j], cur.pr, cur.pctx);
+            let npctx = arena.push(sim.tr_follow[start + j], cur.pr, pctx);
             work.push(AtnConfig { state: target, alt: cur.alt, pctx: npctx, rs: cur.rs, pr: sim.tr_prec[start + j] });
         }
     }
+}
+
+fn atn_collapse_into_caller_loop(
+    sim: &AtnSim,
+    arena: &mut CtxArena,
+    cur: &AtnConfig,
+    rstk: &List<i32>,
+    work: &mut List<AtnConfig>,
+) -> i32 {
+    if sim.state_collapse_to.is_empty() {
+        return cur.pctx;
+    }
+    if cur.pctx == CTX_EMPTY {
+        if cur.rs >= 0 && rstk[cur.rs] >= 0 && sim.state_collapse_to[rstk[cur.rs]] == cur.state {
+            work.push(AtnConfig { state: cur.state, alt: cur.alt, pctx: CTX_EMPTY, rs: cur.rs - 1, pr: cur.pr });
+            return -1;
+        }
+        return cur.pctx;
+    }
+    let edges = arena.edges[cur.pctx];
+    let mut kept: List<[i32, i32, i32]> = [];
+    for let e of &edges {
+        if e.0 >= 0 && sim.state_collapse_to[e.0] == cur.state && cur.pr >= e.1 {
+            work.push(AtnConfig { state: cur.state, alt: cur.alt, pctx: e.2, rs: cur.rs, pr: e.1 });
+        } else {
+            kept.push(*e);
+        }
+    }
+    if kept.len() == edges.len() {
+        return cur.pctx;
+    }
+    if kept.is_empty() {
+        return -1;
+    }
+    if kept.len() == 1 && kept[0].0 == CTX_BOUNDARY {
+        return CTX_EMPTY;
+    }
+    return arena.intern_edges(&kept);
 }
 
 fn atn_pop(
@@ -1478,6 +1574,38 @@ fn atn_min_alt(alts: &List<i32>) -> i32 {
     return m;
 }
 
+fn atn_single_viable_alt(configs: &List<AtnConfig>) -> i32 {
+    let mut heads = AtnKeyMap::new();
+    let mut ctx: List<i32> = [];
+    let mut min_alt: List<i32> = [];
+    let mut next: List<i32> = [];
+    for let c of configs {
+        let k = ((c.state + 2) as i64 * CFG_KEY_RS_SLOT as i64 + (c.rs + 2) as i64) * CFG_KEY_PR_SLOT as i64 + (c.pr + 2) as i64;
+        let head = heads.get(k);
+        let mut g = head;
+        while g >= 0 && ctx[g] != c.pctx {
+            g = next[g];
+        }
+        if g >= 0 {
+            if c.alt < min_alt[g] {
+                min_alt[g] = c.alt;
+            }
+        } else {
+            heads.set(k, ctx.len());
+            ctx.push(c.pctx);
+            min_alt.push(c.alt);
+            next.push(head);
+        }
+    }
+    let single = min_alt[0];
+    for let a of &min_alt {
+        if *a != single {
+            return -1;
+        }
+    }
+    return single;
+}
+
 fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
     if configs.is_empty() {
         return false;
@@ -1533,6 +1661,10 @@ pub fn atn_predict_with_stack(
         }
         if alts.len() == 1 {
             return alts[0];
+        }
+        let single = atn_single_viable_alt(&configs);
+        if single >= 0 {
+            return single;
         }
         if atn_all_at_end(sim, &configs) {
             return atn_min_alt(&alts);

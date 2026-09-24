@@ -15,26 +15,30 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
-fn assert_parses<S: AsStrSlice>(input: S) {
-    let result = g::parse(input);
-    assert result.ok(), `parse failed for ${input}: ${g::to_string_tree(&result)}`;
-}
-
-// The canonical case: between's mandatory `'and'` must survive the binary
-// `and`-loop. Only the tree is `#[TODO]` — ANTLR4 lets the middle operand take
-// the first `and` since a second is left for between itself, while Gale yields
-// it. Here the competing alternative is an *atom* (`'between' expr 'and' expr`,
-// no leading self-reference), so the continuation gate that closed
-// `lr_mid_operand.g4` does not reach it. Acceptance is asserted outside the
-// `#[TODO]`, so a regression from "wrong tree" to "rejected" fails instead of
-// staying a pending todo.
-test "between with trailing and parses" {
-    assert_parses("between X1 and X2 and X3 ;");
-}
-
-#[TODO]
+// between's mandatory `'and'` must survive the binary `and`-loop: the middle
+// operand takes an `and` exactly while another is left for between itself.
 test "between with trailing and brackets the middle operand as ANTLR4 does" {
     assert_tree("between X1 and X2 and X3 ;", "(stat (expr between (expr (expr X1) and (expr X2)) and (expr X3)) ;)");
+    assert_tree(
+        "between a and b and c and d ;",
+        "(stat (expr between (expr (expr (expr a) and (expr b)) and (expr c)) and (expr d)) ;)",
+    );
+}
+
+// The climb that must stop sits in a nested operand, below a looser `or`.
+test "a nested operand leaves between its and" {
+    assert_tree(
+        "between a or b and c and d ;",
+        "(stat (expr between (expr (expr a) or (expr (expr b) and (expr c))) and (expr d)) ;)",
+    );
+    assert_tree(
+        "between a and b or c and d ;",
+        "(stat (expr between (expr (expr (expr a) and (expr b)) or (expr c)) and (expr d)) ;)",
+    );
+    assert_tree(
+        "between between a and b and c and d ;",
+        "(stat (expr between (expr between (expr (expr a) and (expr b)) and (expr c)) and (expr d)) ;)",
+    );
 }
 
 // Plain binary chains still parse.

@@ -383,7 +383,7 @@ fn build_lr_body(
         if alt.elements.len() <= 1 {
             continue;
         }
-        let suffix_seg = build_lr_suffix(b, alt, a, &rule.name, &lr_first, r, rule_index);
+        let suffix_seg = build_lr_suffix(b, alt, a, &rule.name, &lr_first, r, rule_index, lr.atn_class);
         b.add_trans(entry, AtnTransition { kind: ATN_TR_PRECEDENCE, target: suffix_seg.0, prec: a.own_prec });
         b.add_eps(suffix_seg.1, back);
     }
@@ -404,10 +404,18 @@ fn build_lr_suffix<S: AsStrSlice>(
     lr_first: &List<String>,
     r: i32,
     rule_index: &TreeMap<String, i32>,
+    atn_class: bool,
 ) -> [i32, i32] {
     let entry = b.new_state(ATN_BASIC, r);
     let mut cursor = entry;
     for let mut i = 1; i < alt.elements.len(); i += 1 {
+        let mid_operand = atn_class && i + 1 < alt.elements.len() && element_is_self_ref(&alt.elements[i], rule_name);
+        if mid_operand {
+            let seg = self_ref_segment(b, r, 0, self_ref_call_site(&alt.elements[i]));
+            b.add_eps(cursor, seg.0);
+            cursor = seg.1;
+            continue;
+        }
         // Whether an LR operator can follow this element in the rest of the
         // suffix. The LR loop can re-enter on an operator after the suffix,
         // so the suffix tail conservatively carries one (`tail_has = true`).
