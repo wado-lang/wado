@@ -893,7 +893,7 @@ fn check_lexer_calls_resolve(lexer_rules: &List<LexerRule>, routes: &List<LexerR
         }
         for let name of &called {
             let target = lexer_rules.iter_ref().position(|r| r.name == *name);
-            if !(target matches { Some(t) && routes[t].has_match_fn() }) {
+            if !target matches { Some(t) && routes[t].has_match_fn() } {
                 panic(
                     `lexer rule '${caller.name}' calls ${lexer_try_fn_name(name)}, but '${*name}' has no matcher`,
                 );
@@ -3834,11 +3834,11 @@ fn keyword_elem_ends(
     let len = kw.text.len();
     match elem {
         Literal(s) => {
-            let sets: List<LeadingChars> = s.chars().map(|c| folded_leading_chars(&[CharRange { start: c, end: c }], ci))
-                .collect();
+            let sets: List<LeadingChars> = s.chars().map(
+                |c| LeadingChars { ranges: folded_ranges(c, c, ci), negated: false, nullable: false },
+            ).collect();
             return starts.iter_ref().filter(
-                |p| *p + sets.len() <= len
-                    && (0..<sets.len()).all(|i| keyword_chars_in(kw, *p + i, &sets[i], reading)),
+                |p| *p + sets.len() <= len && (0..<sets.len()).all(|i| keyword_chars_in(kw, *p + i, &sets[i], reading)),
             ).map(|p| *p + sets.len()).collect();
         },
         RuleRef(name) => {
@@ -3892,37 +3892,15 @@ fn keyword_elem_ends(
                 frontier = fresh;
             }
         },
-        AnyChar => {
-            return starts.iter_ref().filter(|p| *p < len).map(|p| *p + 1).collect();
-        },
-        CharRange(_) | CharClass(_) | Not(_) => {
-            let set = match elem {
-                CharRange(pair) => folded_leading_chars(&[CharRange { start: pair.0, end: pair.1 }], ci),
-                CharClass(cc) && !(cc.negated && ci) => LeadingChars {
-                    ..folded_leading_chars(&cc.ranges, ci),
-                    negated: cc.negated,
-                },
-                _ => {
-                    let mut no_refs: List<String> = [];
-                    let Some(set) = lexer_elem_leading_chars(elem, all_rules, ci, false, &mut no_refs) else {
-                        return unread_keyword_ends(kw, reading, starts);
-                    };
-                    set
-                },
+        CharRange(_) | CharClass(_) | AnyChar | Not(_) => {
+            let mut no_refs: List<String> = [];
+            let Some(set) = lexer_elem_leading_chars(elem, all_rules, ci, false, &mut no_refs) else {
+                return unread_keyword_ends(kw, reading, starts);
             };
             return starts.iter_ref().filter(|p| *p < len && keyword_chars_in(kw, *p, &set, reading)).map(|p| *p + 1).collect(
             );
         },
     }
-}
-
-/// `ranges` widened by `folded_class`, as a leading set.
-fn folded_leading_chars(ranges: &List<CharRange>, ci: bool) -> LeadingChars {
-    let mut folded: List<[i32, i32]> = [];
-    for let r of ranges {
-        folded.extend(&folded_ranges(r.start, r.end, ci));
-    }
-    return LeadingChars { ranges: folded, negated: false, nullable: false };
 }
 
 fn add_keyword_ends(out: &mut List<i32>, ends: &List<i32>) {

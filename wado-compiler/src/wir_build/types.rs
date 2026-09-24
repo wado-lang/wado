@@ -895,8 +895,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
         {
             let type_table = &*ctx.package.type_table.borrow();
             for (mangled, module_source, cases) in substituted {
-                // A payload not yet registered waits for a later pass. A `fn`
-                // payload's abstract structref is its real representation.
+                // A payload not yet registered waits for a later pass.
                 let cases: Option<Vec<(String, Vec<WirType>)>> = cases
                     .into_iter()
                     .map(|(name, payload)| {
