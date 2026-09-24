@@ -553,6 +553,10 @@ own shapes:
   under the inline budget: flat, and the WIR shows it still not inlined.
   `.claude/skills/wado-performance/dead-ends.md` has the numbers. Deleting the
   call's _caller_ is what paid.
+- **The simulator at a hot LR loop entry** (2026-07). Routing SQLite's
+  `expr NOT? BETWEEN expr AND expr` mid operand to the simulator took
+  `SELECT … BETWEEN 1 AND 10 AND y = 2` over 40 statements from 41 ms to 2.3 s
+  on the dev profile. That shape is decided on the scan instead (`lr_cont`).
 
 ## Correctness items with a performance flavor
 
@@ -563,48 +567,23 @@ path. Full context in `TODO.md` ("Soundness and compatibility divergence") and
 `antlr4-compatibility.md` (prediction design, soundness invariants).
 
 **A memoised ATN / lookahead DFA is a last resort.** It was the named lever for
-the two entries below before each closed on the compiled scan instead. It is
+an LR mid operand and for the ambiguous `rule?` below before each closed on the
+compiled scan instead. It is
 unmeasured in Gale, but ANTLR4's lookahead DFA _is_ that cache and still parses
 this grammar and input at 216.991 ms/iter against Gale's 2.535
 (`benchmark/README.md`). Reach for the scan and the runtime FOLLOW gate first.
 
-- **LR operator-precedence chain** (`DropLoopEntryBranchInLRRule_4`):
-  `scan_expr_lr_*` sees `and X` match and commits where ANTLR4 resolves the
-  precedence via full-context prediction at the LR loop entry. The mid-operand
-  half (`expr BETWEEN expr AND expr` against `expr AND expr`) is **closed on the
-  scan, not the simulator (2026-07)**: an LR self-reference that competes with
-  its own alternative's later delimiter drops to `min_prec = 0` and carries the
-  suffix continuation as a mask, so each loop entry scans the operator's suffix
-  and then checks the continuation still stands. The simulator answer had been
-  priced out for the static half — on the dev profile over 40 statements it took
-  `SELECT … BETWEEN 1 AND 10 AND y = 2` from 41 ms to 2.3 s. A rule already
-  routed to the simulator now decides its loop entry with full context whenever
-  the caller can continue with the lookahead token too. That closed
-  `lr_atn_mid_operand.g4` and `lr_between.g4` (2026-09), and this descriptor
-  shows the price. The ambiguity is real, so each such decision looks ahead to
-  EOF. Over 15 lines it asked 214 of them. 132 came from three passes over the
-  same positions: `stat`'s tournament scans `expr` once per alternative, and the
-  parse then decides again. The other 82 followed an exit, after which each
-  enclosing loop decided the same position again.
-
-  | at `-O2`                              | 15 lines | 30 lines | predictions (15 lines) |
-  | ------------------------------------- | -------- | -------- | ---------------------- |
-  | before full context                   | ~40 µs   | —        | —                      |
-  | full context, caller stack kept apart | 0.79 s   | 6.3 s    | 214                    |
-  | caller stack in the context graph     | 0.18 s   | 0.74 s   | 214                    |
-  | verdicts recorded on `Parser.atn`     | 0.12 s   | 0.45 s   | 129                    |
-  | an exit answers the enclosing loops   | 0.11 s   | 0.38 s   | 92                     |
-
-  Configs that differed only in how deep the caller stack was used to stay
-  apart, and now they merge: about 12 a step instead of 86. The parse asks the
-  scan's questions again, and the recorded verdicts answer them. An exit also
-  answers for each enclosing loop the frame returns into, provided no operator
-  that the caller admits for the token was out of the callee's reach. What
-  remains is one prediction per position per tournament scan, each looking
-  ahead to EOF, so quadratic.
+- **A tournament asks the simulator once per alternative it scans**
+  (`DropLoopEntryBranchInLRRule_4`). Each loop-entry prediction there looks
+  ahead to EOF, since the ambiguity is real, and `stat`'s tournament scans
+  `expr` once for `';'` and once for `'.'`. At 15 lines that is 92 predictions
+  and 0.11 s at `-O2`, quadratic in the input. Deciding `stat` with the
+  simulator would ask each question once. The tournament's longest match and
+  ANTLR4's lowest alternative can disagree, though, so that is a routing
+  decision rather than a tuning one.
 - **`lr_between.g4` is ATN-class and may not need to be.** Its shared-delimiter
   competition sits in an _atom_ alternative (`'between' expr 'and' expr` — no leading
-  self-reference), so the continuation gate above does not reach it. The question it
+  self-reference), so the continuation gate (`lr_cont`) does not reach it. The question it
   asks is the same one, so the same gate may apply; if it does, the simulator comes
   out of grammars that embed it today. Untried.
 - **Ambiguous greedy `rule?` and non-greedy `*?` / `+?` min-match — closed on
