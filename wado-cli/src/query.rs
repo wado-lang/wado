@@ -112,7 +112,7 @@ impl Opt {
                 long: Some("symbol"),
                 short: None,
                 value: Some("<notation>"),
-                desc: "Locate by symbol notation (e.g. core:json#parse) instead of a position",
+                desc: "Locate by symbol notation (e.g. core:json#to_string) instead of a position",
             },
             Self::Base => args::OptSpec {
                 long: Some("base"),

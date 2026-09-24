@@ -157,11 +157,12 @@ count += 1;  // ✅ Correct
 
 ### 5. No Power Operator
 
-Wado does **not** have a `**` power operator. Use the `pow()` function instead.
+Wado does **not** have a `**` power operator. Use `f64::pow` or `f32::pow`
+instead.
 
 ```wado
-let result = x ** 2;      // ❌ Compile error
-let result = pow(x, 2);   // ✅ Correct
+let result = x ** 2.0;          // ❌ Compile error
+let result = f64::pow(x, 2.0);  // ✅ Correct
 ```
 
 **Rationale**:
@@ -185,14 +186,14 @@ a >= b >= c   // ✅ OK: a >= b AND b >= c
 a == b == c   // ✅ OK: a == b AND b == c
 ```
 
-**Invalid chains** (semantic error):
+**Invalid chains** (parse error):
 
 ```wado
-a < b > c     // ❌ Semantic error: mixed directions
-a > b < c     // ❌ Semantic error: mixed directions
-a < b >= c    // ❌ Semantic error: mixing < and >=
-a == b < c    // ❌ Semantic error: mixing == and inequality
-a != b != c   // ❌ Semantic error: != chaining not allowed
+a < b > c     // ❌ Parse error: mixed directions
+a > b < c     // ❌ Parse error: mixed directions
+a < b >= c    // ❌ Parse error: mixing < and >=
+a == b < c    // ❌ Parse error: mixing == and inequality
+a != b != c   // ❌ Parse error: != chaining not allowed
 ```
 
 **Chaining Rules**:
@@ -211,7 +212,7 @@ a != b != c   // ❌ Semantic error: != chaining not allowed
 4. **Reject ambiguous cases**: Mixed directions (`a < b > c`) are rarely intentional
 5. **`!=` is ambiguous**: The meaning of `a != b != c` is unclear (is it "a, b, c are all different" or "a != b AND b != c"?)
 
-**Implementation**: The parser allows comparison operators to be chained (left-associative). The semantic analyser validates:
+**Implementation**: The parser checks each operator as it extends a comparison chain, and rejects the first one that breaks either rule:
 
 - All operators in the chain are in the same "group" (ascending, descending, or equality)
 - `!=` is never chained
@@ -222,7 +223,7 @@ a != b != c   // ❌ Semantic error: != chaining not allowed
 
 1. **Fixes C's design mistake**: `flags & MASK == VALUE` works correctly without parentheses
 2. **Avoids undefined behavior**: No `++`/`--` operators
-3. **Clear and explicit**: `pow(x, y)` instead of ambiguous `**`
+3. **Clear and explicit**: `f64::pow(x, y)` instead of ambiguous `**`
 4. **Familiar to C/Java/Python developers**: `~` for bitwise NOT
 5. **Mathematical comparison chaining**: `0 <= x <= 100` reads as one range test, and is evaluated as one
 6. **Rejects ambiguous chains**: `a < b > c` and `a != b != c` are errors
@@ -235,7 +236,7 @@ a != b != c   // ❌ Semantic error: != chaining not allowed
    - **Mitigation**: Compiler error will catch this immediately
 2. **Diverges from Rust on comparison chaining**: Rust rejects all chaining, Wado allows valid chains
    - **Mitigation**: Well-documented feature; clearer than Rust's blanket rejection
-3. **Comparison chaining requires semantic analysis**: Parser accepts all chains, analyser validates
+3. **Comparison chaining complicates the parser**: it must track the chain's group while it parses one
    - **Mitigation**: Clear error messages guide developers to fix invalid chains
 4. **`!=` chaining is rejected**: Some developers might expect `a != b != c` to work
    - **Mitigation**: Error message suggests alternatives like `a != b && b != c` or "all different" checks

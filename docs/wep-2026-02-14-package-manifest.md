@@ -780,7 +780,7 @@ When no `wado.toml` exists, the compiler operates in single-file mode:
 
 ```wado
 use { Regexp } from "docs:regex@1.0.0";   // exact pin, default registry
-use { Router } from "lib:router" with { git = "https://github.com/user/router.git", ref = "v1.0" };
+use { Router } from "lib:router" with { git: "https://github.com/user/router.git", ref: "v1.0" };
 ```
 
 ### Path Dependencies to Single Files

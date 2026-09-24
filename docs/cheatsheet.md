@@ -43,7 +43,7 @@ Any file that is neither `.wado` nor a Wasm asset (`.wasm` / `.wat`) is imported
 ```wado
 use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
     generator: {
-        module: "wado-lang:gale@0.1",
+        module: "wado-lang:gale",
     },
 };
 ```
@@ -897,8 +897,8 @@ fn area(width: i32, height: i32) -> i32 {
 ```
 
 Always private, and shadows a same-named module-level item.
-`enum`/`variant`/`flags`, a local `impl`/`trait`, and a generic local `type`
-are not yet supported.
+Either may be generic. `enum`/`variant`/`flags` and a local `impl`/`trait` are
+not yet supported.
 
 ### Methods
 
@@ -1000,7 +1000,7 @@ concat::<[i32], [bool, String]>([1], [true, "x"]);
 // A pack on either side of a scalar: nothing settles the ends, so spell them.
 fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { ... }
 middle::<[i32], String, [bool]>([1, "mid", true]);   // 3
-// middle([1, "mid", true]);              // ERROR: cannot infer `Pre`, `Post`
+// middle([1, "mid", true]);              // ERROR: cannot infer `Pre`, `K`, `Post`
 
 // Value spread (works with any tuple, not just packs)
 let a = [1, "hello"];
@@ -1461,7 +1461,7 @@ fn main() {
 
 `resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
 
-An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects, parameter defaults or type parameters); see [the spec](./spec.md#default-implementations).
+An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. A parameter may take a default, filled in at the call site. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects or type parameters); see [the spec](./spec.md#default-implementations).
 
 ```wado
 interface Log {
