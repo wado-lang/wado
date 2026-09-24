@@ -235,7 +235,7 @@ pub trait ReflectTemplate: Reflect with () {
     /// The hole types as a tuple `[V_0, V_1, ...]`.
     type Holes;
 
-    /// The per-hole member tuple `[Hole<Self, V_0>, ...]`.
+    /// The per-hole member tuple `[TemplateHole<Self, V_0>, ...]`.
     type Members;
 
     /// Returns the per-hole members.
@@ -385,8 +385,8 @@ impl<T> Member for FlagsBit<T> {
 /// before the hole, the hole's source text and specifier presence are
 /// constants, and `get` / `fmt` reach the hole's value in a template.
 /// See WEP 2026-01-10.
-#[compiler_item("hole")]
-pub struct Hole<T, V> {
+#[compiler_item("template_hole")]
+pub struct TemplateHole<T, V> {
     index: i32,
     lit: String,
     raw: String,
@@ -394,7 +394,7 @@ pub struct Hole<T, V> {
     has_spec: bool,
 }
 
-impl<T, V> Hole<T, V> {
+impl<T, V> TemplateHole<T, V> {
     /// The hole's position in the template.
     pub fn index(&self) -> i32 {
         return self.index;

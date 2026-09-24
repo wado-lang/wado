@@ -1,0 +1,16 @@
+// A CM type is its declaring interface and name, so two `Pair`s from two
+// interfaces make two signatures for the one `Dom::touch`.
+
+use { Dom as ADom, Pair as APair } from "./sub/cm_same_binding_same_named_types_a.wado";
+use { Dom as BDom, Pair as BPair } from "./sub/cm_same_binding_same_named_types_b.wado";
+
+export fn run() with (ADom, BDom) {
+    let _ = ADom::touch(APair { a: 1 });
+    let _ = BDom::touch(BPair { a: 2 });
+}
+
+__DATA__
+{
+  "compile_error": "two `Dom::touch` bind `web:demo/global#touch` with different signatures: make them agree",
+  "compile_error_codes": ["DUPLICATE_DEFINITION"]
+}

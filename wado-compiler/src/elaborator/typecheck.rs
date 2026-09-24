@@ -9,6 +9,7 @@ use crate::tir::{ResolvedType, TupleSlot, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
+use super::call::ArgSite;
 use super::types::TypeError;
 use super::tysys::TypeSystem;
 
@@ -370,12 +371,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `<H: CompilerHost>` plumbing to the `Elaborator` boundary so
     /// `TypeSystem` itself stays host-agnostic.
     pub(super) fn typecheck(&self, actual: TypeId, expected: TypeId, span: Span) {
+        self.typecheck_worded(actual, expected, span, |payload| TypeError::TypeMismatch {
+            expected: payload.expected,
+            found: payload.found,
+            span,
+        });
+    }
+
+    /// [`Self::typecheck`] on a call argument. A template's mismatch is the
+    /// tag's parameter at fault, since no source spells the template's type.
+    pub(super) fn typecheck_arg(&self, actual: TypeId, expected: TypeId, site: ArgSite) {
+        match site {
+            ArgSite::Written(span) => self.typecheck(actual, expected, span),
+            ArgSite::Template(span) => self.typecheck_worded(actual, expected, span, |payload| {
+                TypeError::TagParamNotTemplate {
+                    param: payload.expected,
+                    span,
+                }
+            }),
+        }
+    }
+
+    fn typecheck_worded(
+        &self,
+        actual: TypeId,
+        expected: TypeId,
+        span: Span,
+        mismatch: impl FnOnce(TypeMismatchPayload) -> TypeError,
+    ) {
         if let Err(payload) = self.tysys.typecheck(actual, expected) {
-            let _ = self.emit(TypeError::TypeMismatch {
-                expected: payload.expected,
-                found: payload.found,
-                span,
-            });
+            let _ = self.emit(mismatch(payload));
             return;
         }
         self.reject_pack_layout_mismatch(actual, expected, span);

@@ -1910,7 +1910,8 @@ impl GenContext {
     /// suffix's first might be a multi-element alt's leading token
     /// whose suppression at the preceding `RuleRef` would leave the
     /// runtime stranded — this is the css3 selector / HTMLParser
-    /// htmlContent hazard documented in `package-gale/CLAUDE.md`.
+    /// htmlContent hazard, "First-exact deep-nullable suffix" in
+    /// `antlr4-compatibility.md`.
     ///
     /// Single-token elements are trivially first-exact. A `Repeat`
     /// inherits first-exactness from its inner: `b?` where `b : Y` has
@@ -1972,8 +1973,7 @@ impl GenContext {
     ///   closes `ll_nullable_suffix`'s gap.
     /// - Suffix is deep-nullable but NOT first-exact: drop the suffix's
     ///   first and return empty. This is the "first-exact deep-nullable
-    ///   suffix" soundness invariant — see `CLAUDE.md` "Failed
-    ///   Approaches" #3 for the rationale.
+    ///   suffix" soundness invariant in `antlr4-compatibility.md`.
     ///
     /// Only the first case is the whole answer; ask
     /// `call_site_follow_is_exact` which one this is.

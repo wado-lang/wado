@@ -1,0 +1,39 @@
+// An unrestricted handle is the bits of its `f64`: `==` and a type pattern read
+// the bits, so a NaN equals itself, -0.0 is not 0.0, and `as` round-trips both.
+#[cm("wasi:demo/dom@0.1.0#node", linearity = "unrestricted", classes = "0..=1")]
+resource Node {}
+
+#[cm("wasi:demo/dom@0.1.0#element", linearity = "unrestricted", classes = "1..=1")]
+resource Element extends Node {}
+
+struct Holder {
+    node: Node,
+}
+
+test "a handle compares by its bits" {
+    let nan = builtin::black_box(f64::NAN) as Node;
+    assert nan == nan;
+    assert Holder { node: nan } == Holder { node: nan };
+    let zero = builtin::black_box(0.0) as Node;
+    let negative_zero = builtin::black_box(-0.0) as Node;
+    assert zero != negative_zero;
+    assert Holder { node: zero } != Holder { node: negative_zero };
+}
+
+test "as keeps the bits" {
+    let bits = 0x7ff8_0000_dead_beef as u64;
+    let handle = f64::from_bits(builtin::black_box(bits)) as Node;
+    assert (handle as f64).to_bits() == bits;
+    assert (builtin::black_box(-0.0) as Node as f64).to_bits() == (-0.0).to_bits();
+}
+
+test "a type pattern reads the bits" {
+    let stride = 137438953472.0;
+    assert builtin::black_box(stride + 2.0) as Node matches { _: Element };
+    assert !(builtin::black_box(-0.0) as Node matches { _: Element });
+    assert !(builtin::black_box(-stride) as Node matches { _: Element });
+    assert !(builtin::black_box(f64::NAN) as Node matches { _: Element });
+}
+
+__DATA__
+{"test": {}}

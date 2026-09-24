@@ -347,14 +347,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // fall through to the normal type mismatch error below.
         }
 
-        // Handles compare by host identity; reify rebuilds the `$same` call.
+        // Handles compare by host identity; reify compares their bits.
         if matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
-            && self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .identity_root(left, right)
-                .is_some()
+            && self.tysys.type_table.borrow().handles_compare(left, right)
         {
             return TypeTable::BOOL;
         }

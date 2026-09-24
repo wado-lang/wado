@@ -408,7 +408,7 @@ input. No query, no highlighter (output stays byte-identical).
 use hl from "./JSON.g4"
     with {
         generator: {
-            module: "wado:gale",
+            module: "wado-lang:gale",
             inputs: ["./JSON.highlights.scm"],   // presence enables highlighting
         },
     };

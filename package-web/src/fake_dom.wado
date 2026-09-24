@@ -1,0 +1,437 @@
+//! A DOM held in memory, which answers the `web:dom` calls a program makes where
+//! no browser does: `with &mut dom do { app(); }`.
+
+use { TreeMap } from "core:collections";
+use {
+    Document,
+    Dom,
+    Element,
+    HtmlElement,
+    HtmlInputElement,
+    Node,
+    Window,
+    DOCUMENT_CLASS,
+    HANDLE_CLASS_STRIDE,
+    HTML_ELEMENT_CLASS,
+    HTML_INPUT_ELEMENT_CLASS,
+    NODE_CLASS,
+    WINDOW_CLASS,
+} from "./dom.wado";
+
+global NO_NODE: i32 = -1;
+global DOCUMENT_INDEX: i32 = 0;
+global WINDOW_INDEX: i32 = 1;
+
+variant Content {
+    Document,
+    Window,
+    Element(String),
+    Text(String),
+}
+
+// Linked as the DOM standard models the tree.
+struct FakeNode {
+    class: f64,
+    content: Content,
+    attributes: TreeMap<String, String>,
+    value: String,
+    parent: i32,
+    first_child: i32,
+    last_child: i32,
+    previous_sibling: i32,
+    next_sibling: i32,
+}
+
+/// A document of `<html><head></head><body></body></html>`, and the window
+/// holding it.
+pub struct FakeDom {
+    nodes: List<FakeNode>,
+}
+
+impl FakeDom {
+    pub fn new() -> FakeDom {
+        let mut dom = FakeDom { nodes: [] };
+        dom.push(DOCUMENT_CLASS, Content::Document);
+        dom.push(WINDOW_CLASS, Content::Window);
+        let html = dom.create("html");
+        dom.append(DOCUMENT_INDEX, html);
+        dom.append(html, dom.create("head"));
+        dom.append(html, dom.create("body"));
+        return dom;
+    }
+
+    fn push(&mut self, class: f64, content: Content) -> i32 {
+        self.nodes.push(FakeNode {
+            class,
+            content,
+            attributes: TreeMap::new(),
+            value: "",
+            parent: NO_NODE,
+            first_child: NO_NODE,
+            last_child: NO_NODE,
+            previous_sibling: NO_NODE,
+            next_sibling: NO_NODE,
+        });
+        return self.nodes.len() - 1;
+    }
+
+    fn create(&mut self, local_name: String) -> i32 {
+        let class = if local_name == "input" { HTML_INPUT_ELEMENT_CLASS } else { HTML_ELEMENT_CLASS };
+        return self.push(class, Content::Element(local_name));
+    }
+
+    fn handle(&self, index: i32) -> f64 {
+        return self.nodes[index].class * HANDLE_CLASS_STRIDE + index as f64;
+    }
+
+    fn index(&self, node: Node) -> i32 {
+        let handle = node as f64;
+        let index = f64::fmod(handle, HANDLE_CLASS_STRIDE) as i32;
+        assert index < self.nodes.len() && self.handle(index) == handle;
+        return index;
+    }
+
+    fn node(&self, index: i32) -> Option<Node> {
+        if index == NO_NODE {
+            return null;
+        }
+        return Option::Some(self.handle(index) as Node);
+    }
+
+    fn local_name_of(&self, element: Element) -> String {
+        let Element(name) = self.nodes[self.index(element)].content else {
+            unreachable();
+        };
+        return name;
+    }
+
+    fn element(&self, index: i32) -> Option<Element> {
+        if index == NO_NODE || !self.nodes[index].content matches { Element(_) } {
+            return null;
+        }
+        return Option::Some(self.handle(index) as Element);
+    }
+
+    fn is_inclusive_ancestor(&self, ancestor: i32, index: i32) -> bool {
+        let mut at = index;
+        while at != NO_NODE && at != ancestor {
+            at = self.nodes[at].parent;
+        }
+        return at == ancestor;
+    }
+
+    fn has_element_child(&self, parent: i32) -> bool {
+        let mut child = self.nodes[parent].first_child;
+        while child != NO_NODE {
+            if self.nodes[child].content matches { Element(_) } {
+                return true;
+            }
+            child = self.nodes[child].next_sibling;
+        }
+        return false;
+    }
+
+    // The DOM standard's pre-insertion validity, trapping where it throws a
+    // `HierarchyRequestError`: `web:dom` carries no exception.
+    fn assert_insertable(&self, parent: i32, node: i32) {
+        let into_document = self.nodes[parent].content matches { Document };
+        assert into_document || self.nodes[parent].content matches { Element(_) }, "HierarchyRequestError: only a document or an element holds children";
+        assert !self.is_inclusive_ancestor(node, parent), "HierarchyRequestError: a node cannot be inserted into itself or its descendant";
+        match self.nodes[node].content {
+            Document | Window => panic("HierarchyRequestError: a document or a window is never a child"),
+            Text(_) => {
+                assert !into_document, "HierarchyRequestError: a document holds no text";
+            },
+            Element(_) => {
+                assert !into_document || !self.has_element_child(parent), "HierarchyRequestError: a document holds one element";
+            },
+        }
+    }
+
+    fn detach(&mut self, child: i32) {
+        let parent = self.nodes[child].parent;
+        if parent == NO_NODE {
+            return;
+        }
+        let previous = self.nodes[child].previous_sibling;
+        let next = self.nodes[child].next_sibling;
+        if previous == NO_NODE {
+            self.nodes[parent].first_child = next;
+        } else {
+            self.nodes[previous].next_sibling = next;
+        }
+        if next == NO_NODE {
+            self.nodes[parent].last_child = previous;
+        } else {
+            self.nodes[next].previous_sibling = previous;
+        }
+        self.nodes[child].parent = NO_NODE;
+        self.nodes[child].previous_sibling = NO_NODE;
+        self.nodes[child].next_sibling = NO_NODE;
+    }
+
+    fn append(&mut self, parent: i32, child: i32) {
+        self.detach(child);
+        let last = self.nodes[parent].last_child;
+        if last == NO_NODE {
+            self.nodes[parent].first_child = child;
+        } else {
+            self.nodes[last].next_sibling = child;
+        }
+        self.nodes[child].previous_sibling = last;
+        self.nodes[parent].last_child = child;
+        self.nodes[child].parent = parent;
+    }
+
+    fn remove_children(&mut self, parent: i32) {
+        while self.nodes[parent].first_child != NO_NODE {
+            self.detach(self.nodes[parent].first_child);
+        }
+    }
+
+    fn text_of(&self, index: i32, out: &mut String) {
+        if let Text(text) = self.nodes[index].content {
+            out.push_str(&text);
+        }
+        let mut child = self.nodes[index].first_child;
+        while child != NO_NODE {
+            self.text_of(child, out);
+            child = self.nodes[child].next_sibling;
+        }
+    }
+
+    fn find_id(&self, index: i32, id: &String) -> i32 {
+        if self.nodes[index].attributes.get("id") == Option::Some(*id) {
+            return index;
+        }
+        let mut child = self.nodes[index].first_child;
+        while child != NO_NODE {
+            let found = self.find_id(child, id);
+            if found != NO_NODE {
+                return found;
+            }
+            child = self.nodes[child].next_sibling;
+        }
+        return NO_NODE;
+    }
+
+    fn child_named(&self, parent: i32, local_name: String) -> i32 {
+        let mut child = self.nodes[parent].first_child;
+        while child != NO_NODE {
+            if let Element(name) = self.nodes[child].content && name == local_name {
+                return child;
+            }
+            child = self.nodes[child].next_sibling;
+        }
+        return NO_NODE;
+    }
+
+    fn body_index(&self) -> i32 {
+        let html = self.child_named(DOCUMENT_INDEX, "html");
+        if html == NO_NODE {
+            return NO_NODE;
+        }
+        return self.child_named(html, "body");
+    }
+}
+
+impl Dom for FakeDom {
+    fn window(&mut self) -> Window {
+        resume self.handle(WINDOW_INDEX) as Window;
+    }
+
+    fn document(&mut self) -> Document {
+        resume self.handle(DOCUMENT_INDEX) as Document;
+    }
+}
+
+impl Window for FakeDom {
+    fn document(&mut self, this: &Window) -> Document {
+        resume self.handle(DOCUMENT_INDEX) as Document;
+    }
+
+    ..trap
+}
+
+impl Document for FakeDom {
+    fn create_element(&mut self, this: &Document, local_name: String, options: Option<String>) -> Element {
+        resume self.handle(self.create(local_name.to_ascii_lowercase())) as Element;
+    }
+
+    fn document_element(&mut self, this: &Document) -> Option<Element> {
+        resume self.element(self.child_named(DOCUMENT_INDEX, "html"));
+    }
+
+    fn body(&mut self, this: &Document) -> Option<HtmlElement> {
+        let body = self.body_index();
+        if body == NO_NODE {
+            resume null;
+        } else {
+            resume Option::Some(self.handle(body) as HtmlElement);
+        }
+    }
+
+    fn get_element_by_id(&mut self, this: &Document, element_id: String) -> Option<Element> {
+        resume self.element(self.find_id(DOCUMENT_INDEX, &element_id));
+    }
+
+    ..trap
+}
+
+impl Node for FakeDom {
+    fn node_type(&mut self, this: &Node) -> u16 {
+        resume match self.nodes[self.index(*this)].content {
+            Element(_) => 1,
+            Text(_) => 3,
+            Document => 9,
+            Window => unreachable(),
+        };
+    }
+
+    fn node_name(&mut self, this: &Node) -> String {
+        resume match self.nodes[self.index(*this)].content {
+            Element(name) => name.to_ascii_uppercase(),
+            Text(_) => "#text",
+            Document => "#document",
+            Window => unreachable(),
+        };
+    }
+
+    fn parent_node(&mut self, this: &Node) -> Option<Node> {
+        resume self.node(self.nodes[self.index(*this)].parent);
+    }
+
+    fn parent_element(&mut self, this: &Node) -> Option<Element> {
+        resume self.element(self.nodes[self.index(*this)].parent);
+    }
+
+    fn has_child_nodes(&mut self, this: &Node) -> bool {
+        resume self.nodes[self.index(*this)].first_child != NO_NODE;
+    }
+
+    fn first_child(&mut self, this: &Node) -> Option<Node> {
+        resume self.node(self.nodes[self.index(*this)].first_child);
+    }
+
+    fn last_child(&mut self, this: &Node) -> Option<Node> {
+        resume self.node(self.nodes[self.index(*this)].last_child);
+    }
+
+    fn previous_sibling(&mut self, this: &Node) -> Option<Node> {
+        resume self.node(self.nodes[self.index(*this)].previous_sibling);
+    }
+
+    fn next_sibling(&mut self, this: &Node) -> Option<Node> {
+        resume self.node(self.nodes[self.index(*this)].next_sibling);
+    }
+
+    fn text_content(&mut self, this: &Node) -> Option<String> {
+        let index = self.index(*this);
+        if self.nodes[index].content matches { Document } {
+            resume null;
+        } else {
+            let mut text = "";
+            self.text_of(index, &mut text);
+            resume Option::Some(text);
+        }
+    }
+
+    fn set_text_content(&mut self, this: &Node, value: Option<String>) {
+        let index = self.index(*this);
+        let text = value.unwrap_or("");
+        match self.nodes[index].content {
+            Document | Window => {
+            },
+            Text(_) => self.nodes[index].content = Content::Text(text),
+            Element(_) => {
+                self.remove_children(index);
+                if !text.is_empty() {
+                    // The slice has no `Text`, so a text node carries `Node`'s class.
+                    let node = self.push(NODE_CLASS, Content::Text(text));
+                    self.append(index, node);
+                }
+            },
+        }
+        resume ();
+    }
+
+    fn contains(&mut self, this: &Node, other: Option<Node>) -> bool {
+        let Some(other) = other else {
+            resume false;
+        };
+        resume self.is_inclusive_ancestor(self.index(*this), self.index(other));
+    }
+
+    fn append_child(&mut self, this: &Node, node: Node) -> Node {
+        let parent = self.index(*this);
+        let child = self.index(node);
+        self.assert_insertable(parent, child);
+        self.append(parent, child);
+        resume node;
+    }
+
+    fn remove_child(&mut self, this: &Node, child: Node) -> Node {
+        let index = self.index(child);
+        assert self.nodes[index].parent == self.index(*this), "NotFoundError: the node to remove is a child";
+        self.detach(index);
+        resume child;
+    }
+
+    ..trap
+}
+
+impl Element for FakeDom {
+    fn local_name(&mut self, this: &Element) -> String {
+        resume self.local_name_of(*this);
+    }
+
+    fn tag_name(&mut self, this: &Element) -> String {
+        resume self.local_name_of(*this).to_ascii_uppercase();
+    }
+
+    fn id(&mut self, this: &Element) -> String {
+        resume self.nodes[self.index(*this)].attributes.get("id").unwrap_or("");
+    }
+
+    fn set_id(&mut self, this: &Element, value: String) {
+        let index = self.index(*this);
+        self.nodes[index].attributes["id"] = value;
+        resume ();
+    }
+
+    fn get_attribute(&mut self, this: &Element, qualified_name: String) -> Option<String> {
+        resume self.nodes[self.index(*this)].attributes.get(qualified_name);
+    }
+
+    fn set_attribute(&mut self, this: &Element, qualified_name: String, value: String) {
+        let index = self.index(*this);
+        self.nodes[index].attributes[qualified_name] = value;
+        resume ();
+    }
+
+    fn has_attribute(&mut self, this: &Element, qualified_name: String) -> bool {
+        resume self.nodes[self.index(*this)].attributes.contains_key(qualified_name);
+    }
+
+    fn remove_attribute(&mut self, this: &Element, qualified_name: String) {
+        let index = self.index(*this);
+        self.nodes[index].attributes.remove(qualified_name);
+        resume ();
+    }
+
+    ..trap
+}
+
+impl HtmlInputElement for FakeDom {
+    fn value(&mut self, this: &HtmlInputElement) -> String {
+        resume self.nodes[self.index(*this)].value;
+    }
+
+    fn set_value(&mut self, this: &HtmlInputElement, value: String) {
+        let index = self.index(*this);
+        self.nodes[index].value = value;
+        resume ();
+    }
+
+    ..trap
+}

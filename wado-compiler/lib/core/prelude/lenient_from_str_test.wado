@@ -72,6 +72,12 @@ test "float decimal and exponent" {
     assert f32::from_str_lenient("2.5") matches { Ok(v) && v == 2.5 };
 }
 
+test "half decimal rounds once" {
+    assert f16::from_str_lenient("1.000_488_281_250_000_000_000_000_01") matches { Ok(v) && v.to_bits() == 0x3c01 };
+    assert bf16::from_str_lenient("-INF") matches { Ok(v) && v.to_bits() == 0xff80 };
+    assert f16::from_str_lenient("1.0 ") matches { Err(_) };
+}
+
 test "float underscores" {
     assert f64::from_str_lenient("3_000.5") matches { Ok(v) && v == 3000.5 };
 }

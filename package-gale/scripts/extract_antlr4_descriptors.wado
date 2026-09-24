@@ -2246,7 +2246,7 @@ fn emit_stage_b_oracle_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice,
 ///
 /// Returns `Some(tree)` for the parse-tree case, with ANTLR4's literal
 /// ` <EOF>` token stripped — Gale's `to_string_tree()` omits empty-text
-/// tokens (see `package-gale/CLAUDE.md` "Driver Tests"). Returns `None`
+/// tokens (see `package-gale/AGENTS.md` "Driver tests"). Returns `None`
 /// for everything else.
 ///
 /// The detector is intentionally conservative: any leftover `<…>` token
@@ -2345,7 +2345,7 @@ test "normalize: clean parse tree passes through trimmed" {
 test "normalize: trailing <EOF> token is stripped" {
     // ANTLR4 emits the EOF token literally because `to_string_tree(rule)`
     // includes every consumed terminal, but Gale's runtime drops empty-text
-    // tokens (CLAUDE.md "Driver Tests"). The normaliser bridges this gap
+    // tokens (AGENTS.md "Driver tests"). The normaliser bridges this gap
     // so descriptor `[output]` blocks line up with Gale's actual emission.
     let result = normalize_output_for_stage_b("(s (declarator a) <EOF>)");
     assert result matches { Some(s) && s == "(s (declarator a))" };

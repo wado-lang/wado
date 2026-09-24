@@ -202,44 +202,44 @@ struct tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<cor
 
 array Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]> (mut ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]");  // TypeId(32)
 
-variant core:prelude/types.wado//Option<u8> {  // TypeId(33)
-    Some(u8),
-    None,
-}
-
-struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(34)
-    discriminant: i32,
-    payload_0: u8,
-}
-
-variant core:prelude/types.wado//Option<u16> {  // TypeId(35)
-    Some(u16),
-    None,
-}
-
-struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(36)
-    discriminant: i32,
-    payload_0: u16,
-}
-
-variant core:prelude/types.wado//Option<u32> {  // TypeId(37)
-    Some(u32),
-    None,
-}
-
-struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(38)
-    discriminant: i32,
-    payload_0: u32,
-}
-
-variant core:prelude/types.wado//Option<u64> {  // TypeId(39)
+variant core:prelude/types.wado//Option<u64> {  // TypeId(33)
     Some(u64),
     None,
 }
 
-struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(40)
+struct core:prelude/types.wado//Option<u64>::Some {  // TypeId(34)
     discriminant: i32,
     payload_0: u64,
+}
+
+variant core:prelude/types.wado//Option<u8> {  // TypeId(35)
+    Some(u8),
+    None,
+}
+
+struct core:prelude/types.wado//Option<u8>::Some {  // TypeId(36)
+    discriminant: i32,
+    payload_0: u8,
+}
+
+variant core:prelude/types.wado//Option<u16> {  // TypeId(37)
+    Some(u16),
+    None,
+}
+
+struct core:prelude/types.wado//Option<u16>::Some {  // TypeId(38)
+    discriminant: i32,
+    payload_0: u16,
+}
+
+variant core:prelude/types.wado//Option<u32> {  // TypeId(39)
+    Some(u32),
+    None,
+}
+
+struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(40)
+    discriminant: i32,
+    payload_0: u32,
 }
 
 variant core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode> {  // TypeId(41)
@@ -383,9 +383,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(88)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(89)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(89)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(90)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(90)
 
 type "functype//wasi/resource-drop:wasi/http/types.wado#fields" = fn(i32);  // TypeId(91)
 
@@ -2150,6 +2150,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
     };
 }
 
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
+    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
+}
+
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
@@ -2184,10 +2188,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
             continue l229;
         };
     };
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
-    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 
 export fn "http_fields_from_list.wado/$cm_export__handle" as "handle"

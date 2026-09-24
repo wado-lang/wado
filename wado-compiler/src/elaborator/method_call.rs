@@ -12,7 +12,9 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::{SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot};
+use super::call::{
+    ArgSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
+};
 use super::callee::StaticMethodRef;
 use super::coercion::is_numeric_literal_arg;
 use super::expr::IndexAccess;
@@ -259,14 +261,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
+        // Base (non-ref) type for method lookup. `mut`: deferred-inference may
+        // concretise the receiver below.
+        let mut base_type_id = self.tysys.get_base_type(receiver);
+
+        // The receiver's fault is reported where it arose; only the arguments
+        // can still say something new.
+        if base_type_id == TypeTable::ERROR {
+            let error = self.resolve_args_without_callee(args_ast, ctx);
+            return MethodCallOutcome::no_dispatch(error);
+        }
+
         // The handle argument-directed selection classifies through (WEP
         // 2026-07-31). Constructing it costs nothing: a class is synthesized
         // only if the candidate set turns out to be an overload set.
         let mut probe = ArgProbe::new(args_ast, ctx);
-
-        // Base (non-ref) type for method lookup. `mut`: deferred-inference may
-        // concretise the receiver below.
-        let mut base_type_id = self.tysys.get_base_type(receiver);
 
         // Get struct name and module source from base type
         // The struct_module is where the struct is defined (and inherent methods live)
@@ -586,11 +595,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 hint: String::new(),
                 span,
             });
-            // Default to Unknown type for error recovery
             MethodInfo {
                 impl_type_bindings: Vec::new(),
                 method_def: None,
-                return_type: TypeTable::UNKNOWN,
+                return_type: TypeTable::ERROR,
                 self_kind: ast::SelfKind::Ref,
                 param_types: vec![],
                 param_is_mut: vec![],
@@ -615,7 +623,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(def) = dispatched_method_def
             && self.report_unavailable(def, span)
         {
-            return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
+            let error = self.resolve_args_without_callee(args_ast, ctx);
+            return MethodCallOutcome::no_dispatch(error);
         }
 
         // Before anything counts slots, since a pack's arguments are one per
@@ -1735,7 +1744,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Resolve arguments with expected types for coercion. `arg_spans` runs
+        // Resolve arguments with expected types for coercion. `arg_sites` runs
         // parallel to `args` so a diagnostic still lands on the argument that
         // caused it rather than on the whole call.
         let mut args: Vec<TypeId> = static_call
@@ -1747,7 +1756,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_expr(a, ctx, expected_type)
             })
             .collect();
-        let mut arg_spans: Vec<Span> = static_call.args.iter().map(Expr::span).collect();
+        let mut arg_sites: Vec<ArgSite> = static_call
+            .args
+            .iter()
+            .map(|arg| ArgSite::Written(arg.span()))
+            .collect();
 
         let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
         let declaring_trait = callee_sig
@@ -1886,7 +1899,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &static_type_bindings,
             Some(static_call.id),
             ctx,
-            |_, _, default_expr, _| arg_spans.push(default_expr.span()),
+            |_, _, default_expr, _| arg_sites.push(ArgSite::Written(default_expr.span())),
         );
 
         // A declared static is checked against its signature here, where the
@@ -1896,7 +1909,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !self.check_static_call_args(
                 &param_types,
                 &args,
-                &arg_spans,
+                &arg_sites,
                 &static_method_defaults,
                 static_call.span,
             )
@@ -2372,7 +2385,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 static_call.id,
                 &method_type_args,
                 &args,
-                &arg_spans,
+                &arg_sites,
                 static_call.span,
                 ctx,
             )
@@ -2526,7 +2539,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         call_id: AstId,
         method_type_args: &[TypeId],
         args: &[TypeId],
-        arg_spans: &[Span],
+        arg_sites: &[ArgSite],
         span: Span,
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
@@ -2582,7 +2595,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.check_static_call_args(
             &param_types,
             args,
-            arg_spans,
+            arg_sites,
             &static_method_defaults,
             span,
         ) {
@@ -2735,13 +2748,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         param_types: &[TypeId],
         args: &[TypeId],
-        arg_spans: &[Span],
+        arg_sites: &[ArgSite],
         static_method_defaults: &[(String, Option<ast::Expr>)],
         span: Span,
     ) -> bool {
         assert_eq!(
             args.len(),
-            arg_spans.len(),
+            arg_sites.len(),
             "every resolved argument carries the span it was written at"
         );
         let optional = static_method_defaults
@@ -2760,7 +2773,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.tysys.type_table.borrow().contains_type_param(expected) {
                 continue;
             }
-            self.typecheck(*arg, expected, arg_spans[i]);
+            self.typecheck_arg(*arg, expected, arg_sites[i]);
         }
         true
     }

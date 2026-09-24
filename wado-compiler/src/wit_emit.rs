@@ -28,6 +28,7 @@ use crate::tir::{
     ResolvedType, TirEnum, TirFlags, TirModule, TirNewtype, TirStruct, TirVariantDecl, TypeId,
     TypeTable,
 };
+use crate::unparse::unparse_type_into;
 use crate::world_registry::WorldRegistry;
 
 /// How much of the referenced interface graph to inline into the WIT document.
@@ -778,7 +779,7 @@ impl<'a> Emitter<'a> {
         let source = registry.source_interface(named)?;
         registry
             .is_unrestricted_resource(&source, &named.name)
-            .then_some(Type::U32)
+            .then_some(Type::F64)
     }
 
     /// Render an AST leaf: primitive, named CM type, or `&Resource` borrow.
@@ -811,9 +812,13 @@ impl<'a> Emitter<'a> {
                     self.map_ast_type(inner, current_fq, uses)
                 }
             }
-            other => Err(WitEmitError::UnrepresentableType {
-                description: format!("CM signature type `{other:?}` has no WIT form"),
-            }),
+            other => {
+                let mut written = String::new();
+                unparse_type_into(other, &mut written);
+                Err(WitEmitError::UnrepresentableType {
+                    description: format!("CM signature type `{written}` has no WIT form"),
+                })
+            }
         }
     }
 
@@ -973,23 +978,33 @@ impl<'a> Emitter<'a> {
                 Ok(self.named(&name, id))
             }
             ResolvedType::Resource { def } if self.types.is_unrestricted_resource(*def) => {
-                Ok(Type::U32)
+                Ok(Type::F64)
             }
             ResolvedType::Resource { def } => Ok(Type::named(to_kebab(self.types.def_name(*def)))),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let inner = *inner;
                 if let ResolvedType::Resource { def } = self.types.get(inner) {
                     if self.types.is_unrestricted_resource(*def) {
-                        return Ok(Type::U32);
+                        return Ok(Type::F64);
                     }
                     Ok(Type::borrow(to_kebab(self.types.def_name(*def))))
                 } else {
                     self.map_type(inner)
                 }
             }
-            other => Err(WitEmitError::UnrepresentableType {
-                description: describe_type(other),
+            _ => Err(WitEmitError::UnrepresentableType {
+                description: self.describe_type(id),
             }),
+        }
+    }
+
+    fn describe_type(&self, id: TypeId) -> String {
+        match self.types.get(id) {
+            ResolvedType::Function { .. } => "function type".to_string(),
+            ResolvedType::TypeParam { name, .. } => format!("type parameter `{name}`"),
+            ResolvedType::Unit => "unit `()`".to_string(),
+            ResolvedType::Never => "never `!`".to_string(),
+            _ => format!("`{}`", self.types.type_name(id)),
         }
     }
 
@@ -1130,16 +1145,6 @@ fn map_primitive(p: PrimitiveType) -> Result<Type, WitEmitError> {
         }
     };
     Ok(ty)
-}
-
-fn describe_type(ty: &ResolvedType) -> String {
-    match ty {
-        ResolvedType::Function { .. } => "function type".to_string(),
-        ResolvedType::TypeParam { name, .. } => format!("type parameter `{name}`"),
-        ResolvedType::Unit => "unit `()`".to_string(),
-        ResolvedType::Never => "never `!`".to_string(),
-        other => format!("{other:?}"),
-    }
 }
 
 /// The parsed components of a CM interface FQ, e.g.

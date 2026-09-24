@@ -18,10 +18,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{
-    FqTypeName, IDENTITY_TEST_METHOD, INTERNAL_PREFIX, NARROWING_TEST_METHOD, Receiver,
-    global_init_function, global_name,
-};
+use crate::name::{FqTypeName, INTERNAL_PREFIX, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
@@ -42,16 +39,17 @@ use crate::ast::{
     AttrArg, Attribute, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
     WIRE_NUMBER_RESERVED, wire_number_of, wire_number_written,
 };
-use crate::compiler_item::CompilerItem;
+use crate::compiler_item::{CompilerItem, Resolved};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
-use crate::elaborator::call::omits_a_default;
+use crate::elaborator::call::{ARRAY_NEW_DATA, omits_a_default};
 use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
 use crate::elaborator::expr::{
     compose_union_plan, int_literal_cast_operand, int_literal_repr, peel_to_struct,
 };
+use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
@@ -81,6 +79,7 @@ use crate::name::{
 };
 use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
+use crate::synthesis::common::{handle_bits, handle_from_f64, handle_to_f64};
 use crate::tir::{
     EffectRef, StructDef, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
@@ -264,8 +263,8 @@ fn build_literal_from_call(array: TirExpr, call: &LiteralFromCall, span: Span) -
 /// What `==` compares when it compares by identity.
 enum Identity {
     Reference,
-    /// A resource handle, compared under this chain root.
-    Handle(TypeId),
+    /// An unrestricted resource handle, which the host interns.
+    Handle,
 }
 
 /// Cast a `from` result to the newtype the literal targeted, where it targeted
@@ -3192,6 +3191,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                     _ => self.reify_expr(&cast.expr, ctx, None),
                 };
+                let (from_handle, to_handle) = {
+                    let tt = self.tysys.type_table.borrow();
+                    (
+                        tt.is_unrestricted_handle(inner.type_id),
+                        tt.is_unrestricted_handle(target_type),
+                    )
+                };
+                let inner = match (from_handle, to_handle) {
+                    (true, false) => handle_to_f64(inner),
+                    (false, true) => return handle_from_f64(inner, target_type),
+                    _ => inner,
+                };
                 TirExpr::new(
                     TirExprKind::Cast {
                         expr: Box::new(inner),
@@ -3259,7 +3270,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // only fits as the already-negative value, or a type
                 // mismatch when the operand's literal type differs).
                 if matches!(op, TirUnaryOp::Neg) {
+                    let half = self.half_format(inner.type_id);
                     match &inner.kind {
+                        TirExprKind::IntLiteral { value, .. } if let Some(format) = half => {
+                            return half_literal(value ^ format.sign_bit(), inner.type_id, span);
+                        }
                         TirExprKind::IntLiteral { value, repr } => {
                             return TirExpr::new(
                                 TirExprKind::IntLiteral {
@@ -6729,7 +6744,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if !matches!(op, ast::BinaryOp::Eq | ast::BinaryOp::NotEq) {
             return None;
         }
-        let mut type_table = self.tysys.type_table.borrow_mut();
+        let type_table = self.tysys.type_table.borrow();
         if matches!(
             (type_table.get(left), type_table.get(right)),
             (ResolvedType::Ref(_), ResolvedType::Ref(_))
@@ -6737,11 +6752,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ) {
             return Some(Identity::Reference);
         }
-        type_table.identity_root(left, right).map(Identity::Handle)
+        type_table
+            .handles_compare(left, right)
+            .then_some(Identity::Handle)
     }
 
-    /// `==` / `!=` by identity: `ref.eq` on references, the host's `is-same`
-    /// on resource handles.
+    /// `==` / `!=` by identity: `ref.eq` on references, bit equality on
+    /// resource handles.
     fn identity_comparison(
         &mut self,
         identity: Identity,
@@ -6750,44 +6767,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         right: TirExpr,
         span: Span,
     ) -> TirExpr {
-        use crate::tir::{CallArg, TirBinaryOp, TirExprKind, TirUnaryOp, TypeTable};
-
         let is_eq = op == ast::BinaryOp::Eq;
-        let same = match identity {
-            Identity::Reference => {
-                let op = if is_eq {
-                    TirBinaryOp::RefEq
+        let (op, left, right) = match identity {
+            Identity::Reference if is_eq => (TirBinaryOp::RefEq, left, right),
+            Identity::Reference => (TirBinaryOp::RefNotEq, left, right),
+            Identity::Handle => (
+                if is_eq {
+                    TirBinaryOp::Eq
                 } else {
-                    TirBinaryOp::RefNotEq
-                };
-                return TirExpr::new(
-                    TirExprKind::Binary {
-                        op,
-                        left: Box::new(left),
-                        right: Box::new(right),
-                    },
-                    TypeTable::BOOL,
-                    span,
-                );
-            }
-            Identity::Handle(root) => TirExpr::new(
-                TirExprKind::method_call(
-                    Box::new(left),
-                    self.lang_predicate_ref(root, IDENTITY_TEST_METHOD),
-                    vec![],
-                    vec![CallArg::new(right, false)],
-                ),
-                TypeTable::BOOL,
-                span,
+                    TirBinaryOp::NotEq
+                },
+                handle_bits(left),
+                handle_bits(right),
             ),
         };
-        if is_eq {
-            return same;
-        }
         TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Not,
-                expr: Box::new(same),
+            TirExprKind::Binary {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
             },
             TypeTable::BOOL,
             span,
@@ -8064,6 +8062,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 static_call.span,
                 ctx,
             );
+            if let Some(folded) = self.fold_le_bytes_call(
+                &dispatch.function_ref,
+                &args,
+                recorded_type,
+                static_call.span,
+            ) {
+                return folded;
+            }
 
             // Replay the production `Call`'s exact type args (method-level;
             // impl args ride along in `function_ref.monomorph_info`).
@@ -8378,6 +8384,87 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         deref_to_value(value, span, &self.tysys.type_table)
     }
 
+    /// The format of `ty` when it is a half, whose value is carried as bits.
+    fn half_format(&self, ty: TypeId) -> Option<FloatFormat> {
+        self.tysys
+            .type_table
+            .borrow()
+            .primitive_head(ty)
+            .filter(|p| p.is_half())
+            .and_then(FloatFormat::of)
+    }
+
+    /// Whether `func` reads `result`'s elements out of bytes as their raw bits:
+    /// `builtin::array_new_data`, or `List::from_le_bytes` over a prelude impl.
+    fn reads_le_bytes(&self, func: &tir::FunctionRef, result: TypeId) -> bool {
+        if func.module_source.is_builtin() {
+            return func.name == ARRAY_NEW_DATA;
+        }
+        if !self.reads_prelude_le_bytes(result) {
+            return false;
+        }
+        let tt = self.tysys.type_table.borrow();
+        let items = tt.compiler_items();
+        let Some(Resolved::Method {
+            module_source,
+            owner_head: Some(owner),
+            name,
+            ..
+        }) = items.get(CompilerItem::ListFromLeBytes)
+        else {
+            return false;
+        };
+        func.module_source == *module_source
+            && func.method_info.as_ref().is_some_and(|info| {
+                info.trait_name.is_none()
+                    && info.method_name == *name
+                    && info.receiver == Receiver::Type(owner.clone())
+            })
+    }
+
+    /// Whether `seq`'s element answers `FromLeBytes` with its primitive's own
+    /// impl, rather than one a newtype over it writes.
+    fn reads_prelude_le_bytes(&self, seq: TypeId) -> bool {
+        let Some(elem) = self.tysys.type_table.borrow().seq_element(seq) else {
+            return false;
+        };
+        let trait_ = self
+            .tysys
+            .compiler_trait_def(CompilerItem::FromLeBytes)
+            .expect("the prelude declares `FromLeBytes`");
+        self.tysys.own_impl_link(elem, trait_).is_none_or(|link| {
+            matches!(
+                self.tysys.type_table.borrow().get(link),
+                ResolvedType::Primitive(_)
+            )
+        })
+    }
+
+    /// A call reading `T`s out of a byte literal, as that literal typed as the
+    /// result, so lowering builds it as a constant with no decode loop.
+    fn fold_le_bytes_call(
+        &self,
+        func: &tir::FunctionRef,
+        args: &[CallArg],
+        result: TypeId,
+        span: Span,
+    ) -> Option<TirExpr> {
+        let [arg] = args else {
+            return None;
+        };
+        let TirExprKind::BytesLiteral(bytes) = &arg.expr.kind else {
+            return None;
+        };
+        let width = self
+            .tysys
+            .type_table
+            .borrow()
+            .packed_element(result)?
+            .data_width()?;
+        (bytes.len() % width == 0 && self.reads_le_bytes(func, result))
+            .then(|| TirExpr::new(TirExprKind::BytesLiteral(bytes.clone()), result, span))
+    }
+
     /// Reify a `CallExpr`, mirroring `Elaborator::resolve_call`
     /// The arms below are ordered by precedence and each
     /// documents the recorded fact it reads; nothing here re-resolves a
@@ -8524,6 +8611,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span,
                 ctx,
             );
+            if let Some(folded) =
+                self.fold_le_bytes_call(&dispatch.function_ref, &arg_exprs, recorded_type, span)
+            {
+                return folded;
+            }
             // Type args: replay exactly what the production builder put on
             // the `Call`. This already folds in any explicit turbofish and,
             // crucially, carries only the method-level type args — a generic
@@ -10113,6 +10205,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .type_table
             .borrow()
             .representation_head(recorded_type);
+        // A half has no float value of its own: its literal is its bits.
+        if let Some(format) = self.half_format(base_target) {
+            let bits = float_literal_bits(repr, format).unwrap_or(0);
+            return half_literal(bits, recorded_type, span);
+        }
         // A float-only literal (`1.0`, `0.0`, `1e2`) is a float regardless of
         // the recorded type: when the recorded type is missing/UNKNOWN (e.g. a
         // stdlib const body whose `expression_types` entry is absent from the
@@ -10124,13 +10221,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             || base_target == TypeTable::F64
             || (recorded_type == TypeTable::UNKNOWN && util::is_float_only_literal(repr));
         if is_float_target {
-            let value: f64 = if util::is_float_only_literal(repr) {
-                util::parse_float_literal(repr).unwrap_or(0.0)
+            // Rounded once, into the target format, so the later narrowing
+            // of an `f32` is exact.
+            let format = if base_target == TypeTable::F32 {
+                FloatFormat::F32
             } else {
-                util::parse_u128_literal(repr)
-                    .map(|v| v as f64)
-                    .unwrap_or(0.0)
+                FloatFormat::F64
             };
+            let value = format.value(float_literal_bits(repr, format).unwrap_or(0));
             // The literal's *type* must be a concrete float, not the (possibly
             // UNKNOWN) recorded type: a float-only literal with no recorded
             // type defaults to `f64` (matching production's
@@ -10733,7 +10831,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// `name: R` over a supertype of `R`: the value binds at `R`, and the pattern
-    /// holds only when the handle's `is-r` import answers true.
+    /// holds only when the class the handle carries lies in `R`'s classes.
     fn reify_narrowing(
         &mut self,
         inner: &ast::Pattern,
@@ -10754,51 +10852,54 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             other => panic!("annotate rejects a narrowing over {other:?}"),
         };
-        let receiver = TirExpr::new(
-            TirExprKind::Local {
-                index: local_index,
-                name: local_name,
-            },
-            target,
-            span,
-        );
-        let test = TirExpr::new(
-            TirExprKind::method_call(
-                Box::new(receiver),
-                self.lang_predicate_ref(target, NARROWING_TEST_METHOD),
-                vec![],
-                vec![],
-            ),
-            TypeTable::BOOL,
-            span,
+        let (low, high) = self
+            .tysys
+            .type_table
+            .borrow()
+            .narrowing_classes(target)
+            .expect("annotate rejects a narrowing to a resource without classes")
+            .handle_bounds();
+        let handle = || {
+            handle_bits(TirExpr::new(
+                TirExprKind::Local {
+                    index: local_index,
+                    name: local_name.clone(),
+                },
+                target,
+                span,
+            ))
+        };
+        let bound = |bits: u64| {
+            TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: bits,
+                    repr: bits.to_string(),
+                },
+                TypeTable::U64,
+                span,
+            )
+        };
+        let compare = |op, left, right| {
+            TirExpr::new(
+                TirExprKind::Binary {
+                    op,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                TypeTable::BOOL,
+                span,
+            )
+        };
+        let test = compare(
+            TirBinaryOp::And,
+            compare(TirBinaryOp::LtEq, bound(low), handle()),
+            compare(TirBinaryOp::Lt, handle(), bound(high)),
         );
         TirPattern::Narrow {
             name,
             local_index,
             type_id: target,
             test: Box::new(test),
-        }
-    }
-
-    /// `R::method`, one of the host's `lang` predicates over `resource`'s handles.
-    fn lang_predicate_ref(&self, resource: TypeId, method: &str) -> tir::FunctionRef {
-        let method_info = LocalMethodName::new(
-            self.tysys.fq_receiver_of_impl(resource, false),
-            None,
-            method.to_string(),
-        );
-        let module_source = self
-            .tysys
-            .type_table
-            .borrow()
-            .nominal_head(resource)
-            .map(|(_, m)| m)
-            .expect("a `lang` predicate's receiver is a declared resource");
-        tir::FunctionRef {
-            module_source,
-            name: method_info.to_mangled_name(),
-            monomorph_info: None,
-            method_info: Some(method_info),
         }
     }
 
@@ -11578,4 +11679,16 @@ pub(crate) fn default_impl_methods(decl: &InterfaceDecl) -> Vec<ast::Function> {
             ..method.clone()
         })
         .collect()
+}
+
+/// A half precision literal, given as its bits.
+fn half_literal(bits: u64, ty: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: bits,
+            repr: format!("{bits:#06x}"),
+        },
+        ty,
+        span,
+    )
 }

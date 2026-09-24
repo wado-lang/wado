@@ -1,0 +1,23 @@
+// The reflection member handles are prelude names, so they are reserved like
+// every other: a module cannot declare its own.
+struct StructField {}
+struct VariantCase {}
+struct EnumCase {}
+struct FlagsBit {}
+struct TemplateHole {}
+
+export fn run() {
+}
+
+__DATA__
+{
+    "compile_error": "conflicts with prelude type of the same name",
+    "compile_error_count": 5,
+    "compile_errors_contains": [
+        "type 'StructField' conflicts",
+        "type 'VariantCase' conflicts",
+        "type 'EnumCase' conflicts",
+        "type 'FlagsBit' conflicts",
+        "type 'TemplateHole' conflicts"
+    ]
+}

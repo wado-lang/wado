@@ -115,6 +115,18 @@ pub fn i64_const(value: i64) -> TirExpr {
     )
 }
 
+/// Create an f64 literal expression.
+pub fn f64_const(value: f64) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::FloatLiteral {
+            value,
+            repr: format!("{value:?}"),
+        },
+        TypeTable::F64,
+        synth_span(),
+    )
+}
+
 /// Create a local variable reference.
 pub fn local_ref(index: u32, name: &str, type_id: TypeId) -> TirExpr {
     TirExpr::new(
@@ -149,6 +161,36 @@ pub fn cast(expr: TirExpr, target_type: TypeId) -> TirExpr {
         },
         target_type,
         synth_span(),
+    )
+}
+
+/// An unrestricted resource handle as the `u64` bits it is in the guest.
+pub fn handle_bits(handle: TirExpr) -> TirExpr {
+    let span = handle.span;
+    TirExpr::new(
+        TirExprKind::Cast {
+            expr: Box::new(handle),
+            target_type: TypeTable::U64,
+        },
+        TypeTable::U64,
+        span,
+    )
+}
+
+/// The `f64` an unrestricted handle is outside the guest: its bits, reinterpreted.
+pub fn handle_to_f64(handle: TirExpr) -> TirExpr {
+    builtin_call(
+        "f64_reinterpret_i64",
+        vec![handle_bits(handle)],
+        TypeTable::F64,
+    )
+}
+
+/// The unrestricted handle of type `handle_type` whose bits `value`, an `f64`, holds.
+pub fn handle_from_f64(value: TirExpr, handle_type: TypeId) -> TirExpr {
+    cast(
+        builtin_call("i64_reinterpret_f64", vec![value], TypeTable::I64),
+        handle_type,
     )
 }
 

@@ -7,7 +7,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirExportDesc, WirFuncType, WirFunction, WirImportDesc,
-    WirInstr, WirPackage, WirStructType, WirType, WirTypeDef, WirVariantType,
+    WirInstr, WirPackage, WirScalarKind, WirStructType, WirType, WirTypeDef, WirVariantType,
 };
 
 use crate::codegen_flags::CodegenFlags;
@@ -2684,21 +2684,16 @@ impl<'a> WirEmitter<'a> {
 
     /// Convert `WirType` to Wasm `ValType` (for locals and function signatures).
     fn wir_type_to_val_type(&self, ty: &WirType) -> ValType {
+        if let Some(kind) = ty.scalar_kind() {
+            return match kind {
+                WirScalarKind::I32 => ValType::I32,
+                WirScalarKind::I64 => ValType::I64,
+                WirScalarKind::F32 => ValType::F32,
+                WirScalarKind::F64 => ValType::F64,
+                WirScalarKind::V128 => ValType::V128,
+            };
+        }
         match ty {
-            WirType::I8
-            | WirType::I16
-            | WirType::I32
-            | WirType::U8
-            | WirType::U16
-            | WirType::U32
-            | WirType::Bool
-            | WirType::Char
-            | WirType::Unit => ValType::I32,
-            WirType::I64 | WirType::U64 => ValType::I64,
-            WirType::F32 => ValType::F32,
-            WirType::F64 => ValType::F64,
-            WirType::V128 => ValType::V128,
-            WirType::Enum { .. } | WirType::Flags { .. } => ValType::I32,
             WirType::Ref { type_id, nullable } => {
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 ValType::Ref(RefType {
@@ -2716,6 +2711,7 @@ impl<'a> WirEmitter<'a> {
                     heap_type: ht,
                 })
             }
+            scalar => unreachable!("{scalar:?} has a scalar kind"),
         }
     }
 

@@ -190,13 +190,13 @@ fn an_interface_is_an_unrestricted_resource_with_its_own_cm_interface() {
     let (code, _) = chain().generate();
     assert!(
         code.contains(
-            "#[cm(\"web:dom/event-target\", linearity = \"unrestricted\")]\npub resource EventTarget {"
+            "#[cm(\"web:dom/event-target\", linearity = \"unrestricted\", classes = \"0..=3\")]\npub resource EventTarget {"
         ),
         "{code}"
     );
     assert!(
         code.contains(
-            "#[cm(\"web:dom/node\", linearity = \"unrestricted\")]\npub resource Node extends EventTarget {"
+            "#[cm(\"web:dom/node\", linearity = \"unrestricted\", classes = \"1..=2\")]\npub resource Node extends EventTarget {"
         ),
         "{code}"
     );
@@ -204,6 +204,26 @@ fn an_interface_is_an_unrestricted_resource_with_its_own_cm_interface() {
         code.contains("pub resource Element extends Node {"),
         "{code}"
     );
+}
+
+/// Each interface's classes come just before its descendants', so one range
+/// covers a subtree.
+#[test]
+fn classes_number_the_inheritance_forest_in_pre_order() {
+    let (code, _) = chain().generate();
+    for (resource, classes) in [
+        ("event-target", "0..=3"),
+        ("node", "1..=2"),
+        ("element", "2..=2"),
+        ("window", "3..=3"),
+    ] {
+        assert!(
+            code.contains(&format!(
+                "#[cm(\"web:dom/{resource}\", linearity = \"unrestricted\", classes = \"{classes}\")]"
+            )),
+            "{resource} should carry {classes}: {code}"
+        );
+    }
 }
 
 #[test]
@@ -486,6 +506,24 @@ fn a_parent_outside_the_slice_is_rejected() {
     assert!(
         err.to_string()
             .contains("`Element` extends `CharacterData`, which is not in the slice"),
+        "{err}"
+    );
+}
+
+#[test]
+fn an_inheritance_cycle_is_rejected() {
+    let mut defs = Definitions::default();
+    defs.interfaces
+        .push(interface("Node", r#""Element""#, "", &[]));
+    defs.interfaces
+        .push(interface("Element", r#""Node""#, "", &[]));
+    for name in ["EventTarget", "Window"] {
+        defs.interfaces.push(interface(name, "null", "", &[]));
+    }
+    let err = transform(&defs.build()).expect_err("a cycle is an error");
+    assert!(
+        err.to_string()
+            .contains("`Node`, `Element` inherit from each other in a cycle"),
         "{err}"
     );
 }

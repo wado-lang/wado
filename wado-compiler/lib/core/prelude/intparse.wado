@@ -14,7 +14,7 @@ use { u128 } from "core:prelude/int128.wado";
 use { Display, Error, From, LenientParseError } from "core:prelude/traits.wado";
 
 
-use { parse_text } from "core:prelude/fpfmt.wado";
+use { BinaryFormat, parse_text_bits } from "core:prelude/fpfmt.wado";
 
 /// Preprocess a human-supplied integer string for a lenient parse: split off
 /// an optional leading sign, detect an optional radix prefix (`0x`/`0X`,
@@ -367,14 +367,14 @@ internal fn parse_u64_radix(s: &StrSlice, radix: u32, max: u64) -> Result<u64, P
     };
 }
 
-/// Parse a `f64` from the view without allocating a substring. An empty view
-/// returns `Err(Empty)` so the public surface stays total.
-internal fn parse_f64_from_str(s: &StrSlice) -> Result<f64, ParseFloatError> {
+/// Parse a float of `format` from the view, as its bits, without allocating a
+/// substring. An empty view returns `Err(Empty)` so the public surface stays total.
+internal fn parse_float_bits(s: &StrSlice, format: &BinaryFormat) -> Result<u64, ParseFloatError> {
     if s.is_empty() {
         return Result::Err(ParseFloatError::new(FloatErrorKind::Empty));
     }
-    return match parse_text(s) {
-        Some(v) => Result::Ok(v),
+    return match parse_text_bits(s, format) {
+        Some(bits) => Result::Ok(bits),
         None => Result::Err(ParseFloatError::new(FloatErrorKind::Invalid)),
     };
 }

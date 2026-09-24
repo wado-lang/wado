@@ -9,6 +9,7 @@ use std::rc::Rc;
 
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
+use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
@@ -353,16 +354,14 @@ fn convert_builtin(
                 span,
             ))
         }
-        // f32/f64 both store the f64 parse; codegen narrows for `f32`, matching
-        // how reify builds float literals (`reify_literal`).
         TypeTable::F32 => Some(float_literal(
-            parse_lenient_float(raw)?,
+            parse_lenient_float(raw, FloatFormat::F32)?,
             raw,
             TypeTable::F32,
             span,
         )),
         TypeTable::F64 => Some(float_literal(
-            parse_lenient_float(raw)?,
+            parse_lenient_float(raw, FloatFormat::F64)?,
             raw,
             TypeTable::F64,
             span,
@@ -455,10 +454,16 @@ fn parse_lenient_uint(s: &str) -> Option<u128> {
     u128::from_str_radix(digits, radix).ok()
 }
 
-/// Parse a lenient float: `_` separators stripped, then Rust's `f64` parser
-/// (decimal, exponent, `nan` / `inf` / `infinity`, all case-insensitive).
-fn parse_lenient_float(s: &str) -> Option<f64> {
-    s.replace('_', "").parse::<f64>().ok()
+/// Parse a lenient float into `format`, rounded once as a literal is: an
+/// optional sign, then a literal's spelling or `nan` / `inf` in any case.
+fn parse_lenient_float(s: &str, format: FloatFormat) -> Option<f64> {
+    let (sign, rest) = split_sign(s);
+    let magnitude = if rest.starts_with(|c: char| c.is_ascii_alphabetic()) {
+        rest.parse::<f64>().ok().filter(|v| !v.is_finite())?
+    } else {
+        format.value(float_literal_bits(rest, format).ok()?)
+    };
+    Some(if sign == "-" { -magnitude } else { magnitude })
 }
 
 /// Split an optional leading `+` / `-` sign, returning `(sign, rest)`.
@@ -547,12 +552,24 @@ mod tests {
 
     #[test]
     fn float_accepts_inf_nan_and_separators() {
-        assert_eq!(parse_lenient_float("2.5"), Some(2.5));
-        assert_eq!(parse_lenient_float("1_000.5"), Some(1000.5));
-        assert_eq!(parse_lenient_float("1e3"), Some(1000.0));
-        assert_eq!(parse_lenient_float("inf"), Some(f64::INFINITY));
-        assert_eq!(parse_lenient_float("-INFINITY"), Some(f64::NEG_INFINITY));
-        assert!(parse_lenient_float("NaN").is_some_and(f64::is_nan));
-        assert_eq!(parse_lenient_float("forty-two"), None);
+        let f64 = |s| parse_lenient_float(s, FloatFormat::F64);
+        assert_eq!(f64("2.5"), Some(2.5));
+        assert_eq!(f64("-1_000.5"), Some(-1000.5));
+        assert_eq!(f64("1e3"), Some(1000.0));
+        assert_eq!(f64("inf"), Some(f64::INFINITY));
+        assert_eq!(f64("-INFINITY"), Some(f64::NEG_INFINITY));
+        assert!(f64("NaN").is_some_and(f64::is_nan));
+        assert_eq!(f64("forty-two"), None);
+        assert_eq!(f64("1e400"), None);
+        assert_eq!(f64("--1.5"), None);
+        assert_eq!(parse_lenient_float("-+nan", FloatFormat::F32), None);
+    }
+
+    #[test]
+    fn float_rounds_once_into_f32() {
+        assert_eq!(
+            parse_lenient_float("1.00000005960464477539062500000000001", FloatFormat::F32),
+            Some(f64::from(f32::from_bits(0x3F80_0001)))
+        );
     }
 }

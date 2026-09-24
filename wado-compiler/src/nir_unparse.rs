@@ -600,17 +600,19 @@ impl<'a> NirUnparser<'a> {
     fn unparse_expr(&mut self, body: &Body, id: ExprId) {
         let ty = body.exprs[id].type_id;
         match &body.exprs[id].kind {
-            ExprKind::PackedArray(bytes) => match core::str::from_utf8(bytes) {
+            ExprKind::PackedArray(data) => match data.as_bytes().map(core::str::from_utf8) {
                 // The packed `Array<u8>` repr of a `String` / `List<u8>` literal:
                 // render UTF-8 payloads as a `packed"…"` string for readable dumps.
-                Ok(s) => {
+                Some(Ok(s)) => {
                     self.output.push_str("packed\"");
                     self.output.push_str(&escape_string(s));
                     self.output.push('"');
                 }
-                Err(_) => self
-                    .output
-                    .push_str(&format!("packed(/* {} bytes */)", bytes.len())),
+                _ => self.output.push_str(&format!(
+                    "packed(/* {} x {} */)",
+                    data.len(),
+                    data.elem.as_str()
+                )),
             },
             ExprKind::VariantConstruct {
                 case_name, payload, ..

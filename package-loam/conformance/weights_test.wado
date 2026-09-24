@@ -2,7 +2,7 @@
 //! `basic_test`, with one operand an initializer. ONNX ships one input for it
 //! and no second, since the weight travels in the model.
 
-use { assert_close, first_initializer, tensor_of } from "./oracle.wado";
+use { assert_close, tensor_of } from "./oracle.wado";
 use { Col, Row, Tensor, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_params/model.onnx"
     with {
         generator: {
@@ -22,13 +22,6 @@ use { Col, Row, Tensor, Weights, forward } from "../tests/onnx/pytorch-operator/
         },
     };
 
-fn weights_of(model_bytes: ByteList) -> Weights {
-    let [data, extents] = first_initializer(model_bytes);
-    return Weights {
-        t_1: Tensor::<f32, [Row, Col]> { data, extents },
-    };
-}
-
 test "a graph with an initializer reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
         #include_bytes("../tests/onnx/pytorch-operator/test_operator_params/test_data_set_0/input_0.pb"),
@@ -36,11 +29,8 @@ test "a graph with an initializer reproduces the output ONNX ships" {
     let [want, want_extents] = tensor_of(
         #include_bytes("../tests/onnx/pytorch-operator/test_operator_params/test_data_set_0/output_0.pb"),
     );
-    let weights = weights_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_params/model.onnx"),
-    );
 
-    let got = forward(&Tensor::<f32, [Row, Col]> { data: x, extents: x_extents }, &weights);
+    let got = forward(&Tensor::<f32, [Row, Col]> { data: x, extents: x_extents }, &Weights::embedded());
 
     assert got.extents == want_extents;
     assert_close(&got.data, &want);

@@ -1,0 +1,58 @@
+// A float literal at a half precision type is rounded once, from its decimal
+// text, to nearest even. Reference bit patterns, as in `half_convert`.
+
+struct Weight {
+    value: bf16,
+}
+
+fn bits_of(x: f16) -> u16 {
+    return x.to_bits();
+}
+
+export fn run() {
+    let one: f16 = 1.0;
+    assert one.to_bits() == 0x3C00;
+    let neg: f16 = -2.0;
+    assert neg.to_bits() == 0xC000;
+    let neg_zero: f16 = -0.0;
+    assert neg_zero.to_bits() == 0x8000;
+    let three: f16 = 3;
+    assert three.to_bits() == 0x4200;
+    let largest: f16 = 65504.0;
+    assert largest.to_bits() == 0x7BFF;
+    let tiniest: f16 = 5.9604645e-8;
+    assert tiniest.to_bits() == 0x0001;
+    let negative_tiniest: f16 = -5.9604645e-8;
+    assert negative_tiniest.to_bits() == 0x8001;
+    let underflow: f16 = 1e-10;
+    assert underflow.to_bits() == 0x0000;
+
+    // Above 2048 the step is 2: each tie lands on its even neighbour.
+    let down: f16 = 2049;
+    assert down.to_bits() == 0x6800;
+    let up: f16 = 2051;
+    assert up.to_bits() == 0x6802;
+
+    // f64 rounds this decimal onto the midpoint above 1, and a second rounding
+    // would take the even side. Rounded once, it is above the midpoint.
+    let above_tie: f16 = 1.00048828125000000000000000000000001;
+    assert above_tie.to_bits() == 0x3C01;
+
+    // Every position a literal is typed from.
+    let list: List<bf16> = [0.5, -1.25, 3.14159265];
+    assert list[0].to_bits() == 0x3F00;
+    assert list[1].to_bits() == 0xBFA0;
+    assert list[2].to_bits() == 0x4049;
+    assert bits_of(0.5) == 0x3800;
+    let w = Weight { value: 1e38 };
+    assert w.value.to_bits() == 0x7E96;
+
+    // The compiler and the prelude round alike wherever the f32 is exact.
+    let exact: f16 = 0.333251953125;
+    assert exact.to_bits() == f16::from_f32(builtin::black_box(0.333251953125)).to_bits();
+    let rounded: bf16 = 1.00390625;
+    assert rounded.to_bits() == bf16::from_f32(builtin::black_box(1.00390625)).to_bits();
+}
+
+__DATA__
+{}

@@ -235,6 +235,9 @@ pub enum Code {
     /// struct, or written on some of a struct's fields and not the rest.
     WireNumber,
     ResourceExtends,
+    /// A resource's `#[cm(..., classes = ...)]` does not number its `extends`
+    /// tree, or a type pattern narrows to a resource that declares none.
+    ResourceClasses,
 
     // Compile-time parameters (`#[param]`)
     /// A `#[param]` attribute is malformed (on a mutable global, an unknown
@@ -323,6 +326,7 @@ impl std::fmt::Display for Code {
             Code::LinearMemoryAttr => "LINEAR_MEMORY_ATTR",
             Code::WireNumber => "WIRE_NUMBER",
             Code::ResourceExtends => "RESOURCE_EXTENDS",
+            Code::ResourceClasses => "RESOURCE_CLASSES",
             Code::ParamAttr => "PARAM_ATTR",
             Code::ParamUnknown => "PARAM_UNKNOWN",
             Code::ParamInvalid => "PARAM_INVALID",

@@ -116,7 +116,7 @@ pub trait ReflectNewtype: Reflect {              // newtype
 
 `ReflectTemplate` is a sixth kind, synthesized per tagged template literal
 rather than per declaration. Its subject is the anonymous type a template
-denotes, its payload pack is the hole types, and its members are `Hole` handles
+denotes, its payload pack is the hole types, and its members are `TemplateHole` handles
 carrying the literal text around each hole. It follows every rule here: sealed,
 monomorphized-only, one member channel. See
 [Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md).
@@ -316,12 +316,12 @@ pass is what the protocol is for.
 decided by the subject's own members, below. The two are separate, and only the
 second withholds anything.
 
-The traits are in `core:prelude`'s re-export, so a derivation names its bound
-with no import. The member handles are `pub` but stay out of it: `StructField`,
-`VariantCase`, `EnumCase`, `FlagsBit` and `Hole` are names a package wants for
-itself, and a derivation gets its handles from `members()` without naming the
-type. A signature that does name one imports it from
-`core:prelude/traits.wado`.
+The traits and the member handles — `StructField`, `VariantCase`, `EnumCase`,
+`FlagsBit` and `TemplateHole` — are in `core:prelude`'s re-export, so a
+derivation names its bound, and a helper signature names a handle, with no
+import. They are the reflection API, documented where the rest of the prelude
+is. Like every prelude name they are reserved: a module declaring its own
+`EnumCase` is an error, and generated code (wadopoet, Gale) avoids them.
 
 A type satisfies a `T: Reflect*` bound only where every one of its members is
 visible. A declaration carries a single synthesized impl, so `members()` is

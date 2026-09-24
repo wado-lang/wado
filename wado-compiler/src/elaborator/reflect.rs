@@ -509,10 +509,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         pack_bound: &str,
         static_call: &ast::StaticMethodCallExpr,
     ) {
-        let _ = self.emit(TypeError::UnknownFunction {
-            name: format!(
-                "{trait_name}::<{type_param_name}>::{method} (no `{pack_bound}` bound on {type_param_name})"
-            ),
+        let _ = self.emit(TypeError::MissingReflectPackBound {
+            trait_name: trait_name.to_string(),
+            type_param: type_param_name.to_string(),
+            method: method.to_string(),
+            pack_bound: pack_bound.to_string(),
             span: static_call.span,
         });
     }

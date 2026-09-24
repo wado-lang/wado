@@ -13,7 +13,6 @@ use crate::nir_arena::{
 use crate::tir::TypeTable;
 
 use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
-use crate::const_eval::{MAX_SEQ_ELEMENTS, Value};
 use crate::nir_value_graph::value_kind_to_const;
 use crate::niri::{CtfeBuiltin, CtfeBuiltinMap};
 use crate::primitive::PrimitiveType;
@@ -1378,27 +1377,11 @@ impl<'a> Builder<'a> {
             }
 
             // ---- Other Skel-side leaves ----
-            // The backing bytes of a `String` / `List<u8>` literal are a
-            // constant the pool can name, so a literal keeps its identity
-            // through a binding instead of going opaque at the first `let`.
-            // Bounded by `MAX_SEQ_ELEMENTS`: past it the walk would cost more
-            // than any fold it enables, and `Value::seq` declines.
-            ExprKind::PackedArray(bytes) => {
-                // Length first: `Value::seq` declines past `MAX_SEQ_ELEMENTS`,
-                // and building a `Value` per byte only to throw the vector away
-                // would walk an embedded asset on every graph build.
-                if bytes.len() > MAX_SEQ_ELEMENTS {
-                    return None;
-                }
-                let elements = bytes
-                    .iter()
-                    .map(|b| Value::Int {
-                        value: u64::from(*b),
-                        prim: PrimitiveType::U8,
-                    })
-                    .collect();
+            // Named by the pool, a literal keeps its identity through a binding
+            // rather than going opaque at the first `let`.
+            ExprKind::PackedArray(data) => {
                 let ty = self.body.exprs[expr].type_id;
-                Value::seq(ty, elements).map(|seq| self.pool.constant(&seq, ty))
+                data.to_value(ty).map(|seq| self.pool.constant(&seq, ty))
             }
             ExprKind::GlobalVarGet { .. } => None,
         }

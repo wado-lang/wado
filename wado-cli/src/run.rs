@@ -200,7 +200,7 @@ async fn run_cli_component(
 ) -> Result<()> {
     let engine = runtime::create_engine(cranelift_opt, profile, runtime_knobs)?;
     let component = Component::new(&engine, wasm)?;
-    let linker = runtime::create_linker(&engine)?;
+    let linker = runtime::create_linker(&component)?;
     let mut store = runtime::create_store(&engine, preopened_dirs, program_args)?;
 
     let profiler = if let ProfileMode::Guest { interval_ms, .. } = profile {

@@ -1,6 +1,7 @@
 # wado-from-idl
 
-Generates Wado stdlib modules from IDL files: WIT, and WebIDL.
+Generates Wado binding modules from IDL files: the stdlib from WIT, and
+`package-web` from WebIDL.
 
 ## Generated Modules
 
@@ -10,9 +11,9 @@ Generates Wado stdlib modules from IDL files: WIT, and WebIDL.
 - `core:kiln` — the submodules under `wado-compiler/lib/core/kiln/`. Regenerate
   with `mise run update-stdlib-kiln`. The facade `lib/core/kiln.wado` is
   hand-written and must be preserved.
-- `web:dom` — `wado-compiler/lib/web/dom.wado`, generated from the WebIDL
-  snapshot beside it, `dom.webidl.json`. Regenerate with
-  `mise run update-stdlib-web`; `tests/web_dom_is_fresh.rs` fails when the
+- `web:dom` — `package-web/src/dom.wado`, generated from the WebIDL snapshot
+  `package-web/idl/dom.webidl.json`. Regenerate with
+  `mise run update-package-web`; `tests/web_dom_is_fresh.rs` fails when the
   module is stale. The snapshot is the webidl2 AST of the slice
   `scripts/webidl/snapshot.mjs` takes from `@webref/idl`; widen the slice
   there and run `mise run update-webidl-snapshot`. See

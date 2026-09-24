@@ -1,0 +1,13 @@
+// An undefined tag is the unknown function it names, and nothing more.
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    let x = 1;
+    println(nosuch`a ${x} b`);
+}
+
+__DATA__
+{
+    "compile_error": "unknown function 'nosuch'",
+    "compile_errors_not_contains": ["type mismatch", "a template tag must name"]
+}

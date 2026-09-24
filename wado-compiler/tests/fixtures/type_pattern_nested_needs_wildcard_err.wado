@@ -1,5 +1,5 @@
 // A type pattern inside a payload covers no more of it than one at the top.
-use { Element, HtmlInputElement } from "web:dom";
+use { Element, HtmlInputElement } from "wado-lang:web";
 
 fn kind(o: Option<Element>) -> i32 {
     return match o {
@@ -11,4 +11,9 @@ fn kind(o: Option<Element>) -> i32 {
 export fn run() {}
 
 __DATA__
-{"compile_error": "non-exhaustive match: missing case `Some(_)`"}
+{
+  "compile_error": "non-exhaustive match: missing case `Some(_)`",
+  "dependencies": {
+    "wado-lang:web": "../../../package-web/src/lib.wado"
+  }
+}

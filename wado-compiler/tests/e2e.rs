@@ -533,7 +533,7 @@ async fn run_http_request_async(
     let component = Component::new(engine, &wasm)
         .map_err(|e| anyhow::anyhow!("failed to create component: {e:?}"))?;
 
-    let linker = common::linker(engine)?;
+    let linker = common::host_linker(&component)?;
 
     let state = common::WasiState {
         ctx: WasiCtxBuilder::new().build(),
