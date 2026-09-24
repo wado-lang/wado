@@ -251,7 +251,9 @@ author wrote, and no source can `break` to a synthesized label. Inside a functio
 body, the digits that make such a name unique come from
 `FunctionContext::fresh_serial`. That serial advances on read, so a desugaring
 nested inside another mints names of its own: a tagged template in a hole, a
-`for-of` over a `for-of`. A per-type bridge spells the type's mangle after its
+`for-of` over a `for-of`. An optimizer pass mints a local through
+`Engine::alloc_minted_local`, which names it by the index it takes in the same
+step. A per-type bridge spells the type's mangle after its
 kind (`$value_copy$…`, `$hole_get$…`), and `name::is_type_bridge` recognizes it.
 
 What is one is a `crate::defs::DefId`: a dense index into the whole-program

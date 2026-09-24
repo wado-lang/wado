@@ -1039,7 +1039,7 @@ fn extract_fmt_candidates(
                 let local = engine.alloc_expr(
                     ExprKind::Local {
                         index: hoisted_buf_index,
-                        name: engine.locals()[hoisted_buf_index as usize].name.clone(),
+                        name: engine.local_name(hoisted_buf_index),
                     },
                     buf_ty,
                     value_span,
@@ -1356,7 +1356,7 @@ fn transform_tmpl_block(
     // Allocate a new local for the hoisted String via the engine.
     let buf_local_index =
         engine.alloc_minted_local("tmpl_buf", string_type, /* is_mut */ true);
-    let buf_local_name = engine.locals()[buf_local_index as usize].name.clone();
+    let buf_local_name = engine.local_name(buf_local_index);
 
     // Hoist statement: let mut $tmpl_buf_N = String { repr: array_new(N), used: 0 };
     // Reuse the original init-value subtree (its old `Let` is replaced below).
@@ -1502,7 +1502,7 @@ fn transform_fmts_in_tmpl_block(
         // improves fallback / debug output consistency.
         let fmt_local_index =
             engine.alloc_minted_local("fmt_buf", candidate.formatter_type, /* is_mut */ true);
-        let hoisted_name = engine.locals()[fmt_local_index as usize].name.clone();
+        let hoisted_name = engine.local_name(fmt_local_index);
 
         // Find the next candidate that shares the same fmt_local_index
         let rename_end = sorted_candidates[pos + 1..]

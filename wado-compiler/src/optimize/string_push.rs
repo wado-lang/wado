@@ -530,7 +530,7 @@ fn let_stmt(
     value: Operand,
     span: Span,
 ) -> StmtId {
-    let name = engine.locals()[local as usize].name.clone();
+    let name = engine.local_name(local);
     engine.alloc_stmt(
         StmtKind::Let {
             name,
@@ -546,7 +546,7 @@ fn let_stmt(
 }
 
 fn local_operand(engine: &mut Engine, local: u32, span: Span) -> Operand {
-    let name = engine.locals()[local as usize].name.clone();
+    let name = engine.local_name(local);
     Operand::Expr(engine.alloc_expr(ExprKind::Local { index: local, name }, TypeTable::I32, span))
 }
 

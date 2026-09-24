@@ -5,7 +5,6 @@
 //! Whatever the rewrite misses, [`rebox_stragglers`] wraps back into a variant.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::minted_name;
 use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal};
 use crate::nir_arena::{
     ArenaStructField, ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef,
@@ -540,13 +539,8 @@ fn rebox_call(
     };
     let (variant_type, layout) = scalarized[&func_id].clone();
 
-    let local_index = u32::try_from(locals.len()).expect("local index overflow");
-    let name = minted_name("rebox", local_index);
-    locals.push(NirLocal {
-        name: name.clone(),
-        type_id: layout.tuple_type,
-        is_mut: false,
-    });
+    let local_index = NirLocal::push_minted(locals, "rebox", layout.tuple_type, false);
+    let name = locals[local_index as usize].name.clone();
     // The call moves to a fresh node so `call`'s id can host the wrapping
     // block, keeping every parent operand valid.
     let moved = body.take_expr(call);
@@ -2136,13 +2130,8 @@ fn hoist_call_scrutinees(
             .expect("variant-return SROA: hoist target has a promoted scrutinee");
         let call_type = body.exprs[call].type_id;
 
-        let local_index = func.local_count();
-        let name = minted_name("vr", local_index);
-        func.locals.push(NirLocal {
-            name: name.clone(),
-            type_id: call_type,
-            is_mut: false,
-        });
+        let local_index = NirLocal::push_minted(&mut func.locals, "vr", call_type, false);
+        let name = func.locals[local_index as usize].name.clone();
 
         // The `Match` moves into a fresh node so the original id can host the
         // wrapping `Block`, keeping every parent operand valid. The call node

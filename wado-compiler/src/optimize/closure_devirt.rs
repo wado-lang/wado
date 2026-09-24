@@ -338,8 +338,8 @@ impl Rule for ClosureDevirtRule {
         };
         let type_id = engine.body.exprs[functor].type_id;
         let span = engine.body.exprs[functor].span;
-        let name = format!("$functor_{}", functor.index());
-        let local = engine.alloc_local(name.clone(), type_id, false);
+        let local = engine.alloc_minted_local("functor", type_id, false);
+        let name = engine.local_name(local);
         let bind = engine.alloc_stmt(
             StmtKind::Let {
                 name: name.clone(),

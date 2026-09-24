@@ -455,7 +455,7 @@ fn runtime_floor(
 /// Build a `Local` read expression for `index`.
 fn local_read(engine: &mut Engine, index: u32, span: Span) -> Operand {
     let ty = engine.locals()[index as usize].type_id;
-    let name = engine.locals()[index as usize].name.clone();
+    let name = engine.local_name(index);
     let e = engine.alloc_expr(ExprKind::Local { index, name }, ty, span);
     Operand::Expr(e)
 }
@@ -1107,7 +1107,7 @@ fn local_read_count(body: &Body, root: NodeRef, l: u32) -> usize {
 /// A `Let` statement re-binding local `l` to `value` (locals are
 /// function-scoped slots, so a second `let` is a plain re-definition).
 fn alloc_local_set(engine: &mut Engine, l: u32, value: Operand, span: Span) -> StmtId {
-    let name = engine.locals()[l as usize].name.clone();
+    let name = engine.local_name(l);
     let ty = engine.locals()[l as usize].type_id;
     let is_mut = engine.locals()[l as usize].is_mut;
     engine.alloc_stmt(

@@ -9,7 +9,7 @@
 //! too — [`FusedValue`] is the only axis the two differ on.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{fused_block_label, minted_name, serial_suffixed, threaded_block_label};
+use crate::name::{fused_block_label, serial_suffixed, threaded_block_label};
 use crate::nir::{NirLiteralPattern, NirLocal};
 use crate::nir_arena::{
     ArmData, BlockId, BlockRole, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId,
@@ -31,7 +31,7 @@ use super::sroa_variant_return::{Pad, zero_pad};
 /// variant return.
 const TAG_SLOT: u32 = 0;
 
-/// What [`minted_name`] says of each local the fusions mint.
+/// What [`Engine::alloc_minted_local`] says of each local the fusions mint.
 const FUSED_PAYLOAD: &str = "fused_payload";
 const FUSED_SLOT: &str = "fused_slot";
 const SROA_SLOT: &str = "sroa_slot";
@@ -1328,7 +1328,7 @@ fn emit_variant_payload_let(engine: &mut Engine, vc: ExprId, f: &Fusion, out: &m
     let value = payload.unwrap_or_else(|| engine.const_operand(ValueKind::Unit, payload_type));
     let stmt = engine.alloc_stmt(
         StmtKind::Let {
-            name: minted_name(FUSED_PAYLOAD, payload_local),
+            name: engine.local_name(payload_local),
             local_index: payload_local,
             is_mut: false,
             is_reactive: false,
@@ -1373,7 +1373,7 @@ fn emit_slot_lets(engine: &mut Engine, elements: &[Operand], f: &Fusion, out: &m
         let value = elements[slot.field_index as usize];
         let stmt = engine.alloc_stmt(
             StmtKind::Let {
-                name: minted_name(FUSED_SLOT, slot.local_index),
+                name: engine.local_name(slot.local_index),
                 local_index: slot.local_index,
                 is_mut: false,
                 is_reactive: false,
@@ -1501,7 +1501,8 @@ fn subst_temp_reads_in_stmt(engine: &mut Engine, s: StmtId, f: &Fusion) {
 
 /// The `Local` that replaces `e`, when `e` is one of the consumer's reads of
 /// the fused temp.
-fn replacement_for(body: &Body, e: ExprId, f: &Fusion) -> Option<ExprKind> {
+fn replacement_for(engine: &Engine, e: ExprId, f: &Fusion) -> Option<ExprKind> {
+    let body = &*engine.body;
     match &f.value {
         BoundValue::Variant {
             case_index,
@@ -1519,7 +1520,7 @@ fn replacement_for(body: &Body, e: ExprId, f: &Fusion) -> Option<ExprKind> {
             (ci == case_index && is_local_operand(body, *inner, f.temp_local)).then(|| {
                 ExprKind::Local {
                     index: *payload_local,
-                    name: minted_name(FUSED_PAYLOAD, *payload_local),
+                    name: engine.local_name(*payload_local),
                 }
             })
         }
@@ -1538,14 +1539,14 @@ fn replacement_for(body: &Body, e: ExprId, f: &Fusion) -> Option<ExprKind> {
             let slot = slots.iter().find(|s| s.field_index == *field_index)?;
             Some(ExprKind::Local {
                 index: slot.local_index,
-                name: minted_name(FUSED_SLOT, slot.local_index),
+                name: engine.local_name(slot.local_index),
             })
         }
     }
 }
 
 fn subst_temp_reads_in_expr(engine: &mut Engine, e: ExprId, f: &Fusion) {
-    if let Some(kind) = replacement_for(engine.body, e, f) {
+    if let Some(kind) = replacement_for(engine, e, f) {
         engine.replace_expr_kind(e, kind);
         return;
     }
@@ -2284,7 +2285,7 @@ fn perform_slot_temp_sroa(
             e,
             ExprKind::Local {
                 index: slot.local_index,
-                name: minted_name(SROA_SLOT, slot.local_index),
+                name: engine.local_name(slot.local_index),
             },
         );
     }
@@ -2305,7 +2306,7 @@ fn perform_slot_temp_sroa(
     for (local_index, type_id, zero) in plan.zeros {
         let decl = engine.alloc_stmt(
             StmtKind::Let {
-                name: minted_name(SROA_SLOT, local_index),
+                name: engine.local_name(local_index),
                 local_index,
                 is_mut: true,
                 is_reactive: false,
@@ -2383,7 +2384,7 @@ fn slot_assign(engine: &mut Engine, slot: &BoundSlot, value: Operand, span: Span
     let target = engine.alloc_expr(
         ExprKind::Local {
             index: slot.local_index,
-            name: minted_name(SROA_SLOT, slot.local_index),
+            name: engine.local_name(slot.local_index),
         },
         slot.type_id,
         span,
@@ -2406,7 +2407,7 @@ fn scalarize_materialized_exit(
 ) {
     let agg_type = engine.body.exprs[exit].type_id;
     let index = engine.alloc_minted_local(SROA_AGG, agg_type, /* is_mut */ false);
-    let name = minted_name(SROA_AGG, index);
+    let name = engine.local_name(index);
     out.push(engine.alloc_stmt(
         StmtKind::Let {
             name: name.clone(),

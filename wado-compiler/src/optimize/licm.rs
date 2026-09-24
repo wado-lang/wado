@@ -519,7 +519,7 @@ fn licm_loop(
                 candidate.type_id,
                 /* is_mut */ false,
             );
-            let hoist_name = engine.locals()[new_local_index as usize].name.clone();
+            let hoist_name = engine.local_name(new_local_index);
 
             // Build `local.field` as fresh arena nodes via the engine.
             let local_expr = engine.alloc_expr(
@@ -703,7 +703,7 @@ fn hoist_reloadable_field_loads(
             candidate.type_id,
             /* is_mut */ true,
         );
-        let hoist_name = engine.locals()[new_local_index as usize].name.clone();
+        let hoist_name = engine.local_name(new_local_index);
 
         let hoist_value = build_field_access(
             engine,
@@ -2049,7 +2049,7 @@ fn hoist_invariant_arith(
     for (_, type_id, occ) in groups {
         let rep = occ[0];
         let new_idx = ctx.alloc_hoist(engine, ARITH_HOIST, type_id, /* is_mut */ false);
-        let name = engine.locals()[new_idx as usize].name.clone();
+        let name = engine.local_name(new_idx);
 
         // Clone the representative into the pre-header `let` *before* rewriting
         // the in-loop occurrences (which include `rep` itself) to a `Local`.
@@ -2267,7 +2267,7 @@ fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVar
             };
             let span = engine.body.exprs[src_expr].span;
             let temp = engine.alloc_minted_local("cse", ty, /* is_mut */ false);
-            let name = engine.locals()[temp as usize].name.clone();
+            let name = engine.local_name(temp);
             // Clone the chosen occurrence's skeleton subtree for the temp's value
             // (the value itself is a sourceless-Opaque tree the extractor can not
             // re-emit; the skeleton can).
@@ -2467,7 +2467,7 @@ fn hoist_invariant_value_operands(
             continue;
         };
         let temp = ctx.alloc_hoist(engine, ARITH_HOIST, ty, /* is_mut */ false);
-        let name = engine.locals()[temp as usize].name.clone();
+        let name = engine.local_name(temp);
         let read = engine
             .body
             .values

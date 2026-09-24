@@ -12,7 +12,6 @@ use cranelift_entity::EntityRef;
 use crate::compiler_trace;
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::minted_name;
 use crate::nir::{FuncId, NirLocal};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
@@ -202,7 +201,7 @@ impl EngineBuffers {
     }
 
     /// Mutable access to local `index`'s use record, growing `uses` on demand
-    /// (a session may `alloc_local` past the count `reset_for` saw).
+    /// (a session may allocate past the count `reset_for` saw).
     fn uses_entry(&mut self, index: u32) -> &mut LocalUses {
         let i = index as usize;
         if self.uses.len() <= i {
@@ -311,7 +310,7 @@ pub struct Engine<'a> {
     pub body: &'a mut Body,
     buf: &'a mut EngineBuffers,
     /// The function's local list — the single source of truth for the local
-    /// count, so `alloc_local` appends here and returns the new index. Sessions
+    /// count, so `alloc_minted_local` appends here and returns the new index. Sessions
     /// over a body with no owning function (a global initializer, a unit test)
     /// pass a scratch `Vec`; those bodies have no locals and their rules never
     /// allocate, so it stays empty.
@@ -378,7 +377,7 @@ impl<'a> Engine<'a> {
     /// Build a session over `body`, reusing the caller-owned `buf`: one O(n)
     /// walk populates the parent map and use index and seeds the worklist in
     /// post-order (see `Engine::build_indices`). `locals` is the owning
-    /// function's local list (see [`Engine::alloc_local`]).
+    /// function's local list (see [`Engine::alloc_minted_local`]).
     pub fn new(
         body: &'a mut Body,
         buf: &'a mut EngineBuffers,
@@ -913,25 +912,15 @@ impl<'a> Engine<'a> {
         self.locals
     }
 
-    /// Allocate a fresh function local, returning its index. `locals.len()` is
-    /// the local count (there is no separate counter — see
-    /// [`crate::nir::NirFunction::local_count`]), so the new local takes the
-    /// index `locals.len()` and the push makes it the next free index.
-    pub fn alloc_local(&mut self, name: String, type_id: TypeId, is_mut: bool) -> u32 {
-        let index = self.locals.len() as u32;
-        self.locals.push(NirLocal {
-            name,
-            type_id,
-            is_mut,
-        });
-        index
+    /// The name local `index` was allocated under.
+    pub fn local_name(&self, index: u32) -> String {
+        self.locals[index as usize].name.clone()
     }
 
-    /// [`Self::alloc_local`] a local a pass mints, named by [`minted_name`] from
-    /// `what` and the index this step takes, never one a caller read earlier.
+    /// [`NirLocal::push_minted`] onto this function's locals: named by the index
+    /// this step takes, never one a caller read earlier.
     pub fn alloc_minted_local(&mut self, what: &str, type_id: TypeId, is_mut: bool) -> u32 {
-        let index = self.locals.len();
-        self.alloc_local(minted_name(what, index), type_id, is_mut)
+        NirLocal::push_minted(self.locals, what, type_id, is_mut)
     }
 
     /// Build the session's three indices — parent map, local use index, and
@@ -2316,31 +2305,22 @@ mod tests {
         assert_eq!(popped, vec![NodeRef::Expr(fresh)]);
     }
 
-    /// `uses_entry` grows `EngineBuffers::uses` on demand for a local
-    /// `alloc_local`'d after `reset_for` pre-sized it to the session's initial
-    /// local count. No other test calls `alloc_local`, so this growth path was
-    /// previously untested — a regression in `uses_entry`'s bounds check or
-    /// `resize_with` length would surface here rather than only on a real
-    /// program that allocates a local mid-pass.
+    /// `uses_entry` grows `EngineBuffers::uses` on demand for a local allocated
+    /// after `reset_for` pre-sized it to the session's initial local count.
     #[test]
-    fn alloc_local_extends_the_use_index_past_reset_fors_initial_size() {
-        // An empty body (not `sample_body()`, which already occupies local
-        // index 0 for `x`) so the newly `alloc_local`'d index doesn't collide
-        // with a pre-existing `Local` mention.
+    fn alloc_minted_local_extends_the_use_index_past_reset_fors_initial_size() {
+        // An empty body, so the new local's index collides with no `Local`.
         let mut body = mk_body(|_| Vec::new());
         let mut __buf_eng = EngineBuffers::default();
         let mut __locals_eng: Vec<NirLocal> = Vec::new();
         let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
 
-        // The session starts with 0 locals (`__locals_eng` is empty), so
-        // `reset_for` pre-sizes `uses` to length 0; `alloc_local` mints an
-        // index beyond that.
-        let new_local = eng.alloc_local("y".to_string(), TypeTable::I32, false);
+        let new_local = eng.alloc_minted_local("y", TypeTable::I32, false);
         assert_eq!(new_local, 0);
         let read = eng.alloc_expr(
             ExprKind::Local {
                 index: new_local,
-                name: "y".to_string(),
+                name: eng.local_name(new_local),
             },
             TypeTable::I32,
             Span::default(),

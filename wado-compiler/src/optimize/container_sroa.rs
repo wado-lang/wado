@@ -29,7 +29,7 @@ use super::arena_query::{
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::SeqField;
 use crate::lower::plan::value_copy;
-use crate::name::FqTraitName;
+use crate::name::{FqTraitName, minted_what};
 use crate::nir::NirField;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::niri::{CtfeBuiltin, build_ctfe_builtin_map};
@@ -953,14 +953,15 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
 
     // Step 4: allocate parallel `List<T_k>` locals through the engine. The
     // type-table borrow is scoped so it does not overlap the engine's locals
-    // mutation (`alloc_local` takes `&mut self`).
+    // mutation (`alloc_minted_local` takes `&mut self`).
     let mut field_map: IndexMap<(u32, u32), FieldList> = IndexMap::default();
     let mut decomposed: IndexSet<u32> = IndexSet::default();
     for c in &safe_candidates {
         for (k, &elem_ty) in c.element_types.iter().enumerate() {
             let list_type = rule.type_table_rc.borrow_mut().make_list(elem_ty);
-            let name = format!("$csroa_{}_{}", c.local_name, k);
-            let local_index = engine.alloc_local(name.clone(), list_type, /* is_mut */ false);
+            let what = minted_what("csroa", &c.local_name);
+            let local_index = engine.alloc_minted_local(&what, list_type, /* is_mut */ false);
+            let name = engine.local_name(local_index);
             field_map.insert(
                 (c.local_index, k as u32),
                 FieldList {
@@ -2191,7 +2192,7 @@ fn spill(
         return op;
     }
     let local_index = engine.alloc_minted_local("csroa_elem", type_id, false);
-    let name = engine.locals()[local_index as usize].name.clone();
+    let name = engine.local_name(local_index);
     out.push(engine.alloc_stmt(
         StmtKind::Let {
             name: name.clone(),

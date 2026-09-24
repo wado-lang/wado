@@ -171,7 +171,7 @@ impl Build<'_, '_> {
     /// A fresh immutable local bound to `value`, as its index and its `let`.
     fn bind(&mut self, what: &str, ty: TypeId, value: Operand) -> (u32, StmtId) {
         let local_index = self.engine.alloc_minted_local(what, ty, false);
-        let name = self.engine.locals()[local_index as usize].name.clone();
+        let name = self.engine.local_name(local_index);
         let stmt = self.engine.alloc_stmt(
             StmtKind::Let {
                 name,
@@ -188,7 +188,7 @@ impl Build<'_, '_> {
     }
 
     fn read(&mut self, local_index: u32, ty: TypeId) -> Operand {
-        let name = self.engine.locals()[local_index as usize].name.clone();
+        let name = self.engine.local_name(local_index);
         self.expr(
             ExprKind::Local {
                 index: local_index,

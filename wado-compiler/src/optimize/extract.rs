@@ -689,7 +689,7 @@ fn apply_field_materialise(
     }
     let span = engine.body.exprs[ids[0]].span;
     let av = engine.alloc_minted_local(ANCHORED_VALUE, id_ty, /* is_mut */ false);
-    let name = engine.locals()[av as usize].name.clone();
+    let name = engine.local_name(av);
     let let_stmt = engine.alloc_stmt(
         StmtKind::Let {
             name: name.clone(),
@@ -789,7 +789,7 @@ fn apply_value_freeze(
     if materialize {
         let (anchor, block) = point.expect("`anchorable` holds only with a point");
         let av = engine.alloc_minted_local(ANCHORED_VALUE, id_ty, /* is_mut */ false);
-        let name = engine.locals()[av as usize].name.clone();
+        let name = engine.local_name(av);
         let read = engine
             .body
             .values

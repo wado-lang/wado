@@ -11,7 +11,7 @@
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{minted_name, minted_what};
+use crate::name::minted_what;
 use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatKind,
@@ -298,14 +298,9 @@ fn scalarize_function(
         frame: &frame,
         loop_sites,
     };
-    let mut locals = func.locals.clone();
-    let changed = {
-        let body = func.body.as_mut().unwrap();
-        let root = body.root;
-        scalarize_block(body, root, &mut locals, type_table, cache, &analysis)
-    };
-    func.locals = locals;
-    changed
+    let body = func.body.as_mut().unwrap();
+    let root = body.root;
+    scalarize_block(body, root, &mut func.locals, type_table, cache, &analysis)
 }
 
 /// Read-only function-wide pre-analysis shared by every `scalarize_loop`
@@ -570,7 +565,7 @@ fn scalarize_loop(
             continue;
         }
 
-        let new_local_index = push_minted_local(
+        let new_local_index = NirLocal::push_minted(
             locals,
             &minted_what(SCALAR, &info.field_name),
             info.field_type_id,
@@ -647,18 +642,6 @@ fn push_expr(body: &mut Body, kind: ExprKind, type_id: TypeId, span: Span) -> Ex
 /// Push a fresh statement node into the arena and return its id.
 fn push_stmt(body: &mut Body, kind: StmtKind, span: Span) -> StmtId {
     body.stmts.push(StmtNode { kind, span })
-}
-
-/// Push a local named by [`minted_name`] from `what` and the index it takes,
-/// returning that index.
-fn push_minted_local(locals: &mut Vec<NirLocal>, what: &str, type_id: TypeId, is_mut: bool) -> u32 {
-    let index = locals.len() as u32;
-    locals.push(NirLocal {
-        name: minted_name(what, index),
-        type_id,
-        is_mut,
-    });
-    index
 }
 
 /// Build a `Local` expression node for the scalar `$hfs_F` local.
@@ -1384,7 +1367,7 @@ impl WalkCtx<'_> {
         {
             return idx;
         }
-        push_minted_local(self.locals, CALL_TEMP, type_id, /* is_mut */ false)
+        NirLocal::push_minted(self.locals, CALL_TEMP, type_id, /* is_mut */ false)
     }
 
     fn free_temp(&mut self, idx: u32, type_id: TypeId) {
