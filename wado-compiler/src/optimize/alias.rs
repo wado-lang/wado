@@ -19,7 +19,7 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::niri::AliasClasses;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
 
 /// Per-function alias annotations, computed once by [`build_alias_info`]:
 /// `aliased` are locals reachable through another handle, `untrackable` those
@@ -994,42 +994,55 @@ fn collect_mut_escaped_node(
 // Alias group analysis (union-find over reference-typed copies)
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// The struct identity a reference type points at, stripping `Ref`/`MutRef`.
-/// `None` for non-reference types or references to non-struct pointees
-/// (primitives, boxed primitives) whose fields const-fold never tracks.
-fn reference_pointee_struct_key(
-    type_id: TypeId,
-    type_table: &TypeTable,
-) -> Option<(String, ModuleSource)> {
-    match type_table.get(type_id) {
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            reference_pointee_struct_key(*inner, type_table)
+/// The heap object a local's value may share with another local of the same
+/// key: a struct handle, or any aggregate (tuple, generic instance, array)
+/// reached through a reference. `None` for scalars, whose fields nothing tracks.
+fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey> {
+    fn key(type_id: TypeId, under_ref: bool, type_table: &TypeTable) -> Option<TypeKey> {
+        match type_table.get(type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => key(*inner, true, type_table),
+            ResolvedType::Newtype { .. } => key(
+                type_table.representation_head(type_id),
+                under_ref,
+                type_table,
+            ),
+            ResolvedType::Struct { .. } => Some(type_table.type_key(type_id)),
+            // A value tuple is copied on assignment, so only a handle to one shares it.
+            ResolvedType::GenericInstance { .. } | ResolvedType::BuiltinArray(_) => {
+                under_ref.then(|| {
+                    type_table.type_key(type_table.monomorphized_struct(type_id).unwrap_or(type_id))
+                })
+            }
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Function { .. }
+            | ResolvedType::Reactive(_)
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => None,
+            ResolvedType::InferVar(var) => panic!("{var} reached alias analysis"),
         }
-        // Look through a `type T = U` newtype to its base, so two references to
-        // the same object whose pointee surfaces as a newtype still share a key
-        // (and thus an alias group). Otherwise `&Newtype` / `&mut Newtype` to
-        // one object would not be grouped, and `mut_escaped`'s group closure
-        // could leave an immutable handle's fields stale across a mutating call.
-        ResolvedType::Newtype { base_type, .. } => {
-            reference_pointee_struct_key(*base_type, type_table)
-        }
-        ResolvedType::Struct { def, .. } => Some((
-            type_table.struct_list_name(type_id)?,
-            type_table.struct_head_module(*def).clone(),
-        )),
-        _ => None,
     }
+    key(type_id, false, type_table)
 }
 
-/// Edges connecting reference locals (`func.locals` is indexed by local index,
-/// params included) that point at the same struct. Two such references may
-/// alias the same heap object, so a write through one must widen invalidation
-/// to the others. Connected as a star to each pointee's first-seen local.
+/// Edges connecting locals (`func.locals` is indexed by local index, params
+/// included) that may share one heap object, by [`shared_object_key`]. A write
+/// through one must widen invalidation to the others. Connected as a star to
+/// each pointee's first-seen local.
 fn same_pointee_reference_edges(locals: &[NirLocal], type_table: &TypeTable) -> Vec<(u32, u32)> {
-    let mut rep: IndexMap<(String, ModuleSource), u32> = IndexMap::default();
+    let mut rep: IndexMap<TypeKey, u32> = IndexMap::default();
     let mut edges = Vec::new();
     for (i, l) in locals.iter().enumerate() {
-        let Some(key) = reference_pointee_struct_key(l.type_id, type_table) else {
+        let Some(key) = shared_object_key(l.type_id, type_table) else {
             continue;
         };
         match rep.get(&key) {
