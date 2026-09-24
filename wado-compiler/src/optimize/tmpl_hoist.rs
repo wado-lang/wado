@@ -114,7 +114,6 @@ pub fn hoist_template_buffers(
                 type_table: &type_table,
                 idents: &idents,
                 heap: &effects,
-                serial: Cell::new(func.locals.len() as u32),
             },
             applied: Cell::new(false),
         };
@@ -157,17 +156,6 @@ struct HoistCx<'a> {
     type_table: &'a RefCell<TypeTable>,
     idents: &'a TmplIdents,
     heap: HeapView<'a>,
-    /// Makes each minted name unique. Seeded with the local count: an earlier
-    /// session's every read named a local it allocated, so each came in below.
-    serial: Cell<u32>,
-}
-
-impl HoistCx<'_> {
-    fn fresh_serial(&self) -> u32 {
-        let serial = self.serial.get();
-        self.serial.set(serial + 1);
-        serial
-    }
 }
 
 impl Rule for TmplHoistRule<'_> {
@@ -1366,9 +1354,9 @@ fn transform_tmpl_block(
     let string_type = candidate.string_type;
 
     // Allocate a new local for the hoisted String via the engine.
-    let buf_local_name = format!("$tmpl_buf_{}", cx.fresh_serial());
     let buf_local_index =
-        engine.alloc_local(buf_local_name.clone(), string_type, /* is_mut */ true);
+        engine.alloc_minted_local("tmpl_buf", string_type, /* is_mut */ true);
+    let buf_local_name = engine.locals()[buf_local_index as usize].name.clone();
 
     // Hoist statement: let mut $tmpl_buf_N = String { repr: array_new(N), used: 0 };
     // Reuse the original init-value subtree (its old `Let` is replaced below).
@@ -1423,7 +1411,7 @@ fn transform_tmpl_block(
     let fmt_candidates =
         extract_fmt_candidates(engine, block, buf_local_index, cx.type_table, cx.idents);
     if !fmt_candidates.is_empty() {
-        transform_fmts_in_tmpl_block(engine, block, &fmt_candidates, hoist_stmts, cx);
+        transform_fmts_in_tmpl_block(engine, block, &fmt_candidates, hoist_stmts);
     }
 }
 
@@ -1481,7 +1469,6 @@ fn transform_fmts_in_tmpl_block(
     block: BlockId,
     candidates: &[FmtCandidate],
     hoist_stmts: &mut Vec<StmtId>,
-    cx: &HoistCx,
 ) {
     // Sort by stmt_index ascending to compute rename ranges
     let mut sorted_candidates: Vec<_> = candidates.iter().collect();
@@ -1513,12 +1500,9 @@ fn transform_fmts_in_tmpl_block(
         // `Let`s by local index, with `tir_func.locals[idx].name` used as a
         // fallback when no `Let` is found, so matching names mainly
         // improves fallback / debug output consistency.
-        let hoisted_name = format!("$fmt_buf_{}", cx.fresh_serial());
-        let fmt_local_index = engine.alloc_local(
-            hoisted_name.clone(),
-            candidate.formatter_type,
-            /* is_mut */ true,
-        );
+        let fmt_local_index =
+            engine.alloc_minted_local("fmt_buf", candidate.formatter_type, /* is_mut */ true);
+        let hoisted_name = engine.locals()[fmt_local_index as usize].name.clone();
 
         // Find the next candidate that shares the same fmt_local_index
         let rename_end = sorted_candidates[pos + 1..]

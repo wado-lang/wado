@@ -10,6 +10,7 @@ use std::ops::ControlFlow;
 use crate::compiler_trace;
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::{LICM_HOIST, is_licm_hoist, minted_what};
 use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
@@ -280,6 +281,10 @@ impl Rule for LicmRule<'_> {
     }
 }
 
+/// What an invariant arithmetic hoist is minted under, beside a field hoist's
+/// field name.
+const ARITH_HOIST: &str = "arith";
+
 /// Per-function LICM session state, threaded through the whole walk.
 struct LicmCtx<'a> {
     type_table: &'a TypeTable,
@@ -287,13 +292,10 @@ struct LicmCtx<'a> {
     /// for conservatively.
     heap: LazyHeapFrame<'a, 'a>,
     /// Locals created by a LICM hoist. Every hoist in this session inserts
-    /// its fresh local; at session start the set is seeded from the
-    /// [`LICM_HOIST_PREFIX`] naming convention — the only marker that
-    /// persists on hoist locals surviving from a prior pass invocation.
+    /// its fresh local; at session start the set is seeded from
+    /// [`is_licm_hoist`] — the only marker that persists on hoist locals
+    /// surviving from a prior pass invocation.
     hoist_locals: IndexSet<u32>,
-    /// Makes each minted name unique. Seeded with the local count: an earlier
-    /// session's every read named a local it allocated, so each came in below.
-    serial: u32,
 }
 
 impl<'a> LicmCtx<'a> {
@@ -306,20 +308,22 @@ impl<'a> LicmCtx<'a> {
         let hoist_locals = locals
             .iter()
             .enumerate()
-            .filter(|(_, l)| l.name.starts_with(LICM_HOIST_PREFIX))
+            .filter(|(_, l)| is_licm_hoist(&l.name))
             .map(|(i, _)| i as u32)
             .collect();
         Self {
             type_table,
             heap: LazyHeapFrame::new(effects, params.to_vec()),
             hoist_locals,
-            serial: locals.len() as u32,
         }
     }
 
-    fn fresh_serial(&mut self) -> u32 {
-        self.serial += 1;
-        self.serial - 1
+    /// Allocate a hoist local minted as [`LICM_HOIST`] narrowed by `what`,
+    /// recording it as one of this session's hoists.
+    fn alloc_hoist(&mut self, engine: &mut Engine, what: &str, ty: TypeId, is_mut: bool) -> u32 {
+        let index = engine.alloc_minted_local(&minted_what(LICM_HOIST, what), ty, is_mut);
+        self.hoist_locals.insert(index);
+        index
     }
 
     /// Whether `call` may write an object of type `key` that `root` holds.
@@ -425,12 +429,6 @@ fn licm_children(
     changed
 }
 
-/// Name prefix for every LICM-created hoist local. [`LicmCtx::new`] seeds its
-/// `hoist_locals` set from it, recognizing hoisted handles persisting from a
-/// prior LICM invocation so their clobbered-object sub-fields stay un-hoisted;
-/// within a session the set itself is authoritative.
-const LICM_HOIST_PREFIX: &str = "$licm_";
-
 /// Apply LICM to a single loop, returning hoisting statement ids to prepend and
 /// whether anything under the loop changed.
 fn licm_loop(
@@ -502,11 +500,8 @@ fn licm_loop(
             break;
         }
 
-        // Step 4: Create hoisting statements. Each candidate gets its local
-        // from `engine.alloc_local` (which also pushes the `NirLocal` entry),
-        // so the surviving hoist locals are contiguous from the function's
-        // current local count. The allocated name travels with the
-        // replacement so every rewritten read reuses it verbatim.
+        // Step 4: Create hoisting statements. The allocated name travels with
+        // the replacement so every rewritten read reuses it verbatim.
         let mut replacements = Vec::with_capacity(candidates.len());
         for candidate in candidates {
             let local_type_id = {
@@ -518,17 +513,13 @@ fn licm_loop(
                 }
             };
 
-            let hoist_name = format!(
-                "{LICM_HOIST_PREFIX}{}_{}",
-                candidate.field_name,
-                ctx.fresh_serial()
-            );
-            let new_local_index = engine.alloc_local(
-                hoist_name.clone(),
+            let new_local_index = ctx.alloc_hoist(
+                engine,
+                &candidate.field_name,
                 candidate.type_id,
                 /* is_mut */ false,
             );
-            ctx.hoist_locals.insert(new_local_index);
+            let hoist_name = engine.locals()[new_local_index as usize].name.clone();
 
             // Build `local.field` as fresh arena nodes via the engine.
             let local_expr = engine.alloc_expr(
@@ -706,17 +697,13 @@ fn hoist_reloadable_field_loads(
             .effects
             .object_key(local_type_id)
             .expect("a candidate's call clobber was found by its object key");
-        let hoist_name = format!(
-            "{LICM_HOIST_PREFIX}{}_{}",
-            candidate.field_name,
-            ctx.fresh_serial()
-        );
-        let new_local_index = engine.alloc_local(
-            hoist_name.clone(),
+        let new_local_index = ctx.alloc_hoist(
+            engine,
+            &candidate.field_name,
             candidate.type_id,
             /* is_mut */ true,
         );
-        ctx.hoist_locals.insert(new_local_index);
+        let hoist_name = engine.locals()[new_local_index as usize].name.clone();
 
         let hoist_value = build_field_access(
             engine,
@@ -2040,7 +2027,7 @@ fn hoist_invariant_arith(
         // invariant as a bare `Operand::Value` slot (no skeleton expr) — hoist
         // those.
         let mut c = hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts, ctx);
-        c |= cse_loop_body(engine, loop_body, modified, ctx);
+        c |= cse_loop_body(engine, loop_body, modified);
         return c;
     }
 
@@ -2061,9 +2048,8 @@ fn hoist_invariant_arith(
 
     for (_, type_id, occ) in groups {
         let rep = occ[0];
-        let name = format!("{LICM_HOIST_PREFIX}arith_{}", ctx.fresh_serial());
-        let new_idx = engine.alloc_local(name.clone(), type_id, /* is_mut */ false);
-        ctx.hoist_locals.insert(new_idx);
+        let new_idx = ctx.alloc_hoist(engine, ARITH_HOIST, type_id, /* is_mut */ false);
+        let name = engine.locals()[new_idx as usize].name.clone();
 
         // Clone the representative into the pre-header `let` *before* rewriting
         // the in-loop occurrences (which include `rep` itself) to a `Local`.
@@ -2094,7 +2080,7 @@ fn hoist_invariant_arith(
     }
 
     hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts, ctx);
-    cse_loop_body(engine, loop_body, modified, ctx);
+    cse_loop_body(engine, loop_body, modified);
     true
 }
 
@@ -2170,12 +2156,7 @@ fn cse_operand_in_scope(
 /// each occurrence is still re-emitted. Binding a clone to a temp before the
 /// earliest occurrence's statement dominates them all, and their shared leaves
 /// are in scope there. Trap-prone ops are excluded, so hoisting cannot trap.
-fn cse_loop_body(
-    engine: &mut Engine,
-    loop_body: BlockId,
-    modified: &ModifiedVars,
-    ctx: &mut LicmCtx,
-) -> bool {
+fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVars) -> bool {
     let stmts = engine.body.blocks[loop_body].stmts.clone();
     // Occurrences of each materialisable arith value, keyed by a value-graph-free
     // **structural key**, as (top-level stmt index, expr) in first-seen order.
@@ -2285,8 +2266,8 @@ fn cse_loop_body(
                 continue;
             };
             let span = engine.body.exprs[src_expr].span;
-            let name = format!("$cse_{}", ctx.fresh_serial());
-            let temp = engine.alloc_local(name.clone(), ty, /* is_mut */ false);
+            let temp = engine.alloc_minted_local("cse", ty, /* is_mut */ false);
+            let name = engine.locals()[temp as usize].name.clone();
             // Clone the chosen occurrence's skeleton subtree for the temp's value
             // (the value itself is a sourceless-Opaque tree the extractor can not
             // re-emit; the skeleton can).
@@ -2485,9 +2466,8 @@ fn hoist_invariant_value_operands(
         let Some(ty) = engine.body.values.type_of(rep) else {
             continue;
         };
-        let name = format!("{LICM_HOIST_PREFIX}arith_{}", ctx.fresh_serial());
-        let temp = engine.alloc_local(name.clone(), ty, /* is_mut */ false);
-        ctx.hoist_locals.insert(temp);
+        let temp = ctx.alloc_hoist(engine, ARITH_HOIST, ty, /* is_mut */ false);
+        let name = engine.locals()[temp as usize].name.clone();
         let read = engine
             .body
             .values

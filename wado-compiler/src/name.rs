@@ -430,6 +430,24 @@ pub fn minted_name(what: &str, serial: impl fmt::Display) -> String {
     format!("{INTERNAL_PREFIX}{what}_{serial}")
 }
 
+/// `what` narrowed by `sub` (a field name, say), for [`minted_name`].
+#[must_use]
+pub fn minted_what(what: &str, sub: &str) -> String {
+    format!("{what}_{sub}")
+}
+
+/// What every LICM hoist is minted under, narrowed by [`minted_what`].
+pub const LICM_HOIST: &str = "licm";
+
+/// Whether `name` is one minted under [`LICM_HOIST`]: what tells a later LICM
+/// session the hoists an earlier one left.
+#[must_use]
+pub fn is_licm_hoist(name: &str) -> bool {
+    name.strip_prefix(INTERNAL_PREFIX)
+        .and_then(|rest| rest.strip_prefix(LICM_HOIST))
+        .is_some_and(|rest| rest.starts_with('_'))
+}
+
 /// The local a derived `Eq` binds `side`'s payload of variant case `case` to.
 #[must_use]
 pub fn eq_payload_local(side: &str, case: &str, index: u32) -> String {
