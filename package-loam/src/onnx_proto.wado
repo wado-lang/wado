@@ -6,7 +6,7 @@
 //! subset leaves out is skipped by `core:protobuf`, so a real model reads
 //! whatever else it carries.
 
-use { from_bytes, write_fixed32 } from "core:protobuf";
+use { from_bytes } from "core:protobuf";
 use {
     Attr,
     ConstTensor,
@@ -18,6 +18,7 @@ use {
     check_element_count,
     element_bytes,
     parameters,
+    push_element,
 } from "./graph.wado";
 
 /// Nesting flattens: `.proto` nests a message inside a message and Wado has
@@ -204,7 +205,7 @@ pub fn float_tensor(t: &TensorProto) -> Result<Option<[List<f32>, List<i32>]>, S
     }
     let extents = extents_of(t)?;
     let Some(bytes) = payload(t, &"float", &extents)? else {
-        unreachable();
+        return Result::Err(`${t.name}: no data`);
     };
     return Result::Ok(Option::Some([List::<f32>::from_le_bytes(bytes), extents]));
 }
@@ -321,14 +322,18 @@ fn payload(t: &TensorProto, dtype: &String, extents: &List<i32>) -> Result<Optio
     if bytes.is_empty() {
         if width == 4 {
             for let v of t.float_data {
-                write_fixed32(&mut bytes, v.to_bits());
+                push_element(&mut bytes, v.to_bits(), width);
             }
         } else {
             for let v of t.int32_data {
-                bytes.push(v as u8);
-                bytes.push((v >> 8) as u8);
+                push_element(&mut bytes, v as u32, width);
             }
         }
+    }
+    // No value field at all, on a shape that has elements: the checkpoint
+    // supplies them, as a textual initializer written without `=` says.
+    if bytes.is_empty() && check_element_count(&t.name, 0, extents).is_err() {
+        return Result::Ok(null);
     }
     if bytes.len() % width != 0 {
         return Result::Err(`${t.name}: ${bytes.len()} raw bytes is not whole ${dtype} elements`);

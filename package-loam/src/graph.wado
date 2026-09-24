@@ -35,6 +35,14 @@ pub fn element_bytes(dtype: &String) -> Option<i32> {
     };
 }
 
+/// One element's low `width` bytes, little-endian, as the protobuf form lays
+/// out a payload.
+pub fn push_element(bytes: &mut ByteList, bits: u32, width: i32) {
+    for let mut at = 0; at < width; at += 1 {
+        bytes.push((bits >> (8 * at) as u32) as u8);
+    }
+}
+
 /// The extents' product is how many elements the tensor says it has, and a
 /// payload of any other length is a file disagreeing with itself.
 pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) -> Result<(), String> {

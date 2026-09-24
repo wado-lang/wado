@@ -162,6 +162,16 @@ test "a half initializer's elements come out of the low half of int32_data" {
     assert g.initializers[0].data == Option::Some(b"\x00\x3c\x00\xc1");
 }
 
+test "an initializer carrying no data is left to the checkpoint" {
+    let g = read_initializer_of(TensorProto {
+        dims: [2],
+        data_type: 1,
+        name: "W",
+    }).unwrap();
+
+    assert g.initializers[0].data matches { None };
+}
+
 test "an initializer whose data disagrees with its shape names itself" {
     let e = read_initializer_of(TensorProto {
         dims: [2],

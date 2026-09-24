@@ -213,10 +213,9 @@ an infinity, as an integer literal past its type's range is.
 ### Parsing rounds once too
 
 `f16::from_str` and `bf16::from_str` round decimal text straight to the half,
-as a literal does, so reading a textual model's weights agrees with writing
-them as source. `f32::from_str` follows the same rule, and every length of
-mantissa is read exactly. Text past the largest finite value parses to an
-infinity, as it does for `f32` and `f64`.
+as a literal does, so parsing agrees with the compiler. `f32::from_str` follows
+the same rule, and every length of mantissa is read exactly. Text past the
+largest finite value parses to an infinity, as it does for `f32` and `f64`.
 
 ### What is deliberately absent
 
