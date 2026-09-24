@@ -29,10 +29,9 @@ shape. Each module's doc says how it works.
 | WIR Optimize         | WIR              | `wir_optimize/`                                 |
 | Codegen              | Component bytes  | `codegen/`                                      |
 
-The driver is `compile_with_options` in `src/lib.rs`. Load lexes, parses, and
-binds each module it reaches. The provider pre-pass follows, and then
-`compile_after_load` runs the rest. The LSP runs the same phases up to liveness
-and stops there.
+The driver is `compile_with_options` in `src/lib.rs`. It loads the modules,
+compiles any inline providers, and hands the rest to `compile_after_load`. The
+LSP runs the same phases up to liveness and stops there.
 
 ## IRs
 
