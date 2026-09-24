@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790292446054,
+  "lastUpdate": 1790293982542,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59457,6 +59457,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2d1f863c26be470a1a9e7e66b320701826991414"
         },
         "date": 1790292445057,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6703,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "be2e0cf4ef762b96da2d91d5393991a84ba8c75e",
+          "message": "Merge pull request #2152 from wado-lang/claude/web-dom-tide-continuation-g9c29t\n\nfeat(web)!: render a DOM page to HTML on the server with `SurfaceDom`, printed by `wado run` and served by `wado serve`",
+          "timestamp": "2026-09-25T08:10:58+09:00",
+          "tree_id": "8b9e6d85344b3a76f3367af4d1898a105064ec41",
+          "url": "https://github.com/wado-lang/wado/commit/be2e0cf4ef762b96da2d91d5393991a84ba8c75e"
+        },
+        "date": 1790293981750,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
