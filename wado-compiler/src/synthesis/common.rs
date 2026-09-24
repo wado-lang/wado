@@ -115,6 +115,18 @@ pub fn i64_const(value: i64) -> TirExpr {
     )
 }
 
+/// Create an f64 literal expression.
+pub fn f64_const(value: f64) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::FloatLiteral {
+            value,
+            repr: format!("{value:?}"),
+        },
+        TypeTable::F64,
+        synth_span(),
+    )
+}
+
 /// Create a local variable reference.
 pub fn local_ref(index: u32, name: &str, type_id: TypeId) -> TirExpr {
     TirExpr::new(

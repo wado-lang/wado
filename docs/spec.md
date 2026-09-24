@@ -5593,7 +5593,7 @@ Rules:
 
 - The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet. `&mut T`, container elements (`List<T>`, `Option<T>`, …) and function types are invariant.
 - Narrowing back to a child is never implicit. It is written as a type pattern (below), which tests the class the host tagged the handle with.
-- `classes = "lo..=hi"` numbers those classes: a resource's own is `lo`, and the resources extending it hold the rest. A child's range lies past its parent's own class inside the parent's, siblings share none, and an `extends` tree declares `classes` on every resource or on none. A type pattern narrows only to a resource that declares them.
+- `classes = "lo..=hi"` numbers those classes: a resource's own is `lo`, and the resources extending it hold the rest. A child's range lies inside its parent's, above the parent's own class. Sibling ranges do not overlap, and an `extends` tree declares `classes` on every resource or on none. A type pattern narrows only to a resource that declares them.
 - `==` and `!=` compare two handles when one type extends the other. The host hands out one handle per object, so equal handles name one object. Handles compare by bits, so a NaN handle equals itself and `-0.0` differs from `0.0`. An unrestricted resource is `Eq`, so a type holding one derives `Eq` too. There is no ordering.
 - A child may not redeclare a method it inherits. A name reachable through both the chain and a trait impl is ambiguous: write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
 - Static methods (no `&self`) are not inherited, and `Self` in an inherited method names the resource that declares it.

@@ -244,7 +244,7 @@ Implicit upcast does **not** fire at:
 
 - Type parameter inference (`T` is solved to the most specific concrete type; the upcast happens later, at a use site)
 - Inside aggregate types where the rule above forces invariance — e.g., constructing `List<Node>` from `[el1, el2]` where `el1: Element, el2: Element` requires an explicit annotation, because `List<T>` is invariant
-- At a payload of a constructor, even where the expected type is a container of the parent. `Option::Some(el)` against an expected `Option<Node>` is an `Option<Element>`, so write `Option::Some(el as Node)`. Upcast is a use-site conversion of one value, and a constructor argument is not that use site: the constructor's type parameter is solved first, as in the first item
+- A constructor's payload, even against a container of the parent: `Option::Some(el)` against `Option<Node>` is an `Option<Element>`, so write `Option::Some(el as Node)`. The constructor's type parameter is solved first, as in the first item
 - Across the affine / unrestricted boundary — by the rule from §"No cross-linearity conversion in v1"
 
 #### Pattern matching and `match`
@@ -513,7 +513,7 @@ resources extending it hold the rest of the range. A pre-order walk of the tree
 assigns them, which is what `wado-from-idl` does in slice order. The compiler
 accepts a numbering only where a range test is sound:
 
-- a child's range lies past its parent's own class and inside the parent's range;
+- a child's range lies inside its parent's, above the parent's own class;
 - no two siblings share a class;
 - a tree is numbered whole or not at all;
 - a narrowing target declares `classes`.

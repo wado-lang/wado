@@ -98,6 +98,13 @@ impl FakeDom {
         return Option::Some(self.handle(index) as Node);
     }
 
+    fn local_name_of(&self, element: Element) -> String {
+        let Element(name) = self.nodes[self.index(element)].content else {
+            unreachable();
+        };
+        return name;
+    }
+
     fn element(&self, index: i32) -> Option<Element> {
         if index == NO_NODE || !self.nodes[index].content matches { Element(_) } {
             return null;
@@ -375,17 +382,11 @@ impl Node for FakeDom {
 
 impl Element for FakeDom {
     fn local_name(&mut self, this: &Element) -> String {
-        let Element(name) = self.nodes[self.index(*this)].content else {
-            unreachable();
-        };
-        resume name;
+        resume self.local_name_of(*this);
     }
 
     fn tag_name(&mut self, this: &Element) -> String {
-        let Element(name) = self.nodes[self.index(*this)].content else {
-            unreachable();
-        };
-        resume name.to_ascii_uppercase();
+        resume self.local_name_of(*this).to_ascii_uppercase();
     }
 
     fn id(&mut self, this: &Element) -> String {

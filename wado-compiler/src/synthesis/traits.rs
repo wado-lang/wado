@@ -26,7 +26,7 @@ use super::common::{
     deref_expr, make_synthetic_free_function, make_synthetic_method, param_local, ref_expr,
     synth_span, write_str_stmt,
 };
-use crate::ast::Visibility;
+use crate::ast::{HandleClasses, Visibility};
 use crate::defs::DefId;
 use crate::escape::unescape_template_segment;
 use crate::name::{
@@ -4436,7 +4436,7 @@ fn unrestricted_inspect_body(
     let class_value = if tt.handle_classes(def).is_some() {
         common::internal_call(
             CompilerItem::HandleClass.attr_name(),
-            vec![h()],
+            vec![h(), common::f64_const(HandleClasses::STRIDE)],
             TypeTable::I32,
         )
     } else {
@@ -4473,7 +4473,7 @@ fn unrestricted_inspect_body(
         common::let_stmt("$class", class_local, TypeTable::I32, class_value),
         common::expr_stmt(common::internal_call(
             CompilerItem::InspectHandle.attr_name(),
-            vec![fmt, name, h(), class()],
+            vec![fmt, name, h(), class(), common::f64_const(HandleClasses::STRIDE)],
             TypeTable::UNIT,
         )),
     ])

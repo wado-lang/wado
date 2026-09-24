@@ -6757,7 +6757,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .then_some(Identity::Handle)
     }
 
-    /// `==` / `!=` by identity: `ref.eq` on references, `f64` equality on
+    /// `==` / `!=` by identity: `ref.eq` on references, bit equality on
     /// resource handles.
     fn identity_comparison(
         &mut self,

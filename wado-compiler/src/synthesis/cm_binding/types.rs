@@ -22,7 +22,9 @@ use crate::component_model::map_key_rejection;
 use crate::component_model::{future_payload_rejection, stream_payload_rejection};
 use crate::defs::DefId;
 use crate::name::{FqTraitName, FqTypeName};
-use crate::synthesis::common::{binary, builtin_call, cast, i32_const, i64_const, synth_span};
+use crate::synthesis::common::{
+    binary, builtin_call, cast, f64_const, i32_const, i64_const, synth_span,
+};
 use crate::tir::StructDef;
 
 /// Snapshot of the stdlib type / variant names CM binding matches against,
@@ -949,7 +951,7 @@ pub(super) fn scalar_store_op(
             4 => "i32_store",
             other => panic!("a one-`i32` CM type cannot be {other} bytes wide: {ty:?}"),
         },
-        _ => "i32_store",
+        ref flat => panic!("`{ty:?}` flattens to {flat:?}, not one scalar"),
     }
 }
 
@@ -1415,14 +1417,7 @@ pub(super) fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
             TypeTable::F32,
             synth_span(),
         ),
-        cm_abi::CmValType::F64 => TirExpr::new(
-            TirExprKind::FloatLiteral {
-                value: 0.0,
-                repr: "0.0".to_string(),
-            },
-            TypeTable::F64,
-            synth_span(),
-        ),
+        cm_abi::CmValType::F64 => f64_const(0.0),
     }
 }
 

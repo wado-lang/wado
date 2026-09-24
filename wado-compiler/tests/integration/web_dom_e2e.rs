@@ -125,10 +125,8 @@ export fn run() with (Dom, Event) {
 }
 "#;
 
-/// One host object per handle. The table is the whole host model: a handle is
-/// the object's class and its index, `class * 2^37 + index`, so the guest
-/// passing the same handle twice reaches the same object — which is what an
-/// upcast has to preserve — and `==` on two handles is identity.
+/// The host's objects, one per handle `class * STRIDE + index`: the same handle
+/// always reaches the same object, so `==` on two handles is identity.
 #[derive(Default)]
 struct DomObjects {
     objects: Vec<Object>,

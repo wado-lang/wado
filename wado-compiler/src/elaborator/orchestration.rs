@@ -256,8 +256,8 @@ fn resolve_resource_extends<H: CompilerHost>(
     );
 }
 
-/// A narrowing tests a handle's class against a range, so each child's range
-/// lies past its parent's own class inside the parent's, apart from its siblings'.
+/// A narrowing tests a handle's class against a range, so a child's range lies
+/// inside its parent's, above the parent's own class, and apart from its siblings'.
 fn reject_misnumbered_classes<H: CompilerHost>(
     pending: &[PendingExtends],
     committed: &IndexMap<DefId, DefId>,

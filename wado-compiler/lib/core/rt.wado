@@ -210,24 +210,23 @@ internal fn write_escaped_string(s: String, f: &mut Formatter) {
     }
 }
 
-global HANDLE_CLASS_STRIDE: f64 = 137438953472.0;
 global HANDLE_LIMIT: f64 = 9007199254740992.0;
 
-/// The class a host-minted unrestricted handle carries, `class * 2^37 + index`,
+/// The class a host-minted unrestricted handle carries, `class * stride + index`,
 /// or -1 for an `f64` no host mints.
 #[compiler_item("handle_class")]
-internal fn handle_class(handle: f64) -> i32 {
+internal fn handle_class(handle: f64, stride: f64) -> i32 {
     let sign_clear = builtin::i64_reinterpret_f64(handle) >= 0;
     if !(sign_clear && handle < HANDLE_LIMIT && builtin::f64_floor(handle) == handle) {
         return -1;
     }
-    return builtin::f64_floor(handle / HANDLE_CLASS_STRIDE) as i32;
+    return builtin::f64_floor(handle / stride) as i32;
 }
 
 /// Writes an unrestricted handle as `name { type_id, object_id }`, or as
 /// `name { handle }` where `class` is -1.
 #[compiler_item("inspect_handle")]
-internal fn inspect_handle(f: &mut Formatter, name: String, handle: f64, class: i32) {
+internal fn inspect_handle(f: &mut Formatter, name: String, handle: f64, class: i32, stride: f64) {
     struct_open(f, name);
     if class < 0 {
         struct_field(f, "handle", true);
@@ -237,7 +236,7 @@ internal fn inspect_handle(f: &mut Formatter, name: String, handle: f64, class: 
         class.inspect(f);
         struct_field_end(f);
         struct_field(f, "object_id", false);
-        let object_id = (handle - class as f64 * HANDLE_CLASS_STRIDE) as i64;
+        let object_id = (handle - class as f64 * stride) as i64;
         object_id.inspect(f);
     }
     struct_field_end(f);
