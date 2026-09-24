@@ -1532,7 +1532,7 @@ fn collect_cm_definitions(module: &ast::Module) -> IndexMap<String, String> {
 
 /// The name `item` declares and the interface its `#[cm(…)]` binds it to, or
 /// `None` for an item binding none.
-fn cm_definition(item: &Item) -> Option<(&str, String)> {
+pub fn cm_definition(item: &Item) -> Option<(&str, String)> {
     let (name, attrs) = match item {
         Item::Newtype(a) => (&a.name, a.attrs.as_slice()),
         Item::Resource(r) => (&r.name, r.attrs.as_slice()),
@@ -1763,69 +1763,75 @@ impl UserCmTypeBinder<'_> {
 
     fn bind_types<'t>(
         &self,
-        types: impl Iterator<Item = &'t mut Type>,
+        mut types: impl Iterator<Item = &'t mut Type>,
         site: &Crossing<'_>,
         sources: &mut SourceInterfaceBatch,
     ) -> Result<(), String> {
-        for ty in types {
-            self.bind_type(ty, site, sources)?;
-        }
-        Ok(())
-    }
-
-    fn bind_type(
-        &self,
-        ty: &mut Type,
-        site: &Crossing<'_>,
-        sources: &mut SourceInterfaceBatch,
-    ) -> Result<(), String> {
-        match ty {
-            Type::Named(named) => self.bind_named(named, site, sources),
-            Type::Generic(g) => self.bind_types(g.args.iter_mut(), site, sources),
-            Type::NamespacedGeneric(g) => self.bind_types(g.args.iter_mut(), site, sources),
-            Type::Function(f) => {
-                self.bind_types(f.params.iter_mut(), site, sources)?;
-                self.bind_type(&mut f.return_type, site, sources)
-            }
-            Type::Tuple(elems) => self.bind_types(elems.iter_mut(), site, sources),
-            Type::Reference(inner) | Type::MutReference(inner) => {
-                self.bind_type(inner, site, sources)
-            }
-            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => Ok(()),
-        }
-    }
-
-    fn bind_named(
-        &self,
-        named: &mut NamedType,
-        site: &Crossing<'_>,
-        sources: &mut SourceInterfaceBatch,
-    ) -> Result<(), String> {
-        let Some(def) = self.resolutions.declared(named.id) else {
-            return Ok(());
-        };
         let defs = self.resolutions.defs();
-        if !defs.kind(def).is_type() {
+        let mut leaf = |named: &NamedType, def: DefId| {
+            if let Some(source) = self.bound.get(&def) {
+                sources.insert(named.id, source.clone());
+            } else if site.crosses && declared_by_program(defs.module(def)) {
+                let declared = defs.name(def);
+                let written = if named.name == declared {
+                    format!("`{declared}`")
+                } else {
+                    format!("`{}` (`{declared}`)", named.name)
+                };
+                return Err(format!(
+                    "{written} crosses the Component Model boundary in `{}` but declares no \
+                     interface; bind it with `#[cm(\"<interface>#<name>\")]`",
+                    site.label
+                ));
+            }
+            Ok(())
+        };
+        types.try_for_each(|ty| bind_type_names(ty, self.resolutions, &mut leaf))
+    }
+}
+
+/// Rewrite every type name `ty` writes to the name of the declaration it
+/// reaches, so no consumer downstream reads an alias's spelling. `leaf` sees
+/// each written name with its declaration first.
+pub fn bind_type_names(
+    ty: &mut Type,
+    resolutions: &Resolutions,
+    leaf: &mut impl FnMut(&NamedType, DefId) -> Result<(), String>,
+) -> Result<(), String> {
+    let children: Vec<&mut Type> = match ty {
+        Type::Named(named) => {
+            let Some(def) = resolutions.declared_if_walked(named.id) else {
+                return Ok(());
+            };
+            let defs = resolutions.defs();
+            if !defs.kind(def).is_type() {
+                return Ok(());
+            }
+            leaf(named, def)?;
+            named.name = defs.name(def).to_string();
             return Ok(());
         }
-        let declared = defs.name(def);
-        if let Some(source) = self.bound.get(&def) {
-            sources.insert(named.id, source.clone());
-        } else if site.crosses && declared_by_program(defs.module(def)) {
-            let written = if named.name == declared {
-                format!("`{declared}`")
-            } else {
-                format!("`{}` (`{declared}`)", named.name)
-            };
-            return Err(format!(
-                "{written} crosses the Component Model boundary in `{}` but declares no \
-                 interface; bind it with `#[cm(\"<interface>#<name>\")]`",
-                site.label
-            ));
+        Type::Generic(g) => {
+            if let Some(def) = resolutions.declared_if_walked(g.id)
+                && resolutions.defs().kind(def).is_type()
+            {
+                g.name = resolutions.defs().name(def).to_string();
+            }
+            g.args.iter_mut().collect()
         }
-        named.name = declared.to_string();
-        Ok(())
-    }
+        Type::NamespacedGeneric(g) => g.args.iter_mut().collect(),
+        Type::Function(f) => f
+            .params
+            .iter_mut()
+            .chain(std::iter::once(&mut f.return_type))
+            .collect(),
+        Type::Tuple(elems) => elems.iter_mut().collect(),
+        Type::Reference(inner) | Type::MutReference(inner) => vec![&mut **inner],
+        Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => Vec::new(),
+    };
+    children
+        .into_iter()
+        .try_for_each(|ty| bind_type_names(ty, resolutions, leaf))
 }
 
 /// Whether `module` is the program's own rather than the stdlib, a component
@@ -1951,27 +1957,6 @@ fn walk_type(
         }
         _ => {}
     }
-}
-
-/// `name -> iface_fq` for every top-level type decl in `items`, the input
-/// `walk_type` needs to stamp `source_interface` on lib-local references.
-fn local_type_names<'a>(
-    items: impl Iterator<Item = &'a Item>,
-    iface_fq: &str,
-) -> IndexMap<String, String> {
-    use crate::ast::Item;
-    items
-        .filter_map(|item| match item {
-            Item::Newtype(a) => Some(a.name.clone()),
-            Item::Struct(s) => Some(s.name.clone()),
-            Item::Flags(f) => Some(f.name.clone()),
-            Item::Enum(e) => Some(e.name.clone()),
-            Item::Variant(v) => Some(v.name.clone()),
-            Item::Resource(r) => Some(r.name.clone()),
-            _ => None,
-        })
-        .map(|name| (name, iface_fq.to_string()))
-        .collect()
 }
 
 impl CmInterfaceRegistry {
@@ -2681,9 +2666,8 @@ impl CmInterfaceRegistry {
         // Every entry type is registered, not just the `pub` ones: a type an
         // `export fn` names crosses the boundary whether or not it is marked,
         // and nothing here computes that reachability.
-        let local_names = local_type_names(module.items.iter(), iface_fq);
         for item in &module.items {
-            self.register_lib_local_item(item, iface_fq, &entry_source, &local_names);
+            self.register_lib_local_item(item, iface_fq, &entry_source);
         }
     }
 
@@ -2766,18 +2750,18 @@ impl CmInterfaceRegistry {
     /// Each carries the module that defines it, so resolution can locate a
     /// submodule type the entry-FQ mapping cannot.
     pub fn register_lib_local_items(&mut self, items: &[(ModuleSource, Item)], iface_fq: &str) {
-        let local_names = local_type_names(items.iter().map(|(_, item)| item), iface_fq);
         for (source, item) in items {
-            self.register_lib_local_item(item, iface_fq, source, &local_names);
+            self.register_lib_local_item(item, iface_fq, source);
         }
     }
 
+    /// `item`'s type references must already answer their source interface: the
+    /// caller binds them by declaration.
     fn register_lib_local_item(
         &mut self,
         item: &Item,
         iface_fq: &str,
         module_source: &ModuleSource,
-        local_names: &IndexMap<String, String>,
     ) {
         use crate::ast::Item;
         if let Some(name) = match item {
@@ -2791,13 +2775,6 @@ impl CmInterfaceRegistry {
             self.lib_local_type_sources
                 .insert(name.clone(), module_source.clone());
         }
-
-        // Answer the source interface of every field / payload / base
-        // reference this decl names, as the stdlib path does before
-        // registration, so later CM resolution never needs a bare-name guess.
-        let mut sources = SourceInterfaceBatch::default();
-        collect_item_type_sources(&mut sources, item, local_names);
-        self.extend_source_interfaces(sources);
 
         match item {
             Item::Newtype(alias) => register_unique(

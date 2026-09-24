@@ -4,11 +4,13 @@
 //! emit Wasm bytes. The resulting [`Semantics`] carries every fact an editor
 //! query needs without paying for monomorphize / lower / codegen.
 
+use std::sync::Arc;
+
 use crate::analyze::Analyzer;
 use crate::ast::{AstId, AstIdSpace, ImplBlock, Item, Module, SelfKind, Visibility};
 use crate::ast_index::AstIndex;
-use crate::compiler_host::{CompilerHost, LogLevel};
-use crate::component_model::CmInterfaceRegistry;
+use crate::compiler_host::{Code, CompilerHost, Diagnostic, LogLevel, Severity};
+use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::Liveness;
@@ -1196,6 +1198,8 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // it onto `Semantics` for the diagnostic emitter and LSP.
     let liveness = std::mem::take(&mut state.liveness);
 
+    let cm_bound = lower_ok && register_user_cm_bindings(&mut state, &load_result.modules, logger);
+
     let space_modules = load_result
         .modules
         .iter()
@@ -1213,9 +1217,55 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         fact_home,
         tir_modules,
         liveness,
-        is_complete: lower_ok && no_syntax_errors,
+        is_complete: cm_bound && no_syntax_errors,
         wit_contract: None,
     }
+}
+
+/// Register the program's own `#[cm]` bindings into the analysis' registry, the
+/// one every consumer reads. False once one is refused, with its diagnostic.
+fn register_user_cm_bindings<H: CompilerHost>(
+    state: &mut AnnotateState,
+    modules: &IndexMap<ModuleSource, Module>,
+    logger: &Logger<'_, H>,
+) -> bool {
+    // The stdlib's are in the shared registry, and a component dependency's are
+    // folded in by `fold_component_interfaces`.
+    let bindings: Vec<(&ModuleSource, &Module)> = modules
+        .iter()
+        .filter(|(source, module)| {
+            !source.is_core()
+                && !source.is_binding()
+                && !source.is_wasm_asset()
+                && declares_cm_binding(module)
+        })
+        .collect();
+    if bindings.is_empty() {
+        return true;
+    }
+    let refuse = |code: Code, message: String| {
+        let _ = logger.error(Diagnostic {
+            severity: Severity::Error,
+            code,
+            message,
+            span: None,
+        });
+        false
+    };
+    let tysys = &mut state.tysys;
+    let registry = Arc::make_mut(&mut tysys.cm_interface_registry);
+    if let Err(error) = registry.register_user_cm_modules(&bindings, &tysys.resolutions) {
+        return match error {
+            UserCmError::TakenInterface(msg) => refuse(Code::DuplicateDefinition, msg),
+            UserCmError::UnboundType(msg) => refuse(Code::CmBoundaryType, msg),
+        };
+    }
+    // Only once every module is registered: an `interface` naming a resource's
+    // operations may sit in a module other than the one declaring it.
+    bindings
+        .iter()
+        .try_for_each(|(_, module)| registry.validate_cm_function_names(module))
+        .map_or_else(|msg| refuse(Code::UnknownType, msg), |()| true)
 }
 
 /// True when `b` is an `impl` on `want_type` and — if `want_trait` is set —

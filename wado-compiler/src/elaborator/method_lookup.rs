@@ -1893,12 +1893,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Some(Ordered::Nothing) | None => &[],
         };
-        let mut found_traits: Vec<TraitMethodMatch> = self.materialize_matches(
-            named,
-            method_name,
-            receiver_type_args,
-            receiver_type_id,
-        );
+        let mut found_traits: Vec<TraitMethodMatch> =
+            self.materialize_matches(named, method_name, receiver_type_args, receiver_type_id);
         // A named block declares the method, or its trait does, so it yields a
         // match; none means the block and the lowering disagree on the name.
         assert!(

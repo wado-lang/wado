@@ -6,8 +6,8 @@
 
 use crate::common::{InMemoryHost, block_on};
 use wado_compiler::semantics::{semantics, semantics_for_world};
-use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope, emit_wit_text};
-use wado_compiler::{OptLevel, dump_with_host_and_world};
+use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope, emit_wit_text, emit_wit_text_from};
+use wado_compiler::{CompilerOptions, OptLevel, compile_with_options, dump_with_host_and_world};
 
 /// The WIR-level import plan (`NirPackage::imported_cm_interfaces`) for
 /// `source` under `world_fq`, the faithful world import set the emitter reads.
@@ -176,6 +176,60 @@ fn wide_int_export_emits_its_prelude_record() {
          }\n\n\
          world command {\n  export entry;\n}",
     );
+}
+
+/// Emit WIT as `wado wit` does: from the subset one compile retains.
+fn emit_compiled(source: &str, scope: WitScope) -> String {
+    let host = InMemoryHost::new();
+    let options = CompilerOptions {
+        opt_level: OptLevel::O2,
+        retain_wir: true,
+        unused_diagnostics: false,
+        embed_wit_contract: Some(wit_emit::wit_contract(
+            Some("wasi:cli/command"),
+            None,
+            Some("entry"),
+        )),
+        ..Default::default()
+    };
+    let result = block_on(compile_with_options(
+        source,
+        &host,
+        Some("entry.wado"),
+        options,
+    ))
+    .expect("compiles");
+    let snapshot = result
+        .wit_emit_snapshot
+        .expect("the WIT subset is retained");
+    let imports = result
+        .wir_package
+        .map(|pkg| pkg.imported_cm_interfaces)
+        .unwrap_or_default();
+    emit_wit_text_from(snapshot.input(), &WitEmitOptions { scope }, &imports)
+        .expect("emit_wit_text_from failed")
+}
+
+/// A program's own `#[cm]` binding reaches `wado wit` as it reaches the
+/// component: the imported interface carries the function it binds.
+#[test]
+fn user_cm_binding_emits_its_imported_function() {
+    const SOURCE: &str = r#"
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-count")]
+    fn get_count(x: u32) -> i32;
+}
+
+export fn run() with Gfx {
+    let _ = Gfx::get_count(1);
+}
+"#;
+    for text in [
+        emit_compiled(SOURCE, WitScope::Full),
+        emit_world(SOURCE, WitScope::Full, "wasi:cli/command"),
+    ] {
+        assert!(text.contains("get-count: func(x: u32) -> s32;"), "\n{text}");
+    }
 }
 
 #[test]

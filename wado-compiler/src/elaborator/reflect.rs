@@ -641,7 +641,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (base_name, module_source, type_args) = {
             let tt = self.tysys.type_table.borrow();
             let (name, module_source) = tt.nominal_head(self_ty)?;
-            (name, module_source, tt.nominal_type_args(self_ty).unwrap_or_default())
+            (
+                name,
+                module_source,
+                tt.nominal_type_args(self_ty).unwrap_or_default(),
+            )
         };
         let info = self
             .tysys

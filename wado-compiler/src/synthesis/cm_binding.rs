@@ -53,11 +53,11 @@ use task_return::{expand_task_returns_in_func, reduce_task_returns_in_func, spli
 use type_fixup::{
     collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
 };
+use types::{Boundary, flat_types_from_ast_type, flat_types_from_type_id};
 pub use types::{
     LiftContext, cm_discriminant_byte_size, cm_flags_byte_size, cm_type_to_type_id,
     flatten_param_type,
 };
-use types::{Boundary, flat_types_from_ast_type, flat_types_from_type_id};
 
 /// Build a `(module_source, name)` set for every effect/resource declared in
 /// the loaded TIR modules. The CM binding synthesizer uses this to attach the

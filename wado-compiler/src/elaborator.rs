@@ -64,9 +64,7 @@ use crate::kiln::InvocationIndex;
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, Receiver, RefKind};
-use crate::name::{
-    DeclName, FqTraitName, FqTypeName, global_name, namespace_member_alias,
-};
+use crate::name::{DeclName, FqTraitName, FqTypeName, global_name, namespace_member_alias};
 use crate::resolve::Resolution;
 use crate::symbol::{Symbol, SymbolKind, SymbolTable, VariableSymbol};
 use crate::tir::{self as tir, TypeId, TypeTable};
