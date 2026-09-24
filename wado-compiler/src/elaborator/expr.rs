@@ -2782,7 +2782,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report the values no guardless arm covers, and the arms no value can
-    /// reach. Guarded arms take part in neither.
+    /// reach. A guarded arm covers nothing.
     fn check_match_exhaustiveness(
         &mut self,
         arms: &[MatchArm],
@@ -2804,7 +2804,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         self.check_range_overlaps(&classified, span);
-        self.check_shadowed_narrowings(arms, &classified);
+        self.check_unreachable_arms(arms, &classified);
 
         let guardless: Vec<&Pat> = classified
             .iter()
@@ -2965,50 +2965,55 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Report a type-pattern arm an earlier guardless one always takes first:
-    /// one taking every value, or every value of the later arm's type.
-    fn check_shadowed_narrowings(&self, arms: &[MatchArm], classified: &[(bool, Pat)]) {
-        let mut shadowed = Vec::new();
-        {
-            let tt = self.tysys.type_table.borrow();
-            for (later, (_, pattern)) in classified.iter().enumerate() {
-                let Pat::Narrow(target) = pattern else {
-                    continue;
-                };
-                let taken_by = |earlier: TypeId| {
-                    format!(
-                        "unreachable arm: every `{}` is `{}`, which an earlier arm already takes",
-                        tt.type_name(*target),
-                        tt.type_name(earlier)
-                    )
-                };
-                let message =
-                    classified[..later]
-                        .iter()
-                        .zip(arms)
-                        .find_map(|((guardless, earlier), arm)| match earlier {
-                            _ if !*guardless => None,
-                            Pat::Narrow(earlier) => (tt.type_key(*earlier) == tt.type_key(*target)
-                                || tt.is_resource_narrowing(*earlier, *target))
-                            .then(|| taken_by(*earlier)),
-                            Pat::Wild => Some(match &arm.pattern {
-                                ast::Pattern::Typed { id, .. } => {
-                                    taken_by(self.sem.types.pattern_ascriptions[id])
-                                }
-                                _ => {
-                                    "unreachable arm: an earlier arm takes every value".to_string()
-                                }
-                            }),
-                            _ => None,
-                        });
-                if let Some(message) = message {
-                    shadowed.push((arms[later].span, message));
-                }
-            }
-        }
-        for (span, message) in shadowed {
+    /// Report the arms no value reaches. Coverage reads no types, so a
+    /// type-pattern arm an earlier narrowing already takes is found by type.
+    fn check_unreachable_arms(&self, arms: &[MatchArm], classified: &[(bool, Pat)]) {
+        let covered = exhaustiveness::unreachable_arms(
+            &classified.iter().map(|(g, p)| (*g, p)).collect::<Vec<_>>(),
+        );
+        let messages: Vec<(Span, String)> = classified
+            .iter()
+            .enumerate()
+            .filter_map(|(later, (_, pattern))| {
+                let message = self
+                    .narrowed_past(&classified[..later], pattern)
+                    .or_else(|| {
+                        covered.contains(&later).then(|| {
+                            "unreachable arm: the arms before it take every value it matches"
+                                .to_string()
+                        })
+                    })?;
+                Some((arms[later].span, message))
+            })
+            .collect();
+        for (span, message) in messages {
             let _ = self.emit(TypeError::InvalidPattern { message, span });
         }
+    }
+
+    /// Why `pattern` is dead when an earlier guardless narrowing takes every
+    /// value of its type.
+    fn narrowed_past(&self, earlier: &[(bool, Pat)], pattern: &Pat) -> Option<String> {
+        let Pat::Narrow(target) = pattern else {
+            return None;
+        };
+        let tt = self.tysys.type_table.borrow();
+        earlier
+            .iter()
+            .find_map(|(guardless, earlier)| match earlier {
+                Pat::Narrow(earlier)
+                    if *guardless
+                        && (tt.type_key(*earlier) == tt.type_key(*target)
+                            || tt.is_resource_narrowing(*earlier, *target)) =>
+                {
+                    Some(format!(
+                        "unreachable arm: every `{}` is `{}`, which an earlier arm already takes",
+                        tt.type_name(*target),
+                        tt.type_name(*earlier)
+                    ))
+                }
+                _ => None,
+            })
     }
 
     fn exh_is_unsigned(&self, scrutinee_type: TypeId) -> bool {

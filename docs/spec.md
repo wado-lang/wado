@@ -957,6 +957,16 @@ match opt {
 }   // Error: non-exhaustive match: missing case `Some(-2147483648..=0)`
 ```
 
+An arm no value can reach is an error too: every value it matches is already
+taken by a guardless arm before it.
+
+```wado
+match opt {
+    _ => 0,
+    Some(x) => x,   // Error: unreachable arm
+}
+```
+
 #### Guard Expressions
 
 Guards use `&&` to reflect left-to-right evaluation (pattern first, then guard):
@@ -5828,7 +5838,7 @@ match e {
 }
 ```
 
-A type match over resources always needs a final `_` arm, because the host may hand back a type the program does not name. An unguarded arm whose type is a supertype of a later arm's makes that later arm dead, which is reported. So does one that takes every value — a binding, `_`, or an irrefutable ascription such as `el: Element` on an `Element` subject.
+A type match over resources always needs a final `_` arm, because the host may hand back a type the program does not name. An unguarded arm whose type is a supertype of a later arm's makes that later arm unreachable, which is an error, as [any unreachable arm](#exhaustiveness) is.
 
 A refutable ascription tests a handle, so it binds a name or `_` and nothing deeper, and its subject is the value rather than a reference to it. `T` must be a concrete type: a type parameter says nothing about whether it narrows.
 

@@ -1929,6 +1929,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Record use→def edges for each imported name in `use { a, b as c } from "..."`
     /// declarations. The cursor landing on an imported name inside a `use`
     /// specifier list should jump to the defining symbol in the source module.
+    fn record_use_reference(&mut self, source: &ModuleSource, site: AstId, name: &str) {
+        if let Some(sym) = self.symbols.lookup_in_module(source, name) {
+            self.record_reference_to_def(site, sym.defined_at);
+        }
+    }
+
     fn record_use_specifier_references(&mut self, module: &Module) {
         for item in &module.items {
             let Item::Use(use_decl) = item else { continue };
@@ -1942,13 +1948,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for use_item in &use_decl.items {
                 match use_item {
                     ast::UseItem::Simple { id, name, .. } => {
-                        if let Some(sym) = self.symbols.lookup_in_module(&source, name) {
-                            self.record_reference_to_def(*id, sym.defined_at);
+                        self.record_use_reference(&source, *id, name);
+                    }
+                    ast::UseItem::InterfaceFunctions {
+                        id,
+                        interface_name,
+                        functions,
+                        ..
+                    } => {
+                        self.record_use_reference(&source, *id, interface_name);
+                        for function in functions {
+                            let member = format!("{interface_name}::{}", function.name);
+                            self.record_use_reference(&source, function.id, &member);
                         }
                     }
-                    ast::UseItem::InterfaceFunctions { .. }
-                    | ast::UseItem::Wildcard
-                    | ast::UseItem::Namespace { .. } => {}
+                    ast::UseItem::Wildcard | ast::UseItem::Namespace { .. } => {}
                 }
             }
         }

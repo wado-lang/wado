@@ -685,6 +685,34 @@ fn aliased_import_use_definition() {
 }
 
 #[test]
+fn interface_member_use_specifier_definition() {
+    futures::executor::block_on(async {
+        let lib = concat!(
+            "pub interface Greeting {\n",
+            "    fn hello() -> String;\n",
+            "}\n",
+        );
+        let entry = concat!(
+            "use { Greeting::{hello as hi} } from \"./lib.wado\";\n",
+            "fn main() -> String with Greeting {\n",
+            "    return hi();\n",
+            "}\n",
+        );
+        let files = [("./lib.wado", lib), ("/test.wado", entry)];
+        let interface = def_at_in(&files, "/test.wado", 0, 8)
+            .await
+            .expect("cursor on `Greeting` inside use{}");
+        assert_eq!(interface.uri, "file:///lib.wado");
+        assert_range(&interface, 0, 14, 22);
+        let member = def_at_in(&files, "/test.wado", 0, 18)
+            .await
+            .expect("cursor on `hello` inside Greeting::{}");
+        assert_eq!(member.uri, "file:///lib.wado");
+        assert_range(&member, 1, 7, 12);
+    });
+}
+
+#[test]
 fn effect_in_with_clause_definition() {
     futures::executor::block_on(async {
         let source = concat!(
@@ -835,6 +863,30 @@ fn use_from_filename_definition() {
         )
         .await
         .expect("cursor inside \"./lib.wado\" string");
+        assert_eq!(result.uri, "file:///lib.wado");
+        assert_eq!(result.range.start.line, 0);
+        assert_eq!(result.range.start.character, 0);
+    });
+}
+
+#[test]
+fn namespace_import_name_definition() {
+    futures::executor::block_on(async {
+        let lib = "pub fn helper() -> i32 { return 42; }\n";
+        let entry = concat!(
+            "use lib from \"./lib.wado\";\n",
+            "fn main() -> i32 {\n",
+            "    return lib::helper();\n",
+            "}\n",
+        );
+        let result = def_at_in(
+            &[("./lib.wado", lib), ("/test.wado", entry)],
+            "/test.wado",
+            0,
+            5,
+        )
+        .await
+        .expect("cursor on the namespace name");
         assert_eq!(result.uri, "file:///lib.wado");
         assert_eq!(result.range.start.line, 0);
         assert_eq!(result.range.start.character, 0);

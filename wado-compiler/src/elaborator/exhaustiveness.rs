@@ -116,6 +116,70 @@ pub(super) fn uncovered(patterns: &[&Pat]) -> Vec<Witness> {
     missing
 }
 
+/// The arms no value reaches: each index whose pattern the guardless arms
+/// before it already cover. A guarded arm covers nothing but may be unreachable.
+pub(super) fn unreachable_arms(arms: &[(bool, &Pat)]) -> Vec<usize> {
+    let mut covering: Vec<Row<'_>> = Vec::new();
+    let mut out = Vec::new();
+    for (index, &(guardless, pattern)) in arms.iter().enumerate() {
+        if !useful(covering.clone(), vec![pattern]) {
+            out.push(index);
+        }
+        if guardless {
+            covering.push(vec![pattern]);
+        }
+    }
+    out
+}
+
+/// Whether some value `q` matches escapes every row of `rows`. A head no
+/// constructor describes (a string, a narrowing) is covered only by a wildcard.
+fn useful<'p>(rows: Vec<Row<'p>>, q: Row<'p>) -> bool {
+    let Some(&head) = q.first() else {
+        return rows.is_empty();
+    };
+    if let Pat::Or(alternatives) = head {
+        return alternatives.iter().any(|alternative| {
+            let mut row = vec![alternative];
+            row.extend_from_slice(&q[1..]);
+            useful(rows.clone(), row)
+        });
+    }
+    let rows = expand_or(rows);
+    let ctors = match head {
+        Pat::Wild => signature(&rows),
+        Pat::Case { cases, index, .. } => Some(vec![Ctor::Case(Rc::clone(cases), *index)]),
+        Pat::Bool(value) => Some(vec![Ctor::Bool(*value)]),
+        Pat::Int {
+            lo,
+            hi,
+            domain: Some(domain),
+        } => {
+            let mut cut_by = rows.clone();
+            cut_by.push(q.clone());
+            Some(
+                split_domain(&cut_by, *domain)
+                    .into_iter()
+                    .filter(|ctor| matches!(ctor, Ctor::Int(a, b, _) if lo <= a && b <= hi))
+                    .collect(),
+            )
+        }
+        Pat::Product { fields, elements } => {
+            Some(vec![Ctor::Product(fields.clone(), elements.len())])
+        }
+        Pat::Int { domain: None, .. } | Pat::Narrow(_) | Pat::Opaque => None,
+        Pat::Or(_) => unreachable!("an or-pattern head is expanded above"),
+    };
+    let Some(ctors) = ctors else {
+        return useful(default_rows(&rows), q[1..].to_vec());
+    };
+    ctors.iter().any(|ctor| {
+        specialize(std::slice::from_ref(&q), ctor)
+            .pop()
+            .is_some_and(|specialized| useful(specialize(&rows, ctor), specialized))
+    })
+}
+
 /// One uncovered value vector for `rows` of `width` columns, if any.
 fn first_uncovered(rows: Vec<Row<'_>>, width: usize) -> Option<Vec<Witness>> {
     if width == 0 {

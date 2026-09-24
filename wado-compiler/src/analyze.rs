@@ -1241,7 +1241,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             // Wildcard import: module is loaded for side effects only,
                             // no symbols to register
                         }
-                        UseItem::Namespace { name: ns } => {
+                        UseItem::Namespace { name: ns, .. } => {
                             // Register each reachable member under its `ns$member`
                             // alias, matching how the elaborator canonicalizes
                             // `ns::member` at lookup time

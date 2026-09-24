@@ -573,8 +573,20 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             v.visit_id(u.id, u.span);
             v.visit_id(u.source_id, u.source_span);
             for it in &u.items {
-                if let UseItem::Simple { id, name_span, .. } = it {
-                    v.visit_id(*id, *name_span);
+                match it {
+                    UseItem::Simple { id, name_span, .. } => v.visit_id(*id, *name_span),
+                    UseItem::InterfaceFunctions {
+                        id,
+                        name_span,
+                        functions,
+                        ..
+                    } => {
+                        v.visit_id(*id, *name_span);
+                        for function in functions {
+                            v.visit_id(function.id, function.name_span);
+                        }
+                    }
+                    UseItem::Wildcard | UseItem::Namespace { .. } => {}
                 }
             }
         }
@@ -1944,6 +1956,8 @@ pub enum UseItem {
     },
     /// Effect with functions: `Effect::{func1, func2}`
     InterfaceFunctions {
+        /// `AstId` for the interface name, the site of its use→def edge.
+        id: AstId,
         interface_name: String,
         /// Span of the interface name identifier — where the item starts.
         name_span: Span,
@@ -1952,7 +1966,7 @@ pub enum UseItem {
     /// Wildcard import: `use _ from "..."` (load module for side effects only)
     Wildcard,
     /// Namespace import: `use name from "..."` (import entire module as namespace)
-    Namespace { name: String },
+    Namespace { name: String, name_span: Span },
 }
 
 impl UseItem {
@@ -1970,7 +1984,10 @@ impl UseItem {
 /// Simple use item (used within effect function imports)
 #[derive(Debug, Clone)]
 pub struct UseItemSimple {
+    /// `AstId` for the name, the site of its use→def edge.
+    pub id: AstId,
     pub name: String,
+    pub name_span: Span,
     pub alias: Option<String>,
 }
 

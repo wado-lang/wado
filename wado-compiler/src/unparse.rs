@@ -38,7 +38,7 @@ fn effective_start_line(attrs: &[Attribute], span_line: usize) -> usize {
 /// one (a single `Namespace` item).
 fn use_namespace_name(u: &UseDecl) -> Option<&str> {
     match u.items.as_slice() {
-        [UseItem::Namespace { name }] => Some(name.as_str()),
+        [UseItem::Namespace { name, .. }] => Some(name.as_str()),
         _ => None,
     }
 }
@@ -610,8 +610,10 @@ impl<'a> Unparser<'a> {
             braces.end,
             |item| {
                 let id = match item {
-                    UseItem::Simple { id, .. } => Some(*id),
-                    _ => None,
+                    UseItem::Simple { id, .. } | UseItem::InterfaceFunctions { id, .. } => {
+                        Some(*id)
+                    }
+                    UseItem::Wildcard | UseItem::Namespace { .. } => None,
                 };
                 (item.start(), id)
             },
@@ -674,7 +676,7 @@ impl<'a> Unparser<'a> {
             UseItem::Wildcard => {
                 self.output.push('_');
             }
-            UseItem::Namespace { name } => {
+            UseItem::Namespace { name, .. } => {
                 self.output.push_str(name);
             }
         }

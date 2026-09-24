@@ -40,7 +40,7 @@ pub(super) fn namespace_imports_of(
     for item in &module.items {
         if let Item::Use(use_decl) = item {
             let namespaces = use_decl.items.iter().filter_map(|use_item| match use_item {
-                ast::UseItem::Namespace { name: ns } => Some(ns),
+                ast::UseItem::Namespace { name: ns, .. } => Some(ns),
                 ast::UseItem::Simple { .. }
                 | ast::UseItem::InterfaceFunctions { .. }
                 | ast::UseItem::Wildcard => None,

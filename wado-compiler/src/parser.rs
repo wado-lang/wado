@@ -1544,8 +1544,9 @@ impl Parser {
         else if matches!(self.peek_kind(), TokenKind::Ident(_))
             && matches!(self.peek_nth(1).kind, TokenKind::From)
         {
+            let name_span = self.peek().span;
             let name = self.consume_ident()?;
-            vec![UseItem::Namespace { name }]
+            vec![UseItem::Namespace { name, name_span }]
         } else {
             // Parse items: `{...}`
             let lbrace_span = self.peek().span;
@@ -1612,6 +1613,7 @@ impl Parser {
                 self.expect(&TokenKind::RBrace)?;
 
                 items.push(UseItem::InterfaceFunctions {
+                    id: self.alloc_ast_id(),
                     interface_name: name,
                     name_span,
                     functions,
@@ -1653,6 +1655,7 @@ impl Parser {
         }
 
         loop {
+            let name_span = self.peek().span;
             let name = self.consume_ident()?;
             let alias = if self.check(&TokenKind::As) {
                 self.advance();
@@ -1660,7 +1663,12 @@ impl Parser {
             } else {
                 None
             };
-            items.push(UseItemSimple { name, alias });
+            items.push(UseItemSimple {
+                id: self.alloc_ast_id(),
+                name,
+                name_span,
+                alias,
+            });
 
             if !self.check(&TokenKind::Comma) {
                 break;
@@ -7002,7 +7010,7 @@ mod tests {
         if let Item::Use(use_decl) = &module.items[0] {
             assert_eq!(use_decl.source, "./utils.wado");
             assert_eq!(use_decl.items.len(), 1);
-            assert_matches!(&use_decl.items[0], UseItem::Namespace { name } if name == "utils");
+            assert_matches!(&use_decl.items[0], UseItem::Namespace { name, .. } if name == "utils");
         } else {
             panic!("expected use declaration");
         }
