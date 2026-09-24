@@ -83,9 +83,8 @@ impl<'a> SharedEscape<'a> {
     /// The slots `slot` holds only if they hold too, or `None` where a use of
     /// it is refused outright.
     fn own_check(&self, slot: &Slot) -> Option<IndexSet<Slot>> {
-        // A bodyless owner's result is no dead end, so `Slot::Ret` stays with
-        // the walk: a pass-through hands the object to its caller, and the walk
-        // is what reads it there.
+        // A bodyless owner's `Slot::Ret` stays with the walk: a pass-through
+        // hands the object to its caller, where the walk reads it.
         if let Slot::Param(id, pos) = slot {
             let owner = self.project.functions[id.index()].borrow();
             if owner.body.is_none() {
@@ -224,9 +223,9 @@ impl<'a> SharedEscape<'a> {
             };
         });
         // A body whose last statement is its value returns without a `Return`.
-        if let Some(&last) = body.blocks[body.root].stmts.last()
-            && let StmtKind::Expr(op) = &body.stmts[last].kind
-            && taint.operand(*op)
+        if body
+            .block_tail(body.root)
+            .is_some_and(|op| taint.operand(op))
         {
             returns_tainted = true;
         }
@@ -345,9 +344,8 @@ impl<'a> SharedEscape<'a> {
 /// Whether `root` holds: no node reachable from it through `own_check`'s
 /// obligations is refused. Settles, and caches, every node it reaches.
 //
-// The greatest fixpoint, so a cycle carrying no refusal holds, which is the
-// sound answer for a safety property. Each node is checked at most once over
-// the life of `verdicts`, whatever the shape of the graph.
+// The greatest fixpoint: a cycle carrying no refusal holds, the sound answer
+// for a safety property. Each node is checked once over the life of `verdicts`.
 fn settle<S: Clone + Eq + Hash>(
     root: &S,
     verdicts: &mut IndexMap<S, bool>,

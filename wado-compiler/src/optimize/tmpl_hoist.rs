@@ -597,10 +597,8 @@ fn for_each_chain_local_expr(body: &Body, e: ExprId, heap: HeapView, f: &mut imp
 
 /// Chain-visit the tail expression statement of `block`, if any.
 fn for_each_block_tail_chain(body: &Body, block: BlockId, heap: HeapView, f: &mut impl FnMut(u32)) {
-    if let Some(s) = body.blocks[block].stmts.last()
-        && let StmtKind::Expr(op) = &body.stmts[*s].kind
-    {
-        for_each_chain_local(body, *op, heap, f);
+    if let Some(op) = body.block_tail(block) {
+        for_each_chain_local(body, op, heap, f);
     }
 }
 

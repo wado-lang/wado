@@ -1,12 +1,9 @@
-//! Capture by reference a binding a closure only reads, where the owning frame
-//! may still write it while the closure lives. Anywhere else the value itself
-//! is captured: nothing can change it, so it reads what the reference would.
-//!
-//! Only a binding whose reference is a `Box<T>` cell needs the proxy. Any other
-//! `&T` is `T`'s own handle, which the value capture already is.
+//! Capture by reference a boxed binding a closure only reads, where the owning
+//! frame may still write it while the closure lives.
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
+use crate::lower::plan::value_copy::place::place_root;
 use crate::name::{capture_ref_name, is_for_body_label};
 use crate::tir::{
     CaptureSource, TirBlock, TirExpr, TirExprKind, TirLocal, TirPattern, TirStmt, TirStmtKind,
@@ -184,12 +181,12 @@ struct Scan {
 }
 
 impl Scan {
-    /// A write the closure can observe: one that runs after it is built, or
-    /// shares a loop with it and so may run after it on a later iteration.
-    /// A `for` header's update belongs to the next iteration, whose bindings
-    /// a closure built in this one's body does not hold.
+    /// Whether the closure built at `site` can observe a write to `local`: one
+    /// after it is built, or in a loop around it on a later iteration.
     fn written_after(&self, local: u32, site: &Site) -> bool {
         self.writes.iter().any(|w| {
+            // A `for` header's update belongs to the next iteration, whose
+            // bindings a closure built in this one's body does not hold.
             w.local == local
                 && !self.in_header_of(&w.at, &site.at)
                 && (w.at.clock > site.at.clock
@@ -300,8 +297,10 @@ impl TirRefVisitor for Scan {
             return;
         }
         self.walk_expr(expr);
+        // A write through a dereference lands where the reference was taken
+        // from, and taking it already address-took that local.
         if let TirExprKind::Assign { target, .. } = &expr.kind
-            && let Some(local) = assigned_local(target)
+            && let Some(local) = place_root(target)
         {
             let at = self.now();
             self.writes.push(Write { local, at });
@@ -345,19 +344,6 @@ impl TirRefVisitor for DerefRead {
             return;
         }
         self.walk_expr(expr);
-    }
-}
-
-/// The frame local an assignment to `place` writes into. A write through a
-/// dereference lands in whatever the reference was taken from, and taking it
-/// already address-took that local.
-fn assigned_local(place: &TirExpr) -> Option<u32> {
-    match &place.kind {
-        TirExprKind::Local { index, .. } => Some(*index),
-        TirExprKind::FieldAccess { expr, .. }
-        | TirExprKind::Index { expr, .. }
-        | TirExprKind::VariantPayload { expr, .. } => assigned_local(expr),
-        _ => None,
     }
 }
 

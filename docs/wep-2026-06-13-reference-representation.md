@@ -257,12 +257,13 @@ fix to conform; none should be preserved.
   callee made through another route to the same place (`self`, a sibling `&mut`
   argument), which lands on its own.
 
-  A store back is still late for a route the callee takes after replacing: until
-  it runs, the replaced value is in the temp alone, so another route reads the
-  old value and has its own write undone. A call whose callee replaces the
-  temp is refused where another argument reaches the same storage — a borrow on
-  the same root, the root itself where the root is a reference, or any
-  reference once the root is borrowed anywhere in the body. Two reference
+  A store back is still late for a route the callee takes after replacing.
+  Until the store back runs, the new value is in the temp alone, so another
+  route reads the old value and has its own write undone. So a call whose
+  callee replaces the temp is refused where another argument reaches the same
+  storage. That argument may be a borrow on the same root, the root itself
+  where the root is a reference, or any reference once the root is borrowed
+  anywhere in the body. Two reference
   parameters the caller passed the same storage through are not seen:
   `f(a, &mut b.opt)` inside `g(a: &mut S, b: &mut S)`, reached as
   `g(&mut s, &mut s)`, still stores back over `a`'s write.

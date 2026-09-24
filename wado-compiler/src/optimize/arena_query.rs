@@ -308,6 +308,23 @@ pub(super) fn collect_pattern_bindings(body: &Body, pattern: PatId, out: &mut Ve
     });
 }
 
+/// Whether `accepts` holds for the value of every `Return` under `node`, nested
+/// ones included.
+pub(super) fn every_return(
+    body: &Body,
+    node: NodeRef,
+    mut accepts: impl FnMut(Option<Operand>) -> bool,
+) -> bool {
+    body.find_in_nodes_under(node, |n| match n {
+        NodeRef::Stmt(s) => match body.stmts[s].kind {
+            StmtKind::Return { value } if !accepts(value) => Some(()),
+            _ => None,
+        },
+        _ => None,
+    })
+    .is_none()
+}
+
 /// Whether a value of `ty` can hold a reference into the heap. Wider than
 /// `value_copy::is_reference_type`, which answers only for `&T` / `&mut T`.
 pub(super) fn holds_reference(type_table: &TypeTable, ty: TypeId) -> bool {

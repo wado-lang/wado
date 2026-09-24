@@ -197,11 +197,11 @@ make_rect(10.0, 20.0);
 ```
 
 The argument is evaluated once, in its place among the others. Where a default
-names a parameter, the call binds its arguments to locals in order and the
-default reads the local, in whatever form it takes, a closure capturing it
-included. A default another default names is bound the same way. A call whose
-defaults name no parameter binds nothing, and the optimizer folds the locals
-away where they are bound (`default_arg_earlier_param_once.wado`):
+names a parameter, the call binds its arguments to locals in order. The default
+then reads the local in whatever form it takes, including a closure that
+captures it. A default that another default names is bound the same way. A call
+whose defaults name no parameter binds nothing. Where a call does bind locals,
+the optimizer folds them away (`default_arg_earlier_param_once.wado`):
 
 ```wado
 fn twice(a: i32, b: i32 = a + a) -> i32 { ... }
@@ -210,9 +210,8 @@ twice(next());          // → { let a = next(); twice(a, a + a) }
 ```
 
 The receiver runs first too. A receiver that is a place stays in its slot,
-since that is where a `&mut self` method writes, and only its subscripts are
-bound, so `v[i()].m(j())` still runs `i()` before `j()`. Any other receiver is
-bound whole.
+because a `&mut self` method writes there. Only its subscripts are bound, so
+`v[i()].m(j())` still runs `i()` before `j()`. Any other receiver is bound whole.
 
 #### Interaction with Function Types
 

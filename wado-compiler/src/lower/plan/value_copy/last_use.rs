@@ -494,13 +494,12 @@ impl Analyzer<'_> {
             .is_some_and(|reach| reach.contains(&local));
         let moved_out =
             self.consumed.contains_key(&local) || inputs.place_move_bases.contains(&local);
-        // A borrowed source is written through whoever lent it, at a root the
-        // scan above never looks at, as is a root a `&mut` outlives. A share
-        // skips the right-sizing a copy does, so a binding whose own capacity is
-        // read keeps its copy.
         path.root != local
+            // A borrowed source is written through whoever lent it, at a root the
+            // scan above never sees, as is a root a `&mut` outlives.
             && !path.through_borrow
             && !self.written_through_escape.contains(&path.root)
+            // A share skips a copy's right-sizing: a binding whose capacity is read keeps its copy.
             && !inputs.capacity_observed.contains(&local)
             && !moved_out
             && !self.is_mutated_root(local)
@@ -1919,7 +1918,7 @@ fn block_yielded_escapes(
     type_table: &TypeTable,
     out: &mut Vec<(u32, Option<u32>)>,
 ) {
-    if let Some(TirStmtKind::Expr(e)) = block.stmts.last().map(|s| &s.kind) {
+    if let Some(e) = block.tail_expr() {
         yielded_escapes(e, type_table, out);
     }
 }

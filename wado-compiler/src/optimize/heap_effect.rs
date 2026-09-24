@@ -1,7 +1,7 @@
 //! Which GC-heap objects a call may read or write: [`HeapEffects`] summarises
 //! each function over the call graph, [`HeapFrame`] the objects of one body.
 
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::rc::Rc;
 
 use cranelift_entity::EntityRef;
@@ -10,9 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::is_closure_call_name;
 use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
-use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind,
-};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::{
@@ -34,6 +32,13 @@ impl TypeSet {
         Self {
             any: true,
             keys: IndexSet::default(),
+        }
+    }
+
+    fn one(key: TypeKey) -> Self {
+        Self {
+            any: false,
+            keys: std::iter::once(key).collect(),
         }
     }
 
@@ -198,6 +203,13 @@ impl Summary {
         self.into_elsewhere.join(other.into_elsewhere);
         *self != before
     }
+
+    fn access(&self, effect: Effect) -> &Access {
+        match effect {
+            Effect::Read => &self.reads,
+            Effect::Write => &self.writes,
+        }
+    }
 }
 
 /// How a callee is summarised.
@@ -345,9 +357,7 @@ impl<'t> HeapEffects<'t> {
             | ResolvedType::Variant { .. }
             | ResolvedType::Function { .. }
             | ResolvedType::Reactive(_) => Some(tt.type_key(ty)),
-            ResolvedType::GenericInstance { .. } => {
-                Some(tt.type_key(tt.monomorphized_struct(ty).unwrap_or(ty)))
-            }
+            ResolvedType::GenericInstance { .. } => Some(tt.type_key(tt.monomorphized_or_self(ty))),
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
@@ -595,11 +605,11 @@ impl<'t> HeapEffects<'t> {
         self.struct_fields.get(&key).map(Vec::as_slice)
     }
 
-    /// The object types a pattern over `ty` reads, or every type where the
-    /// shape is unknown.
+    /// The type of field `field` of the struct `ty` names, where it is known.
     fn pattern_field_type(&self, ty: Option<TypeId>, field: usize) -> Option<TypeId> {
-        let ty = strip_handles(ty?, self.type_table);
-        let ty = self.type_table.monomorphized_struct(ty).unwrap_or(ty);
+        let ty = self
+            .type_table
+            .monomorphized_or_self(strip_handles(ty?, self.type_table));
         self.struct_field_types(ty)?.get(field).copied()
     }
 
@@ -735,6 +745,30 @@ pub(super) struct HeapFrame {
     targets: IndexSet<ExprId>,
 }
 
+/// A body's [`HeapFrame`], built on the first query against the body as it
+/// stands then.
+pub(super) struct LazyHeapFrame<'e, 't> {
+    pub(super) effects: &'e HeapEffects<'t>,
+    params: Vec<u32>,
+    frame: OnceCell<HeapFrame>,
+}
+
+impl<'e, 't> LazyHeapFrame<'e, 't> {
+    /// For a body whose parameters are the locals `params`.
+    pub(super) fn new(effects: &'e HeapEffects<'t>, params: Vec<u32>) -> Self {
+        Self {
+            effects,
+            params,
+            frame: OnceCell::new(),
+        }
+    }
+
+    pub(super) fn get(&self, body: &Body) -> &HeapFrame {
+        self.frame
+            .get_or_init(|| HeapFrame::new(self.effects, body, &self.params))
+    }
+}
+
 const NO_NODE: u32 = u32::MAX;
 const ELSEWHERE: u32 = 0;
 const RET: u32 = 1;
@@ -796,7 +830,7 @@ impl HeapFrame {
                 NodeRef::Block(_) | NodeRef::Pat(_) => {}
             }
         }
-        if let Some(tail) = block_tail(body, body.root) {
+        if let Some(tail) = body.block_tail(body.root) {
             frame.unify_op(effects, body, RET, tail);
         }
         frame.finish();
@@ -1077,7 +1111,7 @@ impl HeapFrame {
             } => {
                 if yields {
                     for b in std::iter::once(*then_branch).chain(*else_branch) {
-                        if let Some(tail) = block_tail(body, b) {
+                        if let Some(tail) = body.block_tail(b) {
                             self.unify_op(effects, body, node, tail);
                         }
                     }
@@ -1086,7 +1120,7 @@ impl HeapFrame {
             ExprKind::Switch { arms, default, .. } => {
                 if yields {
                     for &b in arms.iter().chain(std::iter::once(default)) {
-                        if let Some(tail) = block_tail(body, b) {
+                        if let Some(tail) = body.block_tail(b) {
                             self.unify_op(effects, body, node, tail);
                         }
                     }
@@ -1326,11 +1360,7 @@ impl HeapFrame {
                 Effect::Write => &mut s.writes,
             };
             match keys {
-                Keys::One(k) => {
-                    let mut one = TypeSet::default();
-                    one.insert(*k);
-                    access.record(prov, &one);
-                }
+                Keys::One(k) => access.record(prov, &TypeSet::one(*k)),
                 Keys::Set(set) => access.record(prov, set),
             }
         }
@@ -1339,9 +1369,7 @@ impl HeapFrame {
         }
         s
     }
-}
 
-impl HeapFrame {
     /// Add what `call` does to objects the caller did not allocate.
     fn call_summary(&self, effects: &HeapEffects, body: &Body, call: ExprId, s: &mut Summary) {
         let (target, args) = call_parts(effects, body, call);
@@ -1623,31 +1651,17 @@ pub(super) fn field_path(body: &Body, mut e: ExprId) -> Option<(ExprId, Vec<(Typ
     Some((e, path))
 }
 
-impl Summary {
-    fn access(&self, effect: Effect) -> &Access {
-        match effect {
-            Effect::Read => &self.reads,
-            Effect::Write => &self.writes,
-        }
-    }
-}
-
 /// What a builtin touches through an argument of type `ty`: an array intrinsic
 /// only the array, anything else all it reaches.
 fn builtin_touches(effects: &HeapEffects, ty: TypeId, array: bool) -> Rc<TypeSet> {
     if !array {
         return effects.reach(ty);
     }
-    let mut one = TypeSet::default();
-    match effects.object_key(ty) {
-        Some(k) => {
-            one.insert(k);
-        }
-        None => {
-            one.set_any();
-        }
-    }
-    Rc::new(one)
+    Rc::new(
+        effects
+            .object_key(ty)
+            .map_or_else(TypeSet::everything, TypeSet::one),
+    )
 }
 
 /// Visit where each opaque leaf of the promoted value `v` came from; `None` is
@@ -1686,14 +1700,6 @@ fn returns_part_of(declaration: &BuiltinDeclaration, j: usize) -> bool {
         Some(ReturnConvention::PartOf(p)) => p == j,
         None => true,
     }
-}
-
-fn block_tail(body: &Body, block: BlockId) -> Option<Operand> {
-    let &last = body.blocks[block].stmts.last()?;
-    let StmtKind::Expr(op) = body.stmts[last].kind else {
-        return None;
-    };
-    Some(op)
 }
 
 /// What a call runs, as far as its heap effects go.

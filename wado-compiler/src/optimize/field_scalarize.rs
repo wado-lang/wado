@@ -17,6 +17,7 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::NirRefVisitor;
 use crate::optimize::alias::bound_value;
+use crate::optimize::arena_query::is_local;
 use crate::optimize::heap_effect::{Effect, HeapEffects, HeapFrame};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -332,7 +333,7 @@ impl HfsAnalysis<'_> {
             |site| sites.contains(&site),
             (key, field),
             local,
-            |receiver| is_local(body, receiver, local),
+            |receiver| receiver.as_expr().is_some_and(|e| is_local(body, e, local)),
         )
     }
 
@@ -359,12 +360,6 @@ impl HfsAnalysis<'_> {
             |arg| extract_gc_local_index_operand(body, arg, type_table) == Some(c.local_index),
         )
     }
-}
-
-fn is_local(body: &Body, op: Operand, local: u32) -> bool {
-    op.as_expr().is_some_and(
-        |e| matches!(body.exprs[e].kind, ExprKind::Local { index, .. } if index == local),
-    )
 }
 
 /// The nodes of every loop body in `body`, by the loop's body block.

@@ -25,7 +25,7 @@ use crate::optimize::arena_query::{
 };
 use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeTable};
 use crate::{hashmap, nir_arena};
 
 /// Run condition implication at the body root on an existing engine session.
@@ -153,9 +153,7 @@ pub(super) enum BoundKey {
 pub(super) type Binds = hashmap::IndexMap<u32, Operand>;
 
 /// Build [`Binds`] over the engine's body: every `let t = <value>` whose `t` is
-/// never reassigned (`Assign` / `&mut`) and whose value still holds at every read
-/// of `t`. A resolved read stands for the value re-read where `t` is read, so a
-/// write between the two to anything the value reads would make it stale.
+/// never reassigned and whose value, re-read, still holds at every read of `t`.
 pub(super) fn build_copy_bindings(engine: &Engine) -> Binds {
     let body = &*engine.body;
     let mut reassigned = hashmap::IndexSet::default();
@@ -191,9 +189,8 @@ struct PendingBind {
     escaped: bool,
 }
 
-/// One walk of the body in evaluation order, stamping every write and marking
-/// stale each bind read after a write to something it depends on. A loop's
-/// writes are stamped on entry, since its back edge runs them before each read.
+/// One walk of the body in evaluation order, marking stale each bind read after
+/// a write to something it depends on.
 struct BindWalk<'e, 'a> {
     engine: &'e Engine<'a>,
     tick: u64,
@@ -211,6 +208,7 @@ impl BindWalk<'_, '_> {
         let body = &*self.engine.body;
         if let NodeRef::Stmt(s) = n {
             match &body.stmts[s].kind {
+                // The back edge runs a loop's writes before each read in it.
                 StmtKind::Loop { .. } => {
                     let mut writes = Vec::new();
                     body.for_each_live_node_under(n, |m| node_writes(self.engine, m, &mut writes));
@@ -499,20 +497,11 @@ fn is_seq_length(engine: &Engine, binds: &Binds, op: Operand) -> bool {
             _ => return false,
         },
     };
+    let types = engine.value_graph_type_table();
     field_index == SeqField::Len.index()
-        && receiver_type.is_some_and(|t| is_seq_container_behind_refs(engine, t))
-}
-
-fn is_seq_container_behind_refs(engine: &Engine, mut ty: TypeId) -> bool {
-    let Some(types) = engine.value_graph_type_table() else {
-        return false;
-    };
-    loop {
-        match types.get(ty) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => ty = *inner,
-            _ => return types.is_seq_container(ty),
-        }
-    }
+        && receiver_type
+            .zip(types)
+            .is_some_and(|(t, types)| types.is_seq_container(types.peel_refs(t)))
 }
 
 /// Parse an operand (through copy temps) as a constant `i64`. Constants live in
@@ -648,9 +637,8 @@ fn struct_field_init(
         .map(|f| f.value)
 }
 
-/// The offset `c` for which `bound`, a sequence length built from a literal,
-/// equals `guard_var + c`. A length is never negative, so `guard_var + c` did
-/// not wrap; bare arithmetic, or any other field, proves nothing of the kind.
+/// The `c` for which `bound`, a sequence length, equals `guard_var + c`. Only a
+/// length, never negative, proves `guard_var + c` did not wrap.
 fn bound_offset_over(
     engine: &Engine,
     binds: &Binds,
@@ -893,8 +881,8 @@ fn choice_arms(engine: &Engine, op: Operand) -> Option<(Operand, Operand, Operan
             };
             Some((
                 *condition,
-                block_id_tail(engine.body, *then_branch)?,
-                block_id_tail(engine.body, *else_branch)?,
+                engine.body.block_tail(*then_branch)?,
+                engine.body.block_tail(*else_branch)?,
             ))
         }
         Operand::Value(v) => match engine.body.values.kind(v) {
@@ -1019,9 +1007,8 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
     modifies_any_root(engine, node, &roots)
 }
 
-/// One write an expression node may perform, in the value graph's alias model
-/// (the engine's alias sets), so the two cannot disagree over what a store
-/// reaches.
+/// One write an expression node may perform, in the engine's alias sets, so it
+/// and the value graph cannot disagree over what a store reaches.
 #[derive(Clone, Copy)]
 enum Write {
     /// The slot or storage of this local.
@@ -1032,9 +1019,8 @@ enum Write {
     Call,
 }
 
-/// Every write the expression node `e` itself may perform. A method receiver
-/// counts whatever the callee declares, since the boxing rewrite can erase the
-/// `&mut self` a type test would read.
+/// Every write the expression node `e` itself may perform. A receiver counts as
+/// the callee declares: boxing can erase the `&mut self` a type test would read.
 fn for_each_write(engine: &Engine, e: ExprId, sink: &mut impl FnMut(Write)) {
     let body = &*engine.body;
     let no_signatures = hashmap::IndexMap::default();
@@ -1309,11 +1295,8 @@ fn eliminate_checks_in_node(
     })
 }
 
-/// `<=` loop-guard elimination (`var <= gbound`, surviving `var < gbound + 1`):
-/// drive to `false` every dominated check `var + j >= B` whose bound `B` relates
-/// to `gbound + c` with `c > j >= 0` ([`bound_offset_over`]), since then
-/// `var + j <= gbound + j < gbound + c = B`. Recovers `arr.used == limit + 1`
-/// where the guard is `i <= limit` (structural, value_of-free).
+/// `<=` loop-guard elimination: under `var <= gbound`, drive to `false` each
+/// dominated check `var + j >= B` where `B` is `gbound + c` with `c > j >= 0`.
 fn eliminate_le_checks_in_node(
     engine: &mut Engine,
     node: NodeRef,
@@ -1716,8 +1699,8 @@ fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64>
     };
     let (left, cmp, right) = (*left, *cmp, *right);
     let k = parse_const_i64(engine, binds, right)?;
-    let then_const = parse_const_i64(engine, binds, block_id_tail(engine.body, then_branch)?)?;
-    let else_tail = block_id_tail(engine.body, else_branch)?;
+    let then_const = parse_const_i64(engine, binds, engine.body.block_tail(then_branch)?)?;
+    let else_tail = engine.body.block_tail(else_branch)?;
     if !operand_same(engine, binds, left, else_tail) {
         return None;
     }
@@ -1755,13 +1738,6 @@ fn operand_same(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> bool 
         }
         (Operand::Value(va), Operand::Value(vb)) => va == vb,
         _ => false,
-    }
-}
-
-fn block_id_tail(body: &nir_arena::Body, block: BlockId) -> Option<Operand> {
-    match &body.stmts[*body.blocks[block].stmts.last()?].kind {
-        StmtKind::Expr(op) => Some(*op),
-        _ => None,
     }
 }
 

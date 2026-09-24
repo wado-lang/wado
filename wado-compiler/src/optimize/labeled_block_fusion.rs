@@ -536,12 +536,8 @@ fn arm_body_operand_into_block(
     }
 }
 
-// Shared label-exit walk: one traversal answers every check, and the rewrites
-// take the exits it records rather than walking again, so no rewrite reaches an
-// exit its check did not see. It honours label shadowing, rejects an exit
-// hidden in an expression it does not descend, and hands each exit to an
-// [`ExitSink`] encoding the per-check policy. A promoted `Operand::Value` is
-// accepted vacuously, carrying no skeleton subtree and hence no break.
+// The rewrites take the exits the one shared walk records rather than walking
+// again, so no rewrite reaches an exit its check did not see.
 
 /// Per-exit policy for the shared [`walk_exits`] traversal.
 trait ExitSink {
@@ -764,18 +760,32 @@ fn fresh_label(body: &Body, stem: String, regions: &[NodeRef]) -> String {
     }
 }
 
-/// Replace exit `s` with `with` in the block holding it.
-fn replace_exit(engine: &mut Engine, s: StmtId, with: Vec<StmtId>) {
-    let Some(NodeRef::Block(parent)) = engine.parent_of(NodeRef::Stmt(s)) else {
-        panic!("labeled-block exit {s:?} is not held by a block");
-    };
-    let mut stmts = engine.body.blocks[parent].stmts.clone();
-    let at = stmts
-        .iter()
-        .position(|held| *held == s)
-        .expect("a block holds the statement it parents");
-    stmts.splice(at..=at, with);
-    engine.set_block_stmts(parent, stmts);
+/// The statements of `block`, which is left empty. A statement two blocks claim
+/// is seen twice by later rules, which can erase live work.
+fn take_stmts(engine: &mut Engine, block: BlockId) -> Vec<StmtId> {
+    std::mem::take(&mut engine.body.blocks[block].stmts)
+}
+
+/// Replace each exit, in the block holding it, with what `rewrite` makes of it.
+fn replace_exits(
+    engine: &mut Engine,
+    exits: &[Exit],
+    mut rewrite: impl FnMut(&mut Engine, StmtId) -> Vec<StmtId>,
+) {
+    for exit in exits {
+        let s = exit.stmt;
+        let with = rewrite(engine, s);
+        let Some(NodeRef::Block(parent)) = engine.parent_of(NodeRef::Stmt(s)) else {
+            panic!("labeled-block exit {s:?} is not held by a block");
+        };
+        let mut stmts = engine.body.blocks[parent].stmts.clone();
+        let at = stmts
+            .iter()
+            .position(|held| *held == s)
+            .expect("a block holds the statement it parents");
+        stmts.splice(at..=at, with);
+        engine.set_block_stmts(parent, stmts);
+    }
 }
 
 /// [`ExitSink`] for `check_lb_breaks_and_get_payload`: every `break L:` must
@@ -1235,10 +1245,9 @@ fn perform_fusion(
         span,
         value,
     };
-    for exit in info.exits {
-        let with = fuse_exit(engine, exit.stmt, &fusion);
-        replace_exit(engine, exit.stmt, with);
-    }
+    replace_exits(engine, &info.exits, |engine, s| {
+        fuse_exit(engine, s, &fusion)
+    });
 
     // The LB block becomes unreachable once the outer block drops the `let`;
     // taking its list moves the stmts rather than sharing them.
@@ -1405,20 +1414,10 @@ fn fuse_exit(engine: &mut Engine, s: StmtId, f: &Fusion) -> Vec<StmtId> {
     if selected {
         let subst_then = engine.clone_block(f.then_block);
         subst_temp_reads_in_block(engine, subst_then, f);
-        // Move the cloned stmts into `out` and empty the source block.
-        // Leaving them parented to `subst_then` AND a new block at the
-        // same time double-claims the stmt ids: the engine still
-        // enqueues `subst_then` for `apply_block`, and downstream
-        // rules (e.g. `const_branch_prune::eliminate_dead_stmts`'s
-        // void-block flatten) see the now-orphaned stmts a second
-        // time, which can erase live work.
-        let cloned_stmts = std::mem::take(&mut engine.body.blocks[subst_then].stmts);
-        out.extend(cloned_stmts);
+        out.extend(take_stmts(engine, subst_then));
     } else if let Some(eb) = f.else_block {
-        // None / non-matching case → emit a clone of the else block.
         let cloned = engine.clone_block(eb);
-        let cloned_stmts = std::mem::take(&mut engine.body.blocks[cloned].stmts);
-        out.extend(cloned_stmts);
+        out.extend(take_stmts(engine, cloned));
     }
 
     // Emit `break fused_label;` unless the last emitted statement already
@@ -1883,10 +1882,9 @@ fn perform_threading(engine: &mut Engine, match_id: ExprId, plan: ThreadPlan) {
             .filter_map(|arm| arm.body.as_expr().map(NodeRef::Expr)),
     );
     let fused_label = fresh_label(engine.body, format!("$thread_{}", plan.label), &enclosed);
-    for exit in &plan.exits {
-        let with = thread_exit(engine, exit.stmt, &plan, &fused_label);
-        replace_exit(engine, exit.stmt, with);
-    }
+    replace_exits(engine, &plan.exits, |engine, s| {
+        thread_exit(engine, s, &plan, &fused_label)
+    });
     // Move the scrutinee's LabeledBlock kind onto the match node, killing the
     // vacated node first so the block is never double-claimed.
     let role = match &engine.body.exprs[plan.scrut].kind {
@@ -1913,12 +1911,9 @@ fn thread_exit(
     plan: &ThreadPlan,
     fused_label: &str,
 ) -> Vec<StmtId> {
-    let StmtKind::Break { value, .. } = engine.body.stmts[s].kind else {
-        unreachable!("an exit is a break")
-    };
     let span = engine.body.stmts[s].span;
     let mut out = Vec::new();
-    let vc = value
+    let vc = exit_value(engine.body, s)
         .and_then(Operand::as_expr)
         .expect("guarded by plan_threading");
     let ExprKind::VariantConstruct {
@@ -1967,9 +1962,7 @@ fn thread_exit(
         Operand::Expr(e) => {
             if let Some(b) = engine.body.unbroken_block(e) {
                 let cloned = engine.clone_block(b);
-                // Move the cloned stmts out so the source block never
-                // double-claims them (same discipline as the fusion half).
-                let mut stmts = std::mem::take(&mut engine.body.blocks[cloned].stmts);
+                let mut stmts = take_stmts(engine, cloned);
                 let tail = match stmts.last().map(|s| &engine.body.stmts[*s].kind) {
                     Some(StmtKind::Expr(op)) => {
                         let op = *op;
@@ -2019,20 +2012,8 @@ fn thread_exit(
     out
 }
 
-/// Tagged-tuple temp scalarization: the `let temp = L: { …; break L: [tag,
-/// slots…]; }` an inlined `sroa_variant_return` callee leaves behind, where
-/// every read of `temp` is a `temp.k` projection.
-///
-/// [`LabeledBlockFusionRule`] folds the shapes whose consumer it can relocate
-/// into the block. The one it cannot is the value-producing `let v = match
-/// temp.0 { … }` of an inlined `let x = f()?`, and there the result tuple is
-/// allocated on the heap once per call and read straight back — `json-canada`
-/// pays one per coordinate. Scalarizing the temp needs no consumer analysis at
-/// all: give each projected slot a local, fill them at every exit, and the
-/// tuple never exists.
-/// Build the rule for one function. Mirrors the sibling constructors; the rule
-/// keeps no per-function state beyond the type table it classifies slot types
-/// against.
+/// The rule giving each slot of a `let temp = L: { …; break L: [tag, slots…]; }`
+/// read only as `temp.k` a local of its own, so the tuple never exists.
 pub(super) fn build_slot_temp_sroa(type_table: &TypeTable) -> SlotTempSroaRuleWithTypes<'_> {
     SlotTempSroaRuleWithTypes { type_table }
 }
@@ -2284,10 +2265,9 @@ fn perform_slot_temp_sroa(
     plan: SlotTempSroa,
 ) {
     let span = plan.span;
-    for exit in &plan.exits {
-        let with = scalarize_exit(engine, exit.stmt, &plan);
-        replace_exit(engine, exit.stmt, with);
-    }
+    replace_exits(engine, &plan.exits, |engine, s| {
+        scalarize_exit(engine, s, &plan)
+    });
 
     // Every `temp.k` now reads the slot local instead. Collect first: the
     // rewrite only replaces expression kinds, so the ids stay valid.

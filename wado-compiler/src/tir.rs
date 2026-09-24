@@ -3697,8 +3697,7 @@ impl TypeTable {
         for id in ids {
             let redirect = match self.types.get(id).unwrap() {
                 ResolvedType::Newtype { .. } => {
-                    let head = self.representation_head(id);
-                    Some(self.monomorphized_struct(head).unwrap_or(head))
+                    Some(self.monomorphized_or_self(self.representation_head(id)))
                 }
                 ResolvedType::Flags { .. } => Some(TypeTable::U32),
                 _ => None,
@@ -3724,6 +3723,11 @@ impl TypeTable {
             return None;
         };
         self.monomorphized_struct_of(*def, type_args)
+    }
+
+    /// [`Self::monomorphized_struct`] where there is one, else `id` itself.
+    pub fn monomorphized_or_self(&self, id: TypeId) -> TypeId {
+        self.monomorphized_struct(id).unwrap_or(id)
     }
 
     /// Get the base type if this is a newtype, or None otherwise
@@ -5639,9 +5643,8 @@ pub enum TirPattern {
         inclusive: bool,
         is_unsigned: bool,
     },
-    /// Holds the scrutinee at `type_id`, and matches only when `test`, which
-    /// reads that local, holds: a type pattern the host decides, or a constant
-    /// compared by `Eq`. `name` is the binding it makes, `None` for none.
+    /// Holds the scrutinee in `local_index` at `type_id`, matching where `test` on
+    /// it holds: a host type check or a constant's `Eq`. `name` is what it binds.
     Narrow {
         name: Option<String>,
         local_index: u32,
@@ -5747,6 +5750,14 @@ impl TirBlock {
         Self {
             stmts: Vec::new(),
             span,
+        }
+    }
+
+    /// The expression the block evaluates to, where its last statement is one.
+    pub fn tail_expr(&self) -> Option<&TirExpr> {
+        match &self.stmts.last()?.kind {
+            TirStmtKind::Expr(expr) => Some(expr),
+            _ => None,
         }
     }
 }

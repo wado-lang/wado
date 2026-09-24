@@ -175,14 +175,8 @@ fn yielded_by_branches_in(
     }
 }
 
-/// Group locals connected by a def whose value may be another local's object
-/// (union-find over [`yielded_locals`], flow-insensitive). A bare copy of a GC
-/// value shares the object — Wado value semantics insert explicit `value_copy`
-/// calls where a deep copy is required — so a mutation observed through one
-/// member is observable through every member. Used to widen invalidation and
-/// alias marking.
-///
-/// Returns `local name → group id`; locals with no copy edge are absent.
+/// The group of each local a def may hand another local's object, by name; a
+/// mutation seen through one member is seen through all. Uncopied locals are absent.
 fn collect_copy_groups(body: &[WirInstr]) -> IndexMap<String, u32> {
     let mut edges: Vec<(String, String)> = Vec::new();
     for instr in body {

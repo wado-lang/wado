@@ -517,7 +517,7 @@ fn build_template_block(
                 expr: resolved,
                 format_spec,
             } => {
-                let inner_type = strip_refs(resolved.type_id, tt);
+                let inner_type = tt.borrow().peel_refs(resolved.type_id);
                 let kind = format_spec
                     .as_ref()
                     .map_or(FormatKind::Display, |spec| spec.kind);
@@ -844,18 +844,7 @@ fn interpolation_dispatch_type(
     if kind == FormatKind::Inspect {
         type_id
     } else {
-        strip_refs(type_id, tt)
-    }
-}
-
-/// Strip all `Ref` and `MutRef` wrappers from a type, returning the inner type.
-fn strip_refs(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>) -> TypeId {
-    let mut current = type_id;
-    loop {
-        match tt.borrow().get(current).clone() {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => current = inner,
-            _ => return current,
-        }
+        tt.borrow().peel_refs(type_id)
     }
 }
 

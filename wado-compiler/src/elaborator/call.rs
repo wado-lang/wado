@@ -2368,12 +2368,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-    /// Fill `args` from `defaults` up to `param_types`, each default resolved
-    /// as its author wrote it in `callee_module`: the caller's bindings are out
-    /// of scope, and each parameter ahead of a default is a local of its
-    /// argument's type, as reify binds it. `filled` sees each appended `(index,
-    /// default, resolved type)`. A position no default covers stops the fill
-    /// and is left to the arity check.
+    /// Fill `args` from `defaults` up to `param_types`, each default resolved in
+    /// `callee_module` with the parameters ahead of it bound as reify binds them.
     pub(super) fn fill_trailing_defaults(
         &mut self,
         args: &mut Vec<TypeId>,
@@ -2399,6 +2395,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     bind(ctx, name, *arg_type);
                 }
                 for i in args.len()..param_types.len() {
+                    // A position no default covers is left to the arity check.
                     let Some((name, Some(default_expr))) = defaults.get(i) else {
                         break;
                     };

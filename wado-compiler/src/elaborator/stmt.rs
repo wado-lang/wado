@@ -1590,9 +1590,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// A constant pattern matches where `scrutinee == constant` holds. Where
-    /// that `==` is a trait call, dispatch it on the pattern and reserve the
-    /// local reify holds the scrutinee in to make the call.
+    /// Where a constant pattern's `scrutinee == constant` is a trait call, dispatch
+    /// it on the pattern and reserve the local reify holds the scrutinee in.
     fn resolve_constant_pattern(
         &mut self,
         pattern_id: AstId,

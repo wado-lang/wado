@@ -1753,12 +1753,18 @@ impl Body {
         });
         // An `Expr` tail is never a terminator, so reaching it is the same
         // question as it being there.
-        if let Some(&last) = self.blocks[*block].stmts.last()
-            && let StmtKind::Expr(v) = self.stmts[last].kind
-        {
+        if let Some(v) = self.block_tail(*block) {
             out.push(Some(v));
         }
         Some(out)
+    }
+
+    /// The operand of `block`'s last statement, where that statement is an `Expr`.
+    pub fn block_tail(&self, block: BlockId) -> Option<Operand> {
+        match self.stmts[*self.blocks[block].stmts.last()?].kind {
+            StmtKind::Expr(op) => Some(op),
+            _ => None,
+        }
     }
 
     /// The one operand `e` yields, or `None` where more than one point produces

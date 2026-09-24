@@ -5,6 +5,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirFunction, NirStruct, ReturnAbi};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
+use crate::optimize::arena_query::every_return;
 use crate::optimize::sroa_variant_return::settled_locals;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -238,7 +239,10 @@ fn candidate_info(
         tail_ok,
         tail_call_lowerable: true,
     };
-    if !all_returns_match_shape(body, NodeRef::Block(body.root), &expected) {
+    // The lowering splits every `Return`, nested ones included.
+    if !every_return(body, NodeRef::Block(body.root), |value| {
+        value.is_some_and(|v| expr_returns_match_operand(body, v, &expected))
+    }) {
         return None;
     }
 
@@ -349,22 +353,6 @@ fn collect_stmts(body: &Body, node: NodeRef, out: &mut Vec<StmtId>) {
     body.for_each_child(node, |c| collect_stmts(body, c, out));
 }
 
-/// Whether every `Return` under `node`, nested ones included, has the expected
-/// shape: the lowering splits each one.
-fn all_returns_match_shape(body: &Body, node: NodeRef, expected: &ExpectedShape<'_>) -> bool {
-    if let NodeRef::Stmt(s) = node
-        && let StmtKind::Return { value } = body.stmts[s].kind
-        && !value.is_some_and(|v| expr_returns_match_operand(body, v, expected))
-    {
-        return false;
-    }
-    let mut ok = true;
-    body.for_each_child(node, |c| {
-        ok = ok && all_returns_match_shape(body, c, expected);
-    });
-    ok
-}
-
 fn expr_returns_match_operand(body: &Body, op: Operand, expected: &ExpectedShape<'_>) -> bool {
     op.as_expr()
         .is_some_and(|e| expr_returns_match(body, e, expected))
@@ -375,7 +363,7 @@ fn expr_break_values_match_operand(body: &Body, op: Operand, expected: &Expected
 }
 
 /// The value of a `return`, in tail position. A `return` nested inside it is
-/// [`all_returns_match_shape`]'s to check.
+/// checked on its own by [`every_return`].
 fn expr_returns_match(body: &Body, expr: ExprId, expected: &ExpectedShape<'_>) -> bool {
     if body.exprs[expr].type_id == TypeTable::NEVER {
         return true;

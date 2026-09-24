@@ -34,58 +34,31 @@ use crate::nir::NirField;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::niri::{CtfeBuiltin, build_ctfe_builtin_map};
 
-/// Signature key for a monomorphized `List<T>` method: (`trait_name`, `method_name`).
-/// Inherent methods (`push/len/is_empty/with_capacity`) use `trait_name = None`;
-/// trait methods (`index_value/index_assign`) use `Some("IndexValue<i32>")` etc.
-///
-/// This key is the *method family* identifier — it is invariant under the element
-/// type `T` (i.e., `List<i32>::push` and `List<i64>::push` share the same
-/// `SigKey`). The catalog then uses `(TypeId, SigKey)` for per-element-type lookup.
+/// The family of a monomorphized `List<T>` method, `(trait_name, method_name)`,
+/// the same for every `T`; `(TypeId, SigKey)` names one instance.
 type SigKey = (Option<FqTraitName>, String);
 
-/// Classification of an `List<T>` method by signature shape. Determines whether
-/// the pass can safely rewrite calls on decomposed candidates, and how.
-///
-/// See the module-level table for the mapping from each kind to stdlib methods.
-/// Classification is *signature-driven*: any List method whose signature
-/// matches one of these shapes is automatically handled, regardless of name.
+/// A `List<T>` method's signature shape, whatever its name: it decides whether
+/// and how a call on a decomposed candidate is rewritten.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum ListMethodKind {
-    /// `fn(&mut List<T>, T) -> ()` — stores one element (e.g., `push`).
-    ///
-    /// Rewrite: N parallel calls, one per field, with the T argument projected
-    /// per field.
+    /// `fn(&mut List<T>, T)` storing one element (`push`), rewritten to one call
+    /// per field on that field of the element.
     ElementWriter,
-    /// `fn(&List<T>, i32) -> T` — reads one element by index (e.g., `index_value`).
-    ///
-    /// Rewrite: at each use, read each per-field array at the same index and
-    /// reconstruct a tuple/struct literal — but only when the surrounding
-    /// expression is a `FieldAccess` with a constant field index (so we can
-    /// dispatch directly to the relevant per-field read). Bare full-value reads
-    /// cause the candidate to escape.
+    /// `fn(&List<T>, i32) -> T` (`index_value`), rewritten to one field's read
+    /// under a constant-index `FieldAccess`; a whole-value read escapes.
     IndexReader,
-    /// `fn(&mut List<T>, i32, T) -> ()` — writes one element by index
-    /// (e.g., `index_assign`).
-    ///
-    /// Rewrite: N parallel calls, sharing the same (duplicable) index and
-    /// projecting the T argument per field.
+    /// `fn(&mut List<T>, i32, T)` (`index_assign`), rewritten to one call per
+    /// field on the shared index.
     IndexWriter,
-    /// `fn(i32) -> List<T>` (static, no receiver) that builds an empty list and
-    /// does nothing else (e.g., `with_capacity`; see [`builds_empty`]).
-    ///
-    /// Rewrite: N parallel calls to the same method, one per field, each
-    /// handed the same capacity.
+    /// `fn(i32) -> List<T>` that only builds an empty list ([`builds_empty`]),
+    /// rewritten to one call per field on the same capacity.
     Constructor,
-    /// `fn(Array<T>) -> List<T>` (static, no receiver) — builds the container
-    /// from the array a `[e0, …]` literal denotes (WEP 2026-08-24).
-    ///
-    /// Rewrite: only the empty literal, as N per-field `with_capacity(0)`
-    /// calls. A non-empty one carries elements this pass would have to split
-    /// per field.
+    /// `fn(Array<T>) -> List<T>` from a `[e0, …]` literal; only the empty one is
+    /// rewritten, to one `with_capacity(0)` per field.
     FromArray,
-    /// `fn(&List<T>) -> i32 | bool` that reads only the length (e.g. `len`,
-    /// `is_empty`, `capacity`; see [`reads_length_only`]). Rewritten to field
-    /// 0's method: every rewrite keeps the per-field arrays in lockstep.
+    /// `fn(&List<T>) -> i32 | bool` reading only the length ([`reads_length_only`]),
+    /// rewritten to field 0's: the per-field arrays move in lockstep.
     Query,
 }
 
@@ -456,9 +429,8 @@ fn greatest_fixpoint(
     }
 }
 
-/// Unclassify every family of `candidates` one member of which is outside
-/// `holding`: the rewrite retargets a family member to its sibling of another
-/// element type, so the whole family must mean what the kind promises.
+/// Unclassify each family of `candidates` with a member outside `holding`: a
+/// rewrite retargets a member to its sibling, so the whole family must qualify.
 fn demote_families(sig: &mut MethodSig, candidates: &IndexSet<FuncId>, holding: &IndexSet<FuncId>) {
     let demoted: IndexSet<SigKey> = candidates
         .iter()
@@ -798,10 +770,7 @@ fn demote_element_reading_queries(
         // A bodyless function's signature types may already be gone.
         f.body.as_ref()?;
         let first = f.params.first()?;
-        let ty = match type_table.get(first.type_id) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => first.type_id,
-        };
+        let ty = type_table.peel_refs(first.type_id);
         matches!(type_table.get(ty), ResolvedType::BuiltinArray(_))
             .then_some(f.id)
             .flatten()
@@ -1066,10 +1035,8 @@ struct RewriteCtx<'a> {
     value_copy_ids: &'a IndexSet<FuncId>,
 }
 
-/// Whether the catalog holds, for every per-field element type, the very
-/// method each observed use and the initializer retarget to.
-///
-/// `Query` dispatches to field 0, so only field 0 needs it.
+/// Whether the catalog holds, for every per-field element type, the method each
+/// observed use and the initializer retarget to; a `Query` needs field 0's only.
 fn required_methods_available(
     c: &Candidate,
     used: &IndexSet<(ListMethodKind, FuncId)>,
@@ -1894,9 +1861,8 @@ impl Rewriter<'_, '_> {
         }
     }
 
-    /// Whether a per-field write could land before an element that sees it:
-    /// one reads the container, or has an effect that the split would reorder
-    /// past an earlier field's write.
+    /// Whether a per-field write could land before an element that sees it, by
+    /// reading the container or by an effect the split reorders past the write.
     fn elements_observe_writes(&self, engine: &Engine, rec_local: u32, elems: &[Operand]) -> bool {
         let fields: IndexSet<u32> = (0..elems.len())
             .map(|k| self.ctx.field_map[&(rec_local, k as u32)].local_index)

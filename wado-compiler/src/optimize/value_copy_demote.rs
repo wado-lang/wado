@@ -8,7 +8,7 @@
 //! `container_sroa`'s whitelist and nested-`List<List<T>>` demotion. Its
 //! recursion guard reports `false` at any recursive call site.
 
-use std::cell::{OnceCell, RefCell};
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::compiler_item::SeqField;
@@ -29,7 +29,7 @@ use crate::module_source::ModuleSource;
 use crate::name::shallow_copy_helper_name;
 use crate::nir::FuncId;
 use crate::optimize::dce::{DescriptorCache, callee_descriptor};
-use crate::optimize::heap_effect::{HeapEffects, HeapFrame};
+use crate::optimize::heap_effect::{HeapEffects, LazyHeapFrame};
 use cranelift_entity::EntityRef;
 
 /// A function's canonical [`FuncId`]: the wrapper / demoted / shallow sets key
@@ -394,11 +394,7 @@ fn collect_sites(
     site_elig: &mut IndexMap<(usize, u32), bool>,
     site_key: &mut IndexMap<(usize, u32), FuncKey>,
 ) {
-    let heap = SharedElements {
-        effects,
-        params: params.iter().map(|p| p.local_index).collect(),
-        frame: OnceCell::new(),
-    };
+    let heap = LazyHeapFrame::new(effects, params.iter().map(|p| p.local_index).collect());
     for block in reachable_blocks(body) {
         let stmts = body.blocks[block].stmts.clone();
         for s in stmts {
@@ -452,7 +448,7 @@ fn demote_candidate(
     target_idx: u32,
     params: &[NirParam],
     an: &mut Analyzer,
-    heap: &SharedElements,
+    heap: &LazyHeapFrame,
 ) -> bool {
     let arg0 = match &body.exprs[value].kind {
         ExprKind::Call { args, .. } => args[0].expr,
@@ -487,7 +483,7 @@ fn demote_candidate(
                 compiler_trace!("demote", "arg root local {} not element-clean — skip", root);
                 return false;
             }
-            let exposed = heap.exposed(body, value, target_idx, root);
+            let exposed = elements_exposed(heap, body, value, target_idx, root);
             if exposed {
                 compiler_trace!("demote", "elements of local {} exposed — skip", root);
             }
@@ -496,31 +492,25 @@ fn demote_candidate(
     }
 }
 
-/// The heap view of one body that decides whether a spine copy may share its
-/// elements with the list it copies. The frame is built on first use.
-struct SharedElements<'e, 't> {
-    effects: &'e HeapEffects<'t>,
-    params: Vec<u32>,
-    frame: OnceCell<HeapFrame>,
-}
-
-impl SharedElements<'_, '_> {
-    /// Whether an element the spine copy `target` shares with `root` may be
-    /// written through another handle, or by the caller once the copy escapes.
-    fn exposed(&self, body: &Body, value: ExprId, target: u32, root: u32) -> bool {
-        let Some(keys) = self.effects.element_reach(body.exprs[value].type_id) else {
-            return true;
-        };
-        let frame = self
-            .frame
-            .get_or_init(|| HeapFrame::new(self.effects, body, &self.params));
-        let own = |op: Operand| {
-            op.as_expr()
-                .and_then(|e| storage_root(body, e))
-                .is_some_and(|l| l == target || l == root)
-        };
-        frame.written(self.effects, body, &keys, root, own) || frame.outlives(target)
-    }
+/// Whether an element the spine copy `target` shares with `root` may be written
+/// through another handle, or by the caller once the copy escapes.
+fn elements_exposed(
+    heap: &LazyHeapFrame,
+    body: &Body,
+    value: ExprId,
+    target: u32,
+    root: u32,
+) -> bool {
+    let Some(keys) = heap.effects.element_reach(body.exprs[value].type_id) else {
+        return true;
+    };
+    let frame = heap.get(body);
+    let own = |op: Operand| {
+        op.as_expr()
+            .and_then(|e| storage_root(body, e))
+            .is_some_and(|l| l == target || l == root)
+    };
+    frame.written(heap.effects, body, &keys, root, own) || frame.outlives(target)
 }
 
 /// Phase 2b mechanical rewrite: for each `let x = …` binding whose `(fi, x)` is

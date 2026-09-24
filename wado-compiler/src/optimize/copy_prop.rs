@@ -4,7 +4,7 @@
 //! the safety gates. Runs as a [`Rule`] whose `apply_block` fires at the body
 //! root and drives the analyse/substitute fixpoint to convergence in one shot.
 
-use std::cell::{Cell, OnceCell};
+use std::cell::Cell;
 
 use cranelift_entity::EntityRef;
 
@@ -25,7 +25,7 @@ use super::value_copy::mutation::MutationOracle;
 use crate::optimize::arena_query::{
     bare_promoted_local, buried_promoted_reads, promoted_local_reads, reachable_nodes,
 };
-use crate::optimize::heap_effect::{HeapEffects, HeapFrame, field_path};
+use crate::optimize::heap_effect::{HeapEffects, LazyHeapFrame, field_path};
 use crate::optimize::value_copy::mutation::build_param_mut;
 
 #[derive(Debug, Clone)]
@@ -241,9 +241,7 @@ struct AnalysisCtx<'a> {
     copy_value_id: Option<FuncId>,
     aliases: MutRefAliases,
     scans: IndexMap<BlockId, BlockScan>,
-    effects: &'a HeapEffects<'a>,
-    params: Vec<u32>,
-    frame: OnceCell<HeapFrame>,
+    heap: LazyHeapFrame<'a, 'a>,
 }
 
 impl AnalysisCtx<'_> {
@@ -265,12 +263,11 @@ impl AnalysisCtx<'_> {
                 between.insert(n);
             });
         }
-        let frame = self
-            .frame
-            .get_or_init(|| HeapFrame::new(self.effects, body, &self.params));
-        frame.place_replaced(self.effects, body, root, &path, |site| {
-            between.contains(&site)
-        })
+        self.heap
+            .get(body)
+            .place_replaced(self.heap.effects, body, root, &path, |site| {
+                between.contains(&site)
+            })
     }
 }
 
@@ -909,9 +906,7 @@ fn propagate_at_root(
             copy_value_id,
             aliases,
             scans,
-            effects,
-            params: (0..param_count as u32).collect(),
-            frame: OnceCell::new(),
+            heap: LazyHeapFrame::new(effects, (0..param_count as u32).collect()),
         };
         let analysis = analyze_function_body(engine.body, &ctx);
         if analysis.bindings.is_empty() {

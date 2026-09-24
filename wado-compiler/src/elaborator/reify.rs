@@ -4244,13 +4244,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             payload_type: info.item_type,
         };
 
-        let body_type = match &body_block.stmts.last() {
-            Some(stmt) => match &stmt.kind {
-                TirStmtKind::Expr(e) => e.type_id,
-                _ => TypeTable::UNIT,
-            },
-            None => TypeTable::UNIT,
-        };
+        let body_type = body_block
+            .tail_expr()
+            .map_or(TypeTable::UNIT, |e| e.type_id);
         let some_body = TirExpr::new(TirExprKind::Block(body_block), body_type, span);
 
         let break_block = TirBlock::new(
@@ -5344,9 +5340,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// The method call an operator annotate dispatched to a trait method
-    /// stands for: `left.method(right)`, each side adjusted as the method
-    /// declares it.
+    /// The trait-method call `left.method(right)` an operator dispatched to, each
+    /// side adjusted as the method declares it.
     fn binary_operator_call(
         &mut self,
         dispatch: OperatorDispatch,
@@ -5582,17 +5577,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         if template.parts.len() == 1
-            && let [
-                TirTemplatePart::Interpolation {
-                    expr,
-                    format_spec: None,
-                },
-            ] = parts.as_slice()
-            && expr.type_id == string_type
+            && matches!(
+                parts.as_slice(),
+                [TirTemplatePart::Interpolation { expr, format_spec: None }]
+                    if expr.type_id == string_type
+            )
+            && let Some(TirTemplatePart::Interpolation { expr, .. }) = parts.pop()
         {
-            let Some(TirTemplatePart::Interpolation { expr, .. }) = parts.pop() else {
-                unreachable!("matched a lone interpolation")
-            };
             return *expr;
         }
         TirExpr::new(TirExprKind::TemplateString { parts }, string_type, span)
@@ -7885,9 +7876,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         bind_to_local(ctx, name, expr, stmts)
     }
 
-    /// [`Self::hoist_once`] for a receiver, so it runs ahead of the arguments
-    /// bound after it. A place stays in its slot, since `&mut self` writes
-    /// there, and only the subscripts it computes are hoisted.
+    /// [`Self::hoist_once`] for a receiver, so it runs ahead of the arguments. A
+    /// place stays in its slot for `&mut self` to write; only its subscripts hoist.
     fn bind_receiver_ahead(
         &self,
         ctx: &mut FunctionContext,
@@ -7904,7 +7894,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let value = std::mem::replace(subscript, unbound);
             *subscript = Self::hoist_once(ctx, value, "$recv_index", stmts);
         }
-        drop(type_table);
         receiver
     }
 
@@ -8255,9 +8244,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let Some((name, Some(default_ast))) = func_params.get(i) else {
                     break;
                 };
-                // A default declared on a trait method has no body for annotate
-                // to walk, so without the parameter's type here it reifies
-                // untyped.
+                // A trait method's default has no body for annotate to walk, so
+                // without the parameter's type here it reifies untyped.
                 let expected = param_types.get(i).copied();
                 let mut resolved = self.reify_expr(default_ast, ctx, expected);
                 if let Some(expected) = expected {
@@ -8266,9 +8254,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if *named {
                     resolved = bind_to_local(ctx, name.clone(), resolved, &mut prelude);
                 }
-                // `CallArg::is_mut` says the callee may write the caller's
-                // storage through this slot. A default is a value synthesized
-                // here, so there is no caller storage behind it.
+                // A default is a value synthesized here, with no caller storage
+                // behind it for the callee to write.
                 args.push(CallArg::new(resolved, false));
             }
         });
@@ -8988,11 +8975,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        // Per-arg `is_mut` comes from the recorded `MethodDispatch`, off the
-        // signature of the method annotate dispatched to.
-        // Zip with the AST args so call sites with fewer args than
-        // declared (a Stage-5 recovery shape) still produce the
-        // right is_mut for the args we have.
+        // An argument past the dispatched signature, a recovery shape, is not
+        // `&mut`.
         let mut args: Vec<CallArg> = method_call
             .args
             .iter()
@@ -9009,8 +8993,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
 
-        // Pad missing trailing args with the method's defaults, standing in the
-        // module that declared them — the same walk the free-function path takes.
         let mut prelude = self.reify_apply_param_defaults(
             &mut args,
             &dispatch.param_defaults,
@@ -9030,9 +9012,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             receiver
         };
 
-        // A receiver the callee can replace rather than write into must be
-        // boxed, or the boxing pass has no slot to write the mutation back to
-        // and `x.bump()` mutates a copy.
+        // A receiver the callee can replace rather than write into is boxed, or
+        // the mutation has no slot to land in and `x.bump()` mutates a copy.
         let needs_implicit_mut_borrow = !dispatch.is_ref_impl
             && matches!(dispatch.self_kind, ast::SelfKind::MutRef)
             && self.tysys.mut_self_receiver_needs_box(raw_receiver.type_id);
@@ -9040,8 +9021,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ctx.address_taken_locals.insert(*index);
         }
 
-        // Shares the adjuster with the elaborator so the same TIR shape
-        // (Unary{Ref}/Unary{MutRef}/Deref wrapping) lands.
         let adjusted_receiver = adjust_receiver_for_self_kind(
             raw_receiver,
             dispatch.self_kind,
@@ -9050,22 +9029,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &self.tysys.type_table,
         );
 
-        // Method-level type args for the TIR method-call node — the exact
-        // vector annotate fed into `build_tir_method_call`. The monomorphizer's
-        // `collect_func_instantiation_sites` keys off this field to queue
-        // `Struct^Trait::method<Args>` instances, so it must be exactly what
-        // annotate resolved (turbofish-resolved or inference-recovered).
-        // Reading it from `MethodDispatch` keeps the
-        // blanket-impl turbofish case correct (where
-        // `monomorph_info.method_type_args` is zeroed by design).
+        // Monomorphization queues instances off exactly what annotate resolved;
+        // `monomorph_info.method_type_args` is zeroed for a blanket-impl turbofish.
         let type_args = dispatch.method_type_args.clone();
 
-        // The call's result type is the resolved method's return type
-        // (recorded on the dispatch), not the per-`AstId` `expression_types`
-        // entry: that entry can carry a wrong type for the call site, which
-        // would make a unit-returning call look value-producing and emit a
-        // spurious `drop` of a value-less call (Wasm stack underflow). Fall
-        // back to `recorded_type` only if the dispatch somehow lacks it.
+        // The per-`AstId` type can be wrong at a call site, making a unit call
+        // look value-producing and emitting a `drop` of nothing.
         let result_type = if dispatch.return_type == TypeTable::UNKNOWN {
             recorded_type
         } else {
@@ -11413,9 +11382,8 @@ fn build_tir_method_call(
     )
 }
 
-/// Which of `params` a default the call leaves out names, by slot. Read off the
-/// spelling, so a name the default rebinds for itself answers too, at the cost
-/// of a `let`. The receiver never does: no default can name `self`.
+/// Which of `params` a default the call leaves out names, by slot, read off the
+/// spelling: a name the default rebinds for itself answers too, at a `let`'s cost.
 fn slots_named_by_defaults(args_len: usize, params: &[(String, Option<ast::Expr>)]) -> Vec<bool> {
     let mut named = vec![false; params.len()];
     for (i, (_, default)) in params.iter().enumerate().skip(args_len) {

@@ -4,7 +4,7 @@
 //! pre-header-stable, deduped by structural identity ([`ArithKey`]). Runs as a
 //! [`Rule`] whose `apply_block` fires once and covers every loop in the body.
 
-use std::cell::{Cell, OnceCell};
+use std::cell::Cell;
 use std::ops::ControlFlow;
 
 use crate::compiler_trace;
@@ -29,7 +29,7 @@ use crate::nir_value_graph::ValuePool;
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use crate::optimize::arena_query::storage_root;
 use crate::optimize::condition_implication::{eliminate_at_root, resolve_panic_ids};
-use crate::optimize::heap_effect::{Effect, HeapEffects, HeapFrame};
+use crate::optimize::heap_effect::{Effect, HeapEffects, LazyHeapFrame};
 
 /// Pointee types with a field, keyed by [`TypeTable::type_key`] so the same
 /// type arriving under another id is still a hit.
@@ -117,14 +117,14 @@ impl ModifiedVars {
         root_type: TypeId,
         field_idx: u32,
     ) -> bool {
-        let pointee = strip_references(root_type, ctx.type_table);
+        let pointee = ctx.type_table.peel_refs(root_type);
         self.written_field(pointee, field_idx, ctx.type_table)
             || self.call_writes_object(ctx, body, root, root_type)
     }
 
     /// True when a call in the loop may write the object `root` holds.
     fn call_writes_object(&self, ctx: &LicmCtx, body: &Body, root: u32, root_type: TypeId) -> bool {
-        let Some(key) = ctx.effects.object_key(root_type) else {
+        let Some(key) = ctx.heap.effects.object_key(root_type) else {
             return false;
         };
         self.call_sites
@@ -279,11 +279,9 @@ impl Rule for LicmRule<'_> {
 /// Per-function LICM session state, threaded through the whole walk.
 struct LicmCtx<'a> {
     type_table: &'a TypeTable,
-    effects: &'a HeapEffects<'a>,
-    params: &'a [u32],
-    /// The function's heap classes, from the body at the first query. A local
-    /// minted since has no class and is answered for conservatively.
-    frame: OnceCell<HeapFrame>,
+    /// A local minted after the first query has no heap class and is answered
+    /// for conservatively.
+    heap: LazyHeapFrame<'a, 'a>,
     /// Locals created by a LICM hoist. Every hoist in this session inserts
     /// its fresh local; at session start the set is seeded from the
     /// [`LICM_HOIST_PREFIX`] naming convention — the only marker that
@@ -306,18 +304,16 @@ impl<'a> LicmCtx<'a> {
             .collect();
         Self {
             type_table,
-            effects,
-            params,
-            frame: OnceCell::new(),
+            heap: LazyHeapFrame::new(effects, params.to_vec()),
             hoist_locals,
         }
     }
 
     /// Whether `call` may write an object of type `key` that `root` holds.
     fn call_writes(&self, body: &Body, call: ExprId, key: TypeKey, root: u32) -> bool {
-        self.frame
-            .get_or_init(|| HeapFrame::new(self.effects, body, self.params))
-            .call_may(self.effects, body, call, Effect::Write, key, root)
+        self.heap
+            .get(body)
+            .call_may(self.heap.effects, body, call, Effect::Write, key, root)
     }
 }
 
@@ -468,9 +464,7 @@ fn licm_loop(
         );
 
         // Step 3.5: Drop `x.f` candidates another handle on `x`'s object may
-        // write in the loop, directly or inside a call. A hoist local minted
-        // this session has no heap class, so any same-typed write blocks it
-        // (#1472 cascade).
+        // write in the loop, directly or inside a call (#1472 cascade).
         candidates.retain(|c| {
             let root_ty = candidate_root_ty(engine, c.local_index, c.type_id);
             !modified_vars.is_field_aliasing_written(
@@ -634,11 +628,10 @@ fn hoist_reloadable_field_loads(
     );
 
     // Keep only candidates whose sole obstacle is a call that may write the
-    // object: not directly field-written, and with a genuine (non-reload)
-    // read still present in the loop.
+    // object, and that the loop still reads other than through a reload.
     candidates.retain(|c| {
         let root_ty = candidate_root_ty(engine, c.local_index, c.type_id);
-        let pointee = strip_references(root_ty, ctx.type_table);
+        let pointee = ctx.type_table.peel_refs(root_ty);
         if modified_vars.written_field(pointee, c.field_index, ctx.type_table)
             || !modified_vars.call_writes_object(ctx, engine.body, c.local_index, root_ty)
         {
@@ -663,7 +656,7 @@ fn hoist_reloadable_field_loads(
             .iter()
             .filter_map(|c| {
                 let root_ty = candidate_root_ty(engine, c.local_index, c.type_id);
-                Some((ctx.effects.object_key(root_ty)?, c.local_index))
+                Some((ctx.heap.effects.object_key(root_ty)?, c.local_index))
             })
             .collect(),
     };
@@ -696,6 +689,7 @@ fn hoist_reloadable_field_loads(
     for candidate in &candidates {
         let local_type_id = candidate_root_ty(engine, candidate.local_index, candidate.type_id);
         let key = ctx
+            .heap
             .effects
             .object_key(local_type_id)
             .expect("a candidate's call clobber was found by its object key");
@@ -768,29 +762,29 @@ struct Clobbers {
 }
 
 impl Clobbers {
-    /// The watched objects the call at `e` may write; empty for a non-call.
-    fn hits(&self, ctx: &LicmCtx, body: &Body, e: ExprId) -> IndexSet<(TypeKey, u32)> {
-        if !matches!(
+    /// The watched objects the call at `e` may write; none for a non-call.
+    fn written_by<'s>(
+        &'s self,
+        ctx: &'s LicmCtx,
+        body: &'s Body,
+        e: ExprId,
+    ) -> impl Iterator<Item = (TypeKey, u32)> + 's {
+        let is_call = matches!(
             body.exprs[e].kind,
             ExprKind::Call { .. } | ExprKind::IndirectCall { .. }
-        ) {
-            return IndexSet::default();
-        }
+        );
         self.watched
             .iter()
             .copied()
-            .filter(|&(key, root)| ctx.call_writes(body, e, key, root))
-            .collect()
+            .filter(move |&(key, root)| is_call && ctx.call_writes(body, e, key, root))
+    }
+
+    fn hits(&self, ctx: &LicmCtx, body: &Body, e: ExprId) -> IndexSet<(TypeKey, u32)> {
+        self.written_by(ctx, body, e).collect()
     }
 
     fn clobbers(&self, ctx: &LicmCtx, body: &Body, e: ExprId) -> bool {
-        matches!(
-            body.exprs[e].kind,
-            ExprKind::Call { .. } | ExprKind::IndirectCall { .. }
-        ) && self
-            .watched
-            .iter()
-            .any(|&(key, root)| ctx.call_writes(body, e, key, root))
+        self.written_by(ctx, body, e).next().is_some()
     }
 }
 
@@ -1250,16 +1244,6 @@ fn is_pure_field_chain(body: &Body, e: ExprId) -> bool {
     }
 }
 
-/// Strip all `Ref`/`MutRef` wrappers, returning the pointee type.
-fn strip_references(type_id: TypeId, type_table: &TypeTable) -> TypeId {
-    match type_table.get(type_id) {
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            strip_references(*inner, type_table)
-        }
-        _ => type_id,
-    }
-}
-
 /// Record a field-access write into `written_field_types`, keyed by the pointee
 /// type of the assigned object.
 fn record_written_field_type(
@@ -1276,7 +1260,7 @@ fn record_written_field_type(
         // A write place's receiver is never a promoted `Operand::Value`.
         && let Some(inner_e) = inner.as_expr()
     {
-        let pointee = strip_references(body.exprs[inner_e].type_id, type_table);
+        let pointee = type_table.peel_refs(body.exprs[inner_e].type_id);
         modified.insert_written_field_type(pointee, *field_index, type_table);
     }
 }

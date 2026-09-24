@@ -202,16 +202,16 @@ impl WriteBack<'_> {
             TirExprKind::Local { index, .. } => {
                 self.detached_locals.contains(index).then_some(expr.span)
             }
-            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-                block_value(block).and_then(|value| self.detached_in_value_position(value))
-            }
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => block
+                .tail_expr()
+                .and_then(|value| self.detached_in_value_position(value)),
             TirExprKind::If {
                 then_branch,
                 else_branch,
                 ..
             } => std::iter::once(then_branch)
                 .chain(else_branch)
-                .filter_map(block_value)
+                .filter_map(TirBlock::tail_expr)
                 .find_map(|value| self.detached_in_value_position(value)),
             TirExprKind::Match { arms, .. } => arms
                 .iter()
@@ -335,9 +335,8 @@ impl WriteBack<'_> {
         }
     }
 
-    /// Whether the callee can reach the storage `place` names through `sibling`:
-    /// a borrow of a place on the same root, the root itself where the root is
-    /// a reference, or any reference once the root is borrowed elsewhere.
+    /// Whether the callee can reach the storage `place` names through `sibling`,
+    /// a borrow on its root or a reference that may alias that root.
     fn reaches(&self, sibling: &TirExpr, place: &TirExpr) -> bool {
         let Some(root) = place_root(place) else {
             return false;
@@ -508,9 +507,8 @@ impl WriteBack<'_> {
                     && self.detached_place(arg).is_some()
             })
             .collect();
-        // Until the store back, the replaced value is in the temp alone, so a
-        // sibling reaching the same storage reads the old value and has its own
-        // write undone.
+        // Until the store back the new value is in the temp alone, so a sibling
+        // on the same storage reads the old one and has its own write undone.
         let shared: Vec<bool> = args
             .iter()
             .enumerate()
@@ -670,14 +668,6 @@ fn place_root(expr: &TirExpr) -> Option<Root> {
             op: TirUnaryOp::Deref,
             expr,
         } => place_root(expr),
-        _ => None,
-    }
-}
-
-/// The expression a block evaluates to, if its last statement is one.
-fn block_value(block: &TirBlock) -> Option<&TirExpr> {
-    match block.stmts.last().map(|stmt| &stmt.kind) {
-        Some(TirStmtKind::Expr(expr)) => Some(expr),
         _ => None,
     }
 }

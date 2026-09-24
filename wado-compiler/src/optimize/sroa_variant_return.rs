@@ -399,8 +399,7 @@ fn collect_call_sites(
             if let ExprKind::LabeledBlock {
                 block, result_type, ..
             } = &body.exprs[e].kind
-                && let Some(&last) = body.blocks[*block].stmts.last()
-                && let StmtKind::Expr(value) = body.stmts[last].kind
+                && let Some(value) = body.block_tail(*block)
             {
                 direct(value, *result_type, None);
             }
@@ -427,9 +426,7 @@ fn retype_block(body: &mut Body, e: ExprId, ty: TypeId) {
 fn collect_return_tail_calls(body: &Body, op: Operand, expected: TypeId, out: &mut Vec<CallSite>) {
     let Some(e) = op.as_expr() else { return };
     let tail_of = |block: BlockId, out: &mut Vec<CallSite>| {
-        if let Some(&last) = body.blocks[block].stmts.last()
-            && let StmtKind::Expr(inner) = body.stmts[last].kind
-        {
+        if let Some(inner) = body.block_tail(block) {
             collect_return_tail_calls(body, inner, expected, out);
         }
     };
@@ -766,11 +763,7 @@ fn debug_assert_call_sites_rewritten(_: &NirPackage) {}
 fn tail_call_site(body: &Body, op: Operand) -> Option<(FuncId, ExprId)> {
     let e = op.as_expr()?;
     if let Some(b) = body.unbroken_block(e) {
-        let last = *body.blocks[b].stmts.last()?;
-        let StmtKind::Expr(inner) = &body.stmts[last].kind else {
-            return None;
-        };
-        return tail_call_site(body, *inner);
+        return tail_call_site(body, body.block_tail(b)?);
     }
     match &body.exprs[e].kind {
         ExprKind::Call { func_id, .. } => Some((*func_id, e)),
@@ -1161,7 +1154,10 @@ fn collect_and_validate(
                 .body
                 .as_ref()
                 .expect("is_eligible rejects a body-less function");
-            if !returns_are_scalarizable(body, NodeRef::Block(body.root), cand, &tail_ok) {
+            // Every `Return` `rewrite_returns` reaches must turn into the result tuple.
+            if !arena_query::every_return(body, NodeRef::Block(body.root), |value| {
+                value.is_some_and(|v| return_value_scalarizable(body, v, cand, &tail_ok))
+            }) {
                 invalid.insert(key);
             }
         }
@@ -1203,29 +1199,8 @@ fn collect_called(body: &Body, node: NodeRef, out: &mut IndexSet<FuncId>) {
     body.for_each_child(node, |c| collect_called(body, c, out));
 }
 
-/// Whether every `Return` [`rewrite_returns`] reaches under `node` has a value
-/// [`rewrite_return_value`] turns into the result tuple.
-fn returns_are_scalarizable(
-    body: &Body,
-    node: NodeRef,
-    cand: &Candidate,
-    tail_ok: &IndexMap<FuncId, TypeId>,
-) -> bool {
-    if let NodeRef::Stmt(s) = node
-        && let StmtKind::Return { value } = body.stmts[s].kind
-        && !value.is_some_and(|v| return_value_scalarizable(body, v, cand, tail_ok))
-    {
-        return false;
-    }
-    let mut ok = true;
-    body.for_each_child(node, |c| {
-        ok = ok && returns_are_scalarizable(body, c, cand, tail_ok);
-    });
-    ok
-}
-
 /// The value of a `return`, in tail position. A `return` nested inside it is
-/// [`returns_are_scalarizable`]'s to check.
+/// checked on its own by [`arena_query::every_return`].
 fn return_value_scalarizable(
     body: &Body,
     op: Operand,
