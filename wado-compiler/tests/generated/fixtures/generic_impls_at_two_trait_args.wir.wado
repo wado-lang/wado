@@ -84,21 +84,21 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 fn "generic_impls_at_two_trait_args.wado/run"() with Stdout {
     let p_1: ref "generic_impls_at_two_trait_args.wado//W<i32>";
     let $cond: bool;
-    let p_4: ref "generic_impls_at_two_trait_args.wado//W<i32>";
-    let $local_7: ref "core:prelude/string.wado//String";
-    let self_11: ref "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>";
+    let p_3: ref "generic_impls_at_two_trait_args.wado//W<i32>";
+    let $local_6: ref "core:prelude/string.wado//String";
+    let self_10: ref "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>";
     let handle: i32;
-    let self_22: ref "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>";
-    let self_23: bool;
+    let self_21: ref "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>";
+    let self_22: bool;
     let text: ref "core:prelude/string.wado//String";
     let packed: i64;
-    let rx_27: i32;
-    let tx_28: i32;
+    let rx_26: i32;
+    let tx_27: i32;
     let $sroa_xs_repr: ref "Array<generic_impls_at_two_trait_args.wado/W<i32>>";
     $sroa_xs_repr = array.new_fixed<ref "generic_impls_at_two_trait_args.wado//W<i32>">(struct.new "generic_impls_at_two_trait_args.wado//W<i32>" { v: 2 }, struct.new "generic_impls_at_two_trait_args.wado//W<i32>" { v: 3 });
     let $match_scrut_0: ref null "generic_impls_at_two_trait_args.wado//W<i32>";
-    self_11 = struct.new "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>" { repr: $sroa_xs_repr, index: 0, end: 2 };
-    $match_scrut_0 = "core:prelude/traits.wado/generic_impls_at_two_trait_args.wado/W<i32>^core:prelude/traits.wado/Product::product_iter<core:prelude/slice.wado/SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>>"(self_11);
+    self_10 = struct.new "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>" { repr: $sroa_xs_repr, index: 0, end: 2 };
+    $match_scrut_0 = "core:prelude/traits.wado/generic_impls_at_two_trait_args.wado/W<i32>^core:prelude/traits.wado/Product::product_iter<core:prelude/slice.wado/SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>>"(self_10);
     $cond = (if ref.is_null($match_scrut_0) == 0 -> bool {
         p_1 = ref.as_non_null($match_scrut_0);
         p_1.v == 2;
@@ -110,26 +110,26 @@ fn "generic_impls_at_two_trait_args.wado/run"() with Stdout {
         "generic_impls_at_two_trait_args.wado/run$cold0"();
         unreachable;
     }
-    $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     let $match_scrut_1: ref null "generic_impls_at_two_trait_args.wado//W<i32>";
-    self_22 = struct.new "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>" { repr: $sroa_xs_repr, index: 0, end: 2 };
-    $match_scrut_1 = "core:prelude/traits.wado/generic_impls_at_two_trait_args.wado/W<i32>^core:prelude/traits.wado/Product::product_iter<core:prelude/slice.wado/SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>>"(self_22);
-    self_23 = (if ref.is_null($match_scrut_1) == 0 -> bool {
-        p_4 = ref.as_non_null($match_scrut_1);
-        p_4.v == 2;
+    self_21 = struct.new "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>" { repr: $sroa_xs_repr, index: 0, end: 2 };
+    $match_scrut_1 = "core:prelude/traits.wado/generic_impls_at_two_trait_args.wado/W<i32>^core:prelude/traits.wado/Product::product_iter<core:prelude/slice.wado/SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>>"(self_21);
+    self_22 = (if ref.is_null($match_scrut_1) == 0 -> bool {
+        p_3 = ref.as_non_null($match_scrut_1);
+        p_3.v == 2;
     } else {
         0;
     });
-    text = (if self_23 -> ref "core:prelude/string.wado//String" {
+    text = (if self_22 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($local_7, text.repr, text.used);
-    rx_27 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_28 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "generic_impls_at_two_trait_args.wado/$cm_binding__Stdout_write_via_stream"(rx_27);
-    "core:rt/write_string_to_stream"(tx_28, $local_7.repr, $local_7.used);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($local_6, text.repr, text.used);
+    rx_26 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_27 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "generic_impls_at_two_trait_args.wado/$cm_binding__Stdout_write_via_stream"(rx_26);
+    "core:rt/write_string_to_stream"(tx_27, $local_6.repr, $local_6.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 

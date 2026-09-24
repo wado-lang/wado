@@ -25,7 +25,7 @@ use super::value_copy::mutation::MutationOracle;
 use crate::optimize::arena_query::{
     bare_promoted_local, buried_promoted_reads, promoted_local_reads, reachable_nodes,
 };
-use crate::optimize::heap_effect::{HeapEffects, LazyHeapFrame, field_path};
+use crate::optimize::heap_effect::{HeapEffects, HeapEffectsCache, LazyHeapFrame, field_path};
 use crate::optimize::value_copy::mutation::build_param_mut;
 
 #[derive(Debug, Clone)]
@@ -993,11 +993,15 @@ impl Rule for CopyPropRule<'_> {
     }
 }
 
-pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+pub fn propagate_copies(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    heap: &mut HeapEffectsCache,
+) -> bool {
     let copy_value_id = project.builtin_func_id("copy_value");
     let type_table = project.type_table.borrow();
     let param_mut = build_param_mut(project);
-    let effects = HeapEffects::new(project, &type_table);
+    let effects = heap.effects(project, &type_table, gate);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::CopyProp, len, |fid| {

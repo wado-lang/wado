@@ -29,7 +29,7 @@ use crate::module_source::ModuleSource;
 use crate::name::shallow_copy_helper_name;
 use crate::nir::FuncId;
 use crate::optimize::dce::{DescriptorCache, callee_descriptor};
-use crate::optimize::heap_effect::{HeapEffects, LazyHeapFrame};
+use crate::optimize::heap_effect::{HeapEffects, HeapEffectsCache, LazyHeapFrame};
 use cranelift_entity::EntityRef;
 
 /// A function's canonical [`FuncId`]: the wrapper / demoted / shallow sets key
@@ -48,6 +48,7 @@ pub fn demote_value_copies(
     project: &mut NirPackage,
     gate: &mut FunctionGate,
     descriptor_cache: &mut DescriptorCache,
+    heap: &mut HeapEffectsCache,
 ) -> bool {
     // Intern the `array_clone_shallow` builtin the synthesized twins call, so
     // those calls are born resolved. One id serves all instantiations (the key
@@ -96,7 +97,7 @@ pub fn demote_value_copies(
 
     let type_table = project.type_table.clone();
     let heap_types = type_table.borrow();
-    let effects = HeapEffects::new(project, &heap_types);
+    let effects = heap.effects(project, &heap_types, gate);
     let mut analyzer = Analyzer {
         funcs: &project.functions,
         descriptors,

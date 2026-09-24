@@ -80,27 +80,27 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
     let rx_48: i32;
     let tx_49: i32;
     let $sroa_$iter_1_index: i32;
-    let $tmpl_buf_60: ref "core:prelude/string.wado//String";
     let $sroa_v_repr: ref Array<u8>;
     let $sroa_v_used: i32;
+    let $tmpl_buf_65: ref "core:prelude/string.wado//String";
     byte_sum = 0_i64;
     i = 0;
-    $tmpl_buf_60 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
+    $tmpl_buf_65 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     b0: block {
         l1: loop {
             break_if b0 i >= 3;
-            $tmpl_buf_60.used = 0;
-            new_used = $tmpl_buf_60.used + 6;
-            if @unlikely(new_used > builtin::array_len($tmpl_buf_60.repr)) {
+            $tmpl_buf_65.used = 0;
+            new_used = $tmpl_buf_65.used + 6;
+            if @unlikely(new_used > builtin::array_len($tmpl_buf_65.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_60, new_used);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_65, new_used);
             }
-            start_22 = $tmpl_buf_60.used;
-            $tmpl_buf_60.used = new_used;
-            builtin::array_copy<u8>($tmpl_buf_60.repr, start_22, global:wir_optimize_value_copy_str_bytes_loop.wado::$const_obj_2, 0, 6);
-            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i, $tmpl_buf_60);
-            $sroa_v_repr = $tmpl_buf_60.repr;
-            $sroa_v_used = $tmpl_buf_60.used;
+            start_22 = $tmpl_buf_65.used;
+            $tmpl_buf_65.used = new_used;
+            builtin::array_copy<u8>($tmpl_buf_65.repr, start_22, global:wir_optimize_value_copy_str_bytes_loop.wado::$const_obj_2, 0, 6);
+            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i, $tmpl_buf_65);
+            $sroa_v_repr = $tmpl_buf_65.repr;
+            $sroa_v_used = $tmpl_buf_65.used;
             $sroa_$iter_1_index = 0;
             b3: block {
                 l4: loop {

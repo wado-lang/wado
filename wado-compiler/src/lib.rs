@@ -27,6 +27,7 @@ pub mod elaborator;
 pub(crate) mod escape;
 pub mod flat_package;
 pub mod format_spec;
+pub(crate) mod graph;
 pub mod hashmap;
 pub mod intern;
 pub mod kiln;

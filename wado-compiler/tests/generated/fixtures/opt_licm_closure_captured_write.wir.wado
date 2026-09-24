@@ -77,14 +77,17 @@ fn "opt_licm_closure_captured_write.wado/run"() with Stdout {
     let packed: i64;
     let rx_19: i32;
     let tx_20: i32;
+    let $licm_value_27: i32;
     step = struct.new "core:prelude/types.wado//Box<i32>" { value: black_box(1) };
     sum = 0;
     i = 0;
+    $licm_value_27 = step.value;
     b0: block {
         l1: loop {
             break_if b0 i >= 3;
-            sum = sum + step.value;
+            sum = sum + $licm_value_27;
             step.value = 100;
+            $licm_value_27 = 100;
             i = i + 1;
             continue l1;
         };

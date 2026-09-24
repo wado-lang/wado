@@ -152,7 +152,7 @@ fn "value_copy_demote_mixed_sites.wado/process"(a, b) {
     let $sroa_other_used_122: i32;
     let $sroa_other_used_126: i32;
     let $sroa_other_used_130: i32;
-    sorted = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(let $array_clone_src_1: ref "Array<core:prelude/string.wado/String>"; $array_clone_src_1 = a.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_1(a.used); let $array_clone_dst_2: ref "Array<core:prelude/string.wado/String>"; $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">($array_clone_len_3); builtin::array_copy<ref "core:prelude/string.wado//String">($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_1 };
+    sorted = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:prelude/string.wado//String">(a.repr, local.tee $load_1(a.used))), used: $load_1 };
     "value_copy_demote_mixed_sites.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::sort_by$$Closure_0"(sorted);
     victim = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:prelude/string.wado//String">(b.repr, local.tee $load_3(b.used))), used: $load_3 };
     $v1_13 = victim.used;
@@ -174,7 +174,7 @@ fn "value_copy_demote_mixed_sites.wado/process"(a, b) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1_34);
         unreachable;
-    }, v_31 = builtin::array_get_value<ref "core:prelude/string.wado//String">(sorted.repr, 0), let $array_clone_src_4: ref Array<u8>, $array_clone_src_4 = v_31.repr, let $array_clone_len_6: i32, $array_clone_len_6 = local.tee $load_13(v_31.used), let $array_clone_dst_5: ref Array<u8>, $array_clone_dst_5 = builtin::array_new<u8>($array_clone_len_6), builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6), $sroa_other_used_122 = $load_13, $inline_core_prelude_string_wado_String__internal_push_string_15: block {
+    }, v_31 = builtin::array_get_value<ref "core:prelude/string.wado//String">(sorted.repr, 0), let $array_clone_src_1: ref Array<u8>, $array_clone_src_1 = v_31.repr, let $array_clone_len_3: i32, $array_clone_len_3 = local.tee $load_13(v_31.used), let $array_clone_dst_2: ref Array<u8>, $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3), builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3), $sroa_other_used_122 = $load_13, $inline_core_prelude_string_wado_String__internal_push_string_15: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_15 $sroa_other_used_122 == 0;
         new_used_48 = 0 + $sroa_other_used_122;
         if @unlikely(new_used_48 > builtin::array_len($local_4_4.repr)) {
@@ -183,7 +183,7 @@ fn "value_copy_demote_mixed_sites.wado/process"(a, b) {
         }
         start_49 = $local_4_4.used;
         $local_4_4.used = new_used_48;
-        builtin::array_copy<u8>($local_4_4.repr, start_49, $array_clone_dst_5, 0, $sroa_other_used_122);
+        builtin::array_copy<u8>($local_4_4.repr, start_49, $array_clone_dst_2, 0, $sroa_other_used_122);
     }, new_used_61 = $local_4_4.used + 1, if @unlikely(new_used_61 > builtin::array_len($local_4_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_61);
@@ -191,7 +191,7 @@ fn "value_copy_demote_mixed_sites.wado/process"(a, b) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1_69);
         unreachable;
-    }, v_66 = builtin::array_get_value<ref "core:prelude/string.wado//String">(victim.repr, 0), let $array_clone_src_7: ref Array<u8>, $array_clone_src_7 = v_66.repr, let $array_clone_len_9: i32, $array_clone_len_9 = local.tee $load_24(v_66.used), let $array_clone_dst_8: ref Array<u8>, $array_clone_dst_8 = builtin::array_new<u8>($array_clone_len_9), builtin::array_copy<u8>($array_clone_dst_8, 0, $array_clone_src_7, 0, $array_clone_len_9), $sroa_other_used_126 = $load_24, $inline_core_prelude_string_wado_String__internal_push_string_28: block {
+    }, v_66 = builtin::array_get_value<ref "core:prelude/string.wado//String">(victim.repr, 0), let $array_clone_src_4: ref Array<u8>, $array_clone_src_4 = v_66.repr, let $array_clone_len_6: i32, $array_clone_len_6 = local.tee $load_24(v_66.used), let $array_clone_dst_5: ref Array<u8>, $array_clone_dst_5 = builtin::array_new<u8>($array_clone_len_6), builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6), $sroa_other_used_126 = $load_24, $inline_core_prelude_string_wado_String__internal_push_string_28: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_28 $sroa_other_used_126 == 0;
         new_used_83 = $local_4_4.used + $sroa_other_used_126;
         if @unlikely(new_used_83 > builtin::array_len($load_20)) {
@@ -200,7 +200,7 @@ fn "value_copy_demote_mixed_sites.wado/process"(a, b) {
         }
         start_84 = $local_4_4.used;
         $local_4_4.used = new_used_83;
-        builtin::array_copy<u8>($local_4_4.repr, start_84, $array_clone_dst_8, 0, $sroa_other_used_126);
+        builtin::array_copy<u8>($local_4_4.repr, start_84, $array_clone_dst_5, 0, $sroa_other_used_126);
     }, new_used_96 = $local_4_4.used + 1, if @unlikely(new_used_96 > builtin::array_len($local_4_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_96);
@@ -208,7 +208,7 @@ fn "value_copy_demote_mixed_sites.wado/process"(a, b) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1_104);
         unreachable;
-    }, v_101 = builtin::array_get_value<ref "core:prelude/string.wado//String">(b.repr, 0), let $array_clone_src_10: ref Array<u8>, $array_clone_src_10 = v_101.repr, let $array_clone_len_12: i32, $array_clone_len_12 = local.tee $load_35(v_101.used), let $array_clone_dst_11: ref Array<u8>, $array_clone_dst_11 = builtin::array_new<u8>($array_clone_len_12), builtin::array_copy<u8>($array_clone_dst_11, 0, $array_clone_src_10, 0, $array_clone_len_12), $sroa_other_used_130 = $load_35, $inline_core_prelude_string_wado_String__internal_push_string_41: block {
+    }, v_101 = builtin::array_get_value<ref "core:prelude/string.wado//String">(b.repr, 0), let $array_clone_src_7: ref Array<u8>, $array_clone_src_7 = v_101.repr, let $array_clone_len_9: i32, $array_clone_len_9 = local.tee $load_35(v_101.used), let $array_clone_dst_8: ref Array<u8>, $array_clone_dst_8 = builtin::array_new<u8>($array_clone_len_9), builtin::array_copy<u8>($array_clone_dst_8, 0, $array_clone_src_7, 0, $array_clone_len_9), $sroa_other_used_130 = $load_35, $inline_core_prelude_string_wado_String__internal_push_string_41: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_41 $sroa_other_used_130 == 0;
         new_used_118 = $local_4_4.used + $sroa_other_used_130;
         if @unlikely(new_used_118 > builtin::array_len($load_31)) {
@@ -217,7 +217,7 @@ fn "value_copy_demote_mixed_sites.wado/process"(a, b) {
         }
         start_119 = $local_4_4.used;
         $local_4_4.used = new_used_118;
-        builtin::array_copy<u8>($local_4_4.repr, start_119, $array_clone_dst_11, 0, $sroa_other_used_130);
+        builtin::array_copy<u8>($local_4_4.repr, start_119, $array_clone_dst_8, 0, $sroa_other_used_130);
     }, $local_4_4;
 }
 

@@ -28,7 +28,7 @@ use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
 use super::string_push::{AppendFuseRule, ConstAsciiPushRule, resolve_ctx};
 use super::tuple_projection::TupleProjectionRule;
-use crate::optimize::heap_effect::{HeapEffects, LazyHeapFrame};
+use crate::optimize::heap_effect::{HeapEffectsCache, LazyHeapFrame};
 use crate::optimize::match_to_switch::intern_cold_markers;
 use crate::optimize::mod_ref::compute_fn_effects;
 use crate::optimize::select_lowering::intern_select;
@@ -44,6 +44,7 @@ pub(super) fn run_peephole(
     project: &mut NirPackage,
     gate: &mut FunctionGate,
     pre_inline: bool,
+    heap: &mut HeapEffectsCache,
 ) -> bool {
     // Intern the builtins the bundled rules synthesize, before any shared
     // immutable borrow of `project`, so their calls are born resolved.
@@ -73,7 +74,7 @@ pub(super) fn run_peephole(
     // Post-inline only: the closure-bearing field read it resolves through is
     // what `inline` exposes when an iterator adaptor's `next` is copied in.
     let closure_devirt_rule = (!pre_inline).then(|| build_closure_devirt(project));
-    let heap_effects = (!pre_inline).then(|| HeapEffects::new(project, &type_table));
+    let heap_effects = (!pre_inline).then(|| heap.effects(project, &type_table, gate));
 
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();

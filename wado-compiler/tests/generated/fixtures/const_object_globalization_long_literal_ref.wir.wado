@@ -70,7 +70,6 @@ global global:const_object_globalization_long_literal_ref.wado::$const_obj_1: re
 fn "const_object_globalization_long_literal_ref.wado/run"() with Stdout {
     let $load_3: ref Array<u8>;
     let i: i32;
-    let $local_1: ref "core:prelude/string.wado//String";
     let handle: i32;
     let new_used: i32;
     let start: i32;
@@ -80,20 +79,22 @@ fn "const_object_globalization_long_literal_ref.wado/run"() with Stdout {
     let packed: i64;
     let rx_29: i32;
     let tx_30: i32;
+    let $tmpl_buf_41: ref "core:prelude/string.wado//String";
     i = 0;
+    $tmpl_buf_41 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     b0: block {
         l1: loop {
             break_if b0 i >= 2;
-            $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i, $local_1);
-            new_used = $local_1.used + 77;
-            if @unlikely(new_used > builtin::array_len($local_1.repr)) {
+            $tmpl_buf_41.used = 0;
+            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i, $tmpl_buf_41);
+            new_used = $tmpl_buf_41.used + 77;
+            if @unlikely(new_used > builtin::array_len($tmpl_buf_41.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_41, new_used);
             }
-            start = $local_1.used;
-            $local_1.used = new_used;
-            self_20 = local.tee $load_3($local_1.repr);
+            start = $tmpl_buf_41.used;
+            $tmpl_buf_41.used = new_used;
+            self_20 = local.tee $load_3($tmpl_buf_41.repr);
             builtin::array_copy<u8>(self_20, start, global:const_object_globalization_long_literal_ref.wado::$const_obj_1, 0, 1);
             self_24 = $load_3;
             offset_25 = start + 1;
@@ -104,7 +105,7 @@ fn "const_object_globalization_long_literal_ref.wado/run"() with Stdout {
             rx_29 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
             tx_30 = builtin::i32_wrap_i64(packed >> 32_i64);
             handle = "const_object_globalization_long_literal_ref.wado/$cm_binding__Stdout_write_via_stream"(rx_29);
-            "core:rt/write_string_to_stream"(tx_30, $local_1.repr, $local_1.used);
+            "core:rt/write_string_to_stream"(tx_30, $tmpl_buf_41.repr, $tmpl_buf_41.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
             i = i + 1;
             continue l1;

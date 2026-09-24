@@ -117,23 +117,21 @@ fn "opt_hfs_stores_ref_sync.wado/bump_y"(c) {
 }
 
 fn "opt_hfs_stores_ref_sync.wado/run"() {
+    let $load_1: i32;
     let c: ref "opt_hfs_stores_ref_sync.wado//Counter";
     let total: i32;
     let i: i32;
     let h: ref "opt_hfs_stores_ref_sync.wado//Holder";
     let $v0_5: i32;
     let $v0_7: i32;
-    let $hfs_x_15: i32;
     c = struct.new "opt_hfs_stores_ref_sync.wado//Counter" { x: 0, y: 0 };
     total = 0;
     i = 0;
-    $hfs_x_15 = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= 5;
-            $hfs_x_15 = $hfs_x_15 + 1;
-            total = local.tee total(total + $hfs_x_15) + $hfs_x_15;
-            c.x = $hfs_x_15;
+            c.x = c.x + 1;
+            total = local.tee total(total + local.tee $load_1(c.x)) + $load_1;
             h = "opt_hfs_stores_ref_sync.wado/store_ref"(c);
             total = total + h.c.x;
             "opt_hfs_stores_ref_sync.wado/bump_y"(c);
