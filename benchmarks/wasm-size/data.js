@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790202679265,
+  "lastUpdate": 1790228613456,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59125,6 +59125,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 290692,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1c849b3d8193ddc6614d83687223c4528c9c032b",
+          "message": "Merge pull request #2140 from wado-lang/gale-prefix-operand-min-prec\n\nperf(gale)!: generated parsers 17–20% smaller, and prefix-operator operands parse",
+          "timestamp": "2026-09-24T14:25:29+09:00",
+          "tree_id": "cf5eb76353ff0aa1e2f2e1578ab282c0c9a91491",
+          "url": "https://github.com/wado-lang/wado/commit/1c849b3d8193ddc6614d83687223c4528c9c032b"
+        },
+        "date": 1790228612703,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 239681,
             "unit": "bytes"
           }
         ]
