@@ -1572,12 +1572,8 @@ impl Parser {
     }
 }
 
-fn scan_stat_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_stat_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
-    pos += 1;
     pos = scan_expr(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_NEWLINE { return -1; }
@@ -1585,8 +1581,12 @@ fn scan_stat_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_stat_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_stat_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
+    pos += 1;
     pos = scan_expr(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_NEWLINE { return -1; }
@@ -1702,19 +1702,19 @@ fn _parse_prog(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
-fn _parse_stat__inner_alt_1(p: &mut Parser) -> () {
-    p.b.set_alt(1);
-    p.expect(TK_ID, &SYNC_0, false);
-    p.expect(TK_LIT_EQ, &SYNC_1, false);
-    p.site = 2;
+fn _parse_stat__inner_alt_0(p: &mut Parser) -> () {
+    p.b.set_alt(0);
+    p.site = 1;
     _parse_expr(p);
     p.expect(TK_NEWLINE, &EMPTY_SYNC, true);
     return;
 }
 
-fn _parse_stat__inner_alt_0(p: &mut Parser) -> () {
-    p.b.set_alt(0);
-    p.site = 1;
+fn _parse_stat__inner_alt_1(p: &mut Parser) -> () {
+    p.b.set_alt(1);
+    p.expect(TK_ID, &SYNC_0, false);
+    p.expect(TK_LIT_EQ, &SYNC_1, false);
+    p.site = 2;
     _parse_expr(p);
     p.expect(TK_NEWLINE, &EMPTY_SYNC, true);
     return;

@@ -1557,6 +1557,17 @@ impl Parser {
     }
 }
 
+fn scan_decl_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_decl_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
@@ -1565,17 +1576,6 @@ fn scan_decl_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
     pos += 1;
     pos = scan_init_(tokens, pos);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_decl_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
     pos += 1;
     return pos;
@@ -1655,11 +1655,20 @@ fn _parse_type_(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
+fn _parse_decl__inner_alt_0(p: &mut Parser) -> () {
+    let _rule_start_tok = p.pos;
+    p.site = 1;
+    _parse_type_(p);
+    p.expect(TK_ID, &SYNC_1, false);
+    p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
+    return;
+}
+
 fn _parse_decl__inner_alt_1(p: &mut Parser) -> () {
     let _rule_start_tok = p.pos;
     p.site = 2;
     _parse_type_(p);
-    p.expect(TK_ID, &SYNC_1, false);
+    p.expect(TK_ID, &SYNC_2, false);
     p.site = 3;
     _parse_init_(p);
     p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
@@ -1669,18 +1678,9 @@ fn _parse_decl__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_decl__inner_alt_0(p: &mut Parser) -> () {
-    let _rule_start_tok = p.pos;
-    p.site = 1;
-    _parse_type_(p);
-    p.expect(TK_ID, &SYNC_2, false);
-    p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
-    return;
-}
-
 fn _parse_decl__inner(p: &mut Parser) -> () {
     let _rule_start_tok = p.pos;
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         if p.peek_at(1) == TK_LIT_SEMI {
@@ -1825,8 +1825,8 @@ fn _kind_set_0(k: i32) -> bool {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [96];
 global EXPECTED_0: List<i32> = [TK_LIT_float, TK_LIT_int];
-global SYNC_1: List<i32> = [352];
-global EXPECTED_1: List<i32> = [TK_LIT_EQ, TK_LIT_float, TK_LIT_int];
-global SYNC_2: List<i32> = [128];
+global SYNC_1: List<i32> = [128];
+global SYNC_2: List<i32> = [352];
+global EXPECTED_2: List<i32> = [TK_LIT_EQ, TK_LIT_float, TK_LIT_int];
 global SYNC_3: List<i32> = [2];
 

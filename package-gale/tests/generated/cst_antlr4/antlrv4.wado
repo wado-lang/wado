@@ -3336,19 +3336,19 @@ fn scan_delegate_grammars(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_delegate_grammar_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_delegate_grammar_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
+    if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_delegate_grammar_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
     return pos;

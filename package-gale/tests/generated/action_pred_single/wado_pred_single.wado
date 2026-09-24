@@ -1493,19 +1493,19 @@ impl Parser {
     }
 }
 
-fn scan_pick_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_pick_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
-    pos += 1;
+    pos = scan_gated(tokens, pos);
+    if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_X { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_pick_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_pick_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_gated(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
+    pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_X { return -1; }
     pos += 1;
     return pos;
@@ -1604,15 +1604,15 @@ fn _parse_item(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
-fn _parse_pick__inner_alt_1(p: &mut Parser) -> () {
-    p.expect(TK_A, &SYNC_1, false);
+fn _parse_pick__inner_alt_0(p: &mut Parser) -> () {
+    p.site = 0;
+    _parse_gated(p);
     p.expect(TK_X, &EMPTY_SYNC, true);
     return;
 }
 
-fn _parse_pick__inner_alt_0(p: &mut Parser) -> () {
-    p.site = 0;
-    _parse_gated(p);
+fn _parse_pick__inner_alt_1(p: &mut Parser) -> () {
+    p.expect(TK_A, &SYNC_1, false);
     p.expect(TK_X, &EMPTY_SYNC, true);
     return;
 }

@@ -5731,17 +5731,6 @@ fn scan_type_parameter_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
     return pos;
 }
 
-fn scan_type_parameter_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_19(tokens[pos]) { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_Assign { return -1; }
-    pos += 1;
-    pos = scan_type_argument(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_type_parameter_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_19(tokens[pos]) { return -1; }
@@ -5751,6 +5740,17 @@ fn scan_type_parameter_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
         pos = scan_constraint(tokens, pos, follow);
         if pos < 0 { pos = sp; }
     }
+    return pos;
+}
+
+fn scan_type_parameter_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || !_kind_set_19(tokens[pos]) { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_Assign { return -1; }
+    pos += 1;
+    pos = scan_type_argument(tokens, pos, follow);
+    if pos < 0 { return -1; }
     return pos;
 }
 
@@ -5938,20 +5938,20 @@ fn scan_union_or_intersection_or_primary_type(tokens: &Array<i32>, pos: i32, fol
     return pos;
 }
 
-fn scan_primary_type_atom_alt_9(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_primary_type_atom_alt_8(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_KeyOf { return -1; }
+    pos = scan_type_reference(tokens, pos, FOLLOW_MASK_6);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_Is { return -1; }
     pos += 1;
     pos = scan_primary_type(tokens, pos, follow, 1);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_primary_type_atom_alt_8(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_primary_type_atom_alt_9(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_type_reference(tokens, pos, FOLLOW_MASK_6);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_Is { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_KeyOf { return -1; }
     pos += 1;
     pos = scan_primary_type(tokens, pos, follow, 1);
     if pos < 0 { return -1; }
@@ -7223,18 +7223,18 @@ fn scan_source_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
+fn scan_statement_alt_22(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_debugger_statement(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn scan_statement_alt_27(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Export { return -1; }
     pos += 1;
     pos = scan_statement(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_statement_alt_22(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_debugger_statement(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -8172,6 +8172,23 @@ fn scan_declaration(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return -1;
 }
 
+fn scan_variable_statement_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_binding_pattern(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos] == TK_Colon {
+        let sp = pos;
+        pos = scan_type_annotation(tokens, pos, FOLLOW_MASK_15);
+        if pos < 0 { pos = sp; }
+    }
+    pos = scan_initializer(tokens, pos, follow);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos] == TK_SemiColon && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+        pos += 1;
+    }
+    return pos;
+}
+
 fn scan_variable_statement_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_11(tokens[pos]) {
@@ -8188,23 +8205,6 @@ fn scan_variable_statement_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
         pos += 1;
     }
     pos = scan_variable_declaration_list(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_SemiColon && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        pos += 1;
-    }
-    return pos;
-}
-
-fn scan_variable_statement_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_binding_pattern(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_Colon {
-        let sp = pos;
-        pos = scan_type_annotation(tokens, pos, FOLLOW_MASK_15);
-        if pos < 0 { pos = sp; }
-    }
-    pos = scan_initializer(tokens, pos, follow);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_SemiColon && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         pos += 1;
@@ -8370,74 +8370,6 @@ fn scan_if_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_iteration_statement_alt_3(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_For { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || !_kind_set_25(tokens[pos]) { return -1; }
-    pos += 1;
-    pos = scan_variable_declaration_list(tokens, pos, FOLLOW_MASK_22);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
-    pos += 1;
-    if pos < tokens.len() && _kind_set_27(tokens[pos]) {
-        let sp = pos;
-        pos = scan_expression_sequence(tokens, pos, FOLLOW_MASK_22);
-        if pos < 0 { pos = sp; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
-    pos += 1;
-    if pos < tokens.len() && _kind_set_27(tokens[pos]) {
-        let sp = pos;
-        pos = scan_expression_sequence(tokens, pos, FOLLOW_MASK_32);
-        if pos < 0 { pos = sp; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
-    pos += 1;
-    pos = scan_statement(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_iteration_statement_alt_7(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_For { return -1; }
-    pos += 1;
-    if pos < tokens.len() && tokens[pos] == TK_Await {
-        pos += 1;
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || !_kind_set_25(tokens[pos]) { return -1; }
-    pos += 1;
-    pos = scan_variable_declaration(tokens, pos, FOLLOW_MASK_35);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || !_kind_set_19(tokens[pos]) { return -1; }
-    pos += 1;
-    pos = scan_expression_sequence(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_As {
-        let sp = pos;
-        sg_59_done: {
-            sg_59: {
-                pos += 1;
-                pos = scan_type_(tokens, pos, FOLLOW_MASK_32);
-                if pos < 0 { break sg_59; }
-                break sg_59_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
-    pos += 1;
-    pos = scan_statement(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_iteration_statement_alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_For { return -1; }
@@ -8470,34 +8402,49 @@ fn scan_iteration_statement_alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0
     return pos;
 }
 
-fn scan_iteration_statement_alt_6(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_iteration_statement_alt_3(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_For { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos] == TK_Await {
-        pos += 1;
-    }
     if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
     pos += 1;
-    pos = scan_single_expression(tokens, pos, FOLLOW_MASK_35, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || !_kind_set_19(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_25(tokens[pos]) { return -1; }
     pos += 1;
-    pos = scan_expression_sequence(tokens, pos, 0);
+    pos = scan_variable_declaration_list(tokens, pos, FOLLOW_MASK_22);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_As {
+    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
+    pos += 1;
+    if pos < tokens.len() && _kind_set_27(tokens[pos]) {
         let sp = pos;
-        sg_60_done: {
-            sg_60: {
-                pos += 1;
-                pos = scan_type_(tokens, pos, FOLLOW_MASK_32);
-                if pos < 0 { break sg_60; }
-                break sg_60_done;
-            }
-            pos = -1;
-        }
+        pos = scan_expression_sequence(tokens, pos, FOLLOW_MASK_22);
         if pos < 0 { pos = sp; }
     }
+    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
+    pos += 1;
+    if pos < tokens.len() && _kind_set_27(tokens[pos]) {
+        let sp = pos;
+        pos = scan_expression_sequence(tokens, pos, FOLLOW_MASK_32);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
+    pos += 1;
+    pos = scan_statement(tokens, pos, follow);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_iteration_statement_alt_4(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_For { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
+    pos += 1;
+    pos = scan_single_expression(tokens, pos, FOLLOW_MASK_34, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_In { return -1; }
+    pos += 1;
+    pos = scan_expression_sequence(tokens, pos, FOLLOW_MASK_32);
+    if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
     pos = scan_statement(tokens, pos, follow);
@@ -8526,18 +8473,71 @@ fn scan_iteration_statement_alt_5(tokens: &Array<i32>, pos: i32, follow: i64 = 0
     return pos;
 }
 
-fn scan_iteration_statement_alt_4(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_iteration_statement_alt_6(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_For { return -1; }
     pos += 1;
+    if pos < tokens.len() && tokens[pos] == TK_Await {
+        pos += 1;
+    }
     if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
     pos += 1;
-    pos = scan_single_expression(tokens, pos, FOLLOW_MASK_34, 0);
+    pos = scan_single_expression(tokens, pos, FOLLOW_MASK_35, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_In { return -1; }
+    if pos >= tokens.len() || !_kind_set_19(tokens[pos]) { return -1; }
     pos += 1;
-    pos = scan_expression_sequence(tokens, pos, FOLLOW_MASK_32);
+    pos = scan_expression_sequence(tokens, pos, 0);
     if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos] == TK_As {
+        let sp = pos;
+        sg_59_done: {
+            sg_59: {
+                pos += 1;
+                pos = scan_type_(tokens, pos, FOLLOW_MASK_32);
+                if pos < 0 { break sg_59; }
+                break sg_59_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
+    pos += 1;
+    pos = scan_statement(tokens, pos, follow);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_iteration_statement_alt_7(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_For { return -1; }
+    pos += 1;
+    if pos < tokens.len() && tokens[pos] == TK_Await {
+        pos += 1;
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || !_kind_set_25(tokens[pos]) { return -1; }
+    pos += 1;
+    pos = scan_variable_declaration(tokens, pos, FOLLOW_MASK_35);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || !_kind_set_19(tokens[pos]) { return -1; }
+    pos += 1;
+    pos = scan_expression_sequence(tokens, pos, 0);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos] == TK_As {
+        let sp = pos;
+        sg_60_done: {
+            sg_60: {
+                pos += 1;
+                pos = scan_type_(tokens, pos, FOLLOW_MASK_32);
+                if pos < 0 { break sg_60; }
+                break sg_60_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; }
+    }
     if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
     pos = scan_statement(tokens, pos, follow);
@@ -9845,6 +9845,17 @@ fn scan_object_literal(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
+fn scan_property_assignment_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_property_name(tokens, pos, FOLLOW_MASK_48);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || !_kind_set_10(tokens[pos]) { return -1; }
+    pos += 1;
+    pos = scan_single_expression(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn scan_property_assignment_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBracket { return -1; }
@@ -9863,17 +9874,6 @@ fn scan_property_assignment_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0
 fn scan_property_assignment_alt_5(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier_or_key_word(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_property_assignment_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_property_name(tokens, pos, FOLLOW_MASK_48);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || !_kind_set_10(tokens[pos]) { return -1; }
-    pos += 1;
-    pos = scan_single_expression(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -10190,17 +10190,6 @@ fn scan_single_expression_atom_alt_7(tokens: &Array<i32>, pos: i32, follow: i64 
     return pos;
 }
 
-fn scan_single_expression_atom_alt_49(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
-    pos += 1;
-    pos = scan_expression_sequence(tokens, pos, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_single_expression_atom_alt_11(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Delete { return -1; }
@@ -10237,10 +10226,10 @@ fn scan_single_expression_atom_alt_20(tokens: &Array<i32>, pos: i32, follow: i64
     return pos;
 }
 
-fn scan_single_expression_atom_alt_46(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_43(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_literal(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_This { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -10256,16 +10245,27 @@ fn scan_single_expression_atom_alt_44(tokens: &Array<i32>, pos: i32, follow: i64
     return pos;
 }
 
-fn scan_single_expression_atom_alt_43(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_45(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_This { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_Super { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_single_expression_atom_alt_45(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_46(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_Super { return -1; }
+    pos = scan_literal(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_single_expression_atom_alt_49(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
+    pos += 1;
+    pos = scan_expression_sequence(tokens, pos, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
     return pos;
 }
@@ -11081,13 +11081,6 @@ fn scan_single_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_pr
     return pos;
 }
 
-fn scan_as_expression_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_single_expression(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_as_expression_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_predefined_type(tokens, pos, follow);
@@ -11105,6 +11098,13 @@ fn scan_as_expression_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
         }
         if pos < 0 { pos = sp; }
     }
+    return pos;
+}
+
+fn scan_as_expression_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_single_expression(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
     return pos;
 }
 
@@ -11305,6 +11305,13 @@ fn scan_arrow_function_parameters(tokens: &Array<i32>, pos: i32, follow: i64 = 0
     return -1;
 }
 
+fn scan_arrow_function_body_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_single_expression(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn scan_arrow_function_body_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
@@ -11313,13 +11320,6 @@ fn scan_arrow_function_body_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
     pos += 1;
-    return pos;
-}
-
-fn scan_arrow_function_body_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_single_expression(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
     return pos;
 }
 
@@ -11632,15 +11632,6 @@ fn _parse_type_parameter_list(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
     p.sites.pop();
 }
 
-fn _parse_type_parameter__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.site = 8;
-    _parse_identifier(p);
-    p.expect(TK_Assign, &SYNC_0, false);
-    p.site = 9;
-    _parse_type_argument(p, follow);
-    return;
-}
-
 fn _parse_type_parameter__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.site = 6;
     _parse_identifier(p);
@@ -11648,6 +11639,15 @@ fn _parse_type_parameter__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () wit
         p.site = 7;
         _parse_constraint(p, follow);
     }
+    return;
+}
+
+fn _parse_type_parameter__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.site = 8;
+    _parse_identifier(p);
+    p.expect(TK_Assign, &SYNC_0, false);
+    p.site = 9;
+    _parse_type_argument(p, follow);
     return;
 }
 
@@ -11957,14 +11957,6 @@ fn _parse_union_or_intersection_or_primary_type(p: &mut Parser, follow: i64 = 0,
     p.sites.pop();
 }
 
-fn _parse_primary_type__inner_alt_9(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.b.set_alt(9);
-    p.expect(TK_KeyOf, &SYNC_0, false);
-    p.site = 35;
-    _parse_primary_type(p, follow, 1);
-    return;
-}
-
 fn _parse_primary_type__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(1);
     p.site = 26;
@@ -11985,6 +11977,14 @@ fn _parse_primary_type__inner_alt_8(p: &mut Parser, follow: i64 = 0) -> () with 
     _parse_type_reference(p, FOLLOW_MASK_6);
     p.expect(TK_Is, &SYNC_0, false);
     p.site = 34;
+    _parse_primary_type(p, follow, 1);
+    return;
+}
+
+fn _parse_primary_type__inner_alt_9(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.b.set_alt(9);
+    p.expect(TK_KeyOf, &SYNC_0, false);
+    p.site = 35;
     _parse_primary_type(p, follow, 1);
     return;
 }
@@ -15970,6 +15970,22 @@ fn _parse_declaration(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPars
     p.sites.pop();
 }
 
+fn _parse_variable_statement__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.site = 209;
+    _parse_binding_pattern(p);
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if p.peek_kind() == TK_Colon {
+        p.site = 210;
+        _parse_type_annotation(p, FOLLOW_MASK_15);
+    }
+    p.site = 211;
+    _parse_initializer(p, follow);
+    if p.peek_kind() == TK_SemiColon && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+        p.take();
+    }
+    return;
+}
+
 fn _parse_variable_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if _kind_set_11(p.peek_kind()) {
@@ -15987,22 +16003,6 @@ fn _parse_variable_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> ()
     }
     p.site = 214;
     _parse_variable_declaration_list(p, follow);
-    if p.peek_kind() == TK_SemiColon && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.take();
-    }
-    return;
-}
-
-fn _parse_variable_statement__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.site = 209;
-    _parse_binding_pattern(p);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    if p.peek_kind() == TK_Colon {
-        p.site = 210;
-        _parse_type_annotation(p, FOLLOW_MASK_15);
-    }
-    p.site = 211;
-    _parse_initializer(p, follow);
     if p.peek_kind() == TK_SemiColon && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
     }
@@ -16234,6 +16234,33 @@ fn _parse_if_statement(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPar
     p.sites.pop();
 }
 
+fn _parse_iteration_statement__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.b.set_alt(2);
+    p.expect(TK_For, &SYNC_26, false);
+    p.expect(TK_OpenParen, &SYNC_0, false);
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if _kind_set_27(p.peek_kind()) {
+        p.site = 235;
+        _parse_expression_sequence(p, FOLLOW_MASK_22);
+    }
+    p.expect(TK_SemiColon, &SYNC_0, false);
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if _kind_set_27(p.peek_kind()) {
+        p.site = 236;
+        _parse_expression_sequence(p, FOLLOW_MASK_22);
+    }
+    p.expect(TK_SemiColon, &SYNC_15, false);
+    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
+    if _kind_set_27(p.peek_kind()) {
+        p.site = 237;
+        _parse_expression_sequence(p, FOLLOW_MASK_32);
+    }
+    p.expect(TK_CloseParen, &SYNC_0, false);
+    p.site = 238;
+    _parse_statement(p, follow);
+    return;
+}
+
 fn _parse_iteration_statement__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(3);
     p.expect(TK_For, &SYNC_26, false);
@@ -16260,63 +16287,34 @@ fn _parse_iteration_statement__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn _parse_iteration_statement__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.b.set_alt(7);
-    p.expect(TK_For, &SYNC_49, false);
-    if !kind_set_has(&SYNC_49, p.kinds[p.pos]) { p.sync_enter(&SYNC_49, &EXPECTED_49); }
-    if p.peek_kind() == TK_Await {
-        p.take();
-    }
+fn _parse_iteration_statement__inner_alt_4(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.b.set_alt(4);
+    p.expect(TK_For, &SYNC_26, false);
     p.expect(TK_OpenParen, &SYNC_0, false);
-    p.site = 256;
-    _parse_var_modifier(p);
-    p.site = 257;
-    _parse_variable_declaration(p, FOLLOW_MASK_35);
-    p.site = 258;
-    _parse_identifier(p);
-    if !p.speculating {
-        if !(TypeScriptParserBase::p(p, "of")) {
-            p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
-            return;
-        }
-    }
-    p.site = 259;
-    _parse_expression_sequence(p, 0);
-    if !kind_set_has(&SYNC_50, p.kinds[p.pos]) { p.sync_enter(&SYNC_50, &EXPECTED_50); }
-    if p.peek_kind() == TK_As && _kind_set_1(p.peek_at(1)) {
-        p.take();
-        p.site = 260;
-        _parse_type_(p, FOLLOW_MASK_32);
-    }
+    p.site = 244;
+    _parse_single_expression(p, FOLLOW_MASK_34);
+    p.expect(TK_In, &SYNC_0, false);
+    p.site = 245;
+    _parse_expression_sequence(p, FOLLOW_MASK_32);
     p.expect(TK_CloseParen, &SYNC_0, false);
-    p.site = 261;
+    p.site = 246;
     _parse_statement(p, follow);
     return;
 }
 
-fn _parse_iteration_statement__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.b.set_alt(2);
+fn _parse_iteration_statement__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.b.set_alt(5);
     p.expect(TK_For, &SYNC_26, false);
     p.expect(TK_OpenParen, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    if _kind_set_27(p.peek_kind()) {
-        p.site = 235;
-        _parse_expression_sequence(p, FOLLOW_MASK_22);
-    }
-    p.expect(TK_SemiColon, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    if _kind_set_27(p.peek_kind()) {
-        p.site = 236;
-        _parse_expression_sequence(p, FOLLOW_MASK_22);
-    }
-    p.expect(TK_SemiColon, &SYNC_15, false);
-    if !kind_set_has(&SYNC_15, p.kinds[p.pos]) { p.sync_enter(&SYNC_15, &EXPECTED_15); }
-    if _kind_set_27(p.peek_kind()) {
-        p.site = 237;
-        _parse_expression_sequence(p, FOLLOW_MASK_32);
-    }
+    p.site = 247;
+    _parse_var_modifier(p);
+    p.site = 248;
+    _parse_variable_declaration(p, FOLLOW_MASK_34);
+    p.expect(TK_In, &SYNC_0, false);
+    p.site = 249;
+    _parse_expression_sequence(p, FOLLOW_MASK_32);
     p.expect(TK_CloseParen, &SYNC_0, false);
-    p.site = 238;
+    p.site = 250;
     _parse_statement(p, follow);
     return;
 }
@@ -16353,34 +16351,36 @@ fn _parse_iteration_statement__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn _parse_iteration_statement__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.b.set_alt(5);
-    p.expect(TK_For, &SYNC_26, false);
+fn _parse_iteration_statement__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.b.set_alt(7);
+    p.expect(TK_For, &SYNC_49, false);
+    if !kind_set_has(&SYNC_49, p.kinds[p.pos]) { p.sync_enter(&SYNC_49, &EXPECTED_49); }
+    if p.peek_kind() == TK_Await {
+        p.take();
+    }
     p.expect(TK_OpenParen, &SYNC_0, false);
-    p.site = 247;
+    p.site = 256;
     _parse_var_modifier(p);
-    p.site = 248;
-    _parse_variable_declaration(p, FOLLOW_MASK_34);
-    p.expect(TK_In, &SYNC_0, false);
-    p.site = 249;
-    _parse_expression_sequence(p, FOLLOW_MASK_32);
+    p.site = 257;
+    _parse_variable_declaration(p, FOLLOW_MASK_35);
+    p.site = 258;
+    _parse_identifier(p);
+    if !p.speculating {
+        if !(TypeScriptParserBase::p(p, "of")) {
+            p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
+            return;
+        }
+    }
+    p.site = 259;
+    _parse_expression_sequence(p, 0);
+    if !kind_set_has(&SYNC_50, p.kinds[p.pos]) { p.sync_enter(&SYNC_50, &EXPECTED_50); }
+    if p.peek_kind() == TK_As && _kind_set_1(p.peek_at(1)) {
+        p.take();
+        p.site = 260;
+        _parse_type_(p, FOLLOW_MASK_32);
+    }
     p.expect(TK_CloseParen, &SYNC_0, false);
-    p.site = 250;
-    _parse_statement(p, follow);
-    return;
-}
-
-fn _parse_iteration_statement__inner_alt_4(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.b.set_alt(4);
-    p.expect(TK_For, &SYNC_26, false);
-    p.expect(TK_OpenParen, &SYNC_0, false);
-    p.site = 244;
-    _parse_single_expression(p, FOLLOW_MASK_34);
-    p.expect(TK_In, &SYNC_0, false);
-    p.site = 245;
-    _parse_expression_sequence(p, FOLLOW_MASK_32);
-    p.expect(TK_CloseParen, &SYNC_0, false);
-    p.site = 246;
+    p.site = 261;
     _parse_statement(p, follow);
     return;
 }
@@ -17277,13 +17277,6 @@ fn _parse_class_element(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
     p.sites.pop();
 }
 
-fn _parse_property_member_declaration__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.b.set_alt(3);
-    p.site = 323;
-    _parse_abstract_declaration(p, follow);
-    return;
-}
-
 fn _parse_property_member_declaration__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(0);
     p.site = 312;
@@ -17374,6 +17367,13 @@ fn _parse_property_member_declaration__inner_alt_2(p: &mut Parser, follow: i64 =
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_10);
     }
+    return;
+}
+
+fn _parse_property_member_declaration__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.b.set_alt(3);
+    p.site = 323;
+    _parse_abstract_declaration(p, follow);
     return;
 }
 
@@ -18440,6 +18440,17 @@ fn _parse_object_literal(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptP
     p.sites.pop();
 }
 
+fn _parse_property_assignment__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.b.set_alt(0);
+    p.site = 366;
+    _parse_property_name(p, FOLLOW_MASK_48);
+    if !kind_set_has(&SYNC_67, p.kinds[p.pos]) { p.sync_alts(&SYNC_67, &EXPECTED_67); }
+    p.expect_set(&SYNC_67, &EXPECTED_67);
+    p.site = 367;
+    _parse_single_expression(p, follow);
+    return;
+}
+
 fn _parse_property_assignment__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(1);
     p.expect(TK_OpenBracket, &SYNC_0, false);
@@ -18449,13 +18460,6 @@ fn _parse_property_assignment__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
     p.expect(TK_Colon, &SYNC_0, false);
     p.site = 369;
     _parse_single_expression(p, follow);
-    return;
-}
-
-fn _parse_property_assignment__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.b.set_alt(7);
-    p.site = 375;
-    _parse_rest_parameter(p, follow);
     return;
 }
 
@@ -18473,13 +18477,6 @@ fn _parse_property_assignment__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn _parse_property_assignment__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.b.set_alt(5);
-    p.site = 373;
-    _parse_identifier_or_key_word(p);
-    return;
-}
-
 fn _parse_property_assignment__inner_alt_4(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(4);
     p.site = 372;
@@ -18487,14 +18484,10 @@ fn _parse_property_assignment__inner_alt_4(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn _parse_property_assignment__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.b.set_alt(0);
-    p.site = 366;
-    _parse_property_name(p, FOLLOW_MASK_48);
-    if !kind_set_has(&SYNC_67, p.kinds[p.pos]) { p.sync_alts(&SYNC_67, &EXPECTED_67); }
-    p.expect_set(&SYNC_67, &EXPECTED_67);
-    p.site = 367;
-    _parse_single_expression(p, follow);
+fn _parse_property_assignment__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.b.set_alt(5);
+    p.site = 373;
+    _parse_identifier_or_key_word(p);
     return;
 }
 
@@ -18506,6 +18499,13 @@ fn _parse_property_assignment__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> (
     }
     p.site = 374;
     _parse_single_expression(p, follow);
+    return;
+}
+
+fn _parse_property_assignment__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.b.set_alt(7);
+    p.site = 375;
+    _parse_rest_parameter(p, follow);
     return;
 }
 
@@ -18990,6 +18990,13 @@ fn _parse_expression_sequence(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
     p.sites.pop();
 }
 
+fn _parse_single_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.b.set_alt(0);
+    p.site = 392;
+    _parse_anonymous_function(p, follow);
+    return;
+}
+
 fn _parse_single_expression__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(1);
     p.expect(TK_Class, &SYNC_0, false);
@@ -19037,15 +19044,6 @@ fn _parse_single_expression__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> () 
     return;
 }
 
-fn _parse_single_expression__inner_alt_49(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.b.set_alt(49);
-    p.expect(TK_OpenParen, &SYNC_0, false);
-    p.site = 473;
-    _parse_expression_sequence(p, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_CloseParen, &SYNC_71, true);
-    return;
-}
-
 fn _parse_single_expression__inner_alt_11(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(11);
     p.expect(TK_Delete, &SYNC_0, false);
@@ -19078,13 +19076,6 @@ fn _parse_single_expression__inner_alt_20(p: &mut Parser, follow: i64 = 0) -> ()
     return;
 }
 
-fn _parse_single_expression__inner_alt_47(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.b.set_alt(47);
-    p.site = 471;
-    _parse_array_literal(p, follow);
-    return;
-}
-
 fn _parse_single_expression__inner_alt_41(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(41);
     p.site = 466;
@@ -19099,17 +19090,9 @@ fn _parse_single_expression__inner_alt_42(p: &mut Parser, follow: i64 = 0) -> ()
     return;
 }
 
-fn _parse_single_expression__inner_alt_46(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.b.set_alt(46);
-    p.site = 470;
-    _parse_literal(p);
-    return;
-}
-
-fn _parse_single_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.b.set_alt(0);
-    p.site = 392;
-    _parse_anonymous_function(p, follow);
+fn _parse_single_expression__inner_alt_43(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.b.set_alt(43);
+    p.expect(TK_This, &SYNC_71, true);
     return;
 }
 
@@ -19124,15 +19107,32 @@ fn _parse_single_expression__inner_alt_44(p: &mut Parser, follow: i64 = 0) -> ()
     return;
 }
 
-fn _parse_single_expression__inner_alt_43(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.b.set_alt(43);
-    p.expect(TK_This, &SYNC_71, true);
-    return;
-}
-
 fn _parse_single_expression__inner_alt_45(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(45);
     p.expect(TK_Super, &SYNC_71, true);
+    return;
+}
+
+fn _parse_single_expression__inner_alt_46(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.b.set_alt(46);
+    p.site = 470;
+    _parse_literal(p);
+    return;
+}
+
+fn _parse_single_expression__inner_alt_47(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.b.set_alt(47);
+    p.site = 471;
+    _parse_array_literal(p, follow);
+    return;
+}
+
+fn _parse_single_expression__inner_alt_49(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+    p.b.set_alt(49);
+    p.expect(TK_OpenParen, &SYNC_0, false);
+    p.site = 473;
+    _parse_expression_sequence(p, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    p.expect(TK_CloseParen, &SYNC_71, true);
     return;
 }
 

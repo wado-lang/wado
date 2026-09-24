@@ -4757,6 +4757,19 @@ fn scan_macro_matcher(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32
     return -1;
 }
 
+fn scan_macro_match_alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_DOLLAR { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || !_kind_set_61(tokens[pos]) { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_COLON { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || !_kind_set_4(tokens[pos]) { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_macro_match_alt_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_DOLLAR { return -1; }
@@ -4788,19 +4801,6 @@ fn scan_macro_match_alt_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, fo
         }
     }
     if pos >= tokens.len() || !_kind_set_58(tokens[pos]) { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_macro_match_alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_DOLLAR { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || !_kind_set_61(tokens[pos]) { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_COLON { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || !_kind_set_4(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
@@ -5272,77 +5272,53 @@ fn scan_use_declaration(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, foll
     return pos;
 }
 
-fn scan_use_tree_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_simple_path(tokens, pos, gate, follow);
-    if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_KW_AS && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        let sp_gate = *gate;
-        sg_7_done: {
-            sg_7: {
-                pos += 1;
-                if pos >= tokens.len() || !_kind_set_45(tokens[pos]) { break sg_7; }
-                pos += 1;
-                break sg_7_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 {
-            pos = sp;
-            *gate = sp_gate;
-        }
-    }
-    return pos;
-}
-
 fn scan_use_tree_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    osl_8_done: {
+    osl_7_done: {
         if pos < tokens.len() && _kind_set_9(tokens[pos]) {
-            let sol_9_save = pos;
-            let sol_9_save_gate = *gate;
-            sol_9: {
+            let sol_8_save = pos;
+            let sol_8_save_gate = *gate;
+            sol_8: {
                 pos = scan_simple_path(tokens, pos, gate, 0);
-                if pos < 0 { break sol_9; }
-                if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sol_9; }
+                if pos < 0 { break sol_8; }
+                if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sol_8; }
                 pos += 1;
-                break osl_8_done;
+                break osl_7_done;
             }
-            pos = sol_9_save;
-            *gate = sol_9_save_gate;
+            pos = sol_8_save;
+            *gate = sol_8_save_gate;
         }
         if pos < tokens.len() && tokens[pos] == TK_PATHSEP {
             pos += 1;
-            break osl_8_done;
+            break osl_7_done;
         }
     }
-    let gp_11 = pos;
-    let gp_11_gate = *gate;
-    sg_11_done: {
-        let sgk_11 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if sgk_11 == TK_STAR {
+    let gp_10 = pos;
+    let gp_10_gate = *gate;
+    sg_10_done: {
+        let sgk_10 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if sgk_10 == TK_STAR {
             pos += 1;
-            break sg_11_done;
-        } else if sgk_11 == TK_LCURLYBRACE {
-            sg_11_1: {
+            break sg_10_done;
+        } else if sgk_10 == TK_LCURLYBRACE {
+            sg_10_1: {
                 pos += 1;
                 if pos < tokens.len() && _kind_set_11(tokens[pos]) {
                     let sp = pos;
                     let sp_gate = *gate;
-                    sg_12_done: {
-                        sg_12: {
+                    sg_11_done: {
+                        sg_11: {
                             pos = scan_use_tree(tokens, pos, gate, 0);
-                            if pos < 0 { break sg_12; }
+                            if pos < 0 { break sg_11; }
                             while pos < tokens.len() && tokens[pos] == TK_COMMA {
                                 let sp = pos;
                                 let sp_gate = *gate;
-                                sg_13_done: {
-                                    sg_13: {
+                                sg_12_done: {
+                                    sg_12: {
                                         pos += 1;
                                         pos = scan_use_tree(tokens, pos, gate, (FOLLOW_MASK_18 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-                                        if pos < 0 { break sg_13; }
-                                        break sg_13_done;
+                                        if pos < 0 { break sg_12; }
+                                        break sg_12_done;
                                     }
                                     pos = -1;
                                 }
@@ -5356,7 +5332,7 @@ fn scan_use_tree_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
                             if pos < tokens.len() && tokens[pos] == TK_COMMA {
                                 pos += 1;
                             }
-                            break sg_12_done;
+                            break sg_11_done;
                         }
                         pos = -1;
                     }
@@ -5365,13 +5341,37 @@ fn scan_use_tree_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
                         *gate = sp_gate;
                     }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break sg_11_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break sg_10_1; }
                 pos += 1;
-                break sg_11_done;
+                break sg_10_done;
             }
         }
-        pos = gp_11;
-        *gate = gp_11_gate;
+        pos = gp_10;
+        *gate = gp_10_gate;
+    }
+    return pos;
+}
+
+fn scan_use_tree_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_simple_path(tokens, pos, gate, follow);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos] == TK_KW_AS && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+        let sp = pos;
+        let sp_gate = *gate;
+        sg_13_done: {
+            sg_13: {
+                pos += 1;
+                if pos >= tokens.len() || !_kind_set_45(tokens[pos]) { break sg_13; }
+                pos += 1;
+                break sg_13_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 {
+            pos = sp;
+            *gate = sp_gate;
+        }
     }
     return pos;
 }
@@ -5492,6 +5492,16 @@ fn scan_function_qualifiers(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
     return pos;
 }
 
+fn scan_function_parameters_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_self_param(tokens, pos, gate);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+        pos += 1;
+    }
+    return pos;
+}
+
 fn scan_function_parameters_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_14(tokens[pos]) {
@@ -5555,16 +5565,6 @@ fn scan_function_parameters_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut Scan
             *gate = dc_20_gate;
         }
     }
-    if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        pos += 1;
-    }
-    return pos;
-}
-
-fn scan_function_parameters_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_self_param(tokens, pos, gate);
-    if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         pos += 1;
     }
@@ -7498,16 +7498,16 @@ fn scan_attr_input(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     return -1;
 }
 
-fn scan_statement_alt_4(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+fn scan_statement_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_macro_invocation_semi(tokens, pos, gate);
+    pos = scan_item(tokens, pos, gate);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_statement_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+fn scan_statement_alt_4(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_item(tokens, pos, gate);
+    pos = scan_macro_invocation_semi(tokens, pos, gate);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -7650,6 +7650,15 @@ fn scan_let_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow
     return pos;
 }
 
+fn scan_expression_statement_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_expression(tokens, pos, gate, (FOLLOW_MASK_16 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_expression_statement_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_expression_with_block(tokens, pos, gate, follow);
@@ -7657,15 +7666,6 @@ fn scan_expression_statement_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut Sca
     if pos < tokens.len() && tokens[pos] == TK_SEMI && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         pos += 1;
     }
-    return pos;
-}
-
-fn scan_expression_statement_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_expression(tokens, pos, gate, (FOLLOW_MASK_16 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
-    pos += 1;
     return pos;
 }
 
@@ -7734,13 +7734,6 @@ fn scan_expression_atom_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
     return pos;
 }
 
-fn scan_expression_atom_alt_40(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_macro_invocation(tokens, pos, gate);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_expression_atom_alt_36(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if !((gate.no_struct == 0)) { return -1; }
@@ -7753,6 +7746,13 @@ fn scan_expression_atom_alt_37(tokens: &Array<i32>, pos: i32, gate: &mut ScanGat
     let mut pos = pos;
     if !((gate.no_struct == 0)) { return -1; }
     pos = scan_enumeration_variant_expression(tokens, pos, gate, follow);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_expression_atom_alt_40(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_macro_invocation(tokens, pos, gate);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -8910,13 +8910,6 @@ fn scan_block_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, fol
     return pos;
 }
 
-fn scan_statements_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_expression(tokens, pos, gate, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_statements_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_statement(tokens, pos, gate, 0);
@@ -8969,6 +8962,13 @@ fn scan_statements_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, fol
             *gate = sp_gate;
         }
     }
+    return pos;
+}
+
+fn scan_statements_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_expression(tokens, pos, gate, follow, 0);
+    if pos < 0 { return -1; }
     return pos;
 }
 
@@ -10480,6 +10480,15 @@ fn scan_match_arms(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i
     return pos;
 }
 
+fn scan_match_arm_expression_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_expression(tokens, pos, gate, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_COMMA { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_match_arm_expression_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_expression_with_block(tokens, pos, gate, follow);
@@ -10487,15 +10496,6 @@ fn scan_match_arm_expression_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut Sca
     if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         pos += 1;
     }
-    return pos;
-}
-
-fn scan_match_arm_expression_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_expression(tokens, pos, gate, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_COMMA { return -1; }
-    pos += 1;
     return pos;
 }
 
@@ -10931,6 +10931,15 @@ fn scan_range_pattern_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
     return pos;
 }
 
+fn scan_range_pattern_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_range_pattern_bound(tokens, pos, gate, (FOLLOW_MASK_47 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_DOTDOT { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_range_pattern_alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_range_pattern_bound(tokens, pos, gate, FOLLOW_MASK_48);
@@ -10939,15 +10948,6 @@ fn scan_range_pattern_alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
     pos += 1;
     pos = scan_range_pattern_bound(tokens, pos, gate, follow);
     if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_range_pattern_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_range_pattern_bound(tokens, pos, gate, (FOLLOW_MASK_47 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_DOTDOT { return -1; }
-    pos += 1;
     return pos;
 }
 
@@ -11104,13 +11104,6 @@ fn scan_struct_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follo
     return pos;
 }
 
-fn scan_struct_pattern_elements_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_struct_pattern_et_cetera(tokens, pos, gate);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_struct_pattern_elements_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_struct_pattern_fields(tokens, pos, gate, follow);
@@ -11133,6 +11126,13 @@ fn scan_struct_pattern_elements_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut 
             break osl_118_done;
         }
     }
+    return pos;
+}
+
+fn scan_struct_pattern_elements_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_struct_pattern_et_cetera(tokens, pos, gate);
+    if pos < 0 { return -1; }
     return pos;
 }
 
@@ -11365,6 +11365,15 @@ fn scan_tuple_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow
     return pos;
 }
 
+fn scan_tuple_pattern_items_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_pattern(tokens, pos, gate, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_COMMA { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_tuple_pattern_items_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_DOTDOT { return -1; }
@@ -11430,15 +11439,6 @@ fn scan_tuple_pattern_items_alt_2(tokens: &Array<i32>, pos: i32, gate: &mut Scan
     if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         pos += 1;
     }
-    return pos;
-}
-
-fn scan_tuple_pattern_items_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_pattern(tokens, pos, gate, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_COMMA { return -1; }
-    pos += 1;
     return pos;
 }
 
@@ -12570,6 +12570,15 @@ fn scan_path_ident_segment(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -
     return -1;
 }
 
+fn scan_generic_args_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LT { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_GT { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_generic_args_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LT { return -1; }
@@ -12701,15 +12710,6 @@ fn scan_generic_args_alt_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, f
     if pos < tokens.len() && tokens[pos] == TK_COMMA {
         pos += 1;
     }
-    if pos >= tokens.len() || tokens[pos] != TK_GT { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_generic_args_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LT { return -1; }
-    pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_GT { return -1; }
     pos += 1;
     return pos;
@@ -13222,16 +13222,16 @@ fn scan_visibility(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i
     return pos;
 }
 
-fn scan_macro_identifier_like_token_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+fn scan_macro_identifier_like_token_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_4(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_122(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_macro_identifier_like_token_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+fn scan_macro_identifier_like_token_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_122(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_4(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
@@ -14173,6 +14173,24 @@ fn _parse_macro_matcher(p: &mut Parser) -> () with RustParserBase {
     p.sites.pop();
 }
 
+fn _parse_macro_match__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+    p.expect(TK_DOLLAR, &SYNC_0, false);
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    let grp_kind = p.peek_kind();
+    if _kind_set_4(grp_kind) {
+        p.site = 33;
+        _parse_identifier(p);
+    } else if grp_kind == TK_KW_SELFVALUE {
+        p.take();
+    } else {
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_13);
+    }
+    p.expect(TK_COLON, &SYNC_0, false);
+    p.site = 34;
+    _parse_macro_frag_spec(p);
+    return;
+}
+
 fn _parse_macro_match__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_DOLLAR, &SYNC_7, false);
     p.expect(TK_LPAREN, &SYNC_0, false);
@@ -14221,24 +14239,6 @@ fn _parse_macro_match__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with R
     }
     p.site = 37;
     _parse_macro_rep_op(p);
-    return;
-}
-
-fn _parse_macro_match__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_DOLLAR, &SYNC_0, false);
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
-    let grp_kind = p.peek_kind();
-    if _kind_set_4(grp_kind) {
-        p.site = 33;
-        _parse_identifier(p);
-    } else if grp_kind == TK_KW_SELFVALUE {
-        p.take();
-    } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_13);
-    }
-    p.expect(TK_COLON, &SYNC_0, false);
-    p.site = 34;
-    _parse_macro_frag_spec(p);
     return;
 }
 
@@ -15066,25 +15066,6 @@ fn _parse_use_declaration(p: &mut Parser, follow: i64 = 0) -> () with RustParser
     p.sites.pop();
 }
 
-fn _parse_use_tree__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.site = 77;
-    _parse_simple_path(p, follow);
-    if (p.peek_kind() == TK_KW_AS && _kind_set_45(p.peek_at(1))) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.take();
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
-        let grp_kind = p.peek_kind();
-        if _kind_set_4(grp_kind) {
-            p.site = 78;
-            _parse_identifier(p);
-        } else if grp_kind == TK_UNDERSCORE {
-            p.take();
-        } else {
-            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_22);
-        }
-    }
-    return;
-}
-
 fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut shape_scan_pos: i32 = -1;
@@ -15206,6 +15187,25 @@ fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Rust
         p.expect(TK_RCURLYBRACE, &EMPTY_SYNC, true);
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_23);
+    }
+    return;
+}
+
+fn _parse_use_tree__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+    p.site = 77;
+    _parse_simple_path(p, follow);
+    if (p.peek_kind() == TK_KW_AS && _kind_set_45(p.peek_at(1))) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+        p.take();
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
+        let grp_kind = p.peek_kind();
+        if _kind_set_4(grp_kind) {
+            p.site = 78;
+            _parse_identifier(p);
+        } else if grp_kind == TK_UNDERSCORE {
+            p.take();
+        } else {
+            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_22);
+        }
     }
     return;
 }
@@ -15367,6 +15367,15 @@ fn _parse_abi(p: &mut Parser) -> () with RustParserBase {
     p.sites.pop();
 }
 
+fn _parse_function_parameters__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+    p.site = 87;
+    _parse_self_param(p);
+    if p.peek_kind() == TK_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+        p.take();
+    }
+    return;
+}
+
 fn _parse_function_parameters__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_scan_pos: i32 = -1;
@@ -15430,15 +15439,6 @@ fn _parse_function_parameters__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
         p.site = 90;
         _parse_function_param(p, follow);
     }
-    if p.peek_kind() == TK_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        p.take();
-    }
-    return;
-}
-
-fn _parse_function_parameters__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.site = 87;
-    _parse_self_param(p);
     if p.peek_kind() == TK_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
     }
@@ -18247,19 +18247,19 @@ fn _parse_let_statement(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
     p.sites.pop();
 }
 
+fn _parse_expression_statement__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+    p.site = 225;
+    _parse_expression(p, (FOLLOW_MASK_16 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    p.expect(TK_SEMI, &EMPTY_SYNC, true);
+    return;
+}
+
 fn _parse_expression_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 226;
     _parse_expression_with_block(p, follow);
     if p.peek_kind() == TK_SEMI && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
     }
-    return;
-}
-
-fn _parse_expression_statement__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.site = 225;
-    _parse_expression(p, (FOLLOW_MASK_16 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;
 }
 
@@ -18309,20 +18309,6 @@ fn _parse_expression_statement(p: &mut Parser, follow: i64 = 0) -> () with RustP
     if p.recovering { let _ = p.recover_rule(RK_EXPRESSION_STATEMENT, "expressionStatement", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_expression__inner_alt_38(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.b.set_alt(38);
-    p.site = 293;
-    _parse_closure_expression(p, follow);
-    return;
-}
-
-fn _parse_expression__inner_alt_39(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.b.set_alt(39);
-    p.site = 294;
-    _parse_expression_with_block(p, follow);
-    return;
 }
 
 fn _parse_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -18383,10 +18369,24 @@ fn _parse_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Ru
     return;
 }
 
-fn _parse_expression__inner_alt_40(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.b.set_alt(40);
-    p.site = 295;
-    _parse_macro_invocation(p);
+fn _parse_expression__inner_alt_38(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+    p.b.set_alt(38);
+    p.site = 293;
+    _parse_closure_expression(p, follow);
+    return;
+}
+
+fn _parse_expression__inner_alt_39(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+    p.b.set_alt(39);
+    p.site = 294;
+    _parse_expression_with_block(p, follow);
+    return;
+}
+
+fn _parse_expression__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+    p.b.set_alt(2);
+    p.site = 230;
+    _parse_path_expression(p, follow);
     return;
 }
 
@@ -18404,10 +18404,10 @@ fn _parse_expression__inner_alt_37(p: &mut Parser, follow: i64 = 0) -> () with R
     return;
 }
 
-fn _parse_expression__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.b.set_alt(2);
-    p.site = 230;
-    _parse_path_expression(p, follow);
+fn _parse_expression__inner_alt_40(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+    p.b.set_alt(40);
+    p.site = 295;
+    _parse_macro_invocation(p);
     return;
 }
 
@@ -21962,19 +21962,19 @@ fn _parse_match_arms(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
     p.sites.pop();
 }
 
+fn _parse_match_arm_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+    p.site = 405;
+    _parse_expression(p, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    p.expect(TK_COMMA, &EMPTY_SYNC, true);
+    return;
+}
+
 fn _parse_match_arm_expression__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 406;
     _parse_expression_with_block(p, follow);
     if p.peek_kind() == TK_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
     }
-    return;
-}
-
-fn _parse_match_arm_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.site = 405;
-    _parse_expression(p, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_COMMA, &EMPTY_SYNC, true);
     return;
 }
 
@@ -22671,6 +22671,14 @@ fn _parse_range_pattern__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with
     return;
 }
 
+fn _parse_range_pattern__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+    p.b.set_alt(1);
+    p.site = 435;
+    _parse_range_pattern_bound(p, (FOLLOW_MASK_47 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    p.expect(TK_DOTDOT, &EMPTY_SYNC, true);
+    return;
+}
+
 fn _parse_range_pattern__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.b.set_alt(2);
     p.site = 436;
@@ -22678,14 +22686,6 @@ fn _parse_range_pattern__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with
     p.expect(TK_DOTDOTDOT, &SYNC_0, false);
     p.site = 437;
     _parse_range_pattern_bound(p, follow);
-    return;
-}
-
-fn _parse_range_pattern__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.b.set_alt(1);
-    p.site = 435;
-    _parse_range_pattern_bound(p, (FOLLOW_MASK_47 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_DOTDOT, &EMPTY_SYNC, true);
     return;
 }
 
@@ -23283,6 +23283,13 @@ fn _parse_tuple_pattern(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
     p.sites.pop();
 }
 
+fn _parse_tuple_pattern_items__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+    p.site = 459;
+    _parse_pattern(p, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    p.expect(TK_COMMA, &EMPTY_SYNC, true);
+    return;
+}
+
 fn _parse_tuple_pattern_items__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.site = 461;
     _parse_pattern(p, FOLLOW_MASK_22);
@@ -23337,13 +23344,6 @@ fn _parse_tuple_pattern_items__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> (
     if p.peek_kind() == TK_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
     }
-    return;
-}
-
-fn _parse_tuple_pattern_items__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.site = 459;
-    _parse_pattern(p, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_COMMA, &EMPTY_SYNC, true);
     return;
 }
 
@@ -25089,6 +25089,12 @@ fn _parse_path_ident_segment(p: &mut Parser) -> () with RustParserBase {
     p.sites.pop();
 }
 
+fn _parse_generic_args__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+    p.expect(TK_LT, &SYNC_89, false);
+    p.expect(TK_GT, &EMPTY_SYNC, true);
+    return;
+}
+
 fn _parse_generic_args__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     p.expect(TK_LT, &SYNC_0, false);
     p.site = 538;
@@ -25185,12 +25191,6 @@ fn _parse_generic_args__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with 
     if p.peek_kind() == TK_COMMA {
         p.take();
     }
-    p.expect(TK_GT, &EMPTY_SYNC, true);
-    return;
-}
-
-fn _parse_generic_args__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.expect(TK_LT, &SYNC_89, false);
     p.expect(TK_GT, &EMPTY_SYNC, true);
     return;
 }

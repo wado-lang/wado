@@ -2463,15 +2463,6 @@ struct ExprOrAssignVals {
     _span_hi_expr: i32 = -1,
 }
 
-fn scan_expr_or_assign_alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(25);
-    pos = scan_expr(tokens, pos, atn, follow);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_expr_or_assign_alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(20);
@@ -2480,6 +2471,15 @@ fn scan_expr_or_assign_alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUSPLUS { return -1; }
     pos += 1;
+    return pos;
+}
+
+fn scan_expr_or_assign_alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    atn.stack.push(25);
+    pos = scan_expr(tokens, pos, atn, follow);
+    atn.stack.pop();
+    if pos < 0 { return -1; }
     return pos;
 }
 
@@ -2620,19 +2620,6 @@ fn _parse_prog(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_expr_or_assign__inner_alt_1(p: &mut Parser, follow: i64 = 0, vals: ExprOrAssignVals = ExprOrAssignVals {}) -> ExprOrAssignVals {
-    let mut vals = vals;
-    vals._span_lo_expr = p.pos;
-    p.site = 2;
-    p.atn_ret_pending = 25;
-    let expr = _parse_expr(p, follow);
-    vals._span_hi_expr = p.pos - 1;
-    if !p.speculating {
-        p.emit(`pass: ${p.text_between(vals._span_lo_expr, vals._span_hi_expr)}\n`);
-    }
-    return vals;
-}
-
 fn _parse_expr_or_assign__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: ExprOrAssignVals = ExprOrAssignVals {}) -> ExprOrAssignVals {
     let mut vals = vals;
     vals._span_lo_expr = p.pos;
@@ -2643,6 +2630,19 @@ fn _parse_expr_or_assign__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: Exp
     p.expect(TK_LIT_PLUSPLUS, &EMPTY_SYNC, true);
     if !p.speculating {
         p.emit(`fail.\n`);
+    }
+    return vals;
+}
+
+fn _parse_expr_or_assign__inner_alt_1(p: &mut Parser, follow: i64 = 0, vals: ExprOrAssignVals = ExprOrAssignVals {}) -> ExprOrAssignVals {
+    let mut vals = vals;
+    vals._span_lo_expr = p.pos;
+    p.site = 2;
+    p.atn_ret_pending = 25;
+    let expr = _parse_expr(p, follow);
+    vals._span_hi_expr = p.pos - 1;
+    if !p.speculating {
+        p.emit(`pass: ${p.text_between(vals._span_lo_expr, vals._span_hi_expr)}\n`);
     }
     return vals;
 }

@@ -1491,6 +1491,16 @@ impl Parser {
     }
 }
 
+fn scan_s_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if !((true)) { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_s_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
@@ -1498,16 +1508,6 @@ fn scan_s_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_s_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if !((true)) { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
     pos += 1;
     return pos;
 }
@@ -1528,21 +1528,21 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
+fn _parse_s__inner_alt_0(p: &mut Parser) -> () {
+    p.expect(TK_A, &SYNC_0, false);
+    p.expect(TK_B, &EMPTY_SYNC, true);
+    if !p.speculating {
+         p.emit("ab"); 
+    }
+    return;
+}
+
 fn _parse_s__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_A, &SYNC_0, false);
     p.expect(TK_B, &SYNC_1, false);
     p.expect(TK_C, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("abc"); 
-    }
-    return;
-}
-
-fn _parse_s__inner_alt_0(p: &mut Parser) -> () {
-    p.expect(TK_A, &SYNC_0, false);
-    p.expect(TK_B, &EMPTY_SYNC, true);
-    if !p.speculating {
-         p.emit("ab"); 
     }
     return;
 }

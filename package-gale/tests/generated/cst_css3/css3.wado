@@ -26730,14 +26730,10 @@ fn scan_property_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return -1;
 }
 
-fn scan_ruleset_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_ruleset_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _kind_set_17(tokens[pos]) {
-        let sp = pos;
-        pos = scan_any_(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
+    pos = scan_selector_group(tokens, pos, FOLLOW_MASK_3);
+    if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, 0);
@@ -26754,10 +26750,14 @@ fn scan_ruleset_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_ruleset_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_ruleset_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_selector_group(tokens, pos, FOLLOW_MASK_3);
-    if pos < 0 { return -1; }
+    while pos < tokens.len() && _kind_set_17(tokens[pos]) {
+        let sp = pos;
+        pos = scan_any_(tokens, pos, 0);
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
     pos = scan_ws(tokens, pos, 0);
@@ -30388,6 +30388,24 @@ fn _parse_property_(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
+fn _parse_ruleset__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
+    p.b.set_alt(0);
+    p.site = 129;
+    _parse_selector_group(p, FOLLOW_MASK_3);
+    p.expect(TK_OpenBrace, &SYNC_8, false);
+    p.site = 130;
+    _parse_ws(p, 0);
+    if !kind_set_has(&SYNC_8, p.kinds[p.pos]) { p.sync_enter(&SYNC_8, &EXPECTED_8); }
+    if _kind_set_16(p.peek_kind()) {
+        p.site = 131;
+        _parse_declaration_list(p, FOLLOW_MASK_16);
+    }
+    p.expect(TK_CloseBrace, &SYNC_0, true);
+    p.site = 132;
+    _parse_ws(p, follow);
+    return;
+}
+
 fn _parse_ruleset__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.b.set_alt(1);
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
@@ -30432,24 +30450,6 @@ fn _parse_ruleset__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     }
     p.expect(TK_CloseBrace, &SYNC_0, true);
     p.site = 136;
-    _parse_ws(p, follow);
-    return;
-}
-
-fn _parse_ruleset__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
-    p.b.set_alt(0);
-    p.site = 129;
-    _parse_selector_group(p, FOLLOW_MASK_3);
-    p.expect(TK_OpenBrace, &SYNC_8, false);
-    p.site = 130;
-    _parse_ws(p, 0);
-    if !kind_set_has(&SYNC_8, p.kinds[p.pos]) { p.sync_enter(&SYNC_8, &EXPECTED_8); }
-    if _kind_set_16(p.peek_kind()) {
-        p.site = 131;
-        _parse_declaration_list(p, FOLLOW_MASK_16);
-    }
-    p.expect(TK_CloseBrace, &SYNC_0, true);
-    p.site = 132;
     _parse_ws(p, follow);
     return;
 }

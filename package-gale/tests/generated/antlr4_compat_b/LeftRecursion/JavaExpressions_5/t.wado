@@ -3080,6 +3080,19 @@ fn scan_expression_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follo
     return pos;
 }
 
+fn scan_e_atom_alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    atn.stack.push(36);
+    pos = scan_e(tokens, pos, atn, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
+    atn.stack.pop();
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_e_atom_alt_12(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
@@ -3097,15 +3110,9 @@ fn scan_e_atom_alt_12(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow:
     return pos;
 }
 
-fn scan_e_atom_alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
+fn scan_e_atom_alt_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
-    pos += 1;
-    atn.stack.push(36);
-    pos = scan_e(tokens, pos, atn, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
@@ -3119,13 +3126,6 @@ fn scan_e_atom_alt_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: 
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_class { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_e_atom_alt_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
@@ -3679,6 +3679,13 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
     return pos;
 }
 
+fn scan_typespec_alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_typespec_alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
@@ -3690,9 +3697,9 @@ fn scan_typespec_alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32
     return pos;
 }
 
-fn scan_typespec_alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+fn scan_typespec_alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_int { return -1; }
     pos += 1;
     return pos;
 }
@@ -3704,13 +3711,6 @@ fn scan_typespec_alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_typespec_alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_int { return -1; }
     pos += 1;
     return pos;
 }
@@ -3812,6 +3812,15 @@ fn _parse_expression_list(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
+fn _parse_e__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
+    p.expect(TK_LIT_LPAREN, &SYNC_0, false);
+    p.site = 3;
+    p.atn_ret_pending = 36;
+    _parse_e(p, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    p.expect(TK_LIT_RPAREN, &SYNC_1, true);
+    return;
+}
+
 fn _parse_e__inner_alt_12(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LIT_LPAREN, &SYNC_0, false);
     p.site = 16;
@@ -3824,12 +3833,8 @@ fn _parse_e__inner_alt_12(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_e__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_LIT_LPAREN, &SYNC_0, false);
-    p.site = 3;
-    p.atn_ret_pending = 36;
-    _parse_e(p, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_LIT_RPAREN, &SYNC_1, true);
+fn _parse_e__inner_alt_4(p: &mut Parser, follow: i64 = 0) -> () {
+    p.expect(TK_ID, &SYNC_1, true);
     return;
 }
 
@@ -3839,11 +3844,6 @@ fn _parse_e__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_typespec(p);
     p.expect(TK_LIT_DOT, &SYNC_2, false);
     p.expect(TK_LIT_class, &SYNC_1, true);
-    return;
-}
-
-fn _parse_e__inner_alt_4(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_ID, &SYNC_1, true);
     return;
 }
 
@@ -4344,6 +4344,11 @@ fn _parse_e(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
     p.sites.pop();
 }
 
+fn _parse_typespec__inner_alt_0(p: &mut Parser) -> () {
+    p.expect(TK_ID, &EMPTY_SYNC, true);
+    return;
+}
+
 fn _parse_typespec__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_ID, &SYNC_5, false);
     p.expect(TK_LIT_LBRACKET, &SYNC_10, false);
@@ -4351,8 +4356,8 @@ fn _parse_typespec__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_typespec__inner_alt_0(p: &mut Parser) -> () {
-    p.expect(TK_ID, &EMPTY_SYNC, true);
+fn _parse_typespec__inner_alt_2(p: &mut Parser) -> () {
+    p.expect(TK_LIT_int, &EMPTY_SYNC, true);
     return;
 }
 
@@ -4360,11 +4365,6 @@ fn _parse_typespec__inner_alt_3(p: &mut Parser) -> () {
     p.expect(TK_LIT_int, &SYNC_5, false);
     p.expect(TK_LIT_LBRACKET, &SYNC_10, false);
     p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC, true);
-    return;
-}
-
-fn _parse_typespec__inner_alt_2(p: &mut Parser) -> () {
-    p.expect(TK_LIT_int, &EMPTY_SYNC, true);
     return;
 }
 

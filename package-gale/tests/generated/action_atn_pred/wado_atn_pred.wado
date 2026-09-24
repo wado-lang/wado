@@ -2497,6 +2497,16 @@ fn scan_scanned(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     return -1;
 }
 
+fn scan_xg_alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    if !(( false )) { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_b { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_xg_alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
@@ -2504,16 +2514,6 @@ fn scan_xg_alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     if pos >= tokens.len() || tokens[pos] != TK_LIT_b { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_c { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_xg_alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
-    let mut pos = pos;
-    if !(( false )) { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_b { return -1; }
     pos += 1;
     return pos;
 }
@@ -2560,21 +2560,21 @@ fn _parse_takes(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
+fn _parse_xt__inner_alt_0(p: &mut Parser) -> () {
+    p.expect(TK_LIT_a, &SYNC_0, false);
+    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
+    if !p.speculating {
+         p.emit("ab"); 
+    }
+    return;
+}
+
 fn _parse_xt__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
     p.expect(TK_LIT_b, &SYNC_1, false);
     p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("abc"); 
-    }
-    return;
-}
-
-fn _parse_xt__inner_alt_0(p: &mut Parser) -> () {
-    p.expect(TK_LIT_a, &SYNC_0, false);
-    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
-    if !p.speculating {
-         p.emit("ab"); 
     }
     return;
 }
@@ -2641,21 +2641,21 @@ fn _parse_rejects(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
+fn _parse_xr__inner_alt_0(p: &mut Parser) -> () {
+    p.expect(TK_LIT_a, &SYNC_0, false);
+    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
+    if !p.speculating {
+         p.emit("ab"); 
+    }
+    return;
+}
+
 fn _parse_xr__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
     p.expect(TK_LIT_b, &SYNC_1, false);
     p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("abc"); 
-    }
-    return;
-}
-
-fn _parse_xr__inner_alt_0(p: &mut Parser) -> () {
-    p.expect(TK_LIT_a, &SYNC_0, false);
-    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
-    if !p.speculating {
-         p.emit("ab"); 
     }
     return;
 }
@@ -2722,6 +2722,16 @@ fn _parse_ctxkeep(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
+fn _parse_ck__inner_alt_0(p: &mut Parser, vals: CkVals = CkVals {}) -> CkVals {
+    let mut vals = vals;
+    p.expect(TK_LIT_a, &SYNC_0, false);
+    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
+    if !p.speculating {
+         p.emit("ab"); 
+    }
+    return vals;
+}
+
 fn _parse_ck__inner_alt_1(p: &mut Parser, vals: CkVals = CkVals {}) -> CkVals {
     let mut vals = vals;
     p.expect(TK_LIT_a, &SYNC_0, false);
@@ -2729,16 +2739,6 @@ fn _parse_ck__inner_alt_1(p: &mut Parser, vals: CkVals = CkVals {}) -> CkVals {
     p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("abc"); 
-    }
-    return vals;
-}
-
-fn _parse_ck__inner_alt_0(p: &mut Parser, vals: CkVals = CkVals {}) -> CkVals {
-    let mut vals = vals;
-    p.expect(TK_LIT_a, &SYNC_0, false);
-    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
-    if !p.speculating {
-         p.emit("ab"); 
     }
     return vals;
 }
@@ -2810,6 +2810,16 @@ fn _parse_ctxdrop(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
+fn _parse_cd__inner_alt_0(p: &mut Parser, vals: CdVals = CdVals {}) -> CdVals {
+    let mut vals = vals;
+    p.expect(TK_LIT_a, &SYNC_0, false);
+    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
+    if !p.speculating {
+         p.emit("ab"); 
+    }
+    return vals;
+}
+
 fn _parse_cd__inner_alt_1(p: &mut Parser, vals: CdVals = CdVals {}) -> CdVals {
     let mut vals = vals;
     p.expect(TK_LIT_a, &SYNC_0, false);
@@ -2817,16 +2827,6 @@ fn _parse_cd__inner_alt_1(p: &mut Parser, vals: CdVals = CdVals {}) -> CdVals {
     p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("abc"); 
-    }
-    return vals;
-}
-
-fn _parse_cd__inner_alt_0(p: &mut Parser, vals: CdVals = CdVals {}) -> CdVals {
-    let mut vals = vals;
-    p.expect(TK_LIT_a, &SYNC_0, false);
-    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
-    if !p.speculating {
-         p.emit("ab"); 
     }
     return vals;
 }
@@ -2898,21 +2898,21 @@ fn _parse_allfalse(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
+fn _parse_af__inner_alt_0(p: &mut Parser) -> () {
+    p.expect(TK_LIT_a, &SYNC_0, false);
+    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
+    if !p.speculating {
+         p.emit("ab"); 
+    }
+    return;
+}
+
 fn _parse_af__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
     p.expect(TK_LIT_b, &SYNC_1, false);
     p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("abc"); 
-    }
-    return;
-}
-
-fn _parse_af__inner_alt_0(p: &mut Parser) -> () {
-    p.expect(TK_LIT_a, &SYNC_0, false);
-    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
-    if !p.speculating {
-         p.emit("ab"); 
     }
     return;
 }
@@ -3065,21 +3065,21 @@ fn _parse_scanned(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
+fn _parse_xg__inner_alt_0(p: &mut Parser) -> () {
+    p.expect(TK_LIT_a, &SYNC_0, false);
+    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
+    if !p.speculating {
+         p.emit("ab"); 
+    }
+    return;
+}
+
 fn _parse_xg__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
     p.expect(TK_LIT_b, &SYNC_1, false);
     p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     if !p.speculating {
          p.emit("abc"); 
-    }
-    return;
-}
-
-fn _parse_xg__inner_alt_0(p: &mut Parser) -> () {
-    p.expect(TK_LIT_a, &SYNC_0, false);
-    p.expect(TK_LIT_b, &EMPTY_SYNC, true);
-    if !p.speculating {
-         p.emit("ab"); 
     }
     return;
 }

@@ -2403,15 +2403,6 @@ impl Parser {
     }
 }
 
-fn scan_prog_alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(13);
-    pos = scan_expr(tokens, pos, atn);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_prog_alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let mut pos = pos;
     atn.stack.push(8);
@@ -2419,6 +2410,15 @@ fn scan_prog_alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     atn.stack.pop();
     if pos < 0 { return -1; }
     atn.stack.push(10);
+    pos = scan_expr(tokens, pos, atn);
+    atn.stack.pop();
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_prog_alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    atn.stack.push(13);
     pos = scan_expr(tokens, pos, atn);
     atn.stack.pop();
     if pos < 0 { return -1; }

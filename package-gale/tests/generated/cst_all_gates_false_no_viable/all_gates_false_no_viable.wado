@@ -1549,6 +1549,20 @@ impl Parser {
     }
 }
 
+fn scan_pick_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+    let mut pos = pos;
+    if !((gate.on == 1)) { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LB { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_RB { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_pick_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     let mut pos = pos;
     if !((gate.on == 1)) { return -1; }
@@ -1561,20 +1575,6 @@ fn scan_pick_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     if pos >= tokens.len() || tokens[pos] != TK_RB { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_pick_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
-    let mut pos = pos;
-    if !((gate.on == 1)) { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LB { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_RB { return -1; }
     pos += 1;
     return pos;
 }
@@ -1656,20 +1656,20 @@ fn _parse_stmt(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
+fn _parse_pick__inner_alt_0(p: &mut Parser) -> () {
+    p.expect(TK_ID, &SYNC_1, false);
+    p.expect(TK_LB, &SYNC_2, false);
+    p.expect(TK_ID, &SYNC_3, false);
+    p.expect(TK_RB, &EMPTY_SYNC, true);
+    return;
+}
+
 fn _parse_pick__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_ID, &SYNC_1, false);
     p.expect(TK_LB, &SYNC_2, false);
     p.expect(TK_ID, &SYNC_3, false);
     p.expect(TK_RB, &SYNC_4, false);
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
-    return;
-}
-
-fn _parse_pick__inner_alt_0(p: &mut Parser) -> () {
-    p.expect(TK_ID, &SYNC_1, false);
-    p.expect(TK_LB, &SYNC_2, false);
-    p.expect(TK_ID, &SYNC_3, false);
-    p.expect(TK_RB, &EMPTY_SYNC, true);
     return;
 }
 

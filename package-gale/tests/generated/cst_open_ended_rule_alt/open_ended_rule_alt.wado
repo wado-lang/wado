@@ -1438,24 +1438,6 @@ impl Parser {
     }
 }
 
-fn scan_r_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_D { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_r_alt_2(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_E { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_r_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_A {
@@ -1479,6 +1461,24 @@ fn scan_r_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos >= tokens.len() || tokens[pos] == TK_EOF { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_r_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_D { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_r_alt_2(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_E { return -1; }
     pos += 1;
     return pos;
 }
@@ -1522,20 +1522,8 @@ fn scan_r(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn _parse_r__inner_alt_1(p: &mut Parser) -> () {
-    p.expect(TK_B, &SYNC_0, false);
-    p.expect(TK_D, &EMPTY_SYNC, true);
-    return;
-}
-
-fn _parse_r__inner_alt_2(p: &mut Parser) -> () {
-    p.expect(TK_B, &SYNC_1, false);
-    p.expect(TK_E, &EMPTY_SYNC, true);
-    return;
-}
-
 fn _parse_r__inner_alt_0(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_enter(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
     if p.peek_kind() == TK_A {
         opt_enter_scan: {
@@ -1551,15 +1539,27 @@ fn _parse_r__inner_alt_0(p: &mut Parser) -> () {
         }
     }
     if opt_enter {
-        p.expect(TK_A, &SYNC_2, false);
+        p.expect(TK_A, &SYNC_0, false);
     }
     p.any();
     p.expect(TK_C, &EMPTY_SYNC, true);
     return;
 }
 
+fn _parse_r__inner_alt_1(p: &mut Parser) -> () {
+    p.expect(TK_B, &SYNC_1, false);
+    p.expect(TK_D, &EMPTY_SYNC, true);
+    return;
+}
+
+fn _parse_r__inner_alt_2(p: &mut Parser) -> () {
+    p.expect(TK_B, &SYNC_2, false);
+    p.expect(TK_E, &EMPTY_SYNC, true);
+    return;
+}
+
 fn _parse_r__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if true {
         if kind == TK_A {
@@ -1717,9 +1717,9 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [8];
-global SYNC_1: List<i32> = [16];
-global SYNC_2: List<i32> = [191];
-global EXPECTED_2: List<i32> = [TK_A, TK_B, TK_C, TK_D, TK_E, TK_ERROR, TK_WS];
+global SYNC_0: List<i32> = [191];
+global EXPECTED_0: List<i32> = [TK_A, TK_B, TK_C, TK_D, TK_E, TK_ERROR, TK_WS];
+global SYNC_1: List<i32> = [8];
+global SYNC_2: List<i32> = [16];
 global EXPECTED_3: List<i32> = [TK_A, TK_B];
 

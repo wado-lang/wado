@@ -2415,15 +2415,15 @@ fn _parse_s(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_r__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_B, &EMPTY_SYNC, true);
-    return;
-}
-
 fn _parse_r__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     if p.peek_kind() == TK_A && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
     }
+    return;
+}
+
+fn _parse_r__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
+    p.expect(TK_B, &EMPTY_SYNC, true);
     return;
 }
 
