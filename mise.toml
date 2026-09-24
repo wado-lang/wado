@@ -791,6 +791,16 @@ node scripts/jco/transpile-released.mjs "$WORK/main.wasm" "$WORK/jco"
 WEB_BROWSER_JS="$WORK/jco/main.js" timeout 120 node --test "package-web/glue/*.test.mjs"
 """
 
+[tasks.web-browser-demo]
+description = "Build example/web-browser and serve it on http://127.0.0.1:8089"
+depends = ["jco-deps"]
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+example/web-browser/build.sh
+cd example/web-browser && python3 -m http.server 8089 --bind 127.0.0.1
+"""
+
 
 [tasks.cloudflare-build]
 description = "Compile a Wado service and transpile it for the Cloudflare Worker"

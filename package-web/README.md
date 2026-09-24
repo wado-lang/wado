@@ -13,10 +13,13 @@ export fn run() with Dom {
 }
 ```
 
-The imports are the `web:dom/*` Component Model interfaces. A browser host
-provides them. `wado run`, `wado test` and `wado serve` define each one as a
-trap, so the program instantiates anywhere, and `SurfaceDom` answers the calls
-instead:
+The imports are the `web:dom/*` Component Model interfaces. In a browser,
+`glue/dom.js` provides them from the page's own DOM: the released-jco transpile
+(`scripts/jco/transpile-released.mjs`) maps each `web:<package>/*` import to
+its glue. `example/web-browser` runs one program that way.
+
+`wado run`, `wado test` and `wado serve` define each import as a trap, so the
+program instantiates anywhere, and `SurfaceDom` answers the calls instead:
 
 ```wado
 use { Dom, SurfaceDom } from "wado-lang:web";
@@ -48,6 +51,10 @@ follow the HTML standard's serialization. `example/web-ssr` prints a page with
   (`mise run update-webidl-snapshot`).
 - `src/dom.wado` — the bindings generated from it
   (`mise run update-package-web`). Do not edit by hand.
+- `glue/dom.js` — the browser glue generated beside them: one shim per
+  member, over a table that hands out one handle per object, tagged with its
+  nearest class in the slice. `mise run test-web-glue` runs it on Node against
+  the DOM stub in `glue/dom-stub.mjs`.
 - `src/surface_dom.wado` — `SurfaceDom`, written by hand. It mints handles from
   the class numbers `dom.wado` generates.
 - `src/lib.wado` — the facade `wado-lang:web` names. A name a wider slice
