@@ -2,9 +2,11 @@
 //! handler answers each call or nothing does: every import traps when called.
 
 use anyhow::{Result, bail};
-use wado_compiler::module_source::CmNamespace;
 use wasmtime::component::types::ComponentItem;
 use wasmtime::component::{Component, Linker};
+
+/// The CM namespace of the web platform interfaces.
+const WEB_NAMESPACE: &str = "web:";
 
 /// Define each `web:*` function `component` imports as a trap.
 ///
@@ -18,10 +20,7 @@ pub fn define_web_imports_as_traps<T: 'static>(
     let engine = component.engine();
     let component_type = component.component_type();
     for (interface, import) in component_type.imports(engine) {
-        if !matches!(
-            CmNamespace::split_specifier(interface),
-            Some((CmNamespace::Web, _))
-        ) {
+        if !interface.starts_with(WEB_NAMESPACE) {
             continue;
         }
         let ComponentItem::ComponentInstance(instance) = import.ty else {

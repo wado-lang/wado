@@ -1574,16 +1574,11 @@ mod tests {
             cm_package_from_source("wasi:filesystem/types@0.3.0"),
             Some((CmNamespace::Wasi, "filesystem"))
         );
-        assert_eq!(
-            cm_package_from_source("web:dom/types"),
-            Some((CmNamespace::Web, "dom"))
-        );
         // `core:` is not a `CmNamespace`; the kiln lookups own those.
         assert_eq!(cm_package_from_source("core:kiln/types@0.1.0"), None);
         assert_eq!(cm_package_from_source("my:pkg/iface"), None);
     }
 
-    /// A module name alone cannot tell `wasi:dom/node` from `web:dom/node`.
     #[test]
     fn a_cm_interface_module_carries_the_namespace_that_owns_it() {
         assert_eq!(
@@ -1592,10 +1587,6 @@ mod tests {
                 Some(CmNamespace::Wasi),
                 "sockets/ip_name_lookup.wado".into()
             ))
-        );
-        assert_eq!(
-            cm_interface_module("web:dom/node"),
-            Some((Some(CmNamespace::Web), "dom/node.wado".into()))
         );
         // A `core:` module carries no `CmNamespace`, and must not pair with one.
         assert_eq!(

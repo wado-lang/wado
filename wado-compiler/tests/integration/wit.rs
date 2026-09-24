@@ -4,21 +4,21 @@
 //! Each case asserts the rendered WIT text and re-parses it with `wit-parser`
 //! to confirm the output is syntactically valid WIT.
 
-use crate::common::{InMemoryHost, block_on};
+use crate::common::{InMemoryHost, WEB_PACKAGE, block_on, web_host};
+use wado_compiler::compiler_host::CompilerHost;
 use wado_compiler::semantics::{semantics, semantics_for_world};
 use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope, emit_wit_text};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 /// The WIR-level import plan (`NirPackage::imported_cm_interfaces`) for
 /// `source` under `world_fq`, the faithful world import set the emitter reads.
-fn import_plan(source: &str, world_fq: &str) -> Vec<String> {
-    let host = InMemoryHost::new();
+fn import_plan(host: &impl CompilerHost, source: &str, world_fq: &str) -> Vec<String> {
     // Tolerant like the CLI's `resolve_world_imports`: a program that does not
     // compile to a full component (e.g. no world entry point) has no faithful
     // import set, which is the empty set for the emitter's purposes.
     match block_on(dump_with_host_and_world(
         source,
-        &host,
+        host,
         Some("entry.wado"),
         OptLevel::O2,
         Some(world_fq),
@@ -39,14 +39,22 @@ fn import_plan(source: &str, world_fq: &str) -> Vec<String> {
 /// Emit WIT for `source` under `scope` targeting `world_fq`, feeding the
 /// emitter the faithful import plan as the CLI does.
 fn emit_world(source: &str, scope: WitScope, world_fq: &str) -> String {
-    let host = InMemoryHost::new();
-    let mut sem = block_on(semantics(source, &host, Some("entry.wado")));
+    emit_world_on(&InMemoryHost::new(), source, scope, world_fq)
+}
+
+fn emit_world_on(
+    host: &impl CompilerHost,
+    source: &str,
+    scope: WitScope,
+    world_fq: &str,
+) -> String {
+    let mut sem = block_on(semantics(source, host, Some("entry.wado")));
     assert!(sem.is_complete(), "semantics did not complete for source");
     sem.set_wit_contract(wit_emit::wit_contract(Some(world_fq), None, Some("entry")));
     emit_wit_text(
         &sem,
         &WitEmitOptions { scope },
-        &import_plan(source, world_fq),
+        &import_plan(host, source, world_fq),
     )
     .expect("emit_wit_text failed")
 }
@@ -54,6 +62,11 @@ fn emit_world(source: &str, scope: WitScope, world_fq: &str) -> String {
 /// Emit WIT for `source` targeting the default CLI world, under `scope`.
 fn emit_scope(source: &str, scope: WitScope) -> String {
     emit_world(source, scope, "wasi:cli/command")
+}
+
+/// [`emit_scope`] for a program importing `package-web`.
+fn emit_against_web(source: &str, scope: WitScope) -> String {
+    emit_world_on(&web_host(), source, scope, "wasi:cli/command")
 }
 
 /// Emit WIT for `source` under `local` scope (no inlined nested packages).
@@ -222,19 +235,40 @@ fn full_scope_reconstructs_resource_methods_and_reparses() {
         .expect("resource WIT failed to re-parse");
 }
 
+/// An import the program binds itself is reconstructed like a bundled one.
+#[test]
+fn full_scope_reconstructs_an_import_the_program_declares() {
+    let text = emit_scope(
+        "#[cm(\"wasi:demo/events@0.1.0#event-target\", linearity = \"unrestricted\")]\n\
+         resource EventTarget {\n\
+             #[cm(\"wasi:demo/events@0.1.0#tag\")]\n\
+             #[cm_params(\"self\")]\n\
+             fn tag(&self) -> String;\n\
+         }\n\
+         export fn run() with EventTarget {\n\
+             let t = 1.0 as EventTarget;\n\
+             let _ = t.tag();\n\
+         }",
+        WitScope::Full,
+    );
+    assert!(text.contains("tag: func(self: f64) -> string;"), "\n{text}");
+}
+
 /// An unrestricted resource has no CM handle type: one interface per Wado type,
 /// every handle position the same `f64`, and nothing naming the
 /// `extends` relation. See `docs/wep-2026-04-28-resource-inheritance.md`.
 #[test]
 fn full_scope_reconstructs_an_interface_per_unrestricted_wado_type() {
-    let text = emit_scope(
-        "use { Dom, Node } from \"web:dom\";\n\
-         export fn run() with Dom {\n\
-             let el = Dom::document().create_element(\"div\", null);\n\
-             el.set_id(\"app\");\n\
-             let parent: Node = el;\n\
-             parent.append_child(el);\n\
-         }",
+    let text = emit_against_web(
+        &format!(
+            "use {{ Dom, Node }} from \"{WEB_PACKAGE}\";\n\
+             export fn run() with Dom {{\n\
+                 let el = Dom::document().create_element(\"div\", null);\n\
+                 el.set_id(\"app\");\n\
+                 let parent: Node = el;\n\
+                 parent.append_child(el);\n\
+             }}"
+        ),
         WitScope::Full,
     );
     assert!(text.contains("package web:dom {"), "\n{text}");
@@ -261,9 +295,12 @@ fn full_scope_reconstructs_an_interface_per_unrestricted_wado_type() {
 /// the CM registry, and is the same `f64` there.
 #[test]
 fn an_exported_signature_renders_a_handle_as_the_universal_one() {
-    let text = emit(
-        "use { Element } from \"web:dom\";\n\
-         export fn relabel(el: Element, id: String) -> Element { el.set_id(id); return el; }",
+    let text = emit_against_web(
+        &format!(
+            "use {{ Element }} from \"{WEB_PACKAGE}\";\n\
+             export fn relabel(el: Element, id: String) -> Element {{ el.set_id(id); return el; }}"
+        ),
+        WitScope::Local,
     );
     assert!(
         text.contains("relabel: func(el: f64, id: string) -> f64;"),

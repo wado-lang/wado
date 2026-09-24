@@ -1248,6 +1248,39 @@ pub fn compile_capturing_diagnostics(
     }
 }
 
+/// The coordinate `package-web` publishes the `web:dom` bindings under.
+pub const WEB_PACKAGE: &str = "wado-lang:web";
+
+/// The `[dependencies]` binding [`WEB_PACKAGE`] to `package-web`, relative to
+/// the repository root.
+fn web_dependency() -> indexmap::IndexMap<String, String> {
+    indexmap::IndexMap::from([(
+        WEB_PACKAGE.to_string(),
+        "package-web/src/dom.wado".to_string(),
+    )])
+}
+
+fn repository_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
+}
+
+/// A host at the repository root with `package-web` as [`WEB_PACKAGE`].
+pub fn web_host() -> FilesystemHost {
+    FilesystemHost::new(repository_root()).with_dependencies(web_dependency())
+}
+
+/// Compile `source` with `package-web` as its [`WEB_PACKAGE`] dependency.
+pub fn compile_against_web(source: &str) -> CapturedCompile {
+    compile_capturing_diagnostics(
+        &repository_root().join("entry.wado"),
+        source,
+        CompilerOptions::default(),
+        None,
+        indexmap::IndexMap::new(),
+        web_dependency(),
+    )
+}
+
 /// Compile a file asynchronously (for use within async context)
 pub async fn compile_file_async(
     path: &Path,

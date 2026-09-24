@@ -1367,7 +1367,7 @@ mod tests {
     /// `{module}` fills a filename, so the stem must be one path component.
     #[test]
     fn a_bundled_module_stem_is_a_single_path_component() {
-        for input in ["wasi:http/types", "web:dom", "core:kiln/types"] {
+        for input in ["wasi:http/types", "core:prelude", "core:kiln/types"] {
             let stem = module_filename_stem(input);
             assert!(
                 !stem.contains('/') && !stem.contains(':'),

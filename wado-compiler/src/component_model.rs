@@ -5138,33 +5138,39 @@ mod tests {
         assert!(!registry.declares_own_error_code("wasi:demo/plain@0.1.0"));
     }
 
-    /// The bare-name fallbacks search every bundled namespace, and a
-    /// cross-namespace collision is ambiguous rather than silently `wasi:`.
+    /// The bare-name fallback searches the bundled namespaces alone: a type an
+    /// open namespace declares is reached through its own source.
     #[test]
-    fn a_bare_name_resolves_within_every_bundled_namespace() {
+    fn a_bare_name_resolves_within_the_bundled_namespaces_alone() {
         let registry = registry_from(
-            "web:dom",
+            "wasi:demo",
             r#"
-            #[cm("web:dom/node", linearity = "unrestricted")]
-            pub resource Node {}
-
-            #[cm("web:dom/types")]
+            #[cm("wasi:demo/types@0.1.0")]
             pub interface Types {}
 
-            #[cm("web:dom/types")]
+            #[cm("wasi:demo/types@0.1.0")]
             pub struct Rect {
+                #[cm("x")]
+                pub x: u32,
+            }
+
+            #[cm("web:dom/types")]
+            pub interface WebTypes {}
+
+            #[cm("web:dom/types")]
+            pub struct Point {
                 #[cm("x")]
                 pub x: u32,
             }
             "#,
         );
         assert_eq!(
-            registry.find_binding_source(CmTypeKind::Newtype, "Node"),
-            Some("web:dom/node")
+            registry.find_binding_source(CmTypeKind::Struct, "Rect"),
+            Some("wasi:demo/types@0.1.0")
         );
         assert_eq!(
-            registry.find_binding_source(CmTypeKind::Struct, "Rect"),
-            Some("web:dom/types")
+            registry.find_binding_source(CmTypeKind::Struct, "Point"),
+            None
         );
     }
 

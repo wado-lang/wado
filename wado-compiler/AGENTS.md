@@ -50,8 +50,8 @@ The Wado compiler crate.
 `src/stdlib.rs` maps every import to its file under `lib/`. A dev build reads
 them from disk, so editing one takes effect on the next `wado` run with no
 rebuild. A release build embeds them, as does any `wasm32` build, which has no
-filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT, `lib/web/`
-from a WebIDL snapshot: read `wado-from-idl/AGENTS.md` first.
+filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT: read
+`wado-from-idl/AGENTS.md` first.
 
 A module re-exports an effect only where it owns it: `core:cli` hands out
 `Stdout`, `core:fs` hands out `Preopens`. A module that merely performs an

@@ -222,8 +222,6 @@ stdlib_table! {
     "wasi:tls/worlds.wado" => "wasi/tls/worlds.wado",
     "wasi:webgpu/webgpu.wado" => "wasi/webgpu/webgpu.wado",
     "wasi:webgpu/worlds.wado" => "wasi/webgpu/worlds.wado",
-    // Web platform bindings, generated from the WebIDL snapshot beside them.
-    "web:dom" => "web/dom.wado",
 }
 
 /// Every file [`install_dev_stdlib`] has to cover, relative to
@@ -263,7 +261,7 @@ pub fn get_stdlib_wasm_asset(import_path: &str) -> Option<&'static [u8]> {
 }
 
 /// The source of a stdlib module by import path — `"core:cli"`,
-/// `"wasi:filesystem/types.wado"`, `"web:dom"` — or None for anything else.
+/// `"wasi:filesystem/types.wado"` — or None for anything else.
 #[must_use]
 pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
     all_core_modules()

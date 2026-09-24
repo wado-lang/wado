@@ -1,7 +1,7 @@
 // An unrestricted handle is an `f64`, so `as` relates it to `f64` and nothing
 // else: an integer would round away the class the handle carries. Between two
 // handles `as` only upcasts, since only a type pattern tests the class.
-use { Document, Element, Node } from "web:dom";
+use { Document, Element, Node } from "wado-lang:web";
 
 fn down(n: Node) -> Element {
     return n as Element;
@@ -27,10 +27,15 @@ export fn run() {}
 
 __DATA__
 {
-    "compile_error": "cannot cast 'Node' to 'Element': `as` only upcasts a handle; a type pattern narrows one",
-    "compile_errors_contains": [
-        "cannot cast 'Document' to 'u32': an unrestricted resource handle is an `f64`",
-        "cannot cast 'i32' to 'Document': an unrestricted resource handle is an `f64`"
-    ],
-    "compile_error_codes": ["INVALID_CAST"]
+  "compile_error": "cannot cast 'Node' to 'Element': `as` only upcasts a handle; a type pattern narrows one",
+  "compile_errors_contains": [
+    "cannot cast 'Document' to 'u32': an unrestricted resource handle is an `f64`",
+    "cannot cast 'i32' to 'Document': an unrestricted resource handle is an `f64`"
+  ],
+  "compile_error_codes": [
+    "INVALID_CAST"
+  ],
+  "dependencies": {
+    "wado-lang:web": "../../../package-web/src/dom.wado"
+  }
 }

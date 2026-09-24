@@ -12,14 +12,14 @@ use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi_http::WasiHttpCtx;
 
 use crate::common::{
-    self, DEFAULT_TIMEOUT_MS, TestHttpCtx, WasiState, build_tls_ctx, compile_source, engine,
+    self, DEFAULT_TIMEOUT_MS, TestHttpCtx, WasiState, build_tls_ctx, compile_against_web, engine,
     limit_store, runtime,
 };
 
 /// `Element` is two `extends` links below `EventTarget`, so `dispatch_event`
 /// resolves through the whole chain while `text_content` resolves through one.
 const PROGRAM: &str = r#"
-use { Dom, Event, EventTarget, Node } from "web:dom";
+use { Dom, Event, EventTarget, Node } from "wado-lang:web";
 
 export fn run() with (Dom, Event, EventTarget) {
     let doc = Dom::document();
@@ -63,7 +63,7 @@ export fn run() with (Dom, Event, EventTarget) {
 
 /// Type patterns narrow a handle by the class the host tagged it with.
 const NARROWING_PROGRAM: &str = r#"
-use { Dom, Element, HtmlInputElement, Node } from "web:dom";
+use { Dom, Element, HtmlInputElement, Node } from "wado-lang:web";
 
 fn describe(n: Node) -> String {
     return match n {
@@ -104,7 +104,7 @@ export fn run() with Dom {
 
 /// `==` on handles compares what the host interned, across an upcast and on two roots.
 const IDENTITY_PROGRAM: &str = r#"
-use { Dom, Event, Node } from "web:dom";
+use { Dom, Event, Node } from "wado-lang:web";
 
 export fn run() with (Dom, Event) {
     let doc = Dom::document();
@@ -298,7 +298,8 @@ fn add_dom_to_linker(
 /// Compile `program`, run it against the stub, and hand back the host's table.
 fn run_against_stub(program: &str) -> DomObjects {
     common::install_rustls_provider_for_tests();
-    let wasm = compile_source(program)
+    let wasm = compile_against_web(program)
+        .result
         .unwrap_or_else(|e| panic!("the web:dom program should compile, got {e}"))
         .wasm;
 

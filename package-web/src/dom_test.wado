@@ -1,6 +1,6 @@
 // No host implements `web:dom` here: a handler answers what the program calls,
 // and the host fills every import with a trap for what it does not.
-use { Document, Dom, Element, HtmlElement, HtmlInputElement, Node } from "web:dom";
+use { Document, Dom, Element, HtmlElement, HtmlInputElement, Node } from "./dom.wado";
 
 // A handle is `class * 2^37 + index`, the class being the one `#[cm(classes)]`
 // numbers: Node 1, Element 2, HtmlElement 3, HtmlInputElement 4, Document 5.
@@ -20,8 +20,9 @@ fn index_of(this: &Node) -> i32 {
 
 impl Dom for FakeDom {
     fn document(&mut self) -> Document {
-        resume handle(5.0, 0) as Document
+        resume handle(5.0, 0) as Document;
     }
+
     ..trap
 }
 
@@ -29,19 +30,22 @@ impl Document for FakeDom {
     fn create_element(&mut self, this: &Document, local_name: String, options: Option<String>) -> Element {
         self.texts.push("");
         let class = if local_name == "input" { 4.0 } else { 3.0 };
-        resume handle(class, self.texts.len()) as Element
+        resume handle(class, self.texts.len()) as Element;
     }
+
     ..trap
 }
 
 impl Node for FakeDom {
     fn set_text_content(&mut self, this: &Node, value: Option<String>) {
         self.texts[index_of(this) - 1] = value.unwrap_or("");
-        resume ()
+        resume ();
     }
+
     fn text_content(&mut self, this: &Node) -> Option<String> {
-        resume Option::Some(self.texts[index_of(this) - 1])
+        resume Option::Some(self.texts[index_of(this) - 1]);
     }
+
     ..trap
 }
 
@@ -51,7 +55,7 @@ test "a handler serves every call" {
         let el = Dom::document().create_element("div", null);
         el.set_text_content(Option::Some("hello"));
         assert el.text_content() == Option::Some("hello");
-    }
+    };
     assert dom.texts == ["hello"];
 }
 
@@ -62,12 +66,12 @@ test "a type pattern reads the class the handle carries" {
         let input = doc.create_element("input", null);
         let div = doc.create_element("div", null);
         assert input matches { _: HtmlInputElement };
-        assert !(div matches { _: HtmlInputElement });
+        assert !div matches { _: HtmlInputElement };
         assert div matches { _: HtmlElement };
         let node: Node = doc;
-        assert !(node matches { _: Element });
+        assert !node matches { _: Element };
         assert node matches { _: Document };
-    }
+    };
 }
 
 test "handles compare equal when they name one object" {
@@ -80,13 +84,10 @@ test "handles compare equal when they name one object" {
         assert as_node == div;
         assert div != doc.create_element("div", null);
         assert Dom::document() == doc;
-    }
+    };
 }
 
 #[expect_trap]
 test "a call no handler answers traps" {
     let _ = Dom::window();
 }
-
-__DATA__
-{"test": {}}

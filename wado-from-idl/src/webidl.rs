@@ -144,8 +144,8 @@ struct Merged<'a> {
 /// why there is none.
 type Lowered = std::result::Result<WadoFunction, (String, String)>;
 
-/// The `web:<package>` module's source, naming `source` in its header, and
-/// the skipped members.
+/// The module binding the `web:<package>` interfaces, naming `source` in its
+/// header, and the skipped members.
 ///
 /// # Errors
 ///
@@ -156,11 +156,10 @@ pub fn generate(snapshot: &Snapshot, source: &str) -> Result<(String, Vec<String
         skipped,
     } = transform(snapshot)?;
     module.source_files = vec![source.to_string()];
-    module.stdlib_identity = Some(format!("web:{}", snapshot.package));
     Ok((WadoCodeGenerator::new().generate(&module), skipped))
 }
 
-/// Transform a snapshot into the `web:<package>` module.
+/// Transform a snapshot into the module binding the `web:<package>` interfaces.
 ///
 /// # Errors
 ///

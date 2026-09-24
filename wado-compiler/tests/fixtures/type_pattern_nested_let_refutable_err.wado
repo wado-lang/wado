@@ -1,5 +1,5 @@
 // A type pattern nested in a `let` destructure is refutable in the same way.
-use { Element, HtmlInputElement } from "web:dom";
+use { Element, HtmlInputElement } from "wado-lang:web";
 
 fn take(pair: [Element, i32]) {
     let [input: HtmlInputElement, n] = pair;
@@ -8,4 +8,9 @@ fn take(pair: [Element, i32]) {
 export fn run() {}
 
 __DATA__
-{"compile_error":":5:10: analysis error: invalid pattern: refutable pattern in `let` binding: not every `Element` is `HtmlInputElement`"}
+{
+  "compile_error": ":5:10: analysis error: invalid pattern: refutable pattern in `let` binding: not every `Element` is `HtmlInputElement`",
+  "dependencies": {
+    "wado-lang:web": "../../../package-web/src/dom.wado"
+  }
+}

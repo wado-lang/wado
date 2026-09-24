@@ -567,18 +567,18 @@ description = "Install @webref/idl for the WebIDL snapshot (scripts/webidl)"
 run = "cd scripts/webidl && npm install"
 
 [tasks.update-webidl-snapshot]
-description = "Re-snapshot the WebIDL slice from @webref/idl into lib/web/dom.webidl.json"
+description = "Re-snapshot the WebIDL slice from @webref/idl into package-web/idl/dom.webidl.json"
 depends = ["webidl-deps"]
-run = "node scripts/webidl/snapshot.mjs wado-compiler/lib/web/dom.webidl.json"
+run = "node scripts/webidl/snapshot.mjs package-web/idl/dom.webidl.json"
 
-[tasks.update-stdlib-web]
-description = "Regenerate the web:dom stdlib from the vendored WebIDL snapshot"
+[tasks.update-package-web]
+description = "Regenerate package-web's web:dom bindings from the vendored WebIDL snapshot"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 cargo run -p wado-from-idl -- \
-    --webidl wado-compiler/lib/web/dom.webidl.json \
-    --output-dir wado-compiler/lib/web
+    --webidl package-web/idl/dom.webidl.json \
+    --output-dir package-web/src
 """
 
 [tasks.update-stdlib-kiln]

@@ -1,5 +1,5 @@
 // The host may hand back a type no arm names, so a narrowing match ends in `_`.
-use { Element, HtmlInputElement, Node } from "web:dom";
+use { Element, HtmlInputElement, Node } from "wado-lang:web";
 
 fn kind(n: Node) -> i32 {
     return match n {
@@ -11,4 +11,9 @@ fn kind(n: Node) -> i32 {
 export fn run() {}
 
 __DATA__
-{"compile_error": "non-exhaustive match: type patterns cannot cover every type the host may hand back; add a final `_` arm"}
+{
+  "compile_error": "non-exhaustive match: type patterns cannot cover every type the host may hand back; add a final `_` arm",
+  "dependencies": {
+    "wado-lang:web": "../../../package-web/src/dom.wado"
+  }
+}
