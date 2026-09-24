@@ -20,9 +20,11 @@ use crate::name::{
 };
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct};
 use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind, StmtNode,
+    BlockId, BlockNode, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
+    StmtNode,
 };
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
 use crate::optimize::arena_query::{
     expr_node_may_trap, is_pure_nontrapping_expr_typed, promoted_local_reads,
@@ -2364,139 +2366,104 @@ pub fn remove_unreachable_globals(
         let mut func = func_rc.borrow_mut();
         if let Some(body) = func.body.as_mut() {
             let root = body.root;
-            remove_dead_global_sets_block(body, root, used_globals, &type_table);
+            remove_dead_global_sets(body, NodeRef::Block(root), used_globals, &type_table);
         }
     }
 }
 
-/// Remove `GlobalVarSet` statements for dead globals from a block.
-///
-/// For dead globals whose initializer contains function calls (potential side
-/// effects), the `GlobalVarSet` is replaced with the value expression to
-/// preserve the side effects. For pure initializers (constants, struct/array
-/// literals without calls), the entire statement is removed.
-fn remove_dead_global_sets_block(
+/// Strip every store to a dead global from `node`'s subtree, wherever it sits:
+/// a statement store goes with its statement, an operand one leaves its unit.
+/// A value that may have an effect or trap is kept, evaluated where the store was.
+fn remove_dead_global_sets(
     body: &mut Body,
-    block: BlockId,
+    node: NodeRef,
     used: &IndexSet<(String, String)>,
     type_table: &TypeTable,
 ) {
-    // Recurse into sub-statements first.
-    for s in body.blocks[block].stmts.clone() {
-        remove_dead_global_sets_stmt(body, s, used, type_table);
+    if let NodeRef::Block(block) = node {
+        let old = std::mem::take(&mut body.blocks[block].stmts);
+        let mut kept: Vec<StmtId> = Vec::with_capacity(old.len());
+        for s in old {
+            let StmtKind::Expr(Operand::Expr(store)) = body.stmts[s].kind else {
+                kept.push(s);
+                continue;
+            };
+            let Some(value) = dead_store_value(body, store, used) else {
+                kept.push(s);
+                continue;
+            };
+            if let Some(effect) = kept_effect(body, value, type_table) {
+                body.stmts[s].kind = StmtKind::Expr(effect.into());
+                kept.push(s);
+            }
+        }
+        body.blocks[block].stmts = kept;
     }
 
-    // Process GlobalVarSet statements for dead globals.
-    let old = std::mem::take(&mut body.blocks[block].stmts);
-    let mut new_stmts: Vec<StmtId> = Vec::with_capacity(old.len());
-    for s in old {
-        let dead = if let StmtKind::Expr(Operand::Expr(expr)) = &body.stmts[s].kind
-            && let ExprKind::GlobalVarSet {
-                module_source,
-                name,
-                value,
-                ..
-            } = &body.exprs[*expr].kind
+    let mut stores: Vec<ExprId> = Vec::new();
+    body.for_each_operand(node, |op| {
+        if let Some(e) = op.as_expr()
+            && dead_store_value(body, e, used).is_some()
         {
-            let key = (module_source.to_path().join("::"), name.clone());
-            if used.contains(&key) {
-                None
-            } else {
-                Some((*value, body.stmts[s].span))
-            }
-        } else {
-            None
-        };
-        if let Some((value, span)) = dead {
-            // Dead global: keep the value expression when it is not provably
-            // pure-and-nontrapping, so an initializer that calls a function
-            // (writing another global, printing, asserting) or that can trap
-            // keeps its effect/trap even though the global itself is gone.
-            // The discarded GlobalVarSet owned `value`, so reuse its id here.
-            if let Some(ve) = value.as_expr()
-                && !is_pure_nontrapping_expr_typed(body, ve, Some(type_table))
-            {
-                let new_s = body.stmts.push(StmtNode {
-                    kind: StmtKind::Expr(ve.into()),
+            stores.push(e);
+        }
+    });
+    for store in stores {
+        let value = dead_store_value(body, store, used).expect("collected as a dead store");
+        let unit = body.exprs[store].type_id;
+        match kept_effect(body, value, type_table) {
+            Some(effect) => {
+                let span = body.exprs[store].span;
+                let stmt = body.stmts.push(StmtNode {
+                    kind: StmtKind::Expr(effect.into()),
                     span,
                 });
-                new_stmts.push(new_s);
+                let block = body.blocks.push(BlockNode {
+                    stmts: vec![stmt],
+                    span,
+                });
+                body.exprs[store].kind = ExprKind::plain_block(block, unit, "dead_global_store");
             }
-            continue;
-        }
-        new_stmts.push(s);
-    }
-    body.blocks[block].stmts = new_stmts;
-}
-
-fn remove_dead_global_sets_stmt(
-    body: &mut Body,
-    s: StmtId,
-    used: &IndexSet<(String, String)>,
-    type_table: &TypeTable,
-) {
-    enum W {
-        Expr(ExprId),
-        Blocks(BlockId, Option<BlockId>),
-        None,
-    }
-    let w = match &body.stmts[s].kind {
-        StmtKind::Expr(expr) => expr.as_expr().map_or(W::None, W::Expr),
-        StmtKind::Let { value, .. } => value.as_expr().map_or(W::None, W::Expr),
-        StmtKind::If {
-            then_block,
-            else_block,
-            ..
-        } => W::Blocks(*then_block, *else_block),
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => W::Blocks(*b, None),
-        StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-            value.and_then(Operand::as_expr).map_or(W::None, W::Expr)
-        }
-        StmtKind::Continue | StmtKind::LetDestructure { .. } => W::None,
-    };
-    match w {
-        W::Expr(e) => remove_dead_global_sets_expr(body, e, used, type_table),
-        W::Blocks(b0, b1) => {
-            remove_dead_global_sets_block(body, b0, used, type_table);
-            if let Some(b1) = b1 {
-                remove_dead_global_sets_block(body, b1, used, type_table);
+            None => {
+                let unit = Operand::Value(body.values.alloc_unshared(ValueKind::Unit, unit));
+                body.replace_operand_to(node, store, unit);
             }
         }
-        W::None => {}
     }
-}
 
-/// Recursively remove dead `GlobalVarSet` from expressions that contain blocks.
-/// Strip dead-global stores from `e`'s subtree.
-///
-/// Every child, not a hand-listed few. A dead store can sit under any
-/// operand-carrying kind — globalization's inline-reference shape puts one
-/// under a borrow, `&{ GLOBAL = v; GLOBAL }` — and a kind missing from such a
-/// list keeps the store while the global itself goes, leaving an access to a
-/// slot that no longer exists.
-fn remove_dead_global_sets_expr(
-    body: &mut Body,
-    e: ExprId,
-    used: &IndexSet<(String, String)>,
-    type_table: &TypeTable,
-) {
     let mut children: Vec<NodeRef> = Vec::new();
-    body.for_each_child(NodeRef::Expr(e), |c| children.push(c));
+    body.for_each_child(node, |c| children.push(c));
     for child in children {
-        match child {
-            NodeRef::Block(b) => remove_dead_global_sets_block(body, b, used, type_table),
-            NodeRef::Stmt(s) => remove_dead_global_sets_stmt(body, s, used, type_table),
-            NodeRef::Expr(x) => remove_dead_global_sets_expr(body, x, used, type_table),
-            NodeRef::Pat(_) => {}
-        }
+        remove_dead_global_sets(body, child, used, type_table);
     }
+}
+
+/// The value `e` stores, when `e` is a store to a global `used` does not hold.
+fn dead_store_value(body: &Body, e: ExprId, used: &IndexSet<(String, String)>) -> Option<Operand> {
+    let ExprKind::GlobalVarSet {
+        module_source,
+        name,
+        value,
+    } = &body.exprs[e].kind
+    else {
+        return None;
+    };
+    let key = (module_source.to_path().join("::"), name.clone());
+    (!used.contains(&key)).then_some(*value)
+}
+
+/// The part of a dead store's value that must still run: all of it, unless it
+/// is provably pure and cannot trap.
+fn kept_effect(body: &Body, value: Operand, type_table: &TypeTable) -> Option<ExprId> {
+    value
+        .as_expr()
+        .filter(|&e| !is_pure_nontrapping_expr_typed(body, e, Some(type_table)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::module_source::ModuleSourceInterner;
-    use crate::nir_arena::BlockNode;
     use crate::token::Span;
 
     fn free_fn(interner: &mut ModuleSourceInterner, name: &str) -> FunctionId {

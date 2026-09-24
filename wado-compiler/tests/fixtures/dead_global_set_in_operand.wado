@@ -1,0 +1,32 @@
+// A never-read global's stores go with it. Only a store standing as a whole
+// statement was removed; one in operand position (a match arm body, an `if`
+// condition) survived and addressed a global that no longer had a slot.
+
+use { println, Stdout } from "core:cli";
+
+global mut COUNTER: i32 = 0;
+global mut FLAG: bool = false;
+
+fn bump() -> i32 with Stdout {
+    println("bump");
+    return 4;
+}
+
+export fn run() with Stdout {
+    let o: Option<i32> = Some(builtin::black_box(2));
+    match o {
+        Some(v) => COUNTER = v,
+        None => COUNTER = 9,
+    }
+    match o {
+        Some(_) => COUNTER = bump(),
+        None => {},
+    }
+    if (c: { FLAG = true; builtin::black_box(true) }) {
+        println("then");
+    }
+    println("done");
+}
+
+__DATA__
+{"stdout": "bump\nthen\ndone\n"}
