@@ -43,6 +43,10 @@ impl TypeSet {
         self.any || self.keys.contains(&key)
     }
 
+    pub(super) fn is_empty(&self) -> bool {
+        !self.any && self.keys.is_empty()
+    }
+
     fn insert(&mut self, key: TypeKey) -> bool {
         !self.any && self.keys.insert(key)
     }
@@ -376,6 +380,50 @@ impl<'t> HeapEffects<'t> {
         holds_reference(tt, *element)
     }
 
+    /// Each argument of `call`, in the callee's parameter order, with what the
+    /// call keeps of it.
+    pub(super) fn kept_args(&self, body: &Body, call: ExprId) -> Vec<(Operand, Kept)> {
+        let (target, args) = call_parts(self, body, call);
+        args.iter()
+            .enumerate()
+            .map(|(j, &a)| {
+                let kept = match target {
+                    Target::Summary(s) => Kept {
+                        in_result: s.ret.has_param(j),
+                        stored: s.into_elsewhere.has_param(j)
+                            || s.into_params
+                                .iter()
+                                .enumerate()
+                                .any(|(k, into)| k != j && into.has_param(j)),
+                    },
+                    Target::Builtin { declaration, .. } => {
+                        let retains = || {
+                            declaration.retains.iter().filter(|r| {
+                                r.source == j
+                                    && (!r.elements
+                                        || self.elements_hold_reference(body.operand_type(a)))
+                            })
+                        };
+                        let returned = match declaration.returns {
+                            Some(ReturnConvention::Owned) => false,
+                            Some(ReturnConvention::PartOf(p)) => p == j,
+                            None => true,
+                        };
+                        Kept {
+                            in_result: returned || retains().any(|r| r.into.is_none()),
+                            stored: retains().any(|r| r.into.is_some_and(|q| q != j)),
+                        }
+                    }
+                    Target::Opaque => Kept {
+                        in_result: true,
+                        stored: true,
+                    },
+                };
+                (a, kept)
+            })
+            .collect()
+    }
+
     /// Every object type an element of the list `ty` may reach, or `None` where
     /// `ty` is no list.
     pub(super) fn element_reach(&self, ty: TypeId) -> Option<Rc<TypeSet>> {
@@ -654,6 +702,14 @@ impl Keys {
     }
 }
 
+/// What a call keeps of one argument.
+#[derive(Clone, Copy, Default, Debug)]
+pub(super) struct Kept {
+    /// The result may hold what the argument holds.
+    pub(super) in_result: bool,
+    /// The call may store it in a global or another argument.
+    pub(super) stored: bool,
+}
 
 /// One read or write of an object: where it happens, through which operand,
 /// and which field, where it names one.
