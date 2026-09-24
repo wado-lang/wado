@@ -20,12 +20,11 @@ A symbol is written `MODULE # SYMBOL`.
 Quoting: `MODULE` is quoted as in `import`, but **the quotes may be omitted when unambiguous** — i.e. for schemes and bare dependency names with no whitespace. Relative paths and URLs must be quoted, since they contain `#`, `/`, and `.`.
 
 ```
-core:json#parse                          # free function (unquoted scheme)
-core:math#f64::PI                        # associated constant
+core:json#to_string                      # free function (unquoted scheme)
 core:collections#TreeMap::new            # associated/static function
 core:collections#TreeMap.insert          # instance method
-core:prelude#List<String>::len           # generics, Wado angle brackets
-core:fmt#Point^Display::fmt              # trait-impl member (^ as internally)
+core:collections#TreeMap<String, i32>.get  # generics, Wado angle brackets
+core:url#Url^Display::fmt                # trait-impl member (^ as internally)
 "./utils.wado"#Helper::new               # relative path, quoted
 "https://x/lib.wado"#foo                  # URL, quoted
 ```
