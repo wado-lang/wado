@@ -730,7 +730,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The type a generic application resolves to. `site` names the head's
-    /// declaration; `name` is the compiler-item spelling and the diagnostic.
+    /// declaration; `name` is its spelling, for the diagnostics.
     pub(super) fn resolve_generic_type(
         &mut self,
         site: AstId,
@@ -741,20 +741,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_generic_type_at(Some(site), name, args, span)
     }
 
-    /// The compiler item `def` declares, among the generic heads the compiler
-    /// builds a type of its own for.
-    fn compiler_built_generic(&self, def: DefId) -> Option<CompilerItem> {
+    /// How the compiler builds the type `def` declares, for the generic heads
+    /// it builds a type of its own for.
+    fn compiler_built_generic(&self, def: DefId) -> Option<fn(&mut TypeTable, TypeId) -> TypeId> {
+        let built: [(CompilerItem, fn(&mut TypeTable, TypeId) -> TypeId); 6] = [
+            (CompilerItem::Option, TypeTable::make_option),
+            (CompilerItem::Stream, TypeTable::make_stream),
+            (
+                CompilerItem::StreamWritable,
+                TypeTable::make_stream_writable,
+            ),
+            (CompilerItem::Future, TypeTable::make_future),
+            (
+                CompilerItem::FutureWritable,
+                TypeTable::make_future_writable,
+            ),
+            (CompilerItem::Array, TypeTable::make_builtin_array),
+        ];
         let tt = self.tysys.type_table.borrow();
-        [
-            CompilerItem::Option,
-            CompilerItem::Stream,
-            CompilerItem::StreamWritable,
-            CompilerItem::Future,
-            CompilerItem::FutureWritable,
-            CompilerItem::Array,
-        ]
-        .into_iter()
-        .find(|item| tt.compiler_item_def(*item) == Some(def))
+        built
+            .into_iter()
+            .find(|(item, _)| tt.compiler_item_def(*item) == Some(def))
+            .map(|(_, make)| make)
     }
 
     fn resolve_generic_type_at(
@@ -765,139 +773,87 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> TypeId {
         let def = self.decl_key_at(site, name);
-        match def.and_then(|def| self.compiler_built_generic(def)) {
-            Some(CompilerItem::Option) => {
-                let inner = args
-                    .first()
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                self.tysys.type_table.borrow_mut().make_option(inner)
-            }
-            Some(CompilerItem::Stream) => {
-                let elem = args
-                    .first()
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                self.tysys.type_table.borrow_mut().make_stream(elem)
-            }
-            Some(CompilerItem::StreamWritable) => {
-                let elem = args
-                    .first()
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_stream_writable(elem)
-            }
-            Some(CompilerItem::Future) => {
-                let elem = args
-                    .first()
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                self.tysys.type_table.borrow_mut().make_future(elem)
-            }
-            Some(CompilerItem::FutureWritable) => {
-                let elem = args
-                    .first()
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_future_writable(elem)
-            }
-            // The raw GC array builtin, declared definition-less in `core:prelude`.
-            Some(CompilerItem::Array) => {
-                if args.len() != 1 {
-                    let _ = self.emit(TypeError::ArgumentCountMismatch {
-                        expected: 1,
-                        found: args.len(),
-                        span,
-                    });
-                    return TypeTable::ERROR;
-                }
-                let element_type = self.resolve_type(&args[0]);
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_builtin_array(element_type)
-            }
-            _ => {
-                // The kind of the declaration the head names decides which
-                // shape is built.
-                let Some(def) = def else {
-                    return self.resolve_generic_type_out_of_scope(site, name, args, span);
-                };
-                let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
-                // A trait head reaches here too (`impl IndexValue<i32> for T`),
-                // and a trait's parameters live on its own declaration, so only
-                // a type declaration's list is a ceiling to exceed.
-                let declared = struct_info
-                    .as_ref()
+        if let Some(make) = def.and_then(|def| self.compiler_built_generic(def)) {
+            let [arg] = args else {
+                let _ = self.emit(TypeError::ArgumentCountMismatch {
+                    expected: 1,
+                    found: args.len(),
+                    span,
+                });
+                return TypeTable::ERROR;
+            };
+            let elem = self.resolve_type(arg);
+            return make(&mut self.tysys.type_table.borrow_mut(), elem);
+        }
+        // The kind of the declaration the head names decides which shape is built.
+        let Some(def) = def else {
+            return self.resolve_generic_type_out_of_scope(site, name, args, span);
+        };
+        let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
+        // A trait head reaches here too (`impl IndexValue<i32> for T`),
+        // and a trait's parameters live on its own declaration, so only
+        // a type declaration's list is a ceiling to exceed.
+        let declared = struct_info
+            .as_ref()
+            .map(|info| info.type_params.clone())
+            .or_else(|| {
+                self.lookup_variant_case_of_decl(def)
                     .map(|info| info.type_params.clone())
-                    .or_else(|| {
-                        self.lookup_variant_case_of_decl(def)
-                            .map(|info| info.type_params.clone())
-                    })
-                    .or_else(|| {
-                        self.lookup_generic_newtype_of_decl(def)
-                            .map(|info| info.type_params.clone())
-                    });
-                if let Some(params) = declared
-                    && self.reject_surplus_type_args(name, &params, args, span)
-                {
-                    return TypeTable::ERROR;
-                }
-                if struct_info
-                    .as_ref()
-                    .is_some_and(|info| !info.type_params.is_empty())
-                {
-                    let type_args = self.type_args_of_application(def, args);
-                    self.check_type_decl_arg_bounds(def, &type_args, span);
+            })
+            .or_else(|| {
+                self.lookup_generic_newtype_of_decl(def)
+                    .map(|info| info.type_params.clone())
+            });
+        if let Some(params) = declared
+            && self.reject_surplus_type_args(name, &params, args, span)
+        {
+            return TypeTable::ERROR;
+        }
+        if struct_info
+            .as_ref()
+            .is_some_and(|info| !info.type_params.is_empty())
+        {
+            let type_args = self.type_args_of_application(def, args);
+            self.check_type_decl_arg_bounds(def, &type_args, span);
 
-                    // The instantiation is named by the declaration its head
-                    // resolved to, and keeps its arguments beside it rather
-                    // than fused into a rendered `Box<i32>` head no `impl`
-                    // header writes.
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_generic_instance(def, type_args)
-                } else if let Some(variant_info) = self.lookup_variant_case_of_decl(def).cloned() {
-                    // Check if it's a generic variant (like Result<T, E>)
-                    if variant_info.type_params.is_empty() {
-                        TypeTable::UNKNOWN
-                    } else {
-                        let type_args = self.type_args_of_application(def, args);
-                        self.check_type_decl_arg_bounds(def, &type_args, span);
-                        self.tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_generic_instance(def, type_args)
-                    }
-                } else if let Some(gn_info) = self.lookup_generic_newtype_of_decl(def).cloned() {
-                    // Generic newtype instantiation: `type MyArray<T> = List<T>`.
-                    // Its base is a type the declaration wrote, so it resolves
-                    // against the arguments rather than at the use site — the
-                    // same rule its defaults follow, so no kind is the odd one
-                    // out.
-                    let type_args = self.type_args_of_application(def, args);
-                    let names: Vec<String> =
-                        gn_info.type_params.iter().map(|p| p.name.clone()).collect();
-                    let base_type_id = self.with_type_param_args(&names, &type_args, |e| {
-                        e.resolve_type(&gn_info.base_type_ast)
-                    });
-                    self.check_type_decl_arg_bounds(def, &type_args, span);
-                    self.tysys.type_table.borrow_mut().make_newtype_instance(
-                        def,
-                        type_args,
-                        base_type_id,
-                    )
-                } else {
-                    self.resolve_generic_type_out_of_scope(site, name, args, span)
-                }
+            // The instantiation is named by the declaration its head
+            // resolved to, and keeps its arguments beside it rather
+            // than fused into a rendered `Box<i32>` head no `impl`
+            // header writes.
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_generic_instance(def, type_args)
+        } else if let Some(variant_info) = self.lookup_variant_case_of_decl(def).cloned() {
+            // Check if it's a generic variant (like Result<T, E>)
+            if variant_info.type_params.is_empty() {
+                TypeTable::UNKNOWN
+            } else {
+                let type_args = self.type_args_of_application(def, args);
+                self.check_type_decl_arg_bounds(def, &type_args, span);
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_generic_instance(def, type_args)
             }
+        } else if let Some(gn_info) = self.lookup_generic_newtype_of_decl(def).cloned() {
+            // Generic newtype instantiation: `type MyArray<T> = List<T>`.
+            // Its base is a type the declaration wrote, so it resolves
+            // against the arguments rather than at the use site — the
+            // same rule its defaults follow, so no kind is the odd one
+            // out.
+            let type_args = self.type_args_of_application(def, args);
+            let names: Vec<String> = gn_info.type_params.iter().map(|p| p.name.clone()).collect();
+            let base_type_id = self.with_type_param_args(&names, &type_args, |e| {
+                e.resolve_type(&gn_info.base_type_ast)
+            });
+            self.check_type_decl_arg_bounds(def, &type_args, span);
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_newtype_instance(def, type_args, base_type_id)
+        } else {
+            self.resolve_generic_type_out_of_scope(site, name, args, span)
         }
     }
 

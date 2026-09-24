@@ -439,13 +439,6 @@ pub(crate) struct CallSiteLocation {
 }
 
 impl<'a, H: CompilerHost> Reify<'a, H> {
-    /// The declaration a qualified path's *owner* segment names — see
-    /// `Elaborator::qualified_owner_decl`, which answers the same way from the
-    /// same table.
-    fn qualified_owner_decl(&self, ident: &ast::IdentExpr) -> Option<DefId> {
-        self.tysys.resolutions.declared(ident.owner_segment()?.id)
-    }
-
     /// A `Type::Case` identifier as the declaration owning the case and the
     /// spelling: `Color::Red` at its own segments, a bare `Red` as annotate
     /// read it off the expected type.
@@ -6357,8 +6350,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 tt.as_option(inner_type).is_some(),
                 matches!(
                     tt.get(inner_type),
-                    ResolvedType::GenericInstance { .. }
-                        if tt.is_compiler_item_type(inner_type, CompilerItem::Result)
+                    ResolvedType::GenericInstance { .. } if tt.is_result(inner_type)
                 ),
             )
         };
@@ -8356,7 +8348,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let type_name = &suffix[..inner];
                 let case_name = &suffix[inner + 2..];
                 if let Some(variant_info) = self
-                    .qualified_owner_decl(ident)
+                    .tysys
+                    .resolutions
+                    .owner_decl(ident)
                     .and_then(|def| self.tysys.all_variant_cases.get(&def))
                     .cloned()
                     && let Some((case_index, case_data)) = variant_info

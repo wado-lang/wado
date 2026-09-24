@@ -69,6 +69,15 @@ impl EffectRef {
     pub fn is_param(&self) -> bool {
         matches!(self, EffectRef::Param { .. })
     }
+
+    /// A `with`-clause name written in `module` that reaches no effect; it
+    /// stands as a concrete effect of its spelling, already reported.
+    pub fn unresolved(name: &str, module: &ModuleSource) -> Self {
+        EffectRef::Concrete {
+            name: name.to_string(),
+            module_source: module.clone(),
+        }
+    }
 }
 
 /// Identifies a type parameter with its scope and index
@@ -2087,9 +2096,6 @@ impl TypeTable {
     }
 
     /// Whether `id` resolves to an instance of the compiler `Result` variant.
-    ///
-    /// Compares declarations. The spelling alone answered yes for any module's
-    /// `Result`, which is the mis-identification this table exists to prevent.
     pub fn is_result(&self, id: TypeId) -> bool {
         self.is_compiler_item_type(id, CompilerItem::Result)
     }
@@ -2100,21 +2106,12 @@ impl TypeTable {
     }
 
     /// Whether `id` is the compiler's `String` struct.
-    ///
-    /// Compares declarations; `name == "String"` answered yes for any module's
-    /// own `String`.
     pub fn is_string(&self, id: TypeId) -> bool {
         self.is_compiler_item_type(id, CompilerItem::String)
     }
 
-    /// Whether `id` is the type a compiler item declares.
-    ///
-    /// The `def` a nominal type carries is the identity (WEP 2026-08-12). One
-    /// declaration reaches the table under more than one `TypeId` — a module
-    /// that names it interns its own — and `symbol_by_type` holds the declaring
-    /// node for only the first, so [`Self::decl_of_type`] answers no for every
-    /// other spelling of the same type. A table built without defs — an
-    /// anonymous-struct unit fixture — has no identity, and asks the node.
+    /// Whether `id`, refs peeled, is the type a compiler item declares, compared
+    /// by the `def` it carries (WEP 2026-08-12).
     pub fn is_compiler_item_type(&self, id: TypeId, item: CompilerItem) -> bool {
         let Some(decl) = self.compiler_items.decl(item) else {
             return false;
@@ -2127,6 +2124,7 @@ impl TypeTable {
         };
         match (self.nominal_def(id), self.defs.of_ast_id(decl)) {
             (Some(named), Some(declared)) => named == declared,
+            // A table built without defs, as a unit fixture's is, has only the node.
             _ => self.decl_of_type(id) == Some(decl),
         }
     }
@@ -2292,11 +2290,20 @@ impl TypeTable {
         }
     }
 
+    /// The `T` of a compiler `Box<T>` instance.
+    pub fn as_box(&self, type_id: TypeId) -> Option<TypeId> {
+        match self.get(type_id) {
+            ResolvedType::GenericInstance { type_args, .. }
+                if type_args.len() == 1
+                    && self.is_compiler_item_type(type_id, CompilerItem::Box) =>
+            {
+                Some(type_args[0])
+            }
+            _ => None,
+        }
+    }
+
     /// Check if a type is `Option<T>`, returning the inner type if so.
-    ///
-    /// The instantiation is identified by the declaration it was interned
-    /// against, not by the spelling: `name == "Option"` answered yes for any
-    /// module's `Option`, and for a user type that merely shares the name.
     pub fn as_option(&self, type_id: TypeId) -> Option<TypeId> {
         let ResolvedType::GenericInstance { type_args, .. } = self.get(type_id) else {
             return None;

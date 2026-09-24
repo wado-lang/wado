@@ -1421,7 +1421,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // alias — so the declaration comes from the site rather
                     // than from asking the namespace module about a spelling.
                     let ns_variant = self
-                        .qualified_owner_decl(ident)
+                        .tysys
+                        .resolutions
+                        .owner_decl(ident)
                         .and_then(|def| self.tysys.all_variant_cases.get(&def))
                         .cloned();
                     if let Some(variant_info) = ns_variant {
@@ -1602,7 +1604,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             let defs = self.tysys.resolutions.defs();
                             let receiver = trait_env::ImplTargetKey::of_decl(
                                 defs,
-                                self.qualified_owner_decl(ident)?,
+                                self.tysys.resolutions.owner_decl(ident)?,
                             );
                             self.qualified_method_decl_id(&receiver, method_name)
                         })

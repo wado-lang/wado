@@ -320,9 +320,7 @@ impl TypeSystem {
             // A written head: a binder matches anything, a declaration matches
             // its own, and the arguments recurse.
             _ => {
-                let Some(def) =
-                    head_site(written).and_then(|site| self.resolutions.declared_if_walked(site))
-                else {
+                let Some(def) = self.resolutions.head_decl_if_walked(written) else {
                     // A binder, or a name reaching nothing: no one type to
                     // require, so it accepts whatever the receiver supplies.
                     return true;
@@ -414,9 +412,7 @@ impl TypeSystem {
     /// Whether this type's head reaches a declaration. A binder and a name that
     /// reaches nothing both answer `false` — neither is one type.
     fn head_is_declared(&self, ty: &Type) -> bool {
-        head_site(ty)
-            .and_then(|site| self.resolutions.declared_if_walked(site))
-            .is_some()
+        self.resolutions.head_decl_if_walked(ty).is_some()
     }
 }
 

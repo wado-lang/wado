@@ -367,10 +367,7 @@ impl Resolutions {
     #[must_use]
     pub fn effect_named(&self, effect: &ast::EffectName, module: &ModuleSource) -> EffectRef {
         self.effect_at(effect.id, &effect.name)
-            .unwrap_or_else(|| EffectRef::Concrete {
-                name: effect.name.clone(),
-                module_source: module.clone(),
-            })
+            .unwrap_or_else(|| EffectRef::unresolved(&effect.name, module))
     }
 
     /// `def` as an effect, when it declares an `interface` or a resource.
@@ -437,15 +434,28 @@ impl Resolutions {
     #[must_use]
     pub fn operation_owner(&self, ident: &ast::IdentExpr) -> Option<DefId> {
         match ident.owner_segment() {
-            Some(owner) => self.declared(owner.id),
+            Some(_) => self.owner_decl(ident),
             None => self.defs().parent(self.declared_if_walked(ident.id)?),
         }
+    }
+
+    /// The declaration a qualified path's owner segment names: `Color` in
+    /// `Color::Red` or `ns::Color::Red`; `None` for a bare name.
+    #[must_use]
+    pub fn owner_decl(&self, ident: &ast::IdentExpr) -> Option<DefId> {
+        self.declared(ident.owner_segment()?.id)
     }
 
     /// The declaration a written type names at its head.
     #[must_use]
     pub fn head_decl(&self, ty: &ast::Type) -> Option<DefId> {
         head_site(ty).and_then(|site| self.declared(site))
+    }
+
+    /// [`Self::head_decl`] for a type that may have been synthesised.
+    #[must_use]
+    pub fn head_decl_if_walked(&self, ty: &ast::Type) -> Option<DefId> {
+        head_site(ty).and_then(|site| self.declared_if_walked(site))
     }
 
     /// The declaration `site` names, or `unwalked`'s answer where no walk

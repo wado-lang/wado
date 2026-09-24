@@ -15,6 +15,7 @@ use std::sync::Arc;
 
 use crate::ast;
 use crate::ast::NamedType;
+use crate::compiler_item::CompilerItem;
 use crate::component_model::{
     CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, one_per_cm_name,
     parse_resource_func,
@@ -932,23 +933,33 @@ impl<'a> Emitter<'a> {
                     self.classify_resolved(*inner)
                 }
             }
-            ResolvedType::GenericInstance { def, type_args } => match self.types.def_name(*def) {
-                "Option" if type_args.len() == 1 => CmShape::Option(type_args[0]),
-                "List" if type_args.len() == 1 => CmShape::List(type_args[0]),
-                "TreeMap" if type_args.len() == 2 => CmShape::Map(type_args[0], type_args[1]),
-                n if TypeTable::is_tuple_type(n) => CmShape::Tuple(type_args.clone()),
-                "Result" if type_args.len() == 2 => CmShape::Result {
-                    ok: self.non_unit(type_args[0]),
-                    err: self.non_unit(type_args[1]),
-                },
-                "AsyncCall" if type_args.len() == 1 => self.classify_resolved(type_args[0]),
-                _ => CmShape::Leaf,
-            },
-            ResolvedType::GenericResource { def, type_args } => match self.types.def_name(*def) {
-                "Future" => CmShape::Future(type_args.first().copied()),
-                "Stream" => CmShape::Stream(type_args.first().copied()),
-                _ => CmShape::Leaf,
-            },
+            ResolvedType::GenericInstance { def, type_args } => {
+                let is = |item| self.types.is_compiler_item_type(id, item);
+                match type_args.as_slice() {
+                    _ if TypeTable::is_tuple_type(self.types.def_name(*def)) => {
+                        CmShape::Tuple(type_args.clone())
+                    }
+                    [arg] if is(CompilerItem::Option) => CmShape::Option(*arg),
+                    [arg] if is(CompilerItem::List) => CmShape::List(*arg),
+                    [key, value] if is(CompilerItem::TreeMap) => CmShape::Map(*key, *value),
+                    [ok, err] if is(CompilerItem::Result) => CmShape::Result {
+                        ok: self.non_unit(*ok),
+                        err: self.non_unit(*err),
+                    },
+                    [arg] if is(CompilerItem::AsyncCall) => self.classify_resolved(*arg),
+                    _ => CmShape::Leaf,
+                }
+            }
+            ResolvedType::GenericResource { type_args, .. } => {
+                let elem = type_args.first().copied();
+                if self.types.is_compiler_item_type(id, CompilerItem::Future) {
+                    CmShape::Future(elem)
+                } else if self.types.is_compiler_item_type(id, CompilerItem::Stream) {
+                    CmShape::Stream(elem)
+                } else {
+                    CmShape::Leaf
+                }
+            }
             _ => CmShape::Leaf,
         }
     }

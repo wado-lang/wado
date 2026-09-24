@@ -400,8 +400,7 @@ fn generate_inline_task_return(
     let tt = type_table.borrow();
     let is_result = matches!(
         tt.get(value_type_id),
-        ResolvedType::GenericInstance { .. }
-            if tt.is_compiler_item_type(value_type_id, CompilerItem::Result)
+        ResolvedType::GenericInstance { .. } if tt.is_result(value_type_id)
     );
 
     if is_result && !flat_return_types.is_empty() {

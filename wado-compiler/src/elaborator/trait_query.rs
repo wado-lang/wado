@@ -1057,10 +1057,7 @@ impl TypeSystem {
     /// The declaration a synthesis-driving trait names, from the compiler-item
     /// registry rather than the spelling that classified it.
     pub(super) fn synth_trait_key(&self, on_bound: OnBoundTrait) -> Option<DefId> {
-        self.type_table
-            .borrow()
-            .compiler_items()
-            .trait_def(on_bound.compiler_item())
+        self.compiler_trait_def(on_bound.compiler_item())
     }
 
     /// Which [`OnBoundTrait`] `trait_` is, by identity.

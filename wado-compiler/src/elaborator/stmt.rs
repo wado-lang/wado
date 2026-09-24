@@ -44,16 +44,6 @@ enum RefBinding {
 /// must surface is the binding set (used by or-pattern validation).
 type PatBindings = Vec<(String, u32, TypeId)>;
 
-/// Generic heads `resolve_generic_type` answers itself; none names a
-/// declaration a site could find.
-const BUILTIN_GENERIC_HEADS: &[&str] = &[
-    "Option",
-    "Stream",
-    "StreamWritable",
-    "Future",
-    "FutureWritable",
-];
-
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Walk a block: resolve each statement and manage the lexical scope.
     /// `expected_type` reaches the trailing statement so its coercion fact lands.
@@ -417,12 +407,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.walk_type_heads(ty, &mut |scope, id, name, span, has_args| {
             if name == "Self" || scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
-                return false;
-            }
-            // A builtin head answers for itself; only a written one is looked up.
-            if has_args
-                && (BUILTIN_GENERIC_HEADS.contains(&name) || name == TypeTable::ARRAY_TYPE_NAME)
-            {
                 return false;
             }
             if scope.reject_non_type_decl(id, name, span) {
