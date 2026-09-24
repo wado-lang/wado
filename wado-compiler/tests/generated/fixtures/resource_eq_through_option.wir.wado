@@ -43,16 +43,16 @@ struct core:prelude/format.wado//Formatter {  // TypeId(8)
 
 array Array<u64> (mut u64);  // TypeId(9)
 
-array Array<resource_eq_through_option.wado/Node> (mut f64);  // TypeId(10)
+array Array<resource_eq_through_option.wado/Node> (mut u64);  // TypeId(10)
 
 variant core:prelude/types.wado//Option<resource_eq_through_option.wado/Node> {  // TypeId(11)
-    Some(f64),
+    Some(u64),
     None,
 }
 
 struct core:prelude/types.wado//Option<resource_eq_through_option.wado/Node>::Some {  // TypeId(12)
     discriminant: i32,
-    payload_0: f64,
+    payload_0: u64,
 }
 
 struct core:prelude//List<u64> {  // TypeId(13)
@@ -109,7 +109,7 @@ type "functype//core:prelude/traits.wado/struct_field" = fn(ref "core:prelude/fo
 
 type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(36)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<resource_eq_through_option.wado/Node>" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(37)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<resource_eq_through_option.wado/Node>" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(37)
 
 type "functype//core:prelude/array.wado/core/prelude/array.wado/seq_eq<resource_eq_through_option.wado/Node>" = fn(ref "Array<resource_eq_through_option.wado/Node>", i32, ref "Array<resource_eq_through_option.wado/Node>", i32) -> bool;  // TypeId(38)
 
@@ -137,7 +137,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(50)
 
-type "functype//resource_eq_through_option.wado/resource_eq_through_option.wado/Node^core:prelude/traits.wado/Inspect::inspect" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(51)
+type "functype//resource_eq_through_option.wado/resource_eq_through_option.wado/Node^core:prelude/traits.wado/Inspect::inspect" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(51)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<resource_eq_through_option.wado/Node>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<resource_eq_through_option.wado/Node>", ref "core:prelude/format.wado//Formatter");  // TypeId(52)
 
@@ -232,8 +232,8 @@ global global:core:prelude/primitive.wado::$const_obj_139: ref null Array<u8> = 
 global global:core:prelude/primitive.wado::$const_obj_143: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48), used: 1 };
 
 fn "resource_eq_through_option.wado/run"() {
-    let a_0: f64;
-    let b_1: f64;
+    let a_0: u64;
+    let b_1: u64;
     let $v1_2: ref "core:prelude/types.wado//Option<resource_eq_through_option.wado/Node>";
     let $v2: ref "core:prelude/types.wado//Option<resource_eq_through_option.wado/Node>";
     let $v1_5: ref "core:prelude/types.wado//Option<resource_eq_through_option.wado/Node>";
@@ -275,12 +275,12 @@ fn "resource_eq_through_option.wado/run"() {
     let $fuse_at_45: i32;
     let $fuse_at_46: i32;
     let $fuse_at_47: i32;
-    let a_50: f64;
-    let b_51: f64;
-    let a_56: f64;
-    let b_57: f64;
-    let a_60: f64;
-    let b_61: f64;
+    let a_50: u64;
+    let b_51: u64;
+    let a_56: u64;
+    let b_57: u64;
+    let a_60: u64;
+    let b_61: u64;
     let elements_70: ref "Array<resource_eq_through_option.wado/Node>";
     let other_72: ref "core:prelude//List<resource_eq_through_option.wado/Node>";
     let elements_73: ref "Array<resource_eq_through_option.wado/Node>";
@@ -291,13 +291,13 @@ fn "resource_eq_through_option.wado/run"() {
         "core:prelude/fpfmt.wado/$initialize_module"();
         global:resource_eq_through_option.wado::$modules_initialized = 1;
     };
-    a_0 = black_box(1);
-    b_1 = black_box(2);
+    a_0 = builtin::i64_reinterpret_f64(black_box(1));
+    b_1 = builtin::i64_reinterpret_f64(black_box(2));
     $v1_2 = struct.new "core:prelude/types.wado//Option<resource_eq_through_option.wado/Node>::Some" { discriminant: 0, payload_0: a_0 };
     $v2 = struct.new "core:prelude/types.wado//Option<resource_eq_through_option.wado/Node>::Some" { discriminant: 0, payload_0: a_0 };
     a_50 = ref.cast "core:prelude/types.wado//Option<resource_eq_through_option.wado/Node>::Some"($v1_2).payload_0;
     b_51 = ref.cast "core:prelude/types.wado//Option<resource_eq_through_option.wado/Node>::Some"($v2).payload_0;
-    if @unlikely((a_50 == b_51) == 0) {
+    if @unlikely(a_50 != b_51) {
         cold_path;
         $local_14 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(208);
         $fuse_at_26 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_14, 59);
@@ -466,9 +466,9 @@ condition: Pair { left: a, right: b } != Pair { left: b, right: a }
         "core:rt/panic"($local_22.repr, $local_22.used);
         unreachable;
     }
-    elements_70 = array.new_fixed<f64>(a_0, b_1);
+    elements_70 = array.new_fixed<u64>(a_0, b_1);
     $sroa_nodes_used = builtin::array_len(elements_70);
-    elements_73 = array.new_fixed<f64>(a_0, b_1);
+    elements_73 = array.new_fixed<u64>(a_0, b_1);
     other_72 = struct.new "core:prelude//List<resource_eq_through_option.wado/Node>" { repr: elements_73, used: builtin::array_len(elements_73) };
     $cond_13 = "core:prelude/array.wado/core/prelude/array.wado/seq_eq<resource_eq_through_option.wado/Node>"(elements_70, $sroa_nodes_used, other_72.repr, other_72.used);
     if @unlikely($cond_13 == 0) {
@@ -1694,6 +1694,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<re
     let i_23: i32;
     let new_used_36: i32;
     let start_37: i32;
+    let $h_41: f64;
     let self_88: ref "core:prelude/string.wado//String";
     let new_used_100: i32;
     let start_101: i32;
@@ -1729,6 +1730,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<re
     let self_282: ref "core:prelude/string.wado//String";
     let new_used_294: i32;
     let start_295: i32;
+    let $h_299: f64;
     let self_346: ref "core:prelude/string.wado//String";
     let new_used_358: i32;
     let start_359: i32;
@@ -1808,6 +1810,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<re
                 continue l138;
             };
         };
+        $h_41 = builtin::f64_reinterpret_i64(payload);
         $inline_struct_open_18: block {
             if f.alternate {
                 self_88 = f.buf;
@@ -1844,7 +1847,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<re
         let $mv_arg_2: ref "core:prelude/string.wado//String";
         $mv_arg_2 = global:resource_eq_through_option.wado::$const_obj_50;
         "core:prelude/traits.wado/struct_field"(f, $mv_arg_2.repr, $mv_arg_2.used);
-        "core:prelude/primitive.wado/f64::inspect_into$scalar"(payload, f);
+        "core:prelude/primitive.wado/f64::inspect_into$scalar"($h_41, f);
         if f.alternate {
             self_162 = f.buf;
             new_used_174 = self_162.used + 1;
@@ -1964,6 +1967,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<re
     start_295 = self_282.used;
     self_282.used = new_used_294;
     builtin::array_copy<u8>(self_282.repr, start_295, global:core:prelude/traits.wado::$const_obj_79, 0, 1);
+    $h_299 = builtin::f64_reinterpret_i64(payload);
     $inline_struct_open_127: block {
         if f.alternate {
             self_346 = f.buf;
@@ -2000,7 +2004,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<re
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:resource_eq_through_option.wado::$const_obj_50;
     "core:prelude/traits.wado/struct_field"(f, $mv_arg_4.repr, $mv_arg_4.used);
-    "core:prelude/primitive.wado/f64::inspect_into$scalar"(payload, f);
+    "core:prelude/primitive.wado/f64::inspect_into$scalar"($h_299, f);
     if f.alternate {
         self_420 = f.buf;
         new_used_432 = self_420.used + 1;
@@ -2076,8 +2080,8 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<re
 
 fn "core:prelude/array.wado/core/prelude/array.wado/seq_eq<resource_eq_through_option.wado/Node>"(a, a_end, b, b_end) {
     let i: i32;
-    let self: f64;
-    let other: f64;
+    let self: u64;
+    let other: u64;
     if a_end != b_end {
         return 0;
     }
@@ -2085,7 +2089,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/seq_eq<resource_eq_through_o
     b175: block {
         l176: loop {
             break_if b175 i >= a_end;
-            if self = builtin::array_get_value<f64>(a, i); other = builtin::array_get_value<f64>(b, i); self == other == 0 {
+            if self = builtin::array_get_value<u64>(a, i); other = builtin::array_get_value<u64>(b, i); self == other == 0 {
                 return 0;
             }
             i = i + 1;
@@ -2103,7 +2107,8 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<resource_e
     let self_9: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
     let start_22: i32;
-    let self_24: f64;
+    let self_24: u64;
+    let $h: f64;
     let self_75: ref "core:prelude/string.wado//String";
     let new_used_87: i32;
     let start_88: i32;
@@ -2179,7 +2184,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<resource_e
                 self_9.used = new_used_21;
                 builtin::array_copy<u8>(self_9.repr, start_22, global:core:prelude/array.wado::$const_obj_103, 0, 2);
             }
-            self_24 = builtin::array_get_value<f64>(repr, i_6);
+            $h = builtin::f64_reinterpret_i64(local.tee self_24(builtin::array_get_value<u64>(repr, i_6)));
             $inline_struct_open_10: block {
                 if f.alternate {
                     self_75 = f.buf;
@@ -2218,7 +2223,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<resource_e
             let $mv_arg_2: ref "core:prelude/string.wado//String";
             $mv_arg_2 = global:resource_eq_through_option.wado::$const_obj_50;
             "core:prelude/traits.wado/struct_field"(f, $mv_arg_2.repr, $mv_arg_2.used);
-            "core:prelude/primitive.wado/f64::inspect_into$scalar"(self_24, f);
+            "core:prelude/primitive.wado/f64::inspect_into$scalar"($h, f);
             if f.alternate {
                 self_149 = f.buf;
                 new_used_161 = self_149.used + 1;
@@ -2337,7 +2342,8 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<resour
     let i_43: i32;
     let new_used_56: i32;
     let start_57: i32;
-    let self_59: f64;
+    let self_59: u64;
+    let $h: f64;
     let self_110: ref "core:prelude/string.wado//String";
     let new_used_122: i32;
     let start_123: i32;
@@ -2456,7 +2462,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<resour
                     continue l211;
                 };
             };
-            self_59 = builtin::array_get_value<f64>(repr, i_6);
+            $h = builtin::f64_reinterpret_i64(local.tee self_59(builtin::array_get_value<u64>(repr, i_6)));
             $inline_struct_open_25: block {
                 if f.alternate {
                     self_110 = f.buf;
@@ -2495,7 +2501,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<resour
             let $mv_arg_2: ref "core:prelude/string.wado//String";
             $mv_arg_2 = global:resource_eq_through_option.wado::$const_obj_50;
             "core:prelude/traits.wado/struct_field"(f, $mv_arg_2.repr, $mv_arg_2.used);
-            "core:prelude/primitive.wado/f64::inspect_into$scalar"(self_59, f);
+            "core:prelude/primitive.wado/f64::inspect_into$scalar"($h, f);
             if f.alternate {
                 self_184 = f.buf;
                 new_used_196 = self_184.used + 1;
@@ -3169,6 +3175,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "resource_eq_through_option.wado/resource_eq_through_option.wado/Node^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $h: f64;
     let self_49: ref "core:prelude/string.wado//String";
     let new_used_61: i32;
     let start_62: i32;
@@ -3195,6 +3202,7 @@ fn "resource_eq_through_option.wado/resource_eq_through_option.wado/Node^core:pr
     let $licm_buf_192: ref "core:prelude/string.wado//String";
     let new_used_198: i32;
     let start_199: i32;
+    $h = builtin::f64_reinterpret_i64(self);
     $inline_struct_open_1: block {
         if f.alternate {
             self_49 = f.buf;
@@ -3231,7 +3239,7 @@ fn "resource_eq_through_option.wado/resource_eq_through_option.wado/Node^core:pr
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:resource_eq_through_option.wado::$const_obj_50;
     "core:prelude/traits.wado/struct_field"(f, $mv_arg_2.repr, $mv_arg_2.used);
-    "core:prelude/primitive.wado/f64::inspect_into$scalar"(self, f);
+    "core:prelude/primitive.wado/f64::inspect_into$scalar"($h, f);
     if f.alternate {
         self_123 = f.buf;
         new_used_135 = self_123.used + 1;

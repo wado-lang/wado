@@ -8,13 +8,13 @@ struct tuple//[core:prelude/types.wado/Option<dep:../../../package-web/src/dom.w
 }
 
 variant core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element> {  // TypeId(1)
-    Some(f64),
+    Some(u64),
     None,
 }
 
 struct core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>::Some {  // TypeId(2)
     discriminant: i32,
-    payload_0: f64,
+    payload_0: u64,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
@@ -28,15 +28,15 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "type_pattern_nested_payload_narrow.wado/$cm_export__run"() {
-    let el_1: f64;
+    let el_1: u64;
     let $local_2_2: ref "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>";
-    let el_5: f64;
+    let el_5: u64;
     let $local_2_6: ref "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>";
     drop((if ref.is_null(ref.null none) == 0 -> i32 {
         $local_2_2 = ref.as_non_null(ref.null none);
         if ref.test "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>::Some"($local_2_2) -> i32 {
             el_1 = ref.cast "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>::Some"($local_2_2).payload_0;
-            ((549755813888 <= el_1) & (el_1 < 687194767360)) & 1;
+            ((4782822804267466752_i64 <=u el_1) & (el_1 <u 4783948704174309376_i64)) & 1;
         } else {
             0;
         }
@@ -47,7 +47,7 @@ fn "type_pattern_nested_payload_narrow.wado/$cm_export__run"() {
     $match_scrut_1 = struct.new "tuple//[core:prelude/types.wado/Option<dep:../../../package-web/src/dom.wado/Element>, i32]" { 0: struct.new "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>" { 1 }, 1: 0 };
     drop($local_2_6 = $match_scrut_1.0; (if ref.test "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>::Some"($local_2_6) -> i32 {
         el_5 = ref.cast "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>::Some"($local_2_6).payload_0;
-        ((549755813888 <= el_5) & (el_5 < 687194767360)) & 1;
+        ((4782822804267466752_i64 <=u el_5) & (el_5 <u 4783948704174309376_i64)) & 1;
     } else {
         0;
     }));

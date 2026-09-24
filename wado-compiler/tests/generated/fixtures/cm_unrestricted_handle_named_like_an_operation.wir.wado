@@ -6,7 +6,7 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
 type "functype//wasi/web:demo/Dom::window" = fn() -> f64;  // TypeId(1)
 
-type "functype//cm_unrestricted_handle_named_like_an_operation.wado/$cm_binding__Dom_window" = fn() -> f64;  // TypeId(2)
+type "functype//cm_unrestricted_handle_named_like_an_operation.wado/$cm_binding__Dom_window" = fn() -> u64;  // TypeId(2)
 
 type "functype//cm_unrestricted_handle_named_like_an_operation.wado/$cm_export__run" = fn();  // TypeId(3)
 
@@ -18,7 +18,7 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_unrestricted_handle_named_like_an_operation.wado/$cm_binding__Dom_window"() with Dom {
-    return "wasi/web:demo/Dom::window"();
+    return builtin::i64_reinterpret_f64("wasi/web:demo/Dom::window"());
 }
 
 fn "cm_unrestricted_handle_named_like_an_operation.wado/$cm_export__run"() {

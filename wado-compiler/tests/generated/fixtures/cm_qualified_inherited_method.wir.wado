@@ -13,7 +13,7 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
 type "functype//wasi/wasi:demo/EventTarget::tag" = fn(f64, i32);  // TypeId(3)
 
-type "functype//cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag" = fn(f64) -> ref "core:prelude/string.wado//String";  // TypeId(4)
+type "functype//cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag" = fn(u64) -> ref "core:prelude/string.wado//String";  // TypeId(4)
 
 type "functype//cm_qualified_inherited_method.wado/$cm_export__run" = fn();  // TypeId(5)
 
@@ -32,7 +32,7 @@ fn "cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag"(self) with 
     let arr_8: ref Array<u8>;
     let i: i32;
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:demo/EventTarget::tag"(self, $outptr);
+    "wasi/wasi:demo/EventTarget::tag"(builtin::f64_reinterpret_i64(self), $outptr);
     ptr_3 = builtin::load_i32($outptr);
     len_4 = builtin::load_i32($outptr + 4);
     arr_8 = builtin::array_new<u8>(len_4);
@@ -51,7 +51,8 @@ fn "cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag"(self) with 
 }
 
 fn "cm_qualified_inherited_method.wado/$cm_export__run"() {
-    drop("cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag"(1));
+    let n: u64;
+    drop("cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag"(local.tee n(builtin::i64_reinterpret_f64(1))));
     "wasi/task-return"(0);
 }
 
