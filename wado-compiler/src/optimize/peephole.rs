@@ -62,7 +62,6 @@ pub(super) fn run_peephole(
     let callees = build_callee_map(project);
     let ctfe_builtins = build_ctfe_builtin_map(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    let const_fold_rule = ConstFoldRule::new(&type_table, &callees, &ctfe_builtins);
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
     let aggregate_forward_rule = AggregateForwardRule;
     let bitset_rule = MatchToBitsetRule::new(&type_table, select_id);
@@ -97,6 +96,9 @@ pub(super) fn run_peephole(
         // rebuilt for each body.
         let stores_aliased = func.stores_aliased_locals.clone();
         let elide_rule = ElideRule::new(&stores_aliased, &effects);
+        // Per function, as its CTFE budget and remembered misses are: what one
+        // body spends must not decide whether the next one folds.
+        let const_fold_rule = ConstFoldRule::new(&type_table, &callees, &ctfe_builtins);
         // Reference elimination runs post-inline only (it cleans up the ref
         // bindings inlining exposes). Its maps are built from the pristine
         // post-inline body.
