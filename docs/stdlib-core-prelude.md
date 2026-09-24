@@ -2913,7 +2913,7 @@ The flags value with only this bit set.
 
 ##### `fn inspect(&self, f: &mut Formatter)`
 
-### `pub struct Hole<T, V>`
+### `pub struct TemplateHole<T, V>`
 
 A hole handle minted by `ReflectTemplate::members()`: the literal text
 before the hole, the hole's source text and specifier presence are
