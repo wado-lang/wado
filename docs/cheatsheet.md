@@ -998,7 +998,7 @@ concat::<[i32], [bool, String]>([1], [true, "x"]);
 // A pack on either side of a scalar: nothing settles the ends, so spell them.
 fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { ... }
 middle::<[i32], String, [bool]>([1, "mid", true]);   // 3
-// middle([1, "mid", true]);              // ERROR: cannot infer `Pre`, `Post`
+// middle([1, "mid", true]);              // ERROR: cannot infer `Pre`, `K`, `Post`
 
 // Value spread (works with any tuple, not just packs)
 let a = [1, "hello"];
@@ -1459,7 +1459,7 @@ fn main() {
 
 `resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
 
-An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects, parameter defaults or type parameters); see [the spec](./spec.md#default-implementations).
+An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. A parameter may take a default, filled in at the call site. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects or type parameters); see [the spec](./spec.md#default-implementations).
 
 ```wado
 interface Log {
