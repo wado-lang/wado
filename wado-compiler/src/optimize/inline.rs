@@ -754,6 +754,31 @@ fn collect_inner_labels(callee: &Body, node: NodeRef, labels: &mut IndexSet<Stri
     callee.for_each_child(node, |c| collect_inner_labels(callee, c, labels));
 }
 
+/// Mints the labels of one caller's inlined blocks. A block encloses the call's
+/// arguments, so its label must differ from every label a break there can name.
+#[derive(Default)]
+struct InlineLabels {
+    taken: Option<IndexSet<String>>,
+    serial: u32,
+}
+
+impl InlineLabels {
+    fn fresh(&mut self, caller: &Body, stem: &str) -> String {
+        let taken = self.taken.get_or_insert_with(|| {
+            let mut taken = IndexSet::default();
+            collect_inner_labels(caller, NodeRef::Block(caller.root), &mut taken);
+            taken
+        });
+        loop {
+            let label = format!("$inline_{stem}_{}", self.serial);
+            self.serial += 1;
+            if !taken.contains(&label) {
+                return label;
+            }
+        }
+    }
+}
+
 /// Whether the folds `view` licenses delete a loop — directly, or inside a
 /// call they turn into a literal. The model prices a loop at three
 /// instructions; what it is worth is however many times it spins, so size
@@ -1737,8 +1762,7 @@ pub fn inline_functions(
                 address_taken: std::mem::take(&mut func.address_taken_locals),
                 stores_aliased: std::mem::take(&mut func.stores_aliased_locals),
             };
-            // Counter for generating unique inline labels
-            let mut inline_counter: u32 = 0;
+            let mut labels = InlineLabels::default();
             // Calls in this body that mutate no caller-reachable state, taken
             // *before* the splice (the call exprs survive as `reval.call_expr`
             // keys). Drives the graph-preserving gate below.
@@ -1763,7 +1787,7 @@ pub fn inline_functions(
                     &mut frame,
                     &project.type_table.borrow(),
                     &mut inlined_funcs,
-                    &mut inline_counter,
+                    &mut labels,
                     &mut reval,
                     false,
                 );
@@ -1863,7 +1887,7 @@ fn inline_calls_in_block(
     frame: &mut CallerFrame,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
-    inline_counter: &mut u32,
+    labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
     mut cold: bool,
 ) {
@@ -1910,7 +1934,7 @@ fn inline_calls_in_block(
                     frame,
                     type_table,
                     inlined_funcs,
-                    inline_counter,
+                    labels,
                     reval,
                     cold,
                 );
@@ -1929,7 +1953,7 @@ fn inline_calls_in_block(
                 frame,
                 type_table,
                 inlined_funcs,
-                inline_counter,
+                labels,
                 reval,
                 cold,
             ),
@@ -1943,7 +1967,7 @@ fn inline_calls_in_block(
                         frame,
                         type_table,
                         inlined_funcs,
-                        inline_counter,
+                        labels,
                         reval,
                         cold,
                     );
@@ -1956,7 +1980,7 @@ fn inline_calls_in_block(
                     frame,
                     type_table,
                     inlined_funcs,
-                    inline_counter,
+                    labels,
                     reval,
                     cold,
                 );
@@ -1969,7 +1993,7 @@ fn inline_calls_in_block(
                         frame,
                         type_table,
                         inlined_funcs,
-                        inline_counter,
+                        labels,
                         reval,
                         cold,
                     );
@@ -1983,7 +2007,7 @@ fn inline_calls_in_block(
                 frame,
                 type_table,
                 inlined_funcs,
-                inline_counter,
+                labels,
                 reval,
                 cold,
             ),
@@ -2004,7 +2028,7 @@ fn inline_top_level(
     frame: &mut CallerFrame,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
-    inline_counter: &mut u32,
+    labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) -> ExprId {
@@ -2014,7 +2038,7 @@ fn inline_top_level(
         candidates,
         frame,
         type_table,
-        inline_counter,
+        labels,
         reval,
         cold,
     );
@@ -2030,7 +2054,7 @@ fn inline_top_level(
             frame,
             type_table,
             inlined_funcs,
-            inline_counter,
+            labels,
             reval,
             cold,
         );
@@ -2044,7 +2068,7 @@ fn inline_top_level(
             frame,
             type_table,
             inlined_funcs,
-            inline_counter,
+            labels,
             reval,
             cold,
         );
@@ -2173,7 +2197,7 @@ fn build_inlined_labeled_block(
     call_span: Span,
     call_expr: ExprId,
     frame: &mut CallerFrame,
-    inline_counter: &mut u32,
+    labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
 ) -> ExprId {
     let sanitized_name: String = func_name
@@ -2186,8 +2210,7 @@ fn build_inlined_labeled_block(
             }
         })
         .collect();
-    let label = format!("$inline_{}_{}", sanitized_name, *inline_counter);
-    *inline_counter += 1;
+    let label = labels.fresh(caller, &sanitized_name);
 
     let local_offset = frame.local_count;
     let callee_param_count = candidate.params.len() as u32;
@@ -2288,7 +2311,7 @@ fn try_inline_call_expr(
     candidates: &IndexMap<FuncId, NirFunction>,
     frame: &mut CallerFrame,
     type_table: &TypeTable,
-    inline_counter: &mut u32,
+    labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) -> Option<(ExprId, FuncId)> {
@@ -2377,7 +2400,7 @@ fn try_inline_call_expr(
         call_span,
         call_id,
         frame,
-        inline_counter,
+        labels,
         reval,
     );
     Some((inlined, func_id))
@@ -3050,7 +3073,7 @@ fn inline_calls_in_expr(
     frame: &mut CallerFrame,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
-    inline_counter: &mut u32,
+    labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) {
@@ -3069,7 +3092,7 @@ fn inline_calls_in_expr(
                 frame,
                 type_table,
                 inlined_funcs,
-                inline_counter,
+                labels,
                 reval,
                 cold,
             );
@@ -3083,7 +3106,7 @@ fn inline_calls_in_expr(
                 frame,
                 type_table,
                 inlined_funcs,
-                inline_counter,
+                labels,
                 reval,
                 cold,
             );
@@ -3102,7 +3125,7 @@ fn inline_calls_in_expr(
             frame,
             type_table,
             inlined_funcs,
-            inline_counter,
+            labels,
             reval,
             cold,
         );
@@ -3113,7 +3136,7 @@ fn inline_calls_in_expr(
         candidates,
         frame,
         type_table,
-        inline_counter,
+        labels,
         reval,
         cold,
     ) {
