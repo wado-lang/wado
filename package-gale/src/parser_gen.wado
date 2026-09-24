@@ -4244,7 +4244,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
         } else {
             w.else_begin(`else if _atn_alt == ${i}`);
         }
-        emit_lr_branch_body(w, &lr_alts[valid[i]], rule, rk, labeled, ctx, &mut nc);
+        emit_lr_branch_body(w, &lr_alts[valid[i]], rule, rk, labeled, ctx, &mut nc, &lr_alts[valid[i]].suffix_first);
     }
     if !is_first {
         w.else_begin("else");
