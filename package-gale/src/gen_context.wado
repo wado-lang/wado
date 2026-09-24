@@ -746,6 +746,7 @@ impl GenContext {
     }
 
     fn expect_names(&self, sets: &List<Option<List<i32>>>, i: i32) -> Option<List<String>> {
+        // `Atn.decision_sites` is sparse: a site past its end marks no decision.
         if i < 0 || i >= sets.len() {
             return null;
         }
@@ -1387,16 +1388,6 @@ impl GenContext {
     pub fn first_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<String> {
         let ids = self.first_ids_of_elements_from(elements, start);
         return self.token_kinds.names_of(&ids);
-    }
-
-    pub fn elements_nullable_from(&mut self, elements: &List<Element>, start: i32) -> bool {
-        for let mut i = start; i < elements.len(); i += 1 {
-            let mut nv: List<String> = [];
-            if !self.element_is_nullable_deep(&elements[i], &mut nv) {
-                return false;
-            }
-        }
-        return true;
     }
 
     pub fn first_ids_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<i32> {

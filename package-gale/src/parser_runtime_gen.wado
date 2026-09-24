@@ -93,9 +93,7 @@ internal fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragme
     w.line("let _did = _recover_fragment(p);");
     w.line("p.recovering = _was;");
     w.begin("if !_did || p.pos == _before");
-    w.line("let _sk = p.advance();");
-    w.line("p.tokens.mark_skipped(_sk);");
-    w.line("p.b.skip(_sk);");
+    w.line("p.skip_one();");
     w.end();
     w.end();
     w.blank();
@@ -259,7 +257,7 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     w.line("assert self.b.node_kind(node) == rule, \"recover_rule: the resumed node is the failed rule's\";");
     w.line("self.commit_pending();");
     w.line("self.recovering = false;");
-    w.line("self.skip_until(&self.resync_set());");
+    w.line("self.skip_until(&self.resync_set(&[]));");
     w.line("return true;");
     w.end();
     w.blank();
@@ -294,9 +292,10 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
 
     let mut rs = FnSpec::new("resync_set");
     rs.set_receiver("&self");
+    rs.add_param("base", "&List<i32>");
     rs.set_return_type("List<i32>");
     rs.emit_begin(w);
-    w.line("let mut set: List<i32> = [];");
+    w.line("let mut set = *base;");
     w.begin("for let s of &self.sites");
     w.line("if *s < 0 { continue; }");
     w.line("let f = &CALL_FOLLOW_SETS[CALL_FOLLOW[*s]];");
@@ -339,7 +338,7 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     );
     w.line("return false;");
     w.end();
-    w.line("self.report_sync(names, RecoveryAction::Deleted);");
+    w.line("self.report_extraneous(names, RecoveryAction::Deleted);");
     w.line("self.skip_one();");
     w.line("return true;");
     w.end();
@@ -379,11 +378,8 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     w.line("self.fail_at_decision(names);");
     w.line("return;");
     w.end();
-    w.line("self.report_sync(names, RecoveryAction::SkippedTo);");
-    w.line("let mut set = self.resync_set();");
-    w.line("while set.len() < expected.len() { set.push(0); }");
-    w.line("for let mut i = 0; i < expected.len(); i += 1 { set[i] = set[i] | expected[i]; }");
-    w.line("self.skip_until(&set);");
+    w.line("self.report_extraneous(names, RecoveryAction::SkippedTo);");
+    w.line("self.skip_until(&self.resync_set(expected));");
     w.end();
     w.blank();
 
@@ -398,7 +394,7 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     w.end();
     w.blank();
 
-    let mut rsy = FnSpec::new("report_sync");
+    let mut rsy = FnSpec::new("report_extraneous");
     rsy.set_receiver("&mut self");
     rsy.add_param("names", "&List<i32>");
     rsy.add_param("recovery", "RecoveryAction");
@@ -842,21 +838,6 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         w.blank();
     }
 
-    // Record a local recovery edit as a diagnostic and keep parsing (no
-    // `recovering`): a deleted spurious terminal (`ExtraToken`) or an inserted
-    // required terminal (`MissingToken`).
-    let mut rex = FnSpec::new("report_extra");
-    rex.set_receiver("&mut self");
-    rex.add_param("kind", "i32");
-    rex.emit_begin(w);
-    emit_diag_prologue(w);
-    w.line(
-        "self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::Deleted));",
-    );
-    w.line("self.note_error();");
-    w.end();
-    w.blank();
-
     // At EOF the insertion closes a construct the input never finished.
     let mut rmi = FnSpec::new("report_missing");
     rmi.set_receiver("&mut self");
@@ -993,10 +974,8 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // single-token deletion: the current token is spurious, the expected one
     // follows it.
     w.begin("if self.peek_at(1) == kind");
-    w.line("self.report_extra(kind);");
-    w.line("let _sk = self.advance();");
-    w.line("self.tokens.mark_skipped(_sk);");
-    w.line("self.b.skip(_sk);");
+    w.line("self.report_extraneous(&[kind], RecoveryAction::Deleted);");
+    w.line("self.skip_one();");
     emit_consume_kind_return(w);
     w.end();
     // single-token insertion: the current token continues the rule, so the
@@ -1009,8 +988,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     // Neither match nor a single-token edit fits. If the rule's FIRST-of-rest
     // (`sync`) is known, skip the offending run into a lossless `<error>`
-    // region and resync to it, then continue; otherwise record the deepest
-    // failure and unwind.
+    // region and resync to it, then continue; otherwise fail the rule.
     w.begin("if !sync.is_empty()");
     // Nothing to resync onto at EOF: the missing terminal completes the
     // construct only where the input may end after it.
@@ -1024,9 +1002,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.begin("loop");
     w.line("let _k = self.kinds[self.pos];");
     w.line("if _k == TK_EOF || _k == kind || kind_set_has(sync, _k) { break; }");
-    w.line("let _sk = self.advance();");
-    w.line("self.tokens.mark_skipped(_sk);");
-    w.line("self.b.skip(_sk);");
+    w.line("self.skip_one();");
     w.end();
     w.line("self.b.finish_node(self.last_end());");
     w.end();

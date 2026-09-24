@@ -98,24 +98,24 @@ impl Walker {
         }
     }
 
-    fn kinds(&self, bits: &List<u64>, num_tokens: i32) -> List<i32> {
-        let mut out: List<i32> = [];
-        for let mut k = 0; k < num_tokens; k += 1 {
-            if bits_test(bits, k) {
-                out.push(k);
-            }
-        }
-        return out;
-    }
-
     /// `null` where the rule may end instead: what comes next is the caller's.
     fn expected(&mut self, atn: &Atn, from: i32) -> Option<List<i32>> {
         let next = self.local_next(atn, from);
         if next.reaches_end {
             return null;
         }
-        return Option::Some(self.kinds(&next.bits, atn.num_tokens));
+        return Option::Some(bits_to_kinds(&next.bits, atn.num_tokens));
     }
+}
+
+fn bits_to_kinds(bits: &List<u64>, num_tokens: i32) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let mut k = 0; k < num_tokens; k += 1 {
+        if bits_test(bits, k) {
+            out.push(k);
+        }
+    }
+    return out;
 }
 
 /// `eof` is `TK_EOF`, which no wildcard or `~X` matches.
@@ -139,7 +139,7 @@ pub fn recovery_sets(atn: &Atn, eof: i32) -> RecoverySets {
     let mut call_follow: List<List<i32>> = [];
     for let ret of &atn.call_site_returns {
         call_follow.push(
-            if *ret < 0 { [] as List<i32> } else { w.kinds(&w.local_next(atn, *ret).bits, atn.num_tokens) },
+            if *ret < 0 { [] as List<i32> } else { bits_to_kinds(&w.local_next(atn, *ret).bits, atn.num_tokens) },
         );
     }
 

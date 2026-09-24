@@ -3868,7 +3868,7 @@ fn gen_alt_elements(
             // inserts a missing terminal against (a recovery-only edit; on valid
             // input the leaf matches and `sync` is never read).
             let sync = ctx.first_of_elements_from(elements, i + 1);
-            let rest_nullable = ctx.elements_nullable_from(elements, i + 1);
+            let rest_nullable = ctx.tail_is_nullable_deep(elements, i + 1);
             gen_op_leaf(w, op, ctx, &mut name_counts, &sync, proven, rest_nullable);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
@@ -3926,7 +3926,7 @@ fn gen_elements_with_non_greedy(
             // only deleted-or-unwound (recovery quality is uniform with the
             // top-level sequence).
             let sync = ctx.first_of_elements_from(elements, i + 1);
-            let rest_nullable = ctx.elements_nullable_from(elements, i + 1);
+            let rest_nullable = ctx.tail_is_nullable_deep(elements, i + 1);
             gen_op_leaf(w, op, ctx, name_counts, &sync, proven, rest_nullable);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
@@ -4043,6 +4043,7 @@ fn gen_loop_back_sync(w: &mut CodeWriter, ctx: &mut GenContext, rep_op: &RepeatO
 /// The call-site stamps ahead of a `_parse_X` call that its entry wrapper pushes:
 /// `p.site` for recovery's resync, `p.atn_ret_pending` for full-context prediction.
 fn gen_call_site_stamps(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
+    // `Atn.call_site_returns` is sparse: a site past its end has no follow.
     let known = call_site >= 0 && call_site < ctx.recovery_sets().call_follow.len();
     w.line(`p.site = ${if known { call_site } else { -1 }};`);
     if !ctx.needs_atn() {

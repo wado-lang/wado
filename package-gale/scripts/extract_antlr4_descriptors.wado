@@ -840,10 +840,9 @@ fn write_category_test_files<S: AsStrSlice, S1: AsStrSlice>(
     return written.len();
 }
 
-/// True when the descriptor's own `[errors]` report a parser recovery that can
-/// consume input — the only case where the compare may drop Gale's `<skip …>`
-/// marker. See "Deleted terminals in parse trees" in `antlr4-compatibility.md`.
-fn descriptor_deletes_tokens(parsed: &ParsedDescriptor) -> bool {
+/// True when the descriptor's `[errors]` report a recovery that can consume
+/// input. See "Skipped terminals in parse trees" in `antlr4-compatibility.md`.
+fn descriptor_consumes_tokens(parsed: &ParsedDescriptor) -> bool {
     for let line of parsed.errors.lines() {
         if !line.starts_with("line ") {
             continue;
@@ -1825,7 +1824,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                                 &parsed.input,
                                 &parsed.output,
                                 &parsed.start,
-                                descriptor_deletes_tokens(&parsed) && output_is_tree_print(&parsed.output),
+                                descriptor_consumes_tokens(&parsed) && output_is_tree_print(&parsed.output),
                                 &stage_c_triage,
                                 parsed.slave_grammars.len(),
                             ));
@@ -1896,7 +1895,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                     &parsed.start,
                     &normalised,
                     &sub_rule,
-                    descriptor_deletes_tokens(&parsed),
+                    descriptor_consumes_tokens(&parsed),
                     &stage_b_triage,
                     parsed.slave_grammars.len(),
                 ));
@@ -1907,7 +1906,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                     &parsed.input,
                     &parsed.start,
                     &normalised,
-                    descriptor_deletes_tokens(&parsed),
+                    descriptor_consumes_tokens(&parsed),
                     &stage_b_triage,
                     parsed.slave_grammars.len(),
                 ));

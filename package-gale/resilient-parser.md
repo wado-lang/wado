@@ -86,11 +86,12 @@ one can, and otherwise fails the rule. After a loop iteration, the loop skips
 to what it or the rules under way can continue with. Neither runs where the
 rule may end at the decision, which leaves the token to the caller.
 
-A failed rule recovers at its own entry: it reports once, then skips to what
-the rules under way can continue with — the follow of each call site on the
-invocation stack, computed from the ATN. The skipped tokens stay in the failed
-rule's node, and the caller carries on. Reports are suppressed from one error
-until a token matches, so one mistake is one diagnostic.
+A failed rule recovers at its own entry. It reports once, then skips to a token
+the rules under way can continue with. That set is the union of the follows of
+the call sites on the invocation stack, computed from the ATN. The skipped
+tokens stay in the failed rule's node, and the caller carries on. After an
+error, neither a failed rule nor a sync reports again until a token matches, so
+the cascade of one mistake is one diagnostic.
 
 ## Diagnostics
 

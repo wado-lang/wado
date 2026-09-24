@@ -1172,7 +1172,7 @@ impl Parser {
         assert self.b.node_kind(node) == rule, "recover_rule: the resumed node is the failed rule's";
         self.commit_pending();
         self.recovering = false;
-        self.skip_until(&self.resync_set());
+        self.skip_until(&self.resync_set(&[]));
         return true;
     }
 
@@ -1194,8 +1194,8 @@ impl Parser {
         self.err_row = self.b.checkpoint();
     }
 
-    fn resync_set(&self) -> List<i32> {
-        let mut set: List<i32> = [];
+    fn resync_set(&self, base: &List<i32>) -> List<i32> {
+        let mut set = *base;
         for let s of &self.sites {
             if *s < 0 { continue; }
             let f = &CALL_FOLLOW_SETS[CALL_FOLLOW[*s]];
@@ -1223,7 +1223,7 @@ impl Parser {
         if self.speculating || self.kinds[self.pos] == TK_EOF || !kind_set_has(expected, self.peek_at(1)) {
             return false;
         }
-        self.report_sync(names, RecoveryAction::Deleted);
+        self.report_extraneous(names, RecoveryAction::Deleted);
         self.skip_one();
         return true;
     }
@@ -1246,11 +1246,8 @@ impl Parser {
             self.fail_at_decision(names);
             return;
         }
-        self.report_sync(names, RecoveryAction::SkippedTo);
-        let mut set = self.resync_set();
-        while set.len() < expected.len() { set.push(0); }
-        for let mut i = 0; i < expected.len(); i += 1 { set[i] = set[i] | expected[i]; }
-        self.skip_until(&set);
+        self.report_extraneous(names, RecoveryAction::SkippedTo);
+        self.skip_until(&self.resync_set(expected));
     }
 
     fn fail_at_decision(&mut self, names: &List<i32>) {
@@ -1258,16 +1255,10 @@ impl Parser {
         self.fail_on_token("got", names, code);
     }
 
-    fn report_sync(&mut self, names: &List<i32>, recovery: RecoveryAction) {
+    fn report_extraneous(&mut self, names: &List<i32>, recovery: RecoveryAction) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
         if self.in_error_mode() { return; }
         self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));
-        self.note_error();
-    }
-
-    fn report_extra(&mut self, kind: i32) {
-        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::Deleted));
         self.note_error();
     }
 
@@ -1332,10 +1323,8 @@ impl Parser {
             return self.pos;
         }
         if self.peek_at(1) == kind {
-            self.report_extra(kind);
-            let _sk = self.advance();
-            self.tokens.mark_skipped(_sk);
-            self.b.skip(_sk);
+            self.report_extraneous(&[kind], RecoveryAction::Deleted);
+            self.skip_one();
             if kind == TK_EOF {
                 self.b.token(self.pos);
                 return self.pos;
@@ -1361,9 +1350,7 @@ impl Parser {
                 loop {
                     let _k = self.kinds[self.pos];
                     if _k == TK_EOF || _k == kind || kind_set_has(sync, _k) { break; }
-                    let _sk = self.advance();
-                    self.tokens.mark_skipped(_sk);
-                    self.b.skip(_sk);
+                    self.skip_one();
                 }
                 self.b.finish_node(self.last_end());
             }

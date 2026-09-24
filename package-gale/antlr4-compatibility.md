@@ -129,7 +129,7 @@ only ever dropped in tail position (followed by closing parens /
 whitespace), so an `<EOF>` that is genuine token _text_ mid-tree is left
 untouched.
 
-### Deleted terminals in parse trees
+### Skipped terminals in parse trees
 
 A token that recovery consumes prints as a bare child in ANTLR4 and as
 `<skip x>` in Gale. That covers single-token deletion, the run a loop skips
