@@ -2096,14 +2096,14 @@ fn "./sub/httpbin_handler.wado/parse_query_params"($mv$query$repr, $mv$query$use
     let repr_95: ref Array<u8>;
     let len_97: i32;
     let part_98: ref Array<u8>;
-    let $sroa_sep_repr: ref Array<u8>;
+    let $sroa_sep_repr_100: ref Array<u8>;
     let $av_109: i32;
     params = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(elements_9 = array.new_fixed<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(); struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: elements_9, used: 0 }), entries: ref.as_non_null(elements_10 = array.new_fixed<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(); struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: elements_10, used: 0 }), size: 0, deleted_count: 0 };
     if $mv$query$used == 0 {
         return params;
     }
-    $sroa_sep_repr = array.new_fixed<u8>(38);
-    $iter_0 = struct.new "core:prelude/string.wado//StrSplitIter" { repr: $mv$query$repr, used: $mv$query$used, pos: 0, sep_repr: $sroa_sep_repr, sep_at: 0, sep_len: 1, finished: 0 };
+    $sroa_sep_repr_100 = array.new_fixed<u8>(38);
+    $iter_0 = struct.new "core:prelude/string.wado//StrSplitIter" { repr: $mv$query$repr, used: $mv$query$used, pos: 0, sep_repr: $sroa_sep_repr_100, sep_at: 0, sep_len: 1, finished: 0 };
     b141: block {
         l142: loop {
             $match_7 = "core:prelude/string.wado/core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next$spec0"($iter_0);
@@ -2198,19 +2198,19 @@ fn "./sub/httpbin_handler.wado/headers_to_json"(headers) with Fields {
     let self_38: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
     let value_39: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>";
     let used: i32;
-    let $sroa_$iter_0_repr: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
-    let $sroa_$iter_0_index: i32;
-    let $sroa_item_1: ref "core:prelude//List<u8>";
-    let $sroa_$sroa_item_0_used: i32;
+    let $sroa_$iter_0_repr_48: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
+    let $sroa_$iter_0_index_49: i32;
+    let $sroa_item_1_52: ref "core:prelude//List<u8>";
+    let $sroa_$sroa_item_0_51_used_54: i32;
     all = "httpbin_405.wado/$cm_binding__Fields_copy_all"(headers);
     map = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(elements_8 = array.new_fixed<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(); struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: elements_8, used: 0 }), entries: ref.as_non_null(elements_9 = array.new_fixed<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(); struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: elements_9, used: 0 }), size: 0, deleted_count: 0 };
     end = all.used;
-    $sroa_$iter_0_repr = all.repr;
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_repr_48 = all.repr;
+    $sroa_$iter_0_index_49 = 0;
     b149: block {
         l150: loop {
-            break_if b149 $sroa_$iter_0_index >= end;
-            v_16 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($sroa_$iter_0_repr, $sroa_$iter_0_index);
+            break_if b149 $sroa_$iter_0_index_49 >= end;
+            v_16 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($sroa_$iter_0_repr_48, $sroa_$iter_0_index_49);
             v_17 = v_16.0;
             let $array_clone_src_1: ref Array<u8>;
             $array_clone_src_1 = v_17.repr;
@@ -2219,15 +2219,15 @@ fn "./sub/httpbin_handler.wado/headers_to_json"(headers) with Fields {
             let $array_clone_dst_2: ref Array<u8>;
             $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
             builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
-            $sroa_$sroa_item_0_used = $load_4;
+            $sroa_$sroa_item_0_51_used_54 = $load_4;
             v_18 = v_16.1;
-            $sroa_item_1 = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = v_18.repr; let $array_clone_len_6: i32; $array_clone_len_6 = local.tee $load_7(v_18.used); let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>($array_clone_len_6); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6); $array_clone_dst_5), used: $load_7 };
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
-            key_20 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_dst_8: ref Array<u8>; $array_clone_dst_8 = builtin::array_new<u8>($sroa_$sroa_item_0_used); builtin::array_copy<u8>($array_clone_dst_8, 0, $array_clone_dst_2, 0, $sroa_$sroa_item_0_used); $array_clone_dst_8), used: $sroa_$sroa_item_0_used };
-            value_21 = struct.new "core:value//Value::String" { discriminant: 7, payload_0: ref.as_non_null("core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_lossy<wasi:http/types.wado/FieldValue>"($sroa_item_1)) };
+            $sroa_item_1_52 = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = v_18.repr; let $array_clone_len_6: i32; $array_clone_len_6 = local.tee $load_7(v_18.used); let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>($array_clone_len_6); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6); $array_clone_dst_5), used: $load_7 };
+            $sroa_$iter_0_index_49 = $sroa_$iter_0_index_49 + 1;
+            key_20 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_dst_8: ref Array<u8>; $array_clone_dst_8 = builtin::array_new<u8>($sroa_$sroa_item_0_51_used_54); builtin::array_copy<u8>($array_clone_dst_8, 0, $array_clone_dst_2, 0, $sroa_$sroa_item_0_51_used_54); $array_clone_dst_8), used: $sroa_$sroa_item_0_51_used_54 };
+            value_21 = struct.new "core:value//Value::String" { discriminant: 7, payload_0: ref.as_non_null("core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_lossy<wasi:http/types.wado/FieldValue>"($sroa_item_1_52)) };
             $inline_core_collections_TreeMap_core_prelude_string_wado_String_core_value_Value___insert_11: block {
                 existing_index = block -> i32 {
-                    "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::find_index"(map, key_20.repr, $sroa_$sroa_item_0_used);
+                    "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::find_index"(map, key_20.repr, $sroa_$sroa_item_0_51_used_54);
                 };
                 if existing_index >= 0 {
                     self_27 = map.entries; $v1 = self_27.used; if @unlikely(existing_index >= $v1) {
@@ -2239,7 +2239,7 @@ fn "./sub/httpbin_handler.wado/headers_to_json"(headers) with Fields {
                 }
                 new_index = local.tee $load_12(map.entries).used;
                 self_38 = $load_12;
-                value_39 = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>" { key: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_12: ref Array<u8>; $array_clone_src_12 = key_20.repr; let $array_clone_dst_13: ref Array<u8>; $array_clone_dst_13 = builtin::array_new<u8>($sroa_$sroa_item_0_used); builtin::array_copy<u8>($array_clone_dst_13, 0, $array_clone_src_12, 0, $sroa_$sroa_item_0_used); $array_clone_dst_13), used: $sroa_$sroa_item_0_used }, value: value_21, deleted: 0 };
+                value_39 = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>" { key: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_12: ref Array<u8>; $array_clone_src_12 = key_20.repr; let $array_clone_dst_13: ref Array<u8>; $array_clone_dst_13 = builtin::array_new<u8>($sroa_$sroa_item_0_51_used_54); builtin::array_copy<u8>($array_clone_dst_13, 0, $array_clone_src_12, 0, $sroa_$sroa_item_0_51_used_54); $array_clone_dst_13), used: $sroa_$sroa_item_0_51_used_54 }, value: value_21, deleted: 0 };
                 used = self_38.used;
                 if @unlikely(used >= builtin::array_len(self_38.repr)) {
                     cold_path;
@@ -2262,10 +2262,10 @@ fn "./sub/httpbin_handler.wado/read_body_from_request"(request) {
     let $pattern_temp_1: ref "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]";
     let packed: i64;
     let all: ref "core:prelude//List<u8>";
-    let $sroa_$pattern_temp_0_0: i32;
+    let $sroa_$pattern_temp_0_0_14: i32;
     let elements: ref Array<u8>;
-    $sroa_$pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/future-new:transmission-wasi/http/types.wado#error-code"()));
-    $pattern_temp_1 = "httpbin_405.wado/$cm_binding__Request_consume_body"(request, $sroa_$pattern_temp_0_0);
+    $sroa_$pattern_temp_0_0_14 = builtin::i32_wrap_i64(local.tee packed("wasi/future-new:transmission-wasi/http/types.wado#error-code"()));
+    $pattern_temp_1 = "httpbin_405.wado/$cm_binding__Request_consume_body"(request, $sroa_$pattern_temp_0_0_14);
     body_stream = $pattern_temp_1.0;
     body = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_lossy<core:prelude/list.wado/List<u8>>"($inline_core_prelude_types_wado_Stream_u8___read_to_end_1: block -> ref "core:prelude//List<u8>" {
         elements = array.new_fixed<u8>();
@@ -5439,7 +5439,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     let $sroa_slot_134: u32;
     let $sroa_slot_135: i32;
     let $fused_slot_136: char;
-    let $sroa_$iter_0_byte_index: i32;
+    let $sroa_$iter_0_byte_index_139: i32;
     let $licm_buf_140: ref "core:prelude/string.wado//String";
     let $licm_arith_141: bool;
     let $tmpl_buf_142: ref "core:prelude/string.wado//String";
@@ -5488,44 +5488,44 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     builtin::array_set_u8(self_12.repr, start_150, 34);
     count = 0;
     truncated = 0;
-    $sroa_$iter_0_byte_index = 0;
+    $sroa_$iter_0_byte_index_139 = 0;
     $licm_buf_140 = f.buf;
     $licm_arith_141 = limit >= 0;
     $tmpl_buf_142 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $hfs_used_347 = $licm_buf_140.used;
     b586: block {
         l587: loop {
-            break_if b586 $sroa_$iter_0_byte_index >= $mv$text$used;
+            break_if b586 $sroa_$iter_0_byte_index_139 >= $mv$text$used;
             $sroa_slot_134 = 0;
             $sroa_slot_135 = 0;
             $inline_decode_char_at_6: block {
-                b0 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index);
+                b0 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_139);
                 if b0 <u 128 {
                     $sroa_slot_134 = b0;
                     $sroa_slot_135 = 1;
                     break $inline_decode_char_at_6;
                 }
                 if b0 <u 224 {
-                    b1_24 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index + 1);
+                    b1_24 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_139 + 1);
                     $sroa_slot_134 = ((b0 & 31) << 6) | (b1_24 & 63);
                     $sroa_slot_135 = 2;
                     break $inline_decode_char_at_6;
                 }
                 if b0 <u 240 {
-                    b1_25 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index + 1);
-                    b2_26 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index + 2);
+                    b1_25 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_139 + 1);
+                    b2_26 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_139 + 2);
                     $sroa_slot_134 = (((b0 & 15) << 12) | ((b1_25 & 63) << 6)) | (b2_26 & 63);
                     $sroa_slot_135 = 3;
                     break $inline_decode_char_at_6;
                 }
-                b1_27 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index + 1);
-                b2_28 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index + 2);
-                b3 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index + 3);
+                b1_27 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_139 + 1);
+                b2_28 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_139 + 2);
+                b3 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_139 + 3);
                 $sroa_slot_134 = ((((b0 & 7) << 18) | ((b1_27 & 63) << 12)) | ((b2_28 & 63) << 6)) | (b3 & 63);
                 $sroa_slot_135 = 4;
                 break $inline_decode_char_at_6;
             };
-            $sroa_$iter_0_byte_index = $sroa_$iter_0_byte_index + $sroa_slot_135;
+            $sroa_$iter_0_byte_index_139 = $sroa_$iter_0_byte_index_139 + $sroa_slot_135;
             $fused_slot_136 = $sroa_slot_134;
             if select i32($licm_arith_141, count >= limit, 0) {
                 truncated = 1;
@@ -9503,7 +9503,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     let $sroa_slot_134: u32;
     let $sroa_slot_135: i32;
     let $fused_slot_136: char;
-    let $sroa_$iter_0_byte_index: i32;
+    let $sroa_$iter_0_byte_index_139: i32;
     let $tmpl_buf_142: ref "core:prelude/string.wado//String";
     let new_used_149: i32;
     let start_150: i32;
@@ -9531,8 +9531,8 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     let start_306: i32;
     let new_used_319: i32;
     let start_320: i32;
-    let $sroa_v_repr: ref Array<u8>;
-    let $sroa_v_used: i32;
+    let $sroa_v_repr_332: ref Array<u8>;
+    let $sroa_v_used_333: i32;
     let $hfs_used_344: i32;
     new_used_149 = f.used + 1;
     if @unlikely(new_used_149 > builtin::array_len(f.repr)) {
@@ -9544,44 +9544,44 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     builtin::array_set_u8(f.repr, start_150, 34);
     count = 0;
     truncated = 0;
-    $sroa_v_repr = text.repr;
-    $sroa_v_used = text.end;
-    $sroa_$iter_0_byte_index = text.start;
+    $sroa_v_repr_332 = text.repr;
+    $sroa_v_used_333 = text.end;
+    $sroa_$iter_0_byte_index_139 = text.start;
     $tmpl_buf_142 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $hfs_used_344 = f.used;
     b804: block {
         l805: loop {
-            break_if b804 $sroa_$iter_0_byte_index >= $sroa_v_used;
+            break_if b804 $sroa_$iter_0_byte_index_139 >= $sroa_v_used_333;
             $sroa_slot_134 = 0;
             $sroa_slot_135 = 0;
             $inline_decode_char_at_6: block {
-                b0 = builtin::array_get_value<u8>($sroa_v_repr, $sroa_$iter_0_byte_index);
+                b0 = builtin::array_get_value<u8>($sroa_v_repr_332, $sroa_$iter_0_byte_index_139);
                 if b0 <u 128 {
                     $sroa_slot_134 = b0;
                     $sroa_slot_135 = 1;
                     break $inline_decode_char_at_6;
                 }
                 if b0 <u 224 {
-                    b1_24 = builtin::array_get_value<u8>($sroa_v_repr, $sroa_$iter_0_byte_index + 1);
+                    b1_24 = builtin::array_get_value<u8>($sroa_v_repr_332, $sroa_$iter_0_byte_index_139 + 1);
                     $sroa_slot_134 = ((b0 & 31) << 6) | (b1_24 & 63);
                     $sroa_slot_135 = 2;
                     break $inline_decode_char_at_6;
                 }
                 if b0 <u 240 {
-                    b1_25 = builtin::array_get_value<u8>($sroa_v_repr, $sroa_$iter_0_byte_index + 1);
-                    b2_26 = builtin::array_get_value<u8>($sroa_v_repr, $sroa_$iter_0_byte_index + 2);
+                    b1_25 = builtin::array_get_value<u8>($sroa_v_repr_332, $sroa_$iter_0_byte_index_139 + 1);
+                    b2_26 = builtin::array_get_value<u8>($sroa_v_repr_332, $sroa_$iter_0_byte_index_139 + 2);
                     $sroa_slot_134 = (((b0 & 15) << 12) | ((b1_25 & 63) << 6)) | (b2_26 & 63);
                     $sroa_slot_135 = 3;
                     break $inline_decode_char_at_6;
                 }
-                b1_27 = builtin::array_get_value<u8>($sroa_v_repr, $sroa_$iter_0_byte_index + 1);
-                b2_28 = builtin::array_get_value<u8>($sroa_v_repr, $sroa_$iter_0_byte_index + 2);
-                b3 = builtin::array_get_value<u8>($sroa_v_repr, $sroa_$iter_0_byte_index + 3);
+                b1_27 = builtin::array_get_value<u8>($sroa_v_repr_332, $sroa_$iter_0_byte_index_139 + 1);
+                b2_28 = builtin::array_get_value<u8>($sroa_v_repr_332, $sroa_$iter_0_byte_index_139 + 2);
+                b3 = builtin::array_get_value<u8>($sroa_v_repr_332, $sroa_$iter_0_byte_index_139 + 3);
                 $sroa_slot_134 = ((((b0 & 7) << 18) | ((b1_27 & 63) << 12)) | ((b2_28 & 63) << 6)) | (b3 & 63);
                 $sroa_slot_135 = 4;
                 break $inline_decode_char_at_6;
             };
-            $sroa_$iter_0_byte_index = $sroa_$iter_0_byte_index + $sroa_slot_135;
+            $sroa_$iter_0_byte_index_139 = $sroa_$iter_0_byte_index_139 + $sroa_slot_135;
             $fused_slot_136 = $sroa_slot_134;
             if count >= 256 {
                 truncated = 1;
@@ -10590,9 +10590,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -10600,11 +10600,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l950: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b951: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b951: block {
                 l952: loop {
                     break_if b951 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l952;
                 };
@@ -10622,8 +10622,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -10635,8 +10635,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l950;
@@ -11029,9 +11029,9 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
     let new_used_155: i32;
     let start_156: i32;
     let buf_160: ref "core:prelude/string.wado//String";
-    let $sroa_v_entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
-    let $sroa_$iter_0_repr: ref "Array<core:value/Value>";
-    let $sroa_$iter_0_index: i32;
+    let $sroa_v_entries_182: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
+    let $sroa_$iter_0_repr_191: ref "Array<core:value/Value>";
+    let $sroa_$iter_0_index_192: i32;
     let buf_194: ref "core:prelude/string.wado//String";
     return let $match_scrut_0: ref "core:value//Value", $match_scrut_0 = self.value, (if local.tee $load_1($match_scrut_0.discriminant) == 0 -> ref null "core:serde//SerializeError" {
         "core:json/write_json_null"(s.buf);
@@ -11082,13 +11082,13 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
         builtin::array_copy<u8>(self_57.repr, start_68, global:core:value::$const_obj_98, 0, 1);
         seq = struct.new "core:json//JsonSeqSerializer" { buf: s.buf, count: 0 };
         end_74 = arr.used;
-        $sroa_$iter_0_repr = arr.repr;
-        $sroa_$iter_0_index = 0;
+        $sroa_$iter_0_repr_191 = arr.repr;
+        $sroa_$iter_0_index_192 = 0;
         b1007: block {
             l1008: loop {
-                break_if b1007 $sroa_$iter_0_index >= end_74;
-                ref_val = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: builtin::array_get_value<ref "core:value//Value">($sroa_$iter_0_repr, $sroa_$iter_0_index) };
-                $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
+                break_if b1007 $sroa_$iter_0_index_192 >= end_74;
+                ref_val = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: builtin::array_get_value<ref "core:value//Value">($sroa_$iter_0_repr_191, $sroa_$iter_0_index_192) };
+                $sroa_$iter_0_index_192 = $sroa_$iter_0_index_192 + 1;
                 $local_30 = "core:json/core:json/JsonSeqSerializer^core:serde/SerializeSeq::element<core:value/Value>"(seq, ref_val);
                 if @likely(ref.is_null($local_30)) {
                 } else {
@@ -11121,8 +11121,8 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
         self_94.used = new_used_104;
         builtin::array_copy<u8>(self_94.repr, start_105, global:core:value::$const_obj_96, 0, 1);
         m = struct.new "core:json//JsonMapSerializer" { buf: s.buf, count: 0, need_value: 0 };
-        $sroa_v_entries = map.entries;
-        $iter_1 = struct.new "core:collections//TreeMapEntriesRefIter<core:prelude/string.wado/String,core:value/Value>" { entries: $sroa_v_entries, index: 0 };
+        $sroa_v_entries_182 = map.entries;
+        $iter_1 = struct.new "core:collections//TreeMapEntriesRefIter<core:prelude/string.wado/String,core:value/Value>" { entries: $sroa_v_entries_182, index: 0 };
         b1013: block {
             l1014: loop {
                 $local_31 = "core:collections/core:collections/TreeMapEntriesRefIter<core:prelude/string.wado/String,core:value/Value>^core:prelude/traits.wado/Iterator::next"($iter_1);

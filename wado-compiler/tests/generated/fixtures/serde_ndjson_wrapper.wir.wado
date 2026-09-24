@@ -375,9 +375,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -385,11 +385,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l23: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b24: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b24: block {
                 l25: loop {
                     break_if b24 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l25;
                 };
@@ -407,8 +407,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -420,8 +420,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l23;
@@ -438,7 +438,7 @@ fn "core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize
     let new_used_57: i32;
     let start_58: i32;
     let r: ref null "core:serde//SerializeError";
-    let $sroa_st_buf: ref "core:prelude/string.wado//String";
+    let $sroa_st_buf_82: ref "core:prelude/string.wado//String";
     self_19 = s.buf;
     new_used_29 = self_19.used + 1;
     if @unlikely(new_used_29 > builtin::array_len(self_19.repr)) {
@@ -448,20 +448,20 @@ fn "core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize
     start_30 = self_19.used;
     self_19.used = new_used_29;
     builtin::array_copy<u8>(self_19.repr, start_30, global:core:serde::$const_obj_21, 0, 1);
-    $sroa_st_buf = s.buf;
+    $sroa_st_buf_82 = s.buf;
     v_40 = self.ok;
-    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"($sroa_st_buf, global:core:serde::$const_obj_20, 0);
-    r = "core:json/write_json_bool"($sroa_st_buf, v_40);
+    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"($sroa_st_buf_82, global:core:serde::$const_obj_20, 0);
+    r = "core:json/write_json_bool"($sroa_st_buf_82, v_40);
     if @likely(ref.is_null(r)) {
     } else {
         $qm_e_11 = ref.as_non_null(r);
         cold_path;
         return $qm_e_11;
     }
-    return new_used_57 = $sroa_st_buf.used + 1, if @unlikely(new_used_57 > builtin::array_len($sroa_st_buf.repr)) {
+    return new_used_57 = $sroa_st_buf_82.used + 1, if @unlikely(new_used_57 > builtin::array_len($sroa_st_buf_82.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_st_buf, new_used_57);
-    }, start_58 = $sroa_st_buf.used, $sroa_st_buf.used = new_used_57, builtin::array_copy<u8>($sroa_st_buf.repr, start_58, global:core:serde::$const_obj_19, 0, 1), ref.null none;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_st_buf_82, new_used_57);
+    }, start_58 = $sroa_st_buf_82.used, $sroa_st_buf_82.used = new_used_57, builtin::array_copy<u8>($sroa_st_buf_82.repr, start_58, global:core:serde::$const_obj_19, 0, 1), ref.null none;
 }
 
 export fn "serde_ndjson_wrapper.wado/$cm_export__run" as "run"

@@ -163,7 +163,7 @@ fn "effect_handler_renamed_import.wado/run"() with Stdout {
     let packed: i64;
     let rx_49: i32;
     let tx_50: i32;
-    let $sroa_bytes_used: i32;
+    let $sroa_bytes_used_60: i32;
     fixed = struct.new "effect_handler_renamed_import.wado//FixedRandom" { byte: 9 };
     $save_Random = global:effect_handler_renamed_import.wado::$effect_Random;
     $d_Random = struct.new "effect_handler_renamed_import.wado//$Dispatch_Random" { outer: $save_Random, op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_renamed_import.wado//$Closure_0" { $capture_0: fixed }, func: ref.func "closure/effect_handler_renamed_import.wado/$closure_wrapper_0" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_renamed_import.wado//$Closure_1" {  }, func: ref.func "closure/effect_handler_renamed_import.wado/$closure_wrapper_1" } };
@@ -192,10 +192,10 @@ fn "effect_handler_renamed_import.wado/run"() with Stdout {
     let $array_clone_dst_3: ref Array<u8>;
     $array_clone_dst_3 = builtin::array_new<u8>($array_clone_len_4);
     builtin::array_copy<u8>($array_clone_dst_3, 0, $array_clone_src_2, 0, $array_clone_len_4);
-    $sroa_bytes_used = $load_5;
+    $sroa_bytes_used_60 = $load_5;
     $local_2_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $local_3_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2_2 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_bytes_used, $local_3_3.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_bytes_used_60, $local_3_3.buf);
     new_used = $local_2_2.used + 1;
     if @unlikely(new_used > builtin::array_len($local_2_2.repr)) {
         cold_path;
@@ -205,9 +205,9 @@ fn "effect_handler_renamed_import.wado/run"() with Stdout {
     $local_2_2.used = new_used;
     builtin::array_copy<u8>($local_2_2.repr, start_35, global:effect_handler_renamed_import.wado::$const_obj_1, 0, 1);
     $local_3_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2_2 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_46(if @unlikely(0 >= $sroa_bytes_used) {
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_46(if @unlikely(0 >= $sroa_bytes_used_60) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($sroa_bytes_used);
+        "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($sroa_bytes_used_60);
         unreachable;
     }; builtin::array_get_value<u8>($array_clone_dst_3, 0)), $local_3_3.buf);
     rx_49 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
@@ -424,9 +424,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -434,11 +434,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l33: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b34: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b34: block {
                 l35: loop {
                     break_if b34 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l35;
                 };
@@ -456,8 +456,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -469,8 +469,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l33;

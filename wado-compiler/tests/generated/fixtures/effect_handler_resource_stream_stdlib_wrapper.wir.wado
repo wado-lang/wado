@@ -371,8 +371,8 @@ fn "effect_handler_resource_stream_stdlib_wrapper.wado/run"() with Stdout {
     let packed_111: i64;
     let $sroa_$pattern_temp_0_0_118: i32;
     let $sroa_$pattern_temp_0_1_119: i32;
-    let $sroa_chunk_items: ref "core:prelude//List<u8>";
-    let $sroa_chunk_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_chunk_items_122: ref "core:prelude//List<u8>";
+    let $sroa_chunk_result_123: "core:prelude/types.wado//enum:CopyResult";
     let $sroa_$pattern_temp_0_0_124: i32;
     let $sroa_$pattern_temp_0_1_125: i32;
     s = struct.new "effect_handler_resource_stream_stdlib_wrapper.wado//MockStream" { log: ref.as_non_null(elements_35 = array.new_fixed<u8>(); struct.new "core:prelude//List<u8>" { repr: elements_35, used: 0 }) };
@@ -432,10 +432,10 @@ fn "effect_handler_resource_stream_stdlib_wrapper.wado/run"() with Stdout {
                     unreachable;
                 };
                 v_58 = v_50.items;
-                $sroa_chunk_items = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let $array_clone_src_12: ref Array<u8>; $array_clone_src_12 = v_58.repr; let $array_clone_len_14: i32; $array_clone_len_14 = local.tee $load_16(v_58.used); let $array_clone_dst_13: ref Array<u8>; $array_clone_dst_13 = builtin::array_new<u8>($array_clone_len_14); builtin::array_copy<u8>($array_clone_dst_13, 0, $array_clone_src_12, 0, $array_clone_len_14); $array_clone_dst_13), used: $load_16 };
-                $sroa_chunk_result = v_50.result;
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend"(all, $sroa_chunk_items);
-                if $sroa_chunk_result != 0 {
+                $sroa_chunk_items_122 = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let $array_clone_src_12: ref Array<u8>; $array_clone_src_12 = v_58.repr; let $array_clone_len_14: i32; $array_clone_len_14 = local.tee $load_16(v_58.used); let $array_clone_dst_13: ref Array<u8>; $array_clone_dst_13 = builtin::array_new<u8>($array_clone_len_14); builtin::array_copy<u8>($array_clone_dst_13, 0, $array_clone_src_12, 0, $array_clone_len_14); $array_clone_dst_13), used: $load_16 };
+                $sroa_chunk_result_123 = v_50.result;
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend"(all, $sroa_chunk_items_122);
+                if $sroa_chunk_result_123 != 0 {
                     break $inline_core_prelude_types_wado_Stream_u8___read_to_end_8: all;
                 }
                 continue l3;
@@ -644,8 +644,8 @@ fn "core:rt/panic"(message) {
     let $local_1: ref "effect_handler_resource_stream_stdlib_wrapper.wado//$Dispatch_Stream<u8>";
     let $local_2: ref "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";
     let packed: i64;
-    let $sroa_$pattern_temp_0_0: i32;
-    let $sroa_$pattern_temp_0_1: i32;
+    let $sroa_$pattern_temp_0_0_14: i32;
+    let $sroa_$pattern_temp_0_1_15: i32;
     v = $inline__effect_dispatch__Stream_u8___new_2: block -> ref "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
         $local_0 = global:effect_handler_resource_stream_stdlib_wrapper.wado::$effect_Stream<u8>;
         if ref.is_null($local_0) == 0 {
@@ -664,10 +664,10 @@ fn "core:rt/panic"(message) {
         }
         unreachable;
     };
-    $sroa_$pattern_temp_0_0 = v.0;
-    $sroa_$pattern_temp_0_1 = v.1;
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0);
-    "core:rt/write_string_to_stream"($sroa_$pattern_temp_0_1, message.repr, message.used);
+    $sroa_$pattern_temp_0_0_14 = v.0;
+    $sroa_$pattern_temp_0_1_15 = v.1;
+    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_14);
+    "core:rt/write_string_to_stream"($sroa_$pattern_temp_0_1_15, message.repr, message.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
@@ -1295,18 +1295,18 @@ fn "effect_handler_resource_stream_stdlib_wrapper.wado/effect_handler_resource_s
     let item: u8;
     let used: i32;
     let $licm_log_23: ref "core:prelude//List<u8>";
-    let $sroa_$iter_0_repr: ref Array<u8>;
-    let $sroa_$iter_0_index: i32;
+    let $sroa_$iter_0_repr_24: ref Array<u8>;
+    let $sroa_$iter_0_index_25: i32;
     count = local.tee $load_0(data.used);
     end = $load_0;
-    $sroa_$iter_0_repr = data.repr;
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_repr_24 = data.repr;
+    $sroa_$iter_0_index_25 = 0;
     $licm_log_23 = self.log;
     b100: block {
         l101: loop {
-            break_if b100 $sroa_$iter_0_index >= end;
-            item = builtin::array_get_value<u8>($sroa_$iter_0_repr, $sroa_$iter_0_index);
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
+            break_if b100 $sroa_$iter_0_index_25 >= end;
+            item = builtin::array_get_value<u8>($sroa_$iter_0_repr_24, $sroa_$iter_0_index_25);
+            $sroa_$iter_0_index_25 = $sroa_$iter_0_index_25 + 1;
             used = $licm_log_23.used;
             if @unlikely(used >= builtin::array_len($licm_log_23.repr)) {
                 cold_path;
@@ -1360,8 +1360,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ptr_23: i32;
     let raw_len: i32;
     let written_25: ref "core:prelude/types.wado//StreamWrite";
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_written_count_28: i32;
+    let $sroa_written_result_29: "core:prelude/types.wado//enum:CopyResult";
     let data_31: ref Array<u8>;
     let len_33: i32;
     let ptr_34: i32;
@@ -1404,10 +1404,10 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 }
                 unreachable;
             };
-            $sroa_written_count = v.count;
-            $sroa_written_result = v.result;
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            $sroa_written_count_28 = v.count;
+            $sroa_written_result_29 = v.result;
+            offset = offset + $sroa_written_count_28;
+            if (($sroa_written_result_29 != 0) | ($sroa_written_count_28 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l108;
@@ -1818,8 +1818,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     let end_27: i32;
     let s: i32;
     let e: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_written_count_31: i32;
+    let $sroa_written_result_32: "core:prelude/types.wado//enum:CopyResult";
     let end_36: i32;
     let a_43: i32;
     let a_53: i32;
@@ -1852,9 +1852,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                 }
                 unreachable;
             };
-            $sroa_written_count = v_6.count;
-            $sroa_written_result = v_6.result;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | ($sroa_written_count >= rest.used) {
+            $sroa_written_count_31 = v_6.count;
+            $sroa_written_result_32 = v_6.result;
+            if (($sroa_written_result_32 != 0) | ($sroa_written_count_31 <= 0)) | ($sroa_written_count_31 >= rest.used) {
                 return;
             }
             elements = array.new_fixed<u8>();
@@ -1867,7 +1867,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                 "core:prelude/primitive.wado/i32::clamp$cold0"(0, end_36);
                 unreachable;
             }
-            a_43 = select i32($sroa_written_count > 0, $sroa_written_count, 0);
+            a_43 = select i32($sroa_written_count_31 > 0, $sroa_written_count_31, 0);
             s = select i32(a_43 < end_36, a_43, end_36);
             if @unlikely(s > end_36) {
                 cold_path;

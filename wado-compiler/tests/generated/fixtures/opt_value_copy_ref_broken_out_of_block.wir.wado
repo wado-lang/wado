@@ -129,7 +129,7 @@ fn "opt_value_copy_ref_broken_out_of_block.wado/build"() {
     let used_21: i32;
     let $vc_payload_0: i32;
     let $vc_payload_1: ref "opt_value_copy_ref_broken_out_of_block.wado//Rep";
-    let $sroa_op_value: ref "opt_value_copy_ref_broken_out_of_block.wado//Op";
+    let $sroa_op_value_33: ref "opt_value_copy_ref_broken_out_of_block.wado//Op";
     let v_33: ref "core:prelude//List<core:prelude/string.wado/String>";
     elements_7 = array.new_fixed<ref "opt_value_copy_ref_broken_out_of_block.wado//Op">();
     ops = struct.new "core:prelude//List<opt_value_copy_ref_broken_out_of_block.wado/Op>" { repr: elements_7, used: 0 };
@@ -140,14 +140,14 @@ fn "opt_value_copy_ref_broken_out_of_block.wado/build"() {
     b0: block {
         l1: loop {
             break_if b0 i_3 >= 4;
-            $sroa_op_value = $inline_make_2: block -> ref "opt_value_copy_ref_broken_out_of_block.wado//Op" {
+            $sroa_op_value_33 = $inline_make_2: block -> ref "opt_value_copy_ref_broken_out_of_block.wado//Op" {
                 if (i_3 % 2) == 0 {
                     break $inline_make_2: struct.new "opt_value_copy_ref_broken_out_of_block.wado//Op::Repeat" { discriminant: 1, payload_0: struct.new "opt_value_copy_ref_broken_out_of_block.wado//Rep" { tags: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }), used: 2 } } };
                 }
                 break $inline_make_2: struct.new "opt_value_copy_ref_broken_out_of_block.wado//Op::Plain" { discriminant: 0, payload_0: i_3 };
             };
-            if ref.test "opt_value_copy_ref_broken_out_of_block.wado//Op::Repeat"($sroa_op_value) {
-                rep = ref.cast "opt_value_copy_ref_broken_out_of_block.wado//Op::Repeat"($sroa_op_value).payload_0;
+            if ref.test "opt_value_copy_ref_broken_out_of_block.wado//Op::Repeat"($sroa_op_value_33) {
+                rep = ref.cast "opt_value_copy_ref_broken_out_of_block.wado//Op::Repeat"($sroa_op_value_33).payload_0;
                 value_11 = struct.new "opt_value_copy_ref_broken_out_of_block.wado//Held" { r: ref.as_non_null(pick: block -> ref "opt_value_copy_ref_broken_out_of_block.wado//Rep" {
                     let $match_scrut_1: i32;
                     $match_scrut_1 = rep.tags.used;
@@ -167,11 +167,11 @@ fn "opt_value_copy_ref_broken_out_of_block.wado/build"() {
                 tagged = tagged + rep.tags.used;
             } else {
             }
-            value_20 = (if ref.test "opt_value_copy_ref_broken_out_of_block.wado//Op::Plain"($sroa_op_value) -> ref "opt_value_copy_ref_broken_out_of_block.wado//Op" {
-                $vc_payload_0 = ref.cast "opt_value_copy_ref_broken_out_of_block.wado//Op::Plain"($sroa_op_value).payload_0;
+            value_20 = (if ref.test "opt_value_copy_ref_broken_out_of_block.wado//Op::Plain"($sroa_op_value_33) -> ref "opt_value_copy_ref_broken_out_of_block.wado//Op" {
+                $vc_payload_0 = ref.cast "opt_value_copy_ref_broken_out_of_block.wado//Op::Plain"($sroa_op_value_33).payload_0;
                 struct.new "opt_value_copy_ref_broken_out_of_block.wado//Op::Plain" { discriminant: 0, payload_0: $vc_payload_0 };
             } else {
-                $vc_payload_1 = ref.cast "opt_value_copy_ref_broken_out_of_block.wado//Op::Repeat"($sroa_op_value).payload_0;
+                $vc_payload_1 = ref.cast "opt_value_copy_ref_broken_out_of_block.wado//Op::Repeat"($sroa_op_value_33).payload_0;
                 struct.new "opt_value_copy_ref_broken_out_of_block.wado//Op::Repeat" { discriminant: 1, payload_0: struct.new "opt_value_copy_ref_broken_out_of_block.wado//Rep" { tags: ref.as_non_null(v_33 = $vc_payload_1.tags; struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:prelude/string.wado//String">(v_33.repr, local.tee $load_9(v_33.used))), used: $load_9 }) } };
             });
             used_21 = ops.used;
@@ -318,9 +318,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -328,11 +328,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l30: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b31: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b31: block {
                 l32: loop {
                     break_if b31 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l32;
                 };
@@ -350,8 +350,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -363,8 +363,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l30;

@@ -359,15 +359,15 @@ fn "loop_for.wado/$test_3_c_style_header_with_a_refutable_let_condition"() {
     let count: i32;
     let sum: i32;
     let item: i32;
-    let $sroa_iter_index: i32;
-    $sroa_iter_index = 0;
+    let $sroa_iter_index_30: i32;
+    $sroa_iter_index_30 = 0;
     count = 0;
     sum = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_iter_index >= 3;
-            item = builtin::array_get_value<i32>(global:loop_for.wado::$const_obj_4, $sroa_iter_index);
-            $sroa_iter_index = $sroa_iter_index + 1;
+            break_if b0 $sroa_iter_index_30 >= 3;
+            item = builtin::array_get_value<i32>(global:loop_for.wado::$const_obj_4, $sroa_iter_index_30);
+            $sroa_iter_index_30 = $sroa_iter_index_30 + 1;
             sum = sum + item;
             count = count + 1;
             continue l1;
@@ -389,15 +389,15 @@ fn "loop_for.wado/$test_4_for_of_over_a_list"() {
     let sum: i32;
     let elements: ref Array<i32>;
     let item: i32;
-    let $sroa_$iter_0_index: i32;
+    let $sroa_$iter_0_index_21: i32;
     elements = array.new_fixed<i32>(1, 2, 3, 4, 5);
     sum = 0;
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_index_21 = 0;
     b4: block {
         l5: loop {
-            break_if b4 $sroa_$iter_0_index >= 5;
-            item = builtin::array_get_value<i32>(elements, $sroa_$iter_0_index);
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
+            break_if b4 $sroa_$iter_0_index_21 >= 5;
+            item = builtin::array_get_value<i32>(elements, $sroa_$iter_0_index_21);
+            $sroa_$iter_0_index_21 = $sroa_$iter_0_index_21 + 1;
             sum = sum + item;
             continue l5;
         };
@@ -423,16 +423,16 @@ fn "loop_for.wado/$test_5_for_of_break"() {
     let a_end: i32;
     let i: i32;
     let $licm_repr_41: ref Array<i32>;
-    let $sroa_$iter_0_index: i32;
+    let $sroa_$iter_0_index_44: i32;
     elements_10 = array.new_fixed<i32>(1, 2, 3, 4, 5);
     elements_11 = array.new_fixed<i32>();
     seen = struct.new "core:prelude//List<i32>" { repr: elements_11, used: 0 };
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_index_44 = 0;
     b7: block {
         l8: loop {
-            break_if b7 $sroa_$iter_0_index >= 5;
-            item = builtin::array_get_value<i32>(elements_10, $sroa_$iter_0_index);
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
+            break_if b7 $sroa_$iter_0_index_44 >= 5;
+            item = builtin::array_get_value<i32>(elements_10, $sroa_$iter_0_index_44);
+            $sroa_$iter_0_index_44 = $sroa_$iter_0_index_44 + 1;
             break_if b7 item == 3;
             used = seen.used;
             if @unlikely(used >= builtin::array_len(seen.repr)) {
@@ -503,16 +503,16 @@ fn "loop_for.wado/$test_6_for_of_continue"() {
     let a_end: i32;
     let i: i32;
     let $licm_repr_41: ref Array<i32>;
-    let $sroa_$iter_0_index: i32;
+    let $sroa_$iter_0_index_44: i32;
     elements_10 = array.new_fixed<i32>(1, 2, 3, 4, 5);
     elements_11 = array.new_fixed<i32>();
     seen = struct.new "core:prelude//List<i32>" { repr: elements_11, used: 0 };
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_index_44 = 0;
     b15: block {
         l16: loop {
-            break_if b15 $sroa_$iter_0_index >= 5;
-            item = builtin::array_get_value<i32>(elements_10, $sroa_$iter_0_index);
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
+            break_if b15 $sroa_$iter_0_index_44 >= 5;
+            item = builtin::array_get_value<i32>(elements_10, $sroa_$iter_0_index_44);
+            $sroa_$iter_0_index_44 = $sroa_$iter_0_index_44 + 1;
             continue_if l16 item == 3;
             used = seen.used;
             if @unlikely(used >= builtin::array_len(seen.repr)) {
@@ -573,20 +573,20 @@ fn "loop_for.wado/$test_7_for_of_over_an_empty_list_runs_no_iteration"() {
     let n: i32;
     let elements: ref Array<i32>;
     let $sroa_slot_15: i32;
-    let $sroa_$iter_0_index: i32;
+    let $sroa_$iter_0_index_21: i32;
     elements = array.new_fixed<i32>();
     n = 0;
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_index_21 = 0;
     b23: block {
         l24: loop {
             $sroa_slot_15 = 0;
             $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_3: block {
-                if $sroa_$iter_0_index >= 0 {
+                if $sroa_$iter_0_index_21 >= 0 {
                     $sroa_slot_15 = 1;
                     break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_3;
                 }
-                drop(builtin::array_get_value<i32>(elements, $sroa_$iter_0_index));
-                $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
+                drop(builtin::array_get_value<i32>(elements, $sroa_$iter_0_index_21));
+                $sroa_$iter_0_index_21 = $sroa_$iter_0_index_21 + 1;
                 $sroa_slot_15 = 0;
                 break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_3;
             };
@@ -629,16 +629,16 @@ fn "loop_for.wado/$test_8_for_of_over_a_generic_field"() {
     let $sroa_slot_54: i32;
     let $sroa_slot_55: i32;
     let $sroa_slot_56: i32;
-    let $sroa_c_items: ref "core:prelude//List<i32>";
+    let $sroa_c_items_57: ref "core:prelude//List<i32>";
     let $sroa_$iter_0_repr_64: ref Array<i32>;
     let $sroa_$iter_0_index_65: i32;
     let $sroa_$iter_0_repr_67: ref Array<i32>;
     let $sroa_$iter_0_index_68: i32;
     let $sroa_$iter_0_repr_70: ref Array<i32>;
     let $sroa_$iter_0_index_71: i32;
-    $sroa_c_items = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    $sroa_c_items_57 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     n_21 = 0;
-    $sroa_$iter_0_repr_64 = local.tee $load_0($sroa_c_items.repr);
+    $sroa_$iter_0_repr_64 = local.tee $load_0($sroa_c_items_57.repr);
     $sroa_$iter_0_index_65 = 0;
     b28: block {
         l29: loop {
@@ -681,7 +681,7 @@ condition: c.walk() == 3
 "), used: 26 }, 26);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_7.repr, $fuse_at_14 + 26, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 58, 32), used: 3 }, 3);
         $local_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_7);
-        "core:prelude/traits.wado/loop_for.wado/Container<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "loop_for.wado//Container<i32>" { items: $sroa_c_items }, $local_8);
+        "core:prelude/traits.wado/loop_for.wado/Container<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "loop_for.wado//Container<i32>" { items: $sroa_c_items_57 }, $local_8);
         $fuse_at_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_7, 11);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_7.repr, $fuse_at_15, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_7.repr, $fuse_at_15 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("c.walk(): "), used: 10 }, 10);
@@ -694,7 +694,7 @@ condition: c.walk() == 3
         unreachable;
     }
     n_32 = 0;
-    end_39 = $sroa_c_items.used;
+    end_39 = $sroa_c_items_57.used;
     $sroa_$iter_0_repr_67 = $load_0;
     $sroa_$iter_0_index_68 = 0;
     b33: block {
@@ -738,7 +738,7 @@ condition: c.walk_mut() == 3
 "), used: 30 }, 30);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_17 + 30, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 58, 32), used: 3 }, 3);
         $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9);
-        "core:prelude/traits.wado/loop_for.wado/Container<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "loop_for.wado//Container<i32>" { items: $sroa_c_items }, $local_10);
+        "core:prelude/traits.wado/loop_for.wado/Container<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "loop_for.wado//Container<i32>" { items: $sroa_c_items_57 }, $local_10);
         $fuse_at_18 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_9, 15);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_18, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_18 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("c.walk_mut(): "), used: 14 }, 14);
@@ -799,16 +799,16 @@ fn "loop_for.wado/$test_10_a_mut_binding_is_a_copy_the_list_does_not_see"() {
     let a_end_35: i32;
     let i_40: i32;
     let $licm_repr_57: ref Array<i32>;
-    let $sroa_$iter_0_index: i32;
+    let $sroa_$iter_0_index_60: i32;
     elements_15 = array.new_fixed<i32>(1, 2, 3);
     elements_16 = array.new_fixed<i32>();
     doubled = struct.new "core:prelude//List<i32>" { repr: elements_16, used: 0 };
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_index_60 = 0;
     b43: block {
         l44: loop {
-            break_if b43 $sroa_$iter_0_index >= 3;
-            item = builtin::array_get_value<i32>(elements_15, $sroa_$iter_0_index);
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
+            break_if b43 $sroa_$iter_0_index_60 >= 3;
+            item = builtin::array_get_value<i32>(elements_15, $sroa_$iter_0_index_60);
+            $sroa_$iter_0_index_60 = $sroa_$iter_0_index_60 + 1;
             n = local.tee n(item) * 2;
             used = doubled.used;
             if @unlikely(used >= builtin::array_len(doubled.repr)) {
@@ -882,24 +882,24 @@ fn "loop_for.wado/$test_11_nested_for_of"() {
     let used: i32;
     let new_used: i32;
     let start_51: i32;
-    let $sroa_$iter_0_index: i32;
-    let $sroa_$iter_1_index: i32;
+    let $sroa_$iter_0_index_76: i32;
+    let $sroa_$iter_1_index_79: i32;
     elements_16 = array.new_fixed<i32>(1, 2, 3);
     elements_17 = array.new_fixed<i32>(10, 20);
     elements_18 = array.new_fixed<ref "core:prelude/string.wado//String">();
     pairs = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_18, used: 0 };
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_index_76 = 0;
     b51: block {
         l52: loop {
-            break_if b51 $sroa_$iter_0_index >= 3;
-            item_24 = builtin::array_get_value<i32>(elements_16, $sroa_$iter_0_index);
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
-            $sroa_$iter_1_index = 0;
+            break_if b51 $sroa_$iter_0_index_76 >= 3;
+            item_24 = builtin::array_get_value<i32>(elements_16, $sroa_$iter_0_index_76);
+            $sroa_$iter_0_index_76 = $sroa_$iter_0_index_76 + 1;
+            $sroa_$iter_1_index_79 = 0;
             b53: block {
                 l54: loop {
-                    break_if b53 $sroa_$iter_1_index >= 2;
-                    item_30 = builtin::array_get_value<i32>(elements_17, $sroa_$iter_1_index);
-                    $sroa_$iter_1_index = $sroa_$iter_1_index + 1;
+                    break_if b53 $sroa_$iter_1_index_79 >= 2;
+                    item_30 = builtin::array_get_value<i32>(elements_17, $sroa_$iter_1_index_79);
+                    $sroa_$iter_1_index_79 = $sroa_$iter_1_index_79 + 1;
                     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
                     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
                     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(item_24, $local_9.buf);
@@ -957,18 +957,18 @@ fn "loop_for.wado/$test_12_the_iterable_expression_is_evaluated_once"() {
     let sum: i32;
     let $cond_4: bool;
     let item: i32;
-    let $sroa_$iter_0_repr: ref Array<i32>;
-    let $sroa_$iter_0_index: i32;
+    let $sroa_$iter_0_repr_19: ref Array<i32>;
+    let $sroa_$iter_0_index_20: i32;
     global:loop_for.wado::ITERABLE_CALLS = 0;
     sum = 0;
     global:loop_for.wado::ITERABLE_CALLS = global:loop_for.wado::ITERABLE_CALLS + 1;
-    $sroa_$iter_0_repr = global:loop_for.wado::$const_obj_9;
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_repr_19 = global:loop_for.wado::$const_obj_9;
+    $sroa_$iter_0_index_20 = 0;
     b58: block {
         l59: loop {
-            break_if b58 $sroa_$iter_0_index >= 3;
-            item = builtin::array_get_value<i32>($sroa_$iter_0_repr, $sroa_$iter_0_index);
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
+            break_if b58 $sroa_$iter_0_index_20 >= 3;
+            item = builtin::array_get_value<i32>($sroa_$iter_0_repr_19, $sroa_$iter_0_index_20);
+            $sroa_$iter_0_index_20 = $sroa_$iter_0_index_20 + 1;
             sum = sum + item;
             continue l59;
         };
@@ -1005,16 +1005,16 @@ fn "loop_for.wado/$test_13_for_of_over_strings"() {
     let self_46: ref Array<u8>;
     let offset_47: i32;
     let used: i32;
-    let $sroa_$iter_0_index: i32;
-    let $sroa_item_used: i32;
+    let $sroa_$iter_0_index_67: i32;
+    let $sroa_item_used_70: i32;
     elements_13 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 111, 98), used: 3 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Charlie"), used: 7 });
     elements_14 = array.new_fixed<ref "core:prelude/string.wado//String">();
     greeted = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_14, used: 0 };
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_index_67 = 0;
     b62: block {
         l63: loop {
-            break_if b62 $sroa_$iter_0_index >= 3;
-            v = builtin::array_get_value<ref "core:prelude/string.wado//String">(elements_13, $sroa_$iter_0_index);
+            break_if b62 $sroa_$iter_0_index_67 >= 3;
+            v = builtin::array_get_value<ref "core:prelude/string.wado//String">(elements_13, $sroa_$iter_0_index_67);
             let $array_clone_src_1: ref Array<u8>;
             $array_clone_src_1 = v.repr;
             let $array_clone_len_3: i32;
@@ -1022,12 +1022,12 @@ fn "loop_for.wado/$test_13_for_of_over_strings"() {
             let $array_clone_dst_2: ref Array<u8>;
             $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
             builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
-            $sroa_item_used = $load_1;
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
+            $sroa_item_used_70 = $load_1;
+            $sroa_$iter_0_index_67 = $sroa_$iter_0_index_67 + 1;
             $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
             $local_5.used = 7;
             builtin::array_copy<u8>($local_5.repr, 0, global:loop_for.wado::$const_obj_19, 0, 7);
-            new_used_39 = 7 + (1 + $sroa_item_used);
+            new_used_39 = 7 + (1 + $sroa_item_used_70);
             if @unlikely(new_used_39 > 24) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_39);
@@ -1035,9 +1035,9 @@ fn "loop_for.wado/$test_13_for_of_over_strings"() {
             start_40 = $local_5.used;
             $local_5.used = new_used_39;
             self_42 = local.tee $load_4($local_5.repr);
-            builtin::array_copy<u8>(self_42, start_40, $array_clone_dst_2, 0, $sroa_item_used);
+            builtin::array_copy<u8>(self_42, start_40, $array_clone_dst_2, 0, $sroa_item_used_70);
             self_46 = $load_4;
-            offset_47 = start_40 + $sroa_item_used;
+            offset_47 = start_40 + $sroa_item_used_70;
             builtin::array_copy<u8>(self_46, offset_47, global:loop_for.wado::$const_obj_18, 0, 1);
             used = greeted.used;
             if @unlikely(used >= builtin::array_len(greeted.repr)) {
@@ -1091,23 +1091,23 @@ fn "loop_for.wado/$test_14_for_of_over_structs"() {
     let new_used: i32;
     let start_38: i32;
     let used: i32;
-    let $sroa_$iter_0_index: i32;
-    let $sroa_item_x: i32;
-    let $sroa_item_y: i32;
+    let $sroa_$iter_0_index_60: i32;
+    let $sroa_item_x_62: i32;
+    let $sroa_item_y_63: i32;
     elements_12 = array.new_fixed<ref "loop_for.wado//Point">(struct.new "loop_for.wado//Point" { x: 1, y: 2 }, struct.new "loop_for.wado//Point" { x: 3, y: 4 });
     elements_13 = array.new_fixed<ref "core:prelude/string.wado//String">();
     out_1 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_13, used: 0 };
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_index_60 = 0;
     b67: block {
         l68: loop {
-            break_if b67 $sroa_$iter_0_index >= 2;
-            v = builtin::array_get_value<ref "loop_for.wado//Point">(elements_12, $sroa_$iter_0_index);
-            $sroa_item_x = v.x;
-            $sroa_item_y = v.y;
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
+            break_if b67 $sroa_$iter_0_index_60 >= 2;
+            v = builtin::array_get_value<ref "loop_for.wado//Point">(elements_12, $sroa_$iter_0_index_60);
+            $sroa_item_x_62 = v.x;
+            $sroa_item_y_63 = v.y;
+            $sroa_$iter_0_index_60 = $sroa_$iter_0_index_60 + 1;
             $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
             $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
-            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_item_x, $local_6.buf);
+            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_item_x_62, $local_6.buf);
             new_used = $local_5.used + 1;
             if @unlikely(new_used > builtin::array_len($local_5.repr)) {
                 cold_path;
@@ -1117,7 +1117,7 @@ fn "loop_for.wado/$test_14_for_of_over_structs"() {
             $local_5.used = new_used;
             builtin::array_copy<u8>($local_5.repr, start_38, global:loop_for.wado::$const_obj_15, 0, 1);
             $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
-            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_item_y, $local_6.buf);
+            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_item_y_63, $local_6.buf);
             used = out_1.used;
             if @unlikely(used >= builtin::array_len(out_1.repr)) {
                 cold_path;
@@ -1183,19 +1183,19 @@ fn "loop_for.wado/$test_15_for_of_over_tuples"() {
     let new_used: i32;
     let start_65: i32;
     let used_74: i32;
-    let $sroa_$iter_0_index: i32;
-    let $sroa_$iter_2_index: i32;
+    let $sroa_$iter_0_index_95: i32;
+    let $sroa_$iter_2_index_100: i32;
     let $sroa_item_0_102: i32;
     let $sroa_item_1_103: i32;
-    let $sroa_$sroa_item_0_used: i32;
+    let $sroa_$sroa_item_0_97_used_107: i32;
     elements_22 = array.new_fixed<ref "tuple//[core:prelude/string.wado/String, i32]">(struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, 1: 1 }, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, 1: 2 });
     elements_23 = array.new_fixed<ref "core:prelude/string.wado//String">();
     keys = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_23, used: 0 };
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_index_95 = 0;
     b72: block {
         l73: loop {
-            break_if b72 $sroa_$iter_0_index >= 2;
-            v_30 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(elements_22, $sroa_$iter_0_index);
+            break_if b72 $sroa_$iter_0_index_95 >= 2;
+            v_30 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(elements_22, $sroa_$iter_0_index_95);
             v_31 = v_30.0;
             let $array_clone_src_1: ref Array<u8>;
             $array_clone_src_1 = v_31.repr;
@@ -1204,9 +1204,9 @@ fn "loop_for.wado/$test_15_for_of_over_tuples"() {
             let $array_clone_dst_2: ref Array<u8>;
             $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
             builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
-            $sroa_$sroa_item_0_used = $load_2;
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
-            value_34 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>($sroa_$sroa_item_0_used); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_dst_2, 0, $sroa_$sroa_item_0_used); $array_clone_dst_5), used: $sroa_$sroa_item_0_used };
+            $sroa_$sroa_item_0_97_used_107 = $load_2;
+            $sroa_$iter_0_index_95 = $sroa_$iter_0_index_95 + 1;
+            value_34 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>($sroa_$sroa_item_0_97_used_107); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_dst_2, 0, $sroa_$sroa_item_0_97_used_107); $array_clone_dst_5), used: $sroa_$sroa_item_0_97_used_107 };
             used_35 = keys.used;
             if @unlikely(used_35 >= builtin::array_len(keys.repr)) {
                 cold_path;
@@ -1245,14 +1245,14 @@ condition: keys == [\"a\", \"b\"]
     elements_39 = array.new_fixed<ref "tuple//[i32, i32]">(struct.new "tuple//[i32, i32]" { 0: 1, 1: 2 }, struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 });
     elements_40 = array.new_fixed<ref "core:prelude/string.wado//String">();
     out_6 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_40, used: 0 };
-    $sroa_$iter_2_index = 0;
+    $sroa_$iter_2_index_100 = 0;
     b76: block {
         l77: loop {
-            break_if b76 $sroa_$iter_2_index >= 2;
-            v_47 = builtin::array_get_value<ref "tuple//[i32, i32]">(elements_39, $sroa_$iter_2_index);
+            break_if b76 $sroa_$iter_2_index_100 >= 2;
+            v_47 = builtin::array_get_value<ref "tuple//[i32, i32]">(elements_39, $sroa_$iter_2_index_100);
             $sroa_item_0_102 = v_47.0;
             $sroa_item_1_103 = v_47.1;
-            $sroa_$iter_2_index = $sroa_$iter_2_index + 1;
+            $sroa_$iter_2_index_100 = $sroa_$iter_2_index_100 + 1;
             $local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
             $local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_12 };
             "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_item_0_102, $local_13.buf);
@@ -1316,24 +1316,24 @@ fn "loop_for.wado/$test_16_for_of_over_a_reference_yields_references"() {
     let ref_val_47: ref "loop_for.wado//Point";
     let ref_val_55: i32;
     let item: i32;
-    let $sroa_$iter_0_repr: ref Array<i32>;
-    let $sroa_$iter_0_index: i32;
-    let $sroa_$iter_2_repr: ref "Array<loop_for.wado/Point>";
-    let $sroa_$iter_2_index: i32;
-    let $sroa_$iter_4_repr: ref Array<i32>;
-    let $sroa_$iter_4_index: i32;
-    let $sroa_$iter_6_repr: ref Array<i32>;
-    let $sroa_$iter_6_index: i32;
+    let $sroa_$iter_0_repr_71: ref Array<i32>;
+    let $sroa_$iter_0_index_72: i32;
+    let $sroa_$iter_2_repr_74: ref "Array<loop_for.wado/Point>";
+    let $sroa_$iter_2_index_75: i32;
+    let $sroa_$iter_4_repr_77: ref Array<i32>;
+    let $sroa_$iter_4_index_78: i32;
+    let $sroa_$iter_6_repr_80: ref Array<i32>;
+    let $sroa_$iter_6_index_81: i32;
     sum = 0;
     self_33 = global:loop_for.wado::$const_obj_27;
     end_37 = self_33.used;
-    $sroa_$iter_0_repr = self_33.repr;
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_repr_71 = self_33.repr;
+    $sroa_$iter_0_index_72 = 0;
     b81: block {
         l82: loop {
-            break_if b81 $sroa_$iter_0_index >= end_37;
-            ref_val_39 = builtin::array_get_value<i32>($sroa_$iter_0_repr, $sroa_$iter_0_index);
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
+            break_if b81 $sroa_$iter_0_index_72 >= end_37;
+            ref_val_39 = builtin::array_get_value<i32>($sroa_$iter_0_repr_71, $sroa_$iter_0_index_72);
+            $sroa_$iter_0_index_72 = $sroa_$iter_0_index_72 + 1;
             sum = sum + ref_val_39;
             continue l82;
         };
@@ -1346,13 +1346,13 @@ fn "loop_for.wado/$test_16_for_of_over_a_reference_yields_references"() {
     total = 0;
     self_41 = global:loop_for.wado::$const_obj_26;
     end_45 = self_41.used;
-    $sroa_$iter_2_repr = self_41.repr;
-    $sroa_$iter_2_index = 0;
+    $sroa_$iter_2_repr_74 = self_41.repr;
+    $sroa_$iter_2_index_75 = 0;
     b84: block {
         l85: loop {
-            break_if b84 $sroa_$iter_2_index >= end_45;
-            ref_val_47 = builtin::array_get_value<ref "loop_for.wado//Point">($sroa_$iter_2_repr, $sroa_$iter_2_index);
-            $sroa_$iter_2_index = $sroa_$iter_2_index + 1;
+            break_if b84 $sroa_$iter_2_index_75 >= end_45;
+            ref_val_47 = builtin::array_get_value<ref "loop_for.wado//Point">($sroa_$iter_2_repr_74, $sroa_$iter_2_index_75);
+            $sroa_$iter_2_index_75 = $sroa_$iter_2_index_75 + 1;
             total = total + (ref_val_47.x + ref_val_47.y);
             continue l85;
         };
@@ -1363,13 +1363,13 @@ fn "loop_for.wado/$test_16_for_of_over_a_reference_yields_references"() {
         unreachable;
     }
     s = 0;
-    $sroa_$iter_4_repr = global:loop_for.wado::$const_obj_9;
-    $sroa_$iter_4_index = 0;
+    $sroa_$iter_4_repr_77 = global:loop_for.wado::$const_obj_9;
+    $sroa_$iter_4_index_78 = 0;
     b87: block {
         l88: loop {
-            break_if b87 $sroa_$iter_4_index >= 3;
-            ref_val_55 = builtin::array_get_value<i32>($sroa_$iter_4_repr, $sroa_$iter_4_index);
-            $sroa_$iter_4_index = $sroa_$iter_4_index + 1;
+            break_if b87 $sroa_$iter_4_index_78 >= 3;
+            ref_val_55 = builtin::array_get_value<i32>($sroa_$iter_4_repr_77, $sroa_$iter_4_index_78);
+            $sroa_$iter_4_index_78 = $sroa_$iter_4_index_78 + 1;
             s = s + ref_val_55;
             continue l88;
         };
@@ -1380,13 +1380,13 @@ fn "loop_for.wado/$test_16_for_of_over_a_reference_yields_references"() {
         unreachable;
     }
     v = 0;
-    $sroa_$iter_6_repr = global:loop_for.wado::$const_obj_9;
-    $sroa_$iter_6_index = 0;
+    $sroa_$iter_6_repr_80 = global:loop_for.wado::$const_obj_9;
+    $sroa_$iter_6_index_81 = 0;
     b90: block {
         l91: loop {
-            break_if b90 $sroa_$iter_6_index >= 3;
-            item = builtin::array_get_value<i32>($sroa_$iter_6_repr, $sroa_$iter_6_index);
-            $sroa_$iter_6_index = $sroa_$iter_6_index + 1;
+            break_if b90 $sroa_$iter_6_index_81 >= 3;
+            item = builtin::array_get_value<i32>($sroa_$iter_6_repr_80, $sroa_$iter_6_index_81);
+            $sroa_$iter_6_index_81 = $sroa_$iter_6_index_81 + 1;
             v = v + item;
             continue l91;
         };
@@ -1417,22 +1417,22 @@ fn "loop_for.wado/$test_17_for_of_over_an_enumerate_adapter"() {
     let used: i32;
     let new_used: i32;
     let start_50: i32;
-    let $sroa_$iter_0_count: i32;
-    let $sroa_$sroa_$iter_0_inner_index: i32;
+    let $sroa_$iter_0_count_66: i32;
+    let $sroa_$sroa_$iter_0_inner_65_index_83: i32;
     sum = 0;
     elements_18 = array.new_fixed<ref "core:prelude/string.wado//String">();
     seen = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_18, used: 0 };
-    $sroa_$sroa_$iter_0_inner_index = 0;
-    $sroa_$iter_0_count = 0;
+    $sroa_$sroa_$iter_0_inner_65_index_83 = 0;
+    $sroa_$iter_0_count_66 = 0;
     b93: block {
         l94: loop {
             $match_14 = $inline_core_prelude_traits_wado_IterEnumerate_core_prelude_slice_wado_SliceValueIter_i32___core_prelude_traits_wado_Iterator__next_7: block -> ref null "tuple//[i32, i32]" {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_8: block {
-                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_8 $sroa_$sroa_$iter_0_inner_index >= 3;
-                    item_29 = builtin::array_get_value<i32>(global:loop_for.wado::$const_obj_4, $sroa_$sroa_$iter_0_inner_index);
-                    $sroa_$sroa_$iter_0_inner_index = $sroa_$sroa_$iter_0_inner_index + 1;
-                    idx = $sroa_$iter_0_count;
-                    $sroa_$iter_0_count = $sroa_$iter_0_count + 1;
+                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_8 $sroa_$sroa_$iter_0_inner_65_index_83 >= 3;
+                    item_29 = builtin::array_get_value<i32>(global:loop_for.wado::$const_obj_4, $sroa_$sroa_$iter_0_inner_65_index_83);
+                    $sroa_$sroa_$iter_0_inner_65_index_83 = $sroa_$sroa_$iter_0_inner_65_index_83 + 1;
+                    idx = $sroa_$iter_0_count_66;
+                    $sroa_$iter_0_count_66 = $sroa_$iter_0_count_66 + 1;
                     break $inline_core_prelude_traits_wado_IterEnumerate_core_prelude_slice_wado_SliceValueIter_i32___core_prelude_traits_wado_Iterator__next_7: struct.new "tuple//[i32, i32]" { 0: idx, 1: item_29 };
                 };
                 break $inline_core_prelude_traits_wado_IterEnumerate_core_prelude_slice_wado_SliceValueIter_i32___core_prelude_traits_wado_Iterator__next_7: ref.null none;
@@ -1518,33 +1518,33 @@ fn "loop_for.wado/$test_20_continue_with_a_double_indexed_iterable"() {
     let a_end: i32;
     let i: i32;
     let $licm_repr_59: ref Array<i32>;
-    let $sroa_data_repr: ref "Array<core:prelude/list.wado/List<i32>>";
-    let $sroa_indices_repr: ref Array<i32>;
-    let $sroa_$iter_1_repr: ref Array<i32>;
-    let $sroa_$iter_1_index: i32;
-    $sroa_data_repr = array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 }, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(40, 50, 60), used: 3 });
-    $sroa_indices_repr = array.new_fixed<i32>(0, 1);
+    let $sroa_data_repr_65: ref "Array<core:prelude/list.wado/List<i32>>";
+    let $sroa_indices_repr_67: ref Array<i32>;
+    let $sroa_$iter_1_repr_69: ref Array<i32>;
+    let $sroa_$iter_1_index_70: i32;
+    $sroa_data_repr_65 = array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 }, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(40, 50, 60), used: 3 });
+    $sroa_indices_repr_67 = array.new_fixed<i32>(0, 1);
     elements_16 = array.new_fixed<i32>();
     result = struct.new "core:prelude//List<i32>" { repr: elements_16, used: 0 };
     k = 0;
     b100: block {
         l101: loop {
             break_if b100 k >= 2;
-            index_26 = builtin::array_get_value<i32>($sroa_indices_repr, k);
+            index_26 = builtin::array_get_value<i32>($sroa_indices_repr_67, k);
             if @unlikely(index_26 >= 2) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_26);
                 unreachable;
             }
-            self_18 = builtin::array_get_value<ref "core:prelude//List<i32>">($sroa_data_repr, index_26);
+            self_18 = builtin::array_get_value<ref "core:prelude//List<i32>">($sroa_data_repr_65, index_26);
             end = self_18.used;
-            $sroa_$iter_1_repr = self_18.repr;
-            $sroa_$iter_1_index = 0;
+            $sroa_$iter_1_repr_69 = self_18.repr;
+            $sroa_$iter_1_index_70 = 0;
             b103: block {
                 l104: loop {
-                    break_if b103 $sroa_$iter_1_index >= end;
-                    item_35 = builtin::array_get_value<i32>($sroa_$iter_1_repr, $sroa_$iter_1_index);
-                    $sroa_$iter_1_index = $sroa_$iter_1_index + 1;
+                    break_if b103 $sroa_$iter_1_index_70 >= end;
+                    item_35 = builtin::array_get_value<i32>($sroa_$iter_1_repr_69, $sroa_$iter_1_index_70);
+                    $sroa_$iter_1_index_70 = $sroa_$iter_1_index_70 + 1;
                     continue_if l104 (item_35 % 20) == 0;
                     used = result.used;
                     if @unlikely(used >= builtin::array_len(result.repr)) {
@@ -2943,7 +2943,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     let $sroa_slot_134: u32;
     let $sroa_slot_135: i32;
     let $fused_slot_136: char;
-    let $sroa_$iter_0_byte_index: i32;
+    let $sroa_$iter_0_byte_index_139: i32;
     let $licm_buf_140: ref "core:prelude/string.wado//String";
     let $licm_arith_141: bool;
     let $tmpl_buf_142: ref "core:prelude/string.wado//String";
@@ -2992,44 +2992,44 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     builtin::array_set_u8(self_12.repr, start_150, 34);
     count = 0;
     truncated = 0;
-    $sroa_$iter_0_byte_index = 0;
+    $sroa_$iter_0_byte_index_139 = 0;
     $licm_buf_140 = f.buf;
     $licm_arith_141 = limit >= 0;
     $tmpl_buf_142 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $hfs_used_347 = $licm_buf_140.used;
     b179: block {
         l180: loop {
-            break_if b179 $sroa_$iter_0_byte_index >= $mv$text$used;
+            break_if b179 $sroa_$iter_0_byte_index_139 >= $mv$text$used;
             $sroa_slot_134 = 0;
             $sroa_slot_135 = 0;
             $inline_decode_char_at_6: block {
-                b0 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index);
+                b0 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_139);
                 if b0 <u 128 {
                     $sroa_slot_134 = b0;
                     $sroa_slot_135 = 1;
                     break $inline_decode_char_at_6;
                 }
                 if b0 <u 224 {
-                    b1_24 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index + 1);
+                    b1_24 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_139 + 1);
                     $sroa_slot_134 = ((b0 & 31) << 6) | (b1_24 & 63);
                     $sroa_slot_135 = 2;
                     break $inline_decode_char_at_6;
                 }
                 if b0 <u 240 {
-                    b1_25 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index + 1);
-                    b2_26 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index + 2);
+                    b1_25 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_139 + 1);
+                    b2_26 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_139 + 2);
                     $sroa_slot_134 = (((b0 & 15) << 12) | ((b1_25 & 63) << 6)) | (b2_26 & 63);
                     $sroa_slot_135 = 3;
                     break $inline_decode_char_at_6;
                 }
-                b1_27 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index + 1);
-                b2_28 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index + 2);
-                b3 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index + 3);
+                b1_27 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_139 + 1);
+                b2_28 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_139 + 2);
+                b3 = builtin::array_get_value<u8>($mv$text$repr, $sroa_$iter_0_byte_index_139 + 3);
                 $sroa_slot_134 = ((((b0 & 7) << 18) | ((b1_27 & 63) << 12)) | ((b2_28 & 63) << 6)) | (b3 & 63);
                 $sroa_slot_135 = 4;
                 break $inline_decode_char_at_6;
             };
-            $sroa_$iter_0_byte_index = $sroa_$iter_0_byte_index + $sroa_slot_135;
+            $sroa_$iter_0_byte_index_139 = $sroa_$iter_0_byte_index_139 + $sroa_slot_135;
             $fused_slot_136 = $sroa_slot_134;
             if select i32($licm_arith_141, count >= limit, 0) {
                 truncated = 1;
@@ -4379,9 +4379,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -4389,11 +4389,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l336: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b337: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b337: block {
                 l338: loop {
                     break_if b337 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l338;
                 };
@@ -4411,8 +4411,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -4424,8 +4424,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l336;

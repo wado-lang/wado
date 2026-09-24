@@ -452,11 +452,11 @@ fn "stream_http_echo.wado/$cm_task_entry__handle"(request) {
     let end: i32;
     let item: ref "core:prelude//List<u8>";
     let v_215: ref "core:prelude//List<u8>";
-    let $sroa_$pattern_temp_0_0: i32;
-    let $sroa_$iter_0_repr: ref "Array<core:prelude/list.wado/List<u8>>";
-    let $sroa_$iter_0_index: i32;
-    $sroa_$pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed_191("wasi/future-new:transmission-wasi/http/types.wado#error-code"()));
-    $pattern_temp_1 = "stream_http_echo.wado/$cm_binding__Request_consume_body"(request, $sroa_$pattern_temp_0_0);
+    let $sroa_$pattern_temp_0_0_216: i32;
+    let $sroa_$iter_0_repr_224: ref "Array<core:prelude/list.wado/List<u8>>";
+    let $sroa_$iter_0_index_225: i32;
+    $sroa_$pattern_temp_0_0_216 = builtin::i32_wrap_i64(local.tee packed_191("wasi/future-new:transmission-wasi/http/types.wado#error-code"()));
+    $pattern_temp_1 = "stream_http_echo.wado/$cm_binding__Request_consume_body"(request, $sroa_$pattern_temp_0_0_216);
     body_stream = $pattern_temp_1.0;
     elements = array.new_fixed<ref "core:prelude//List<u8>">();
     chunks = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: elements, used: 0 };
@@ -489,14 +489,14 @@ fn "stream_http_echo.wado/$cm_task_entry__handle"(request) {
     $tv_1 = local.tee $ok_val_25(ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"($task_ret).payload_0);
     "wasi/task-return:handle"(0, $tv_1, 0, 0_i64, 0, 0, 0, 0);
     end = chunks.used;
-    $sroa_$iter_0_repr = chunks.repr;
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_repr_224 = chunks.repr;
+    $sroa_$iter_0_index_225 = 0;
     b4: block {
         l5: loop {
-            break_if b4 $sroa_$iter_0_index >= end;
-            v_215 = builtin::array_get_value<ref "core:prelude//List<u8>">($sroa_$iter_0_repr, $sroa_$iter_0_index);
+            break_if b4 $sroa_$iter_0_index_225 >= end;
+            v_215 = builtin::array_get_value<ref "core:prelude//List<u8>">($sroa_$iter_0_repr_224, $sroa_$iter_0_index_225);
             item = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = v_215.repr; let $array_clone_len_6: i32; $array_clone_len_6 = local.tee $load_10(v_215.used); let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>($array_clone_len_6); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6); $array_clone_dst_5), used: $load_10 };
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
+            $sroa_$iter_0_index_225 = $sroa_$iter_0_index_225 + 1;
             "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_208, item);
             continue l5;
         };
@@ -1300,9 +1300,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -1310,11 +1310,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l128: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b129: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b129: block {
                 l130: loop {
                     break_if b129 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l130;
                 };
@@ -1332,8 +1332,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -1345,8 +1345,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l128;

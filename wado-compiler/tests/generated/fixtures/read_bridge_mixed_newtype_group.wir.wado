@@ -169,7 +169,7 @@ fn "read_bridge_mixed_newtype_group.wado/run"() with Stdout {
     let packed_97: i64;
     let rx_98: i32;
     let tx_99: i32;
-    let $sroa_s_raw: f64;
+    let $sroa_s_raw_115: f64;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:read_bridge_mixed_newtype_group.wado::$modules_initialized);
         cold_path;
@@ -177,7 +177,7 @@ fn "read_bridge_mixed_newtype_group.wado/run"() with Stdout {
         global:read_bridge_mixed_newtype_group.wado::$modules_initialized = 1;
     };
     m = black_box(2.5);
-    $sroa_s_raw = black_box(1.5);
+    $sroa_s_raw_115 = black_box(1.5);
     fields = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
     "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"(m, $local_8);
@@ -202,7 +202,7 @@ fn "read_bridge_mixed_newtype_group.wado/run"() with Stdout {
         builtin::array_copy<u8>(fields.repr, start_44, $local_8.repr, 0, n_39);
     };
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
-    "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"($sroa_s_raw, $local_10);
+    "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"($sroa_s_raw_115, $local_10);
     new_used_64 = $local_10.used + 1;
     if @unlikely(new_used_64 > builtin::array_len($local_10.repr)) {
         cold_path;
@@ -1090,9 +1090,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -1100,11 +1100,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l111: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b112: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b112: block {
                 l113: loop {
                     break_if b112 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l113;
                 };
@@ -1122,8 +1122,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -1135,8 +1135,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l111;

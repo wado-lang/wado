@@ -107,40 +107,40 @@ fn "array_bounds_elim_oob_bound_shrunk.wado/run"() with Stdout {
     let packed: i64;
     let rx_34: i32;
     let tx_35: i32;
-    let $sroa_arr_repr: ref Array<i32>;
-    let $sroa_arr_used: i32;
-    $sroa_arr_repr = array.new_fixed<i32>(10, 20, 30);
-    $sroa_arr_used = 3;
+    let $sroa_arr_repr_45: ref Array<i32>;
+    let $sroa_arr_used_46: i32;
+    $sroa_arr_repr_45 = array.new_fixed<i32>(10, 20, 30);
+    $sroa_arr_used_46 = 3;
     i = 0;
     sum = 0;
     b0: block {
         l1: loop {
-            break_if b0 i >= $sroa_arr_used;
+            break_if b0 i >= $sroa_arr_used_46;
             if i == 0 {
                 $inline_core_prelude_list_wado_List_i32___pop_3: block {
-                    break_if $inline_core_prelude_list_wado_List_i32___pop_3 $sroa_arr_used == 0;
-                    $sroa_arr_used = $sroa_arr_used - 1;
-                    drop(builtin::array_get_value<i32>($sroa_arr_repr, $sroa_arr_used));
+                    break_if $inline_core_prelude_list_wado_List_i32___pop_3 $sroa_arr_used_46 == 0;
+                    $sroa_arr_used_46 = $sroa_arr_used_46 - 1;
+                    drop(builtin::array_get_value<i32>($sroa_arr_repr_45, $sroa_arr_used_46));
                     break $inline_core_prelude_list_wado_List_i32___pop_3;
                 };
                 $inline_core_prelude_list_wado_List_i32___pop_5: block {
-                    break_if $inline_core_prelude_list_wado_List_i32___pop_5 $sroa_arr_used == 0;
-                    $sroa_arr_used = $sroa_arr_used - 1;
-                    drop(builtin::array_get_value<i32>($sroa_arr_repr, $sroa_arr_used));
+                    break_if $inline_core_prelude_list_wado_List_i32___pop_5 $sroa_arr_used_46 == 0;
+                    $sroa_arr_used_46 = $sroa_arr_used_46 - 1;
+                    drop(builtin::array_get_value<i32>($sroa_arr_repr_45, $sroa_arr_used_46));
                     break $inline_core_prelude_list_wado_List_i32___pop_5;
                 };
                 $inline_core_prelude_list_wado_List_i32___pop_7: block {
-                    break_if $inline_core_prelude_list_wado_List_i32___pop_7 $sroa_arr_used == 0;
-                    $sroa_arr_used = $sroa_arr_used - 1;
-                    drop(builtin::array_get_value<i32>($sroa_arr_repr, $sroa_arr_used));
+                    break_if $inline_core_prelude_list_wado_List_i32___pop_7 $sroa_arr_used_46 == 0;
+                    $sroa_arr_used_46 = $sroa_arr_used_46 - 1;
+                    drop(builtin::array_get_value<i32>($sroa_arr_repr_45, $sroa_arr_used_46));
                     break $inline_core_prelude_list_wado_List_i32___pop_7;
                 };
             }
-            sum = sum + if @unlikely(i >= $sroa_arr_used) {
+            sum = sum + if @unlikely(i >= $sroa_arr_used_46) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $sroa_arr_used);
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $sroa_arr_used_46);
                 unreachable;
-            }; builtin::array_get_value<i32>($sroa_arr_repr, i);
+            }; builtin::array_get_value<i32>($sroa_arr_repr_45, i);
             i = i + 1;
             continue l1;
         };
@@ -324,9 +324,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -334,11 +334,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l29: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b30: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b30: block {
                 l31: loop {
                     break_if b30 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l31;
                 };
@@ -356,8 +356,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -369,8 +369,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l29;

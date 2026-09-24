@@ -115,19 +115,19 @@ fn "multi_value_return_nested_return.wado/run"() with Stdout {
     let packed: i64;
     let rx_85: i32;
     let tx_86: i32;
-    let $sroa_v_end: i32;
-    let $sroa_fb_0: i32;
-    $sroa_v_end = black_box(2);
-    $iter_0 = struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 0, end: $sroa_v_end };
+    let $sroa_v_end_92: i32;
+    let $sroa_fb_0_95: i32;
+    $sroa_v_end_92 = black_box(2);
+    $iter_0 = struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 0, end: $sroa_v_end_92 };
     b0: block {
         l1: loop {
             let $mv$$match_9$0: i32;
             let $mv$$match_9$1: i32;
             multivalue_bind [$mv$$match_9$0, $mv$$match_9$1] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^core:prelude/traits.wado/Iterator::next"($iter_0);
             if $mv$$match_9$0 == 0 {
-                $sroa_fb_0 = black_box(7);
+                $sroa_fb_0_95 = black_box(7);
                 $local_10 = $inline_pair_3: block -> ref "tuple//[i32, i32]" {
-                    fb_15 = struct.new "tuple//[i32, i32]" { 0: $sroa_fb_0, 1: 8 };
+                    fb_15 = struct.new "tuple//[i32, i32]" { 0: $sroa_fb_0_95, 1: 8 };
                     break $inline_pair_3: struct.new "tuple//[i32, i32]" { 0: (if $mv$$match_9$1 > 0 -> i32 {
                         $mv$$match_9$1;
                     } else {
@@ -140,7 +140,7 @@ fn "multi_value_return_nested_return.wado/run"() with Stdout {
                     if $mv$$match_9$1 == 0 -> ref "tuple//[i32, i32]" {
                         struct.new "tuple//[i32, i32]" { 0: 10, 1: 0 };
                     } else {
-                        break $inline_pick_5: struct.new "tuple//[i32, i32]" { 0: $sroa_fb_0, 1: 8 };
+                        break $inline_pick_5: struct.new "tuple//[i32, i32]" { 0: $sroa_fb_0_95, 1: 8 };
                     }
                     break $inline_pick_5;
                 };
@@ -333,9 +333,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -343,11 +343,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l34: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b35: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b35: block {
                 l36: loop {
                     break_if b35 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l36;
                 };
@@ -365,8 +365,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -378,8 +378,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l34;

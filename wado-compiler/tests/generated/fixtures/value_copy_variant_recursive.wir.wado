@@ -207,9 +207,9 @@ fn "value_copy_variant_recursive.wado/$test_0_recursive_struct_copy_is_deep"() {
     let $v0_8: i32;
     let n_10: ref "value_copy_variant_recursive.wado//Node";
     let $v0_11: i32;
-    let $sroa_a_next: ref null "value_copy_variant_recursive.wado//Node";
-    $sroa_a_next = struct.new "value_copy_variant_recursive.wado//Node" { value: 2, next: ref.null none };
-    b = "value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Node"(struct.new "value_copy_variant_recursive.wado//Node" { value: 1, next: $sroa_a_next });
+    let $sroa_a_next_22: ref null "value_copy_variant_recursive.wado//Node";
+    $sroa_a_next_22 = struct.new "value_copy_variant_recursive.wado//Node" { value: 2, next: ref.null none };
+    b = "value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Node"(struct.new "value_copy_variant_recursive.wado//Node" { value: 1, next: $sroa_a_next_22 });
     b.value = 10;
     let $match_scrut_0: ref null "value_copy_variant_recursive.wado//Node";
     $match_scrut_0 = local.tee $load_0(b.next);
@@ -218,8 +218,8 @@ fn "value_copy_variant_recursive.wado/$test_0_recursive_struct_copy_is_deep"() {
         n_2.value = 20;
     } else {
     }
-    if ref.is_null($sroa_a_next) == 0 {
-        n_5 = ref.as_non_null($sroa_a_next);
+    if ref.is_null($sroa_a_next_22) == 0 {
+        n_5 = ref.as_non_null($sroa_a_next_22);
         $v0_6 = n_5.value;
         if @unlikely($v0_6 != 2) {
             cold_path;
@@ -268,14 +268,14 @@ fn "value_copy_variant_recursive.wado/$test_1_recursive_variant_copy_is_deep"() 
     let $fuse_at_19: i32;
     let $vc_payload_0: ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>";
     let used: i32;
-    let $sroa_a_value: ref "value_copy_variant_recursive.wado//Tree";
-    let $sroa_b_value: ref "value_copy_variant_recursive.wado//Tree";
+    let $sroa_a_value_29: ref "value_copy_variant_recursive.wado//Tree";
+    let $sroa_b_value_30: ref "value_copy_variant_recursive.wado//Tree";
     leaves = struct.new "core:prelude//List<value_copy_variant_recursive.wado/Tree>" { repr: array.new_fixed<ref "value_copy_variant_recursive.wado//Tree">(struct.new "value_copy_variant_recursive.wado//Tree::Leaf" { discriminant: 1, payload_0: 1 }), used: 1 };
-    $sroa_a_value = struct.new "value_copy_variant_recursive.wado//Tree::Branch" { discriminant: 0, payload_0: leaves };
-    $vc_payload_0 = ref.cast "value_copy_variant_recursive.wado//Tree::Branch"($sroa_a_value).payload_0;
-    $sroa_b_value = struct.new "value_copy_variant_recursive.wado//Tree::Branch" { discriminant: 0, payload_0: struct.new "core:prelude//List<value_copy_variant_recursive.wado/Tree>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "value_copy_variant_recursive.wado//Tree">($vc_payload_0.repr, local.tee $load_1($vc_payload_0.used))), used: $load_1 } };
-    if ref.test "value_copy_variant_recursive.wado//Tree::Branch"($sroa_b_value) {
-        children_3 = ref.cast "value_copy_variant_recursive.wado//Tree::Branch"($sroa_b_value).payload_0;
+    $sroa_a_value_29 = struct.new "value_copy_variant_recursive.wado//Tree::Branch" { discriminant: 0, payload_0: leaves };
+    $vc_payload_0 = ref.cast "value_copy_variant_recursive.wado//Tree::Branch"($sroa_a_value_29).payload_0;
+    $sroa_b_value_30 = struct.new "value_copy_variant_recursive.wado//Tree::Branch" { discriminant: 0, payload_0: struct.new "core:prelude//List<value_copy_variant_recursive.wado/Tree>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "value_copy_variant_recursive.wado//Tree">($vc_payload_0.repr, local.tee $load_1($vc_payload_0.used))), used: $load_1 } };
+    if ref.test "value_copy_variant_recursive.wado//Tree::Branch"($sroa_b_value_30) {
+        children_3 = ref.cast "value_copy_variant_recursive.wado//Tree::Branch"($sroa_b_value_30).payload_0;
         used = children_3.used;
         if @unlikely(used >= builtin::array_len(children_3.repr)) {
             cold_path;
@@ -285,8 +285,8 @@ fn "value_copy_variant_recursive.wado/$test_1_recursive_variant_copy_is_deep"() 
         children_3.used = used + 1;
     } else {
     }
-    if ref.test "value_copy_variant_recursive.wado//Tree::Branch"($sroa_a_value) {
-        children_4 = ref.cast "value_copy_variant_recursive.wado//Tree::Branch"($sroa_a_value).payload_0;
+    if ref.test "value_copy_variant_recursive.wado//Tree::Branch"($sroa_a_value_29) {
+        children_4 = ref.cast "value_copy_variant_recursive.wado//Tree::Branch"($sroa_a_value_29).payload_0;
         $v1_5 = children_4.used;
         if @unlikely($v1_5 != 1) {
             cold_path;
@@ -319,8 +319,8 @@ condition: children.len() == 1
         }
     } else {
     }
-    if ref.test "value_copy_variant_recursive.wado//Tree::Branch"($sroa_b_value) {
-        children_7 = ref.cast "value_copy_variant_recursive.wado//Tree::Branch"($sroa_b_value).payload_0;
+    if ref.test "value_copy_variant_recursive.wado//Tree::Branch"($sroa_b_value_30) {
+        children_7 = ref.cast "value_copy_variant_recursive.wado//Tree::Branch"($sroa_b_value_30).payload_0;
         $v1_8 = children_7.used;
         if @unlikely($v1_8 != 2) {
             cold_path;
@@ -1366,9 +1366,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -1376,11 +1376,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l112: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b113: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b113: block {
                 l114: loop {
                     break_if b113 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l114;
                 };
@@ -1398,8 +1398,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -1411,8 +1411,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l112;

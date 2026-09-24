@@ -1166,7 +1166,7 @@ fn "http_client_send_body_read.wado/$cm_task_entry__handle"(request) with Client
     let rx_261: i32;
     let tx_262: i32;
     let self_264: ref "core:prelude/string.wado//StrUtf8ByteIter";
-    let $sroa_$pattern_temp_2_0: i32;
+    let $sroa_$pattern_temp_2_0_267: i32;
     let elements_276: ref Array<u8>;
     let item_278: u8;
     let used: i32;
@@ -1196,8 +1196,8 @@ fn "http_client_send_body_read.wado/$cm_task_entry__handle"(request) with Client
         "core:rt/panic"($mv_arg_1.repr, $mv_arg_1.used);
         unreachable;
     });
-    $sroa_$pattern_temp_2_0 = builtin::i32_wrap_i64(local.tee packed_205("wasi/future-new:transmission-wasi/http/types.wado#error-code"()));
-    $pattern_temp_3 = "http_client_send_body_read.wado/$cm_binding__Response_consume_body"(upstream, $sroa_$pattern_temp_2_0);
+    $sroa_$pattern_temp_2_0_267 = builtin::i32_wrap_i64(local.tee packed_205("wasi/future-new:transmission-wasi/http/types.wado#error-code"()));
+    $pattern_temp_3 = "http_client_send_body_read.wado/$cm_binding__Response_consume_body"(upstream, $sroa_$pattern_temp_2_0_267);
     body_stream = $pattern_temp_3.0;
     bytes = $inline_core_prelude_types_wado_Stream_u8___read_to_end_5: block -> ref "core:prelude//List<u8>" {
         elements_216 = array.new_fixed<u8>();
@@ -3058,9 +3058,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -3068,11 +3068,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l364: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b365: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b365: block {
                 l366: loop {
                     break_if b365 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l366;
                 };
@@ -3090,8 +3090,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -3103,8 +3103,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l364;

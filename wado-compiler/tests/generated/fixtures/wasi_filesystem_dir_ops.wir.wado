@@ -504,10 +504,10 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
     let packed_437: i64;
     let rx_438: i32;
     let tx_439: i32;
-    let $sroa_$iter_0_repr: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
-    let $sroa_$iter_0_index: i32;
-    let $sroa_item_type: ref "wasi:filesystem/types.wado//DescriptorType";
-    let $sroa_$sroa_item_name_used: i32;
+    let $sroa_$iter_0_repr_448: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
+    let $sroa_$iter_0_index_449: i32;
+    let $sroa_item_type_451: ref "wasi:filesystem/types.wado//DescriptorType";
+    let $sroa_$sroa_item_name_452_used_464: i32;
     dirs = "wasi_filesystem_dir_ops.wado/$cm_binding__Preopens_get_directories"();
     if local.tee $load_0(dirs.used) == 0 {
         rx_37 = builtin::i32_wrap_i64(local.tee packed_36("wasi/stream-new"()));
@@ -661,14 +661,14 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
         unreachable;
     };
     end = entries.used;
-    $sroa_$iter_0_repr = entries.repr;
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_repr_448 = entries.repr;
+    $sroa_$iter_0_index_449 = 0;
     b17: block {
         l18: loop {
-            break_if b17 $sroa_$iter_0_index >= end;
-            v_138 = builtin::array_get_value<ref "wasi:filesystem/types.wado//DirectoryEntry">($sroa_$iter_0_repr, $sroa_$iter_0_index);
+            break_if b17 $sroa_$iter_0_index_449 >= end;
+            v_138 = builtin::array_get_value<ref "wasi:filesystem/types.wado//DirectoryEntry">($sroa_$iter_0_repr_448, $sroa_$iter_0_index_449);
             v_139 = v_138.type;
-            $sroa_item_type = (if local.tee $load_26(v_139.discriminant) == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+            $sroa_item_type_451 = (if local.tee $load_26(v_139.discriminant) == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
                 v_139;
             } else if $load_26 == 1 -> ref "wasi:filesystem/types.wado//DescriptorType" {
                 v_139;
@@ -699,18 +699,18 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
             let $array_clone_dst_21: ref Array<u8>;
             $array_clone_dst_21 = builtin::array_new<u8>($array_clone_len_22);
             builtin::array_copy<u8>($array_clone_dst_21, 0, $array_clone_src_20, 0, $array_clone_len_22);
-            $sroa_$sroa_item_name_used = $load_31;
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
+            $sroa_$sroa_item_name_452_used_464 = $load_31;
+            $sroa_$iter_0_index_449 = $sroa_$iter_0_index_449 + 1;
             entry_count = entry_count + 1;
             if $inline_core_prelude_array_wado_seq_eq_u8__spec0_8: block -> bool {
                 b_395 = global:wasi_filesystem_dir_ops.wado::$const_obj_21;
-                if $sroa_$sroa_item_name_used != 9 {
+                if $sroa_$sroa_item_name_452_used_464 != 9 {
                     break $inline_core_prelude_array_wado_seq_eq_u8__spec0_8: 0;
                 }
                 i_399 = 0;
                 b29: block {
                     l30: loop {
-                        break_if b29 i_399 >= $sroa_$sroa_item_name_used;
+                        break_if b29 i_399 >= $sroa_$sroa_item_name_452_used_464;
                         if builtin::array_get_value<u8>($array_clone_dst_21, i_399) != builtin::array_get_value<u8>(b_395, i_399) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__spec0_8: 0;
                         }
@@ -721,7 +721,7 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                 break $inline_core_prelude_array_wado_seq_eq_u8__spec0_8: 1;
             } {
                 found_alpha = 1;
-                if $sroa_item_type.discriminant == 5 {
+                if $sroa_item_type_451.discriminant == 5 {
                     rx_150 = builtin::i32_wrap_i64(local.tee packed_149("wasi/stream-new"()));
                     tx_151 = builtin::i32_wrap_i64(packed_149 >> 32_i64);
                     handle_147 = "wasi_filesystem_dir_ops.wado/$cm_binding__Stdout_write_via_stream"(rx_150);
@@ -733,13 +733,13 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
             }
             if $inline_core_prelude_array_wado_seq_eq_u8__spec1_9: block -> bool {
                 b_403 = global:wasi_filesystem_dir_ops.wado::$const_obj_19;
-                if $sroa_$sroa_item_name_used != 6 {
+                if $sroa_$sroa_item_name_452_used_464 != 6 {
                     break $inline_core_prelude_array_wado_seq_eq_u8__spec1_9: 0;
                 }
                 i_407 = 0;
                 b35: block {
                     l36: loop {
-                        break_if b35 i_407 >= $sroa_$sroa_item_name_used;
+                        break_if b35 i_407 >= $sroa_$sroa_item_name_452_used_464;
                         if builtin::array_get_value<u8>($array_clone_dst_21, i_407) != builtin::array_get_value<u8>(b_403, i_407) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__spec1_9: 0;
                         }
@@ -750,7 +750,7 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                 break $inline_core_prelude_array_wado_seq_eq_u8__spec1_9: 1;
             } {
                 found_nested = 1;
-                if $sroa_item_type.discriminant == 2 {
+                if $sroa_item_type_451.discriminant == 2 {
                     rx_164 = builtin::i32_wrap_i64(local.tee packed_163("wasi/stream-new"()));
                     tx_165 = builtin::i32_wrap_i64(packed_163 >> 32_i64);
                     handle_161 = "wasi_filesystem_dir_ops.wado/$cm_binding__Stdout_write_via_stream"(rx_164);
@@ -762,13 +762,13 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
             }
             if $inline_core_prelude_array_wado_seq_eq_u8__10: block -> bool {
                 b_411 = global:wasi_filesystem_dir_ops.wado::$const_obj_17;
-                if $sroa_$sroa_item_name_used != 11 {
+                if $sroa_$sroa_item_name_452_used_464 != 11 {
                     break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
                 }
                 i_415 = 0;
                 b41: block {
                     l42: loop {
-                        break_if b41 i_415 >= $sroa_$sroa_item_name_used;
+                        break_if b41 i_415 >= $sroa_$sroa_item_name_452_used_464;
                         if builtin::array_get_value<u8>($array_clone_dst_21, i_415) != builtin::array_get_value<u8>(b_411, i_415) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
                         }
@@ -779,7 +779,7 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
                 break $inline_core_prelude_array_wado_seq_eq_u8__10: 1;
             } {
                 found_newdir = 1;
-                if $sroa_item_type.discriminant == 2 {
+                if $sroa_item_type_451.discriminant == 2 {
                     rx_178 = builtin::i32_wrap_i64(local.tee packed_177("wasi/stream-new"()));
                     tx_179 = builtin::i32_wrap_i64(packed_177 >> 32_i64);
                     handle_175 = "wasi_filesystem_dir_ops.wado/$cm_binding__Stdout_write_via_stream"(rx_178);
@@ -1910,9 +1910,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -1920,11 +1920,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l280: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b281: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b281: block {
                 l282: loop {
                     break_if b281 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l282;
                 };
@@ -1942,8 +1942,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -1955,8 +1955,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l280;
