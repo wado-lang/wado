@@ -1463,6 +1463,26 @@ let r2 = &mut x;  // OK in Wado (no borrow checker)
 *r2 = 30;
 ```
 
+#### Reference Identity
+
+`==` and `!=` on two references to a type whose value is a heap object (a
+struct, `List<T>`, `String`, a tuple, a variant) compare identity, not content.
+
+Identity is guaranteed in one direction only. Two references to one object
+always compare equal. Two references to distinct objects of identical content
+may also compare equal, because the optimizer may intern such objects into one.
+Whether it does can change with the optimization level and with the Wado
+version. An identity comparison that should be true is never false.
+
+```wado
+fn same(a: &List<i32>, b: &List<i32>) -> bool { return a == b; }
+
+let xs: List<i32> = [1, 2, 3];
+same(&xs, &xs);                 // always true
+let ys: List<i32> = [1, 2, 3];
+same(&xs, &ys);                 // false or true: the two may be one object
+```
+
 #### Design Trade-offs
 
 - Simplicity: No lifetime annotations or borrow checker errors
