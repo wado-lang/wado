@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790251556122,
+  "lastUpdate": 1790255740590,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59281,6 +59281,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/399b75489d114ac8c45e595b41eee76707fe62c2"
         },
         "date": 1790251555441,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6703,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 239681,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "deea526b073d41b3cb5681147e4516f49bb63520",
+          "message": "Merge pull request #2146 from wado-lang/claude/tagged-template-issues-h5gb91\n\nfix(tagged-template): one legible diagnostic per fault; reflection handles in the prelude",
+          "timestamp": "2026-09-24T21:56:50+09:00",
+          "tree_id": "e546210a681dfb004719a8317f3b671fa82d4081",
+          "url": "https://github.com/wado-lang/wado/commit/deea526b073d41b3cb5681147e4516f49bb63520"
+        },
+        "date": 1790255740200,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
