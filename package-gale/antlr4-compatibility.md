@@ -948,7 +948,7 @@ the compiled fast path:**
    no simulator. A rule reachable only past a `.` / `~X` (whose follow set
    can't be enumerated) routes conservatively. A caller's scan of such a
    rule asks the simulator too, with the parse's caller stack
-   (`ATN_STACK`), so the scan ends where the parse will. Every other
+   (`Parser.atn`), so the scan ends where the parse will. Every other
    multi-alt ambiguity keeps the tournament, whose longest-match matches
    ANTLR4 across the corpus. Regression fixtures:
    `tests/grammars/ll_longest_vs_context.g4`, `ll_at_end_nullable_gap.g4` and

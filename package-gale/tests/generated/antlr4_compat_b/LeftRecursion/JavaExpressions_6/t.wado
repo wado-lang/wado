@@ -1125,6 +1125,10 @@ global CTX_UNKNOWN_RETURN: i32 = -4;
 global CTX_EMPTY: i32 = 0;
 global CTX_UNKNOWN: i32 = 1;
 
+pub struct AtnState {
+    pub stack: List<i32>,
+}
+
 struct AtnKeyMap {
     keys: List<i64>,
     vals: List<i32>,
@@ -2528,6 +2532,7 @@ struct Parser {
     site: i32,
     sites: List<i32>,
     err_row: i32,
+    atn: AtnState,
     atn_ret_pending: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -2545,7 +2550,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1, atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1, atn: AtnState { stack: [] }, atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
     }
 
     fn emit(&mut self, s: String) {
@@ -2942,21 +2947,21 @@ impl Parser {
     }
 }
 
-fn scan_expression_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_expression_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    ATN_STACK.push(19);
-    pos = scan_e(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
-    ATN_STACK.pop();
+    atn.stack.push(19);
+    pos = scan_e(tokens, pos, atn, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         sg_0_done: {
             sg_0: {
                 pos += 1;
-                ATN_STACK.push(28);
-                pos = scan_e(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
-                ATN_STACK.pop();
+                atn.stack.push(28);
+                pos = scan_e(tokens, pos, atn, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
+                atn.stack.pop();
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
             }
@@ -2969,11 +2974,11 @@ fn scan_expression_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_e_atom_alt_5(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_atom_alt_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    ATN_STACK.push(53);
-    pos = scan_typespec(tokens, pos);
-    ATN_STACK.pop();
+    atn.stack.push(53);
+    pos = scan_typespec(tokens, pos, atn);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -2982,7 +2987,7 @@ fn scan_e_atom_alt_5(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2991,23 +2996,23 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let mut best: i32 = -1;
             pos = start + 1;
             try_7: {
-                ATN_STACK.push(90);
-                pos = scan_typespec(tokens, pos);
-                ATN_STACK.pop();
+                atn.stack.push(90);
+                pos = scan_typespec(tokens, pos, atn);
+                atn.stack.pop();
                 if pos < 0 { break try_7; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_7; }
                 pos += 1;
-                ATN_STACK.push(94);
-                pos = scan_e(tokens, pos, follow, 16);
-                ATN_STACK.pop();
+                atn.stack.push(94);
+                pos = scan_e(tokens, pos, atn, follow, 16);
+                atn.stack.pop();
                 if pos < 0 { break try_7; }
                 if pos > best { best = pos; }
             }
             pos = start + 1;
             try_0: {
-                ATN_STACK.push(36);
-                pos = scan_e(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
-                ATN_STACK.pop();
+                atn.stack.push(36);
+                pos = scan_e(tokens, pos, atn, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
+                atn.stack.pop();
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_0; }
                 pos += 1;
@@ -3020,22 +3025,22 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             break scan_alts;
         } else if alt_kind == TK_ID {
             let mut best: i32 = -1;
-            let try_5_end = scan_e_atom_alt_5(tokens, start, follow);
+            let try_5_end = scan_e_atom_alt_5(tokens, start, atn, follow);
             if try_5_end > best { best = try_5_end; }
             pos = start + 1;
             if pos > best { best = pos; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_int {
-            pos = scan_e_atom_alt_5(tokens, start, follow);
+            pos = scan_e_atom_alt_5(tokens, start, atn, follow);
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_new {
             pos = start + 1;
             try_6: {
-                ATN_STACK.push(62);
-                pos = scan_typespec(tokens, pos);
-                ATN_STACK.pop();
+                atn.stack.push(62);
+                pos = scan_typespec(tokens, pos, atn);
+                atn.stack.pop();
                 if pos < 0 { break try_6; }
                 let gp_1 = pos;
                 sg_1_done: {
@@ -3045,9 +3050,9 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                             pos += 1;
                             if pos < tokens.len() && _kind_set_0(tokens[pos]) {
                                 let sp = pos;
-                                ATN_STACK.push(71);
-                                pos = scan_expression_list(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                                ATN_STACK.pop();
+                                atn.stack.push(71);
+                                pos = scan_expression_list(tokens, pos, atn, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                                atn.stack.pop();
                                 if pos < 0 { pos = sp; }
                             }
                             if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sg_1_0; }
@@ -3059,9 +3064,9 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                             sg_2_done: {
                                 sg_2: {
                                     pos += 1;
-                                    ATN_STACK.push(81);
-                                    pos = scan_e(tokens, pos, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
-                                    ATN_STACK.pop();
+                                    atn.stack.push(81);
+                                    pos = scan_e(tokens, pos, atn, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
+                                    atn.stack.pop();
                                     if pos < 0 { break sg_2; }
                                     if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break sg_2; }
                                     pos += 1;
@@ -3074,9 +3079,9 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                                 sg_3_done: {
                                     sg_3: {
                                         pos += 1;
-                                        ATN_STACK.push(81);
-                                        pos = scan_e(tokens, pos, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
-                                        ATN_STACK.pop();
+                                        atn.stack.push(81);
+                                        pos = scan_e(tokens, pos, atn, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
+                                        atn.stack.pop();
                                         if pos < 0 { break sg_3; }
                                         if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break sg_3; }
                                         pos += 1;
@@ -3098,9 +3103,9 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         } else if _kind_set_2(alt_kind) {
             try_8: {
                 pos += 1;
-                ATN_STACK.push(111);
-                pos = scan_e(tokens, pos, follow, 14);
-                ATN_STACK.pop();
+                atn.stack.push(111);
+                pos = scan_e(tokens, pos, atn, follow, 14);
+                atn.stack.pop();
                 if pos < 0 { break try_8; }
                 break scan_alts;
             }
@@ -3108,9 +3113,9 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         } else if _kind_set_3(alt_kind) {
             try_9: {
                 pos += 1;
-                ATN_STACK.push(122);
-                pos = scan_e(tokens, pos, follow, 14);
-                ATN_STACK.pop();
+                atn.stack.push(122);
+                pos = scan_e(tokens, pos, atn, follow, 14);
+                atn.stack.pop();
                 if pos < 0 { break try_9; }
                 break scan_alts;
             }
@@ -3122,7 +3127,7 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_e_lr_6(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -3131,7 +3136,7 @@ fn scan_e_lr_6(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_e_lr_7(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -3140,7 +3145,7 @@ fn scan_e_lr_7(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_e_lr_8(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -3150,9 +3155,9 @@ fn scan_e_lr_8(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
-        ATN_STACK.push(146);
-        pos = scan_expression_list(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        ATN_STACK.pop();
+        atn.stack.push(146);
+        pos = scan_expression_list(tokens, pos, atn, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+        atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
@@ -3160,7 +3165,7 @@ fn scan_e_lr_8(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_e_lr_9(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_9(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -3172,9 +3177,9 @@ fn scan_e_lr_9(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
-        ATN_STACK.push(161);
-        pos = scan_expression_list(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        ATN_STACK.pop();
+        atn.stack.push(161);
+        pos = scan_expression_list(tokens, pos, atn, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+        atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
@@ -3182,35 +3187,35 @@ fn scan_e_lr_9(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_e_lr_11(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_11(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
     pos += 1;
-    ATN_STACK.push(168);
-    pos = scan_e(tokens, pos, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
-    ATN_STACK.pop();
+    atn.stack.push(168);
+    pos = scan_e(tokens, pos, atn, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_e_lr_13(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_13(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_4(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_e_lr_14(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_14(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
     if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
-        ATN_STACK.push(186);
-        pos = scan_expression_list(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        ATN_STACK.pop();
+        atn.stack.push(186);
+        pos = scan_expression_list(tokens, pos, atn, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+        atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
@@ -3218,157 +3223,157 @@ fn scan_e_lr_14(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_e_lr_17(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_17(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_5(tokens[pos]) { return -1; }
     pos += 1;
-    ATN_STACK.push(202);
-    pos = scan_e(tokens, pos, follow, 14);
-    ATN_STACK.pop();
+    atn.stack.push(202);
+    pos = scan_e(tokens, pos, atn, follow, 14);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_lr_18(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_18(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_6(tokens[pos]) { return -1; }
     pos += 1;
-    ATN_STACK.push(213);
-    pos = scan_e(tokens, pos, follow, 13);
-    ATN_STACK.pop();
+    atn.stack.push(213);
+    pos = scan_e(tokens, pos, atn, follow, 13);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_lr_19(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_19(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_7(tokens[pos]) { return -1; }
     pos += 1;
-    ATN_STACK.push(227);
-    pos = scan_e(tokens, pos, follow, 12);
-    ATN_STACK.pop();
+    atn.stack.push(227);
+    pos = scan_e(tokens, pos, atn, follow, 12);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_lr_20(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_20(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_8(tokens[pos]) { return -1; }
     pos += 1;
-    ATN_STACK.push(244);
-    pos = scan_e(tokens, pos, follow, 11);
-    ATN_STACK.pop();
+    atn.stack.push(244);
+    pos = scan_e(tokens, pos, atn, follow, 11);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_lr_21(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_21(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_instanceof { return -1; }
     pos += 1;
-    ATN_STACK.push(249);
-    pos = scan_e(tokens, pos, follow, 10);
-    ATN_STACK.pop();
+    atn.stack.push(249);
+    pos = scan_e(tokens, pos, atn, follow, 10);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_lr_22(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_22(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_9(tokens[pos]) { return -1; }
     pos += 1;
-    ATN_STACK.push(260);
-    pos = scan_e(tokens, pos, follow, 9);
-    ATN_STACK.pop();
+    atn.stack.push(260);
+    pos = scan_e(tokens, pos, atn, follow, 9);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_lr_23(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_23(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_AMP { return -1; }
     pos += 1;
-    ATN_STACK.push(265);
-    pos = scan_e(tokens, pos, follow, 8);
-    ATN_STACK.pop();
+    atn.stack.push(265);
+    pos = scan_e(tokens, pos, atn, follow, 8);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_lr_24(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_24(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_CARET { return -1; }
     pos += 1;
-    ATN_STACK.push(270);
-    pos = scan_e(tokens, pos, follow, 6);
-    ATN_STACK.pop();
+    atn.stack.push(270);
+    pos = scan_e(tokens, pos, atn, follow, 6);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_lr_25(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_25(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_PIPE { return -1; }
     pos += 1;
-    ATN_STACK.push(275);
-    pos = scan_e(tokens, pos, follow, 6);
-    ATN_STACK.pop();
+    atn.stack.push(275);
+    pos = scan_e(tokens, pos, atn, follow, 6);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_lr_26(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_26(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_AMPAMP { return -1; }
     pos += 1;
-    ATN_STACK.push(280);
-    pos = scan_e(tokens, pos, follow, 5);
-    ATN_STACK.pop();
+    atn.stack.push(280);
+    pos = scan_e(tokens, pos, atn, follow, 5);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_lr_27(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_27(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_PIPEPIPE { return -1; }
     pos += 1;
-    ATN_STACK.push(285);
-    pos = scan_e(tokens, pos, follow, 4);
-    ATN_STACK.pop();
+    atn.stack.push(285);
+    pos = scan_e(tokens, pos, atn, follow, 4);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_lr_28(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_28(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_QUESTION { return -1; }
     pos += 1;
-    ATN_STACK.push(290);
-    pos = scan_e(tokens, pos, FOLLOW_MASK_8, 0);
-    ATN_STACK.pop();
+    atn.stack.push(290);
+    pos = scan_e(tokens, pos, atn, FOLLOW_MASK_8, 0);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { return -1; }
     pos += 1;
-    ATN_STACK.push(294);
-    pos = scan_e(tokens, pos, follow, 3);
-    ATN_STACK.pop();
+    atn.stack.push(294);
+    pos = scan_e(tokens, pos, atn, follow, 3);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_lr_29(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_29(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_10(tokens[pos]) { return -1; }
     pos += 1;
-    ATN_STACK.push(335);
-    pos = scan_e(tokens, pos, follow, 1);
-    ATN_STACK.pop();
+    atn.stack.push(335);
+    pos = scan_e(tokens, pos, atn, follow, 1);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_e_atom(tokens, pos, follow);
+fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_e_atom(tokens, pos, atn, follow);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -3377,7 +3382,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
             if second_kind == TK_ID {
                 if 20 >= min_prec {
                     let lr_saved_pos = pos;
-                    pos = scan_e_lr_6(tokens, pos, follow);
+                    pos = scan_e_lr_6(tokens, pos, atn, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
                     break;
@@ -3385,7 +3390,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
             } else if second_kind == TK_LIT_this {
                 if 19 >= min_prec {
                     let lr_saved_pos = pos;
-                    pos = scan_e_lr_7(tokens, pos, follow);
+                    pos = scan_e_lr_7(tokens, pos, atn, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
                     break;
@@ -3393,7 +3398,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
             } else if second_kind == TK_LIT_super {
                 if 18 >= min_prec {
                     let lr_saved_pos = pos;
-                    pos = scan_e_lr_8(tokens, pos, follow);
+                    pos = scan_e_lr_8(tokens, pos, atn, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
                     break;
@@ -3401,7 +3406,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
             } else {
                 if 17 >= min_prec {
                     let lr_saved_pos = pos;
-                    pos = scan_e_lr_9(tokens, pos, follow);
+                    pos = scan_e_lr_9(tokens, pos, atn, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
                     break;
@@ -3410,7 +3415,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if suffix_kind == TK_LIT_LBRACKET {
             if 16 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_11(tokens, pos, follow);
+                pos = scan_e_lr_11(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3418,7 +3423,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if _kind_set_4(suffix_kind) {
             if 15 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_13(tokens, pos, follow);
+                pos = scan_e_lr_13(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3426,7 +3431,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if suffix_kind == TK_LIT_LPAREN {
             if 14 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_14(tokens, pos, follow);
+                pos = scan_e_lr_14(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3434,7 +3439,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if _kind_set_5(suffix_kind) {
             if 13 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_17(tokens, pos, follow);
+                pos = scan_e_lr_17(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3442,7 +3447,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if _kind_set_6(suffix_kind) {
             if 12 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_18(tokens, pos, follow);
+                pos = scan_e_lr_18(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3450,7 +3455,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if _kind_set_7(suffix_kind) {
             if 11 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_19(tokens, pos, follow);
+                pos = scan_e_lr_19(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3458,7 +3463,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if _kind_set_8(suffix_kind) {
             if 10 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_20(tokens, pos, follow);
+                pos = scan_e_lr_20(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3466,7 +3471,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if suffix_kind == TK_LIT_instanceof {
             if 9 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_21(tokens, pos, follow);
+                pos = scan_e_lr_21(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3474,7 +3479,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if _kind_set_9(suffix_kind) {
             if 8 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_22(tokens, pos, follow);
+                pos = scan_e_lr_22(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3482,7 +3487,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if suffix_kind == TK_LIT_AMP {
             if 7 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_23(tokens, pos, follow);
+                pos = scan_e_lr_23(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3490,7 +3495,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if suffix_kind == TK_LIT_CARET {
             if 6 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_24(tokens, pos, follow);
+                pos = scan_e_lr_24(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3498,7 +3503,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if suffix_kind == TK_LIT_PIPE {
             if 5 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_25(tokens, pos, follow);
+                pos = scan_e_lr_25(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3506,7 +3511,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if suffix_kind == TK_LIT_AMPAMP {
             if 4 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_26(tokens, pos, follow);
+                pos = scan_e_lr_26(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3514,7 +3519,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if suffix_kind == TK_LIT_PIPEPIPE {
             if 3 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_27(tokens, pos, follow);
+                pos = scan_e_lr_27(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3522,7 +3527,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if suffix_kind == TK_LIT_QUESTION {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_28(tokens, pos, follow);
+                pos = scan_e_lr_28(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3530,7 +3535,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
         } else if _kind_set_10(suffix_kind) {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_29(tokens, pos, follow);
+                pos = scan_e_lr_29(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3542,13 +3547,13 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_typespec(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_typespec(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
-            let _atn_alt = atn_predict_with_stack(&ATN_SIM, 18, &ATN_STACK, tokens, pos, TK_EOF, 0);
+            let _atn_alt = atn_predict_with_stack(&ATN_SIM, 18, &atn.stack, tokens, pos, TK_EOF, 0);
             if _atn_alt == 1 {
                 pos = start + 1;
                 try_1: {
@@ -3566,7 +3571,7 @@ fn scan_typespec(tokens: &Array<i32>, pos: i32) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_LIT_int {
-            let _atn_alt = atn_predict_with_stack(&ATN_SIM, 18, &ATN_STACK, tokens, pos, TK_EOF, 0);
+            let _atn_alt = atn_predict_with_stack(&ATN_SIM, 18, &atn.stack, tokens, pos, TK_EOF, 0);
             if _atn_alt == 3 {
                 pos = start + 1;
                 try_3: {
@@ -3605,14 +3610,14 @@ fn _parse_s(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    ATN_STACK.push(_atn_ret);
+    p.atn.stack.push(_atn_ret);
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
     _parse_s__inner(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_S, "s", -1); }
     p.b.finish_node(p.last_end());
-    ATN_STACK.pop();
+    p.atn.stack.pop();
     p.sites.pop();
 }
 
@@ -3631,9 +3636,9 @@ fn _parse_expression_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 sg_4: {
                     if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_4; }
                     pos += 1;
-                    ATN_STACK.push(28);
-                    pos = scan_e(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
-                    ATN_STACK.pop();
+                    p.atn.stack.push(28);
+                    pos = scan_e(tokens, pos, &mut p.atn, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
+                    p.atn.stack.pop();
                     if pos < 0 { break sg_4; }
                     break sg_4_done;
                 }
@@ -3655,14 +3660,14 @@ fn _parse_expression_list(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    ATN_STACK.push(_atn_ret);
+    p.atn.stack.push(_atn_ret);
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_EXPRESSION_LIST, _start);
     _parse_expression_list__inner(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_EXPRESSION_LIST, "expressionList", -1); }
     p.b.finish_node(p.last_end());
-    ATN_STACK.pop();
+    p.atn.stack.pop();
     p.sites.pop();
 }
 
@@ -3678,19 +3683,19 @@ fn _parse_e__inner_alt_12(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_e__inner_scan_12(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn _parse_e__inner_scan_12(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    ATN_STACK.push(90);
-    pos = scan_typespec(tokens, pos);
-    ATN_STACK.pop();
+    atn.stack.push(90);
+    pos = scan_typespec(tokens, pos, atn);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
     pos += 1;
-    ATN_STACK.push(94);
-    pos = scan_e(tokens, pos, follow, 16);
-    ATN_STACK.pop();
+    atn.stack.push(94);
+    pos = scan_e(tokens, pos, atn, follow, 16);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
@@ -3704,13 +3709,13 @@ fn _parse_e__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_e__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn _parse_e__inner_scan_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    ATN_STACK.push(36);
-    pos = scan_e(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
-    ATN_STACK.pop();
+    atn.stack.push(36);
+    pos = scan_e(tokens, pos, atn, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
+    atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
     pos += 1;
@@ -3731,7 +3736,7 @@ fn _parse_e__inner_alt_4(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_e__inner_scan_4(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn _parse_e__inner_scan_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
@@ -3744,8 +3749,8 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
     if kind == TK_LIT_LPAREN {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_12 = _parse_e__inner_scan_12(_sd_tokens, _sd_pos, follow);
-        let _sd_p_0 = _parse_e__inner_scan_0(_sd_tokens, _sd_pos, follow);
+        let _sd_p_12 = _parse_e__inner_scan_12(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_0 = _parse_e__inner_scan_0(_sd_tokens, _sd_pos, &mut p.atn, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -3777,8 +3782,8 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
         if kind == TK_ID {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_5 = scan_e_atom_alt_5(_sd_tokens, _sd_pos, follow);
-            let _sd_p_4 = _parse_e__inner_scan_4(_sd_tokens, _sd_pos, follow);
+            let _sd_p_5 = scan_e_atom_alt_5(_sd_tokens, _sd_pos, &mut p.atn, follow);
+            let _sd_p_4 = _parse_e__inner_scan_4(_sd_tokens, _sd_pos, &mut p.atn, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_4 > _sd_best_p {
@@ -3828,9 +3833,9 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
                             sg_5: {
                                 if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { break sg_5; }
                                 pos += 1;
-                                ATN_STACK.push(81);
-                                pos = scan_e(tokens, pos, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
-                                ATN_STACK.pop();
+                                p.atn.stack.push(81);
+                                pos = scan_e(tokens, pos, &mut p.atn, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
+                                p.atn.stack.pop();
                                 if pos < 0 { break sg_5; }
                                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break sg_5; }
                                 pos += 1;
@@ -3891,7 +3896,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
         if _sk == TK_LIT_DOT {
             if p.peek_at(1) == TK_ID {
                 if 20 >= min_prec {
-                    if scan_e_lr_6(&p.kinds, p.pos, follow) < 0 {
+                    if scan_e_lr_6(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
@@ -3903,7 +3908,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 }
             } else if p.peek_at(1) == TK_LIT_this {
                 if 19 >= min_prec {
-                    if scan_e_lr_7(&p.kinds, p.pos, follow) < 0 {
+                    if scan_e_lr_7(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
@@ -3915,7 +3920,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 }
             } else if p.peek_at(1) == TK_LIT_super {
                 if 18 >= min_prec {
-                    if scan_e_lr_8(&p.kinds, p.pos, follow) < 0 {
+                    if scan_e_lr_8(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
@@ -3927,9 +3932,9 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                     opt_scan: {
                         let tokens = &p.kinds;
                         let mut pos: i32 = p.pos;
-                        ATN_STACK.push(146);
-                        pos = scan_expression_list(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                        ATN_STACK.pop();
+                        p.atn.stack.push(146);
+                        pos = scan_expression_list(tokens, pos, &mut p.atn, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                        p.atn.stack.pop();
                         if pos < 0 { break opt_scan; }
                         opt_scan_pos = pos;
                     }
@@ -3945,7 +3950,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 }
             } else {
                 if 17 >= min_prec {
-                    if scan_e_lr_9(&p.kinds, p.pos, follow) < 0 {
+                    if scan_e_lr_9(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
@@ -3958,9 +3963,9 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                     opt_scan_2: {
                         let tokens = &p.kinds;
                         let mut pos: i32 = p.pos;
-                        ATN_STACK.push(161);
-                        pos = scan_expression_list(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                        ATN_STACK.pop();
+                        p.atn.stack.push(161);
+                        pos = scan_expression_list(tokens, pos, &mut p.atn, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                        p.atn.stack.pop();
                         if pos < 0 { break opt_scan_2; }
                         opt_scan_pos_2 = pos;
                     }
@@ -3977,7 +3982,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_LBRACKET {
             if 16 >= min_prec {
-                if scan_e_lr_11(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_11(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -3992,7 +3997,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _kind_set_4(_sk) {
             if 15 >= min_prec {
-                if scan_e_lr_13(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_13(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4003,7 +4008,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_LPAREN {
             if 14 >= min_prec {
-                if scan_e_lr_14(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_14(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4013,9 +4018,9 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 opt_scan_3: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    ATN_STACK.push(186);
-                    pos = scan_expression_list(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                    ATN_STACK.pop();
+                    p.atn.stack.push(186);
+                    pos = scan_expression_list(tokens, pos, &mut p.atn, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                    p.atn.stack.pop();
                     if pos < 0 { break opt_scan_3; }
                     opt_scan_pos_3 = pos;
                 }
@@ -4031,7 +4036,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _kind_set_5(_sk) {
             if 13 >= min_prec {
-                if scan_e_lr_17(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_17(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4045,7 +4050,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _kind_set_6(_sk) {
             if 12 >= min_prec {
-                if scan_e_lr_18(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_18(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4059,7 +4064,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _kind_set_7(_sk) {
             if 11 >= min_prec {
-                if scan_e_lr_19(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_19(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4073,7 +4078,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _kind_set_8(_sk) {
             if 10 >= min_prec {
-                if scan_e_lr_20(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_20(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4087,7 +4092,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_instanceof {
             if 9 >= min_prec {
-                if scan_e_lr_21(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_21(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4101,7 +4106,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _kind_set_9(_sk) {
             if 8 >= min_prec {
-                if scan_e_lr_22(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_22(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4115,7 +4120,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_AMP {
             if 7 >= min_prec {
-                if scan_e_lr_23(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_23(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4129,7 +4134,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_CARET {
             if 6 >= min_prec {
-                if scan_e_lr_24(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_24(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4143,7 +4148,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_PIPE {
             if 5 >= min_prec {
-                if scan_e_lr_25(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_25(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4157,7 +4162,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_AMPAMP {
             if 4 >= min_prec {
-                if scan_e_lr_26(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_26(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4171,7 +4176,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_PIPEPIPE {
             if 3 >= min_prec {
-                if scan_e_lr_27(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_27(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4185,7 +4190,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_QUESTION {
             if 2 >= min_prec {
-                if scan_e_lr_28(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_28(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4203,7 +4208,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _kind_set_10(_sk) {
             if 1 >= min_prec {
-                if scan_e_lr_29(&p.kinds, p.pos, follow) < 0 {
+                if scan_e_lr_29(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4226,12 +4231,12 @@ fn _parse_e(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    ATN_STACK.push(_atn_ret);
+    p.atn.stack.push(_atn_ret);
     p.sites.push(p.site);
     let _row = p.b.checkpoint();
     _parse_e__inner(p, follow, min_prec);
     if p.recovering && p.recover_rule(RK_E, "e", _row) { p.b.finish_node(p.last_end()); }
-    ATN_STACK.pop();
+    p.atn.stack.pop();
     p.sites.pop();
 }
 
@@ -4242,7 +4247,7 @@ fn _parse_typespec__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_typespec__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
+fn _parse_typespec__inner_scan_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
@@ -4258,7 +4263,7 @@ fn _parse_typespec__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_typespec__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
+fn _parse_typespec__inner_scan_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
@@ -4272,7 +4277,7 @@ fn _parse_typespec__inner_alt_3(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_typespec__inner_scan_3(tokens: &Array<i32>, pos: i32) -> i32 {
+fn _parse_typespec__inner_scan_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_int { return -1; }
     pos += 1;
@@ -4288,7 +4293,7 @@ fn _parse_typespec__inner_alt_2(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_typespec__inner_scan_2(tokens: &Array<i32>, pos: i32) -> i32 {
+fn _parse_typespec__inner_scan_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_int { return -1; }
     pos += 1;
@@ -4299,14 +4304,14 @@ fn _parse_typespec__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_ID {
-        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 18, &ATN_STACK, &p.kinds, p.pos, TK_EOF, 0);
+        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 18, &p.atn.stack, &p.kinds, p.pos, TK_EOF, 0);
         if _atn_alt == 1 {
             return _parse_typespec__inner_alt_1(p);
         }
         return _parse_typespec__inner_alt_0(p);
     }
     if kind == TK_LIT_int {
-        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 18, &ATN_STACK, &p.kinds, p.pos, TK_EOF, 0);
+        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 18, &p.atn.stack, &p.kinds, p.pos, TK_EOF, 0);
         if _atn_alt == 3 {
             return _parse_typespec__inner_alt_3(p);
         }
@@ -4324,14 +4329,14 @@ fn _parse_typespec(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    ATN_STACK.push(_atn_ret);
+    p.atn.stack.push(_atn_ret);
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_TYPESPEC, _start);
     _parse_typespec__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_TYPESPEC, "typespec", -1); }
     p.b.finish_node(p.last_end());
-    ATN_STACK.pop();
+    p.atn.stack.pop();
     p.sites.pop();
 }
 
@@ -4483,5 +4488,4 @@ global FOLLOW_MASK_5: i64 = 5;
 global FOLLOW_MASK_8: i64 = 774;
 
 global ATN_SIM: AtnSim = atn_decode(&b"\x04\x00\x13\x00\x66\x01\x00\x00\x02\x00\x04\x00\x06\x00\x14\x00\x1e\x00\x3f\x00\x44\x00\x54\x00\x60\x00\x71\x00\x7b\x00\x8f\x00\x9e\x00\xac\x00\xb7\x00\xbe\x00\xcc\x00\xd7\x00\xe5\x00\xfb\x00\x28\x01\x50\x01\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x07\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x08\x09\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x06\x09\x07\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x0a\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x04\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x15\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x04\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x0c\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x04\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x04\x00\x01\x00\x01\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x04\x00\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x05\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x01\x00\x04\x00\x01\x00\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x04\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x04\x00\x00\x01\x00\x04\x00\x00\x01\x00\x04\x00\x00\x01\x00\x04\x00\x00\x01\x00\x04\x00\x00\x01\x00\x04\x00\x00\x01\x00\x04\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x09\x00\x10\x00\x1f\x00\x51\x01\x0b\x00\x02\x00\x0c\x00\x05\x00\x0e\x00\x0f\x00\x0a\x00\x12\x00\x04\x00\x13\x00\x05\x00\x15\x00\x17\x00\x16\x00\x11\x00\x19\x00\x1e\x00\x1a\x00\x1b\x00\x1c\x00\x05\x00\x18\x00\x15\x00\x21\x00\x28\x00\x2b\x00\x2e\x00\x31\x00\x34\x00\x3b\x00\x57\x00\x60\x00\x71\x00\x7c\x00\x22\x00\x23\x00\x24\x00\x05\x00\x26\x00\x27\x00\x20\x00\x29\x00\x2a\x00\x20\x00\x2c\x00\x2d\x00\x20\x00\x2f\x00\x30\x00\x20\x00\x32\x00\x33\x00\x20\x00\x35\x00\x07\x00\x37\x00\x38\x00\x39\x00\x3a\x00\x20\x00\x3c\x00\x3d\x00\x3e\x00\x07\x00\x40\x00\x42\x00\x4b\x00\x20\x00\x43\x00\x44\x00\x45\x00\x47\x00\x46\x00\x49\x00\x03\x00\x46\x00\x4a\x00\x41\x00\x4c\x00\x4e\x00\x55\x00\x4f\x00\x50\x00\x51\x00\x05\x00\x53\x00\x54\x00\x4d\x00\x4c\x00\x56\x00\x41\x00\x58\x00\x59\x00\x5a\x00\x07\x00\x5c\x00\x5d\x00\x5e\x00\x05\x00\x20\x00\x61\x00\x63\x00\x66\x00\x69\x00\x6c\x00\x6f\x00\x64\x00\x65\x00\x62\x00\x67\x00\x68\x00\x62\x00\x6a\x00\x6b\x00\x62\x00\x6d\x00\x6e\x00\x62\x00\x05\x00\x20\x00\x72\x00\x74\x00\x77\x00\x7a\x00\x75\x00\x76\x00\x73\x00\x78\x00\x79\x00\x73\x00\x05\x00\x20\x00\x7f\x00\x84\x00\x89\x00\x96\x00\xa5\x00\xac\x00\xb5\x00\xbe\x00\xcc\x00\xd7\x00\xe5\x00\xf6\x00\xfb\x00\x06\x01\x0b\x01\x10\x01\x15\x01\x1a\x01\x1f\x01\x28\x01\x7d\x00\x06\x00\x7c\x00\x80\x00\x81\x00\x82\x00\x83\x00\x7e\x00\x85\x00\x86\x00\x87\x00\x88\x00\x7e\x00\x8a\x00\x8b\x00\x8c\x00\x8d\x00\x8e\x00\x8f\x00\x90\x00\x92\x00\x91\x00\x94\x00\x03\x00\x91\x00\x95\x00\x7e\x00\x97\x00\x98\x00\x99\x00\x9a\x00\x9b\x00\x9c\x00\x9d\x00\x9e\x00\x9f\x00\xa1\x00\xa0\x00\xa3\x00\x03\x00\xa0\x00\xa4\x00\x7e\x00\xa6\x00\xa7\x00\xa8\x00\x05\x00\xaa\x00\xab\x00\x7e\x00\xad\x00\xaf\x00\xb2\x00\x7e\x00\xb0\x00\xb1\x00\xae\x00\xb3\x00\xb4\x00\xae\x00\xb6\x00\xb7\x00\xb8\x00\xba\x00\xb9\x00\xbc\x00\x03\x00\xb9\x00\xbd\x00\x7e\x00\xbf\x00\xc1\x00\xc4\x00\xc7\x00\xca\x00\xc2\x00\xc3\x00\xc0\x00\xc5\x00\xc6\x00\xc0\x00\xc8\x00\xc9\x00\xc0\x00\x05\x00\x7e\x00\xcd\x00\xcf\x00\xd2\x00\xd5\x00\xd0\x00\xd1\x00\xce\x00\xd3\x00\xd4\x00\xce\x00\x05\x00\x7e\x00\xd8\x00\xda\x00\xdd\x00\xe0\x00\xe3\x00\xdb\x00\xdc\x00\xd9\x00\xde\x00\xdf\x00\xd9\x00\xe1\x00\xe2\x00\xd9\x00\x05\x00\x7e\x00\xe6\x00\xe8\x00\xeb\x00\xee\x00\xf1\x00\xf4\x00\xe9\x00\xea\x00\xe7\x00\xec\x00\xed\x00\xe7\x00\xef\x00\xf0\x00\xe7\x00\xf2\x00\xf3\x00\xe7\x00\x05\x00\x7e\x00\xf7\x00\xf8\x00\xf9\x00\x05\x00\x7e\x00\xfc\x00\xfe\x00\x01\x01\x04\x01\xff\x00\x00\x01\xfd\x00\x02\x01\x03\x01\xfd\x00\x05\x00\x7e\x00\x07\x01\x08\x01\x09\x01\x05\x00\x7e\x00\x0c\x01\x0d\x01\x0e\x01\x05\x00\x7e\x00\x11\x01\x12\x01\x13\x01\x05\x00\x7e\x00\x16\x01\x17\x01\x18\x01\x05\x00\x7e\x00\x1b\x01\x1c\x01\x1d\x01\x05\x00\x7e\x00\x20\x01\x21\x01\x22\x01\x05\x00\x24\x01\x25\x01\x26\x01\x05\x00\x7e\x00\x29\x01\x2b\x01\x2e\x01\x31\x01\x34\x01\x37\x01\x3a\x01\x3d\x01\x40\x01\x43\x01\x46\x01\x49\x01\x4c\x01\x4f\x01\x2c\x01\x2d\x01\x2a\x01\x2f\x01\x30\x01\x2a\x01\x32\x01\x33\x01\x2a\x01\x35\x01\x36\x01\x2a\x01\x38\x01\x39\x01\x2a\x01\x3b\x01\x3c\x01\x2a\x01\x3e\x01\x3f\x01\x2a\x01\x41\x01\x42\x01\x2a\x01\x44\x01\x45\x01\x2a\x01\x47\x01\x48\x01\x2a\x01\x4a\x01\x4b\x01\x2a\x01\x4d\x01\x4e\x01\x2a\x01\x05\x00\x7e\x00\x53\x01\x56\x01\x5d\x01\x60\x01\x08\x00\x54\x01\x55\x01\x52\x01\x57\x01\x58\x01\x59\x01\x5a\x01\x5b\x01\x5c\x01\x52\x01\x5e\x01\x5f\x01\x52\x01\x61\x01\x62\x01\x63\x01\x64\x01\x65\x01\x66\x01\x52\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x0d\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x0f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x12\x00\x00\x00\x00\x00\x00\x00\x00\x13\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x14\x00\x00\x00\x00\x00\x00\x00\x00\x15\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x0d\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x0f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x16\x00\x00\x00\x00\x00\x00\x00\x00\x17\x00\x00\x00\x00\x00\x00\x00\x00\x18\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x12\x00\x00\x00\x00\x00\x00\x00\x00\x13\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x1a\x00\x00\x00\x00\x00\x00\x00\x00\x1b\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1c\x00\x00\x00\x00\x00\x00\x00\x00\x1d\x00\x00\x00\x00\x00\x00\x00\x00\x1e\x00\x00\x00\x00\x00\x00\x00\x00\x1f\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x20\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x21\x00\x00\x00\x00\x00\x00\x00\x00\x22\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x24\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x25\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x26\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x27\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x28\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x29\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x2a\x00\x00\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x00\x00\x00\x00\x2d\x00\x00\x00\x00\x00\x00\x00\x00\x2e\x00\x00\x00\x00\x00\x00\x00\x00\x2f\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x31\x00\x00\x00\x00\x00\x00\x00\x00\x32\x00\x00\x00\x00\x00\x00\x00\x00\x33\x00\x00\x00\x00\x00\x00\x00\x00\x34\x00\x00\x00\x00\x00\x00\x00\x00\x35\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x0f\x00\x00\x00\x00\x00\x00\x00\x00\x36\x00\x00\x00\x00\x00\x00\x00\x00\x36\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x0f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x14\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x25\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x36\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x48\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x52\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x70\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x7b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x93\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xa2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xa9\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xbb\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xcb\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xd6\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xe4\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf5\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xfa\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0f\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x14\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x19\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1e\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x27\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x50\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x14\x00\x13\x00\x12\x00\x11\x00\x10\x00\x0f\x00\x0e\x00\x0d\x00\x0c\x00\x0b\x00\x0a\x00\x09\x00\x08\x00\x07\x00\x06\x00\x05\x00\x04\x00\x03\x00\x02\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
-global mut ATN_STACK: List<i32> = [];
 

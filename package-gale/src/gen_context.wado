@@ -61,6 +61,11 @@ pub struct FollowMaskEntry {
 /// is the whole gate.
 pub global FOLLOW_MASK_MAX_K: i32 = FOLLOW_MAX_DEPTH;
 
+/// The parser's ATN state (`AtnState`): its field, and the name a scan
+/// function's `&mut` parameter borrows it under.
+pub global ATN_STATE_HANDLE: String = "atn";
+pub global ATN_STATE_TYPE: String = "AtnState";
+
 /// The labeled rule calls of one rule whose capture an action reads: `spans`
 /// carry the call's token range (`$x.text`), `nodes` its builder row (`$x.ctx`).
 pub struct RuleCaptures {
@@ -165,8 +170,8 @@ pub struct GenContext {
     /// Set where a decision routes to the runtime ATN simulator; gates its
     /// infrastructure, so a grammar without one stays byte-identical.
     needs_atn_seen: bool,
-    /// Set where a scan decides through the simulator too. Gates the shared
-    /// caller stack (`ATN_STACK`), so a `??`-only grammar carries no dead stack.
+    /// Set where a scan decides through the simulator too. Gates the scans'
+    /// `atn` parameter, so a `??`-only grammar's scans borrow nothing.
     needs_scan_atn_seen: bool,
     /// Set by lowering for an ATN-class LR rule. Gates the LR tables.
     needs_lr_atn_seen: bool,
@@ -521,8 +526,7 @@ impl GenContext {
         return `${self.scan_gate_path()}.${field}`;
     }
 
-    /// The trailing gate argument of a scan call, empty without a gate.
-    pub fn scan_gate_arg(&self) -> String {
+    fn scan_gate_arg(&self) -> String {
         if !self.emit_scan_gate() {
             return String::new();
         }
@@ -592,7 +596,7 @@ impl GenContext {
     }
 
     /// Whether the generated parser emits the ATN simulator infrastructure
-    /// (the `ATN_SIM` blob, `Parser.atn_stack`, rule-entry stack maintenance).
+    /// (the `ATN_SIM` blob, `Parser.atn`, rule-entry stack maintenance).
     pub fn needs_atn(&self) -> bool {
         return self.needs_atn_seen;
     }
@@ -603,8 +607,8 @@ impl GenContext {
         self.needs_scan_atn_seen = true;
     }
 
-    /// Whether scans decide through the ATN, so the caller stack is the global
-    /// `ATN_STACK` both sides share. (`ATN_SIM` is emitted whenever `needs_atn`.)
+    /// Whether scans decide through the ATN, so every scan borrows the parser's
+    /// ATN state. (`ATN_SIM` is emitted whenever `needs_atn`.)
     pub fn needs_scan_atn(&self) -> bool {
         return self.needs_scan_atn_seen;
     }
@@ -620,10 +624,27 @@ impl GenContext {
         return self.needs_lr_atn_seen;
     }
 
-    /// The caller stack the parse side pushes and predicts with: `ATN_STACK`
-    /// where scans read it too, so a scan launched mid-parse has full context.
+    /// The caller stack pushed and predicted with, as this code reaches it. A
+    /// scan borrows the parser's, so one launched mid-parse has full context.
     pub fn atn_stack_place(&self) -> String {
-        return if self.needs_scan_atn_seen { "ATN_STACK" } else { "p.atn_stack" };
+        return `${self.atn_state_path()}.stack`;
+    }
+
+    fn atn_state_path(&self) -> String {
+        if self.in_scan_fn {
+            return ATN_STATE_HANDLE;
+        }
+        return `${PARSER_HANDLE}.${ATN_STATE_HANDLE}`;
+    }
+
+    /// The trailing arguments of a scan call for the parser state it borrows:
+    /// the gate, then the ATN state. Empty where the scan borrows neither.
+    pub fn scan_state_args(&self) -> String {
+        let mut args = self.scan_gate_arg();
+        if self.needs_scan_atn() {
+            args.push_str(if self.in_scan_fn { `, ${ATN_STATE_HANDLE}` } else { `, &mut ${self.atn_state_path()}` });
+        }
+        return args;
     }
 
     /// Install what each rule's actions read off its labeled rule calls
@@ -902,7 +923,7 @@ impl GenContext {
         return self.atn_rule_body_decision(rule);
     }
 
-    /// The exact ATN return state to push onto `ATN_STACK` before a scan
+    /// The exact ATN return state to push onto the caller stack before a scan
     /// rule call (from `Atn.call_site_returns`), or -1 when the grammar has no
     /// scan-side ATN routing. Every scan rule call brackets with this push/pop
     /// — mirroring the parse side, where the rule-entry wrapper pushes every
@@ -1176,7 +1197,7 @@ impl GenContext {
 
     /// Index of a parser rule by name (position in `parser_rules`), or -1.
     /// Matches `atn.wado::build_atn`'s rule indexing, so the generated
-    /// parser can push this onto `atn_stack` for full-context prediction.
+    /// parser can push this onto its caller stack for full-context prediction.
     pub fn rule_index_of<S: AsStrSlice>(&self, name: S) -> i32 {
         if let Some(i) = self.rule_index.get_str(name) {
             return i;

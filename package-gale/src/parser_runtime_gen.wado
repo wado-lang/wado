@@ -429,7 +429,6 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w: &mut CodeWriter,
     trace: bool,
     needs_atn: bool,
-    shared_atn_stack: bool,
     emit_actions: bool,
     fragment_recovery: bool,
     scan_gate: bool,
@@ -486,15 +485,13 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     }
     // Runtime ATN simulator state (only when a non-greedy / LR decision needs
     // it); the decoded ATN is shared via the module-level `ATN_SIM`.
-    // `atn_stack` is the caller stack of ATN return states for full-context
-    // prediction. `atn_ret_pending` passes a call site's return state to the
+    // `atn.stack` is the caller stack of ATN return states for full-context
+    // prediction, which a simulating scan borrows so it continues the parse's
+    // frames. `atn_ret_pending` passes a call site's return state to the
     // callee's entry wrapper, which pushes it and resets to -1 (an unstamped
-    // call pushes -1 = unknown caller, handled as SLL). Scans that simulate
-    // share the stack as the global `ATN_STACK` instead.
-    if needs_atn && !shared_atn_stack {
-        s.add_field("atn_stack", "List<i32>");
-    }
+    // call pushes -1 = unknown caller, handled as SLL).
     if needs_atn {
+        s.add_field("atn", "AtnState");
         s.add_field("atn_ret_pending", "i32");
     }
     // the parser drives a `TreeBuilder` (`b`) — the matched
@@ -543,11 +540,8 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     if trace {
         init.push_str(", trace_depth: 0");
     }
-    if needs_atn && !shared_atn_stack {
-        init.push_str(", atn_stack: []");
-    }
     if needs_atn {
-        init.push_str(", atn_ret_pending: -1");
+        init.push_str(", atn: AtnState { stack: [] }, atn_ret_pending: -1");
     }
     init.push_str(", b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: []");
     if emit_actions {

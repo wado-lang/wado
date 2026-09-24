@@ -1080,6 +1080,10 @@ global CTX_UNKNOWN_RETURN: i32 = -4;
 global CTX_EMPTY: i32 = 0;
 global CTX_UNKNOWN: i32 = 1;
 
+pub struct AtnState {
+    pub stack: List<i32>,
+}
+
 struct AtnKeyMap {
     keys: List<i64>,
     vals: List<i32>,
@@ -1921,7 +1925,7 @@ struct Parser {
     site: i32,
     sites: List<i32>,
     err_row: i32,
-    atn_stack: List<i32>,
+    atn: AtnState,
     atn_ret_pending: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -1938,7 +1942,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1, atn_stack: [], atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1, atn: AtnState { stack: [] }, atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
     fn supersedes_pending(&self, start: i32) -> bool {
@@ -2329,14 +2333,14 @@ fn _parse_prog(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
+    p.atn.stack.push(_atn_ret);
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_PROG, _start);
     _parse_prog__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_PROG, "prog", -1); }
     p.b.finish_node(p.last_end());
-    p.atn_stack.pop();
+    p.atn.stack.pop();
     p.sites.pop();
 }
 
@@ -2352,7 +2356,7 @@ fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
         p.site = 2;
         p.atn_ret_pending = 21;
         _parse_e(p);
-        if atn_predict_with_stack(&ATN_SIM, 1, &p.atn_stack, &p.kinds, p.pos, TK_EOF, min_prec) == 1 {
+        if atn_predict_with_stack(&ATN_SIM, 1, &p.atn.stack, &p.kinds, p.pos, TK_EOF, min_prec) == 1 {
             p.expect(TK_LIT_else, &SYNC_0, false);
             p.site = 3;
             p.atn_ret_pending = 30;
@@ -2406,12 +2410,12 @@ fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
+    p.atn.stack.push(_atn_ret);
     p.sites.push(p.site);
     let _row = p.b.checkpoint();
     _parse_e__inner(p, min_prec);
     if p.recovering && p.recover_rule(RK_E, "e", _row) { p.b.finish_node(p.last_end()); }
-    p.atn_stack.pop();
+    p.atn.stack.pop();
     p.sites.pop();
 }
 

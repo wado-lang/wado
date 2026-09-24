@@ -332,7 +332,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         gen_follow_mask_globals(&mut w, &ctx, &named);
     }
     if ctx.needs_atn() {
-        gen_atn_data_global(&mut w, &atn, ctx.needs_lr_atn(), ctx.needs_scan_atn());
+        gen_atn_data_global(&mut w, &atn, ctx.needs_lr_atn());
     }
     // Serialized lexer ATN blob, decoded once into `LATN_SIM`, for the
     // runtime lexer simulator (`latn_match`).
@@ -592,13 +592,8 @@ fn element_has_open_first(e: &Element) -> bool {
 
 /// Emit the decoded `ATN_SIM` global: the serialized whole-grammar ATN the
 /// inlined runtime decodes once, at construction, into the module-level sim.
-fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, lr_tables: bool, emit_scan_globals: bool) {
+fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, lr_tables: bool) {
     emit_atn_blob_global(w, atn, "ATN_SIM", lr_tables);
-    // One caller stack for both sides: a scan launched mid-parse continues the
-    // parse's frames, so its simulation has the full context the parse has.
-    if emit_scan_globals {
-        w.line("global mut ATN_STACK: List<i32> = [];");
-    }
     w.blank();
 }
 

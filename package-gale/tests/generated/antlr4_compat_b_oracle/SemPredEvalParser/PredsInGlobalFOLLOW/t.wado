@@ -1083,6 +1083,10 @@ global CTX_UNKNOWN_RETURN: i32 = -4;
 global CTX_EMPTY: i32 = 0;
 global CTX_UNKNOWN: i32 = 1;
 
+pub struct AtnState {
+    pub stack: List<i32>,
+}
+
 struct AtnKeyMap {
     keys: List<i64>,
     vals: List<i32>,
@@ -1892,6 +1896,7 @@ struct Parser {
     site: i32,
     sites: List<i32>,
     err_row: i32,
+    atn: AtnState,
     atn_ret_pending: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -1909,7 +1914,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1, atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], err_row: -1, atn: AtnState { stack: [] }, atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
     }
 
     fn emit(&mut self, s: String) {
@@ -2331,14 +2336,14 @@ fn _parse_s(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    ATN_STACK.push(_atn_ret);
+    p.atn.stack.push(_atn_ret);
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
     _parse_s__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_S, "s", -1); }
     p.b.finish_node(p.last_end());
-    ATN_STACK.pop();
+    p.atn.stack.pop();
     p.sites.pop();
 }
 
@@ -2360,14 +2365,14 @@ fn _parse_t(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    ATN_STACK.push(_atn_ret);
+    p.atn.stack.push(_atn_ret);
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_T, _start);
     _parse_t__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_T, "t", -1); }
     p.b.finish_node(p.last_end());
-    ATN_STACK.pop();
+    p.atn.stack.pop();
     p.sites.pop();
 }
 
@@ -2380,7 +2385,7 @@ fn _parse_e__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_e__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
+fn _parse_e__inner_scan_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
@@ -2390,7 +2395,7 @@ fn _parse_e__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
 fn _parse_e__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
-        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 0, &ATN_STACK, &p.kinds, p.pos, TK_EOF, 0);
+        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 0, &p.atn.stack, &p.kinds, p.pos, TK_EOF, 0);
         if _atn_alt == 1 {
             return _parse_e__inner_alt_1(p);
         }
@@ -2411,14 +2416,14 @@ fn _parse_e(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    ATN_STACK.push(_atn_ret);
+    p.atn.stack.push(_atn_ret);
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_E, _start);
     _parse_e__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_E, "e", -1); }
     p.b.finish_node(p.last_end());
-    ATN_STACK.pop();
+    p.atn.stack.pop();
     p.sites.pop();
 }
 
@@ -2500,5 +2505,4 @@ global EMPTY_SYNC: List<i32> = [];
 global EXPECTED_0: List<i32> = [TK_ID];
 
 global ATN_SIM: AtnSim = atn_decode(&b"\x03\x00\x01\x00\x1a\x00\x00\x00\x02\x00\x04\x00\x14\x00\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x00\x07\x00\x0e\x00\x15\x00\x09\x00\x02\x00\x0a\x00\x05\x00\x0c\x00\x0d\x00\x08\x00\x10\x00\x04\x00\x11\x00\x05\x00\x13\x00\x14\x00\x0f\x00\x17\x00\x1a\x00\x06\x00\x18\x00\x19\x00\x16\x00\x16\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x12\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
-global mut ATN_STACK: List<i32> = [];
 
