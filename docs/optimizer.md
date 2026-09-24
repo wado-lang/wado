@@ -2,35 +2,37 @@
 
 The optimizer rewrites NIR ([WEP: NIR](./wep-2026-05-11-nir.md)), then a smaller
 set of passes rewrites WIR before emission. This document lists what runs, one
-line per pass. The order is the code's, in `src/optimize.rs` and
-`src/wir_optimize.rs`; `WADO_LIST_PASSES` prints it. How a pass works is its
-module doc.
+line per pass. The order is the one in `src/optimize.rs` and
+`src/wir_optimize.rs`, and `WADO_LIST_PASSES` prints it. Each pass's module doc
+says how it works.
 
 ## Philosophy
 
 When WebAssembly provides a native instruction for a feature, prefer it over a
 complex compiler transformation. That keeps the compiler small, lets the runtime
-JIT do the work, and produces smaller output: `select` for branchless
-conditionals, `array.copy`/`array.fill` for bulk ops, `br_table` for dense
-matches.
+JIT do the work, and produces smaller output. Examples are `select` for
+branchless conditionals, `array.copy` and `array.fill` for bulk operations, and
+`br_table` for dense matches.
 
 ## Optimization Levels
 
-| Flag            | Iterations | Inline budget | Notes                                                 |
-| --------------- | ---------- | ------------- | ----------------------------------------------------- |
-| `-O0`           | 0          | N/A           | DCE, `match_to_switch`, and the backend rewrites only |
-| `-O1`           | 2          | 4             |                                                       |
-| `-O2` (default) | 15         | 16            |                                                       |
-| `-O3`           | 20         | 26            |                                                       |
-| `-Os`           | 15         | 16            | Strips the name section; a failed `assert` only traps |
+| Flag            | Iterations | Inline threshold | Notes                                                 |
+| --------------- | ---------- | ---------------- | ----------------------------------------------------- |
+| `-O0`           | 0          | N/A              | DCE, `match_to_switch`, and the backend rewrites only |
+| `-O1`           | 2          | 4                |                                                       |
+| `-O2` (default) | 15         | 16               |                                                       |
+| `-O3`           | 20         | 26               |                                                       |
+| `-Os`           | 15         | 16               | Strips the name section; a failed `assert` only traps |
 
-The inline budget counts the Wasm instructions on the callee's hot path.
-`--optimize-inline-growth <pct>` also bounds how far inlining may grow the whole
-program; no level sets it.
+The inline threshold bounds what one inlined copy adds to its caller. That is
+the Wasm instructions on the callee's hot path, less the call it replaces.
+`--optimize-iterations` and `--optimize-inline-threshold` override a level's
+values. `--optimize-inline-growth <pct>` also bounds how far inlining may grow
+the whole program. No level sets it.
 
 A pass reports a change only when it made one, because the fixed-point loop
-stops once no pass reports a change. At `-O2`, `-O3`, and `-Os` the iteration
-count is sized so the loop converges under it; at `-O1` it is a budget.
+stops once no pass reports a change. At `-O2`, `-O3`, and `-Os` the loop must
+converge within the iteration count. At `-O1` the count is only a budget.
 
 ## Architecture
 
@@ -38,10 +40,13 @@ NIR has two tiers: a skeleton carrying effect order, control flow, and
 allocation, and a hash-consed graph of the pure values it reaches. Local
 rewrites are rules on one worklist engine, and a per-function dirty set lets a
 pass skip functions unchanged since it last ran. CSE, GVN, and pure copy
-propagation are not passes: they fall out of the hash-consing. See
+propagation are not passes, because the hash-consing already does them. See
 [WEP: NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md).
 
 ## Pipeline
+
+`-O0` runs only DCE, `match_to_switch`, and steps 7 and 8. Every other level
+runs the whole list.
 
 1. DCE.
 2. Before the loop: `cold_outline`, `match_to_switch` over global initializers,
@@ -56,8 +61,9 @@ propagation are not passes: they fall out of the hash-consing. See
    `const_branch_prune`, `const_object_globalization`, `const_folding`,
    `scalar_forward`, `clone_forward`.
 5. DCE.
-6. `promote_fields`, `condition_implication`, `loop_version_bce`.
-7. Backend rewrites, at every level: `select_lowering`, `multi_value_return`,
+6. `promote_fields`, `condition_implication` (with `const_branch_prune`),
+   `loop_version_bce`.
+7. Backend rewrites: `select_lowering`, `multi_value_return`,
    `multi_value_param`, `freeze_pure_arith`.
 8. The WIR passes.
 
@@ -78,29 +84,29 @@ Allocation and aggregates:
   and a cold call site opts out.
 - `cold_outline` — move the region a `cold_path()` marks into a function of its
   own.
-- `sroa` — split a struct or tuple local that does not escape into scalar
-  locals. The highest-impact WasmGC pass.
+- `sroa` — split a struct, tuple, or array local used only for element access
+  into scalar locals. The highest-impact WasmGC pass.
 - `container_sroa` — turn a `List` of structs or tuples into one list per field.
-- `sroa_param` — pass the fields a callee reads instead of the struct.
+- `sroa_param` — pass the one field a callee reads instead of the struct.
 - `sroa_variant_return` — return a variant as a `[tag, slots…]` tuple
   ([WEP: Variant Return Scalarization](./wep-2026-08-03-variant-return-abi.md)).
 - `elide_box_local` — collapse a box bound once and read once into its value.
-- `drop_value` — a value-producing labeled block whose result is discarded keeps
-  only its effects.
+- `drop_value` — keep only the effects of a labeled block whose value is
+  discarded.
 - `string_push` — specialize a constant ASCII push, and reserve a run of
   appends at once.
 - `value_copy_demote` — make a deep list copy shallow when its elements are
   never mutated.
 - `clone_forward` — collapse a clone of a clone into one.
 
-Defensive copies are chosen by lower's ownership analysis, before NIR exists, so
-no pass here elides them
+Lower's ownership analysis chooses the defensive copies before NIR exists, so no
+pass here elides them
 ([WEP: Ownership Analysis](./wep-2026-05-21-resource-ownership.md)).
 
 Variants and references:
 
-- `labeled_block_fusion` — thread the result an inlined `?` produces straight
-  to its consumer.
+- `labeled_block_fusion` — remove the `Option` or `Result` an inlined helper
+  builds only for its caller to test, as `?` and `if let` do.
 - `slot_temp_sroa` — split the aggregate an inlined helper leaves where fusion
   cannot reach.
 - `closure_devirt` — call a closure directly when its callee is known.
@@ -142,10 +148,12 @@ Whole program and backend:
 - `dce` — remove unreachable functions, types, globals, literals, and imports.
 - `promote_fields` / `freeze_pure_arith` — fold pure field reads and arithmetic
   into the value graph.
-- `match_to_bitset` — test a boolean `match` over literals with one bit mask.
+- `match_to_bitset` — test membership in a set of literals and ranges with one
+  bit mask.
 - `match_to_switch` — lower a dense integer or enum `match` to `br_table`.
 - `if_chain_to_match` — fuse a run of `if K == x` statements into one `match`.
-- `select_lowering` — lower an `if` with pure arms to `select`.
+- `select_lowering` — lower an `if` whose arms are pure and cannot trap to
+  `select`.
 - `multi_value_return` — return a tuple or struct as one Wasm result per field.
 - `multi_value_param` — pass an aggregate read only by field as one parameter
   per field.
@@ -173,14 +181,15 @@ lowered first. `-O0` then only infers branch hints and removes dead items.
 A `#![wasm_module(...)]` core module, such as the allocator, runs the same list
 on its own, with its passes named `wir/<module>:<pass>`.
 
-wasmtime lays out the cold side of a hinted branch out of line;
+wasmtime lays out the cold side of a hinted branch out of line.
 `-f no-branch-hinting` disables hints for benchmarking.
 
 ## Differential Testing (EMI)
 
 `wado-compiler/tests/emi.rs` injects code behind a guard that is always false at
 run time, and checks that the program's output does not change at any level.
-`mise run emi-calibrate` and `mise run emi-mutate` run it; CI runs it nightly.
+`mise run emi-calibrate` and `mise run emi-mutate` run it, and CI runs it
+nightly.
 See [WEP: Compiler Fuzzing](./wep-2026-08-19-compiler-fuzzing.md).
 
 ## Not Yet Implemented
