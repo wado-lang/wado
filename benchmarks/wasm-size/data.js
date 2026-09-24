@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790250446900,
+  "lastUpdate": 1790251556122,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59237,6 +59237,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/333972a952f1ab00e645c396fdccd2cad81236b4"
         },
         "date": 1790250445953,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6703,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 239681,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "399b75489d114ac8c45e595b41eee76707fe62c2",
+          "message": "Merge pull request #2147 from wado-lang/claude/remove-claude-md-mp93j9\n\nchore: drop the CLAUDE.md symlinks; AGENTS.md is the one agent guide",
+          "timestamp": "2026-09-24T20:35:03+09:00",
+          "tree_id": "6cbdb5544b2c3727586875ab45d88eb4b10b263d",
+          "url": "https://github.com/wado-lang/wado/commit/399b75489d114ac8c45e595b41eee76707fe62c2"
+        },
+        "date": 1790251555441,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
