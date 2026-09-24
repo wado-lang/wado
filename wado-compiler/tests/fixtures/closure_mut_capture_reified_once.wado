@@ -1,0 +1,43 @@
+// A mut-capturing closure takes the `$ref_` local annotate reserved for it, so
+// reify must walk it once. A lone template hole and a `.len()` receiver each
+// used to be reified, inspected and thrown away before the real walk.
+
+use { println, Stdout } from "core:cli";
+
+fn take(mut f: fn mut()) -> i32 {
+    f();
+    return 1;
+}
+
+fn text(mut f: fn mut()) -> String {
+    f();
+    return "abc";
+}
+
+fn lone_hole() -> i32 {
+    let mut c = 1;
+    let s = `${take(|| { c = 2; })}`;
+    assert s == "1";
+    return c;
+}
+
+fn lone_string_hole() -> i32 {
+    let mut c = 1;
+    let s = `${text(|| { c = 3; })}`;
+    assert s == "abc";
+    return c;
+}
+
+fn len_receiver() -> i32 {
+    let mut c = 1;
+    let n = text(|| { c = 4; }).len();
+    assert n == 3;
+    return c;
+}
+
+export fn run() with Stdout {
+    println(`${lone_hole()} ${lone_string_hole()} ${len_receiver()}`);
+}
+
+__DATA__
+{"stdout": "2 3 4\n"}

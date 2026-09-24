@@ -5578,17 +5578,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return TirExpr::new(TirExprKind::StringLiteral(combined), string_type, span);
         }
 
-        if template.parts.len() == 1
-            && let ast::TemplatePart::Interpolation {
-                expr, format: None, ..
-            } = &template.parts[0]
-        {
-            let resolved = self.reify_expr(expr, ctx, None);
-            if resolved.type_id == string_type {
-                return resolved;
-            }
-        }
-
         let mut parts = Vec::new();
         for part in &template.parts {
             match part {
@@ -5612,6 +5601,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
 
+        if template.parts.len() == 1
+            && let [
+                TirTemplatePart::Interpolation {
+                    expr,
+                    format_spec: None,
+                },
+            ] = parts.as_slice()
+            && expr.type_id == string_type
+        {
+            let Some(TirTemplatePart::Interpolation { expr, .. }) = parts.pop() else {
+                unreachable!("matched a lone interpolation")
+            };
+            return *expr;
+        }
         TirExpr::new(TirExprKind::TemplateString { parts }, string_type, span)
     }
 
@@ -8954,15 +8957,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Reify recognises tuple-typed receivers and emits the
         // direct TIR shape. See WEP §"Synthetic call sites stay
         // annotation-free by design".
+        let raw_receiver = self.reify_expr(&method_call.receiver, ctx, None);
         if matches!(method_call.method.as_str(), "len" | "zip") {
-            let receiver = self.reify_expr(&method_call.receiver, ctx, None);
             // Auto-deref through `&`/`&mut` so tuple `.len()` / `.zip()` work
             // on a reference receiver, like any other method (mirrors the
             // elaborator's `get_base_type`). The `receiver` expr is kept as-is
             // for field access, which auto-derefs.
-            let base_type_id = self.tysys.type_table.borrow().peel_refs(receiver.type_id);
+            let base_type_id = self
+                .tysys
+                .type_table
+                .borrow()
+                .peel_refs(raw_receiver.type_id);
             let is_tuple_receiver = self.tysys.type_table.borrow().is_tuple(base_type_id);
             if is_tuple_receiver {
+                let receiver = raw_receiver;
                 return match method_call.method.as_str() {
                     "len" => {
                         // A tuple type still carrying a `..T` pack has an arity
@@ -9041,11 +9049,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
         });
 
-        // Reify receiver and adjust per the dispatch contract, sharing the
-        // adjuster with the elaborator so the same TIR shape
-        // (Unary{Ref}/Unary{MutRef}/Deref wrapping) lands.
-        let raw_receiver = self.reify_expr(&method_call.receiver, ctx, None);
-
         // A receiver the callee can replace rather than write into must be
         // boxed, or the boxing pass has no slot to write the mutation back to
         // and `x.bump()` mutates a copy.
@@ -9056,6 +9059,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ctx.address_taken_locals.insert(*index);
         }
 
+        // Shares the adjuster with the elaborator so the same TIR shape
+        // (Unary{Ref}/Unary{MutRef}/Deref wrapping) lands.
         let adjusted_receiver = adjust_receiver_for_self_kind(
             raw_receiver,
             dispatch.self_kind,
