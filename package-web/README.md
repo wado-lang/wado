@@ -32,13 +32,14 @@ test "the app renders a heading" {
 ```
 
 `SurfaceDom` is the DOM's API surface with no browser engine behind it: no
-layout, style or scripting. It holds a tree, text, attributes, an input's
-value and the document's title. A call it does not answer traps, and so does an insertion the DOM standard rejects with a
-`HierarchyRequestError`.
+layout, style or scripting. It holds a tree, text, attributes, an input's value
+and the document's title. A call it does not answer traps, and so does an
+insertion the DOM standard rejects with a `HierarchyRequestError`.
 
 A server renders a page by serializing it. `dom.to_html()` gives the whole
 document, doctype included, and `Element::get_html` an element's children. Both
-follow the HTML standard's serialization.
+follow the HTML standard's serialization. `example/web-ssr` prints a page with
+`wado run` and serves it with `wado serve`.
 
 ## Layout
 
@@ -46,8 +47,8 @@ follow the HTML standard's serialization.
   (`mise run update-webidl-snapshot`).
 - `src/dom.wado` — the bindings generated from it
   (`mise run update-package-web`). Do not edit by hand.
-- `src/surface_dom.wado` — `SurfaceDom`, written by hand. It mints handles from the
-  class numbers `dom.wado` generates.
+- `src/surface_dom.wado` — `SurfaceDom`, written by hand. It mints handles from
+  the class numbers `dom.wado` generates.
 - `src/lib.wado` — the facade `wado-lang:web` names. A name a wider slice
   generates must be added here; a test fails until it is.
 

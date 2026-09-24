@@ -520,9 +520,9 @@ accepts a numbering only where a range test is sound:
 
 A gap in a range is allowed. It stands for classes the slice leaves out.
 
-A host written in Wado, such as `package-web`'s `SurfaceDom`, reads these numbers
-rather than copying them: `wado-from-idl` emits each resource's own class and the
-stride as `internal` globals (`NODE_CLASS`, `HANDLE_CLASS_STRIDE`).
+A host written in Wado, such as `package-web`'s `SurfaceDom`, reads these
+numbers rather than copying them: `wado-from-idl` emits each resource's own
+class and the stride as `internal` globals (`NODE_CLASS`, `HANDLE_CLASS_STRIDE`).
 
 The host tags each object with the class of the nearest ancestor of its runtime
 type that the slice declares. An `HTMLDivElement` in a slice that stops at

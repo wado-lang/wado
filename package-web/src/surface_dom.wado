@@ -43,6 +43,16 @@ struct SurfaceNode {
     next_sibling: i32,
 }
 
+fn class_of(content: &Content) -> f64 {
+    return match *content {
+        Document => DOCUMENT_CLASS,
+        Window => WINDOW_CLASS,
+        Element(name) => if name == "input" { HTML_INPUT_ELEMENT_CLASS } else { HTML_ELEMENT_CLASS },
+        // The slice has neither `DocumentType` nor `Text`, so these carry `Node`'s class.
+        Doctype | Text(_) => NODE_CLASS,
+    };
+}
+
 fn is_void(local_name: &String) -> bool {
     return *local_name matches { "area" | "base" | "basefont" | "bgsound" | "br" | "col" | "embed" | "frame" | "hr" | "img" | "input" | "keygen" | "link" | "meta" | "param" | "source" | "track" | "wbr" };
 }
@@ -92,10 +102,9 @@ pub struct SurfaceDom {
 impl SurfaceDom {
     pub fn new() -> SurfaceDom {
         let mut dom = SurfaceDom { nodes: [] };
-        dom.push(DOCUMENT_CLASS, Content::Document);
-        dom.push(WINDOW_CLASS, Content::Window);
-        // The slice has no `DocumentType`, so the doctype carries `Node`'s class.
-        dom.append(DOCUMENT_INDEX, dom.push(NODE_CLASS, Content::Doctype));
+        dom.push(Content::Document);
+        dom.push(Content::Window);
+        dom.append(DOCUMENT_INDEX, dom.push(Content::Doctype));
         let html = dom.create("html");
         dom.append(DOCUMENT_INDEX, html);
         dom.append(html, dom.create("head"));
@@ -110,9 +119,9 @@ impl SurfaceDom {
         return html;
     }
 
-    fn push(&mut self, class: f64, content: Content) -> i32 {
+    fn push(&mut self, content: Content) -> i32 {
         self.nodes.push(SurfaceNode {
-            class,
+            class: class_of(&content),
             content,
             attributes: TreeMap::new(),
             value: "",
@@ -126,8 +135,7 @@ impl SurfaceDom {
     }
 
     fn create(&mut self, local_name: String) -> i32 {
-        let class = if local_name == "input" { HTML_INPUT_ELEMENT_CLASS } else { HTML_ELEMENT_CLASS };
-        return self.push(class, Content::Element(local_name));
+        return self.push(Content::Element(local_name));
     }
 
     fn handle(&self, index: i32) -> f64 {
@@ -170,15 +178,23 @@ impl SurfaceDom {
         return at == ancestor;
     }
 
-    fn has_child(&self, parent: i32, is_kind: fn(&Content) -> bool) -> bool {
+    fn children(&self, parent: i32) -> List<i32> {
+        let mut children: List<i32> = [];
         let mut child = self.nodes[parent].first_child;
         while child != NO_NODE {
-            if is_kind(&self.nodes[child].content) {
-                return true;
-            }
+            children.push(child);
             child = self.nodes[child].next_sibling;
         }
-        return false;
+        return children;
+    }
+
+    fn child_where(&self, parent: i32, accept: fn(&Content) -> bool) -> i32 {
+        for let child of self.children(parent) {
+            if accept(&self.nodes[child].content) {
+                return child;
+            }
+        }
+        return NO_NODE;
     }
 
     // The DOM standard's pre-insertion validity, trapping where it throws a
@@ -191,22 +207,21 @@ impl SurfaceDom {
             Document | Window => panic("HierarchyRequestError: a document or a window is never a child"),
             Doctype => {
                 assert into_document, "HierarchyRequestError: only a document holds a doctype";
-                assert !self.has_child(parent, |c| *c matches { Doctype }), "HierarchyRequestError: a document holds one doctype";
-                assert !self.has_child(parent, |c| *c matches { Element(_) }), "HierarchyRequestError: a doctype precedes the element";
+                assert self.child_where(parent, |c| *c matches { Doctype }) == NO_NODE, "HierarchyRequestError: a document holds one doctype";
+                assert self.child_where(parent, |c| *c matches { Element(_) }) == NO_NODE, "HierarchyRequestError: a doctype precedes the element";
             },
             Text(_) => {
                 assert !into_document, "HierarchyRequestError: a document holds no text";
             },
             Element(_) => {
-                assert !into_document || !self.has_child(parent, |c| *c matches { Element(_) }), "HierarchyRequestError: a document holds one element";
+                assert !into_document || self.child_where(parent, |c| *c matches { Element(_) }) == NO_NODE, "HierarchyRequestError: a document holds one element";
             },
         }
     }
 
     fn serialize_children(&self, parent: i32, out: &mut String) {
         let raw_text = self.nodes[parent].content matches { Element(name) && is_raw_text(&name) };
-        let mut child = self.nodes[parent].first_child;
-        while child != NO_NODE {
+        for let child of self.children(parent) {
             match self.nodes[child].content {
                 Document | Window => unreachable(),
                 Doctype => out.push_str("<!DOCTYPE html>"),
@@ -231,7 +246,6 @@ impl SurfaceDom {
                     }
                 },
             }
-            child = self.nodes[child].next_sibling;
         }
     }
 
@@ -280,10 +294,8 @@ impl SurfaceDom {
         if let Text(text) = self.nodes[index].content {
             out.push_str(&text);
         }
-        let mut child = self.nodes[index].first_child;
-        while child != NO_NODE {
+        for let child of self.children(index) {
             self.text_of(child, out);
-            child = self.nodes[child].next_sibling;
         }
     }
 
@@ -292,13 +304,11 @@ impl SurfaceDom {
         if (*accept)(&self.nodes[index]) {
             return index;
         }
-        let mut child = self.nodes[index].first_child;
-        while child != NO_NODE {
+        for let child of self.children(index) {
             let found = self.find(child, accept);
             if found != NO_NODE {
                 return found;
             }
-            child = self.nodes[child].next_sibling;
         }
         return NO_NODE;
     }
@@ -310,21 +320,12 @@ impl SurfaceDom {
     fn replace_all_text(&mut self, index: i32, text: String) {
         self.remove_children(index);
         if !text.is_empty() {
-            // The slice has no `Text`, so a text node carries `Node`'s class.
-            let node = self.push(NODE_CLASS, Content::Text(text));
-            self.append(index, node);
+            self.append(index, self.push(Content::Text(text)));
         }
     }
 
     fn child_named(&self, parent: i32, local_name: String) -> i32 {
-        let mut child = self.nodes[parent].first_child;
-        while child != NO_NODE {
-            if let Element(name) = self.nodes[child].content && name == local_name {
-                return child;
-            }
-            child = self.nodes[child].next_sibling;
-        }
-        return NO_NODE;
+        return self.child_where(parent, |c| *c matches { Element(name) && name == local_name });
     }
 
     fn html_child(&self, local_name: String) -> i32 {
@@ -380,12 +381,10 @@ impl Document for SurfaceDom {
         let title = self.title_index();
         let mut text = "";
         if title != NO_NODE {
-            let mut child = self.nodes[title].first_child;
-            while child != NO_NODE {
+            for let child of self.children(title) {
                 if let Text(data) = self.nodes[child].content {
                     text.push_str(&data);
                 }
-                child = self.nodes[child].next_sibling;
             }
         }
         resume strip_and_collapse_ascii_whitespace(&text);
