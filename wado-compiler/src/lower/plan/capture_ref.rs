@@ -55,15 +55,14 @@ enum FrameLocals<'a> {
 }
 
 impl FrameLocals<'_> {
-    /// `None` past the table, which a synthesized closure leaves empty: its
+    /// `None` past the table, which a synthesized frame may leave empty: its
     /// slots cannot be told apart from a fresh one, so it gets no proxy.
     fn local(&self, index: u32) -> Option<(&str, TypeId)> {
         let index = index as usize;
         match self {
-            Self::Function { locals, .. } => {
-                let local = &locals[index];
-                Some((&local.name, local.type_id))
-            }
+            Self::Function { locals, .. } => locals
+                .get(index)
+                .map(|local| (local.name.as_str(), local.type_id)),
             Self::Closure {
                 params,
                 body_locals,
