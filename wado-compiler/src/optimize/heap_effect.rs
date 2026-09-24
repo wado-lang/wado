@@ -1500,6 +1500,45 @@ impl HeapFrame {
                 && self.shares(h, OperandNode::Node(self.parent[a.node as usize]))
         })
     }
+
+    /// Whether a store or a call at a site `at` accepts may put a new object on
+    /// the place `local` then `path` names (see [`field_path`]).
+    pub(super) fn place_replaced(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        local: u32,
+        path: &[(TypeId, u32)],
+        at: impl Fn(NodeRef) -> bool,
+    ) -> bool {
+        path.iter().any(|&(holder, field)| {
+            let Some(key) = effects.object_key(holder) else {
+                return true;
+            };
+            self.accessed_besides(true, &at, (key, field), local, |_| false)
+                || self.calls.iter().any(|&call| {
+                    at(NodeRef::Expr(call))
+                        && self.call_may(effects, body, call, Effect::Write, key, local)
+                })
+        })
+    }
+}
+
+/// The expression a field chain starts from, and each object on the chain with
+/// the field taken from it.
+pub(super) fn field_path(body: &Body, mut e: ExprId) -> Option<(ExprId, Vec<(TypeId, u32)>)> {
+    let mut path = Vec::new();
+    while let ExprKind::FieldAccess {
+        expr: inner,
+        field_index,
+        ..
+    } = &body.exprs[e].kind
+    {
+        let inner = inner.as_expr()?;
+        path.push((body.exprs[inner].type_id, *field_index));
+        e = inner;
+    }
+    Some((e, path))
 }
 
 impl Summary {

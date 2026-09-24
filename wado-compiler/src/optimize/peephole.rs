@@ -28,6 +28,7 @@ use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
 use super::string_push::{AppendFuseRule, ConstAsciiPushRule, resolve_ctx};
 use super::tuple_projection::TupleProjectionRule;
+use crate::optimize::heap_effect::HeapEffects;
 use crate::optimize::match_to_switch::intern_cold_markers;
 use crate::optimize::mod_ref::compute_fn_effects;
 use crate::optimize::select_lowering::intern_select;
@@ -73,6 +74,7 @@ pub(super) fn run_peephole(
     // Post-inline only: the closure-bearing field read it resolves through is
     // what `inline` exposes when an iterator adaptor's `next` is copied in.
     let closure_devirt_rule = (!pre_inline).then(|| build_closure_devirt(project));
+    let heap_effects = (!pre_inline).then(|| HeapEffects::new(project, &type_table));
 
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
@@ -100,9 +102,12 @@ pub(super) fn run_peephole(
         // Reference elimination runs post-inline only (it cleans up the ref
         // bindings inlining exposes). Its maps are built from the pristine
         // post-inline body.
-        let ref_elim_rule = (!pre_inline)
-            .then(|| func.body.as_ref().map(build_ref_elim))
-            .flatten();
+        let params: Vec<u32> = func.params.iter().map(|p| p.local_index).collect();
+        let ref_elim_rule = heap_effects.as_ref().and_then(|effects| {
+            func.body
+                .as_ref()
+                .map(|b| build_ref_elim(b, effects, &params))
+        });
         // Adjacent-use box-local elision runs post-inline only (it collapses the
         // `Box<T>` shells `sroa_param` / `inline` expose). Its stats come from
         // the pristine post-inline body; the escape sets (`address_taken` here,
