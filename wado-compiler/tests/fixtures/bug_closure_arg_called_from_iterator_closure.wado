@@ -1,0 +1,68 @@
+// A closure literal passed straight to a `fn`-typed parameter, which the callee
+// then calls from inside an iterator adapter's closure, traps on a cast once the
+// result is bound. Bound to a local first, the same closure works.
+
+fn all_admitted(xs: &List<char>, admits: fn(char) -> bool) -> bool {
+    return xs.iter_ref().all(|c| admits(*c));
+}
+
+test "a closure literal argument is callable from an iterator closure" {
+    let xs: List<char> = ['a', 'b'];
+    let all = all_admitted(&xs, |c| c >= 'a');
+    let some = all_admitted(&xs, |c| c >= 'b');
+    assert all;
+    assert !some;
+}
+
+test "the same closure bound to a local first" {
+    let xs: List<char> = ['a', 'b'];
+    let admits = |c: char| c >= 'a';
+    let all = all_admitted(&xs, admits);
+    assert all;
+}
+
+// Specialized to the literal's functor, the parameter still reads as `fn(...)`
+// wherever a value of that type is due, not only where it is captured.
+
+struct Held {
+    f: fn(char) -> bool,
+}
+
+fn via_alias(x: char, admits: fn(char) -> bool) -> bool {
+    let f = admits;
+    return f(x);
+}
+
+fn via_list(x: char, admits: fn(char) -> bool) -> bool {
+    let fs: List<fn(char) -> bool> = [admits];
+    return fs[0](x);
+}
+
+fn via_if(x: char, admits: fn(char) -> bool) -> bool {
+    let f = if x == 'z' { admits } else { admits };
+    return f(x);
+}
+
+fn via_closure_arg(x: char, admits: fn(char) -> bool) -> bool {
+    let apply = |f: fn(char) -> bool| f(x);
+    return apply(admits);
+}
+
+fn via_field(x: char, admits: fn(char) -> bool) -> bool {
+    let h = Held { f: admits };
+    return (h.f)(x) && admits(x);
+}
+
+fn returned(admits: fn(char) -> bool) -> fn(char) -> bool {
+    return admits;
+}
+
+test "a closure literal argument read in every value position" {
+    assert via_alias('b', |c| c >= 'b');
+    assert !via_list('a', |c| c >= 'b');
+    assert via_if('b', |c| c >= 'b');
+    assert via_closure_arg('b', |c| c >= 'b');
+    assert via_field('b', |c| c >= 'b');
+    let f = returned(|c| c >= 'b');
+    assert f('b') && !f('a');
+}

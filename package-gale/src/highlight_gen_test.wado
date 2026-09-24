@@ -1,5 +1,5 @@
-//! Tests for `highlight_gen.wado`. The `defaults` capture table is indexed by
-//! token kind at runtime (`defaults[kind]`), so its row order must match the
+//! Tests for `highlight_gen.wado`. The `default_ids` table is indexed by token
+//! kind at runtime (`default_ids[kind]`), so its row order must match the
 //! token numbering emitted by `gen_token_constants` — deferred `more` /
 //! `type(...)` rules at the back, and no sentinel `TK_ERROR` row when a user
 //! rule named `ERROR` claims the id. Captures and overrides come from the
@@ -48,7 +48,7 @@ fn highlight_output<S: AsStrSlice>(input: S) -> String {
 fn assert_capture_refused(run: &[String, List<Diagnostic>]) {
     assert run.1.len() == 1, `expected one diagnostic, got ${run.1.len()}`;
     assert run.1[0].message.contains("single token"), run.1[0].message;
-    assert index_of(&run.0, "HighlightOverride {") == -1, run.0;
+    assert index_of(&run.0, "RuleCapture {") == -1, run.0;
 }
 
 fn index_of<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
@@ -126,7 +126,7 @@ test "query maps a token to its default capture" {
 r : B ;
 B : 'b' ;
 ", "(B) @keyword");
-    assert index_of(&out, "\"keyword\",  // TK_B") >= 0, out;
+    assert index_of(&out, "0,  // TK_B @keyword") >= 0, out;
 }
 
 test "query maps a literal token to its default capture" {
@@ -134,7 +134,7 @@ test "query maps a literal token to its default capture" {
 r : 'let' B ;
 B : 'b' ;
 ", "\"let\" @keyword");
-    assert index_of(&out, "\"keyword\",  // ") >= 0, out;
+    assert index_of(&out, " @keyword\n") >= 0, out;
 }
 
 test "highlight fn: a grammar with a parser walks the CST, query or not" {
@@ -155,17 +155,59 @@ B : 'b' ;
     assert index_of(&contextual, "highlight_walk(&mut visitor") >= 0, contextual;
 }
 
-test "rule capture covers every token the rule accepts" {
-    // `(name) @variable` reads the token set off the grammar, so a contextual
+test "rule capture is one rule-level entry, not one per token" {
+    // `(name) @variable` covers every token under `name`, so a contextual
     // keyword the rule accepts as a name is captured without the query naming
-    // it — and a keyword the rule does not accept is left alone.
+    // it, and no per-token table spells the set out.
     let out = highlight_output_q("grammar T;
 r : name ;
 name : IDENTIFIER | 'test' | 'task' ;
 IDENTIFIER : [a-z]+ ;
 ", "(name) @variable");
-    assert count_occurrences(&out, "rule_name: \"name\"") == 3, out;
-    assert count_occurrences(&out, "capture: \"variable\"") == 3, out;
+    assert count_occurrences(&out, "RuleCapture {") == 1, out;
+    assert index_of(&out, "rule_captures: [\n        RuleCapture { rule_id: RK_NAME as i32, capture_id: 0, order: 0 },") >= 0, out;
+    assert index_of(&out, "overrides_by_kind: [],") >= 0, out;
+}
+
+test "the mapping is one global, resolved at generation time" {
+    let out = highlight_output_q("grammar T;
+r : name '(' ;
+name : IDENTIFIER ;
+IDENTIFIER : [a-z]+ ;
+", "(name) @variable\n\"(\" @punctuation.bracket");
+    assert index_of(&out, "pub global HIGHLIGHT_MAPPING: HighlightMapping = HighlightMapping {") >= 0, out;
+    assert index_of(&out, "HighlightVisitor::new(&HIGHLIGHT_MAPPING)") >= 0, out;
+    assert index_of(&out, "fn highlight_mapping") == -1, out;
+    assert index_of(&out, "rule_names") == -1, out;
+    assert index_of(&out, "capture_classes: [\n        \"punctuation bracket\",\n        \"variable\",\n    ],") >= 0, out;
+}
+
+test "the highlighter is a library: no CLI entry point, no imports" {
+    let out = highlight_output_q("grammar T;
+r : B ;
+B : 'b' ;
+", "(B) @keyword");
+    assert index_of(&out, "fn run") == -1, out;
+    assert index_of(&out, "use ") == -1, out;
+}
+
+test "a rule capture restates an earlier override on the same rule" {
+    let out = highlight_output_q("grammar T;
+r : B ;
+B : 'b' ;
+", "(r (B) @string)\n(r) @keyword");
+    assert index_of(&out, "string") == -1, out;
+    assert count_occurrences(&out, "RuleCapture { rule_id: RK_R as i32, capture_id: 0, order: 0 },  // @keyword") == 1, out;
+}
+
+test "an override on a kind a rule capture covers takes the capture's order" {
+    let out = highlight_output_q("grammar T;
+r : name ;
+name : IDENTIFIER ;
+IDENTIFIER : [a-z]+ ;
+", "(name) @variable\n(name (IDENTIFIER) @type)");
+    assert count_occurrences(&out, "RuleCapture { rule_id: RK_NAME as i32, capture_id: 0, order: 0 },  // @type") == 1, out;
+    assert count_occurrences(&out, "RuleCapture { rule_id: RK_NAME as i32, capture_id: 1, order: 0 },  // @variable") == 1, out;
 }
 
 test "rule capture follows a rule that delegates to a naming rule" {
@@ -178,8 +220,7 @@ field : name ;
 name : IDENTIFIER | 'test' | 'task' ;
 IDENTIFIER : [a-z]+ ;
 ", "(field) @property");
-    assert count_occurrences(&out, "rule_name: \"field\"") == 3, out;
-    assert count_occurrences(&out, "capture: \"property\"") == 3, out;
+    assert count_occurrences(&out, "RuleCapture { rule_id: RK_FIELD as i32") == 1, out;
 }
 
 test "rule capture follows a delegation chain as long as the grammar makes it" {
@@ -193,7 +234,7 @@ e : name ;
 name : IDENTIFIER | 'test' ;
 IDENTIFIER : [a-z]+ ;
 ", "(a) @property");
-    assert count_occurrences(&out, "rule_name: \"a\"") == 2, out;
+    assert count_occurrences(&out, "RuleCapture { rule_id: RK_A as i32") == 1, out;
 }
 
 test "rule capture on a delegation cycle warns instead of recurring forever" {
@@ -213,14 +254,16 @@ IDENTIFIER : [a-z]+ ;
 ", "(pair) @variable"));
 }
 
-test "query override emits a HighlightOverride row" {
+test "query override emits a row under its token kind" {
     let out = highlight_output_q("grammar T;
 r : B ;
 B : 'b' ;
 ", "(r (B) @string)");
-    assert index_of(&out, "HighlightOverride {") >= 0, out;
-    assert index_of(&out, "rule_name: \"r\"") >= 0, out;
-    assert index_of(&out, "capture: \"string\"") >= 0, out;
+    assert index_of(
+        &out,
+        "[  // TK_B\n            RuleCapture { rule_id: RK_R as i32, capture_id: 0, order: 0 },  // @string\n        ],",
+    ) >= 0, out;
+    assert index_of(&out, "rule_captures: [],") >= 0, out;
 }
 
 test "default on a named token the parser also writes inline maps that token" {
@@ -230,7 +273,7 @@ B : 'b' ;
 LP : '(' ;
 RP : ')' ;
 ", "(LP) @punctuation.bracket");
-    assert index_of(&out, "\"punctuation.bracket\",  // TK_LP") >= 0, out;
+    assert index_of(&out, "0,  // TK_LP @punctuation.bracket") >= 0, out;
 }
 
 test "default on an action-bearing named token the parser also writes inline" {
@@ -241,7 +284,7 @@ B : 'b' ;
 LP : '(' { lx.count += 1 } ;
 RP : ')' ;
 ", "(LP) @punctuation.bracket");
-    assert index_of(&out, "\"punctuation.bracket\",  // TK_LP") >= 0, out;
+    assert index_of(&out, "0,  // TK_LP @punctuation.bracket") >= 0, out;
     assert index_of(&out, "TK_LIT_LP") < 0, out;
 }
 
@@ -251,9 +294,9 @@ r : B ;
 B : 'b' ;
 ", "(r (B) @string)
 (r (B) @keyword)");
-    assert count_occurrences(&out, "HighlightOverride {") == 1, out;
-    assert index_of(&out, "capture: \"keyword\"") >= 0, out;
-    assert index_of(&out, "capture: \"string\"") == -1, out;
+    assert count_occurrences(&out, "RuleCapture {") == 1, out;
+    assert index_of(&out, "// @keyword") >= 0, out;
+    assert index_of(&out, "string") == -1, out;
 }
 
 test "unknown token in query warns via ctx diagnostics" {
@@ -291,9 +334,10 @@ test "capture_vocabulary lists the query's distinct capture classes, sorted" {
         "grammar T; s : KW STR KW ; KW : 'if' ; STR : '\"' ~[\"]* '\"' ;",
         "(KW) @keyword\n(STR) @string\n",
     );
+    assert index_of(&out, "capture_names: [\n        \"keyword\",\n        \"string\",\n    ],") >= 0, out;
     assert index_of(
         &out,
-        "pub fn capture_vocabulary() -> List<String> {\n    return [\n        \"keyword\",\n        \"string\",\n    ];\n}",
+        "pub fn capture_vocabulary() -> List<String> {\n    return HIGHLIGHT_MAPPING.capture_names;\n}",
     ) >= 0, out;
 }
 
@@ -302,13 +346,10 @@ test "capture_vocabulary lists a capture shared by two selectors once" {
         "grammar T; s : KW ID ; KW : 'if' ; ID : [a-z]+ ;",
         "(KW) @keyword\n(ID) @keyword\n",
     );
-    assert index_of(
-        &out,
-        "pub fn capture_vocabulary() -> List<String> {\n    return [\n        \"keyword\",\n    ];\n}",
-    ) >= 0, out;
+    assert index_of(&out, "capture_names: [\n        \"keyword\",\n    ],") >= 0, out;
 }
 
 test "capture_vocabulary is empty without a highlight query" {
     let out = highlight_output("grammar T; s : KW ; KW : 'if' ;");
-    assert index_of(&out, "pub fn capture_vocabulary() -> List<String> {\n    return [];\n}") >= 0, out;
+    assert index_of(&out, "capture_names: [],") >= 0, out;
 }

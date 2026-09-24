@@ -364,7 +364,7 @@ D : 'd' { if $index - start == 1 && $pos > 0 { $channel = 2 } } ;
 B : 'b' ;
 WS : ' ' -> skip ;
 ");
-    assert src.contains("LexerSlice::new(chars, start, pos).to_string() == \"aa\""), "$text is the matched slice";
+    assert src.contains("chars_text(chars, start, pos) == \"aa\""), "$text is the matched slice";
     assert src.contains("lx.act_type = TK_B"), "$type writes the type latch";
     assert src.contains("lx.act_channel = 1"), "$channel writes the channel latch";
     assert src.contains("pos - start == 1"), "$index is the match cursor";

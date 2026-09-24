@@ -1,4 +1,30 @@
-//! Char-range copies, shared by every scanner that carries a `List<char>`.
+//! Char-range copies and the identifier alphabet, shared by every text scanner.
+
+/// Whether `c` can be part of an identifier in Wado or generated text.
+pub fn is_ident_char(c: char) -> bool {
+    return c == '_' || c.is_ascii_alphanumeric();
+}
+
+pub fn is_ident_byte(b: u8) -> bool {
+    return is_ident_char(b as char);
+}
+
+/// Every maximal identifier-character run in `text`, in order.
+pub fn ident_words<S: AsStrSlice>(text: S) -> List<String> {
+    let s = text.as_str_slice();
+    let mut out: List<String> = [];
+    let mut start = -1;
+    for let mut i = 0; i <= s.len(); i += 1 {
+        let in_word = i < s.len() && is_ident_byte(s.get_byte_unchecked(i));
+        if in_word && start < 0 {
+            start = i;
+        } else if !in_word && start >= 0 {
+            out.push(s.slice(start, i).to_string());
+            start = -1;
+        }
+    }
+    return out;
+}
 
 /// `chars[start..end]` as its own `String`.
 pub fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {

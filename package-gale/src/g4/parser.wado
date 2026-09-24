@@ -1,4 +1,5 @@
-use { Token, ParseError, Span, LexerSlice } from "../runtime/lex.wado";
+use { Span } from "../runtime/lex.wado";
+use { ParseError } from "./parse_error.wado";
 use {
     Grammar,
     GrammarKind,
@@ -43,7 +44,7 @@ use {
     compose_grammars,
     superclass_bases,
 } from "../ir.wado";
-use { G4Token } from "./token.wado";
+use { G4Token, Token } from "./token.wado";
 use {
     tokenize_chars,
     resolve_unicode_escape_code,
@@ -259,7 +260,7 @@ impl G4Parser {
 
         self.expect(G4Token::Grammar)?;
         let name_tok = self.expect(G4Token::Identifier)?;
-        let name = name_tok.text.to_string();
+        let name = name_tok.text;
         self.expect(G4Token::Semicolon)?;
 
         let mut virtual_tokens: List<String> = [];
@@ -285,7 +286,7 @@ impl G4Parser {
                 }
                 self.advance();
                 let mode_name_tok = self.expect(G4Token::Identifier)?;
-                current_mode = intern_mode(&mut mode_names, &mode_name_tok.text.to_string());
+                current_mode = intern_mode(&mut mode_names, &mode_name_tok.text);
                 self.expect(G4Token::Semicolon)?;
                 continue;
             }
@@ -315,7 +316,7 @@ impl G4Parser {
             }
 
             let rule_name_tok = self.expect(G4Token::Identifier)?;
-            let rule_name = rule_name_tok.text.to_string();
+            let rule_name = rule_name_tok.text;
             let rule_name_span = rule_name_tok.span;
 
             if is_lexer_grammar || is_frag || is_lexer_rule_name(&rule_name) {
@@ -451,7 +452,7 @@ impl G4Parser {
         self.advance();
         while !self.at_eof() && !self.is_kind(G4Token::RBrace) {
             if self.is_kind(G4Token::Identifier) {
-                names.push(self.peek().text.to_string());
+                names.push(self.peek().text);
                 self.advance();
                 if self.is_kind(G4Token::Assign) {
                     self.advance();
@@ -511,7 +512,7 @@ impl G4Parser {
                 );
             }
             let name_tok = self.peek();
-            let name = name_tok.text.to_string();
+            let name = name_tok.text;
             let name_span = name_tok.span;
             self.advance();
             if self.is_kind(G4Token::Assign) {
@@ -552,7 +553,7 @@ impl G4Parser {
                 self.advance();
                 continue;
             }
-            let name = self.peek().text.to_string();
+            let name = self.peek().text;
             self.advance();
             if !self.is_kind(G4Token::Assign) {
                 while !self.at_eof() && !self.is_kind(G4Token::Semicolon) && !self.is_kind(G4Token::RBrace) {
@@ -578,12 +579,12 @@ impl G4Parser {
 
     fn parse_option_value(&mut self) -> OptionValue {
         if self.is_kind(G4Token::StringLit) {
-            let body = self.peek().text.to_string();
+            let body = self.peek().text;
             self.advance();
             return OptionValue::Str(body);
         }
         if self.is_kind(G4Token::IntLit) {
-            let text = self.peek().text.to_string();
+            let text = self.peek().text;
             self.advance();
             return OptionValue::Int(parse_int_literal(&text) as i64);
         }
@@ -592,7 +593,7 @@ impl G4Parser {
             return OptionValue::Action(body);
         }
         if self.is_kind(G4Token::Identifier) {
-            let head = self.peek().text.to_string();
+            let head = self.peek().text;
             self.advance();
             if !(self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Identifier as i32) {
                 return OptionValue::Ident(head);
@@ -600,7 +601,7 @@ impl G4Parser {
             let mut parts: List<String> = [head];
             while self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Identifier as i32 {
                 self.advance();
-                parts.push(self.peek().text.to_string());
+                parts.push(self.peek().text);
                 self.advance();
             }
             return OptionValue::Qualified(parts);
@@ -613,7 +614,7 @@ impl G4Parser {
         let mut scope: Option<String> = null;
         let mut name = String::with_capacity(8);
         if self.is_kind(G4Token::Identifier) {
-            name = self.peek().text.to_string();
+            name = self.peek().text;
             self.advance();
         }
         if self.is_kind(G4Token::ColonColon) {
@@ -621,7 +622,7 @@ impl G4Parser {
             scope = Option::<String>::Some(name);
             name = String::with_capacity(8);
             if self.is_kind(G4Token::Identifier) {
-                name = self.peek().text.to_string();
+                name = self.peek().text;
                 self.advance();
             }
         }
@@ -699,7 +700,7 @@ impl G4Parser {
                 continue;
             }
             let name_tok = self.peek();
-            let name = name_tok.text.to_string();
+            let name = name_tok.text;
             self.advance();
             if !self.is_kind(G4Token::Assign) {
                 while !self.at_eof() && !self.is_kind(G4Token::Comma) && !self.is_kind(G4Token::RAngle) {
@@ -819,12 +820,12 @@ impl G4Parser {
             if !self.is_kind(G4Token::Identifier) {
                 break;
             }
-            let mut qid = self.peek().text.to_string();
+            let mut qid = self.peek().text;
             self.advance();
             while self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Identifier as i32 {
                 self.advance();
                 qid.push('.');
-                qid.push_str(&self.peek().text.to_string());
+                qid.push_str(&self.peek().text);
                 self.advance();
             }
             out.push(qid);
@@ -930,7 +931,7 @@ impl G4Parser {
         if self.is_kind(G4Token::Hash) {
             self.advance();
             let label_tok = self.expect(G4Token::Identifier)?;
-            label = Option::<String>::Some(label_tok.text.to_string());
+            label = Option::<String>::Some(label_tok.text);
         }
 
         return Result::<Alternative, ParseError>::Ok(Alternative { label, options, elements, actions });
@@ -945,7 +946,7 @@ impl G4Parser {
     fn parse_atom(&mut self) -> Result<Element, ParseError> {
         if self.is_kind(G4Token::Identifier) {
             let tok = self.advance();
-            let name = tok.text.to_string();
+            let name = tok.text;
             let name_span = tok.span;
             if self.is_kind(G4Token::Assign) || self.is_kind(G4Token::PlusAssign) {
                 let list = self.is_kind(G4Token::PlusAssign);
@@ -998,7 +999,7 @@ impl G4Parser {
         }
         if self.is_kind(G4Token::StringLit) {
             let tok = self.advance();
-            let text = tok.text.to_string();
+            let text = tok.text;
             let mut options: List<GrammarOption> = [];
             if self.is_kind(G4Token::LAngle) {
                 options = self.parse_angle_options()?;
@@ -1164,7 +1165,7 @@ impl G4Parser {
                 ),
             );
         }
-        let arg = self.advance().text.to_string();
+        let arg = self.advance().text;
         self.expect(G4Token::RParen)?;
         return Result::<String, ParseError>::Ok(arg);
     }
@@ -1183,7 +1184,7 @@ impl G4Parser {
             }
             let action_tok = self.advance();
             let action_span = action_tok.span;
-            let action_name = action_tok.text.to_string();
+            let action_name = action_tok.text;
             match action_name {
                 "skip" => {
                     actions.skip = true;
@@ -1208,9 +1209,9 @@ impl G4Parser {
                     } else if arg.text == "HIDDEN" {
                         actions.channel = HIDDEN_CHANNEL;
                     } else if arg.kind == G4Token::IntLit as i32 {
-                        actions.channel = parse_int_literal(&arg.text.to_string());
+                        actions.channel = parse_int_literal(&arg.text);
                     } else {
-                        let name = arg.text.to_string();
+                        let name = arg.text;
                         let mut resolved = -1;
                         for let mut i = 0; i < self.channels.len(); i += 1 {
                             if self.channels[i] == name {
@@ -1311,14 +1312,14 @@ impl G4Parser {
     fn parse_lexer_atom(&mut self) -> Result<LexerElement, ParseError> {
         if self.is_kind(G4Token::StringLit) {
             let tok = self.advance();
-            let text = tok.text.to_string();
+            let text = tok.text;
             let start_span = tok.span;
             let is_dot_dot = self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Dot as i32;
             if is_dot_dot && text.chars().count() == 1 {
                 self.advance();
                 self.advance();
                 let end_tok = self.expect(G4Token::StringLit)?;
-                let end_text = end_tok.text.to_string();
+                let end_text = end_tok.text;
                 if end_text.chars().count() != 1 {
                     let expected: List<String> = ["single-char string literal"];
                     return Result::<LexerElement, ParseError>::Err(
@@ -1339,7 +1340,7 @@ impl G4Parser {
         }
         if self.is_kind(G4Token::CharClass) {
             let tok = self.advance();
-            let cc = parse_char_class(&tok.text.to_string(), tok.span)?;
+            let cc = parse_char_class(&tok.text, tok.span)?;
             return Result::<LexerElement, ParseError>::Ok(LexerElement::CharClass(cc));
         }
         if self.is_kind(G4Token::Dot) {
@@ -1355,7 +1356,7 @@ impl G4Parser {
         }
         if self.is_kind(G4Token::Identifier) {
             let tok = self.advance();
-            let name = tok.text.to_string();
+            let name = tok.text;
             let span = tok.span;
             self.pending_refs.push(PendingRef {
                 kind: RefKind::LexerRuleRef,

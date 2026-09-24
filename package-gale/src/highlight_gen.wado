@@ -4,13 +4,13 @@ use { CodeWriter, FnSpec, Vis, wado } from "lib:wadopoet";
 use { HighlightRule, TokenSelector } from "./highlight_query.wado";
 use { GenContext } from "./gen_context.wado";
 use { DiagnosticKind, DiagnosticOwner } from "./gir.wado";
+use { rule_kind_const } from "./gen_util.wado";
 use { TreeMap } from "core:collections";
 
-/// `highlight`: the token/rule mapping compiled from the query, then
+/// `highlight`: the query compiled into the `HIGHLIGHT_MAPPING` global, then
 /// `highlight_walk` over the CST with `hl_cover_unvisited` for what the tree
 /// left out. `parse` always returns a tree, partial on broken input, so there
-/// is no tokenize-only fallback. A query with no rule-context capture is
-/// walked all the same: an empty override table never reads the rule stack.
+/// is no tokenize-only fallback.
 pub fn gen_highlight(
     w: &mut CodeWriter,
     grammar: &Grammar,
@@ -33,11 +33,10 @@ pub fn gen_highlight(
         fr.add_param("input", "S");
         fr.set_return_type("String");
         fr.emit_begin(w);
-        w.line("let mapping = highlight_mapping();");
-        w.line("let mut visitor = HighlightVisitor::new(mapping);");
+        w.line("let mut visitor = HighlightVisitor::new(&HIGHLIGHT_MAPPING);");
         w.line("highlight_walk(&mut visitor, &result.tokens, &result.cst);");
         w.line("visitor.hl_cover_unvisited(&result.tokens);");
-        w.line("return highlight_html(input, &visitor.captures, &visitor.capture_classes);");
+        w.line("return highlight_html(input, &visitor.captures, &HIGHLIGHT_MAPPING.capture_classes);");
         w.end();
         w.blank();
 
@@ -56,17 +55,15 @@ pub fn gen_highlight(
         f.add_param("input", "S");
         f.set_return_type("String");
         f.emit_begin(w);
-        w.line("let mapping = highlight_mapping();");
-        w.line("let mut visitor = HighlightVisitor::new(mapping);");
+        w.line("let mut visitor = HighlightVisitor::new(&HIGHLIGHT_MAPPING);");
         w.line("let tokens = tokenize(input);");
         w.begin("for let mut _i = 0; _i < tokens.len(); _i += 1");
         w.line("visitor.hl_capture_token(&tokens, _i);");
         w.end();
-        w.line("return highlight_html(input, &visitor.captures, &visitor.capture_classes);");
+        w.line("return highlight_html(input, &visitor.captures, &HIGHLIGHT_MAPPING.capture_classes);");
         w.end();
     }
     w.blank();
-    gen_highlight_run(w);
 }
 
 /// Token kind resolution built once per grammar: token kind ids are the index
@@ -76,12 +73,28 @@ struct KindIndex {
     by_literal: TreeMap<String, i32>,
 }
 
-/// A resolved override: rule name + integer token kind + capture, ready to emit
-/// into the `overrides` table.
+/// `(rule (TOKEN) @capture)`: `order` is the position in the query of the rule
+/// that decides it, which is what settles a token two captures both claim.
 struct ResolvedOverride {
-    rule_name: String,
+    rule_index: i32,
     token_kind: i32,
     capture: String,
+    order: i32,
+}
+
+/// `(rule) @capture`: every token under the rule, which accepts exactly `kinds`.
+struct ResolvedRuleCapture {
+    rule_index: i32,
+    kinds: List<i32>,
+    capture: String,
+    order: i32,
+}
+
+/// The query resolved against the grammar, each tier last-wins.
+struct ResolvedQuery {
+    default_by_kind: TreeMap<i32, String>,
+    overrides: List<ResolvedOverride>,
+    rule_captures: List<ResolvedRuleCapture>,
 }
 
 fn build_kind_index(lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>, slots: &List<TokenSlot>) -> KindIndex {
@@ -134,32 +147,6 @@ fn parser_rule_index<S: AsStrSlice>(parser_rules: &List<ParserRule>, name: S) ->
         }
     }
     return -1;
-}
-
-/// `(rule) @capture` — every token the rule accepts, captured within it. The
-/// runtime keys an override by (rule, token kind), so each alternative has to
-/// be one token, or a delegation to a rule that is.
-fn expand_rule_capture<S: AsStrSlice>(
-    overrides: &mut List<ResolvedOverride>,
-    rule: &ParserRule,
-    parser_rules: &List<ParserRule>,
-    idx: &KindIndex,
-    capture: S,
-    ctx: &mut GenContext,
-) {
-    let mut visiting: List<String> = [rule.name];
-    match rule_token_kinds(rule, parser_rules, idx, &mut visiting) {
-        Some(kinds) => {
-            for let kind of &kinds {
-                push_override(overrides, rule.name, *kind, capture);
-            }
-        },
-        None => ctx.warn(
-            &DiagnosticOwner::host("highlight"),
-            DiagnosticKind::HighlightQuery,
-            `highlight query: '(${rule.name}) @${capture}' needs every alternative of '${rule.name}' to be a single token, or a delegation to a rule that is`,
-        ),
-    }
 }
 
 /// Every token kind `rule` accepts, or `null` where an alternative is anything
@@ -217,85 +204,92 @@ fn rule_token_kinds(
     return Option::Some(kinds);
 }
 
-/// Record an override for (rule, token), last-wins: a later query rule for the
-/// same pair replaces an earlier one (matching the default table's last-wins
-/// and tree-sitter's convention), rather than being dead behind it.
-fn push_override<S: AsStrSlice, S1: AsStrSlice>(
-    overrides: &mut List<ResolvedOverride>,
-    rule_name: S,
-    token_kind: i32,
-    capture: S1,
-) {
-    for let mut i = 0; i < overrides.len(); i += 1 {
-        if overrides[i].rule_name == rule_name.as_str_slice() && overrides[i].token_kind == token_kind {
-            overrides[i] = ResolvedOverride {
-                rule_name: rule_name.to_string(),
-                token_kind,
-                capture: capture.to_string(),
-            };
-            return;
+impl ResolvedQuery {
+    /// Last-wins per (rule, token): a later rule replaces the capture and keeps
+    /// the earlier order, as does one landing on a kind a rule capture covers.
+    fn push_override<S: AsStrSlice>(&mut self, rule_index: i32, token_kind: i32, capture: S, order: i32) {
+        for let ov of &mut self.overrides {
+            if ov.rule_index == rule_index && ov.token_kind == token_kind {
+                ov.capture = capture.to_string();
+                return;
+            }
         }
+        let mut at = order;
+        for let rc of &self.rule_captures {
+            if rc.rule_index == rule_index && rc.kinds.contains(&token_kind) {
+                at = rc.order;
+            }
+        }
+        self.overrides.push(ResolvedOverride { rule_index, token_kind, capture: capture.to_string(), order: at });
     }
-    overrides.push(ResolvedOverride {
-        rule_name: rule_name.to_string(),
-        token_kind,
-        capture: capture.to_string(),
-    });
+
+    /// `(rule) @capture` restates every (rule, token) override it covers, so
+    /// the later capture wins there too.
+    fn push_rule_capture<S: AsStrSlice>(&mut self, rule_index: i32, kinds: List<i32>, capture: S, order: i32) {
+        for let ov of &mut self.overrides {
+            if ov.rule_index == rule_index && kinds.contains(&ov.token_kind) {
+                ov.capture = capture.to_string();
+            }
+        }
+        for let rc of &mut self.rule_captures {
+            if rc.rule_index == rule_index {
+                rc.capture = capture.to_string();
+                return;
+            }
+        }
+        self.rule_captures.push(ResolvedRuleCapture { rule_index, kinds, capture: capture.to_string(), order });
+    }
+
+    /// Every capture class the query can emit, sorted: a capture's id is its
+    /// index here.
+    fn vocabulary(&self) -> List<String> {
+        let mut out: List<String> = [];
+        for let capture of self.default_by_kind.values() {
+            push_unique(&mut out, *capture);
+        }
+        for let ov of &self.overrides {
+            push_unique(&mut out, ov.capture);
+        }
+        for let rc of &self.rule_captures {
+            push_unique(&mut out, rc.capture);
+        }
+        out.sort();
+        return out;
+    }
 }
 
-fn slot_comment(slot: &TokenSlot, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> String {
-    return match slot {
-        Rule(ri) => `TK_${lexer_rules[*ri].name}`,
-        Eof => "TK_EOF",
-        Error => "TK_ERROR",
-        Lit(li) => lit_tokens[*li].const_name,
-    };
-}
-
-/// `highlight_mapping`: the query compiled to a defaults table keyed by token
-/// kind and a list of (rule, token kind) overrides, both last-wins.
-fn gen_highlight_mapping(
-    w: &mut CodeWriter,
-    lexer_rules: &List<LexerRule>,
+fn resolve_query(
     parser_rules: &List<ParserRule>,
-    lit_tokens: &List<LitToken>,
+    idx: &KindIndex,
     query: &List<HighlightRule>,
     ctx: &mut GenContext,
-) {
-    // Token kind ids follow `token_slot_order` — including deferred
-    // `more` / `type(...)` rules and the conditional `TK_ERROR` sentinel —
-    // so both the defaults table (indexed `defaults[kind]` at runtime) and
-    // override resolution key off it.
-    let slots = token_slot_order(lexer_rules, lit_tokens);
-    let idx = build_kind_index(lexer_rules, lit_tokens, &slots);
-
-    // Compile the query: defaults keyed by token kind and overrides, both
-    // last-wins. Unknown token / rule names are skipped with a warning rather
-    // than failing the whole highlighter.
-    let mut default_by_kind = TreeMap::<i32, String>::new();
-    let mut overrides: List<ResolvedOverride> = [];
-    for let rule of query {
-        let mut expanded = false;
+) -> ResolvedQuery {
+    let mut resolved = ResolvedQuery {
+        default_by_kind: TreeMap::<i32, String>::new(),
+        overrides: [],
+        rule_captures: [],
+    };
+    for let mut order = 0; order < query.len(); order += 1 {
+        let rule = &query[order];
         if rule.rule_context matches { None } {
             if let Name(name) = &rule.selector {
                 let at = parser_rule_index(parser_rules, name);
                 if at >= 0 {
-                    expand_rule_capture(
-                        &mut overrides,
-                        &parser_rules[at],
-                        parser_rules,
-                        &idx,
-                        rule.capture,
-                        ctx,
-                    );
-                    expanded = true;
+                    let captured = &parser_rules[at];
+                    let mut visiting: List<String> = [captured.name];
+                    match rule_token_kinds(captured, parser_rules, idx, &mut visiting) {
+                        Some(kinds) => resolved.push_rule_capture(at, kinds, rule.capture, order),
+                        None => ctx.warn(
+                            &DiagnosticOwner::host("highlight"),
+                            DiagnosticKind::HighlightQuery,
+                            `highlight query: '(${captured.name}) @${rule.capture}' needs every alternative of '${captured.name}' to be a single token, or a delegation to a rule that is`,
+                        ),
+                    }
+                    continue;
                 }
             }
         }
-        if expanded {
-            continue;
-        }
-        let kind = match resolve_selector(&idx, &rule.selector) {
+        let kind = match resolve_selector(idx, &rule.selector) {
             Some(k) => k,
             None => {
                 ctx.warn(
@@ -308,10 +302,11 @@ fn gen_highlight_mapping(
         };
         match &rule.rule_context {
             None => {
-                default_by_kind[kind] = rule.capture;
+                resolved.default_by_kind[kind] = rule.capture;
             },
             Some(rctx) => {
-                if parser_rule_index(parser_rules, rctx) < 0 {
+                let at = parser_rule_index(parser_rules, rctx);
+                if at < 0 {
                     ctx.warn(
                         &DiagnosticOwner::host("highlight"),
                         DiagnosticKind::HighlightQuery,
@@ -319,91 +314,138 @@ fn gen_highlight_mapping(
                     );
                     continue;
                 }
-                push_override(&mut overrides, *rctx, kind, rule.capture);
+                resolved.push_override(at, kind, rule.capture, order);
             },
         }
     }
-
-    let mut f = FnSpec::new("highlight_mapping", Vis::Pub);
-    f.set_return_type("HighlightMapping");
-    f.emit_begin(w);
-
-    // Default capture per token kind, one row per slot in kind order.
-    w.line("let defaults: List<String> = [");
-    w.indent();
-    for let mut i = 0; i < slots.len(); i += 1 {
-        let capture = match default_by_kind.get(i) {
-            Some(c) => c,
-            None => "",
-        };
-        w.line(wado`"${capture}",  // ${slot_comment(&slots[i], lexer_rules, lit_tokens)}`);
-    }
-    w.dedent();
-    w.line("];");
-
-    // Rule names indexed by rule_id (parser-rule declaration order). Must
-    // match the ids the generated walker passes to hl_enter, and the ids the
-    // runtime resolves override `rule_name`s against.
-    w.line("let rule_names: List<String> = [");
-    w.indent();
-    for let rule of parser_rules {
-        w.line(wado`"${rule.name}",`);
-    }
-    w.dedent();
-    w.line("];");
-
-    if overrides.is_empty() {
-        w.line("let overrides: List<HighlightOverride> = [];");
-    } else {
-        w.line("let overrides: List<HighlightOverride> = [");
-        w.indent();
-        for let ov of &overrides {
-            w.line(
-                &wado`HighlightOverride { rule_name: "${ov.rule_name}", token_kind: ${ov.token_kind}, capture: "${ov.capture}" },`,
-            );
-        }
-        w.dedent();
-        w.line("];");
-    }
-
-    w.line("return HighlightMapping { defaults, rule_names, overrides };");
-
-    w.end();
-    w.blank();
-
-    gen_capture_vocabulary(w, &default_by_kind, &overrides);
+    return resolved;
 }
 
-/// `capture_vocabulary`: the distinct capture classes this grammar's query can
-/// emit, sorted — what `gale-highlight`'s `Theme::unstyled` checks a theme against.
-fn gen_capture_vocabulary(
+fn slot_comment(slot: &TokenSlot, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> String {
+    return match slot {
+        Rule(ri) => `TK_${lexer_rules[*ri].name}`,
+        Eof => "TK_EOF",
+        Error => "TK_ERROR",
+        Lit(li) => lit_tokens[*li].const_name,
+    };
+}
+
+fn rule_capture_literal<S: AsStrSlice>(rule: &ParserRule, capture_id: i32, order: i32, capture: S) -> String {
+    return `RuleCapture { rule_id: ${rule_kind_const(&rule.name)} as i32, capture_id: ${capture_id}, order: ${order} },  // @${capture}`;
+}
+
+fn gen_list_field(w: &mut CodeWriter, field: &String, rows: &List<String>) {
+    if rows.is_empty() {
+        w.line(`${field}: [],`);
+        return;
+    }
+    w.line(`${field}: [`);
+    w.indent();
+    for let row of rows {
+        w.line(row);
+    }
+    w.dedent();
+    w.line("],");
+}
+
+fn string_rows(items: &List<String>) -> List<String> {
+    let mut rows: List<String> = [];
+    for let item of items {
+        rows.push(wado`"${*item}",`);
+    }
+    return rows;
+}
+
+/// `HIGHLIGHT_MAPPING`: the query resolved down to capture ids, token kinds and
+/// rule kinds, so a highlight reads it without building anything.
+fn gen_highlight_mapping(
     w: &mut CodeWriter,
-    default_by_kind: &TreeMap<i32, String>,
-    overrides: &List<ResolvedOverride>,
+    lexer_rules: &List<LexerRule>,
+    parser_rules: &List<ParserRule>,
+    lit_tokens: &List<LitToken>,
+    query: &List<HighlightRule>,
+    ctx: &mut GenContext,
 ) {
-    let mut vocabulary: List<String> = [];
-    for let capture of default_by_kind.values() {
-        push_unique(&mut vocabulary, *capture);
+    // Token kind ids follow `token_slot_order` — including deferred
+    // `more` / `type(...)` rules and the conditional `TK_ERROR` sentinel.
+    let slots = token_slot_order(lexer_rules, lit_tokens);
+    let idx = build_kind_index(lexer_rules, lit_tokens, &slots);
+    let resolved = resolve_query(parser_rules, &idx, query, ctx);
+    let vocabulary = resolved.vocabulary();
+    let mut capture_ids = TreeMap::<String, i32>::new();
+    let mut classes: List<String> = [];
+    for let mut i = 0; i < vocabulary.len(); i += 1 {
+        capture_ids[vocabulary[i]] = i;
+        classes.push(vocabulary[i].replace(".", " "));
     }
-    for let ov of overrides {
-        push_unique(&mut vocabulary, ov.capture);
+
+    w.line("pub global HIGHLIGHT_MAPPING: HighlightMapping = HighlightMapping {");
+    w.indent();
+    gen_list_field(w, &"capture_names", &string_rows(&vocabulary));
+    gen_list_field(w, &"capture_classes", &string_rows(&classes));
+
+    let mut default_rows: List<String> = [];
+    for let mut i = 0; i < slots.len(); i += 1 {
+        let slot = slot_comment(&slots[i], lexer_rules, lit_tokens);
+        default_rows.push(
+            match resolved.default_by_kind.get(i) {
+                Some(c) => `${capture_ids[c]},  // ${slot} @${c}`,
+                None => `-1,  // ${slot}`,
+            },
+        );
     }
-    vocabulary.sort();
+    gen_list_field(w, &"default_ids", &default_rows);
+
+    let mut by_kind: List<List<ResolvedOverride>> = [];
+    for let ov of &resolved.overrides {
+        while by_kind.len() <= ov.token_kind {
+            by_kind.push([]);
+        }
+        by_kind[ov.token_kind].push(*ov);
+    }
+    if by_kind.is_empty() {
+        w.line("overrides_by_kind: [],");
+    } else {
+        w.line("overrides_by_kind: [");
+        w.indent();
+        for let mut kind = 0; kind < by_kind.len(); kind += 1 {
+            let slot = slot_comment(&slots[kind], lexer_rules, lit_tokens);
+            if by_kind[kind].is_empty() {
+                w.line(`[],  // ${slot}`);
+                continue;
+            }
+            by_kind[kind].sort_by(|a: &ResolvedOverride, b: &ResolvedOverride| a.order.cmp(&b.order));
+            w.line(`[  // ${slot}`);
+            w.indent();
+            for let ov of &by_kind[kind] {
+                w.line(
+                    rule_capture_literal(&parser_rules[ov.rule_index], capture_ids[ov.capture], ov.order, ov.capture),
+                );
+            }
+            w.dedent();
+            w.line("],");
+        }
+        w.dedent();
+        w.line("],");
+    }
+
+    let mut rule_captures = resolved.rule_captures;
+    rule_captures.sort_by(|a: &ResolvedRuleCapture, b: &ResolvedRuleCapture| a.order.cmp(&b.order));
+    let mut rule_capture_rows: List<String> = [];
+    for let rc of &rule_captures {
+        rule_capture_rows.push(
+            rule_capture_literal(&parser_rules[rc.rule_index], capture_ids[rc.capture], rc.order, rc.capture),
+        );
+    }
+    gen_list_field(w, &"rule_captures", &rule_capture_rows);
+    w.dedent();
+    w.line("};");
+    w.blank();
 
     let mut f = FnSpec::new("capture_vocabulary", Vis::Pub);
     f.set_return_type("List<String>");
     f.emit_begin(w);
-    if vocabulary.is_empty() {
-        w.line("return [];");
-    } else {
-        w.line("return [");
-        w.indent();
-        for let capture of &vocabulary {
-            w.line(wado`"${*capture}",`);
-        }
-        w.dedent();
-        w.line("];");
-    }
+    w.line("return HIGHLIGHT_MAPPING.capture_names;");
     w.end();
     w.blank();
 }
@@ -412,33 +454,4 @@ fn push_unique<S: AsStrSlice>(out: &mut List<String>, value: S) {
     if !out.contains_str(value) {
         out.push(value.to_string());
     }
-}
-
-fn gen_highlight_run(w: &mut CodeWriter) {
-    w.line("use { args, print, eprintln, Stdout, Stderr, Environment } from \"core:cli\";");
-    w.line("use fs from \"core:fs\";");
-    w.line("use { Preopens } from \"wasi:filesystem\";");
-    w.blank();
-    let mut run_fn = FnSpec::new("run");
-    run_fn.set_export();
-    run_fn.add_effect("Stdout");
-    run_fn.add_effect("Stderr");
-    run_fn.add_effect("Environment");
-    run_fn.add_effect("Preopens");
-    run_fn.emit_begin(w);
-    w.line("let arguments = args();");
-    w.begin("if arguments.len() < 1");
-    w.line("eprintln(\"Usage: <highlighter> <input-file>\");");
-    w.line("return;");
-    w.end();
-    w.begin("let input = match fs::read_to_string(&arguments[0])");
-    w.line("Ok(text) => text,");
-    w.begin("Err(e) =>");
-    w.line("eprintln(`error: ${e}`);");
-    w.line("return;");
-    w.end_with(",");
-    w.end_with(";");
-    w.line("print(highlight(&input));");
-    w.end();
-    w.blank();
 }

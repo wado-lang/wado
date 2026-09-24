@@ -242,6 +242,21 @@ test "LR rule has no position-0 self-reference (no naive left recursion)" {
     assert found2, "'+' operand should recurse at conflict_min = 2";
 }
 
+test "a prefix alt's operand recurses at the parse side's precedence" {
+    let g = parse("grammar E;\ne : e '*' e | e '+' e | '-' e | INT ;\nINT : '0'..'9'+ ;\n").unwrap();
+    let atn = build_atn(&g);
+    let mut precs: List<i32> = [];
+    for let st of &atn.states {
+        for let t of &st.transitions {
+            if t.kind == ATN_TR_RULE && t.target == atn.rule_start[0] {
+                precs.push(t.prec);
+            }
+        }
+    }
+    precs.sort();
+    assert precs == [1, 2, 3], `self-ref precedences: ${precs:?}`;
+}
+
 test "LR ATN round-trips through atn_blob_bytes/atn_decode exactly" {
     let g = parse(LR_G4).unwrap();
     let atn = build_atn(&g);

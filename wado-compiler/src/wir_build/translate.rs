@@ -32,14 +32,11 @@ use crate::wir::{
 use crate::wir_build::context::{CANONICAL_INSPECT_SLOT, ClosureWrapperFuncs};
 use crate::{nir, tir};
 
-pub(super) fn ref_binding_needs_boxing(
-    binding_wir: &WirType,
-    source_wir: Option<&WirType>,
-) -> bool {
+pub(super) fn ref_binding_needs_boxing(binding_wir: &WirType, source_wir: &WirType) -> bool {
     match (binding_wir, source_wir) {
-        (WirType::Ref { type_id: bt, .. }, Some(WirType::Ref { type_id: st, .. })) => bt != st,
-        (WirType::Ref { .. }, Some(WirType::AbstractRef { .. })) => false,
-        (WirType::Ref { .. }, Some(_)) => true,
+        (WirType::Ref { type_id: bt, .. }, WirType::Ref { type_id: st, .. }) => bt != st,
+        (WirType::Ref { .. }, WirType::AbstractRef { .. }) => false,
+        (WirType::Ref { .. }, _) => true,
         _ => false,
     }
 }

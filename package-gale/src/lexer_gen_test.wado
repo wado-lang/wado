@@ -16,7 +16,10 @@ use {
     compute_elem_first_chars,
     resolve_ci,
     lit_name,
+    fold_range_ci,
+    folded_range_contains,
 } from "./lexer_gen.wado";
+use { CharRange } from "./ir.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { MemberDecls, MemberField, MemberMethod } from "./java2wado/jmembers.wado";
 use { SuperOp } from "./superclass.wado";
@@ -195,6 +198,55 @@ test "gen_lexer: a dispatch with no wildcard rule still covers every char" {
     assert out.contains("_ => {},"), out;
 }
 
+test "gen_lexer: a catch-all declared last runs once, after the dispatch" {
+    let out = lexer_source("lexer grammar L; A : [a-f] '1' ; D : [h] [0-9] ; ANY : . ;");
+    assert count_occurrences(&out, "= try_ANY(") == 1, out;
+    assert out.find("if best_end <= start {").unwrap() < out.find("= try_ANY(").unwrap(), out;
+}
+
+test "gen_lexer: a catch-all declared first stays in the arms it ties in" {
+    let out = lexer_source("lexer grammar L; ANY : . ; A : [a-f] '1' ; D : [h] [0-9] ;");
+    assert count_occurrences(&out, "= try_ANY(") == 3, out;
+}
+
+test "gen_lexer: an alternation of single chars is one class test" {
+    let out = lexer_source("lexer grammar L; fragment D : [0-9] ; A : ('_' | D | 'a'..'c' | 'b') 'z' ;");
+    assert out.contains("matches { '0'..='9' | '_' | 'a'..='c' }"), out;
+    assert !out.contains("alts_"), out;
+}
+
+test "gen_lexer: a large class is one shared function, however many sites test it" {
+    let set = "[a\\u00e0b\\u00e1c\\u00e2d\\u00e3e\\u00e4f\\u00e5g\\u00e6h\\u00e7i\\u00e8]";
+    let out = lexer_source(`lexer grammar L; A : ${set} '1' ; B : ${set} '2' ; C : ${set}+ ;`);
+    assert count_occurrences(&out, "fn in_char_set_0(c: char) -> bool {") == 1, out;
+    assert count_occurrences(&out, "in_char_set_0(chars[pos])") == 4, out;
+    assert !out.contains("in_char_set_1"), out;
+}
+
+test "gen_lexer: arm scoring peeks the suffix from one site, whatever the arm count" {
+    let out = lexer_source("lexer grammar L; I : ('a' | 'ab' | 'abc') 'bcd' ;");
+    assert count_occurrences(&out, "chars[pos] != 'd'") == 2, out;
+}
+
+test "gen_lexer: an optional element's block is labelled as one, not as a loop" {
+    let out = lexer_source("lexer grammar L; A : 'a' 'bc'? ;");
+    assert out.contains("opt_0: {"), out;
+    assert !out.contains("rep_"), out;
+}
+
+test "gen_lexer: a char that prints as nothing is spelled as its escape" {
+    let out = lexer_source("lexer grammar L; WS : [\\u00A0\\u2000-\\u200A] ; BOM : '\\uFEFF' 'é' ;");
+    assert out.contains("matches { '\\u{a0}' | '\\u{2000}'..='\\u{200a}' }"), out;
+    assert out.contains("chars[pos] != '\\u{feff}'"), out;
+    assert out.contains("chars[pos] != 'é'"), out;
+}
+
+test "gen_lexer: a negated single char is one class test" {
+    let out = lexer_source("lexer grammar L; S : '\"' ~'\"'* '\"' ;");
+    assert out.contains("if (chars[pos] matches { '\"' }) { break"), out;
+    assert !out.contains("not_"), out;
+}
+
 test "gen_lexer: tail alternation of unequal length uses the longest-match emit" {
     // ANTLR4's lexer takes the longest arm (`I` matches `ab`, not `a`).
     let out = lexer_source("lexer grammar L; I : ('a' | 'ab') ; J : . ;");
@@ -204,7 +256,7 @@ test "gen_lexer: tail alternation of unequal length uses the longest-match emit"
 test "gen_lexer: tail alternation of equal length keeps the first-match emit" {
     // Every arm consumes the same fixed count, so longest and first-match
     // coincide; the cheaper emit stays byte-identical for the common shape.
-    let out = lexer_source("lexer grammar L; WS : (' ' | '\n') ;");
+    let out = lexer_source("lexer grammar L; WS : ('  ' | '\n\n') ;");
     assert !out.contains("alts_best_"), out;
     assert out.contains("alts_done_"), out;
 }
@@ -409,4 +461,26 @@ test "lit_name renders a grammar literal the way ANTLR4's vocabulary does" {
     let mut quote = String::new();
     quote.push('"');
     assert `${lit_name(quote)}` == "'\"'";
+}
+
+test "folded_range_contains agrees with the ranges fold_range_ci builds" {
+    let bounds: List<[char, char]> = [
+        ['a', 'a'],
+        ['Q', 'Q'],
+        ['0', '9'],
+        ['A', 'z'],
+        ['_', 'c'],
+        ['X', 'b'],
+        ['\u{00C0}', '\u{00FF}'],
+    ];
+    for let [start, end] of bounds {
+        let mut folded: List<CharRange> = [];
+        fold_range_ci(start, end, &mut folded);
+        for let code of 0..<0x100 {
+            let c = char::from_u32(code as u32).unwrap();
+            let built = folded.iter_ref().any(|r| r.start <= c <= r.end);
+            assert folded_range_contains(start, end, true, c) == built;
+            assert folded_range_contains(start, end, false, c) == (start <= c <= end);
+        }
+    }
 }

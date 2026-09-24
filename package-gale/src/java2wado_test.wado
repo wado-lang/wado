@@ -663,7 +663,7 @@ A : 'a' { System.out.println(${*body}); } ;
         let msgs = stage_lexer_bodies(&mut g, &lang, &NO_MEMBERS);
         assert msgs.is_empty(), `must resolve '${*body}': ${msgs.len()} diagnostics`;
         let staged = g.lexer_rules[0].body[0].actions[0].source.text;
-        assert staged.contains("LexerSlice::new(chars, start, pos).to_string()"), `staged: '${staged}'`;
+        assert staged.contains("chars_text(chars, start, pos)"), `staged: '${staged}'`;
     }
 
     // And in a parser body both are the rule's own consumed span.

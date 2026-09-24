@@ -348,22 +348,13 @@ fn build_lr_body(
     r: i32,
     rule_index: &TreeMap<String, i32>,
 ) -> [i32, i32] {
-    // Atom block: the non-LR alternatives, in source order. LR alts are
-    // identified by their `alt_index`; everything else is an atom.
-    let mut is_lr_alt: List<bool> = [];
-    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-        is_lr_alt.push(false);
-    }
-    for let a of &lr.lr_alts {
-        is_lr_alt[a.alt_index] = true;
-    }
     let mut atom_alts: List<Alternative> = [];
-    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-        if !is_lr_alt[i] {
-            atom_alts.push(rule.alternatives[i]);
-        }
+    let mut operand_precs: List<i32> = [];
+    for let body of &lr.atom.alts {
+        atom_alts.push(rule.alternatives[body.alt_index]);
+        operand_precs.push(body.prefix_self_ref_min_prec);
     }
-    let atom_seg = build_alternation(b, &atom_alts, r, rule_index, -1);
+    let atom_seg = build_alternation(b, &atom_alts, r, rule_index, -1, &operand_precs);
 
     let entry = b.new_state(ATN_STAR_LOOP_ENTRY, r);
     let loop_end = b.new_state(ATN_LOOP_END, r);
@@ -693,14 +684,17 @@ fn build_alternation(
     rule: i32,
     rule_index: &TreeMap<String, i32>,
     site: i32,
+    operand_precs: &List<i32> = &[],
 ) -> [i32, i32] {
+    assert operand_precs.is_empty() || operand_precs.len() == alts.len(), "one operand precedence per alternative";
     let start = b.new_state(ATN_BLOCK_START, rule);
     let end = b.new_state(ATN_BLOCK_END, rule);
     if alts.len() > 1 {
         b.mark_decision_for_site(start, site);
     }
-    for let alt of alts {
-        let seg = build_sequence(b, &alt.elements, rule, rule_index);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let operand_prec = if operand_precs.is_empty() { 0 } else { operand_precs[i] };
+        let seg = build_sequence(b, &alts[i].elements, rule, rule_index, operand_prec);
         b.add_eps(start, seg.0);
         b.add_eps(seg.1, end);
     }
@@ -712,17 +706,24 @@ fn build_alternation(
 }
 
 /// Build a sequence of elements, threading each element's exit into the
-/// next element's entry. Returns `[entry, exit]`.
+/// next element's entry. Returns `[entry, exit]`. A positive `operand_prec`
+/// makes the last element a prefix alternative's self-ref at that precedence.
 fn build_sequence(
     b: &mut AtnBuilder,
     elements: &List<Element>,
     rule: i32,
     rule_index: &TreeMap<String, i32>,
+    operand_prec: i32 = 0,
 ) -> [i32, i32] {
     let entry = b.new_state(ATN_BASIC, rule);
     let mut cursor = entry;
-    for let elem of elements {
-        let seg = build_element(b, elem, rule, rule_index);
+    for let mut i = 0; i < elements.len(); i += 1 {
+        let elem = &elements[i];
+        let seg = if operand_prec > 0 && i == elements.len() - 1 {
+            self_ref_segment(b, rule, operand_prec, self_ref_call_site(elem));
+        } else {
+            build_element(b, elem, rule, rule_index);
+        };
         b.add_eps(cursor, seg.0);
         cursor = seg.1;
     }
