@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790282454675,
+  "lastUpdate": 1790288290975,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59389,6 +59389,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 239681,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a26f785cedcb69393aeb09701ca5d0c838ff467c",
+          "message": "Merge pull request #2150 from wado-lang/claude/serene-noether-kjg53x\n\nfix: close ~45 miscompiles in lower and the NIR optimizer; sqlite_parse -O3 compiles 2.3x faster",
+          "timestamp": "2026-09-25T06:52:45+09:00",
+          "tree_id": "1a9e068556be6e5699d1345cc475fd6a466a0b86",
+          "url": "https://github.com/wado-lang/wado/commit/a26f785cedcb69393aeb09701ca5d0c838ff467c"
+        },
+        "date": 1790288289996,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6703,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 240302,
             "unit": "bytes"
           }
         ]
