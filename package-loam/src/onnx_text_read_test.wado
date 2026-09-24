@@ -148,6 +148,34 @@ test "an initializer's inline values are not mistaken for its name" {
     ).unwrap();
     assert g.initializers.len() == 1;
     assert g.initializers[0].name == "W";
+    // 1.0 is 0x3f800000 and -2.5 is 0xc0200000, little-endian.
+    assert g.initializers[0].data == Option::Some(b"\x00\x00\x80\x3f\x00\x00\x20\xc0");
+}
+
+test "an initializer without inline values carries no data" {
+    assert mlp().initializers[0].data matches { None };
+}
+
+test "inline values that disagree with the shape name the tensor" {
+    let e = read(
+        `agraph (float[2] X) => (float[2] Y)
+        <float[3] W = {1.0, -2.5}>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap_err();
+    assert e == "W: 2 elements for a shape of 3 or more";
+}
+
+test "inline half values name themselves rather than rounding twice" {
+    let e = read(
+        `agraph (float16[2] X) => (float16[2] Y)
+        <float16[2] W = {1.0, -2.5}>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap_err();
+    assert e == "W: inline float16 values are not read";
 }
 
 test "a syntax error comes back with its position" {

@@ -133,8 +133,44 @@ test "a model round-trips through the declarations" {
     assert g.initializers.len() == 1;
     assert g.initializers[0].name == "W";
     assert g.initializers[0].rank matches { Dims(d) && d[0] matches { Static(4) } && d[1] matches { Static(2) } };
+    assert g.initializers[0].data matches { Some(d) && List::<f32>::from_le_bytes(d) == weight.float_data };
     assert g.nodes[0].op == "MatMul";
     assert g.nodes[0].inputs[1] == "W";
+}
+
+fn read_initializer_of(weight: TensorProto) -> Result<Graph, String> {
+    let model = ModelProto {
+        graph: Option::Some(GraphProto {
+            name: "weights",
+            initializer: [weight],
+        }),
+    };
+    let Ok(bytes) = to_bytes(&model) else {
+        panic("the model did not encode");
+    };
+    return read(bytes);
+}
+
+test "a half initializer's elements come out of the low half of int32_data" {
+    let g = read_initializer_of(TensorProto {
+        dims: [2],
+        data_type: 10,
+        name: "H",
+        int32_data: [0x3c00, 0xc100],
+    }).unwrap();
+
+    assert g.initializers[0].data == Option::Some(b"\x00\x3c\x00\xc1");
+}
+
+test "an initializer whose data disagrees with its shape names itself" {
+    let e = read_initializer_of(TensorProto {
+        dims: [2],
+        data_type: 1,
+        name: "W",
+        float_data: [1.0, 2.0, 3.0],
+    }).unwrap_err();
+
+    assert e == "W: 3 elements for a shape of 2";
 }
 
 test "a value the subset cannot type names itself" {

@@ -5,7 +5,8 @@ use onnx from "../grammar/Onnx.g4"
         generator: { module: "../../package-gale/src/generator.wado" },
     };
 
-use { Attr, Dim, Graph, Node, Rank, ValueInfo, parameters } from "./graph.wado";
+use { write_fixed32 } from "core:protobuf";
+use { Attr, Dim, Graph, Node, Rank, ValueInfo, check_element_count, element_bytes, parameters } from "./graph.wado";
 
 /// Read a graph out of the ONNX textual format. A syntax error comes back as
 /// the first diagnostic; anything the reader does not cover names itself.
@@ -75,24 +76,63 @@ fn read_value_info(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32) -> Res
     let Some(tensor) = first_child_of_kind(s, type_node, onnx::RK_TENSOR_TYPE) else {
         return Result::Err(`${name}: only a tensor type is read, not a sequence or a map`);
     };
-    // Loam takes its weights from the checkpoint the invocation names, so
-    // dropping this would leave a tensor whose data came from nowhere.
-    if has_external_data(s, vi) {
-        return Result::Err(
-            `${name}: an initializer whose data lives in another file is not read`,
-        );
-    }
     let [dtype, rank] = read_tensor_type(s, toks, tensor);
-    return Result::Ok(ValueInfo { name, dtype, rank });
+    let data = read_constant_data(s, toks, vi, &name, &dtype, &rank)?;
+    return Result::Ok(ValueInfo { name, dtype, rank, data });
 }
 
-/// Whether an initializer's data is a `["location": ...]` list naming a file,
-/// rather than inline values or the checkpoint.
-fn has_external_data(s: &onnx::CstStore, vi: i32) -> bool {
+/// A value's inline elements as the little-endian bytes the protobuf form
+/// carries. Only `float` is encoded: a half element would round twice, once
+/// into `f32` and again into the half.
+fn read_constant_data(
+    s: &onnx::CstStore,
+    toks: &onnx::TokenStream,
+    vi: i32,
+    name: &String,
+    dtype: &String,
+    rank: &Rank,
+) -> Result<Option<ByteList>, String> {
     let Some(data) = first_child_of_kind(s, vi, onnx::RK_CONSTANT_DATA) else {
-        return false;
+        return Result::Ok(null);
     };
-    return first_child_of_kind(s, data, onnx::RK_EXTERNAL_DATA) matches { Some(_) };
+    // Loam takes its weights from the graph or the checkpoint the invocation
+    // names, so dropping this would leave a tensor whose data came from nowhere.
+    let Some(values) = first_child_of_kind(s, data, onnx::RK_TENSOR_VALUES) else {
+        return Result::Err(`${name}: an initializer whose data lives in another file is not read`);
+    };
+    if element_bytes(dtype) matches { None } {
+        return Result::Ok(null);
+    }
+    if *dtype != "float" {
+        return Result::Err(`${name}: inline ${dtype} values are not read`);
+    }
+    let mut extents: List<i32> = [];
+    match rank {
+        Scalar => {
+        },
+        Unranked => {
+            return Result::Err(`${name}: inline values need a stated rank`);
+        },
+        Dims(dims) => {
+            for let d of *dims {
+                let Static(e) = d else {
+                    return Result::Err(`${name}: inline values need every extent stated`);
+                };
+                extents.push(e);
+            }
+        },
+    }
+    let elements = children_of_kind(s, values, onnx::RK_TENSOR_ELEM);
+    check_element_count(name, elements.len(), &extents)?;
+    let mut bytes = ByteList::with_capacity(elements.len() * 4);
+    for let e of elements {
+        let text = first_token_text(s, toks, e);
+        let Ok(v) = f32::from_str(&text) else {
+            return Result::Err(`${name}: ${text} is not a float`);
+        };
+        write_fixed32(&mut bytes, v.to_bits());
+    }
+    return Result::Ok(Option::Some(bytes));
 }
 
 fn read_tensor_type(s: &onnx::CstStore, toks: &onnx::TokenStream, tensor: i32) -> [String, Rank] {

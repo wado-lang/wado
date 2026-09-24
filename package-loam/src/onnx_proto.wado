@@ -6,8 +6,19 @@
 //! subset leaves out is skipped by `core:protobuf`, so a real model reads
 //! whatever else it carries.
 
-use { from_bytes, read_fixed32 } from "core:protobuf";
-use { Attr, ConstTensor, Dim, Graph, Node, Rank, ValueInfo, parameters } from "./graph.wado";
+use { from_bytes, read_fixed32, write_fixed32 } from "core:protobuf";
+use {
+    Attr,
+    ConstTensor,
+    Dim,
+    Graph,
+    Node,
+    Rank,
+    ValueInfo,
+    check_element_count,
+    element_bytes,
+    parameters,
+} from "./graph.wado";
 
 /// Nesting flattens: `.proto` nests a message inside a message and Wado has
 /// no nested declaration, so the path is joined into the name. This is the
@@ -217,24 +228,6 @@ fn raw_floats(raw: &ByteList, tensor: &String) -> Result<List<f32>, String> {
     return Result::Ok(data);
 }
 
-/// The extents' product is how many elements the tensor says it has, and a
-/// payload of any other length is a file disagreeing with itself.
-fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) -> Result<(), String> {
-    let mut declared: i64 = 1;
-    for let e of *extents {
-        declared = declared * e as i64;
-        // No payload is longer than what was read, so a product past it is
-        // already wrong and cannot overflow on the way.
-        if declared > elements as i64 {
-            return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared} or more`);
-        }
-    }
-    if declared != elements as i64 {
-        return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared}`);
-    }
-    return Result::Ok(());
-}
-
 /// The element type names the textual format spells, indexed by
 /// `TensorProto.DataType`. The two formats must agree, since one `Graph`
 /// serves both readers.
@@ -305,8 +298,7 @@ fn read_value_info(vi: &ValueInfoProto) -> Result<ValueInfo, String> {
     return Result::Ok(ValueInfo { name: vi.name, dtype, rank });
 }
 
-/// An initializer as a `ValueInfo`: its name, type and extents. The weights
-/// themselves are the caller's, as `emit` already assumes.
+/// An initializer as a `ValueInfo`: its name, type, extents and data.
 fn read_initializer(t: &TensorProto) -> Result<ValueInfo, String> {
     if let Some(entry) = t.external_data.first() {
         return Result::Err(`${t.name}: external data (${entry.key})`);
@@ -317,11 +309,45 @@ fn read_initializer(t: &TensorProto) -> Result<ValueInfo, String> {
     let Some(dtype) = dtype_name(t.data_type) else {
         return Result::Err(`${t.name}: element type ${t.data_type}`);
     };
+    let mut extents: List<i32> = [];
     let mut dims: List<Dim> = [];
     for let d of t.dims {
-        dims.push(Dim::Static(extent(d, &t.name)?));
+        let e = extent(d, &t.name)?;
+        extents.push(e);
+        dims.push(Dim::Static(e));
     }
-    return Result::Ok(ValueInfo { name: t.name, dtype, rank: Rank::Dims(dims) });
+    return Result::Ok(ValueInfo {
+        name: t.name,
+        dtype,
+        rank: Rank::Dims(dims),
+        data: payload(t, &dtype, &extents)?,
+    });
+}
+
+/// A tensor's elements as little-endian bytes: `raw_data` as it stands, or the
+/// typed field re-encoded. A 16-bit element sits in the low half of an `int32`.
+fn payload(t: &TensorProto, dtype: &String, extents: &List<i32>) -> Result<Option<ByteList>, String> {
+    let Some(width) = element_bytes(dtype) else {
+        return Result::Ok(null);
+    };
+    let mut bytes = t.raw_data;
+    if bytes.is_empty() {
+        if width == 4 {
+            for let v of t.float_data {
+                write_fixed32(&mut bytes, v.to_bits());
+            }
+        } else {
+            for let v of t.int32_data {
+                bytes.push(v as u8);
+                bytes.push((v >> 8) as u8);
+            }
+        }
+    }
+    if bytes.len() % width != 0 {
+        return Result::Err(`${t.name}: ${bytes.len()} raw bytes is not whole ${dtype} elements`);
+    }
+    check_element_count(&t.name, bytes.len() / width, extents)?;
+    return Result::Ok(Option::Some(bytes));
 }
 
 /// An attribute's values as text, so the two readers hand `Attr` the same

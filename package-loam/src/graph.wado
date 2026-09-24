@@ -21,6 +21,36 @@ pub struct ValueInfo {
     pub name: String,
     pub dtype: String,
     pub rank: Rank,
+    /// The elements as little-endian bytes, where the graph carries them.
+    pub data: Option<ByteList> = null,
+}
+
+/// How many bytes one element of `dtype` takes, for the element types a
+/// kernel reaches. A payload of any other type is not read.
+pub fn element_bytes(dtype: &String) -> Option<i32> {
+    return match dtype.as_str_slice() {
+        "float" => Option::Some(4),
+        "float16" | "bfloat16" => Option::Some(2),
+        _ => null,
+    };
+}
+
+/// The extents' product is how many elements the tensor says it has, and a
+/// payload of any other length is a file disagreeing with itself.
+pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) -> Result<(), String> {
+    let mut declared: i64 = 1;
+    for let e of *extents {
+        declared = declared * e as i64;
+        // No payload is longer than what was read, so a product past it is
+        // already wrong and cannot overflow on the way.
+        if declared > elements as i64 {
+            return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared} or more`);
+        }
+    }
+    if declared != elements as i64 {
+        return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared}`);
+    }
+    return Result::Ok(());
 }
 
 /// A tensor an attribute carries, which `Constant` is the operator of. It has
@@ -69,7 +99,7 @@ pub struct Graph {
 
 /// The declared inputs that are parameters. An initializer's name may also
 /// appear among them, where it supplies that input's default rather than a
-/// second value, and Loam's weights are the caller's either way.
+/// second value, and Loam reads a weight from `Weights` either way.
 pub fn parameters(inputs: List<ValueInfo>, initializers: &List<ValueInfo>) -> List<ValueInfo> {
     let mut weights: List<String> = [];
     for let vi of *initializers {

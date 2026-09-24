@@ -11,6 +11,7 @@ use {
     Vis,
     wado,
     char_range_pat,
+    byte_string_literal,
 } from "./wadopoet.wado";
 
 
@@ -544,6 +545,16 @@ test "char_range_pat escapes both endpoints" {
     let mut expected = String::new();
     expected.push_str("'\\t'..='\\n'");
     assert `${char_range_pat('\t'..='\n')}` == expected, `got: ${char_range_pat('\t'..='\n')}`;
+}
+
+test "byte_string_literal keeps printable ASCII and escapes the rest" {
+    assert byte_string_literal(b"a\"\\ \x00\xff\n~") == "b\"a\\x22\\x5c \\x00\\xff\\x0a~\"";
+}
+
+test "byte_string_literal reads back byte for byte" {
+    let bytes = b"\x89PNG\r\n\x1a\n";
+    assert byte_string_literal(&bytes) == "b\"\\x89PNG\\x0d\\x0a\\x1a\\x0a\"";
+    assert byte_string_literal(b"") == "b\"\"";
 }
 
 test "ImplSpec basic" {
