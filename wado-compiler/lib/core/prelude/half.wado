@@ -9,6 +9,7 @@ use {
     Display,
     Eq,
     From,
+    FromStr,
     Inspect,
     OperatorOrd,
     Ord,
@@ -16,6 +17,9 @@ use {
     TryFrom,
 } from "core:prelude/traits.wado";
 use { Formatter } from "core:prelude/format.wado";
+use { BFLOAT16, BINARY16 } from "core:prelude/fpfmt.wado";
+use { ParseFloatError, parse_float_bits } from "core:prelude/intparse.wado";
+use { AsStrSlice } from "core:prelude/string.wado";
 use { Result } from "core:prelude/types.wado";
 
 global F16_SIGN: u16 = 0x8000;
@@ -166,6 +170,24 @@ impl From<bf16> for f32 {
 impl From<bf16> for f64 {
     fn from(value: bf16) -> f64 {
         return f32::from(value) as f64;
+    }
+}
+
+/// Rounds the decimal once, ties to even, as `f32::from_str` does. Parsing into
+/// `f32` and narrowing would round twice.
+impl FromStr for f16 {
+    type Err = ParseFloatError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<f16, ParseFloatError> {
+        return Result::Ok(f16::from_bits(parse_float_bits(&s.as_str_slice(), &BINARY16)? as u16));
+    }
+}
+
+impl FromStr for bf16 {
+    type Err = ParseFloatError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<bf16, ParseFloatError> {
+        return Result::Ok(bf16::from_bits(parse_float_bits(&s.as_str_slice(), &BFLOAT16)? as u16));
     }
 }
 

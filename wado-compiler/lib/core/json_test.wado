@@ -341,6 +341,21 @@ test "deserialize f64" {
     assert r matches { Ok(v) && v == 3.14 };
 }
 
+test "deserialize f32 rounds the decimal once" {
+    // Just above the midpoint between 1 and the next f32: through f64 it lands
+    // on the midpoint and ties to even, down to 1.
+    let r: Result<f32, DeserializeError> = from_string("1.000000059604644776");
+    assert r matches { Ok(v) && v.to_bits() == 0x3f800001 };
+}
+
+test "deserialize f64 reads digits past the nineteenth" {
+    // 1 + 2^-53 exactly is the midpoint and ties to even; one more digit is above it.
+    let tie: Result<f64, DeserializeError> = from_string("1.00000000000000011102230246251565404236316680908203125");
+    assert tie matches { Ok(v) && v.to_bits() == 0x3ff0000000000000 };
+    let above: Result<f64, DeserializeError> = from_string("1.000000000000000111022302462515654042363166809082031251");
+    assert above matches { Ok(v) && v.to_bits() == 0x3ff0000000000001 };
+}
+
 test "deserialize f64 integer" {
     let r: Result<f64, DeserializeError> = from_string("42");
     assert r matches { Ok(v) && v == 42.0 };

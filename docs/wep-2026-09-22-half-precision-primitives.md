@@ -210,6 +210,14 @@ copy drifts silently.
 A literal past the type's largest finite value is a compile error rather than
 an infinity, as an integer literal past its type's range is.
 
+### Parsing rounds once too
+
+`f16::from_str` and `bf16::from_str` round decimal text straight to the half,
+as a literal does, so reading a textual model's weights agrees with writing
+them as source. `f32::from_str` follows the same rule, and every length of
+mantissa is read exactly. Text past the largest finite value parses to an
+infinity, as it does for `f32` and `f64`.
+
 ### What is deliberately absent
 
 Conversion between `f16` and `bf16`. Each direction loses something the other
@@ -242,8 +250,6 @@ either.
 No associated constants. `f16::MAX` and the other finite ones could now be
 written as literals and are not declared. `NAN` and the infinities have no
 literal, so a constant initializer cannot spell them.
-
-No `FromStr`, so a half precision value cannot be parsed from text directly.
 
 A half precision tensor cannot be part of a component's public API, so a Loam
 module that exports one has to widen it or hand out its bytes.

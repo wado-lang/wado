@@ -87,6 +87,23 @@ test "get_pow10 shortcut agrees with the general decomposition" {
     }
 }
 
+test "mul_pow10 is the exact ceiling of 10^p" {
+    // Computed exactly with big integers, as hi << 64 - lo.
+    let expected: List<[i32, u64, u64]> = [
+        [-1, 0xcccccccccccccccd, 0x3333333333333333],
+        [-2, 0xa3d70a3d70a3d70b, 0xc28f5c28f5c28f5c],
+        [-27, 0x9e74d1b791e07e49, 0x88a15d9b30aacb82],
+        [-351, 0x8049a4ac0c5811af, 0xdfa4769288829d87],
+        [27, 0xcecb8f27f4200f3a, 0x0],
+        [28, 0x813f3978f8940985, 0xc000000000000000],
+        [350, 0xcc573c2a0eccdaa7, 0x20531390de1f4000],
+    ];
+    for let [p, hi, lo] of expected {
+        let got = mul_pow10(p);
+        assert got.hi == hi && got.lo == lo, `10^${p}`;
+    }
+}
+
 test "digits count" {
     assert digits(0) == 0;
     assert digits(1) == 1;

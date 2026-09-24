@@ -198,7 +198,8 @@ bool
 i128, u128
 
 // half precision: storage only, no arithmetic and no `as` cast.
-// Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32`.
+// Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32`,
+// text via `from_str` (rounded once, as a literal is).
 // Every comparison hands the widened value to f32's, so `==` and `<` are IEEE
 // and `Ord` is the total order — the same split f32 has.
 f16, bf16

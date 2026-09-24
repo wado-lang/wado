@@ -43,14 +43,16 @@ test "f64::from_str overflow underflow" {
     assert f64::from_str("-1e999") matches { Ok(v) && v == f64::NEG_INFINITY };
     assert f64::from_str("1e-999") matches { Ok(v) && v == 0.0 };
 
-    // Boundary: eff_p 350 is within table, 351 overflows
-    assert f64::from_str("1e350") matches { Ok(v) && v.is_finite() };
+    // Inside the pow10 table's domain, and still past f64's range either way.
+    assert f64::from_str("1e350") matches { Ok(v) && v == f64::INFINITY };
     assert f64::from_str("1e351") matches { Ok(v) && v == f64::INFINITY };
     assert f64::from_str("-1e351") matches { Ok(v) && v == f64::NEG_INFINITY };
-
-    // Boundary: eff_p -351 is within table (subnormal), -352 underflows to zero
-    assert f64::from_str("1e-351") matches { Ok(v) && v.is_finite() && v > 0.0 };
+    assert f64::from_str("1e-351") matches { Ok(v) && v == 0.0 };
     assert f64::from_str("1e-352") matches { Ok(v) && v == 0.0 };
+
+    // The largest finite value, and the first decimal past its rounding edge.
+    assert f64::from_str("1.7976931348623157e308") matches { Ok(v) && v.to_bits() == 0x7fefffffffffffff };
+    assert f64::from_str("1.8e308") matches { Ok(v) && v == f64::INFINITY };
 }
 
 test "f64::from_str malformed" {

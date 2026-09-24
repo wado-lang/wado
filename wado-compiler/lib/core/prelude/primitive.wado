@@ -49,6 +49,8 @@ use {
     write_decimal_prec,
     write_exp_prec,
     u64_bit_len,
+    BINARY32,
+    BINARY64,
 } from "core:prelude/fpfmt.wado";
 
 // Deterministic math functions imported directly from the bundled
@@ -120,7 +122,7 @@ use {
     ParseFloatError,
     parse_i64_radix,
     parse_u64_radix,
-    parse_f64_from_str,
+    parse_float_bits,
     lenient_int_preprocess,
     lenient_float_preprocess,
 } from "core:prelude/intparse.wado";
@@ -1578,7 +1580,7 @@ impl FromStr for f32 {
     type Err = ParseFloatError;
 
     fn from_str<S: AsStrSlice>(s: S) -> Result<f32, ParseFloatError> {
-        return Result::Ok(parse_f64_from_str(&s.as_str_slice())? as f32);
+        return Result::Ok(f32::from_bits(parse_float_bits(&s.as_str_slice(), &BINARY32)? as u32));
     }
 }
 
@@ -1966,7 +1968,7 @@ impl FromStr for f64 {
     type Err = ParseFloatError;
 
     fn from_str<S: AsStrSlice>(s: S) -> Result<f64, ParseFloatError> {
-        return parse_f64_from_str(&s.as_str_slice());
+        return Result::Ok(f64::from_bits(parse_float_bits(&s.as_str_slice(), &BINARY64)?));
     }
 }
 
