@@ -3564,42 +3564,27 @@ impl Type {
     /// type determines — a name that is really a concrete type simply matches
     /// no parameter.
     pub fn mentioned_names(&self, out: &mut Vec<String>) {
-        match self {
+        self.for_each(&mut |ty| match ty {
             Type::Named(n) => out.push(n.name.clone()),
-            Type::Generic(g) => {
-                out.push(g.name.clone());
-                for a in &g.args {
-                    a.mentioned_names(out);
-                }
-            }
+            Type::Generic(g) => out.push(g.name.clone()),
             Type::NamespacedGeneric(g) => {
                 out.push(g.namespace.clone());
                 out.push(g.name.clone());
-                for a in &g.args {
-                    a.mentioned_names(out);
-                }
             }
-            Type::Function(f) => {
-                for p in &f.params {
-                    p.mentioned_names(out);
-                }
-                f.return_type.mentioned_names(out);
-            }
-            Type::Tuple(elems) => {
-                for e in elems {
-                    e.mentioned_names(out);
-                }
-            }
-            Type::Reference(inner) | Type::MutReference(inner) => inner.mentioned_names(out),
             Type::TypePackSpread(name, _) => out.push(name.clone()),
-            Type::Infer(_) | Type::Error(_) => {}
-        }
+            Type::Function(_)
+            | Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::Infer(_)
+            | Type::Error(_) => {}
+        });
     }
 
     /// Whether `pred` holds of this type or of any within it, outermost first.
     /// The one recursion a type predicate takes; a hand-spelled walk forgets arms.
     #[must_use]
-    pub fn any(&self, pred: &mut impl FnMut(&Type) -> bool) -> bool {
+    pub fn any<'a>(&'a self, pred: &mut impl FnMut(&'a Type) -> bool) -> bool {
         if pred(self) {
             return true;
         }
@@ -3611,6 +3596,14 @@ impl Type {
             Type::Reference(inner) | Type::MutReference(inner) => inner.any(pred),
             Type::Named(_) | Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => false,
         }
+    }
+
+    /// Calls `f` on this type and on every type within it, outermost first.
+    pub fn for_each<'a>(&'a self, f: &mut impl FnMut(&'a Type)) {
+        let _ = self.any(&mut |ty| {
+            f(ty);
+            false
+        });
     }
 
     /// Whether `name` is spelled anywhere in this type.
@@ -3635,37 +3628,12 @@ impl Type {
     #[must_use]
     pub fn pack_spreads(&self) -> Vec<(&str, Span)> {
         let mut out = Vec::new();
-        self.collect_pack_spreads(&mut out);
+        self.for_each(&mut |ty| {
+            if let Type::TypePackSpread(name, span) = ty {
+                out.push((name.as_str(), *span));
+            }
+        });
         out
-    }
-
-    fn collect_pack_spreads<'a>(&'a self, out: &mut Vec<(&'a str, Span)>) {
-        match self {
-            Type::Generic(g) => {
-                for a in &g.args {
-                    a.collect_pack_spreads(out);
-                }
-            }
-            Type::NamespacedGeneric(g) => {
-                for a in &g.args {
-                    a.collect_pack_spreads(out);
-                }
-            }
-            Type::Function(f) => {
-                for p in &f.params {
-                    p.collect_pack_spreads(out);
-                }
-                f.return_type.collect_pack_spreads(out);
-            }
-            Type::Tuple(elems) => {
-                for e in elems {
-                    e.collect_pack_spreads(out);
-                }
-            }
-            Type::Reference(inner) | Type::MutReference(inner) => inner.collect_pack_spreads(out),
-            Type::TypePackSpread(name, span) => out.push((name, *span)),
-            Type::Named(_) | Type::Infer(_) | Type::Error(_) => {}
-        }
     }
 
     /// The unit type, written at `span`.

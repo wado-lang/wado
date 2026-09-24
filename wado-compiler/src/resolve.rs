@@ -1476,12 +1476,11 @@ mod tests {
             "pub struct Widget { b: i32 }\npub fn there(w: Widget) {}",
         );
         let mut seen: Vec<(ModuleSource, DefId)> = Vec::new();
-        for (site, answer) in &r.refs {
+        for answer in r.refs.values() {
             if let Resolution::Def(def) = answer
                 && r.defs().name(*def) == "Widget"
             {
                 seen.push((r.defs().module(*def).clone(), *def));
-                let _ = site;
             }
         }
         assert!(seen.iter().any(|(m, _)| m == &entry));

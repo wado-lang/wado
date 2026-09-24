@@ -1450,7 +1450,7 @@ pub(super) fn type_id_to_ast_type(
     };
     match resolved {
         ResolvedType::Primitive(p) => named_no_source(p.as_str()),
-        ResolvedType::Unit => named_no_source(TypeTable::UNIT_TYPE_NAME),
+        ResolvedType::Unit => Type::unit(AstId::fresh(), span),
         // `Flags` joins them: its own CM type, 1 byte at <=8 labels, not a
         // four-byte `i32`.
         ResolvedType::Struct { .. }

@@ -538,11 +538,12 @@ mod tests {
     #[test]
     fn test_result_unit_unit() {
         // result<(), ()>: disc(u8, 1 byte) + max(0, 0) = 1 byte, align 1
-        let result = generic_type("Result", vec![named_type("()"), named_type("()")]);
+        let unit = || Type::unit(AstId::fresh(), Span::new(0, 0, 1, 1));
+        let result = generic_type("Result", vec![unit(), unit()]);
         assert_eq!(cm_size(&result), 1);
         assert_eq!(cm_align(&result), 1);
 
-        let layout = layout_result(&named_type("()"), &named_type("()"));
+        let layout = layout_result(&unit(), &unit());
         assert_eq!(layout.size, 1);
         assert_eq!(layout.align, 1);
         assert_eq!(layout.offsets, vec![0, 1]); // disc at 0, payload at 1

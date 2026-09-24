@@ -9,7 +9,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::lower::plan::value_copy::analyze::{carries_no_storage, returned_value};
 use crate::lower::plan::value_copy::callgraph;
-use crate::name::FqTraitName;
+use crate::name::LocalMethodName;
 use crate::tir::{
     BuiltinDeclarations, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam,
     TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
@@ -520,18 +520,20 @@ fn is_index_accessor(func: &FunctionRef, items: &CompilerItems) -> bool {
     let Some(declared) = func
         .method_info
         .as_ref()
-        .and_then(|m| m.trait_name.as_ref())
-        .and_then(FqTraitName::canonical)
+        .and_then(LocalMethodName::trait_decl)
     else {
         return false;
     };
-    [
-        CompilerItem::IndexValue,
-        CompilerItem::IndexRef,
-        CompilerItem::IndexRefMut,
-    ]
-    .iter()
-    .any(|item| items.trait_def(*item) == Some(declared))
+    items
+        .trait_among(
+            declared,
+            &[
+                CompilerItem::IndexValue,
+                CompilerItem::IndexRef,
+                CompilerItem::IndexRefMut,
+            ],
+        )
+        .is_some()
 }
 
 /// The root local a place expression is taken over. Needs no types, so a

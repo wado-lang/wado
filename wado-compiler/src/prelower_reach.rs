@@ -11,7 +11,7 @@ use crate::compiler_trace;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{FqTraitName, FunctionId, global_init_target, is_type_bridge};
+use crate::name::{FunctionId, LocalMethodName, global_init_target, is_type_bridge};
 use crate::nir_package::NirPackage;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction};
 use crate::tir_visitor::TirRefVisitor;
@@ -57,13 +57,11 @@ fn is_root(func: &TirFunction, flat: &FlatPackage, mintable: &IndexSet<DefId>) -
         || func.compiler_item.is_some()
         || is_type_bridge(&func.name)
         || global_init_target(&func.name).is_some()
-        || func.method_info.as_ref().is_some_and(|method| {
-            method
-                .trait_name
-                .as_ref()
-                .and_then(FqTraitName::canonical)
-                .is_some_and(|def| mintable.contains(&def))
-        })
+        || func
+            .method_info
+            .as_ref()
+            .and_then(LocalMethodName::trait_decl)
+            .is_some_and(|def| mintable.contains(&def))
 }
 
 /// What [`reachable`] found, against the population it walked.

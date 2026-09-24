@@ -1858,15 +1858,18 @@ impl Monomorphizer {
         // no AST header, so the checks below would peel past them and a
         // derivation would answer with the base's name. Every other trait does
         // inherit, and peeling is how it is reached.
-        if type_table.reflect_kind(tid) == Some(CompilerItem::ReflectNewtype) {
-            let items = type_table.compiler_items();
-            if trait_name.canonical().is_some_and(|declared| {
-                [CompilerItem::Reflect, CompilerItem::ReflectNewtype]
-                    .into_iter()
-                    .any(|item| items.trait_def(item) == Some(declared))
-            }) {
-                return tid;
-            }
+        if type_table.reflect_kind(tid) == Some(CompilerItem::ReflectNewtype)
+            && trait_name.canonical().is_some_and(|declared| {
+                type_table
+                    .compiler_items()
+                    .trait_among(
+                        declared,
+                        &[CompilerItem::Reflect, CompilerItem::ReflectNewtype],
+                    )
+                    .is_some()
+            })
+        {
+            return tid;
         }
         if let Some(decl) = self.functions.trait_env.trait_def_of_fq(trait_name) {
             if self.has_own_trait_impl(type_table, tid, decl) {

@@ -714,7 +714,7 @@ impl CmFunctionInfo {
     /// `"Stdout::write_via_stream"`).
     #[must_use]
     pub fn used_key(&self) -> String {
-        used_wasi_key(&self.interface_name, &self.method_name)
+        operation_key(&self.interface_name, &self.method_name)
     }
 
     /// The CM identifier `interface#function`, as [`CmImport::full_path`] spells it.
@@ -1183,10 +1183,10 @@ fn register_unique<V>(
     map.insert(key, value);
 }
 
-/// The key an interface operation takes in `NirPackage::used_wasi_functions`
-/// (e.g. `"Stdout::write_via_stream"`).
+/// The key an interface operation takes in `effect_to_func` and
+/// `NirPackage::used_wasi_functions` (e.g. `"Stdout::write_via_stream"`).
 #[must_use]
-pub fn used_wasi_key(interface: &str, operation: &str) -> String {
+pub fn operation_key(interface: &str, operation: &str) -> String {
     DeclPath::method_of(&DeclName::new(interface), operation).into_string()
 }
 
@@ -1582,7 +1582,7 @@ fn build_local_name_resolver(
     }
     for item in &module.items {
         if let Item::Use(use_decl) = item {
-            let Some(other_defs) = resolve_use_source(&use_decl.source, defs_by_module) else {
+            let Some(other_defs) = defs_by_module.get(use_decl.source.as_str()) else {
                 continue;
             };
             for use_item in &use_decl.items {
@@ -1603,28 +1603,6 @@ fn build_local_name_resolver(
         }
     }
     local
-}
-
-/// Resolve a stdlib `use ... from "<source>"` source string to the
-/// `collect_cm_definitions` entry for the targeted module.
-///
-/// Accepts both the flat package form (`"wasi:http"`) and the per-interface
-/// form (`"wasi:http/types.wado"`). Flat imports search every interface under
-/// the package for a matching name at use site (see
-/// `build_local_name_resolver`).
-fn resolve_use_source<'a>(
-    source: &str,
-    defs_by_module: &'a IndexMap<&'static str, IndexMap<String, String>>,
-) -> Option<&'a IndexMap<String, String>> {
-    defs_by_module.get(source).or_else(|| {
-        // Flat package form. Rather than caching a merged view of every
-        // interface in the package, return None and let the caller resolve
-        // per-item below — so `use { ErrorCode } from "wasi:http"` does not
-        // resolve here. Stdlib does not rely on flat-package imports for type
-        // references, so nothing needs it yet.
-        let _ = source;
-        None
-    })
 }
 
 /// The CM interface each named-type reference site resolves to, keyed by the
@@ -1892,13 +1870,12 @@ fn collect_named_type_sources(
     let mut sources = SourceInterfaceBatch::default();
     for item in &mut module.items {
         let Ok(()) = try_for_each_signed_type(item, &mut |_, ty| {
-            let _ = ty.any(&mut |ty| {
+            ty.for_each(&mut |ty| {
                 if let Type::Named(n) = ty
                     && let Some(source) = local_names.get(&n.name)
                 {
                     sources.entry(n.id).or_insert_with(|| source.clone());
                 }
-                false
             });
             Ok::<(), Infallible>(())
         });
@@ -3067,7 +3044,7 @@ impl CmInterfaceRegistry {
         emitting: Option<&str>,
         out: &mut IndexSet<(String, String)>,
     ) {
-        let _ = ty.any(&mut |ty| {
+        ty.for_each(&mut |ty| {
             if let Type::Named(named) = ty
                 && let Some(source) = self.cm_source_of_named_type(named, emitting)
                 && self
@@ -3076,7 +3053,6 @@ impl CmInterfaceRegistry {
             {
                 out.insert((source, named.name.clone()));
             }
-            false
         });
     }
 
@@ -3549,7 +3525,7 @@ impl CmInterfaceRegistry {
         self.used_names.insert(local_name.clone());
 
         self.effect_to_func.insert(
-            DeclPath::method_of(&DeclName::new(interface_name), method_name).into_string(),
+            operation_key(interface_name, method_name),
             func_info.clone(),
         );
 

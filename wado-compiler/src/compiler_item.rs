@@ -2019,6 +2019,7 @@ impl CompilerItems {
     #[must_use]
     pub fn trait_fq(&self, item: CompilerItem) -> FqTraitName {
         self.trait_fq_opt(item)
+            .cloned()
             .unwrap_or_else(|| panic!("compiler item `{item}` is not a registered trait"))
     }
 
@@ -2030,12 +2031,21 @@ impl CompilerItems {
         self.trait_fq_opt(item)?.canonical()
     }
 
+    /// Which of `items` is the trait `def` declares, if any.
+    #[must_use]
+    pub fn trait_among(&self, def: DefId, items: &[CompilerItem]) -> Option<CompilerItem> {
+        items
+            .iter()
+            .copied()
+            .find(|&item| self.trait_def(item) == Some(def))
+    }
+
     /// Non-panicking [`Self::trait_fq`]: `None` when the item is not
     /// registered. Private, so matching an impl goes through [`Self::trait_def`]
     /// rather than through a spelling.
-    fn trait_fq_opt(&self, item: CompilerItem) -> Option<FqTraitName> {
+    fn trait_fq_opt(&self, item: CompilerItem) -> Option<&FqTraitName> {
         match self.get(item)? {
-            Resolved::Trait { fq, .. } => fq.clone(),
+            Resolved::Trait { fq, .. } => fq.as_ref(),
             _ => None,
         }
     }

@@ -2419,14 +2419,13 @@ fn generate_cm_imports(
             });
             let mut referenced_types: Vec<String> = Vec::new();
             for ty in signature_types {
-                let _ = ty.any(&mut |ty| {
+                ty.for_each(&mut |ty| {
                     if let Type::Named(named) = ty
                         && !ty.is_unit()
                         && !referenced_types.contains(&named.name)
                     {
                         referenced_types.push(named.name.clone());
                     }
-                    false
                 });
             }
 

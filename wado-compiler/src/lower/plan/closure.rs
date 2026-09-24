@@ -1818,13 +1818,13 @@ impl ClosureCallSiteLowerer<'_> {
         let Some(trait_) = info.trait_decl() else {
             return;
         };
-        let is_format_trait = {
-            let items = self.type_table.compiler_items();
-            CLOSURE_FORMAT_TRAITS
-                .iter()
-                .any(|(it, _)| items.trait_def(*it) == Some(trait_))
-        };
-        if !is_format_trait {
+        let format_traits = CLOSURE_FORMAT_TRAITS.map(|(item, _)| item);
+        if self
+            .type_table
+            .compiler_items()
+            .trait_among(trait_, &format_traits)
+            .is_none()
+        {
             return;
         }
 
