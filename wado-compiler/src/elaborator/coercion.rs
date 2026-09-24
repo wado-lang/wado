@@ -546,8 +546,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(coerced);
         }
 
-        // A key-value literal whose generic target neither declares a struct
-        // nor builds from a pair array: say what is missing where it is written.
+        // A key-value literal whose generic target takes no fields and builds
+        // from no pair array here: say what is missing where it is written.
         if let Expr::StructLiteral(struct_lit) = expr
             && struct_lit.name.is_none()
             && matches!(

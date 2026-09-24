@@ -1570,9 +1570,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether `name` refers to an immutable global (defined here or imported),
-    /// which in pattern position is a constant-value (refutable) match rather
-    /// than a fresh binding.
     /// The alias of the immutable global `ns::NAME` names in a pattern, which is
     /// a constant-value pattern as the bare `NAME` is.
     pub(super) fn namespaced_constant(
@@ -1586,6 +1583,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|alias| self.is_immutable_global(alias))
     }
 
+    /// Whether `name` refers to an immutable global (defined here or imported),
+    /// which in pattern position is a constant-value match, not a binding.
     pub(super) fn is_immutable_global(&self, name: &str) -> bool {
         self.sem
             .decls

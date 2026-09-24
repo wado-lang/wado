@@ -3085,7 +3085,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => return Some(Pat::Opaque),
         };
-        Some(self.exh_int(value?, value?, scrutinee_type))
+        let value = value?;
+        Some(self.exh_int(value, value, scrutinee_type))
     }
 
     /// The case `name` of the enum or variant `scrutinee_type`, its payload

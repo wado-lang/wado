@@ -957,8 +957,8 @@ match opt {
 }   // Error: non-exhaustive match: missing case `Some(-2147483648..=0)`
 ```
 
-An arm no value can reach is an error too: every value it matches is already
-taken by a guardless arm before it.
+An arm no value can reach is an error too: the guardless arms before it already
+take every value it matches.
 
 ```wado
 match opt {
