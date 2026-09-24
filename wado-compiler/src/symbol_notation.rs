@@ -88,7 +88,7 @@ fn err(message: impl Into<String>) -> ParseError {
     }
 }
 
-/// Parse a symbol notation string such as `core:json#parse` or
+/// Parse a symbol notation string such as `core:json#to_string` or
 /// `"https://x/lib.wado"#Foo::bar`.
 pub fn parse(input: &str) -> Result<SymbolNotation, ParseError> {
     let input = input.trim();
