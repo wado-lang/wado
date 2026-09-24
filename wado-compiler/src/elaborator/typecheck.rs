@@ -371,10 +371,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `TypeSystem` itself stays host-agnostic.
     pub(super) fn typecheck(&self, actual: TypeId, expected: TypeId, span: Span) {
         if let Err(payload) = self.tysys.typecheck(actual, expected) {
-            let _ = self.emit(TypeError::TypeMismatch {
-                expected: payload.expected,
-                found: payload.found,
-                span,
+            // A template's type reaches a check only as a tag's argument.
+            let is_template = self
+                .tysys
+                .type_table
+                .borrow()
+                .template_shape_of_type(actual)
+                .is_some();
+            let _ = self.emit(if is_template {
+                TypeError::TagParamNotTemplate {
+                    param: payload.expected,
+                    span,
+                }
+            } else {
+                TypeError::TypeMismatch {
+                    expected: payload.expected,
+                    found: payload.found,
+                    span,
+                }
             });
             return;
         }

@@ -48,9 +48,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let result =
             self.resolve_call_with_args(&call, ctx, expected_type, Some(vec![template_ty]));
 
-        // Reify rebuilds the call from the dispatch fact. A call that failed
-        // has reported why; one that resolved without a fact is a variant
-        // case, which accepts the template silently.
+        // Reify rebuilds the call from the dispatch fact. A call without one
+        // either reported why or was a variant case, which is silent.
         if !self
             .sem
             .types
@@ -71,22 +70,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: tag.span(),
         });
         TypeTable::ERROR
-    }
-
-    /// Check the template against the tag's parameter. The template's type is
-    /// one no source spells, so a mismatch names the parameter's missing bound.
-    pub(super) fn check_tag_param(&self, template: TypeId, param: TypeId, tag: &str, span: Span) {
-        if self.tysys.typecheck(template, param).is_ok() {
-            return;
-        }
-        let param_name = self.tysys.type_table.borrow().type_name(param);
-        let _ = self.emit(TypeError::InvalidLiteral {
-            message: format!(
-                "a template tag's parameter must be bound by `ReflectTemplate`; \
-                 `{tag}` takes `{param_name}`"
-            ),
-            span,
-        });
     }
 
     /// The template's shape, or `None` where a hole cannot be a member of one:

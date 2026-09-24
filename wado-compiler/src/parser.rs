@@ -1802,7 +1802,7 @@ impl Parser {
             }
             other => Err(ParseError {
                 message: format!(
-                    "expected attribute value (string, number, bool, array, or object), got {other:?}"
+                    "expected attribute value (string, number, bool, array, or object), found {other}"
                 ),
                 span,
             }),
@@ -3844,7 +3844,10 @@ impl Parser {
                             } else {
                                 // Not a valid tuple field sequence
                                 return Err(ParseError {
-                                    message: format!("expected field name, found NumberLit({s:?})"),
+                                    message: format!(
+                                        "expected field name, found {}",
+                                        self.peek().kind
+                                    ),
                                     span: field_span,
                                 });
                             }

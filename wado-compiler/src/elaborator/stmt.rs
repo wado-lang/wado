@@ -1205,6 +1205,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         ref_binding: RefBinding,
     ) {
+        if type_id == TypeTable::ERROR
+            && let Some(subpatterns) = shape_checked_subpatterns(pattern)
+        {
+            for p in subpatterns {
+                let error = TypeTable::ERROR;
+                self.resolve_let_pattern_inner(p, error, is_mut, span, site, ctx, ref_binding);
+            }
+            return;
+        }
         match pattern {
             ast::Pattern::Ident {
                 id,
@@ -1632,6 +1641,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         ref_binding: RefBinding,
     ) -> PatBindings {
+        if scrutinee_type == TypeTable::ERROR
+            && let Some(subpatterns) = shape_checked_subpatterns(pattern)
+        {
+            return subpatterns
+                .into_iter()
+                .flat_map(|p| {
+                    self.resolve_if_pattern_inner(p, TypeTable::ERROR, ctx, span, ref_binding)
+                })
+                .collect();
+        }
         if let Some(site) = ctx.irrefutable_site
             && let Some(reason) = self.refutation(pattern, scrutinee_type)
         {
@@ -1949,7 +1968,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => {
                         let _ = self.emit(TypeError::PatternTypeMismatch {
                             expected: "variant or enum type".to_string(),
-                            found: format!("{resolved_type:?}"),
+                            found: self.tysys.type_table.borrow().type_name(scrutinee_type),
                             span: *span,
                         });
                         TypeTable::UNKNOWN
@@ -2526,23 +2545,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             }) || matches!(
                 self.tysys.type_table.borrow().get(iterable_type_id),
-                ResolvedType::Unknown | ResolvedType::Error | ResolvedType::TypeParam { .. }
+                ResolvedType::Unknown | ResolvedType::TypeParam { .. }
             );
-            if !implements_into_iter {
-                let type_name = self.tysys.type_table.borrow().type_name(iterable_type_id);
-                let _ = self.emit(TypeError::MissingTraitImpl {
-                    type_name,
-                    trait_name: "IntoIterator".to_string(),
-                    span: for_of.span,
-                });
-            }
-            // Only record the desugar tag when the iterable actually
-            // supports iteration; tagging an error-path node would lead
-            // reify to expand a TIR shape the elaborator never produced.
-            if implements_into_iter {
+            let into_iter_receiver = if implements_into_iter {
+                // Reify expands the tag, so only an iterable that supports
+                // iteration carries one.
                 self.record_desugar(for_of.id, DesugarKind::ForOfIterator);
-            }
-            self.resolve_iterator_for_of(for_of, ctx);
+                if is_enumerate {
+                    self.resolve_expr(&for_of.iterable, ctx, None)
+                } else {
+                    iterable_type_id
+                }
+            } else {
+                if iterable_type_id != TypeTable::ERROR {
+                    let type_name = self.tysys.type_table.borrow().type_name(iterable_type_id);
+                    let _ = self.emit(TypeError::MissingTraitImpl {
+                        type_name,
+                        trait_name: "IntoIterator".to_string(),
+                        span: for_of.span,
+                    });
+                }
+                TypeTable::ERROR
+            };
+            self.resolve_iterator_for_of(for_of, into_iter_receiver, ctx);
         }
 
         ctx.for_continue_labels = saved_continue;
@@ -2842,19 +2867,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// binding `$iter_N = iterable.into_iter()` around a `loop` that matches
     /// `$iter_N.next()`, breaking on `None`. The synthetic local and both
     /// dispatches carry no defining `AstId`, so clicking `for` does not drag the
-    /// user into `Iterator::next`. `for_of.iterable` is resolved as written.
-    fn resolve_iterator_for_of(&mut self, for_of: &ForOfStmt, ctx: &mut FunctionContext) {
+    /// user into `Iterator::next`. `into_iter_receiver_type` is the type of
+    /// `for_of.iterable` as written, or `ERROR` where it cannot be iterated.
+    fn resolve_iterator_for_of(
+        &mut self,
+        for_of: &ForOfStmt,
+        into_iter_receiver_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) {
         use super::method_call::MethodCallInput;
 
         let span = for_of.span;
         let unique_id = ctx.fresh_serial();
         let iter_var = format!("$iter_{unique_id}");
         let label = format!("$for_of_{unique_id}");
-
-        // Resolve the iterable receiver verbatim, then dispatch `.into_iter()`
-        // on it. Whatever adapter chain the user wrote (e.g. `.enumerate()`,
-        // `.filter(…)`, `.map(…)`) is already part of `for_of.iterable`.
-        let into_iter_receiver_type = self.resolve_expr(&for_of.iterable, ctx, None);
 
         // `<receiver>.into_iter()` — the synthetic call passes
         // `call_id == None` so `record_method_dispatch` skips it; the
@@ -2969,9 +2995,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some((def, type_args)) => {
                 self.get_variant_case_payload_type(def, &some_case_name, &type_args, span)
             }
-            // `.next()` returned an unexpected non-Option type. The iterator-
-            // trait check above (or method dispatch downstream) has already
-            // diagnosed it, so the binding carries the error.
+            // A non-Option `.next()` was diagnosed above, so the binding
+            // carries the error.
             None => TypeTable::ERROR,
         };
 
@@ -3408,6 +3433,23 @@ fn mut_bindings_of(pattern: &Pattern) -> Pattern {
             span: *span,
         },
         other => other.clone(),
+    }
+}
+
+/// The subpatterns a pattern reaches by checking the scrutinee's shape; `None`
+/// for one that checks no shape of its own.
+fn shape_checked_subpatterns(pattern: &Pattern) -> Option<Vec<&Pattern>> {
+    match pattern {
+        Pattern::Tuple(patterns, _) => Some(patterns.iter().collect()),
+        Pattern::Struct { fields, .. } => Some(fields.iter().map(|f| &f.pattern).collect()),
+        Pattern::Variant { bindings, .. } => Some(bindings.iter().collect()),
+        Pattern::Literal(_) | Pattern::Range { .. } => Some(Vec::new()),
+        Pattern::Ident { .. }
+        | Pattern::MutIdent { .. }
+        | Pattern::Wildcard
+        | Pattern::Or(_)
+        | Pattern::Typed { .. }
+        | Pattern::Error(_) => None,
     }
 }
 

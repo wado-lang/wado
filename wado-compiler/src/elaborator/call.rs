@@ -325,6 +325,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The value a bare callee names — a binding first, so shadowing wins, else
     /// a global — with the binding it came from; `None` where it names none.
+    /// Records the use→def edge `resolve_ident` would, which it bypasses.
     pub(super) fn callee_value(
         &mut self,
         ident: &ast::IdentExpr,
@@ -334,10 +335,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         match ctx.lookup_or_capture(&ident.name) {
-            Some(var_ref) => Some((var_ref.value_type(), Some(var_ref))),
-            None => self
-                .global_var_type(ident.id, &ident.name)
-                .map(|ty| (ty, None)),
+            Some(var_ref) => {
+                self.record_reference_opt(ident.id, var_ref.defining_ast_id());
+                Some((var_ref.value_type(), Some(var_ref)))
+            }
+            None => {
+                let ty = self.global_var_type(ident.id, &ident.name)?;
+                self.record_item_reference_by_name(ident.id, &ident.name);
+                Some((ty, None))
+            }
         }
     }
 
@@ -641,16 +647,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Expr::Ident(ident) = &call.callee
             && let Some((value_ty, binding)) = self.callee_value(ident, ctx)
         {
-            // Record the use→def edge the same way `resolve_ident` would,
-            // so navigation on a value-binding callee (local or global)
-            // still resolves — the fast path bypasses `resolve_ident`.
-            match &binding {
-                Some(var_ref) => {
-                    self.record_reference_opt(ident.id, var_ref.defining_ast_id());
-                }
-                None => self.record_item_reference_by_name(ident.id, &ident.name),
-            }
-
             if let Some(sig) = self.as_fn_signature(value_ty) {
                 self.record_indirect_callee(
                     call.id,
@@ -954,7 +950,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Resolve arguments with coercion awareness
-        let is_tag_call = given_args.is_some();
         let mut args: Vec<TypeId> = match given_args {
             Some(args) => args,
             None => {
@@ -1976,15 +1971,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (i, arg) in args.iter_mut().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
                 self.pin_arg_hole_against(arg, expected);
-                if is_tag_call {
-                    self.check_tag_param(*arg, expected, &ident.name, call.span);
-                } else {
-                    self.typecheck(
-                        *arg,
-                        expected,
-                        call.args.get(i).map_or(call.span, ast::Expr::span),
-                    );
-                }
+                self.typecheck(
+                    *arg,
+                    expected,
+                    call.args.get(i).map_or(call.span, ast::Expr::span),
+                );
             }
         }
         if !check_param_types.is_empty() {

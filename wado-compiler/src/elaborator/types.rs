@@ -298,6 +298,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A template passed to a tag whose parameter it cannot satisfy.
+    TagParamNotTemplate {
+        param: String,
+        span: Span,
+    },
+
     /// Unknown type name
     UnknownType {
         name: String,
@@ -1293,6 +1299,11 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!("type mismatch: expected '{expected}', found '{found}'"),
+                *span,
+            ),
+            TypeError::TagParamNotTemplate { param, span } => (
+                Code::TypeMismatch,
+                format!("a template tag's parameter must be bound by `ReflectTemplate`, not `{param}`"),
                 *span,
             ),
             TypeError::UnknownType { name, span } => {

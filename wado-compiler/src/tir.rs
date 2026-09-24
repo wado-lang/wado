@@ -1489,27 +1489,33 @@ impl TypeTable {
     /// A template shape as its text, each hole spelled as its type and
     /// specifier, cut to [`TEMPLATE_NAME_MAX_CHARS`] characters.
     fn template_shape_name(&self, shape: &TemplateShape) -> String {
-        let mut text = String::new();
-        for (k, segment) in shape.segments.iter().enumerate() {
-            text.push_str(segment);
-            if let Some(hole) = shape.holes.get(k) {
-                let _ = write!(text, "${{{}", self.type_name(hole.ty));
-                if let Some(spec) = &hole.spec {
-                    let _ = write!(text, ":{spec}");
-                }
-                text.push('}');
-            }
-        }
-        let mut chars = text.chars();
         let mut name = String::from("`");
-        for c in chars.by_ref().take(TEMPLATE_NAME_MAX_CHARS) {
-            if c.is_control() {
-                name.extend(c.escape_default());
-            } else {
-                name.push(c);
+        let mut room = TEMPLATE_NAME_MAX_CHARS;
+        let mut push = |text: &str| {
+            for c in text.chars() {
+                if room == 0 {
+                    return false;
+                }
+                room -= 1;
+                if c.is_control() {
+                    name.extend(c.escape_default());
+                } else {
+                    name.push(c);
+                }
             }
-        }
-        if chars.next().is_some() {
+            true
+        };
+        let complete = shape.segments.iter().enumerate().all(|(k, segment)| {
+            push(segment)
+                && shape.holes.get(k).is_none_or(|hole| {
+                    let spec = hole
+                        .spec
+                        .as_ref()
+                        .map_or(String::new(), |s| format!(":{s}"));
+                    push(&format!("${{{}{spec}}}", self.type_name(hole.ty)))
+                })
+        });
+        if !complete {
             name.push_str("...");
         }
         name.push('`');

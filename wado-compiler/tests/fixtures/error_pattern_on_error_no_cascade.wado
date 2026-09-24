@@ -1,0 +1,27 @@
+// A pattern over a value whose type is already an error checks no shape of its
+// own: the unknown function is the one fault, and the bindings still exist.
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() {
+    let [a, b] = missing_pair();
+    let _ = a + b;
+    let Point { x, .. } = missing_point();
+    let _ = x;
+    match missing_option() {
+        Some(v) => {
+            let _ = v;
+        },
+        None => {},
+    }
+    if let 1 = missing_number() {
+    }
+}
+
+__DATA__
+{
+    "compile_error_count": 4,
+    "compile_errors_not_contains": ["pattern mismatch", "undefined variable"]
+}

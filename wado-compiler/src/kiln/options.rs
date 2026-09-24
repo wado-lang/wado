@@ -287,12 +287,15 @@ fn lower_type(
                 variants,
             })
         }
-        other => {
+        _ => {
             push_unsupported(
                 diagnostics,
                 module,
                 field_name,
-                &format!("type `{other:?}` is not supported in generator options"),
+                &format!(
+                    "type `{}` is not supported in generator options",
+                    types.type_name(type_id)
+                ),
             );
             None
         }
