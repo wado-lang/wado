@@ -8,6 +8,7 @@ use std::borrow::Cow;
 
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::UNIT_TYPE_NAME;
 use crate::token::Span;
 
 /// Identity of one `AstId` allocation space — one per parse. Each top-level
@@ -3667,10 +3668,19 @@ impl Type {
         }
     }
 
+    /// The unit type, written at `span`.
+    pub fn unit(id: AstId, span: Span) -> Self {
+        Type::Named(NamedType {
+            id,
+            name: UNIT_TYPE_NAME.to_string(),
+            span,
+        })
+    }
+
     /// Whether this is the unit type, spelled `()`.
     #[must_use]
     pub fn is_unit(&self) -> bool {
-        matches!(self, Type::Named(n) if n.name == "()")
+        matches!(self, Type::Named(n) if n.name == UNIT_TYPE_NAME)
     }
 
     /// Returns the [`AstId`] for types that carry one (named types and

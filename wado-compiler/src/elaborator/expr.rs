@@ -2185,7 +2185,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             if then_type != TypeTable::UNIT {
                                 let type_name = self.tysys.type_table.borrow().type_name(then_type);
                                 let _ = self.emit(TypeError::TypeMismatch {
-                                    expected: "()".to_string(),
+                                    expected: TypeTable::UNIT_TYPE_NAME.to_string(),
                                     found: type_name,
                                     span: if_expr.then_block.span,
                                 });

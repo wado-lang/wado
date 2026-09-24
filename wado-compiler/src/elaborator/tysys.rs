@@ -488,7 +488,7 @@ impl TypeSystem {
                 assoc_name,
                 ..
             } => format!("{}::{}", self.type_id_to_string(param_id), assoc_name),
-            ResolvedType::Unit => "()".to_string(),
+            ResolvedType::Unit => TypeTable::UNIT_TYPE_NAME.to_string(),
             ResolvedType::Never => "!".to_string(),
             ResolvedType::Unknown => "<unknown>".to_string(),
             ResolvedType::Error => "<error>".to_string(),

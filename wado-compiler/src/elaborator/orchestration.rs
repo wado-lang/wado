@@ -52,7 +52,7 @@ use crate::elaborator::trait_env::{
 use crate::elaborator::{build_func_index, collect_unavailable, liveness, scope, sig};
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
-use crate::name::{namespace_member_alias, resolve_import_with_invocations};
+use crate::name::{UNIT_TYPE_NAME, namespace_member_alias, resolve_import_with_invocations};
 use crate::primitive::PrimitiveType;
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::semantics::Semantics;
@@ -2770,7 +2770,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> Result<(), Bail> {
         match ty {
             Type::Named(named) => {
-                if named.name == "()" || named.name == "!" || named.name == "Self" {
+                if matches!(named.name.as_str(), UNIT_TYPE_NAME | "!" | "Self") {
                     return Ok(());
                 }
                 if type_params.contains(&named.name.as_str()) {

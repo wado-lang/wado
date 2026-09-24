@@ -20,8 +20,8 @@ use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
     FqTraitName, FqTypeName, LocalMethodName, RefKind, TEMPLATE_SHAPE_PREFIX, TUPLE_TYPE_NAME,
-    TypeHead, TypeNameInfo, format_type_name, mangle_builtin_array_type, mangle_generic_name,
-    mangle_local_item_name, mangle_tuple_type,
+    TypeHead, TypeNameInfo, UNIT_TYPE_NAME, format_type_name, mangle_builtin_array_type,
+    mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
@@ -930,7 +930,7 @@ impl TypeTable {
     /// every by-name primitive resolution. `i128` / `u128` are struct-backed.
     pub fn primitive_by_name(name: &str) -> Option<TypeId> {
         match name {
-            "()" => Some(Self::UNIT),
+            Self::UNIT_TYPE_NAME => Some(Self::UNIT),
             "!" => Some(Self::NEVER),
             _ => PrimitiveType::from_name(name).map(Self::primitive_type_id),
         }
@@ -950,10 +950,8 @@ impl TypeTable {
     /// check sound. User-facing spelling is `[T1, T2, …]`.
     pub const TUPLE_TYPE_NAME: &'static str = TUPLE_TYPE_NAME;
 
-    /// Canonical name for the unit type `()` used in method lookup and impl indexing.
-    /// Must match what `format_type_name(TypeNameInfo::Unit)` returns, and matches
-    /// the source-level syntax `()` so error messages and mangled names line up.
-    pub const UNIT_TYPE_NAME: &'static str = "()";
+    /// The unit type's name in method lookup, impl indexing and mangling.
+    pub const UNIT_TYPE_NAME: &'static str = UNIT_TYPE_NAME;
 
     /// Canonical user-facing name of the raw GC array (`ResolvedType::BuiltinArray`).
     /// Single source of truth for both the resolver arms that recognise the
@@ -4397,7 +4395,7 @@ impl TypeTable {
         let type_name = |t: TypeId| self.render_type_name(t, qualified);
         match self.get(id) {
             ResolvedType::Primitive(p) => p.as_str().to_string(),
-            ResolvedType::Unit => "()".to_string(),
+            ResolvedType::Unit => Self::UNIT_TYPE_NAME.to_string(),
             ResolvedType::Never => "!".to_string(),
             ResolvedType::Unknown => "unknown".to_string(),
             ResolvedType::Error => "error".to_string(),

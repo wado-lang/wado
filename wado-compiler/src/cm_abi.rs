@@ -10,6 +10,7 @@
 use crate::ast::{AstId, NamedType};
 use crate::ast::{GenericType, Type};
 use crate::component_model::{CmInterfaceRegistry, cm_layout_with_registry};
+use crate::name::UNIT_TYPE_NAME;
 #[cfg(test)]
 use crate::token::Span;
 
@@ -122,7 +123,7 @@ fn cm_size_named(name: &str) -> u32 {
         "i32" | "u32" | "f32" | "char" => 4,
         "i64" | "u64" | "f64" => 8,
         "String" => 8, // (ptr: i32, len: i32)
-        "()" => 0,     // unit
+        UNIT_TYPE_NAME => 0,
         // Unknown named types (enums, resources) are i32 handles
         _ => 4,
     }
@@ -136,7 +137,7 @@ fn cm_align_named(name: &str) -> u32 {
         "i32" | "u32" | "f32" | "char" => 4,
         "i64" | "u64" | "f64" => 8,
         "String" => 4, // (ptr: i32, len: i32) — aligned to i32
-        "()" => 1,     // unit
+        UNIT_TYPE_NAME => 1,
         // Unknown named types (enums, resources) are i32 handles
         _ => 4,
     }

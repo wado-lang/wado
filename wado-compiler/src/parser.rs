@@ -4991,43 +4991,7 @@ impl Parser {
 
         // Function type: fn(T1, T2) -> R   or   fn mut(T1, T2) -> R
         if self.check(&TokenKind::Fn) {
-            self.advance();
-            let is_mut = if self.check(&TokenKind::Mut) {
-                self.advance();
-                true
-            } else {
-                false
-            };
-            self.expect(&TokenKind::LParen)?;
-
-            // Parse parameter types
-            let params = self.parse_comma_separated_recovering(
-                &TokenKind::RParen,
-                Self::parse_type,
-                |_, span| Type::Error(span),
-            );
-            self.expect(&TokenKind::RParen)?;
-
-            // Parse return type (optional)
-            let return_type = if self.check(&TokenKind::Arrow) {
-                self.advance();
-                self.parse_type()?
-            } else {
-                Type::Named(NamedType {
-                    id: self.alloc_ast_id(),
-                    name: "()".to_string(),
-                    span: start_span,
-                })
-            };
-
-            let (effects, _) = self.parse_effect_row()?;
-
-            return Ok(Type::Function(Box::new(FunctionType {
-                is_mut,
-                params,
-                return_type,
-                effects,
-            })));
+            return Ok(Type::Function(self.parse_fn_type(start_span)?));
         }
 
         // Reference type: &T or &mut T
@@ -5053,13 +5017,7 @@ impl Parser {
             self.advance();
             if self.check(&TokenKind::RParen) {
                 self.advance();
-                // Unit type () - distinct from empty tuple []
-                let id = self.alloc_ast_id();
-                return Ok(Type::Named(NamedType {
-                    id,
-                    name: "()".to_string(),
-                    span: start_span,
-                }));
+                return Ok(Type::unit(self.alloc_ast_id(), start_span));
             }
             // Parenthesized type for grouping (not tuple in this case)
             let inner = self.parse_type()?;
@@ -5295,7 +5253,7 @@ impl Parser {
 
         // Closure-type bound: `fn(...)` or `fn mut(...)`.
         if self.check(&TokenKind::Fn) {
-            let fn_signature = self.parse_fn_type_for_bound(span)?;
+            let fn_signature = self.parse_fn_type(span)?;
             let bound_name = if fn_signature.is_mut { "FnMut" } else { "Fn" };
             return Ok(TraitBound {
                 id: self.alloc_ast_id(),
@@ -5359,12 +5317,8 @@ impl Parser {
         })
     }
 
-    /// Parse a `fn(...)` / `fn mut(...)` closure-type bound.
-    ///
-    /// - `fn(...) -> R`                  — no effects
-    /// - `fn(...) -> R with E`            — single effect
-    /// - `fn(...) -> R with (E1, E2)`     — multiple effects (parens required)
-    fn parse_fn_type_for_bound(&mut self, start_span: Span) -> ParseResult<Box<FunctionType>> {
+    /// Parse a `fn(...) -> R with E` / `fn mut(...)` type; `-> R` defaults to `()`.
+    fn parse_fn_type(&mut self, start_span: Span) -> ParseResult<Box<FunctionType>> {
         self.expect(&TokenKind::Fn)?;
         let is_mut = if self.check(&TokenKind::Mut) {
             self.advance();
@@ -5384,11 +5338,7 @@ impl Parser {
             self.advance();
             self.parse_type()?
         } else {
-            Type::Named(NamedType {
-                id: self.alloc_ast_id(),
-                name: "()".to_string(),
-                span: start_span,
-            })
+            Type::unit(self.alloc_ast_id(), start_span)
         };
 
         let (effects, _) = self.parse_effect_row()?;

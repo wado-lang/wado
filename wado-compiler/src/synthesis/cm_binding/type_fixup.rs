@@ -61,8 +61,7 @@ fn replace_wasi_derived_type_recursive(
             .as_tuple(user_type)
             .map(|user_elems| (elems, user_elems)),
         Type::Generic(g)
-            if ((g.name == ctx.names.array || g.name == ctx.names.option)
-                && g.args.len() == 1)
+            if ((g.name == ctx.names.array || g.name == ctx.names.option) && g.args.len() == 1)
                 || (g.name == ctx.names.result && g.args.len() == 2)
                 || ctx.names.is_tree_map(g) =>
         {

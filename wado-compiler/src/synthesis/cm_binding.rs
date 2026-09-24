@@ -31,9 +31,7 @@ use crate::hashmap;
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{DeclPath, is_test_function, kebab_export_name, to_kebab};
 use crate::package::{Package, test_selected};
-use crate::tir::{
-    ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable,
-};
+use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
 use crate::tir_visitor::TirRefVisitor;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{TEST_WORLD, WorldExportInfo, WorldInfo, fq_name_package};

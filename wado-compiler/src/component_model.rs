@@ -1187,7 +1187,7 @@ fn register_unique<V>(
 /// (e.g. `"Stdout::write_via_stream"`).
 #[must_use]
 pub fn used_wasi_key(interface: &str, operation: &str) -> String {
-    format!("{interface}::{operation}")
+    DeclPath::method_of(&DeclName::new(interface), operation).into_string()
 }
 
 /// `emitting` itself, where it declares `wado_name` in a
@@ -4463,196 +4463,176 @@ impl CmTypeGen {
         resource_exports: &IndexMap<&str, u32>,
     ) -> ComponentValType {
         match ty {
-            Type::Named(named) => match named.name.as_str() {
-                "String" => ComponentValType::Primitive(PrimitiveValType::String),
-                "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
-                "i8" => ComponentValType::Primitive(PrimitiveValType::S8),
-                "i16" => ComponentValType::Primitive(PrimitiveValType::S16),
-                "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
-                "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
-                "u8" => ComponentValType::Primitive(PrimitiveValType::U8),
-                "u16" => ComponentValType::Primitive(PrimitiveValType::U16),
-                "u32" => ComponentValType::Primitive(PrimitiveValType::U32),
-                "u64" => ComponentValType::Primitive(PrimitiveValType::U64),
-                "f32" => ComponentValType::Primitive(PrimitiveValType::F32),
-                "f64" => ComponentValType::Primitive(PrimitiveValType::F64),
-                "char" => ComponentValType::Primitive(PrimitiveValType::Char),
-                name => {
-                    // Preserve a local newtype as a named CM alias
-                    // (`type meters = f64`) so the structural type matches
-                    // `wado wit` instead of erasing to its base (issue #1456).
-                    let source = cm_interface_registry.source_interface(named);
-                    if let Some((canonical_source, base)) = cm_interface_registry
-                        .local_newtype_base(source.as_deref(), name)
-                        .map(|(s, ty)| (s.to_string(), ty.clone()))
-                    {
-                        // Canonical source keys the cache so same-named locals
-                        // stay distinct and every reference dedups to one alias.
-                        let cache_key = format!("newtype:{canonical_source}:{name}");
-                        if let Some(&idx) = self.cache.get(&cache_key) {
-                            return ComponentValType::Type(idx);
-                        }
-                        // Peel the base first: an imported-newtype base resolves
-                        // to its primitive, avoiding the unsupported-name panic
-                        // below; a local-newtype base recurses as a nested alias.
-                        let base =
-                            cm_interface_registry.resolve_type_preserving_local_newtypes(&base);
-                        let base_val = self.ast_type_to_cm(
-                            sink,
-                            &base,
-                            cm_interface_registry,
-                            resource_exports,
-                        );
-                        let base_idx = match base_val {
-                            ComponentValType::Primitive(prim) => {
-                                sink.define(CmDefined::Primitive(prim))
-                            }
-                            ComponentValType::Type(idx) => idx,
-                        };
-                        let named_idx = self.export_named(sink, &to_kebab(name), base_idx);
-                        self.cache.insert(cache_key, named_idx);
-                        return ComponentValType::Type(named_idx);
-                    }
-                    // Every branch here is emitting a WASI interface
-                    // declaration. The type reference must have a resolved
-                    // `wasi:*` source_interface from stdlib bootstrap, or
-                    // fall back to the emitting interface (`interface_hint`)
-                    // when the reference is synthesized, or to the unique
-                    // `wasi:*` registrant as a last resort. If none match
-                    // we panic — that would mean the caller handed us an
-                    // unresolved reference to a type no interface declares.
-                    let source_owned: String = cm_interface_registry
-                        .cm_source_of_named_type(named, self.interface_hint.as_deref())
-                        .unwrap_or_else(|| {
-                            panic!(
-                                "unresolved CM named type reference `{name}` while emitting CM instance"
-                            )
-                        });
-                    let source = source_owned.as_str();
-                    if let Some(cm_name) =
-                        cm_interface_registry.get_resource_cm_name_by_source(source, name)
-                    {
-                        let cache_key = format!("own:{cm_name}");
-                        if let Some(&idx) = self.cache.get(&cache_key) {
-                            return ComponentValType::Type(idx);
-                        }
-                        let export_idx = *resource_exports.get(cm_name).unwrap_or_else(|| {
-                            panic!(
-                                "resource `{cm_name}` from `{source}` is not among the resources \
-                                 this instance declares ({}), so a handle to it has no type here",
-                                resource_exports
-                                    .keys()
-                                    .copied()
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            )
-                        });
-                        let idx = sink.define(CmDefined::Own(export_idx));
-                        self.cache.insert(cache_key, idx);
-                        ComponentValType::Type(idx)
-                    } else if let Some(cases) = {
-                        // Prefer the explicit `interface_hint` for cross-
-                        // interface aliases (e.g. re-exported variants), but fall
-                        // back to the resolved source when the hinted interface
-                        // does not own the variant. A kiln generator's export
-                        // interface is hinted, yet its `generate` returns shared
-                        // `core:kiln/types` variants (e.g. `Error`) sourced
-                        // elsewhere.
-                        let cases_opt = self
-                            .interface_hint
-                            .as_deref()
-                            .and_then(|h| {
-                                cm_interface_registry.get_variant_cases_by_source(h, name)
-                            })
-                            .or_else(|| {
-                                cm_interface_registry.get_variant_cases_by_source(source, name)
-                            });
-                        cases_opt.map(<[CmVariantCase]>::to_vec)
-                    } {
-                        let cm_name = self
-                            .interface_hint
-                            .as_deref()
-                            .and_then(|h| {
-                                cm_interface_registry.get_variant_cm_name_by_source(h, name)
-                            })
-                            .or_else(|| {
-                                cm_interface_registry.get_variant_cm_name_by_source(source, name)
-                            })
-                            .expect("variant cm_name present when cases are")
-                            .to_string();
-                        let idx = self.define_variant(
-                            sink,
-                            &cm_name,
-                            &cases,
-                            cm_interface_registry,
-                            resource_exports,
-                        );
-                        ComponentValType::Type(idx)
-                    } else if let Some(fields) = cm_interface_registry
-                        .get_struct_fields_by_source(source, name)
-                        .map(<[(String, Type)]>::to_vec)
-                    {
-                        let cm_name = cm_interface_registry
-                            .get_struct_cm_name_by_source(source, name)
-                            .expect("struct cm_name present when fields are")
-                            .to_string();
-                        let idx = self.define_record(
-                            sink,
-                            &cm_name,
-                            &fields,
-                            cm_interface_registry,
-                            resource_exports,
-                        );
-                        ComponentValType::Type(idx)
-                    } else if let Some(variants) = cm_interface_registry
-                        .get_enum_variants_by_source(source, name)
-                        .map(<[String]>::to_vec)
-                    {
-                        let cache_key = format!("enum:{name}");
-                        if let Some(&idx) = self.cache.get(&cache_key) {
-                            return ComponentValType::Type(idx);
-                        }
-                        let variant_refs: Vec<&str> = variants.iter().map(String::as_str).collect();
-                        let idx = sink.define(CmDefined::Enum(&variant_refs));
-                        self.cache.insert(cache_key.clone(), idx);
-
-                        if let Some(cm_name) =
-                            cm_interface_registry.get_enum_cm_name_by_source(source, name)
-                        {
-                            let export_idx = self.export_named(sink, cm_name, idx);
-                            self.cache.insert(cache_key, export_idx);
-                            return ComponentValType::Type(export_idx);
-                        }
-
-                        ComponentValType::Type(idx)
-                    } else if let Some(members) = cm_interface_registry
-                        .get_flags_members_by_source(source, name)
-                        .map(<[String]>::to_vec)
-                    {
-                        let cache_key = format!("flags:{name}");
-                        if let Some(&idx) = self.cache.get(&cache_key) {
-                            return ComponentValType::Type(idx);
-                        }
-                        let member_refs: Vec<&str> = members.iter().map(String::as_str).collect();
-                        let idx = sink.define(CmDefined::Flags(&member_refs));
-                        self.cache.insert(cache_key.clone(), idx);
-
-                        // Export to make it a named type (as for record/variant/
-                        // enum) so an exported interface instance can reference it.
-                        if let Some(cm_name) =
-                            cm_interface_registry.get_flags_cm_name_by_source(source, name)
-                        {
-                            let export_idx = self.export_named(sink, cm_name, idx);
-                            self.cache.insert(cache_key, export_idx);
-                            return ComponentValType::Type(export_idx);
-                        }
-
-                        ComponentValType::Type(idx)
-                    } else {
-                        panic!("unsupported named type for CM instance: {name} (source={source})")
-                    }
+            Type::Named(named) => {
+                if let Some(prim) = wado_primitive_name_to_cm(&named.name) {
+                    return ComponentValType::Primitive(prim);
                 }
-            },
+                let name = named.name.as_str();
+                // Preserve a local newtype as a named CM alias
+                // (`type meters = f64`) so the structural type matches
+                // `wado wit` instead of erasing to its base (issue #1456).
+                let source = cm_interface_registry.source_interface(named);
+                if let Some((canonical_source, base)) = cm_interface_registry
+                    .local_newtype_base(source.as_deref(), name)
+                    .map(|(s, ty)| (s.to_string(), ty.clone()))
+                {
+                    // Canonical source keys the cache so same-named locals
+                    // stay distinct and every reference dedups to one alias.
+                    let cache_key = format!("newtype:{canonical_source}:{name}");
+                    if let Some(&idx) = self.cache.get(&cache_key) {
+                        return ComponentValType::Type(idx);
+                    }
+                    // Peel the base first: an imported-newtype base resolves
+                    // to its primitive, avoiding the unsupported-name panic
+                    // below; a local-newtype base recurses as a nested alias.
+                    let base = cm_interface_registry.resolve_type_preserving_local_newtypes(&base);
+                    let base_val =
+                        self.ast_type_to_cm(sink, &base, cm_interface_registry, resource_exports);
+                    let base_idx = match base_val {
+                        ComponentValType::Primitive(prim) => {
+                            sink.define(CmDefined::Primitive(prim))
+                        }
+                        ComponentValType::Type(idx) => idx,
+                    };
+                    let named_idx = self.export_named(sink, &to_kebab(name), base_idx);
+                    self.cache.insert(cache_key, named_idx);
+                    return ComponentValType::Type(named_idx);
+                }
+                // Every branch here is emitting a WASI interface
+                // declaration. The type reference must have a resolved
+                // `wasi:*` source_interface from stdlib bootstrap, or
+                // fall back to the emitting interface (`interface_hint`)
+                // when the reference is synthesized, or to the unique
+                // `wasi:*` registrant as a last resort. If none match
+                // we panic — that would mean the caller handed us an
+                // unresolved reference to a type no interface declares.
+                let source_owned: String = cm_interface_registry
+                    .cm_source_of_named_type(named, self.interface_hint.as_deref())
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "unresolved CM named type reference `{name}` while emitting CM instance"
+                        )
+                    });
+                let source = source_owned.as_str();
+                if let Some(cm_name) =
+                    cm_interface_registry.get_resource_cm_name_by_source(source, name)
+                {
+                    let cache_key = format!("own:{cm_name}");
+                    if let Some(&idx) = self.cache.get(&cache_key) {
+                        return ComponentValType::Type(idx);
+                    }
+                    let export_idx = *resource_exports.get(cm_name).unwrap_or_else(|| {
+                        panic!(
+                            "resource `{cm_name}` from `{source}` is not among the resources \
+                                 this instance declares ({}), so a handle to it has no type here",
+                            resource_exports
+                                .keys()
+                                .copied()
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    });
+                    let idx = sink.define(CmDefined::Own(export_idx));
+                    self.cache.insert(cache_key, idx);
+                    ComponentValType::Type(idx)
+                } else if let Some(cases) = {
+                    // Prefer the explicit `interface_hint` for cross-
+                    // interface aliases (e.g. re-exported variants), but fall
+                    // back to the resolved source when the hinted interface
+                    // does not own the variant. A kiln generator's export
+                    // interface is hinted, yet its `generate` returns shared
+                    // `core:kiln/types` variants (e.g. `Error`) sourced
+                    // elsewhere.
+                    let cases_opt = self
+                        .interface_hint
+                        .as_deref()
+                        .and_then(|h| cm_interface_registry.get_variant_cases_by_source(h, name))
+                        .or_else(|| {
+                            cm_interface_registry.get_variant_cases_by_source(source, name)
+                        });
+                    cases_opt.map(<[CmVariantCase]>::to_vec)
+                } {
+                    let cm_name = self
+                        .interface_hint
+                        .as_deref()
+                        .and_then(|h| cm_interface_registry.get_variant_cm_name_by_source(h, name))
+                        .or_else(|| {
+                            cm_interface_registry.get_variant_cm_name_by_source(source, name)
+                        })
+                        .expect("variant cm_name present when cases are")
+                        .to_string();
+                    let idx = self.define_variant(
+                        sink,
+                        &cm_name,
+                        &cases,
+                        cm_interface_registry,
+                        resource_exports,
+                    );
+                    ComponentValType::Type(idx)
+                } else if let Some(fields) = cm_interface_registry
+                    .get_struct_fields_by_source(source, name)
+                    .map(<[(String, Type)]>::to_vec)
+                {
+                    let cm_name = cm_interface_registry
+                        .get_struct_cm_name_by_source(source, name)
+                        .expect("struct cm_name present when fields are")
+                        .to_string();
+                    let idx = self.define_record(
+                        sink,
+                        &cm_name,
+                        &fields,
+                        cm_interface_registry,
+                        resource_exports,
+                    );
+                    ComponentValType::Type(idx)
+                } else if let Some(variants) = cm_interface_registry
+                    .get_enum_variants_by_source(source, name)
+                    .map(<[String]>::to_vec)
+                {
+                    let cache_key = format!("enum:{name}");
+                    if let Some(&idx) = self.cache.get(&cache_key) {
+                        return ComponentValType::Type(idx);
+                    }
+                    let variant_refs: Vec<&str> = variants.iter().map(String::as_str).collect();
+                    let idx = sink.define(CmDefined::Enum(&variant_refs));
+                    self.cache.insert(cache_key.clone(), idx);
+
+                    if let Some(cm_name) =
+                        cm_interface_registry.get_enum_cm_name_by_source(source, name)
+                    {
+                        let export_idx = self.export_named(sink, cm_name, idx);
+                        self.cache.insert(cache_key, export_idx);
+                        return ComponentValType::Type(export_idx);
+                    }
+
+                    ComponentValType::Type(idx)
+                } else if let Some(members) = cm_interface_registry
+                    .get_flags_members_by_source(source, name)
+                    .map(<[String]>::to_vec)
+                {
+                    let cache_key = format!("flags:{name}");
+                    if let Some(&idx) = self.cache.get(&cache_key) {
+                        return ComponentValType::Type(idx);
+                    }
+                    let member_refs: Vec<&str> = members.iter().map(String::as_str).collect();
+                    let idx = sink.define(CmDefined::Flags(&member_refs));
+                    self.cache.insert(cache_key.clone(), idx);
+
+                    // Export to make it a named type (as for record/variant/
+                    // enum) so an exported interface instance can reference it.
+                    if let Some(cm_name) =
+                        cm_interface_registry.get_flags_cm_name_by_source(source, name)
+                    {
+                        let export_idx = self.export_named(sink, cm_name, idx);
+                        self.cache.insert(cache_key, export_idx);
+                        return ComponentValType::Type(export_idx);
+                    }
+
+                    ComponentValType::Type(idx)
+                } else {
+                    panic!("unsupported named type for CM instance: {name} (source={source})")
+                }
+            }
             Type::Reference(inner) | Type::MutReference(inner) => {
                 if let Type::Named(n) = inner.as_ref()
                     && let Some(source) = cm_interface_registry

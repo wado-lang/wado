@@ -1707,7 +1707,7 @@ pub enum TypeNameInfo {
 pub fn format_type_name(info: TypeNameInfo) -> String {
     match info {
         TypeNameInfo::Primitive(name) => name,
-        TypeNameInfo::Unit => "()".to_string(),
+        TypeNameInfo::Unit => UNIT_TYPE_NAME.to_string(),
         TypeNameInfo::Named(name) => name,
         TypeNameInfo::Generic { name, args } => mangle_generic_name(&name, &args),
         TypeNameInfo::Tuple(elems) => mangle_tuple_type(&elems),
@@ -1754,6 +1754,9 @@ pub fn mangle_tuple_type(elems: &[String]) -> String {
 /// The head name of a tuple type. Name formats live here, so
 /// [`crate::tir::TypeTable::TUPLE_TYPE_NAME`] reads it from this one place.
 pub const TUPLE_TYPE_NAME: &str = "[]";
+
+/// The name of the unit type: its source spelling.
+pub const UNIT_TYPE_NAME: &str = "()";
 
 /// A name in the *declaration* namespace: what source writes, what an `impl`
 /// header spells, what every by-name declaration lookup keys on — as opposed to
@@ -2535,7 +2538,10 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
     let head = head_of(name);
     name.starts_with('&')
         || PrimitiveType::is_primitive_name(head)
-        || matches!(head, "()" | "!" | "Array" | "[]" | "Fn")
+        || matches!(
+            head,
+            UNIT_TYPE_NAME | "!" | "Array" | TUPLE_TYPE_NAME | "Fn"
+        )
 }
 
 /// Whether `def` declares a builtin shape: a primitive, `Array` or the tuple
