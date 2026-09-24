@@ -3994,9 +3994,9 @@ fn keyword_chars_in(kw: &KeywordInfo, pos: i32, set: &LeadingChars, reading: Key
 fn keyword_chars_admitted(kw: &KeywordInfo, pos: i32, reading: KeywordReading, admits: fn(char) -> bool) -> bool {
     let accepts = keyword_accepts(kw, pos);
     return if reading matches { Proven } {
-        accepts.iter_ref().all(|c| admits(*c))
+        accepts.iter_ref().all(|c| admits(*c));
     } else {
-        accepts.iter_ref().any(|c| admits(*c))
+        accepts.iter_ref().any(|c| admits(*c));
     };
 }
 
