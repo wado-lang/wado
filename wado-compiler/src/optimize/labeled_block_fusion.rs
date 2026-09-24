@@ -1273,6 +1273,27 @@ fn emit_variant_payload_let(engine: &mut Engine, vc: ExprId, f: &Fusion, out: &m
     out.push(stmt);
 }
 
+/// The payload of a break whose case the fused arm does not take, kept as a
+/// statement: it still evaluates at the break.
+fn emit_untaken_payload(
+    engine: &mut Engine,
+    value: Option<Operand>,
+    span: Span,
+    out: &mut Vec<StmtId>,
+) {
+    let Some(vc) = value.and_then(Operand::as_expr) else {
+        return;
+    };
+    let ExprKind::VariantConstruct {
+        payload: Some(payload @ Operand::Expr(_)),
+        ..
+    } = engine.body.exprs[vc].kind
+    else {
+        return;
+    };
+    out.push(engine.alloc_stmt(StmtKind::Expr(payload), span));
+}
+
 /// `let $fused_slot_k = <element k>;` for each slot the arm reads. The
 /// elements it does not read are dropped, which the precondition allows only
 /// for pure ones.
@@ -1315,8 +1336,11 @@ fn transform_lb_stmt(engine: &mut Engine, s: StmtId, f: &Fusion, out: &mut Vec<S
                     matches!(&engine.body.exprs[e].kind,
                         ExprKind::VariantConstruct { case_index: ci, .. } if ci == case_index)
                 });
-                vc.inspect(|&vc| emit_variant_payload_let(engine, vc, f, out))
-                    .is_some()
+                match vc {
+                    Some(vc) => emit_variant_payload_let(engine, vc, f, out),
+                    None => emit_untaken_payload(engine, value, f.span, out),
+                }
+                vc.is_some()
             }
             BoundValue::Slots { tag_value, .. } => {
                 let e = value

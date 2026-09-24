@@ -1,0 +1,29 @@
+// Fusing a labeled block with the `if let` over its value sends each `break`
+// straight to the arm its case selects. A break of the other case still
+// evaluates its payload, so the call building it must run.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn noisy(n: i32) -> String with Stdout {
+    println(`noisy ${n}`);
+    return "e";
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(-3);
+    let r: Result<i32, String> = check: {
+        if n > 0 {
+            break check: Ok(n * 2);
+        }
+        break check: Err(noisy(n));
+    };
+    if let Ok(v) = r {
+        println(`ok ${v}`);
+    }
+    println("done");
+}
+
+__DATA__
+{
+    "stdout": "noisy -3\ndone\n"
+}
