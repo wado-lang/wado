@@ -563,6 +563,12 @@ answer rather than four derivations of it. Lower bakes the classification into
 carries the built `ScanGroupElement` rather than bare scan bodies, so emit has
 nothing left to assemble a second classification into.
 
+A rule's own arms partition the same way (`rule_overlap_groups`), and the
+branch that merges is decided by `build_prediction`, which knows the same thing
+at every depth: a position that reaches a `.` or `~X` joins every token branch,
+and the tokens no alternative names go to the tournament. `r : A? . C | B D |
+B E` takes `b c` by its first alternative. Fixture `open_ended_rule_alt.g4`.
+
 A branch of the decision therefore carries what it admits — `Admits`, one of
 `Everything`, `Untestable`, or `Kinds` (never empty) — instead of a rendered
 test, and `kind_check_str` refuses an empty set rather than choosing for the
@@ -826,17 +832,21 @@ relevant sites.
    the gap `warn_unsupported_prediction_predicate` names for the rule-level
    case. Not diagnosed: the same shape parses correctly wherever the group is
    not scanned, which `nested_action_gate_test.wado` pins.
-10. A viability probe is stamped only where the walk reaches the rule's tail.
-    The probe scans the continuation and, when that runs out, conjoins the
-    rule's FOLLOW — an answer that is only about the caller if nothing else
-    follows inside the rule. A group body, an LR suffix, and an LR rule's atom
-    alternative all end short of the rule (the LR atom ends where the
+10. A viability probe asks the caller only where the walk reaches the rule's
+    tail. The probe scans the continuation and, when that runs out, conjoins
+    the rule's FOLLOW — an answer that is only about the caller if nothing
+    else follows inside the rule. A group body, an LR suffix, and an LR rule's
+    atom alternative all end short of the rule (the LR atom ends where the
     precedence loop begins), so each answers `reaches_rule_tail = false`.
     Stamping the atom `true` rejected `CASE a WHEN 1 THEN 2 END + 1`: the probe
     asked the caller's FOLLOW at a position where the `+` loop would continue.
-    Keep it separate from `enclosing_at_tail`, which the FOLLOW gate uses and
-    which asks a weaker question — conflating the two is what put the probe
-    there. Fixture `tests/grammars/lr_atom_probe.g4`.
+    Short of the tail a probe is stamped only over a continuation that must
+    consume a token, whose scan then decides alone (`probe_asks_caller =
+    false`): `('=' m? '@' '#')` with `m : '@' '!'` enters `m` only where `m '@'
+    '#'` scans. Keep it separate from `enclosing_at_tail`, which the FOLLOW
+    gate uses and which asks a weaker question — conflating the two is what
+    put the probe there. Fixtures `tests/grammars/lr_atom_probe.g4`,
+    `ll_shape_prefix_signature.g4`.
 11. An LR overlap group's second-token sub-dispatch measures the element that
     carries the shared token, not the one after it — reading the next element
     is right only when the carrier matches exactly one token. Rust's

@@ -66,7 +66,6 @@ use {
     alt_class_of,
     alt_classes,
     classes_union,
-    compute_overlap_groups,
     compute_overlap_groups_of,
     direct_dispatch_branches,
     dispatch_branches,
@@ -2171,7 +2170,7 @@ fn gen_scan_optional_probe<S: AsStrSlice>(
         gen_scan_op_element(w, se, ctx, &fail);
     }
     let opt_ok = "opt_ok";
-    emit_probe_verdict(w, &re.probe_viable, &opt_ok, ctx);
+    emit_probe_verdict(w, re.probe_asks_caller, &re.probe_viable, &opt_ok, ctx);
     w.end();
     // The probe only asks whether the continuation fits, so its walk is undone
     // either way: keeping the body means the gate the body left, dropping it
@@ -2204,7 +2203,7 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
         gen_scan_op_element(w, se, ctx, &fail);
     }
     let ng_exit = "ng_exit";
-    emit_probe_verdict(w, &re.probe_viable, &ng_exit, ctx);
+    emit_probe_verdict(w, re.probe_asks_caller, &re.probe_viable, &ng_exit, ctx);
     w.end();
     gen_scan_rewind(w, ctx, "ep");
     w.line("if ng_exit { break; }");
@@ -2219,25 +2218,19 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
 /// Whether the exit probe decides this scan-side loop, from the same stamp
 /// and parts the parse side reads.
 fn scan_non_greedy_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> bool {
-    let first = admits_kinds(&re.inner_admits);
     return re.non_greedy
         && re.static_exit_undecided
-        && !first.is_empty()
-        && probe_decides(&first, &first, &re.continuation_scan, re.continuation_scannable, ctx);
+        && !admits_kinds(&re.inner_admits).is_empty()
+        && probe_decides(&re.continuation_scan, re.continuation_scannable, ctx);
 }
 
 /// Scan-side twin of `optional_probe_decides` — same conjuncts off the mirror
 /// stamps, so the two sides answer identically.
 fn scan_optional_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> bool {
-    return re.body matches { RuleCall(_) }
+    return re.body matches { RuleCall(_) | Token(_) | Wildcard | Excluded(_) }
         && re.body_scannable
-        && probe_decides(
-            &admits_kinds(&re.inner_admits),
-            &re.caller_follow_first,
-            &re.continuation_scan,
-            re.continuation_scannable,
-            ctx,
-        );
+        && re.probe_contested
+        && probe_decides(&re.continuation_scan, re.continuation_scannable, ctx);
 }
 
 /// Whether the repeat guard already proves the body matches, leaving the
@@ -2466,7 +2459,7 @@ fn gen_scan_decline_stranded(
     for let se of &duties.decline_scan {
         gen_scan_op_element(w, se, ctx, `break dcl_${gc};`);
     }
-    emit_probe_verdict(w, &duties.decline_viable, `dc_${gc}_exit`, ctx);
+    emit_probe_verdict(w, DECLINE_ASKS_CALLER, &duties.decline_viable, `dc_${gc}_exit`, ctx);
     w.end();
     // Both exits leave a walk that did not happen, so both put the gate back:
     // declining rewinds to the iteration's start, and continuing resumes at the
@@ -2927,14 +2920,7 @@ pub fn rule_overlap_groups(
         let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(&rule.alternatives[idx], &mut visiting));
     }
-    // Raw first sets, not `compute_overlap_groups_of` — the one partition that
-    // cannot yet be the shared one. A merged branch here is decided by
-    // `build_prediction`, which walks static first sets and so cannot rank an
-    // open-ended alternative; merging loses `. EOF | A EOF`'s first
-    // alternative. The cost is the `#[TODO]` in
-    // `driver_cst_open_ended_rule_alt_test.wado`, and closing it means
-    // teaching `build_prediction` what `AltClass` knows.
-    let groups = compute_overlap_groups(&first_sets);
+    let groups = compute_overlap_groups_of(&alt_classes(&non_lr_indices, &rule.alternatives, &first_sets, ctx));
     return [non_lr_indices, first_sets, groups];
 }
 
@@ -4632,11 +4618,10 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCon
 /// competing readings are the loop's own, so `body_admits` stands in for
 /// the overlap; it also gates each iteration, hence non-empty.
 fn non_greedy_probe_decides(r: &RepeatOp, ctx: &mut GenContext) -> bool {
-    let body_first = admits_kinds(&r.body_admits);
     return r.static_exit_undecided
         && r.kind matches { Star | Plus }
-        && !body_first.is_empty()
-        && probe_decides(&body_first, &body_first, &r.continuation_scan, r.continuation_scannable, ctx);
+        && !admits_kinds(&r.body_admits).is_empty()
+        && probe_decides(&r.continuation_scan, r.continuation_scannable, ctx);
 }
 
 /// Open a non-greedy loop that exits only when exiting is viable. The caller
@@ -4647,15 +4632,25 @@ fn begin_non_greedy_probe_loop(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCo
     w.line("if p.recovering { break; }");
     let verdict = dedup_name("ng_exit", nc);
     w.line(`let mut ${verdict}: bool = false;`);
-    gen_viability_probe(w, &r.continuation_scan, &verdict, "ng_exit_scan", ctx, nc, null, &r.probe_viable);
+    gen_viability_probe(
+        w,
+        &r.continuation_scan,
+        &verdict,
+        "ng_exit_scan",
+        ctx,
+        nc,
+        null,
+        r.probe_asks_caller,
+        &r.probe_viable,
+    );
     w.line(`if ${verdict} { break; }`);
     w.line(`if !(${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}) { break; }`);
 }
 
 /// A labelled block that scans `continuation` from the parse position and,
 /// when it matches, lets the caller's FOLLOW rule on everything past the
-/// rule; `verdict` is the caller's already-declared `bool`. `prefix_scan`
-/// runs first, for the entry probe's body.
+/// rule where `asks_caller`; `verdict` is the caller's already-declared
+/// `bool`. `prefix_scan` runs first, for the entry probe's body.
 fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     continuation: &List<ScanElement>,
@@ -4663,8 +4658,9 @@ fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     label_base: S1,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
-    prefix_scan: Option<ScanElement> = null,
-    probe_viable: &List<String> = &EMPTY_PROBE_VIABLE,
+    prefix_scan: Option<ScanElement>,
+    asks_caller: bool,
+    probe_viable: &List<String>,
 ) {
     let label = dedup_name(label_base, nc);
     w.begin(`${label}:`);
@@ -4676,18 +4672,28 @@ fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     for let se of continuation {
         gen_scan_op_element(w, se, ctx, &fail);
     }
-    emit_probe_verdict(w, probe_viable, verdict, ctx);
+    emit_probe_verdict(w, asks_caller, probe_viable, verdict, ctx);
     w.end();
 }
 
-global EMPTY_PROBE_VIABLE: List<String> = [];
-
-/// The probe's verdict once its scan has reached the rule's tail: the
-/// threaded mask has to admit the position, and so does the rule's own
-/// FOLLOW when lowering stamped one. The mask answers "yes" wherever a call
-/// site left it empty; the FOLLOW conjunct is what still says no there, and
-/// conjoining can only move a verdict from "exit" to "iterate".
-fn emit_probe_verdict<S: AsStrSlice>(w: &mut CodeWriter, probe_viable: &List<String>, verdict: S, ctx: &mut GenContext) {
+/// The probe's verdict once its scan has matched. Short of the rule's tail
+/// the match is the answer. At the tail the threaded mask has to admit the
+/// position, and so does the rule's own FOLLOW when lowering stamped one. The
+/// mask answers "yes" wherever a call site left it empty; the FOLLOW conjunct
+/// is what still says no there, and conjoining can only move a verdict from
+/// "exit" to "iterate".
+fn emit_probe_verdict<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    asks_caller: bool,
+    probe_viable: &List<String>,
+    verdict: S,
+    ctx: &mut GenContext,
+) {
+    if !asks_caller {
+        assert probe_viable.is_empty(), "a FOLLOW is stamped only on a probe reaching the rule's tail";
+        w.line(`${verdict} = true;`);
+        return;
+    }
     let mask = if ctx.current_rule_reads_follow() {
         `${FOLLOW_PARAM} == 0 || ${follow_yields_call("tokens", "pos")}`;
     } else {
@@ -4813,6 +4819,10 @@ fn gen_op_optional(
     }
     if let OptionalShapeLookahead(s) = &r.strategy {
         gen_op_optional_shape_lookahead(w, r, s, ctx, nc, follow_gate);
+        return;
+    }
+    if optional_probe_decides(r, ctx) {
+        gen_optional_probe_entry(w, r, ctx, nc);
         return;
     }
     if r.strategy matches { OptionalScanGuard } {
@@ -6404,7 +6414,7 @@ fn gen_op_repeat_optional_rulecall(
     // Ambiguous entry: the exclusion below would hand every shared token
     // to the continuation, but ANTLR4 resolves the ambiguity by entering
     // whenever entering leaves a viable parse. Ask the probe instead.
-    if optional_probe_decides(rep_op, follow, ctx) {
+    if optional_probe_decides(rep_op, ctx) {
         gen_optional_probe_entry(w, rep_op, ctx, name_counts);
         return;
     }
@@ -6433,27 +6443,24 @@ fn gen_op_repeat_optional_rulecall(
     gen_optional_present(w, &rep_op.body, &caller_follow_gate, &entry, ctx, &proven);
 }
 
-fn optional_probe_decides(r: &RepeatOp, follow: &List<String>, ctx: &mut GenContext) -> bool {
-    return r.body_scannable
-        && probe_decides(&admits_kinds(&r.body_admits), follow, &r.continuation_scan, r.continuation_scannable, ctx);
+/// Whether the probe decides this greedy `?` over a leaf body. Any leaf: a
+/// token contests a continuation as a rule call does (`A? . C` on `a c`).
+fn optional_probe_decides(r: &RepeatOp, ctx: &mut GenContext) -> bool {
+    return r.body_shape matches { LeafRuleCall | LeafOther }
+        && r.body_scannable
+        && r.probe_contested
+        && probe_decides(&r.continuation_scan, r.continuation_scannable, ctx);
 }
 
 /// Whether a probe can decide this Repeat, from the parts the parse-side
 /// `RepeatOp` and the scan-side `ScanRepeatElement` both carry — the two must
 /// answer identically or the tournament measures a length the parse will not
-/// consume. It takes a lowered continuation, a competing reading to rule on,
-/// and something to ask: with nothing after the body and no runtime FOLLOW
-/// the probe would reduce to "the body scans, so enter".
-fn probe_decides(
-    body_first: &List<String>,
-    follow: &List<String>,
-    continuation: &List<ScanElement>,
-    continuation_scannable: bool,
-    ctx: &mut GenContext,
-) -> bool {
-    return continuation_scannable
-        && sets_overlap(body_first, follow)
-        && (!continuation.is_empty() || ctx.current_rule_reads_follow());
+/// consume. The caller supplies the competing reading to rule on; this asks
+/// for a lowered continuation and something to ask of it: with nothing after
+/// the body and no runtime FOLLOW the probe would reduce to "the body scans,
+/// so enter".
+fn probe_decides(continuation: &List<ScanElement>, continuation_scannable: bool, ctx: &mut GenContext) -> bool {
+    return continuation_scannable && (!continuation.is_empty() || ctx.current_rule_reads_follow());
 }
 
 /// Greedy Optional that enters when entering stays viable. The cheap
@@ -6477,6 +6484,7 @@ fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenConte
         ctx,
         nc,
         Option::Some(r.scan_body),
+        r.probe_asks_caller,
         &r.probe_viable,
     );
     w.end();
@@ -6517,6 +6525,10 @@ fn gen_op_repeat_optional_leaf(
 ) {
     let opt_field = rep_op.field;
     let _ = dedup_name(&opt_field, name_counts);
+    if optional_probe_decides(rep_op, ctx) {
+        gen_optional_probe_entry(w, rep_op, ctx, name_counts);
+        return;
+    }
 
     // Same K-prefix gate as the RuleCall arm — see
     // `gen_op_repeat_optional_rulecall` for the rationale.
@@ -6918,6 +6930,10 @@ fn gen_rep_iteration_entry<S: AsStrSlice>(
 /// threaded mask. The mask is inert wherever no caller supplied one, so asking
 /// it would call the end of the input a dead end and decline the last iteration
 /// of every top-level list.
+/// A decline is stamped only where the walk reaches the rule's tail
+/// (`lower_decline_scan`), so its verdict always asks the caller.
+global DECLINE_ASKS_CALLER: bool = true;
+
 fn gen_rep_decline_stranded<S: AsStrSlice>(
     w: &mut CodeWriter,
     duties: &IterationDuties,
@@ -6936,7 +6952,17 @@ fn gen_rep_decline_stranded<S: AsStrSlice>(
     let can_continue = decline_continue_check(body_admits, duties, &cont_kind, ctx);
     w.begin(`if !(${can_continue})`);
     w.line(`let mut ${dead_end}: bool = false;`);
-    gen_viability_probe(w, &duties.decline_scan, &dead_end, "decline_scan", ctx, nc, null, &duties.decline_viable);
+    gen_viability_probe(
+        w,
+        &duties.decline_scan,
+        &dead_end,
+        "decline_scan",
+        ctx,
+        nc,
+        null,
+        DECLINE_ASKS_CALLER,
+        &duties.decline_viable,
+    );
     w.line(`if ${dead_end} { break; }`);
     w.end();
     w.end();
@@ -8042,7 +8068,7 @@ fn first_nullable_alt(classes: &List<AltClass>) -> Option<i32> {
 }
 
 /// The union of one branch's first sets, for the branches not over classified
-/// alternatives: LR suffixes, and a rule's arms (see `rule_overlap_groups`).
+/// alternatives: LR suffixes.
 fn slot_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List<String> {
     let mut union_first: List<String> = [];
     for let idx of group {
@@ -8644,7 +8670,8 @@ fn dispatch_fallback_indices(
 /// the `Consume` steps crossed terminals every alt shares, so FIRST at `skip`
 /// is exact. It is not exact for an alt whose remainder there can match empty:
 /// that alt also admits whatever follows the rule at the call site, which no
-/// FIRST-derived branch set names (`a : X Y? | X Z` on `X`).
+/// FIRST-derived branch set names (`a : X Y? | X Z` on `X`). Nor for one that
+/// reaches a `.` or `~X`, which admits every token.
 fn dispatch_claims_every_first_token(
     d: &PredictionDispatch,
     indices: &List<i32>,
@@ -8664,7 +8691,7 @@ fn dispatch_claims_every_first_token(
         }
     }
     for let idx of indices {
-        if ctx.tail_is_nullable_deep(&alts[*idx].elements, skip) {
+        if ctx.tail_is_nullable_deep(&alts[*idx].elements, skip) || ctx.elements_reach_open_end(&alts[*idx].elements, skip) {
             return false;
         }
         for let tk of &ctx.first_of_elements_from(&alts[*idx].elements, skip) {
@@ -8923,15 +8950,8 @@ fn gen_multi_alt_body_alt<S: AsStrSlice, S1: AsStrSlice>(
         } else {
             String::new();
         };
-        // The raw union, not `admits[g]`: rule level does not merge the other
-        // alternatives into an open-ended branch (see `rule_overlap_groups`),
-        // so the narrower test is what keeps the arms after it reachable. The
-        // `#[TODO]` in `driver_cst_open_ended_rule_alt_test.wado` is the cost.
-        let cond = ctx.admits_check_str(
-            &admits_or_everything(&slot_first_union(group, first_sets)),
-            &DISPATCH_KIND_LOCAL,
-        );
-        w.begin(`if ${cond}${gate}`);
+        let proven = admits_kinds(&admits[g]);
+        w.begin(`if ${ctx.admits_check_str(&admits[g], &DISPATCH_KIND_LOCAL)}${gate}`);
 
         if group.len() == 1 {
             let alt_index = non_lr_indices[group[0]];
@@ -8949,7 +8969,7 @@ fn gen_multi_alt_body_alt<S: AsStrSlice, S1: AsStrSlice>(
                 rule_alts_labeled(&rule.alternatives),
                 &NO_AFTER,
                 ctx,
-                &slot_first_union(group, first_sets),
+                &proven,
             );
         } else {
             let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx);
@@ -8962,7 +8982,7 @@ fn gen_multi_alt_body_alt<S: AsStrSlice, S1: AsStrSlice>(
                 type_name,
                 ctx,
                 &rule.name,
-                &slot_first_union(group, first_sets),
+                &proven,
             );
         }
 

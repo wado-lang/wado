@@ -137,6 +137,8 @@ use {
     DiagnosticOwner,
     DiagnosticSite,
     Admits,
+    admits_is_everything,
+    admits_is_untestable,
     admits_kinds,
     admits_or_untestable,
     AltClass,
@@ -2571,18 +2573,16 @@ fn rebind_scan_repeat_caller_follow(
     rule_name: &String = &NO_PROBE_RULE,
 ) -> ScanElement {
     if let Repeat(re) = se {
-        let mut continuation_scan: List<ScanElement> = [];
-        let mut continuation_scannable = false;
-        let mut probe_viable: List<String> = [];
-        let wants_probe = re.non_greedy || re.kind matches { Optional };
-        if wants_probe && reaches_rule_tail {
-            if let Some(scan) = lower_scan_continuation_elements(alt_elements, index, ctx) {
-                continuation_scan = scan;
-                continuation_scannable = true;
-                probe_viable = ctx.rule_follow_for_probe(rule_name);
-                ctx.mark_rule_reads_follow();
-            }
-        }
+        let probe = lower_continuation_probe(re.non_greedy, re.kind, alt_elements, index, ctx, reaches_rule_tail, rule_name);
+        let probe_contested = optional_probe_contested(
+            re.non_greedy,
+            re.kind,
+            &re.inner_admits,
+            &caller_follow_first,
+            alt_elements,
+            index,
+            ctx,
+        );
         let static_exit_undecided = non_greedy_static_undecided(
             &admits_kinds(&re.inner_admits),
             &caller_follow_first,
@@ -2606,10 +2606,12 @@ fn rebind_scan_repeat_caller_follow(
             caller_follow_first: caller_follow_first,
             gate_caller_follow: re.gate_caller_follow,
             non_greedy: re.non_greedy,
-            continuation_scan,
-            continuation_scannable,
+            continuation_scan: probe.scan,
+            continuation_scannable: probe.scannable,
+            probe_asks_caller: probe.asks_caller,
+            probe_contested,
             static_exit_undecided,
-            probe_viable,
+            probe_viable: probe.viable,
             body_scannable: re.body_scannable,
             duties,
         });
@@ -4482,15 +4484,16 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
     reaches_rule_tail: bool,
     rule_name: S,
 ) -> RepeatOp {
-    let mut continuation_scan: List<ScanElement> = [];
-    let mut continuation_scannable = false;
-    let mut probe_viable: List<String> = [];
-    if let Some(scan) = lower_continuation_scan(rep_op, alt_elements, index, ctx, reaches_rule_tail) {
-        continuation_scan = scan;
-        continuation_scannable = true;
-        probe_viable = ctx.rule_follow_for_probe(rule_name);
-        ctx.mark_rule_reads_follow();
-    }
+    let probe = lower_continuation_probe(rep_op.non_greedy, rep_op.kind, alt_elements, index, ctx, reaches_rule_tail, rule_name);
+    let probe_contested = optional_probe_contested(
+        rep_op.non_greedy,
+        rep_op.kind,
+        &rep_op.body_admits,
+        &caller_follow_first,
+        alt_elements,
+        index,
+        ctx,
+    );
     let static_exit_undecided = non_greedy_static_undecided(
         &admits_kinds(&rep_op.body_admits),
         &caller_follow_first,
@@ -4511,10 +4514,12 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         ..*rep_op,
         caller_follow_first,
         caller_follow_second,
-        continuation_scan,
-        continuation_scannable,
+        continuation_scan: probe.scan,
+        continuation_scannable: probe.scannable,
+        probe_asks_caller: probe.asks_caller,
+        probe_contested,
         static_exit_undecided,
-        probe_viable,
+        probe_viable: probe.viable,
         duties,
     };
 }
@@ -4629,26 +4634,67 @@ fn lower_decline_scan(
     };
 }
 
+/// The probe stamps of one Repeat, shared by its parse and scan twins.
+struct ContinuationProbe {
+    scan: List<ScanElement> = [],
+    scannable: bool = false,
+    asks_caller: bool = false,
+    viable: List<String> = [],
+}
+
 /// The continuation for emit's probe, built only for the Repeat kinds whose
-/// decision can need it.
+/// decision can need it, and only where the scan's end means something.
 ///
-/// `reaches_rule_tail` is a precondition, not a hint: the probe ends by
-/// asking the caller's FOLLOW, which is the right question only at the
-/// rule's tail. Inside a group the walk stops at that group's end, so
-/// `useTree : (simplePath? PATHSEP)? (STAR | …)` would ask it on `*` and
-/// reject `use foo::*`.
-fn lower_continuation_scan(
-    rep_op: &RepeatOp,
+/// At the rule's tail the verdict asks the caller's FOLLOW. Anywhere else it
+/// cannot (invariant 10): inside a group the walk stops at that group's end,
+/// so `useTree : (simplePath? PATHSEP)? (STAR | …)` would ask it on `*` and
+/// reject `use foo::*`. There a continuation that must consume a token decides
+/// alone, and one that may match nothing is not stamped.
+fn lower_continuation_probe<S: AsStrSlice>(
+    non_greedy: bool,
+    kind: RepeatKind,
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut GenContext,
     reaches_rule_tail: bool,
-) -> Option<List<ScanElement>> {
-    let wants_probe = rep_op.non_greedy || rep_op.kind matches { Optional };
-    if !wants_probe || !reaches_rule_tail {
-        return null;
+    rule_name: S,
+) -> ContinuationProbe {
+    let wants_probe = non_greedy || kind matches { Optional };
+    if !wants_probe || !reaches_rule_tail && ctx.tail_is_nullable_deep(alt_elements, index + 1) {
+        return ContinuationProbe {};
     }
-    return lower_scan_continuation_elements(alt_elements, index, ctx);
+    let Some(scan) = lower_scan_continuation_elements(alt_elements, index, ctx) else {
+        return ContinuationProbe {};
+    };
+    if !reaches_rule_tail {
+        return ContinuationProbe { scan, scannable: true };
+    }
+    let viable = ctx.rule_follow_for_probe(rule_name);
+    ctx.mark_rule_reads_follow();
+    return ContinuationProbe { scan, scannable: true, asks_caller: true, viable };
+}
+
+/// Whether a greedy `?`'s body and what follows it can start on one token, so
+/// no lookahead test separates entering from skipping.
+fn optional_probe_contested(
+    non_greedy: bool,
+    kind: RepeatKind,
+    body: &Admits,
+    follow: &List<String>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+) -> bool {
+    if non_greedy || !kind matches { Optional } || admits_is_untestable(body) {
+        return false;
+    }
+    if ctx.elements_reach_open_end(alt_elements, index + 1) {
+        return true;
+    }
+    if admits_is_everything(body) {
+        return !follow.is_empty();
+    }
+    return sets_overlap(&admits_kinds(body), follow);
 }
 
 /// True iff `elem` is a list-label (`+=`). Used by

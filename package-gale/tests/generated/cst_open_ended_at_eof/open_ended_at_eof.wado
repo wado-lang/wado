@@ -1255,11 +1255,30 @@ impl Parser {
     }
 }
 
+fn scan_x(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] == TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_s__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_k {
         p.take();
-        if p.peek_kind() != TK_EOF && p.peek_kind() != TK_EOF {
+        let mut opt_enter: bool = false;
+        if p.peek_kind() != TK_EOF {
+            opt_enter_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_x(tokens, pos);
+                if pos < 0 { break opt_enter_scan; }
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break opt_enter_scan; }
+                pos += 1;
+                opt_enter = true;
+            }
+        }
+        if opt_enter {
             _parse_x(p);
         }
         p.expect(TK_EOF, &EMPTY_SYNC);
@@ -1267,7 +1286,19 @@ fn _parse_s__inner(p: &mut Parser) -> () {
     }
     if kind == TK_LIT_m {
         p.take();
+        let mut opt_enter: bool = false;
         if p.peek_kind() != TK_EOF {
+            opt_enter_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] == TK_EOF { break opt_enter_scan; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break opt_enter_scan; }
+                pos += 1;
+                opt_enter = true;
+            }
+        }
+        if opt_enter {
             p.any();
         }
         p.expect(TK_EOF, &EMPTY_SYNC);
