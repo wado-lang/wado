@@ -66,43 +66,97 @@ fn count_assignments_in_instr(instr: &WirInstr, counts: &mut IndexMap<String, u3
     instr.for_each_child(&mut |child| count_assignments_in_instr(child, counts));
 }
 
-/// The possible copied-from locals of a plain local-to-local copy value: a
-/// direct `LocalGet`, every break-value local of a `Block` (each exit may
-/// hand out a different local's object), or a `Seq` tail `LocalGet`.
-fn copy_sources(value: &WirInstr) -> Vec<String> {
+/// The locals whose own object `value` may evaluate to, through every exit of a
+/// branch or block and through casts, tees and `select`.
+//
+// Nothing else hands a local's object on: a load reads what a store already
+// escaped, and a call's result is a channel its arguments opened at the call.
+fn yielded_locals(value: &WirInstr, out: &mut IndexSet<String>) {
     match value {
-        WirInstr::LocalGet { name, .. } => vec![name.clone()],
-        WirInstr::Block { body, .. } => block_exit_locals(body),
-        WirInstr::Seq(body) => extract_seq_result_local(body).into_iter().collect(),
-        _ => Vec::new(),
-    }
-}
-
-/// Locals in break-value position of a value block: any `LocalGet`
-/// immediately followed by a `Br` targeting the block's own label.
-fn block_exit_locals(body: &[WirInstr]) -> Vec<String> {
-    let mut out = Vec::new();
-    collect_exit_locals_in_body(body, 0, &mut out);
-    out
-}
-
-fn collect_exit_locals_in_body(body: &[WirInstr], nesting: u32, out: &mut Vec<String>) {
-    for pair in body.windows(2) {
-        if let [WirInstr::LocalGet { name, .. }, WirInstr::Br { depth }] = pair
-            && *depth == nesting
-        {
-            out.push(name.clone());
+        WirInstr::LocalGet { name, result_ty } => {
+            if result_ty.is_reference() {
+                out.insert(name.clone());
+            }
         }
-    }
-    for instr in body {
-        collect_exit_locals_in_instr(instr, nesting, out);
+        WirInstr::LocalTee { value: inner, .. }
+        | WirInstr::RefAsNonNull(inner)
+        | WirInstr::RefCast { expr: inner, .. }
+        | WirInstr::BlackBox(inner)
+        | WirInstr::ExternInternalize(inner)
+        | WirInstr::ExternExternalize(inner) => yielded_locals(inner, out),
+        WirInstr::Select {
+            if_true, if_false, ..
+        } => {
+            yielded_locals(if_true, out);
+            yielded_locals(if_false, out);
+        }
+        WirInstr::Block { body, .. } => yielded_by_label(body, out),
+        WirInstr::If {
+            then_body,
+            else_body,
+            ..
+        } => {
+            yielded_by_label(then_body, out);
+            if let Some(eb) = else_body {
+                yielded_by_label(eb, out);
+            }
+        }
+        // A branch to a loop's label continues it, carrying no value out.
+        WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            if let Some(tail) = body.last() {
+                yielded_locals(tail, out);
+            }
+        }
+        _ => {}
     }
 }
 
-fn collect_exit_locals_in_instr(instr: &WirInstr, nesting: u32, out: &mut Vec<String>) {
+/// What a labeled body yields: its fall-through tail and the value of every
+/// branch to its label.
+fn yielded_by_label(body: &[WirInstr], out: &mut IndexSet<String>) {
+    if let Some(tail) = body.last() {
+        yielded_locals(tail, out);
+    }
+    yielded_by_branches(body, 0, None, out);
+}
+
+/// The values of the branches in `body` to the label `depth` levels out. A
+/// branch's value is the instruction before it; `carried` is that for the first.
+fn yielded_by_branches<'a>(
+    body: &'a [WirInstr],
+    depth: u32,
+    carried: Option<&'a WirInstr>,
+    out: &mut IndexSet<String>,
+) {
+    let mut before = carried;
+    for instr in body {
+        yielded_by_branches_in(instr, depth, before, out);
+        before = Some(instr);
+    }
+}
+
+fn yielded_by_branches_in(
+    instr: &WirInstr,
+    depth: u32,
+    before: Option<&WirInstr>,
+    out: &mut IndexSet<String>,
+) {
+    let targets_label = match instr {
+        WirInstr::Br { depth: d } | WirInstr::BrIf { depth: d, .. } => *d == depth,
+        WirInstr::BrTable {
+            targets, default, ..
+        } => targets
+            .iter()
+            .chain(std::iter::once(default))
+            .any(|d| *d == depth),
+        _ => false,
+    };
+    if targets_label && let Some(value) = before {
+        yielded_locals(value, out);
+    }
     match instr {
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-            collect_exit_locals_in_body(body, nesting + 1, out);
+            yielded_by_branches(body, depth + 1, None, out);
         }
         WirInstr::If {
             condition,
@@ -110,26 +164,23 @@ fn collect_exit_locals_in_instr(instr: &WirInstr, nesting: u32, out: &mut Vec<St
             else_body,
             ..
         } => {
-            collect_exit_locals_in_instr(condition, nesting, out);
-            collect_exit_locals_in_body(then_body, nesting + 1, out);
+            yielded_by_branches_in(condition, depth, None, out);
+            yielded_by_branches(then_body, depth + 1, None, out);
             if let Some(eb) = else_body {
-                collect_exit_locals_in_body(eb, nesting + 1, out);
+                yielded_by_branches(eb, depth + 1, None, out);
             }
         }
-        WirInstr::Seq(body) => collect_exit_locals_in_body(body, nesting, out),
-        _ => {
-            instr.for_each_child(&mut |child| {
-                collect_exit_locals_in_instr(child, nesting, out);
-            });
-        }
+        WirInstr::Seq(body) => yielded_by_branches(body, depth, before, out),
+        _ => instr.for_each_child(&mut |child| yielded_by_branches_in(child, depth, None, out)),
     }
 }
 
-/// Group locals connected by plain local-to-local copies (union-find over
-/// copy edges, flow-insensitive). A bare copy of a GC value shares the object
-/// — Wado value semantics insert explicit `value_copy` calls where a deep
-/// copy is required — so a mutation observed through one member is observable
-/// through every member. Used to widen invalidation and alias marking.
+/// Group locals connected by a def whose value may be another local's object
+/// (union-find over [`yielded_locals`], flow-insensitive). A bare copy of a GC
+/// value shares the object — Wado value semantics insert explicit `value_copy`
+/// calls where a deep copy is required — so a mutation observed through one
+/// member is observable through every member. Used to widen invalidation and
+/// alias marking.
 ///
 /// Returns `local name → group id`; locals with no copy edge are absent.
 fn collect_copy_groups(body: &[WirInstr]) -> IndexMap<String, u32> {
@@ -172,7 +223,9 @@ fn collect_copy_groups(body: &[WirInstr]) -> IndexMap<String, u32> {
 
 fn collect_copy_edges(instr: &WirInstr, edges: &mut Vec<(String, String)>) {
     if let WirInstr::LocalSet { name, value } | WirInstr::LocalTee { name, value } = instr {
-        for source in copy_sources(value) {
+        let mut sources = IndexSet::default();
+        yielded_locals(value, &mut sources);
+        for source in sources {
             edges.push((name.clone(), source));
         }
     }
@@ -242,7 +295,7 @@ fn collect_aliased_in_instr(
                     None => true,
                 };
                 if stores_param {
-                    collect_reference_locals(arg, aliased);
+                    yielded_locals(arg, aliased);
                 }
                 collect_aliased_in_instr(arg, aliased, functions, defined_func_base, !stores_param);
             }
@@ -260,7 +313,7 @@ fn collect_aliased_in_instr(
             ..
         } => {
             for arg in args {
-                collect_reference_locals(arg, aliased);
+                yielded_locals(arg, aliased);
                 collect_aliased_in_instr(arg, aliased, functions, defined_func_base, false);
             }
             collect_aliased_in_instr(callee, aliased, functions, defined_func_base, false);
@@ -566,42 +619,31 @@ fn collect_container_escapes(instr: &WirInstr, names: &mut IndexSet<String>) {
     match instr {
         WirInstr::StructNew { fields, .. } => {
             for field in fields {
-                collect_reference_locals(field, names);
+                yielded_locals(field, names);
             }
         }
         WirInstr::ArrayNewFixed { elements, .. } => {
             for element in elements {
-                collect_reference_locals(element, names);
+                yielded_locals(element, names);
             }
         }
-        WirInstr::ArrayNew { init, .. } => collect_reference_locals(init, names),
+        WirInstr::ArrayNew { init, .. } => yielded_locals(init, names),
         WirInstr::StructSet { value, .. }
         | WirInstr::ArraySet { value, .. }
         | WirInstr::ArrayFill { value, .. }
         | WirInstr::TableSet { value, .. }
-        | WirInstr::GlobalSet { value, .. } => collect_reference_locals(value, names),
+        | WirInstr::GlobalSet { value, .. } => yielded_locals(value, names),
         _ => {}
     }
 }
 
-/// The locals whose own object `instr` hands over, wherever in it the read of
-/// them sits.
-//
-// A load hands over the field's pointee, not the base: naming that pointee takes
-// a local `collect_container_escapes` has already invalidated. A nested call
-// inside `instr` is its own channel, reached by the caller's walk.
-fn collect_reference_locals(instr: &WirInstr, names: &mut IndexSet<String>) {
-    match instr {
-        WirInstr::LocalGet { name, result_ty } => {
-            if result_ty.is_reference() {
-                names.insert(name.clone());
-            }
-        }
-        WirInstr::StructGet { .. }
-        | WirInstr::ArrayGet { .. }
-        | WirInstr::ArrayGetS { .. }
-        | WirInstr::ArrayGetU { .. } => {}
-        _ => instr.for_each_child(&mut |child| collect_reference_locals(child, names)),
+fn invalidate_handed_over(args: &[WirInstr], known: &mut FieldKnowledge<'_>) {
+    let mut names = IndexSet::default();
+    for arg in args {
+        yielded_locals(arg, &mut names);
+    }
+    for name in &names {
+        known.invalidate_mutated_local(name);
     }
 }
 
@@ -616,15 +658,7 @@ fn invalidate_call_effects_before_rewrite(instr: &WirInstr, known: &mut FieldKno
         // a bare argument, and a block is where this walk stops.
         WirInstr::Call { args, .. }
         | WirInstr::CallRef { args, .. }
-        | WirInstr::CallIndirect { args, .. } => {
-            let mut names = IndexSet::default();
-            for arg in args {
-                collect_reference_locals(arg, &mut names);
-            }
-            for name in &names {
-                known.invalidate_mutated_local(name);
-            }
-        }
+        | WirInstr::CallIndirect { args, .. } => invalidate_handed_over(args, known),
         WirInstr::RefAsNonNull(inner) => {
             if let WirInstr::LocalGet { name, .. } = inner.as_ref() {
                 known.invalidate_mutated_local(name);
@@ -738,7 +772,9 @@ fn invalidate_effects_in_instr(
         WirInstr::StructSet {
             expr, field_name, ..
         } => {
-            if let WirInstr::LocalGet { name, .. } = expr.as_ref() {
+            let mut bases = IndexSet::default();
+            yielded_locals(expr, &mut bases);
+            for name in &bases {
                 known.invalidate_mutated_field(name, field_name);
             }
         }
@@ -752,15 +788,7 @@ fn invalidate_effects_in_instr(
         // it retains them.
         WirInstr::Call { args, .. }
         | WirInstr::CallRef { args, .. }
-        | WirInstr::CallIndirect { args, .. } => {
-            let mut names = IndexSet::default();
-            for arg in args {
-                collect_reference_locals(arg, &mut names);
-            }
-            for name in &names {
-                known.invalidate_mutated_local(name);
-            }
-        }
+        | WirInstr::CallIndirect { args, .. } => invalidate_handed_over(args, known),
         WirInstr::Block { .. } | WirInstr::Seq(_) | WirInstr::Loop { .. } => {
             if scope == InvalidationScope::Statement {
                 return;
