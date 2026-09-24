@@ -1,0 +1,16 @@
+// Two modules each bind `Dom::f` to `web:a/global#f`, returning different
+// types. One binding cannot serve both, and the call sites crashed on it.
+
+use { Dom as ADom } from "./sub/cm_same_interface_name_two_modules_a.wado";
+use { Dom as BDom } from "./sub/cm_same_binding_two_signatures_b.wado";
+
+export fn run() with (ADom, BDom) {
+    let _ = ADom::f();
+    let _ = BDom::f();
+}
+
+__DATA__
+{
+  "compile_error": "two `Dom::f` bind `web:a/global#f` with different signatures: make them agree",
+  "compile_error_codes": ["DUPLICATE_DEFINITION"]
+}

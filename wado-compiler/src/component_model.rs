@@ -671,6 +671,25 @@ pub fn one_per_cm_name<'a>(
         .collect()
 }
 
+/// A stable key for an AST type, ignoring spans.
+fn type_key(ty: &Type) -> String {
+    match ty {
+        Type::Named(n) => n.name.clone(),
+        Type::Reference(inner) => format!("&{}", type_key(inner)),
+        Type::MutReference(inner) => format!("&mut {}", type_key(inner)),
+        Type::Generic(g) => format!("{}:{}", g.name, type_keys(&g.args)),
+        Type::NamespacedGeneric(g) => {
+            format!("{}::{}:{}", g.namespace, g.name, type_keys(&g.args))
+        }
+        Type::Tuple(elems) => format!("[{}]", type_keys(elems)),
+        _ => format!("{ty:?}"),
+    }
+}
+
+fn type_keys(types: &[Type]) -> String {
+    types.iter().map(type_key).collect::<Vec<_>>().join(",")
+}
+
 /// Information about a CM function from an interface method
 #[derive(Debug, Clone)]
 pub struct CmFunctionInfo {
@@ -713,6 +732,24 @@ impl CmFunctionInfo {
     #[must_use]
     pub fn used_key(&self) -> String {
         used_wasi_key(&self.interface_name, &self.method_name)
+    }
+
+    /// The CM function this binds, as `interface#function` (a world import: the bare function).
+    fn cm_path(&self) -> String {
+        if self.interface_path.is_empty() {
+            return self.wasi_func_name.clone();
+        }
+        format!("{}#{}", self.interface_path, self.wasi_func_name)
+    }
+
+    /// The CM parameter names and every type, span-insensitive.
+    fn signature_key(&self) -> (bool, Vec<(&str, String)>, Option<String>) {
+        let params = self
+            .params
+            .iter()
+            .map(|(_, cm_name, ty)| (cm_name.as_str(), type_key(ty)))
+            .collect();
+        (self.is_async, params, self.return_type.as_ref().map(type_key))
     }
 
     /// Whether `canon lower` requires the Memory canonical option.
@@ -2182,7 +2219,7 @@ impl CmInterfaceRegistry {
                     func.is_async,
                     params,
                     return_type,
-                );
+                )?;
             }
         }
 
@@ -3379,18 +3416,6 @@ impl CmInterfaceRegistry {
             .function
             .clone()
             .unwrap_or_else(|| method_name.replace('_', "-"));
-        let qualified_name = format!("{interface_name}::{method_name}");
-        // A call finds its binding by these names alone, so a second binding
-        // under them would take over the first one's call sites.
-        if let Some(bound) = self.effect_to_func.get(&qualified_name)
-            && (bound.interface_path != interface_path || bound.wasi_func_name != wasi_func_name)
-        {
-            return Err(format!(
-                "`{qualified_name}` binds `{interface_path}#{wasi_func_name}`, but another \
-                 `{qualified_name}` already binds `{}#{}`: rename one of the interfaces",
-                bound.interface_path, bound.wasi_func_name
-            ));
-        }
         // Params carry their value types: newtypes peeled, extern handles kept,
         // so a binding's GC-level types match the caller's.
         let resolved_params: Vec<(String, String, Type)> = params
@@ -3409,26 +3434,40 @@ impl CmInterfaceRegistry {
             return_type,
         };
 
-        // Generate the local alias name using utility function
-        // Format: wasi:{package}/{interface_name}::{method_name}
-        let local_name = func_info.local_alias_name();
-
-        self.used_names.insert(local_name.clone());
-
-        // Register in effect -> func map
-        self.effect_to_func
-            .insert(qualified_name, func_info.clone());
-
-        // Register in interface -> functions map
+        if !self.bind(format!("{interface_name}::{method_name}"), &func_info)? {
+            return Ok(());
+        }
+        self.local_aliases
+            .insert(func_info.local_alias_name(), (interface_path.clone(), wasi_func_name));
         self.interfaces
-            .entry(interface_path.clone())
+            .entry(interface_path)
             .or_default()
             .push(func_info);
-
-        // Register local alias: local_name -> (interface_path, wasi_func_name)
-        self.local_aliases
-            .insert(local_name, (interface_path, wasi_func_name));
         Ok(())
+    }
+
+    /// Binds `key` to `func_info`; `Ok(false)` when `key` already binds the same signature.
+    fn bind(&mut self, key: String, func_info: &CmFunctionInfo) -> Result<bool, String> {
+        // A call finds its binding by `key` alone, so a second binding under it
+        // would take over the first one's call sites.
+        if let Some(bound) = self.effect_to_func.get(&key) {
+            let (path, bound_path) = (func_info.cm_path(), bound.cm_path());
+            if path != bound_path {
+                return Err(format!(
+                    "`{key}` binds `{path}`, but another `{key}` already binds `{bound_path}`: \
+                     rename one of the interfaces"
+                ));
+            }
+            if func_info.signature_key() != bound.signature_key() {
+                return Err(format!(
+                    "two `{key}` bind `{path}` with different signatures: make them agree"
+                ));
+            }
+            return Ok(false);
+        }
+        self.used_names.insert(func_info.local_alias_name());
+        self.effect_to_func.insert(key, func_info.clone());
+        Ok(true)
     }
 
     /// Register a world-level function import (Phase 9), keyed by its bare name
@@ -3441,7 +3480,7 @@ impl CmInterfaceRegistry {
         is_async: bool,
         params: Vec<(String, String, Type)>,
         return_type: Option<Type>,
-    ) {
+    ) -> Result<(), String> {
         let resolved_params: Vec<(String, String, Type)> = params
             .into_iter()
             .map(|(name, cm_name, ty)| (name, cm_name, self.value_type(&ty)))
@@ -3459,12 +3498,15 @@ impl CmInterfaceRegistry {
             params: resolved_params,
             return_type,
         };
-        let local_name = func_info.local_alias_name();
-        self.used_names.insert(local_name.clone());
-        self.local_aliases
-            .insert(local_name, (String::new(), cm_func_name.to_string()));
-        self.effect_to_func.insert(func_name.to_string(), func_info);
+        if !self.bind(func_name.to_string(), &func_info)? {
+            return Ok(());
+        }
+        self.local_aliases.insert(
+            func_info.local_alias_name(),
+            (String::new(), cm_func_name.to_string()),
+        );
         self.world_import_functions.insert(func_name.to_string());
+        Ok(())
     }
 
     /// Whether `name` is a world-level function import (Phase 9).
@@ -4094,24 +4136,6 @@ impl CmTypeGen {
         self.cache.insert(key.to_string(), idx);
     }
 
-    /// Compute a stable cache key for an AST type (ignoring spans)
-    fn type_key(ty: &Type) -> String {
-        match ty {
-            Type::Named(n) => n.name.clone(),
-            Type::Reference(inner) => format!("&{}", Self::type_key(inner)),
-            Type::MutReference(inner) => format!("&mut {}", Self::type_key(inner)),
-            Type::Generic(g) => {
-                let args: Vec<String> = g.args.iter().map(Self::type_key).collect();
-                format!("{}:{}", g.name, args.join(","))
-            }
-            Type::Tuple(elems) => {
-                let args: Vec<String> = elems.iter().map(Self::type_key).collect();
-                format!("[{}]", args.join(","))
-            }
-            _ => format!("{ty:?}"),
-        }
-    }
-
     /// Define a variant type and its named export, returning the exported type index.
     ///
     /// Handles payload types recursively via `ast_type_to_cm`.
@@ -4553,7 +4577,7 @@ impl CmTypeGen {
                         cm_interface_registry,
                         resource_exports,
                     );
-                    let key = Self::type_key(&generic.args[0]);
+                    let key = type_key(&generic.args[0]);
                     let idx = self.define_list(sink, elem_cm, &key);
                     ComponentValType::Type(idx)
                 }
@@ -4572,8 +4596,8 @@ impl CmTypeGen {
                     );
                     let key = format!(
                         "{},{}",
-                        Self::type_key(&generic.args[0]),
-                        Self::type_key(&generic.args[1])
+                        type_key(&generic.args[0]),
+                        type_key(&generic.args[1])
                     );
                     let idx = self.define_map(sink, key_cm, value_cm, &key);
                     ComponentValType::Type(idx)
@@ -4603,8 +4627,8 @@ impl CmTypeGen {
                     };
                     let key = format!(
                         "{},{}",
-                        Self::type_key(&generic.args[0]),
-                        Self::type_key(&generic.args[1])
+                        type_key(&generic.args[0]),
+                        type_key(&generic.args[1])
                     );
                     let idx = self.define_result(sink, ok_type, err_type, &key);
                     ComponentValType::Type(idx)
@@ -4616,7 +4640,7 @@ impl CmTypeGen {
                         cm_interface_registry,
                         resource_exports,
                     );
-                    let key = Self::type_key(&generic.args[0]);
+                    let key = type_key(&generic.args[0]);
                     let idx = self.define_option(sink, inner_cm, &key);
                     ComponentValType::Type(idx)
                 }
@@ -4630,7 +4654,7 @@ impl CmTypeGen {
                             cm_interface_registry,
                             resource_exports,
                         );
-                        (Some(cm), Self::type_key(&generic.args[0]))
+                        (Some(cm), type_key(&generic.args[0]))
                     };
                     let idx = self.define_stream(sink, elem, &key);
                     ComponentValType::Type(idx)
@@ -4645,7 +4669,7 @@ impl CmTypeGen {
                             cm_interface_registry,
                             resource_exports,
                         );
-                        (Some(cm), Self::type_key(&generic.args[0]))
+                        (Some(cm), type_key(&generic.args[0]))
                     };
                     let idx = self.define_future(sink, inner, &key);
                     ComponentValType::Type(idx)
@@ -4670,12 +4694,7 @@ impl CmTypeGen {
                     .iter()
                     .map(|e| self.ast_type_to_cm(sink, e, cm_interface_registry, resource_exports))
                     .collect();
-                let key = elems
-                    .iter()
-                    .map(Self::type_key)
-                    .collect::<Vec<_>>()
-                    .join(",");
-                let idx = self.define_tuple(sink, cm_elems, &key);
+                let idx = self.define_tuple(sink, cm_elems, &type_keys(elems));
                 ComponentValType::Type(idx)
             }
             _ => panic!("unsupported type for CM instance: {ty:?}"),

@@ -1,0 +1,16 @@
+// Two modules each declare the same `Dom::f` binding. They share one import,
+// where a second copy made the component invalid.
+
+use { Dom as ADom } from "./sub/cm_same_interface_name_two_modules_a.wado";
+use { Dom as BDom } from "./sub/cm_same_binding_declared_twice_b.wado";
+
+export fn run() with (ADom, BDom) {
+    let _ = ADom::f();
+    let _ = BDom::f();
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "skip_os": true
+}
