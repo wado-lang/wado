@@ -29,8 +29,7 @@ variant Content {
     Text(String),
 }
 
-// The tree is linked as the DOM standard models it, so navigating it copies
-// nothing and takes constant time.
+// Linked as the DOM standard models the tree.
 struct FakeNode {
     class: f64,
     content: Content,
@@ -131,7 +130,7 @@ impl FakeDom {
         assert into_document || self.nodes[parent].content matches { Element(_) }, "HierarchyRequestError: only a document or an element holds children";
         assert !self.is_inclusive_ancestor(node, parent), "HierarchyRequestError: a node cannot be inserted into itself or its descendant";
         match self.nodes[node].content {
-            Document | Window => panic("HierarchyRequestError: a document is never a child"),
+            Document | Window => panic("HierarchyRequestError: a document or a window is never a child"),
             Text(_) => {
                 assert !into_document, "HierarchyRequestError: a document holds no text";
             },

@@ -969,7 +969,7 @@ pub struct CmInterfaceRegistry {
     resources: IndexMap<(String, String), String>,
 
     /// Resources declared `#[cm(..., linearity = "unrestricted")]`, registered as
-    /// `u32` newtypes rather than in [`Self::resources`].
+    /// `f64` newtypes rather than in [`Self::resources`].
     /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
     unrestricted_resources: IndexMap<(String, String), String>,
 
@@ -1990,7 +1990,7 @@ impl CmInterfaceRegistry {
                 // Use the #[cm] fragment as the CM name (preserves acronym casing like DNS, TLS)
                 let cm_name = cm_attr_cm_name(&resource.attrs, &resource.name);
                 // An unrestricted resource is erased at the boundary, which sees
-                // the universal handle, a copyable `u32`, so it registers as a
+                // the universal handle, a copyable `f64`, so it registers as a
                 // newtype and every `own`/`borrow` path passes it by.
                 if declares_unrestricted(&resource.attrs) {
                     self.unrestricted_resources
@@ -3266,7 +3266,7 @@ impl CmInterfaceRegistry {
         self.newtypes
             .iter()
             .filter_map(move |((source, name), ty)| {
-                // An extern-handle handle registers here to reach the `u32` every
+                // An extern-handle handle registers here to reach the `f64` every
                 // boundary path lowers it to, but it names no CM type: the WIT
                 // spells the handle inline, so no alias declares it.
                 if source.starts_with(interface_prefix)
@@ -3318,7 +3318,7 @@ impl CmInterfaceRegistry {
         let resources: IndexSet<&str> = self.resources.keys().map(|(_, n)| n.as_str()).collect();
         let structs: IndexSet<&str> = self.structs.keys().map(|(_, n)| n.as_str()).collect();
 
-        // Check all parameter types, at the boundary's view: an extern handle is a `u32`.
+        // Check all parameter types, at the boundary's view: an extern handle is an `f64`.
         for (_, _, ty) in &func.params {
             let resolved = self.resolve_type(ty);
             if !is_param_type_supported_with_types(&resolved, &enums, &resources, &structs) {
