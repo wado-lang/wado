@@ -23,7 +23,9 @@ use crate::token::Span;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{reachable_blocks, strip_one_value_copy};
+use super::arena_query::{
+    is_pure_operand, operand_read_locals, reachable_blocks, strip_one_value_copy,
+};
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::SeqField;
 use crate::lower::plan::value_copy;
@@ -1504,6 +1506,11 @@ impl Rewriter<'_, '_> {
                 )?;
                 let sig = sig_key_of_id(ctx.sig, func_id)?;
                 let mut out = Vec::with_capacity(arity);
+                let per_field = if self.elements_observe_writes(engine, rec_local, &per_field) {
+                    self.spill_elements(engine, rec_local, per_field, span, &mut out)
+                } else {
+                    per_field
+                };
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
                     let field = ctx.field_map[&(rec_local, k as u32)].clone();
                     let call =
@@ -1524,6 +1531,17 @@ impl Rewriter<'_, '_> {
                     self.decompose_source(engine, src.as_expr()?, arity, &layout, all_scalar)?;
                 let sig = sig_key_of_id(ctx.sig, func_id)?;
                 let mut out = Vec::with_capacity(arity);
+                let (idx, per_field) =
+                    if self.elements_observe_writes(engine, rec_local, &per_field) {
+                        let idx_type = engine.body.operand_type(idx);
+                        let idx = clone_or_dup(engine, idx);
+                        let idx = spill(engine, idx, idx_type, span, &mut out);
+                        let per_field =
+                            self.spill_elements(engine, rec_local, per_field, span, &mut out);
+                        (idx, per_field)
+                    } else {
+                        (idx, per_field)
+                    };
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
                     let field = ctx.field_map[&(rec_local, k as u32)].clone();
                     let idx_clone = clone_or_dup(engine, idx);
@@ -1537,6 +1555,40 @@ impl Rewriter<'_, '_> {
             }
             _ => None,
         }
+    }
+
+    /// Whether a per-field write could land before an element that sees it:
+    /// one reads the container, or has an effect that the split would reorder
+    /// past an earlier field's write.
+    fn elements_observe_writes(&self, engine: &Engine, rec_local: u32, elems: &[Operand]) -> bool {
+        let fields: IndexSet<u32> = (0..elems.len())
+            .map(|k| self.ctx.field_map[&(rec_local, k as u32)].local_index)
+            .collect();
+        elems.iter().any(|&op| {
+            !is_pure_operand(engine.body, op)
+                || operand_read_locals(engine.body, op)
+                    .iter()
+                    .any(|l| fields.contains(l))
+        })
+    }
+
+    /// Evaluate every element into a temporary, in order, ahead of the writes.
+    fn spill_elements(
+        &self,
+        engine: &mut Engine,
+        rec_local: u32,
+        elems: Vec<Operand>,
+        span: Span,
+        out: &mut Vec<StmtId>,
+    ) -> Vec<Operand> {
+        elems
+            .into_iter()
+            .enumerate()
+            .map(|(k, op)| {
+                let ty = self.ctx.field_map[&(rec_local, k as u32)].elem_type;
+                spill(engine, op, ty, span, out)
+            })
+            .collect()
     }
 
     /// Decompose a source expression into N per-field value operands.
@@ -1819,6 +1871,46 @@ fn clone_or_dup(engine: &mut Engine, op: Operand) -> Operand {
         Operand::Expr(e) => Operand::Expr(engine.clone_expr(e)),
         Operand::Value(_) => op,
     }
+}
+
+/// Bind `op` to a fresh temporary in `out` and read it back, unless it is a
+/// constant, which reads the same wherever it lands.
+fn spill(
+    engine: &mut Engine,
+    op: Operand,
+    type_id: TypeId,
+    span: Span,
+    out: &mut Vec<StmtId>,
+) -> Operand {
+    if let Operand::Value(v) = op
+        && engine.body.values.kind(v).is_constant()
+    {
+        return op;
+    }
+    let name = format!("$csroa_elem_{}", engine.locals().len());
+    let local_index = engine.alloc_local(name.clone(), type_id, false);
+    out.push(engine.alloc_stmt(
+        StmtKind::Let {
+            name: name.clone(),
+            local_index,
+            is_mut: false,
+            is_reactive: false,
+            type_id,
+            value: op,
+            // The temporary carries the element to its one use, as the
+            // argument it replaces did.
+            skip_value_copy: true,
+        },
+        span,
+    ));
+    Operand::Expr(engine.alloc_expr(
+        ExprKind::Local {
+            index: local_index,
+            name,
+        },
+        type_id,
+        span,
+    ))
 }
 
 /// The `&v_field` / `&mut v_field` receiver of a per-field call.
