@@ -602,6 +602,24 @@ impl Keys {
         ty.and_then(|t| effects.object_key(t))
             .map_or_else(|| Keys::Set(Rc::new(TypeSet::everything())), Keys::One)
     }
+
+    fn contains(&self, key: TypeKey) -> bool {
+        match self {
+            Keys::One(k) => *k == key,
+            Keys::Set(set) => set.contains(key),
+        }
+    }
+}
+
+/// One read or write of an object: where it happens, through which operand,
+/// and which field, where it names one.
+struct AccessSite {
+    effect: Effect,
+    node: u32,
+    keys: Keys,
+    site: NodeRef,
+    receiver: Option<Operand>,
+    field: Option<u32>,
 }
 
 /// Objects per class within one body: a union-find over locals and expressions
@@ -616,7 +634,7 @@ pub(super) struct HeapFrame {
     expr_base: u32,
     expr_count: usize,
     /// Accesses to classify once every class is final.
-    accesses: Vec<(Effect, u32, Keys)>,
+    accesses: Vec<AccessSite>,
     calls: Vec<ExprId>,
     /// Assignment targets: written, not read.
     targets: IndexSet<ExprId>,
@@ -654,7 +672,7 @@ impl HeapFrame {
             let mut seen_values = IndexSet::default();
             body.for_each_operand(node, |op| {
                 if let Some(v) = op.as_value() {
-                    frame.value_reads(effects, body, v, &mut seen_values);
+                    frame.value_reads(effects, body, node, v, &mut seen_values);
                 }
             });
             match node {
@@ -821,6 +839,7 @@ impl HeapFrame {
         &mut self,
         effects: &HeapEffects,
         body: &Body,
+        site: NodeRef,
         v: ValueId,
         seen: &mut IndexSet<ValueId>,
     ) {
@@ -828,34 +847,42 @@ impl HeapFrame {
             return;
         }
         match body.values.kind(v) {
-            ValueKind::FieldAccess { receiver, .. } => {
-                let receiver = *receiver;
+            ValueKind::FieldAccess {
+                receiver,
+                field_index,
+                ..
+            } => {
+                let (receiver, field) = (*receiver, *field_index);
                 let keys = Keys::of(effects, body.values.type_of(receiver));
-                if let OperandNode::Node(n) =
-                    self.operand_node(effects, body, Operand::Value(receiver))
-                {
-                    self.accesses.push((Effect::Read, n, keys));
-                }
-                self.value_reads(effects, body, receiver, seen);
+                self.record(
+                    effects,
+                    body,
+                    Effect::Read,
+                    keys,
+                    site,
+                    Operand::Value(receiver),
+                    Some(field),
+                );
+                self.value_reads(effects, body, site, receiver, seen);
             }
             ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
-                self.value_reads(effects, body, *operand, seen);
+                self.value_reads(effects, body, site, *operand, seen);
             }
             ValueKind::Binary { lhs, rhs, .. } => {
                 let (lhs, rhs) = (*lhs, *rhs);
-                self.value_reads(effects, body, lhs, seen);
-                self.value_reads(effects, body, rhs, seen);
+                self.value_reads(effects, body, site, lhs, seen);
+                self.value_reads(effects, body, site, rhs, seen);
             }
             ValueKind::Select { cond, then, else_ } => {
                 let (cond, then, else_) = (*cond, *then, *else_);
-                self.value_reads(effects, body, cond, seen);
-                self.value_reads(effects, body, then, seen);
-                self.value_reads(effects, body, else_, seen);
+                self.value_reads(effects, body, site, cond, seen);
+                self.value_reads(effects, body, site, then, seen);
+                self.value_reads(effects, body, site, else_, seen);
             }
             ValueKind::LoopPhi { entry, body_iter } => {
                 let (entry, body_iter) = (*entry, *body_iter);
-                self.value_reads(effects, body, entry, seen);
-                self.value_reads(effects, body, body_iter, seen);
+                self.value_reads(effects, body, site, entry, seen);
+                self.value_reads(effects, body, site, body_iter, seen);
             }
             ValueKind::Opaque(_)
             | ValueKind::Int(..)
@@ -868,11 +895,48 @@ impl HeapFrame {
         }
     }
 
-    /// Record an access to the object `receiver` names.
-    fn access(&mut self, effects: &HeapEffects, body: &Body, effect: Effect, receiver: Operand) {
+    /// Record an access at `site` to the object `receiver` names.
+    fn access(
+        &mut self,
+        effects: &HeapEffects,
+        body: &Body,
+        effect: Effect,
+        site: ExprId,
+        receiver: Operand,
+        field: Option<u32>,
+    ) {
         let keys = Keys::of(effects, Some(body.operand_type(receiver)));
-        if let OperandNode::Node(n) = self.operand_node(effects, body, receiver) {
-            self.accesses.push((effect, n, keys));
+        self.record(
+            effects,
+            body,
+            effect,
+            keys,
+            NodeRef::Expr(site),
+            receiver,
+            field,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn record(
+        &mut self,
+        effects: &HeapEffects,
+        body: &Body,
+        effect: Effect,
+        keys: Keys,
+        site: NodeRef,
+        receiver: Operand,
+        field: Option<u32>,
+    ) {
+        if let OperandNode::Node(node) = self.operand_node(effects, body, receiver) {
+            self.accesses.push(AccessSite {
+                effect,
+                node,
+                keys,
+                site,
+                receiver: Some(receiver),
+                field,
+            });
         }
     }
 
@@ -894,7 +958,7 @@ impl HeapFrame {
             ExprKind::GlobalVarSet { value, .. } => self.unify_op(effects, body, ELSEWHERE, *value),
             ExprKind::Unary { op, expr: inner } => {
                 if *op == NirUnaryOp::Deref && !self.targets.contains(&e) {
-                    self.access(effects, body, Effect::Read, *inner);
+                    self.access(effects, body, Effect::Read, e, *inner, None);
                 }
                 if yields {
                     self.unify_op(effects, body, node, *inner);
@@ -913,18 +977,28 @@ impl HeapFrame {
                 }
             }
             ExprKind::Assign { target, value } => self.assign(effects, body, *target, *value),
-            ExprKind::FieldAccess { expr: inner, .. }
-            | ExprKind::Index { expr: inner, .. }
-            | ExprKind::VariantPayload { expr: inner, .. } => {
+            ExprKind::FieldAccess {
+                expr: inner,
+                field_index,
+                ..
+            } => {
                 if !self.targets.contains(&e) {
-                    self.access(effects, body, Effect::Read, *inner);
+                    self.access(effects, body, Effect::Read, e, *inner, Some(*field_index));
+                }
+                if yields {
+                    self.unify_op(effects, body, node, *inner);
+                }
+            }
+            ExprKind::Index { expr: inner, .. } | ExprKind::VariantPayload { expr: inner, .. } => {
+                if !self.targets.contains(&e) {
+                    self.access(effects, body, Effect::Read, e, *inner, None);
                 }
                 if yields {
                     self.unify_op(effects, body, node, *inner);
                 }
             }
             ExprKind::VariantTag { expr: inner } | ExprKind::VariantTest { expr: inner, .. } => {
-                self.access(effects, body, Effect::Read, *inner);
+                self.access(effects, body, Effect::Read, e, *inner, None);
             }
             ExprKind::StructLiteral { fields, .. } => {
                 for f in fields {
@@ -999,6 +1073,11 @@ impl HeapFrame {
         if let ExprKind::Local { .. } = place {
             return;
         }
+        let field = if let ExprKind::FieldAccess { field_index, .. } = place {
+            Some(*field_index)
+        } else {
+            None
+        };
         if let ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::Index { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
@@ -1009,10 +1088,16 @@ impl HeapFrame {
         {
             let receiver = self.operand_node(effects, body, *inner);
             self.unify_nodes(receiver, value_node);
-            self.access(effects, body, Effect::Write, *inner);
-        } else if let OperandNode::Node(n) = target_node {
-            self.accesses
-                .push((Effect::Write, n, Keys::of(effects, None)));
+            self.access(effects, body, Effect::Write, target, *inner, field);
+        } else if let OperandNode::Node(node) = target_node {
+            self.accesses.push(AccessSite {
+                effect: Effect::Write,
+                node,
+                keys: Keys::of(effects, None),
+                site: NodeRef::Expr(target),
+                receiver: None,
+                field: None,
+            });
         }
     }
 
@@ -1025,10 +1110,15 @@ impl HeapFrame {
         ty: Option<TypeId>,
     ) {
         let read = |frame: &mut Self, ty: Option<TypeId>| {
-            if let OperandNode::Node(n) = scrutinee {
-                frame
-                    .accesses
-                    .push((Effect::Read, n, Keys::of(effects, ty)));
+            if let OperandNode::Node(node) = scrutinee {
+                frame.accesses.push(AccessSite {
+                    effect: Effect::Read,
+                    node,
+                    keys: Keys::of(effects, ty),
+                    site: NodeRef::Pat(pat),
+                    receiver: None,
+                    field: None,
+                });
             }
         };
         match &body.pats[pat].kind {
@@ -1180,8 +1270,11 @@ impl HeapFrame {
             into_elsewhere: self.class_prov(ELSEWHERE),
             ..Summary::default()
         };
-        for (effect, n, keys) in &self.accesses {
-            let prov = self.class_prov(*n);
+        for AccessSite {
+            effect, node, keys, ..
+        } in &self.accesses
+        {
+            let prov = self.class_prov(*node);
             let access = match effect {
                 Effect::Read => &mut s.reads,
                 Effect::Write => &mut s.writes,
@@ -1343,6 +1436,22 @@ impl HeapFrame {
         key: TypeKey,
         local: u32,
     ) -> bool {
+        self.call_may_besides(effects, body, call, effect, key, local, |_| false)
+    }
+
+    /// [`Self::call_may`], leaving out the arguments `answered` accepts: the
+    /// ones a caller accounts for on its own.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn call_may_besides(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        call: ExprId,
+        effect: Effect,
+        key: TypeKey,
+        local: u32,
+        answered: impl Fn(Operand) -> bool,
+    ) -> bool {
         let h = self.local_root(local);
         let h_escapes = h.is_none_or(|r| !self.prov[r as usize].is_fresh());
         let (target, args) = call_parts(effects, body, call);
@@ -1353,7 +1462,7 @@ impl HeapFrame {
             return true;
         }
         args.iter().enumerate().any(|(j, &a)| {
-            if !self.shares(h, self.lookup(effects, body, a)) {
+            if answered(a) || !self.shares(h, self.lookup(effects, body, a)) {
                 return false;
             }
             let ty = body.operand_type(a);
@@ -1367,6 +1476,28 @@ impl HeapFrame {
                 }
                 Target::Opaque => effects.reach(ty).contains(key),
             }
+        })
+    }
+
+    /// Whether an access at a site `at` accepts may reach field `field` of the
+    /// `key` object `local` holds, other than a field access whose receiver
+    /// `own` accepts. `writes_only` leaves out the reads.
+    pub(super) fn accessed_besides(
+        &self,
+        writes_only: bool,
+        at: impl Fn(NodeRef) -> bool,
+        (key, field): (TypeKey, u32),
+        local: u32,
+        own: impl Fn(Operand) -> bool,
+    ) -> bool {
+        let h = self.local_root(local);
+        self.accesses.iter().any(|a| {
+            (!writes_only || a.effect == Effect::Write)
+                && at(a.site)
+                && a.keys.contains(key)
+                && a.field.is_none_or(|f| f == field)
+                && !(a.field.is_some() && a.receiver.is_some_and(&own))
+                && self.shares(h, OperandNode::Node(self.parent[a.node as usize]))
         })
     }
 }
