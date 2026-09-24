@@ -610,8 +610,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             self.resolve_expr(ast_value, ctx, Some(target_type)),
                             target_type,
                         )
-                    } else if let Some(coerced) =
-                        self.try_coerce_struct_to_map(ast_value, ctx, target_type)
+                    } else if let Some(coerced) = self
+                        .try_coerce_struct_newtype(ast_value, ctx, target_type)
+                        .or_else(|| self.try_coerce_struct_to_map(ast_value, ctx, target_type))
                     {
                         (coerced, target_type)
                     } else {

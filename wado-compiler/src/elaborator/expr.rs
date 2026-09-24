@@ -799,6 +799,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return param_type;
         }
 
+        if self.dispatched_operation(ident).is_some() {
+            let _ = self.emit(TypeError::OperationAsValue {
+                name: ident.name.clone(),
+                span: ident.span,
+            });
+            return TypeTable::ERROR;
+        }
+
         // Check for associated constants (e.g., f64::PI, i32::MAX). The
         // constant's body is *foreign* AST owned by `const_module`; we
         // re-resolve it here only for the consumer's inference side effects.
@@ -2794,15 +2802,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if matches!(scrutinee_type, TypeTable::ERROR | TypeTable::UNKNOWN) {
             return;
         }
-        let classified: Vec<(bool, Pat)> = arms
+        // An arm that failed to resolve was reported there, and coverage over
+        // the rest would report its absence again.
+        let Some(classified) = arms
             .iter()
             .map(|arm| {
-                (
-                    arm.guard.is_none(),
-                    self.exh_pattern(&arm.pattern, scrutinee_type),
-                )
+                let pattern = self.exh_pattern(&arm.pattern, scrutinee_type)?;
+                Some((arm.guard.is_none(), pattern))
             })
-            .collect();
+            .collect::<Option<Vec<(bool, Pat)>>>()
+        else {
+            return;
+        };
         self.check_range_overlaps(&classified, span);
         self.check_unreachable_arms(arms, &classified);
 
@@ -2848,11 +2859,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Project an AST pattern onto the shape coverage reads, asked of the
-    /// structure its type wraps, as pattern resolution asks it.
-    fn exh_pattern(&mut self, pattern: &ast::Pattern, written_type: TypeId) -> Pat {
+    /// structure its type wraps. `None` for a pattern that failed to resolve.
+    fn exh_pattern(&mut self, pattern: &ast::Pattern, written_type: TypeId) -> Option<Pat> {
         let scrutinee_type = self.structure_head(written_type);
-        match pattern {
-            ast::Pattern::Wildcard | ast::Pattern::Error(_) => Pat::Wild,
+        Some(match pattern {
+            ast::Pattern::Error(_) => return None,
+            ast::Pattern::Wildcard => Pat::Wild,
             ast::Pattern::Ident { name, .. } | ast::Pattern::MutIdent { name, .. } => {
                 // A bare identifier is a case when it names one, a constant-value
                 // pattern when it names an immutable global, else a binding.
@@ -2861,62 +2873,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return self.exh_case(scrutinee_type, name, None);
                 }
                 if !is_mut && self.is_immutable_global(name) {
-                    return Pat::Opaque;
+                    return Some(Pat::Opaque);
                 }
                 Pat::Wild
             }
-            ast::Pattern::Literal(lit) => self.exh_literal(lit, scrutinee_type),
+            ast::Pattern::Literal(lit) => return self.exh_literal(lit, scrutinee_type),
             ast::Pattern::Variant {
                 variant_name,
                 variant_qualifier,
                 bindings,
                 ..
-            } => self.exh_variant(
-                variant_name,
-                variant_qualifier.as_ref(),
-                bindings,
-                written_type,
-            ),
+            } => {
+                return self.exh_variant(
+                    variant_name,
+                    variant_qualifier.as_ref(),
+                    bindings,
+                    written_type,
+                );
+            }
             ast::Pattern::Or(alternatives) => Pat::Or(
                 alternatives
                     .iter()
                     .map(|alt| self.exh_pattern(alt, written_type))
-                    .collect(),
+                    .collect::<Option<_>>()?,
             ),
             ast::Pattern::Range {
                 start, end, kind, ..
-            } => self.exh_range(start, end, *kind, scrutinee_type),
+            } => return self.exh_range(start, end, *kind, scrutinee_type),
             ast::Pattern::Tuple(patterns, _) => {
-                let Some(types) = self.tysys.type_table.borrow().as_tuple(scrutinee_type) else {
-                    return Pat::Wild;
-                };
+                let types = self.tysys.type_table.borrow().as_tuple(scrutinee_type)?;
                 let elements = types
                     .iter()
                     .enumerate()
                     .map(|(i, &ty)| {
                         patterns
                             .get(i)
-                            .map_or(Pat::Wild, |p| self.exh_pattern(p, ty))
+                            .map_or(Some(Pat::Wild), |p| self.exh_pattern(p, ty))
                     })
-                    .collect();
+                    .collect::<Option<_>>()?;
                 Pat::Product {
                     fields: None,
                     elements,
                 }
             }
             ast::Pattern::Struct { fields, .. } => {
-                let Some(declared) = self.struct_field_types(scrutinee_type) else {
-                    return Pat::Wild;
-                };
+                let declared = self.struct_field_types(scrutinee_type)?;
                 let elements = declared
                     .iter()
                     .map(|(name, ty)| {
                         fields
                             .iter()
                             .find(|f| f.field_name == *name)
-                            .map_or(Pat::Wild, |f| self.exh_pattern(&f.pattern, *ty))
+                            .map_or(Some(Pat::Wild), |f| self.exh_pattern(&f.pattern, *ty))
                     })
-                    .collect();
+                    .collect::<Option<_>>()?;
                 Pat::Product {
                     fields: Some(declared.into_iter().map(|(name, _)| name).collect()),
                     elements,
@@ -2936,10 +2946,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     Pat::Narrow(target)
                 } else {
-                    self.exh_pattern(inner, target)
+                    return self.exh_pattern(inner, target);
                 }
             }
-        }
+        })
     }
 
     /// A struct's fields in declaration order, typed at this instance.
@@ -3044,11 +3054,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn exh_literal(&mut self, lit: &Literal, scrutinee_type: TypeId) -> Pat {
+    fn exh_literal(&mut self, lit: &Literal, scrutinee_type: TypeId) -> Option<Pat> {
         // A literal that does not parse was reported where it was lexed or
         // resolved, and takes no value here.
         let value = match lit {
-            Literal::Number(repr) if util::is_float_only_literal(repr) => return Pat::Wild,
+            Literal::Number(repr) if util::is_float_only_literal(repr) => return None,
             Literal::Number(repr) => {
                 if self.exh_is_unsigned(scrutinee_type) {
                     util::parse_u128_literal(repr).map(|v| v as i128).ok()
@@ -3056,7 +3066,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     util::parse_i128_literal(repr).ok()
                 }
             }
-            Literal::Bool(b) => return Pat::Bool(*b),
+            Literal::Bool(b) => return Some(Pat::Bool(*b)),
             Literal::Char(raw) => escape::unescape_char(raw).ok().map(|c| c as i128),
             Literal::Byte(raw) => escape::unescape_byte(raw).ok().map(i128::from),
             // `null` is the `None` case where the scrutinee has one.
@@ -3070,12 +3080,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return if self.is_known_case_of_type(scrutinee_type, &none, None) {
                     self.exh_case(scrutinee_type, &none, None)
                 } else {
-                    Pat::Opaque
+                    Some(Pat::Opaque)
                 };
             }
-            _ => return Pat::Opaque,
+            _ => return Some(Pat::Opaque),
         };
-        value.map_or(Pat::Opaque, |v| self.exh_int(v, v, scrutinee_type))
+        Some(self.exh_int(value?, value?, scrutinee_type))
     }
 
     /// The case `name` of the enum or variant `scrutinee_type`, its payload
@@ -3085,7 +3095,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
         name: &str,
         payload: Option<&ast::Pattern>,
-    ) -> Pat {
+    ) -> Option<Pat> {
         if let Some(enum_info) = self.enum_of_type(scrutinee_type) {
             let cases: Rc<[Case]> = enum_info
                 .cases
@@ -3095,21 +3105,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     has_payload: false,
                 })
                 .collect();
-            let Some(index) = cases.iter().position(|c| c.name == name) else {
-                return Pat::Wild;
-            };
-            return Pat::Case {
+            let index = cases.iter().position(|c| c.name == name)?;
+            return Some(Pat::Case {
                 cases,
                 index,
                 payload: None,
-            };
+            });
         }
-        let Some(variant_info) = self.variant_of_type(scrutinee_type).cloned() else {
-            return Pat::Wild;
-        };
-        let Some(index) = variant_info.cases.iter().position(|c| c.name == name) else {
-            return Pat::Wild;
-        };
+        let variant_info = self.variant_of_type(scrutinee_type).cloned()?;
+        let index = variant_info.cases.iter().position(|c| c.name == name)?;
         let cases: Rc<[Case]> = variant_info
             .cases
             .iter()
@@ -3118,21 +3122,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 has_payload: c.payload != TypeTable::UNIT,
             })
             .collect();
-        let payload = payload.filter(|_| cases[index].has_payload).map(|p| {
-            let type_args = match self.tysys.type_table.borrow().get(scrutinee_type) {
-                ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
-                _ => Vec::new(),
-            };
-            let payload_type = self
-                .tysys
-                .substitute_type_params(variant_info.cases[index].payload, &type_args);
-            Box::new(self.exh_pattern(p, payload_type))
-        });
-        Pat::Case {
+        let payload = match payload.filter(|_| cases[index].has_payload) {
+            Some(p) => {
+                let type_args = match self.tysys.type_table.borrow().get(scrutinee_type) {
+                    ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                    _ => Vec::new(),
+                };
+                let payload_type = self
+                    .tysys
+                    .substitute_type_params(variant_info.cases[index].payload, &type_args);
+                Some(Box::new(self.exh_pattern(p, payload_type)?))
+            }
+            None => None,
+        };
+        Some(Pat::Case {
             cases,
             index,
             payload,
-        }
+        })
     }
 
     fn exh_variant(
@@ -3141,15 +3148,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         variant_qualifier: Option<&ast::Type>,
         bindings: &[ast::Pattern],
         written_type: TypeId,
-    ) -> Pat {
+    ) -> Option<Pat> {
         let scrutinee_type = self.structure_head(written_type);
         let normalized = self
             .strip_ns_prefix(variant_name)
             .unwrap_or(variant_name)
             .to_string();
 
-        // A bare name that is no case: an associated constant is its value, a
-        // namespaced global an opaque constant-value pattern; anything else binds.
+        // A name that is no case: an associated constant is its value, a
+        // namespaced global an opaque constant; a bare one binds.
         if bindings.is_empty()
             && !self.is_known_case_of_type(written_type, &normalized, variant_qualifier)
         {
@@ -3162,22 +3169,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .imports
                     .pattern_ns_member(variant_qualifier, variant_name)
                     .is_some_and(|alias| self.is_immutable_global(&alias));
-                return if names_global { Pat::Opaque } else { Pat::Wild };
+                if names_global {
+                    return Some(Pat::Opaque);
+                }
+                let is_bare = variant_qualifier.is_none() && !variant_name.contains("::");
+                return is_bare.then_some(Pat::Wild);
             };
-            return match &const_expr {
+            return Some(match &const_expr {
                 ast::Expr::Literal(lit) if !matches!(lit.value, Literal::Null) => {
                     match self.exh_literal(&lit.value, scrutinee_type) {
-                        pattern @ (Pat::Int { .. } | Pat::Bool(_)) => pattern,
+                        Some(pattern @ (Pat::Int { .. } | Pat::Bool(_))) => pattern,
                         _ => Pat::Opaque,
                     }
                 }
                 _ => Pat::Opaque,
-            };
+            });
         }
 
         // A mismatched qualifier was reported where the pattern was resolved.
         if !self.pattern_qualifier_matches_scrutinee(written_type, variant_qualifier) {
-            return Pat::Wild;
+            return None;
         }
         self.exh_case(scrutinee_type, &normalized, bindings.first())
     }
@@ -3188,22 +3199,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         end: &ast::Pattern,
         kind: ast::RangeKind,
         scrutinee_type: TypeId,
-    ) -> Pat {
+    ) -> Option<Pat> {
         // Bad or empty bounds were reported where the pattern was resolved.
         let is_unsigned = self.exh_is_unsigned(scrutinee_type);
-        let (Some(start_val), Some(end_val)) = (
-            util::range_endpoint_to_i128(start, is_unsigned),
-            util::range_endpoint_to_i128(end, is_unsigned),
-        ) else {
-            return Pat::Wild;
-        };
+        let start_val = util::range_endpoint_to_i128(start, is_unsigned)?;
+        let end_val = util::range_endpoint_to_i128(end, is_unsigned)?;
         let inclusive = matches!(kind, ast::RangeKind::Inclusive);
         let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
         if order.is_gt() || (!inclusive && order.is_ge()) {
-            return Pat::Wild;
+            return None;
         }
         let hi = if inclusive { end_val } else { end_val - 1 };
-        self.exh_int(start_val, hi, scrutinee_type)
+        Some(self.exh_int(start_val, hi, scrutinee_type))
     }
 
     fn format_missing_cases(cases: &[String]) -> String {
@@ -3620,21 +3627,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type
     }
 
-    /// The struct declaration an unnamed literal's target names, or `None`
-    /// where it declares none and the literal interns by its fields. A generic
-    /// struct built from `From<Array<…>>` reads the literal as key-value pairs.
-    pub(super) fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<DefId> {
-        match *self.tysys.type_table.borrow().get(expected_type?) {
+    /// The struct declaration an unnamed literal's target names, or `None` where
+    /// it declares none or builds from key-value pairs.
+    pub(super) fn implicit_struct_target(
+        &mut self,
+        expected_type: Option<TypeId>,
+    ) -> Option<DefId> {
+        let expected_type = expected_type?;
+        let resolved = self.tysys.type_table.borrow().get(expected_type).clone();
+        match resolved {
             ResolvedType::Struct {
                 def: StructDef::Decl(def),
                 ..
             } => Some(def),
             ResolvedType::GenericInstance { def, .. } => {
-                let converts = self
-                    .tysys
-                    .compiler_trait_def(CompilerItem::From)
-                    .is_some_and(|from| self.tysys.trait_env.converts_from_array(def, from));
-                (!converts && self.lookup_struct_fields_of_decl(def).is_some()).then_some(def)
+                (self.lookup_struct_fields_of_decl(def).is_some()
+                    && !self.is_key_value_literal_target(expected_type))
+                .then_some(def)
             }
             _ => None,
         }

@@ -103,9 +103,8 @@ fn file_path_definition(ctx: &QueryContext, line: usize, col: usize) -> Option<D
     })
 }
 
-/// Walk the module AST looking for a file-path node whose span covers
-/// `(line, col)`: a `use` source string, the name a namespace import binds
-/// to that module, or an `#include_str` / `#include_bytes` path argument.
+/// The file path at `(line, col)`: a `use` source string or namespace name,
+/// or an `#include_str` / `#include_bytes` argument.
 fn find_file_path_at_cursor(module: &Module, line: usize, col: usize) -> Option<String> {
     for item in &module.items {
         let Item::Use(use_decl) = item else { continue };

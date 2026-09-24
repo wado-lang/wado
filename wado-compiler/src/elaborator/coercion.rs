@@ -542,15 +542,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(coerced);
         }
 
+        if let Some(coerced) = self.try_coerce_struct_newtype(expr, ctx, target_type) {
+            return Some(coerced);
+        }
+
         // Key-value literal → a type with a `From<Array<[K, V]>>` impl. The
         // sub-helper records `StructToMap` and `expression_types`.
         if let Some(coerced) = self.try_coerce_struct_to_map(expr, ctx, target_type) {
             return Some(coerced);
         }
 
-        // A key-value literal whose generic target builds from no pair array
-        // at all: say what is missing where it is written. A target declaring
-        // a struct reads the literal as that struct instead.
+        // A key-value literal whose generic target neither declares a struct
+        // nor builds from a pair array: say what is missing where it is written.
         if let Expr::StructLiteral(struct_lit) = expr
             && struct_lit.name.is_none()
             && matches!(
@@ -583,13 +586,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
+    /// An unnamed struct literal against a newtype over a struct, built as that
+    /// struct: literal coercion reaches a newtype as it reaches its base.
+    pub(super) fn try_coerce_struct_newtype(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        target_type: TypeId,
+    ) -> Option<TypeId> {
+        let Expr::StructLiteral(struct_lit) = expr else {
+            return None;
+        };
+        let base = self
+            .tysys
+            .type_table
+            .borrow()
+            .representation_head(target_type);
+        if struct_lit.name.is_some()
+            || base == target_type
+            || self.implicit_struct_target(Some(base)).is_none()
+        {
+            return None;
+        }
+        self.resolve_expr(expr, ctx, Some(base));
+        self.record_coercion(expr.id(), CoercionKind::StructNewtype, target_type);
+        self.record_expression_type(expr.id(), target_type);
+        Some(target_type)
+    }
+
     /// Coerce an anonymous struct literal into a type implementing
-    /// `From<Array<[K, V]>>` (WEP 2026-08-24).
-    ///
-    /// Records the coercion choice and resolved expression type at the
-    /// decision point so every caller (`try_coerce`, `resolve_cast`,
-    /// `resolve_let`'s struct-to-map branch) leaves an annotation —
-    /// no caller can bypass recording.
+    /// `From<Array<[K, V]>>`, recording the choice wherever it is decided.
     pub(super) fn try_coerce_struct_to_map(
         &mut self,
         expr: &Expr,

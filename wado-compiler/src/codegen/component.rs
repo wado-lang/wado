@@ -146,7 +146,7 @@ pub fn build_component(
     // type can reference the record's index. Shares `lib_type_gen` with
     // `emit_world_exports`, so the export-signature record and the canonical
     // record are one and the same.
-    prebuild_resource_payload_types(&mut builder, &mut ctx, project, &all_canonical_intrinsics);
+    prebuild_canonical_resource_types(&mut builder, &mut ctx, project, &all_canonical_intrinsics);
     prebuild_value_named_types(
         &mut builder,
         &mut ctx,
@@ -1454,9 +1454,9 @@ fn payload_type_to_cm_key(
                 .map(|t| payload_type_to_cm_key(t, ctx, project))
                 .collect(),
         ),
-        CmPayloadType::Named(decl) => CmTypeKey::Leaf(payload_decl_type_idx(ctx, project, decl)),
+        CmPayloadType::Named(decl) => CmTypeKey::Leaf(canonical_decl_type_idx(ctx, project, decl)),
         CmPayloadType::Resource(decl) => {
-            CmTypeKey::own_of(payload_decl_type_idx(ctx, project, decl))
+            CmTypeKey::own_of(canonical_decl_type_idx(ctx, project, decl))
         }
     }
 }
@@ -1481,7 +1481,11 @@ fn decl_instance_key(project: &NirPackage, decl: &CmDecl) -> String {
 
 /// The outer type index a canonical's declaration is bound to, or the alias its
 /// declaring interface exports where nothing bound one.
-fn payload_decl_type_idx(ctx: &ComponentModelContext, project: &NirPackage, decl: &CmDecl) -> u32 {
+fn canonical_decl_type_idx(
+    ctx: &ComponentModelContext,
+    project: &NirPackage,
+    decl: &CmDecl,
+) -> u32 {
     ctx.decl_type_idx(decl.def())
         .or_else(|| {
             let fq = project
@@ -1489,11 +1493,11 @@ fn payload_decl_type_idx(ctx: &ComponentModelContext, project: &NirPackage, decl
                 .interface_declaring_cm_name(decl.module(), decl.cm_name())?;
             export_alias_idx(ctx, fq, decl.cm_name())
         })
-        .unwrap_or_else(|| unaliased(&format!("the canonical payload `{}`", decl.name_suffix())))
+        .unwrap_or_else(|| unaliased(&format!("the canonical's type `{}`", decl.name_suffix())))
 }
 
 /// The distinct declarations the canonicals reach as `kind`.
-fn payload_decls(
+fn canonical_decls(
     canonical_intrinsics: &[CanonicalIntrinsic],
     kind: CmDeclKind,
 ) -> IndexMap<DefId, CmDecl> {
@@ -1510,15 +1514,14 @@ fn payload_decls(
 }
 
 /// Import the interface defining every resource a canonical names, so `own<r>`
-/// and `resource.drop` have a type to point at. Nothing else does for a
-/// guest-created future, or for a resource no imported function mentions.
-fn prebuild_resource_payload_types(
+/// and `resource.drop` have a type to point at where no imported function does.
+fn prebuild_canonical_resource_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
     canonical_intrinsics: &[CanonicalIntrinsic],
 ) {
-    for (def, decl) in payload_decls(canonical_intrinsics, CmDeclKind::Resource) {
+    for (def, decl) in canonical_decls(canonical_intrinsics, CmDeclKind::Resource) {
         if ctx.has_decl_type(def) {
             continue;
         }
@@ -1547,7 +1550,7 @@ fn prebuild_value_named_types(
         return;
     };
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
-    for (def, _) in payload_decls(canonical_intrinsics, CmDeclKind::Value) {
+    for (def, _) in canonical_decls(canonical_intrinsics, CmDeclKind::Value) {
         if ctx.has_decl_type(def) {
             continue;
         }
@@ -1818,7 +1821,7 @@ fn emit_canonical_intrinsics(
                 builder.error_context_drop();
             }
             CanonicalIntrinsic::ResourceDrop(decl) => {
-                builder.resource_drop(payload_decl_type_idx(ctx, project, decl));
+                builder.resource_drop(canonical_decl_type_idx(ctx, project, decl));
             }
         }
     }

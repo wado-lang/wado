@@ -54,6 +54,22 @@ pub(crate) struct StructFieldInfo {
     pub(super) type_param_type_ids: Vec<TypeId>,
 }
 
+/// Each slot whose default names its own or a later parameter, with the name.
+pub(super) fn forward_type_param_defaults(params: &[ast::GenericParam]) -> Vec<(usize, String)> {
+    params
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, param)| {
+            let mut heads = Vec::new();
+            collect_type_heads(param.default.as_ref()?, &mut heads);
+            let (_, name) = heads
+                .into_iter()
+                .find(|(_, name)| params[slot..].iter().any(|p| p.name == *name))?;
+            Some((slot, name))
+        })
+        .collect()
+}
+
 /// Every named head `ty` reaches, as a reference site and its spelling. The
 /// scopeless twin of `Elaborator::walk_type_heads`: a `Self::` or `T::` prefix
 /// is collected like any other and left to `declaration_at`, which answers
@@ -395,6 +411,11 @@ pub enum TypeError {
 
     /// Unknown variable
     UnknownIdentifier {
+        name: String,
+        span: Span,
+    },
+    /// An effect or resource operation read as a value rather than called.
+    OperationAsValue {
         name: String,
         span: Span,
     },
@@ -1411,6 +1432,11 @@ impl TypeError {
             TypeError::UnknownIdentifier { name, span } => (
                 Code::UndefinedVariable,
                 format!("unknown identifier '{name}'"),
+                *span,
+            ),
+            TypeError::OperationAsValue { name, span } => (
+                Code::UndefinedVariable,
+                format!("`{name}` is an operation: call it rather than read it as a value"),
                 *span,
             ),
             TypeError::UnknownBreakLabel { label, span } => (

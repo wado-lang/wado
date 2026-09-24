@@ -1,5 +1,5 @@
 // A default naming a parameter at or after its own slot is ill-formed on the
-// declaration, whether or not anything applies it.
+// declaration, whether or not anything applies it, whatever declares it.
 
 struct Fwd<A = B, B = i32> {
     v: B,
@@ -11,13 +11,34 @@ variant Own<A = A> {
 
 type Later<A = B, B = i32> = List<A>;
 
+fn free<C = D, D = i32>() -> i32 {
+    return 1;
+}
+
+trait Tr<E = F, F = i32> {
+    fn method<G = H, H = i32>(&self) -> i32;
+}
+
+struct Host {}
+
+impl Host {
+    fn assoc<K = L, L = i32>() -> i32 {
+        return 1;
+    }
+}
+
 export fn run() {}
 
 __DATA__
 {
-  "compile_error": "the default for type parameter 'A' names 'B'",
+  "compile_error": "which is declared no earlier than",
+  "compile_error_count": 7,
   "compile_errors_contains": [
     "the default for type parameter 'A' names 'B', which is declared no earlier than 'A' itself",
-    "the default for type parameter 'A' names 'A', which is declared no earlier than 'A' itself"
+    "the default for type parameter 'A' names 'A', which is declared no earlier than 'A' itself",
+    "the default for type parameter 'C' names 'D'",
+    "the default for type parameter 'E' names 'F'",
+    "the default for type parameter 'G' names 'H'",
+    "the default for type parameter 'K' names 'L'"
   ]
 }

@@ -136,9 +136,8 @@ pub fn resolve_import_plan(
         needed_resources.extend(here);
     }
 
-    // Phase 2: resource-defining interfaces for every referenced resource
-    // (transitive: a defining interface may reference further resources). A
-    // canonical reaches resources too: a `resource.drop`, or an `own<r>` payload.
+    // Phase 2: the interfaces defining every resource a signature or canonical
+    // reaches, transitively, since a defining interface may reach more.
     let mut worklist: Vec<String> = needed_resources
         .iter()
         .map(|(source, _)| source.clone())

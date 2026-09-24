@@ -438,13 +438,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         span: Span,
     ) -> Option<AstId> {
         if is_expression_keyword(name) {
-            let _ = self.logger.error_in(
-                module_source,
-                AnalyzeError::KeywordName {
-                    name: name.to_string(),
-                    span,
-                },
-            );
+            let _ = self.reject_keyword_name(module_source, name, span);
             return None;
         }
         if let Some(first) = self.symbols.defined_span_in_module(module_source, name) {
@@ -554,6 +548,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Enum(enum_decl) => {
+                    for case in &enum_decl.cases {
+                        let _ = self.reject_keyword_name(module_source, &case.name, case.name_span);
+                    }
                     let kind = SymbolKind::Enum(EnumSymbol {
                         cases: enum_decl.cases.iter().map(|c| c.name.clone()).collect(),
                     });
@@ -569,6 +566,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Variant(variant_decl) => {
+                    for case in &variant_decl.cases {
+                        let _ = self.reject_keyword_name(module_source, &case.name, case.name_span);
+                    }
                     let kind = SymbolKind::Variant(VariantSymbol {
                         cases: variant_decl.cases.iter().map(|c| c.name.clone()).collect(),
                     });
@@ -1049,6 +1049,25 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         )
     }
 
+    /// Reject a name spelled like a keyword that begins an expression.
+    fn reject_keyword_name(
+        &self,
+        module_source: &ModuleSource,
+        name: &str,
+        span: Span,
+    ) -> Result<(), Bail> {
+        if !is_expression_keyword(name) {
+            return Ok(());
+        }
+        self.logger.error_in(
+            module_source,
+            AnalyzeError::KeywordName {
+                name: name.to_string(),
+                span,
+            },
+        )
+    }
+
     /// Reject an import whose local name the module also declares.
     ///
     /// The name then means two declarations at once, and every layering that
@@ -1061,15 +1080,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         local_name: &str,
         span: Span,
     ) -> Result<(), Bail> {
-        if is_expression_keyword(local_name) {
-            return self.logger.error_in(
-                module_source,
-                AnalyzeError::KeywordName {
-                    name: local_name.to_string(),
-                    span,
-                },
-            );
-        }
+        self.reject_keyword_name(module_source, local_name, span)?;
         let Some(declared) = self
             .symbols
             .defined_span_in_module(module_source, local_name)
@@ -1241,7 +1252,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             // Wildcard import: module is loaded for side effects only,
                             // no symbols to register
                         }
-                        UseItem::Namespace { name: ns, .. } => {
+                        UseItem::Namespace {
+                            name: ns,
+                            name_span,
+                        } => {
+                            self.reject_keyword_name(from_module_source, ns, *name_span)?;
                             // Register each reachable member under its `ns$member`
                             // alias, matching how the elaborator canonicalizes
                             // `ns::member` at lookup time

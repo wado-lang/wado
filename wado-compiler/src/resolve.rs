@@ -376,9 +376,8 @@ impl Resolutions {
         }
     }
 
-    /// The declaration an operation call names, with the operation: the owner
-    /// segment of `[ns::]E::op`, or for a bare `op` imported as
-    /// `use { E::{op} }`, the declaration `op` is a member of.
+    /// The declaration an operation call names, with the operation: `E` of
+    /// `[ns::]E::op`, or of a bare `op` imported as `use { E::{op} }`.
     #[must_use]
     pub fn operation_at<'a>(&'a self, ident: &'a ast::IdentExpr) -> Option<(DefId, &'a str)> {
         if let Some(owner) = ident.owner_segment() {

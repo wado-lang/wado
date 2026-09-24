@@ -1800,12 +1800,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         result
     }
 
-    /// Resolve `a OP1 b OP2 c [OP3 d …]` as the equivalent
-    /// `(a OP1 b) & (b OP2 c) [& (c OP3 d) …]`, which reify emits. The join is
-    /// `&`, not `&&`: a chain evaluates every operand.
-    ///
-    /// Every operand but the last is bound to a `$mK` local, so
-    /// `foo() < bar() < baz()` calls each once, left to right.
+    /// Resolve `a OP1 b OP2 c …` as `(a OP1 b) & (b OP2 c) …`, every operand
+    /// but the last bound once to a `$mK` local, so each evaluates left to right.
     pub(super) fn desugar_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
@@ -1874,9 +1870,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::BOOL
     }
 
-    /// Allocate a `$mK` local for a comparison-chain operand. The `Let`
-    /// binding itself is rebuilt by reify; the body walk needs only the
-    /// `add_local` side effect (walk-order parity) and the local's type.
+    /// Allocate a `$mK` local for a comparison-chain operand, in walk order;
+    /// reify rebuilds the `Let` itself.
     fn bind_chain_operand(&mut self, idx: usize, type_id: TypeId, ctx: &mut FunctionContext) {
         let name = format!("$m{idx}");
         let _local_index = ctx.add_local(name, type_id, false, None);

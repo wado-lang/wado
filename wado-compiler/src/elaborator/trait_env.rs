@@ -1466,20 +1466,6 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
-    /// Whether some `impl From<Array<…>> for` the declaration `target` exists,
-    /// whichever of its instantiations it covers.
-    pub(super) fn converts_from_array(&self, target: DefId, from: DefId) -> bool {
-        self.all_impl_keys(&ImplTargetKey::Decl(target))
-            .iter()
-            .filter_map(|key| self.impl_headers.get(key)?.trait_.as_ref())
-            .any(|trait_| {
-                trait_.def == Some(from)
-                    && trait_.arg_ids.first().is_some_and(|arg| {
-                        matches!(arg.head(), name::TypeHead::Builtin(head) if head == TypeTable::ARRAY_TYPE_NAME)
-                    })
-            })
-    }
-
     /// Keys of the **inherent** impls on `type_name`, in global build order —
     /// the `trait_name.is_none()` subset of [`Self::all_impl_index`]. Used by
     /// instance-method lookup, which must not treat trait impls as inherent.
@@ -2048,16 +2034,20 @@ fn sited_impl_target_key(
     }
 }
 
-/// Whether the module is user code — the root package or a dependency — which
-/// coherence checks, rather than the stdlib. Ownership is per package.
+/// Whether the module is user code, which coherence checks, rather than the
+/// stdlib. Ownership is per package, a remote one included.
 pub(super) fn is_user_local(ms: &ModuleSource) -> bool {
-    matches!(
-        ms,
+    match ms {
         ModuleSource::Local { .. }
-            | ModuleSource::Dependency { .. }
-            | ModuleSource::EntryPoint { .. }
-            | ModuleSource::Redirected { .. }
-    )
+        | ModuleSource::Dependency { .. }
+        | ModuleSource::Remote { .. }
+        | ModuleSource::EntryPoint { .. }
+        | ModuleSource::Redirected { .. } => true,
+        // A Wasm asset declares only the extern functions it exports.
+        ModuleSource::Core { .. } | ModuleSource::Binding { .. } | ModuleSource::Wasm { .. } => {
+            false
+        }
+    }
 }
 
 /// The declarations a user package owns, as identities rather than bare
@@ -3162,9 +3152,9 @@ mod tests {
     }
 
     #[test]
-    fn test_is_user_local_remote_is_foreign() {
+    fn test_is_user_local_remote_is_user_code() {
         let mut interner = ModuleSourceInterner::new();
-        assert!(!is_user_local(
+        assert!(is_user_local(
             &interner.remote("https://example.com/lib.wado")
         ));
     }

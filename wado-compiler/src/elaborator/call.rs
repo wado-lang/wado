@@ -526,10 +526,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The effect or resource an operation call dispatches through, with the
-    /// operation, where that declaration declares it: `[ns::]E::op`, or a bare
-    /// `op` imported as `use { E::{op} }` from an interface. Answered by the
-    /// sites the walk resolved, so an import alias needs no translation back
-    /// into a spelling.
+    /// operation: `[ns::]E::op`, or a bare `op` imported as `use { E::{op} }`.
     pub(super) fn dispatched_operation(&self, ident: &ast::IdentExpr) -> Option<(DefId, String)> {
         let (decl, operation) = self.tysys.resolutions.operation_at(ident)?;
         let dispatches = match ident.owner_segment() {
@@ -556,11 +553,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The callee of an operation dispatch through `decl`.
-    ///
-    /// Signature resolution, the effect check, dispatch and WIR all key on the
-    /// declaration's own name and the bare operation, so neither an import
-    /// alias nor a namespace qualifier may reach them.
+    /// The callee of an operation dispatch through `decl`, keyed by the
+    /// declaration's own name, never an import alias or namespace qualifier.
     fn effect_operation_callee(&self, decl: DefId, operation: &str) -> CalleeRef {
         let declared = self.tysys.resolutions.defs().name(decl).to_string();
         CalleeRef::local_namespace(&mut self.interner.borrow_mut(), &declared, operation)
@@ -846,9 +840,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // walk answered for it. Every receiver lookup below goes through that
         // site, so the spelling is never split back into an identity.
         let receiver_site = callee_kind.receiver_site();
-        // A case is reachable wherever its type is; only a static method has
-        // a visibility of its own to check. An imported operation's `use`
-        // checked its own.
+        // Only a static method has a visibility of its own to check: a case's is
+        // its type's, and an imported operation's `use` checked its own.
         if callee_kind.case_owner().is_none()
             && !matches!(callee_kind, CalleeIdentKind::Operation { .. })
             && let Some((struct_name, _)) = effective_name.rsplit_once("::")

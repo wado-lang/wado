@@ -1,0 +1,37 @@
+// An arm whose pattern was rejected covers nothing and misses nothing: the
+// arms after it are neither unreachable nor is the match non-exhaustive.
+enum A { X, Y }
+enum B { X }
+
+fn by_float(x: f64) -> i32 {
+    return match x {
+        0.0 => 1,
+        1.5 => 2,
+        _ => 3,
+    };
+}
+
+fn by_float_range(x: f64) -> i32 {
+    return match x {
+        0.0..<1.0 => 1,
+        _ => 2,
+    };
+}
+
+fn by_foreign_qualifier(a: A) -> i32 {
+    return match a {
+        B::X => 1,
+        A::Y => 2,
+    };
+}
+
+export fn run() {
+    let _ = by_float(1.0) + by_float_range(0.5) + by_foreign_qualifier(A::X);
+}
+
+__DATA__
+{
+  "compile_error": "float literals cannot be used in match patterns",
+  "compile_errors_contains": ["pattern mismatch"],
+  "compile_errors_not_contains": ["unreachable arm", "non-exhaustive"]
+}

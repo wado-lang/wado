@@ -242,7 +242,7 @@ let sum = m + m;              // OK: Meters + Meters -> Meters
 let raw: f64 = m as f64;      // explicit cast required
 
 type Location = Point;
-let loc = Location { x: 0, y: 0 };
+let loc: Location = { x: 0, y: 0 };  // literal coercion; or `Point { … } as Location`
 loc.distance(&loc2);  // inherits Point methods, params expect &Location
 
 impl Location {

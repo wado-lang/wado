@@ -705,8 +705,7 @@ struct EffectIndex<'a> {
 }
 
 /// The declaration an operation call names, with the operation: `E` of
-/// `[ns::]*E::op`, or the one a bare `op` imported as `use { E::{op} }` is a
-/// member of.
+/// `[ns::]*E::op`, or of a bare `op` imported as `use { E::{op} }`.
 fn operation_at<'a>(sem: &'a Semantics, callee: &'a Expr) -> Option<(DefId, &'a str)> {
     let Expr::Ident(ident) = callee else {
         return None;
@@ -780,12 +779,8 @@ fn binding_granted_effects(
         .collect()
 }
 
-/// What a direct `E::op()` call through `interface` demands of its caller.
-///
-/// Empty where it demands nothing: the call names no interface, or `E` is a
-/// user-defined effect, whose operation an installed handler answers and whose
-/// dispatch with none traps — a runtime outcome, not a demand on the position.
-/// A purely computational component's operation demands nothing either.
+/// What a direct `E::op()` call through `interface` demands of its caller:
+/// nothing for a user-defined effect or a purely computational component.
 fn operation_requirements(
     sem: &Semantics,
     index: &EffectIndex,

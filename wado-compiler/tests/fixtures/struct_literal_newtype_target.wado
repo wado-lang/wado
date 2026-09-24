@@ -1,0 +1,54 @@
+// An unnamed struct literal reaches a newtype over a struct, as a literal
+// reaches any newtype, and a generic struct whose `From<Array<T>>` takes no
+// pairs still reads the literal as its fields.
+struct Pt {
+    x: i32,
+}
+
+type Loc = Pt;
+
+struct Box<T> {
+    value: T,
+}
+
+type IntBox = Box<i32>;
+
+struct Bag<T> {
+    items: List<T>,
+}
+
+impl<T> From<Array<T>> for Bag<T> {
+    fn from(a: Array<T>) -> Bag<T> {
+        let mut items: List<T> = [];
+        for let x of a {
+            items.push(x);
+        }
+        return Bag { items };
+    }
+}
+
+fn origin() -> Loc {
+    return { x: 0 };
+}
+
+test "a newtype over a struct takes an unnamed literal" {
+    let l: Loc = { x: 3 };
+    assert l.x == 3;
+    assert origin().x == 0;
+}
+
+test "a newtype over a generic struct takes an unnamed literal" {
+    let b: IntBox = { value: 4 };
+    assert b.value == 4;
+}
+
+test "a generic struct built from a plain sequence reads a literal as fields" {
+    let items: List<i32> = [1, 2];
+    let b: Bag<i32> = { items };
+    assert b.items.len() == 2;
+    let c: Bag<i32> = [5, 6, 7];
+    assert c.items.len() == 3;
+}
+
+__DATA__
+{"test": {}}

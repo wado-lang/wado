@@ -5884,6 +5884,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
+        let Some(newtype) = self
+            .ann_coercions(struct_lit.id)
+            .filter(|choice| choice.kind == CoercionKind::StructNewtype)
+            .map(|choice| choice.target_type)
+        else {
+            return self.reify_struct_literal_as(struct_lit, ctx, recorded_type);
+        };
+        let base = self.tysys.type_table.borrow().representation_head(newtype);
+        let built = self.reify_struct_literal_as(struct_lit, ctx, base);
+        cast_to_newtype(built, Some(newtype), struct_lit.span)
+    }
+
+    fn reify_struct_literal_as(
+        &mut self,
+        struct_lit: &ast::StructLiteralExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
         use crate::tir::{TirExprKind, TirStructField};
 
         // A recorded `key_value_coercions[struct_lit.id]` means the literal
@@ -6795,8 +6813,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a comparison chain `a < b < c …` into
-    /// `let $m0 = a; let $m1 = b; ($m0 < $m1) & ($m1 < c) …`: every operand
-    /// but the last is bound once, so all of them evaluate left to right.
+    /// `let $m0 = a; let $m1 = b; ($m0 < $m1) & ($m1 < c) …`.
     fn reify_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
