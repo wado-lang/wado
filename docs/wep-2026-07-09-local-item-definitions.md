@@ -83,17 +83,15 @@ whether reify or this WEP's eager annotate-time emission produced it.
 
 ## Consequences
 
-- Supported today: local `struct` (generic or not) and local non-generic
-  `type` (newtype) — declare, construct, field/case access, comparison,
-  `assert`, and auto-derived traits (`Display` etc.: structural for a
-  struct, forwarded from the base type for a newtype).
+- Supported today: local `struct` and local `type` (newtype), generic or not —
+  declare, construct, field/case access, comparison, `assert`, and
+  auto-derived traits (`Display` etc.: structural for a struct, forwarded from
+  the base type for a newtype).
 - Not yet supported: parses, but a reference fails downstream with whatever
   error fits how it was referenced, not a dedicated message. Local
   `enum`/`variant`/`flags` surfaces as `unknown identifier` for a case path
-  (e.g. `Color::Red`) or `unknown function` for variant construction. Local
-  generic `type` surfaces as a type mismatch: it does not go through the
-  monomorphized template a generic struct uses, and this WEP wires up nothing in
-  its place. Methods on any local type surface as `no method 'x' found on type`.
+  (e.g. `Color::Red`) or `unknown function` for variant construction. Methods
+  on any local type surface as `no method 'x' found on type`.
 
 ## Known gap: methods on a local type
 

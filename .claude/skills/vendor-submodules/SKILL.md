@@ -14,7 +14,7 @@ description: Locate and sync the reference specs and runtimes vendored under ven
 - `vendor/wasmtime/` - a Wasm runtime with WASI P3 support
 - `vendor/wasm-tools/` - the Wasm toolchain the Wado compiler builds on
 - `vendor/antlr4/` - ANTLR4, the grammar dialect Gale targets. Read
-  `package-gale/CLAUDE.md` first: most of this tree must not be read
+  `package-gale/AGENTS.md` first: most of this tree must not be read
 - `vendor/wasi-webgpu/` - the `wasi:webgpu` proposal
 - `vendor/protobuf-spec/` - protobuf.dev's source, which is the protobuf spec
   - Wire format: `vendor/protobuf-spec/content/programming-guides/encoding.md`

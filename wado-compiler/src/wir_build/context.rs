@@ -718,11 +718,8 @@ impl<'a> WirContext<'a> {
             .unwrap_or_else(|pending| pending.placeholder)
     }
 
-    /// The `WirType` of `type_id`, or `None` when it has no WIR registration.
-    ///
-    /// For the one caller with a real recovery: a tuple interned by CM binding
-    /// synthesis can carry `TypeId`s the registrar never saw, and
-    /// `tuple_constructor_args` then searches for or defines a matching struct.
+    /// The `WirType` of `type_id`, or `None` when it has no WIR registration,
+    /// for a caller that recovers from the miss.
     pub fn try_type_id_to_wir_type(
         &self,
         type_table: &TypeTable,

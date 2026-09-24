@@ -1,0 +1,44 @@
+// A generic instance over a `fn` type argument crashed the compiler as not
+// registered, whichever container carried it.
+
+struct Boxed<T> {
+    value: T,
+}
+
+variant Either<L, R> {
+    Left(L),
+    Right(R),
+}
+
+fn is_b(c: char) -> bool {
+    return c == 'b';
+}
+
+test "Option of a fn type" {
+    let f = |c: char| c >= 'b';
+    let o: Option<fn(char) -> bool> = Some(f);
+    let Some(g) = o else { unreachable(); };
+    assert g('b') && !g('a');
+    let none: Option<fn(char) -> bool> = null;
+    assert none matches { None };
+}
+
+test "Result of a fn type" {
+    let r: Result<fn(char) -> bool, String> = Ok(is_b);
+    let Ok(g) = r else { unreachable(); };
+    assert g('b');
+}
+
+test "user generics over a fn type" {
+    let b = Boxed::<fn(char) -> bool> { value: |c| c == 'x' };
+    assert (b.value)('x');
+    let e: Either<fn(char) -> bool, i32> = Either::Left(is_b);
+    let Either::Left(g) = e else { unreachable(); };
+    assert g('b');
+}
+
+test "List of Option of a fn type" {
+    let fs: List<Option<fn(char) -> bool>> = [Some(is_b), null];
+    assert fs[0].unwrap()('b');
+    assert fs[1] matches { None };
+}

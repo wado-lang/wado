@@ -13,95 +13,60 @@ impl Span {
     pub fn len(&self) -> i32 {
         return self.end - self.start;
     }
+}
 
-    pub fn merge(&self, other: &Span) -> Span {
-        let start = if self.start < other.start { self.start } else { other.start };
-        let end = if self.end > other.end { self.end } else { other.end };
-        return Span { start, end };
+pub fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+    let mut bytes = 0;
+    for let mut i = start; i < end; i += 1 {
+        bytes += chars[i].len_utf8();
+    }
+    out.reserve(bytes);
+    for let mut i = start; i < end; i += 1 {
+        out.push(chars[i]);
     }
 }
 
-impl Eq for Span {
-    fn eq(&self, other: &Self) -> bool {
-        return self.start == other.start && self.end == other.end;
-    }
+pub fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
+    let mut s = String::new();
+    push_chars(&mut s, chars, start, end);
+    return s;
 }
 
-pub struct LexerSlice {
-    pub chars: &List<char>,
-    pub start: i32,
-    pub end: i32,
-}
-
-impl LexerSlice {
-    pub fn new(chars: &List<char>, start: i32, end: i32) -> LexerSlice {
-        return LexerSlice { chars, start, end };
-    }
-
-    pub fn empty(chars: &List<char>) -> LexerSlice {
-        return LexerSlice { chars, start: 0, end: 0 };
-    }
-
-    pub fn from_string<S: AsStrSlice>(s: S) -> LexerSlice {
-        let chars = s.chars().collect();
-        return LexerSlice { chars: &chars, start: 0, end: chars.len() };
-    }
-
-    pub fn is_empty(&self) -> bool {
-        return self.start >= self.end;
-    }
-
-    pub fn len(&self) -> i32 {
-        return self.end - self.start;
-    }
-
-    pub fn push_to(&self, out: &mut String) {
-        for let mut i = self.start; i < self.end; i += 1 {
-            out.push(self.chars[i]);
-        }
-    }
-
-    pub fn to_string(&self) -> String {
-        let mut s = String::with_capacity(self.end - self.start);
-        self.push_to(&mut s);
-        return s;
-    }
-}
-
-impl Display for LexerSlice {
-    fn fmt(&self, f: &mut Formatter) {
-        for let mut i = self.start; i < self.end; i += 1 {
-            f.write_char(self.chars[i]);
+pub fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+    for let mut i = start; i < end; i += 1 {
+        match chars[i] {
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c => out.push(c),
         }
     }
 }
 
-impl Eq<String> for LexerSlice {
-    fn eq(&self, other: &String) -> bool {
-        let mut i = self.start;
-        for let c of other.chars() {
-            if i >= self.end || c != self.chars[i] {
-                return false;
-            }
-            i += 1;
-        }
-        return i == self.end;
+pub fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
+    let w = kind >> 5;
+    if w >= set.len() {
+        return false;
     }
+    return set[w] >> (kind & 31) & 1 == 1;
 }
 
-impl Eq for LexerSlice {
-    fn eq(&self, other: &Self) -> bool {
-        let len = self.end - self.start;
-        if len != other.end - other.start {
-            return false;
-        }
-        for let mut i = 0; i < len; i += 1 {
-            if self.chars[self.start + i] != other.chars[other.start + i] {
-                return false;
-            }
-        }
-        return true;
+pub fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
+    let n = expected.len();
+    if n == 0 {
+        return message.to_string();
     }
+    let mut out = String::with_capacity(n * 8 + message.len() + 11);
+    out.push_str("expected ");
+    for let mut i = 0; i < n; i += 1 {
+        if i > 0 {
+            out.push_str(&if i == n - 1 { " or " } else { ", " });
+        }
+        out.push_str(&expected[i]);
+    }
+    out.push_str("; ");
+    out.push_str(message);
+    return out;
 }
 
 pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
@@ -114,26 +79,28 @@ pub fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
     return col;
 }
 
-pub struct Token {
-    pub kind: i32,
-    pub text: LexerSlice,
-    pub span: Span,
-    pub leading_trivia: List<Token>,
-    pub channel: i32,
+pub fn line_starts(chars: &List<char>) -> List<i32> {
+    let mut starts: List<i32> = [0];
+    for let mut i = 0; i < chars.len(); i += 1 {
+        if chars[i] == '\n' {
+            starts.push(i + 1);
+        }
+    }
+    return starts;
 }
 
-impl Token {
-    pub fn new(kind: i32, text: LexerSlice, span: Span) -> Token {
-        return Token { kind, text, span, leading_trivia: [], channel: 0 };
+pub fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let mut lo = 0;
+    let mut hi = starts.len() - 1;
+    while lo < hi {
+        let mid = (lo + hi + 1) / 2;
+        if starts[mid] <= pos {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
     }
-
-    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: List<Token>) -> Token {
-        return Token { kind, text, span, leading_trivia, channel: 0 };
-    }
-
-    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: List<Token>, channel: i32) -> Token {
-        return Token { kind, text, span, leading_trivia, channel };
-    }
+    return [lo + 1, pos - starts[lo]];
 }
 
 pub flags TokenFlags {
@@ -254,10 +221,6 @@ impl TokenStream {
         self.set_flag(i, TokenFlags::Skipped);
     }
 
-    pub fn mark_lex_error(&mut self, i: i32) {
-        self.set_flag(i, TokenFlags::LexError);
-    }
-
     pub fn is_synthetic(&self, i: i32) -> bool {
         return self.flags[i] & TokenFlags::Synthetic != TokenFlags::none();
     }
@@ -282,39 +245,16 @@ impl TokenStream {
         return self.starts[i] >= self.ends[i];
     }
 
-    pub fn push_text(&self, out: &mut String, start: i32, end: i32) {
-        for let mut j = start; j < end; j += 1 {
-            out.push(self.chars[j]);
-        }
-    }
-
     pub fn token_text(&self, i: i32) -> String {
-        let start = self.starts[i];
-        let end = self.ends[i];
-        let mut s = String::with_capacity(end - start);
-        self.push_text(&mut s, start, end);
-        return s;
+        return chars_text(self.chars, self.starts[i], self.ends[i]);
     }
 
     pub fn push_token_text(&self, out: &mut String, i: i32) {
-        self.push_text(out, self.starts[i], self.ends[i]);
+        push_chars(out, self.chars, self.starts[i], self.ends[i]);
     }
 
     pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
-        for let mut j = self.starts[i]; j < self.ends[i]; j += 1 {
-            match self.chars[j] {
-                '\n' => out.push_str("\\n"),
-                '\r' => out.push_str("\\r"),
-                '\t' => out.push_str("\\t"),
-                c => out.push(c),
-            }
-        }
-    }
-
-    pub fn push_leading_trivia_text(&self, out: &mut String, i: i32) {
-        for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
-            self.push_text(out, self.triv_starts[j], self.triv_ends[j]);
-        }
+        push_chars_escaped(out, self.chars, self.starts[i], self.ends[i]);
     }
 
     pub fn rule_text(&self, start_tok: i32, end_tok: i32) -> String {
@@ -323,7 +263,7 @@ impl TokenStream {
             if i > start_tok {
                 for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
                     if self.triv_chans[j] != 0 {
-                        self.push_text(&mut out, self.triv_starts[j], self.triv_ends[j]);
+                        push_chars(&mut out, self.chars, self.triv_starts[j], self.triv_ends[j]);
                     }
                 }
             }
@@ -333,90 +273,13 @@ impl TokenStream {
     }
 }
 
-pub struct ParseError {
-    pub message: String,
-    pub span: Span,
-    pub expected: List<String>,
-    pub line: i32 = 1,
-    pub col: i32 = 0,
-    pub rule_stack: List<String> = [],
-}
-
-impl ParseError {
-    pub fn new<S: AsStrSlice>(message: S, span: Span, expected: List<String>) -> ParseError {
-        return ParseError { message: message.to_string(), span, expected };
-    }
-
-    pub fn at<S: AsStrSlice>(message: S, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
-        return ParseError { message: message.to_string(), span, expected, line, col, rule_stack: [] };
-    }
-
-    pub fn full_message(&self) -> String {
-        if self.expected.is_empty() {
-            return self.message;
-        }
-        return `expected ${join_expected(&self.expected)}; ${self.message}`;
-    }
-
-    pub fn rule_path(&self) -> String {
-        return rule_path_of(&self.rule_stack);
-    }
-}
-
-pub fn rule_path_of(stack: &List<String>) -> String {
-    let mut out = String::with_capacity(stack.len() * 8);
-    let n = stack.len();
-    let mut written = 0;
-    for let mut i = 0; i < n; i += 1 {
-        let name = &stack[n - 1 - i];
-        if written > 0 && *name == stack[n - i] {
-            continue;
-        }
-        if written > 0 {
-            out.push_str(" > ");
-        }
-        out.push_str(name);
-        written += 1;
-    }
-    return out;
-}
-
-fn join_expected(names: &List<String>) -> String {
-    let n = names.len();
-    let mut out = String::with_capacity(n * 8);
-    for let mut i = 0; i < n; i += 1 {
-        if i > 0 {
-            out.push_str(&if i == n - 1 { " or " } else { ", " });
-        }
-        out.push_str(&names[i]);
-    }
-    return out;
-}
-
-impl Display for ParseError {
-    fn fmt(&self, f: &mut Formatter) {
-        f.write_str(`parse error at ${self.line}:${self.col}: ${self.full_message()}`);
-        if !self.rule_stack.is_empty() {
-            f.write_str(`\n  in rule: ${self.rule_path()}`);
-        }
-    }
-}
-
 pub enum Severity {
     Error,
-    Warning,
-    Info,
-    Hint,
 }
 
 impl Severity {
     pub fn label(&self) -> String {
-        return match *self {
-            Error => "error",
-            Warning => "warning",
-            Info => "info",
-            Hint => "hint",
-        };
+        return match *self { Error => "error" };
     }
 }
 
@@ -450,13 +313,8 @@ pub enum RecoveryAction {
     None,
 }
 
-pub struct RelatedInfo {
-    pub message: String,
-    pub span: Span,
-}
-
 pub struct Diagnostic {
-    pub severity: Severity,
+    pub severity: Severity = Severity::Error,
     pub code: DiagnosticCode,
     pub message: String,
     pub span: Span,
@@ -466,19 +324,18 @@ pub struct Diagnostic {
     pub found: i32 = -1,
     pub rule_stack: List<String> = [],
     pub recovery: RecoveryAction = RecoveryAction::None,
-    pub related: List<RelatedInfo> = [],
 }
 
 impl Diagnostic {
-    pub fn error<S: AsStrSlice>(code: DiagnosticCode, message: S, span: Span, line: i32, col: i32) -> Diagnostic {
-        return Diagnostic {
-            severity: Severity::Error,
-            code,
-            message: message.to_string(),
-            span,
-            line,
-            col,
-        };
+    pub fn error<S: AsStrSlice>(
+        code: DiagnosticCode,
+        message: S,
+        span: Span,
+        expected: List<i32>,
+        found: i32,
+        recovery: RecoveryAction,
+    ) -> Diagnostic {
+        return Diagnostic { code, message: message.to_string(), span, expected, found, recovery };
     }
 
     pub fn is_error(&self) -> bool {
@@ -486,32 +343,66 @@ impl Diagnostic {
     }
 
     pub fn rule_path(&self) -> String {
-        return rule_path_of(&self.rule_stack);
+        let stack = &self.rule_stack;
+        let mut out = String::with_capacity(stack.len() * 8);
+        let n = stack.len();
+        for let mut i = 0; i < n; i += 1 {
+            let name = &stack[n - 1 - i];
+            if i > 0 {
+                if *name == stack[n - i] {
+                    continue;
+                }
+                out.push_str(" > ");
+            }
+            out.push_str(name);
+        }
+        return out;
     }
 }
 
 impl Display for Diagnostic {
     fn fmt(&self, f: &mut Formatter) {
         f.write_str(`${self.severity.label()}[${self.code.name()}] at ${self.line}:${self.col}: ${self.message}`);
-        for let r of &self.related {
-            f.write_str(`\n  note: ${r.message}`);
-        }
     }
 }
 
-pub fn line_col(chars: &List<char>, pos: i32) -> [i32, i32] {
-    let mut line = 1;
-    let mut col = 0;
-    let cap = if pos < chars.len() { pos } else { chars.len() };
-    for let mut i = 0; i < cap; i += 1 {
-        if chars[i] == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
+fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
+    let mut message = String::from("token recognition error at: '");
+    push_chars_escaped(&mut message, tokens.chars, tokens.starts[i], tokens.ends[i]);
+    message.push('\'');
+    return Diagnostic::error(
+        DiagnosticCode::LexError,
+        message,
+        tokens.span_at(i),
+        [],
+        tokens.kinds[i],
+        RecoveryAction::None,
+    );
+}
+
+pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
+    let mut merged: List<Diagnostic> = [];
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if tokens.is_lex_error(i) {
+            merged.push(lex_error_at(tokens, i));
         }
     }
-    return [line, col];
+    merged.extend(diagnostics);
+    merged.sort_by(|a: &Diagnostic, b: &Diagnostic| a.span.start.cmp(&b.span.start));
+    merged.truncate(max_errors);
+    *diagnostics = merged;
+}
+
+pub fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
+    if diagnostics.is_empty() {
+        return;
+    }
+    let starts = line_starts(chars);
+    for let mut i = 0; i < diagnostics.len(); i += 1 {
+        let lc = line_col_at(&starts, diagnostics[i].span.start);
+        diagnostics[i].line = lc.0;
+        diagnostics[i].col = lc.1;
+    }
 }
 
 pub type NodeKind = i32;
@@ -582,8 +473,7 @@ impl CstStore {
     }
 
     pub fn is_token(&self, i: i32) -> bool {
-        let t = self.tag[i];
-        return t matches { Tok | Miss | Skip };
+        return self.tag[i] matches { Tok | Miss | Skip };
     }
 
     pub fn child_kind(&self, i: i32) -> ChildKind {
@@ -634,56 +524,9 @@ impl CstStore {
         token_names: &List<String>,
     ) -> String {
         let mut out = String::with_capacity(256);
-        cst_to_string_tree_impl(&mut out, self, i, toks, rule_names, token_names);
+        let _ = render_node(&mut out, &self.tag, &self.a, i, toks, rule_names, token_names);
         return out;
     }
-}
-
-fn cst_to_string_tree_impl(
-    out: &mut String,
-    s: &CstStore,
-    i: i32,
-    toks: &TokenStream,
-    rule_names: &List<String>,
-    token_names: &List<String>,
-) {
-    let node_kind = s.kind(i) as i32;
-    let name = if node_kind == K_ERROR as i32 { "<error>" } else { rule_names[node_kind] };
-    if i + 1 >= s.tag.len() || s.tag[i + 1] matches { Close } {
-        out.push_str(&name);
-        return;
-    }
-    out.push_str("(");
-    out.push_str(&name);
-    let mut c = i + 1;
-    while c < s.next[i] {
-        match s.tag[c] {
-            Open => {
-                out.push_str(" ");
-                cst_to_string_tree_impl(out, s, c, toks, rule_names, token_names);
-                c = s.next[c];
-            },
-            Tok => {
-                if !toks.is_empty_text(s.token_index(c)) {
-                    out.push_str(" ");
-                    toks.push_token_text_escaped(out, s.token_index(c));
-                }
-                c += 1;
-            },
-            Miss => {
-                out.push_str(` <missing ${token_names[toks.kind_at(s.token_index(c))]}>`);
-                c += 1;
-            },
-            Skip => {
-                out.push_str(" <skip ");
-                toks.push_token_text_escaped(out, s.token_index(c));
-                out.push_str(">");
-                c += 1;
-            },
-            Close => c += 1,
-        }
-    }
-    out.push_str(")");
 }
 
 pub struct ParseResult {
@@ -723,10 +566,6 @@ pub struct TreeBuilder {
 }
 
 impl TreeBuilder {
-    pub fn new() -> TreeBuilder {
-        return TreeBuilder { tag: [], a: [], b: [], alt: [], open: [], last_finished: -1 };
-    }
-
     pub fn with_capacity(rows: i32) -> TreeBuilder {
         return TreeBuilder {
             tag: List::with_capacity(rows),
@@ -781,17 +620,21 @@ impl TreeBuilder {
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
+        if self.last_finished >= checkpoint {
+            self.last_finished += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
-        while self.tag.len() > checkpoint {
-            let _ = self.tag.pop();
-            let _ = self.a.pop();
-            let _ = self.b.pop();
-            let _ = self.alt.pop();
-        }
+        self.tag.truncate(checkpoint);
+        self.a.truncate(checkpoint);
+        self.b.truncate(checkpoint);
+        self.alt.truncate(checkpoint);
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
+        }
+        if self.last_finished >= checkpoint {
+            self.last_finished = -1;
         }
     }
 
@@ -918,12 +761,12 @@ impl TreeBuilder {
         token_names: &List<String>,
     ) -> String {
         let mut out = String::with_capacity(128);
-        let _ = render_builder_node(&mut out, &self.tag, &self.a, root, toks, rule_names, token_names);
+        let _ = render_node(&mut out, &self.tag, &self.a, root, toks, rule_names, token_names);
         return out;
     }
 }
 
-fn render_builder_node(
+fn render_node(
     out: &mut String,
     tag: &List<EventTag>,
     a: &List<i32>,
@@ -947,7 +790,7 @@ fn render_builder_node(
         match tag[c] {
             Open => {
                 out.push_str(" ");
-                c = render_builder_node(out, tag, a, c, toks, rule_names, token_names);
+                c = render_node(out, tag, a, c, toks, rule_names, token_names);
             },
             Close => {
                 out.push_str(")");
@@ -977,13 +820,7 @@ fn render_builder_node(
 }
 
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
-    let chars = tokens.chars;
-    let mut line_starts: List<i32> = [0];
-    for let mut i = 0; i < chars.len(); i += 1 {
-        if chars[i] == '\n' {
-            line_starts.push(i + 1);
-        }
-    }
+    let starts = line_starts(tokens.chars);
     let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
     out.push_str(&tokens.output);
     let mut index = 0;
@@ -999,7 +836,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
                     tokens.triv_starts[t],
                     tokens.triv_ends[t],
                     tokens.triv_chans[t],
-                    &line_starts,
+                    &starts,
                     index,
                     eof_kind,
                 );
@@ -1013,7 +850,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             tokens.starts[i],
             tokens.ends[i],
             0,
-            &line_starts,
+            &starts,
             index,
             eof_kind,
         );
@@ -1029,47 +866,26 @@ fn emit_lexer_token(
     start: i32,
     end: i32,
     channel: i32,
-    line_starts: &List<i32>,
+    starts: &List<i32>,
     index: i32,
     eof_kind: i32,
 ) {
     let is_eof = kind == eof_kind;
-    let mut text_buf = String::with_capacity(16);
-    if is_eof {
-        text_buf.push_str("<EOF>");
-    } else {
-        for let mut j = start; j < end; j += 1 {
-            let c = tokens.chars[j];
-            match c {
-                '\n' => text_buf.push_str("\\n"),
-                '\r' => text_buf.push_str("\\r"),
-                '\t' => text_buf.push_str("\\t"),
-                _ => text_buf.push(c),
-            }
-        }
-    }
     let type_id = if is_eof { -1 } else { kind + 1 };
-    let line_col = line_col_from_starts(line_starts, start);
-    let line = line_col.0;
-    let col = line_col.1;
-    let end_inclusive = end - 1;
-    let channel_attr = if channel != 0 { `channel=${channel},` } else { String::from("") };
-    out.push_str(`[@${index},${start}:${end_inclusive}='${text_buf}',<${type_id}>,${channel_attr}${line}:${col}]\n`);
+    let lc = line_col_at(starts, start);
+    out.push_str(`[@${index},${start}:${end - 1}='`);
+    if is_eof {
+        out.push_str("<EOF>");
+    } else {
+        push_chars_escaped(out, tokens.chars, start, end);
+    }
+    out.push_str(`',<${type_id}>,`);
+    if channel != 0 {
+        out.push_str(`channel=${channel},`);
+    }
+    out.push_str(`${lc.0}:${lc.1}]\n`);
 }
 
-fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
-    let mut lo = 0;
-    let mut hi = line_starts.len() - 1;
-    while lo < hi {
-        let mid = (lo + hi + 1) / 2;
-        if line_starts[mid] <= pos {
-            lo = mid;
-        } else {
-            hi = mid - 1;
-        }
-    }
-    return [lo + 1, pos - line_starts[lo]];
-}
 pub global FOLLOW_MAX_DEPTH: i32 = 4;
 
 pub global FOLLOW_SLOT_BITS: i64 = 8;
@@ -1081,31 +897,6 @@ pub global FOLLOW_OPENS_BIT: i64 = 128;
 pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
 pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
-
-pub fn follow_bitsets(kinds: &List<List<i32>>) -> List<List<i32>> {
-    let mut out: List<List<i32>> = [];
-    for let set of kinds {
-        let mut words: List<i32> = [];
-        for let kind of set {
-            assert *kind >= 0, `follow_bitsets: negative token kind ${*kind}`;
-            let w = *kind >> 5;
-            while words.len() <= w {
-                words.push(0);
-            }
-            words[w] = words[w] | 1 << (*kind & 31);
-        }
-        out.push(words);
-    }
-    return out;
-}
-
-fn follow_set_has(set: &List<i32>, kind: i32) -> bool {
-    let w = kind >> 5;
-    if w >= set.len() {
-        return false;
-    }
-    return set[w] >> (kind & 31) & 1 == 1;
-}
 
 pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     let mut c = cont;
@@ -1128,7 +919,7 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<
                 if !set.is_empty() {
                     let idx = pos + depth;
                     let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
-                    if !follow_set_has(set, kind) {
+                    if !kind_set_has(set, kind) {
                         alive = false;
                     }
                 }
@@ -1139,38 +930,6 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<
     }
     return alive && constrained;
 }
-pub enum TokenKind {
-    COS,
-    SIN,
-    TAN,
-    ACOS,
-    ASIN,
-    ATAN,
-    LN,
-    LOG,
-    SQRT,
-    LPAREN,
-    RPAREN,
-    PLUS,
-    MINUS,
-    TIMES,
-    DIV,
-    GT,
-    LT,
-    EQ,
-    COMMA,
-    POINT,
-    POW,
-    PI,
-    EULER,
-    I,
-    VARIABLE,
-    SCIENTIFIC_NUMBER,
-    WS,
-    Eof,
-    Error,
-}
-
 pub global TK_COS: i32 = 0;
 pub global TK_SIN: i32 = 1;
 pub global TK_TAN: i32 = 2;
@@ -1214,115 +973,6 @@ impl Lexer {
     fn at_end(&self) -> bool {
         return self.pos >= self.chars.len();
     }
-
-    fn slice(&self, start: i32, end: i32) -> LexerSlice {
-        return LexerSlice::new(&self.chars, start, end);
-    }
-}
-
-fn try_COS(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_SIN(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_TAN(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_ACOS(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_ASIN(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_ATAN(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_LN(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'n' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_LOG(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'g' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_SQRT(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'q' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn try_LPAREN(chars: &List<char>, start: i32) -> i32 {
@@ -1409,81 +1059,20 @@ fn try_POW(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_PI(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'p' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn try_VARIABLE(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_0 = pos;
-    alts_done_0: {
-        alts_0_0: {
-            pos = alts_saved_0;
-            if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_0_0; }
-            pos += 1;
-            break alts_done_0;
-        }
-        alts_0_1: {
-            pos = alts_saved_0;
-            if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_0_1; }
-            pos += 1;
-            break alts_done_0;
-        }
-        alts_0_2: {
-            pos = alts_saved_0;
-            if pos >= chars.len() || chars[pos] != '_' { break alts_0_2; }
-            pos += 1;
-            break alts_done_0;
-        }
-        return -1;
-    }
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { 'A'..='Z' | '_' | 'a'..='z' })) { return -1; }
+    pos += 1;
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            let alts_saved_2 = pos;
-            alts_done_2: {
-                alts_2_0: {
-                    pos = alts_saved_2;
-                    let alts_saved_3 = pos;
-                    alts_done_3: {
-                        alts_3_0: {
-                            pos = alts_saved_3;
-                            if pos >= chars.len() || !(chars[pos] matches { 'a'..='z' }) { break alts_3_0; }
-                            pos += 1;
-                            break alts_done_3;
-                        }
-                        alts_3_1: {
-                            pos = alts_saved_3;
-                            if pos >= chars.len() || !(chars[pos] matches { 'A'..='Z' }) { break alts_3_1; }
-                            pos += 1;
-                            break alts_done_3;
-                        }
-                        alts_3_2: {
-                            pos = alts_saved_3;
-                            if pos >= chars.len() || chars[pos] != '_' { break alts_3_2; }
-                            pos += 1;
-                            break alts_done_3;
-                        }
-                        break alts_2_0;
-                    }
-                    break alts_done_2;
-                }
-                alts_2_1: {
-                    pos = alts_saved_2;
-                    if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break alts_2_1; }
-                    pos += 1;
-                    break alts_done_2;
-                }
-                break rep_1;
-            }
+        let rep_saved_0 = pos;
+        rep_0: {
+            if pos >= chars.len() { break rep_0; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='Z' | '_' | 'a'..='z' })) { break rep_0; }
+            pos += 1;
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_0;
         break;
     }
     return pos;
@@ -1494,111 +1083,85 @@ fn try_SCIENTIFIC_NUMBER(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_4 = pos;
-        rep_4: {
-            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_4; }
+        let rep_saved_1 = pos;
+        rep_1: {
+            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_1; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_4;
+        pos = rep_saved_1;
         break;
     }
+    let opt_saved_3 = pos;
+    let mut opt_ok_3 = false;
+    opt_3: {
+        if pos >= chars.len() || chars[pos] != '.' { break opt_3; }
+        pos += 1;
+        if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break opt_3; }
+        pos += 1;
+        loop {
+            let rep_saved_4 = pos;
+            rep_4: {
+                if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_4; }
+                pos += 1;
+                continue;
+            }
+            pos = rep_saved_4;
+            break;
+        }
+        opt_ok_3 = true;
+    }
+    if !opt_ok_3 { pos = opt_saved_3; }
     let opt_saved_6 = pos;
     let mut opt_ok_6 = false;
-    rep_6: {
-        if pos >= chars.len() || chars[pos] != '.' { break rep_6; }
+    opt_6: {
+        if pos >= chars.len() { break opt_6; }
+        if !((chars[pos] matches { 'E' | 'e' })) { break opt_6; }
         pos += 1;
-        if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_6; }
-        pos += 1;
-        loop {
-            let rep_saved_7 = pos;
-            rep_7: {
-                if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_7; }
-                pos += 1;
-                continue;
-            }
-            pos = rep_saved_7;
-            break;
-        }
-        opt_ok_6 = true;
-    }
-    if !opt_ok_6 { pos = opt_saved_6; }
-    let opt_saved_9 = pos;
-    let mut opt_ok_9 = false;
-    rep_9: {
-        let alts_saved_10 = pos;
-        alts_done_10: {
-            alts_10_0: {
-                pos = alts_saved_10;
-                if pos >= chars.len() || chars[pos] != 'E' { break alts_10_0; }
-                pos += 1;
-                break alts_done_10;
-            }
-            alts_10_1: {
-                pos = alts_saved_10;
-                if pos >= chars.len() || chars[pos] != 'e' { break alts_10_1; }
-                pos += 1;
-                break alts_done_10;
-            }
-            break rep_9;
-        }
-        let opt_saved_11 = pos;
-        let mut opt_ok_11 = false;
-        rep_11: {
-            let alts_saved_12 = pos;
-            alts_done_12: {
-                alts_12_0: {
-                    pos = alts_saved_12;
-                    if pos >= chars.len() || chars[pos] != '+' { break alts_12_0; }
-                    pos += 1;
-                    break alts_done_12;
-                }
-                alts_12_1: {
-                    pos = alts_saved_12;
-                    if pos >= chars.len() || chars[pos] != '-' { break alts_12_1; }
-                    pos += 1;
-                    break alts_done_12;
-                }
-                break rep_11;
-            }
-            opt_ok_11 = true;
-        }
-        if !opt_ok_11 { pos = opt_saved_11; }
-        if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_9; }
-        pos += 1;
-        loop {
-            let rep_saved_13 = pos;
-            rep_13: {
-                if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_13; }
-                pos += 1;
-                continue;
-            }
-            pos = rep_saved_13;
-            break;
-        }
-        let opt_saved_15 = pos;
-        let mut opt_ok_15 = false;
-        rep_15: {
-            if pos >= chars.len() || chars[pos] != '.' { break rep_15; }
+        let opt_saved_7 = pos;
+        let mut opt_ok_7 = false;
+        opt_7: {
+            if pos >= chars.len() { break opt_7; }
+            if !((chars[pos] matches { '+' | '-' })) { break opt_7; }
             pos += 1;
-            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_15; }
+            opt_ok_7 = true;
+        }
+        if !opt_ok_7 { pos = opt_saved_7; }
+        if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break opt_6; }
+        pos += 1;
+        loop {
+            let rep_saved_8 = pos;
+            rep_8: {
+                if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_8; }
+                pos += 1;
+                continue;
+            }
+            pos = rep_saved_8;
+            break;
+        }
+        let opt_saved_10 = pos;
+        let mut opt_ok_10 = false;
+        opt_10: {
+            if pos >= chars.len() || chars[pos] != '.' { break opt_10; }
+            pos += 1;
+            if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break opt_10; }
             pos += 1;
             loop {
-                let rep_saved_16 = pos;
-                rep_16: {
-                    if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_16; }
+                let rep_saved_11 = pos;
+                rep_11: {
+                    if pos >= chars.len() || !(chars[pos] matches { '0'..='9' }) { break rep_11; }
                     pos += 1;
                     continue;
                 }
-                pos = rep_saved_16;
+                pos = rep_saved_11;
                 break;
             }
-            opt_ok_15 = true;
+            opt_ok_10 = true;
         }
-        if !opt_ok_15 { pos = opt_saved_15; }
-        opt_ok_9 = true;
+        if !opt_ok_10 { pos = opt_saved_10; }
+        opt_ok_6 = true;
     }
-    if !opt_ok_9 { pos = opt_saved_9; }
+    if !opt_ok_6 { pos = opt_saved_6; }
     return pos;
 }
 
@@ -1608,27 +1171,59 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { ' ' | '\r' | '\n' | '\t' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_18 = pos;
-        rep_18: {
-            if pos >= chars.len() { break rep_18; }
-            if !((chars[pos] matches { ' ' | '\r' | '\n' | '\t' })) { break rep_18; }
+        let rep_saved_13 = pos;
+        rep_13: {
+            if pos >= chars.len() { break rep_13; }
+            if !((chars[pos] matches { ' ' | '\r' | '\n' | '\t' })) { break rep_13; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_18;
+        pos = rep_saved_13;
         break;
     }
     return pos;
 }
 
 fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
-    let len = end - start;
-    if len == 1 {
-        if chars[start].eq_ignore_ascii_case(&'e') {
-            if chars[start + 0] == 'e' { return TK_EULER; }
-        } else if chars[start].eq_ignore_ascii_case(&'i') {
-            if chars[start + 0] == 'i' { return TK_I; }
-        }
+    match end - start {
+        1 => {
+            match chars[start] {
+                'e' => { return TK_EULER; },
+                'i' => { return TK_I; },
+                _ => {},
+            }
+        },
+        2 => {
+            match chars[start] {
+                'l' => { if chars[start + 1] == 'n' { return TK_LN; } },
+                'p' => { if chars[start + 1] == 'i' { return TK_PI; } },
+                _ => {},
+            }
+        },
+        3 => {
+            match chars[start] {
+                'c' => { if chars[start + 1] == 'o' && chars[start + 2] == 's' { return TK_COS; } },
+                'l' => { if chars[start + 1] == 'o' && chars[start + 2] == 'g' { return TK_LOG; } },
+                's' => { if chars[start + 1] == 'i' && chars[start + 2] == 'n' { return TK_SIN; } },
+                't' => { if chars[start + 1] == 'a' && chars[start + 2] == 'n' { return TK_TAN; } },
+                _ => {},
+            }
+        },
+        4 => {
+            match chars[start] {
+                'a' => {
+                    match chars[start + 1] {
+                        'c' => { if chars[start + 2] == 'o' && chars[start + 3] == 's' { return TK_ACOS; } },
+                        's' => { if chars[start + 2] == 'i' && chars[start + 3] == 'n' { return TK_ASIN; } },
+                        't' => { if chars[start + 2] == 'a' && chars[start + 3] == 'n' { return TK_ATAN; } },
+                        _ => {},
+                    }
+                },
+                's' => { if chars[start + 1] == 'q' && chars[start + 2] == 'r' && chars[start + 3] == 't' { return TK_SQRT; } },
+                _ => {},
+            }
+        },
+        _ => {},
     }
     return -1;
 }
@@ -1696,7 +1291,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 end = try_GT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_GT; }
             },
-            'A'..='Z' | '_' | 'b' | 'd'..='k' | 'm'..='o' | 'q'..='r' | 'u'..='z' => {
+            'A'..='Z' | '_' | 'a'..='z' => {
                 end = try_VARIABLE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
             },
@@ -1704,61 +1299,17 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 end = try_POW(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_POW; }
             },
-            'a' => {
-                end = try_ACOS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ACOS; }
-                end = try_ASIN(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ASIN; }
-                end = try_ATAN(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_ATAN; }
-                end = try_VARIABLE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-            },
-            'c' => {
-                end = try_COS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_COS; }
-                end = try_VARIABLE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-            },
-            'l' => {
-                end = try_LN(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LN; }
-                end = try_LOG(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LOG; }
-                end = try_VARIABLE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-            },
-            'p' => {
-                end = try_PI(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_PI; }
-                end = try_VARIABLE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-            },
-            's' => {
-                end = try_SIN(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_SIN; }
-                end = try_SQRT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_SQRT; }
-                end = try_VARIABLE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-            },
-            't' => {
-                end = try_TAN(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_TAN; }
-                end = try_VARIABLE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_VARIABLE; }
-            },
             _ => {},
         }
-        if best_end > start {
-            let kw_kind = classify_keyword(&lexer.chars, start, best_end);
-            if kw_kind >= 0 { best_kind = kw_kind; }
-        }
         if best_end <= start {
-            ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
+            let _ = ts.push_token_flagged(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
             triv_lo = ts.trivia_mark();
             lexer.pos = start + 1;
         } else {
+            if best_kind == TK_VARIABLE {
+                let kw_kind = classify_keyword(&lexer.chars, start, best_end);
+                if kw_kind >= 0 { best_kind = kw_kind; }
+            }
             let tok_start = start;
             let is_skip = best_kind matches { TK_WS };
             if is_skip {
@@ -1845,9 +1396,8 @@ struct Parser {
     tokens: TokenStream,
     kinds: Array<i32>,
     pos: i32,
-    pending: Option<ParseError>,
+    pending: Option<Diagnostic>,
     recovering: bool,
-    pending_code: DiagnosticCode,
     speculating: bool,
     max_errors: i32,
     b: TreeBuilder,
@@ -1865,19 +1415,32 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
-    fn error(&self, message: String, span: Span, expected: &List<i32>) -> ParseError {
-        let lc = line_col(self.tokens.chars, span.start);
-        return ParseError::at(message, span, kind_names(expected), lc.0, lc.1);
+    fn supersedes_pending(&self, start: i32) -> bool {
+        if let Some(cur) = &self.pending { return start > cur.span.start; }
+        return true;
     }
 
     fn fail(&mut self, message: String, span: Span, expected: &List<i32>, code: DiagnosticCode) {
-        let take = if let Some(cur) = &self.pending { span.start > cur.span.start } else { true };
-        if take {
-            self.pending = Option::Some(self.error(message, span, expected));
-            self.pending_code = code;
+        if self.supersedes_pending(span.start) {
+            self.pending = Option::Some(Diagnostic::error(code, with_expected(message, &kind_names(expected)), span, *expected, self.kinds[self.pos], RecoveryAction::None));
+        }
+        self.recovering = true;
+    }
+
+    fn fail_on_token(&mut self, what: String, expected: &List<i32>, code: DiagnosticCode) {
+        if self.supersedes_pending(self.tokens.starts[self.pos]) {
+            self.fail(`${what} "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), expected, code);
+        }
+        self.recovering = true;
+    }
+
+    fn fail_on_kind(&mut self, kind: i32) {
+        if self.supersedes_pending(self.tokens.starts[self.pos]) {
+            let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };
+            self.fail_on_token("got", &([kind] as List<i32>), code);
         }
         self.recovering = true;
     }
@@ -1892,28 +1455,23 @@ impl Parser {
         }
     }
 
-    fn in_set(&self, k: i32, set: &List<i32>) -> bool {
-        for let x of set { if *x == k { return true; } }
-        return false;
+    fn report_extra(&mut self, kind: i32) {
+        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::Deleted));
     }
 
-    fn report_extra(&mut self, span: Span) {
+    fn report_missing(&mut self, kind: i32) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
-        let lc = line_col(self.tokens.chars, span.start);
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
+        let found = self.kinds[self.pos];
+        let at_eof = found == TK_EOF;
+        let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };
+        let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };
+        self.diagnostics.push(Diagnostic::error(code, `missing ${token_kind_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
     }
 
-    fn report_missing(&mut self, kind: i32, span: Span) {
+    fn report_unexpected(&mut self, kind: i32) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
-        let lc = line_col(self.tokens.chars, span.start);
-        let name = token_kind_name(kind);
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing ${name}`, span, lc.0, lc.1));
-    }
-
-    fn report_unexpected(&mut self, span: Span) {
-        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
-        let lc = line_col(self.tokens.chars, span.start);
-        self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "${self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));
     }
 
     fn peek_start(&self) -> i32 {
@@ -1957,11 +1515,11 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), &([kind] as List<i32>), DiagnosticCode::UnexpectedToken);
+            self.fail_on_kind(kind);
             return self.pos;
         }
         if self.peek_at(1) == kind {
-            self.report_extra(self.tokens.span_at(self.pos));
+            self.report_extra(kind);
             let _sk = self.advance();
             self.tokens.mark_skipped(_sk);
             self.b.skip(_sk);
@@ -1973,19 +1531,19 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        if self.in_set(self.kinds[self.pos], sync) {
-            self.report_missing(kind, self.tokens.span_at(self.pos));
+        if kind_set_has(sync, self.kinds[self.pos]) {
+            self.report_missing(kind);
             let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
             self.b.missing(_syn);
             return _syn;
         }
         if !sync.is_empty() {
-            self.report_unexpected(self.tokens.span_at(self.pos));
+            self.report_unexpected(kind);
             if self.kinds[self.pos] != TK_EOF {
                 self.b.start_error(self.tokens.span_at(self.pos).start);
                 loop {
                     let _k = self.kinds[self.pos];
-                    if _k == TK_EOF || _k == kind || self.in_set(_k, sync) { break; }
+                    if _k == TK_EOF || _k == kind || kind_set_has(sync, _k) { break; }
                     let _sk = self.advance();
                     self.tokens.mark_skipped(_sk);
                     self.b.skip(_sk);
@@ -2005,13 +1563,20 @@ impl Parser {
             self.b.missing(_syn2);
             return _syn2;
         }
-        self.fail(
-            `got "${self.tokens.token_text(self.pos)}"`,
-            self.tokens.span_at(self.pos),
-            &([kind] as List<i32>),
-            DiagnosticCode::UnexpectedToken,
-        );
+        self.fail_on_kind(kind);
         return self.pos;
+    }
+
+    fn take(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
+        let kind = self.kinds[self.pos];
+        if kind == TK_EOF {
+            self.b.token(self.pos);
+            return self.pos;
+        }
+        let _i = self.advance();
+        self.b.token(_i);
+        return _i;
     }
 
     fn any(&mut self) -> i32 {
@@ -2021,36 +1586,26 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        self.fail(
-            `expected any token; got "${self.tokens.token_text(self.pos)}"`,
-            self.tokens.span_at(self.pos),
-            &EMPTY_SYNC,
-            DiagnosticCode::UnexpectedToken,
-        );
+        self.fail_on_token("expected any token; got", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 
     fn expect_not(&mut self, excluded: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
-        if k != TK_EOF && !self.in_set(k, excluded) {
+        if k != TK_EOF && !kind_set_has(excluded, k) {
             let _i = self.advance();
             self.b.token(_i);
             return _i;
         }
-        self.fail(
-            `unexpected token "${self.tokens.token_text(self.pos)}"`,
-            self.tokens.span_at(self.pos),
-            &EMPTY_SYNC,
-            DiagnosticCode::UnexpectedToken,
-        );
+        self.fail_on_token("unexpected token", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: &List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &List<i32>, expected: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
-        if self.in_set(k, included) {
+        if kind_set_has(included, k) {
             if k == TK_EOF {
                 self.b.token(self.pos);
                 return self.pos;
@@ -2059,31 +1614,12 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        self.fail(
-            `got "${self.tokens.token_text(self.pos)}"`,
-            self.tokens.span_at(self.pos),
-            included,
-            DiagnosticCode::UnexpectedToken,
-        );
+        self.fail_on_token("got", expected, DiagnosticCode::UnexpectedToken);
         return self.pos;
     }
 }
 
-fn scan_equation(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_expression(tokens, pos, FOLLOW_MASK_0);
-    if pos < 0 { return -1; }
-    pos = scan_relop(tokens, pos);
-    if pos < 0 { return -1; }
-    pos = scan_expression(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
     pos = scan_multiplying_expression(tokens, pos, follow);
     if pos < 0 { return -1; }
@@ -2091,29 +1627,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         let sp = pos;
         sg_0_done: {
             sg_0: {
-                let gp_1 = pos;
-                let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                let mut sg_1_best = -1;
-                if sgk_1 == TK_PLUS {
-                    pos = gp_1;
-                    sg_1_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_PLUS { break sg_1_0; }
-                        pos += 1;
-                        if pos > sg_1_best { sg_1_best = pos; }
-                    }
-                } else if sgk_1 == TK_MINUS {
-                    pos = gp_1;
-                    sg_1_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_MINUS { break sg_1_1; }
-                        pos += 1;
-                        if pos > sg_1_best { sg_1_best = pos; }
-                    }
-                }
-                if sg_1_best >= 0 {
-                    pos = sg_1_best;
-                } else {
-                    break sg_0;
-                }
+                pos += 1;
                 pos = scan_multiplying_expression(tokens, pos, follow);
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
@@ -2123,43 +1637,40 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_multiplying_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
     pos = scan_pow_expression(tokens, pos, follow);
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_1(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        sg_1_done: {
+            sg_1: {
+                pos += 1;
+                pos = scan_pow_expression(tokens, pos, follow);
+                if pos < 0 { break sg_1; }
+                break sg_1_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    return pos;
+}
+
+fn scan_pow_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_signed_atom(tokens, pos, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos] == TK_POW && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+        let sp = pos;
         sg_2_done: {
             sg_2: {
-                let gp_3 = pos;
-                let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                let mut sg_3_best = -1;
-                if sgk_3 == TK_TIMES {
-                    pos = gp_3;
-                    sg_3_0: {
-                        if pos >= tokens.len() || tokens[pos] != TK_TIMES { break sg_3_0; }
-                        pos += 1;
-                        if pos > sg_3_best { sg_3_best = pos; }
-                    }
-                } else if sgk_3 == TK_DIV {
-                    pos = gp_3;
-                    sg_3_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_DIV { break sg_3_1; }
-                        pos += 1;
-                        if pos > sg_3_best { sg_3_best = pos; }
-                    }
-                }
-                if sg_3_best >= 0 {
-                    pos = sg_3_best;
-                } else {
-                    break sg_2;
-                }
-                pos = scan_pow_expression(tokens, pos, follow);
+                pos += 1;
+                pos = scan_signed_atom(tokens, pos, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
                 if pos < 0 { break sg_2; }
                 break sg_2_done;
             }
@@ -2168,31 +1679,6 @@ fn scan_multiplying_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos == scan_start { return -1; }
-    return pos;
-}
-
-fn scan_pow_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let scan_start = pos;
-    let mut pos = pos;
-    pos = scan_signed_atom(tokens, pos, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_POW && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        sg_4_done: {
-            sg_4: {
-                if pos >= tokens.len() || tokens[pos] != TK_POW { break sg_4; }
-                pos += 1;
-                pos = scan_signed_atom(tokens, pos, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-                if pos < 0 { break sg_4; }
-                break sg_4_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -2218,7 +1704,6 @@ fn scan_signed_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if _kind_set_2(alt_kind) {
-            pos = start;
             try_2: {
                 pos = scan_func_(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -2226,7 +1711,6 @@ fn scan_signed_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             return -1;
         } else if _kind_set_3(alt_kind) {
-            pos = start;
             try_3: {
                 pos = scan_atom(tokens, pos, follow);
                 if pos < 0 { break try_3; }
@@ -2245,30 +1729,9 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if alt_kind == TK_SCIENTIFIC_NUMBER {
-            pos = start;
-            try_0: {
-                pos = scan_scientific(tokens, pos);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_VARIABLE {
-            pos = start;
-            try_1: {
-                pos = scan_variable(tokens, pos);
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
-            return -1;
-        } else if _kind_set_4(alt_kind) {
-            pos = start;
-            try_2: {
-                pos = scan_constant(tokens, pos);
-                if pos < 0 { break try_2; }
-                break scan_alts;
-            }
-            return -1;
+        if _kind_set_6(alt_kind) {
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_LPAREN {
             pos = start + 1;
             try_3: {
@@ -2286,44 +1749,22 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_scientific(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_SCIENTIFIC_NUMBER { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_constant(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_4(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
-fn scan_variable(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_VARIABLE { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_func_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_funcname(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || !_kind_set_2(tokens[pos]) { return -1; }
+    pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA {
         let sp = pos;
-        sg_5_done: {
-            sg_5: {
-                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_5; }
+        sg_3_done: {
+            sg_3: {
                 pos += 1;
                 pos = scan_expression(tokens, pos, (FOLLOW_MASK_6 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-                if pos < 0 { break sg_5; }
-                break sg_5_done;
+                if pos < 0 { break sg_3; }
+                break sg_3_done;
             }
             pos = -1;
         }
@@ -2333,20 +1774,6 @@ fn scan_func_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
     return pos;
-}
-
-fn scan_funcname(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_2(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
-}
-
-fn scan_relop(tokens: &Array<i32>, pos: i32) -> i32 {
-    if pos < tokens.len() && _kind_set_5(tokens[pos]) {
-        return pos + 1;
-    }
-    return -1;
 }
 
 fn _parse_equation__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -2377,34 +1804,13 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_6_done: {
-                sg_6: {
-                    let gp_7 = pos;
-                    let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    let mut sg_7_best = -1;
-                    if sgk_7 == TK_PLUS {
-                        pos = gp_7;
-                        sg_7_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_PLUS { break sg_7_0; }
-                            pos += 1;
-                            if pos > sg_7_best { sg_7_best = pos; }
-                        }
-                    } else if sgk_7 == TK_MINUS {
-                        pos = gp_7;
-                        sg_7_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_MINUS { break sg_7_1; }
-                            pos += 1;
-                            if pos > sg_7_best { sg_7_best = pos; }
-                        }
-                    }
-                    if sg_7_best >= 0 {
-                        pos = sg_7_best;
-                    } else {
-                        break sg_6;
-                    }
+            sg_4_done: {
+                sg_4: {
+                    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break sg_4; }
+                    pos += 1;
                     pos = scan_multiplying_expression(tokens, pos, follow);
-                    if pos < 0 { break sg_6; }
-                    break sg_6_done;
+                    if pos < 0 { break sg_4; }
+                    break sg_4_done;
                 }
                 break rep_scan;
             }
@@ -2412,7 +1818,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect_set(&SYNC_0);
+        p.expect_set(&SYNC_0, &EXPECTED_0);
         _parse_multiplying_expression(p, follow);
     }
     return;
@@ -2438,34 +1844,13 @@ fn _parse_multiplying_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_8_done: {
-                sg_8: {
-                    let gp_9 = pos;
-                    let sgk_9 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    let mut sg_9_best = -1;
-                    if sgk_9 == TK_TIMES {
-                        pos = gp_9;
-                        sg_9_0: {
-                            if pos >= tokens.len() || tokens[pos] != TK_TIMES { break sg_9_0; }
-                            pos += 1;
-                            if pos > sg_9_best { sg_9_best = pos; }
-                        }
-                    } else if sgk_9 == TK_DIV {
-                        pos = gp_9;
-                        sg_9_1: {
-                            if pos >= tokens.len() || tokens[pos] != TK_DIV { break sg_9_1; }
-                            pos += 1;
-                            if pos > sg_9_best { sg_9_best = pos; }
-                        }
-                    }
-                    if sg_9_best >= 0 {
-                        pos = sg_9_best;
-                    } else {
-                        break sg_8;
-                    }
+            sg_5_done: {
+                sg_5: {
+                    if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { break sg_5; }
+                    pos += 1;
                     pos = scan_pow_expression(tokens, pos, follow);
-                    if pos < 0 { break sg_8; }
-                    break sg_8_done;
+                    if pos < 0 { break sg_5; }
+                    break sg_5_done;
                 }
                 break rep_scan;
             }
@@ -2473,7 +1858,7 @@ fn _parse_multiplying_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect_set(&SYNC_1);
+        p.expect_set(&SYNC_1, &EXPECTED_1);
         _parse_pow_expression(p, follow);
     }
     return;
@@ -2499,13 +1884,13 @@ fn _parse_pow_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_10_done: {
-                sg_10: {
-                    if pos >= tokens.len() || tokens[pos] != TK_POW { break sg_10; }
+            sg_6_done: {
+                sg_6: {
+                    if pos >= tokens.len() || tokens[pos] != TK_POW { break sg_6; }
                     pos += 1;
                     pos = scan_signed_atom(tokens, pos, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-                    if pos < 0 { break sg_10; }
-                    break sg_10_done;
+                    if pos < 0 { break sg_6; }
+                    break sg_6_done;
                 }
                 break rep_scan;
             }
@@ -2533,12 +1918,12 @@ fn _parse_pow_expression(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_signed_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_PLUS {
-        p.expect(TK_PLUS, &SYNC_2);
+        p.take();
         _parse_signed_atom(p, follow);
         return;
     }
     if kind == TK_MINUS {
-        p.expect(TK_MINUS, &SYNC_2);
+        p.take();
         _parse_signed_atom(p, follow);
         return;
     }
@@ -2553,7 +1938,7 @@ fn _parse_signed_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of signedAtom matches",
         p.peek_span(),
-        &SYNC_2,
+        &EXPECTED_2,
     );
     return;
 }
@@ -2584,7 +1969,7 @@ fn _parse_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
         return;
     }
     if kind == TK_LPAREN {
-        p.expect(TK_LPAREN, &SYNC_2);
+        p.take();
         _parse_expression(p, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_RPAREN, &EMPTY_SYNC);
         return;
@@ -2592,7 +1977,7 @@ fn _parse_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of atom matches",
         p.peek_span(),
-        &SYNC_3,
+        &EXPECTED_3,
     );
     return;
 }
@@ -2608,16 +1993,11 @@ fn _parse_atom(p: &mut Parser, follow: i64 = 0) -> () {
     }
 }
 
-fn _parse_scientific__inner(p: &mut Parser) -> () {
-    p.expect(TK_SCIENTIFIC_NUMBER, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_scientific(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SCIENTIFIC, _start);
-    _parse_scientific__inner(p);
+    p.expect(TK_SCIENTIFIC_NUMBER, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("scientific");
@@ -2627,13 +2007,13 @@ fn _parse_scientific(p: &mut Parser) -> () {
 fn _parse_constant__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of constant matches",
         p.peek_span(),
-        &SYNC_4,
+        &EXPECTED_4,
     );
     return;
 }
@@ -2649,16 +2029,11 @@ fn _parse_constant(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_variable__inner(p: &mut Parser) -> () {
-    p.expect(TK_VARIABLE, &EMPTY_SYNC);
-    return;
-}
-
 fn _parse_variable(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_VARIABLE, _start);
-    _parse_variable__inner(p);
+    p.expect(TK_VARIABLE, &EMPTY_SYNC);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("variable");
@@ -2675,13 +2050,13 @@ fn _parse_func___inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_11_done: {
-                sg_11: {
-                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_11; }
+            sg_7_done: {
+                sg_7: {
+                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_7; }
                     pos += 1;
                     pos = scan_expression(tokens, pos, (FOLLOW_MASK_6 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-                    if pos < 0 { break sg_11; }
-                    break sg_11_done;
+                    if pos < 0 { break sg_7; }
+                    break sg_7_done;
                 }
                 break rep_scan;
             }
@@ -2710,13 +2085,13 @@ fn _parse_func_(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_funcname__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if _kind_set_2(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of funcname matches",
         p.peek_span(),
-        &SYNC_5,
+        &EXPECTED_5,
     );
     return;
 }
@@ -2735,13 +2110,13 @@ fn _parse_funcname(p: &mut Parser) -> () {
 fn _parse_relop__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if _kind_set_5(kind) {
-        let _ = p.expect(kind, &EMPTY_SYNC);
+        p.take();
         return;
     }
     p.no_viable(
         "no alternative of relop matches",
         p.peek_span(),
-        &SYNC_6,
+        &EXPECTED_6,
     );
     return;
 }
@@ -2764,13 +2139,12 @@ fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Par
     p.max_errors = max_errors;
     entry(&mut p);
     if p.recovering && p.diagnostics.len() < max_errors {
-        if let Some(e) = &p.pending {
-            let lc = line_col(p.tokens.chars, e.span.start);
-            let mut d = Diagnostic::error(p.pending_code, e.full_message(), e.span, lc.0, lc.1);
-            d.rule_stack = e.rule_stack;
+        if let Some(d) = p.pending {
             p.diagnostics.push(d);
         }
     }
+    merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);
+    resolve_positions(&mut p.diagnostics, p.tokens.chars);
     return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }
 
@@ -2878,22 +2252,26 @@ fn _kind_set_5(k: i32) -> bool {
     return k matches { TK_EQ | TK_GT | TK_LT };
 }
 
-global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_MINUS, TK_PLUS];
-global SYNC_1: List<i32> = [TK_DIV, TK_TIMES];
-global SYNC_2: List<i32> = [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_EULER, TK_I, TK_LN, TK_LOG, TK_LPAREN, TK_MINUS, TK_PI, TK_PLUS, TK_SCIENTIFIC_NUMBER, TK_SIN, TK_SQRT, TK_TAN, TK_VARIABLE];
-global SYNC_3: List<i32> = [TK_EULER, TK_I, TK_LPAREN, TK_PI, TK_SCIENTIFIC_NUMBER, TK_VARIABLE];
-global SYNC_4: List<i32> = [TK_EULER, TK_I, TK_PI];
-global SYNC_5: List<i32> = [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_LN, TK_LOG, TK_SIN, TK_SQRT, TK_TAN];
-global SYNC_6: List<i32> = [TK_EQ, TK_GT, TK_LT];
+fn _kind_set_6(k: i32) -> bool {
+    return k matches { TK_EULER | TK_I | TK_PI | TK_SCIENTIFIC_NUMBER | TK_VARIABLE };
+}
 
-global FOLLOW_KINDS: List<List<i32>> = [[TK_EQ, TK_GT, TK_LT], [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_EULER, TK_I, TK_LN, TK_LOG, TK_LPAREN, TK_MINUS, TK_PI, TK_PLUS, TK_SCIENTIFIC_NUMBER, TK_SIN, TK_SQRT, TK_TAN, TK_VARIABLE], [TK_EOF], [TK_POW], [TK_RPAREN], [TK_LPAREN], [TK_COMMA]];
-global FOLLOW_SETS: List<List<i32>> = follow_bitsets(&FOLLOW_KINDS);
+global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [6144];
+global EXPECTED_0: List<i32> = [TK_MINUS, TK_PLUS];
+global SYNC_1: List<i32> = [24576];
+global EXPECTED_1: List<i32> = [TK_DIV, TK_TIMES];
+global SYNC_2: List<i32> = [65018879];
+global EXPECTED_2: List<i32> = [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_EULER, TK_I, TK_LN, TK_LOG, TK_LPAREN, TK_MINUS, TK_PI, TK_PLUS, TK_SCIENTIFIC_NUMBER, TK_SIN, TK_SQRT, TK_TAN, TK_VARIABLE];
+global EXPECTED_3: List<i32> = [TK_EULER, TK_I, TK_LPAREN, TK_PI, TK_SCIENTIFIC_NUMBER, TK_VARIABLE];
+global EXPECTED_4: List<i32> = [TK_EULER, TK_I, TK_PI];
+global EXPECTED_5: List<i32> = [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_LN, TK_LOG, TK_SIN, TK_SQRT, TK_TAN];
+global EXPECTED_6: List<i32> = [TK_EQ, TK_GT, TK_LT];
+
+global FOLLOW_SETS: List<List<i32>> = [[229376], [134217728], [1048576], [65018879], [1024], [262144]];
 global FOLLOW_MASK_0: i64 = 1;
-global FOLLOW_MASK_1: i64 = 2;
-global FOLLOW_MASK_2: i64 = 3;
-global FOLLOW_MASK_3: i64 = 516;
+global FOLLOW_MASK_2: i64 = 2;
+global FOLLOW_MASK_3: i64 = 1027;
 global FOLLOW_MASK_4: i64 = 5;
-global FOLLOW_MASK_5: i64 = 518;
-global FOLLOW_MASK_6: i64 = 519;
+global FOLLOW_MASK_6: i64 = 1030;
 

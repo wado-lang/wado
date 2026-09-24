@@ -35,7 +35,20 @@ use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::DesugarKind;
 use crate::elaborator::trait_env::ImplMethodEntry;
 use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, VariantInfo};
+use crate::escape::unescape_bytes;
+use crate::primitive::PrimitiveType;
 use crate::{Span, token};
+
+/// The builtin that reads an `Array<T>` out of a byte literal.
+pub(crate) const ARRAY_NEW_DATA: &str = "array_new_data";
+
+/// An expression as a byte literal.
+enum ByteLiteral {
+    Not,
+    /// A literal whose bytes are unknown, which its own error reports.
+    Unknown,
+    Len(usize),
+}
 
 /// The parameter an associated-type equality binds: a bare parameter
 /// (`Builder<Output = T>`) or a pack spelt as the whole tuple
@@ -592,6 +605,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: arg.span(),
             });
         }
+    }
+
+    /// Check a `builtin::array_new_data` call. Its bytes become a constant read
+    /// as whole elements, so they must be known at compile time.
+    fn check_array_new_data(&mut self, args: &[Expr], result: TypeId, span: Span) {
+        let width = self
+            .tysys
+            .type_table
+            .borrow()
+            .packed_element(result)
+            .and_then(PrimitiveType::data_width);
+        let message = match (args, width) {
+            (_, None) => format!(
+                "`builtin::{ARRAY_NEW_DATA}` needs a numeric primitive element type, written as `builtin::{ARRAY_NEW_DATA}::<T>`"
+            ),
+            ([arg], Some(width)) => match self.byte_literal(arg) {
+                ByteLiteral::Not => format!(
+                    "`builtin::{ARRAY_NEW_DATA}` needs a byte string literal or `#include_bytes`"
+                ),
+                ByteLiteral::Len(len) if len % width != 0 => format!(
+                    "`builtin::{ARRAY_NEW_DATA}` reads {width}-byte elements, but has {len} bytes"
+                ),
+                ByteLiteral::Len(_) | ByteLiteral::Unknown => return,
+            },
+            // A miscounted call is the arity error's to report.
+            _ => return,
+        };
+        let _ = self.emit(TypeError::InvalidLiteral { message, span });
+    }
+
+    /// What `expr` is as a byte literal.
+    fn byte_literal(&self, expr: &Expr) -> ByteLiteral {
+        let Expr::Literal(lit) = expr else {
+            return ByteLiteral::Not;
+        };
+        let len = match &lit.value {
+            ast::Literal::Bytes(raw) => unescape_bytes(raw).ok().map(|b| b.len()),
+            ast::Literal::IncludeBytes(raw_path) => {
+                let key = [self.home_module(lit.id).to_string(), raw_path.clone()];
+                self.tysys.included_files.get(&key).map(Vec::len)
+            }
+            _ => return ByteLiteral::Not,
+        };
+        len.map_or(ByteLiteral::Unknown, ByteLiteral::Len)
     }
 
     pub(super) fn resolve_call(
@@ -1926,6 +1983,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (it pins the per-call monomorphic shape reify needs to seed
         // mangled-name construction).
         self.record_generic_instantiation(call.id, type_args.clone(), return_type);
+        if callee.module().is_builtin() && callee.name() == ARRAY_NEW_DATA {
+            self.check_array_new_data(&call.args, return_type, call.span);
+        }
 
         // Check each argument: reject &T/&mut T passed where non-ref is expected.
         // For generic functions with explicit type args, rebuild param types with

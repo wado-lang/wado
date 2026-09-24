@@ -43,7 +43,7 @@ Any file that is neither `.wado` nor a Wasm asset (`.wasm` / `.wat`) is imported
 ```wado
 use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
     generator: {
-        module: "wado-lang:gale@0.1",
+        module: "wado-lang:gale",
     },
 };
 ```
@@ -198,10 +198,12 @@ bool
 i128, u128
 
 // half precision: storage only, no arithmetic and no `as` cast.
-// Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32`.
+// Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32` /
+// `from_f64`, text via `from_str` (each rounded once, as a literal is).
 // Every comparison hands the widened value to f32's, so `==` and `<` are IEEE
 // and `Ord` is the total order — the same split f32 has.
 f16, bf16
+let w: List<bf16> = [0.5, -1.25];   // a float literal rounds once, ties to even
 
 // Composites
 String                  // UTF-8 string
@@ -895,8 +897,8 @@ fn area(width: i32, height: i32) -> i32 {
 ```
 
 Always private, and shadows a same-named module-level item.
-`enum`/`variant`/`flags`, a local `impl`/`trait`, and a generic local `type`
-are not yet supported.
+Either may be generic. `enum`/`variant`/`flags` and a local `impl`/`trait` are
+not yet supported.
 
 ### Methods
 
@@ -998,7 +1000,7 @@ concat::<[i32], [bool, String]>([1], [true, "x"]);
 // A pack on either side of a scalar: nothing settles the ends, so spell them.
 fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { ... }
 middle::<[i32], String, [bool]>([1, "mid", true]);   // 3
-// middle([1, "mid", true]);              // ERROR: cannot infer `Pre`, `Post`
+// middle([1, "mid", true]);              // ERROR: cannot infer `Pre`, `K`, `Post`
 
 // Value spread (works with any tuple, not just packs)
 let a = [1, "hello"];
@@ -1262,7 +1264,7 @@ let pi = f64::PI;
 let max = i32::MAX;
 ```
 
-Primitives provide built-in constants: `f64::PI`, `f64::INFINITY`, `f64::NAN`, `i32::MAX`, `i32::MIN`, etc. See [`core:prelude`](./stdlib-core-prelude.md).
+Primitives provide built-in constants: `f64::PI`, `f64::INFINITY`, `f64::NAN`, `f64::MAX`, `f64::EPSILON`, `i32::MAX`, `i32::MIN`, etc. Every float type, `f16` and `bf16` included, carries Rust's limits (`MAX`, `MIN`, `MIN_POSITIVE`, `EPSILON`, `MANTISSA_DIGITS`, …). See [`core:prelude`](./stdlib-core-prelude.md).
 
 ## Primitive Type Methods
 
@@ -1459,7 +1461,7 @@ fn main() {
 
 `resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
 
-An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects, parameter defaults or type parameters); see [the spec](./spec.md#default-implementations).
+An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. A parameter may take a default, filled in at the call site. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects or type parameters); see [the spec](./spec.md#default-implementations).
 
 ```wado
 interface Log {
@@ -1584,6 +1586,13 @@ let data = #data;           // __DATA__ section content (String)
 
 let src = #include_str("./runtime.wado");  // include file as String
 let icon = #include_bytes("./icon.png");   // include file as ByteList
+```
+
+A literal read as numbers becomes a constant, with no decode loop at startup.
+See [the spec](./spec.md#embedded-data).
+
+```wado
+let w = List::<f32>::from_le_bytes(#include_bytes("./w.bin"));  // little-endian f32s
 ```
 
 Paths in `#include_str` and `#include_bytes` are resolved relative to the source file. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).

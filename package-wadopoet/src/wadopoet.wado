@@ -8,6 +8,8 @@ pub struct CodeWriter {
     indent_level: i32,
     fresh_line: bool,
     id_counter: i32,
+    hoisted_names: List<[String, String]> = [],
+    hoisted: String = "",
 }
 
 impl CodeWriter {
@@ -112,6 +114,30 @@ impl CodeWriter {
         return id;
     }
 
+    /// The name of a top-level function defined once per distinct `key`: `define`
+    /// renders it from the name, and `write_hoisted` places it.
+    pub fn hoist_fn<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        key: S,
+        prefix: S1,
+        define: fn(&String) -> String,
+    ) -> String {
+        if let Some(hit) = self.hoisted_names.iter_ref().find(|kn| kn.0 == key.as_str_slice()) {
+            return hit.1;
+        }
+        let name = `${prefix}${self.hoisted_names.len()}`;
+        self.hoisted_names.push([key.to_string(), name]);
+        self.hoisted.push_str(&define(&name));
+        return name;
+    }
+
+    /// Write every definition `hoist_fn` has queued since the last call.
+    pub fn write_hoisted(&mut self) {
+        let text = self.hoisted;
+        self.hoisted = "";
+        self.raw(&text);
+    }
+
     /// Append raw text with no indentation handling.
     pub fn raw<S: AsStrSlice>(&mut self, text: S) {
         self.buf.push_str(text);
@@ -123,6 +149,7 @@ impl CodeWriter {
     /// Return the generated code. Asserts that indentation is balanced.
     pub fn to_string(&self) -> String {
         assert self.indent_level == 0, `CodeWriter: unbalanced indentation (level=${self.indent_level})`;
+        assert self.hoisted.is_empty(), "CodeWriter: a hoisted definition was never written";
         return self.buf;
     }
 
@@ -305,6 +332,28 @@ pub fn wado<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
     out.push_str(&ReflectTemplate::<T>::tail());
     return out;
 }
+
+/// `bytes` as a byte string literal. Printable ASCII other than `"` and `\`
+/// stands as itself, and every other byte is a `\x` escape.
+pub fn byte_string_literal<S: AsByteSlice>(bytes: S) -> String {
+    let view = bytes.as_byte_slice();
+    let mut out = String::with_capacity(view.len() * 4 + 3);
+    out.push_str("b\"");
+    for let mut i = 0; i < view.len(); i += 1 {
+        let b = view.get_unchecked(i);
+        if b'\x20' <= b <= b'\x7e' && b != b'"' && b != b'\\' {
+            out.push_ascii_unchecked(b);
+        } else {
+            out.push_str("\\x");
+            out.push_ascii_unchecked(HEX_DIGITS.get_byte_unchecked((b >> 4) as i32));
+            out.push_ascii_unchecked(HEX_DIGITS.get_byte_unchecked((b & 0xf) as i32));
+        }
+    }
+    out.push('"');
+    return out;
+}
+
+global HEX_DIGITS: String = "0123456789abcdef";
 
 pub type CharRangePat = RangeInclusive<char>;
 

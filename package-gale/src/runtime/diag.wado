@@ -1,20 +1,12 @@
-use { Span, rule_path_of } from "./lex.wado";
+use { Span, TokenStream, line_starts, line_col_at, push_chars_escaped } from "./lex.wado";
 
 pub enum Severity {
     Error,
-    Warning,
-    Info,
-    Hint,
 }
 
 impl Severity {
     pub fn label(&self) -> String {
-        return match *self {
-            Error => "error",
-            Warning => "warning",
-            Info => "info",
-            Hint => "hint",
-        };
+        return match *self { Error => "error" };
     }
 }
 
@@ -48,13 +40,8 @@ pub enum RecoveryAction {
     None,
 }
 
-pub struct RelatedInfo {
-    pub message: String,
-    pub span: Span,
-}
-
 pub struct Diagnostic {
-    pub severity: Severity,
+    pub severity: Severity = Severity::Error,
     pub code: DiagnosticCode,
     pub message: String,
     pub span: Span,
@@ -64,19 +51,18 @@ pub struct Diagnostic {
     pub found: i32 = -1,
     pub rule_stack: List<String> = [],
     pub recovery: RecoveryAction = RecoveryAction::None,
-    pub related: List<RelatedInfo> = [],
 }
 
 impl Diagnostic {
-    pub fn error<S: AsStrSlice>(code: DiagnosticCode, message: S, span: Span, line: i32, col: i32) -> Diagnostic {
-        return Diagnostic {
-            severity: Severity::Error,
-            code,
-            message: message.to_string(),
-            span,
-            line,
-            col,
-        };
+    pub fn error<S: AsStrSlice>(
+        code: DiagnosticCode,
+        message: S,
+        span: Span,
+        expected: List<i32>,
+        found: i32,
+        recovery: RecoveryAction,
+    ) -> Diagnostic {
+        return Diagnostic { code, message: message.to_string(), span, expected, found, recovery };
     }
 
     pub fn is_error(&self) -> bool {
@@ -84,30 +70,64 @@ impl Diagnostic {
     }
 
     pub fn rule_path(&self) -> String {
-        return rule_path_of(&self.rule_stack);
+        let stack = &self.rule_stack;
+        let mut out = String::with_capacity(stack.len() * 8);
+        let n = stack.len();
+        for let mut i = 0; i < n; i += 1 {
+            let name = &stack[n - 1 - i];
+            if i > 0 {
+                if *name == stack[n - i] {
+                    continue;
+                }
+                out.push_str(" > ");
+            }
+            out.push_str(name);
+        }
+        return out;
     }
 }
 
 impl Display for Diagnostic {
     fn fmt(&self, f: &mut Formatter) {
         f.write_str(`${self.severity.label()}[${self.code.name()}] at ${self.line}:${self.col}: ${self.message}`);
-        for let r of &self.related {
-            f.write_str(`\n  note: ${r.message}`);
-        }
     }
 }
 
-pub fn line_col(chars: &List<char>, pos: i32) -> [i32, i32] {
-    let mut line = 1;
-    let mut col = 0;
-    let cap = if pos < chars.len() { pos } else { chars.len() };
-    for let mut i = 0; i < cap; i += 1 {
-        if chars[i] == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
+fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
+    let mut message = String::from("token recognition error at: '");
+    push_chars_escaped(&mut message, tokens.chars, tokens.starts[i], tokens.ends[i]);
+    message.push('\'');
+    return Diagnostic::error(
+        DiagnosticCode::LexError,
+        message,
+        tokens.span_at(i),
+        [],
+        tokens.kinds[i],
+        RecoveryAction::None,
+    );
+}
+
+pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
+    let mut merged: List<Diagnostic> = [];
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if tokens.is_lex_error(i) {
+            merged.push(lex_error_at(tokens, i));
         }
     }
-    return [line, col];
+    merged.extend(diagnostics);
+    merged.sort_by(|a: &Diagnostic, b: &Diagnostic| a.span.start.cmp(&b.span.start));
+    merged.truncate(max_errors);
+    *diagnostics = merged;
+}
+
+pub fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
+    if diagnostics.is_empty() {
+        return;
+    }
+    let starts = line_starts(chars);
+    for let mut i = 0; i < diagnostics.len(); i += 1 {
+        let lc = line_col_at(&starts, diagnostics[i].span.start);
+        diagnostics[i].line = lc.0;
+        diagnostics[i].col = lc.1;
+    }
 }

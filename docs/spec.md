@@ -46,16 +46,10 @@ produced are stated here, each where it applies: [Memory Model](#memory-model),
 
 ### Whitespace
 
-The lexer recognizes exactly four whitespace characters:
-
-| Code Point | Name  |
-| ---------- | ----- |
-| `\u0020`   | Space |
-| `\u000A`   | LF    |
-| `\u000D`   | CR    |
-| `\u0009`   | Tab   |
-
-The lexer skips whitespace between tokens. Other Unicode whitespace characters (e.g., `\u00A0` non-breaking space) are not recognized as whitespace and will cause a lexer error if used outside strings.
+Whitespace separates tokens and is otherwise ignored. Any character with the
+Unicode `White_Space` property is whitespace: space, tab, LF and CR, and also
+characters such as the no-break space (U+00A0) and the ideographic space
+(U+3000).
 
 ### Comments
 
@@ -68,11 +62,17 @@ The lexer skips whitespace between tokens. Other Unicode whitespace characters (
  * Multi-line
  * block comment
  */
+
+//! Module doc comment
+/// Doc comment
 ```
 
 Block comments do not nest.
 
-TODO: the parser keeps comments in the AST.
+A doc comment is a line comment that documents code. `///` documents the item
+that follows it, and consecutive `///` lines form one doc string. `//!`
+documents the module, and appears before any item. Neither changes what a
+program means. See [WEP: Documentation Generation](./wep-2026-02-28-doc-command.md).
 
 ### Shebang
 
@@ -90,12 +90,12 @@ The `__DATA__` marker separates source code from embedded data. Everything after
 ```wado
 use {println} from "core:cli";
 
-fn run() with Stdout {
+export fn run() with Stdout {
     println("Hello!");
 }
 
 __DATA__
-This is raw data that can be accessed via the compiler API.
+This is raw data, not Wado code.
 It can contain any text, including JSON, YAML, or test expectations.
 ```
 
@@ -108,13 +108,13 @@ It can contain any text, including JSON, YAML, or test expectations.
 
 #### Accessing Data
 
-The data section is accessible via the compiler API on the parsed module, which enables tooling like test frameworks to embed expected results directly in source files.
-
 Within Wado code, the content is available through the `#data` compile-time location literal. See [Compile-Time Location Literals](#compile-time-location-literals).
 
 ### Identifiers
 
-Identifiers match the pattern `[a-zA-Z_][a-zA-Z0-9_]*`:
+An identifier starts with an ASCII letter or `_`. Each later character is `_`
+or any Unicode letter or number (a character with the `Alphabetic` property or a
+numeric general category):
 
 ```wado
 foo
@@ -124,22 +124,34 @@ FooBar
 FOO_BAR
 _private
 name123
+café        // OK: `é` is not the first character
+é           // Error: the first character must be ASCII
 ```
 
 Identifiers are case-sensitive.
 
 ### Contextual Keywords
 
-The following keywords are contextual — they act as keywords only in specific syntactic positions and can be used as variable names, field names, and function parameters elsewhere:
+The following keywords are contextual. Each acts as a keyword only in the
+position listed:
 
-| Keyword   | Keyword context                 | Identifier elsewhere                  |
-| --------- | ------------------------------- | ------------------------------------- |
-| `flags`   | `flags` declaration             | Variable, field, parameter            |
-| `type`    | `type` declaration              | Variable, field, parameter            |
-| `of`      | `for let <pattern> of <expr>`   | Variable, field, parameter            |
-| `from`    | `use { ... } from "..."`        | Variable, field, parameter, type name |
-| `test`    | `test "name" { ... }` block     | Variable, field, parameter            |
-| `extends` | `resource Child extends Parent` | Variable, field, parameter            |
+| Keyword   | Keyword context                                     |
+| --------- | --------------------------------------------------- |
+| `flags`   | `flags` declaration                                 |
+| `type`    | `type` declaration                                  |
+| `of`      | `for let <pattern> of <expr>`                       |
+| `from`    | `use { ... } from "..."`                            |
+| `test`    | `test "name" { ... }` block                         |
+| `extends` | `resource Child extends Parent`                     |
+| `do`      | `with Effect => handler do { ... }`                 |
+| `task`    | `task return expr;`                                 |
+| `trap`    | `..trap` rest clause of an effect handler `impl`    |
+| `forward` | `..forward` rest clause of an effect handler `impl` |
+| `resume`  | `resume expr` in an effect handler                  |
+
+Elsewhere each is an ordinary identifier: a variable, field, parameter, or type
+name. `resume` is the exception. It is a keyword in every expression position,
+so it serves only as a field name.
 
 ```wado
 // 'of' as a variable name
@@ -196,7 +208,8 @@ let b = if c { 1; } else { 2; };       // also 1 or 2
 let u = if c { g(); () } else { () };  // ()
 ```
 
-Only `if`, `match` and [labeled blocks](#labeled-blocks) produce a block value.
+Only `if`, `match`, `with … do` and [labeled blocks](#labeled-blocks) produce a
+block value.
 A brace in value position is a struct literal: `let x = { 1 };` is an error, and
 `let p = { x: 1, y: 2 };` is an implicit struct literal.
 
@@ -333,14 +346,18 @@ fn wrap<T>(value: T) -> i32 {
 }
 ```
 
-`enum`/`variant`/`flags` declarations, methods on a local type (a local
-`impl`/`trait` block), and generic local `type` (newtype) are not yet
-supported inside a function body. See
+So do local newtypes: `type N<T> = List<T>;`.
+
+A function body may also declare `enum`, `variant` and `flags` items, and
+`impl`/`trait` blocks that give a local type methods.
+
+Not yet implemented. See
 [WEP: Local Item Definitions](./wep-2026-07-09-local-item-definitions.md).
 
 ### Global Variables
 
-Global variables are module-level state that compile directly to WebAssembly globals. Unlike local variables (`let`), globals have module lifetime and are accessed via `global.get`/`global.set` instructions.
+Global variables are module-level state. Unlike local variables (`let`), they
+live as long as the module.
 
 ```wado
 // Immutable global
@@ -382,7 +399,6 @@ fn example() {
 
 #### Initialization Order
 
-An initializer too complex for a Wasm constant runs at module initialization.
 Initializers run in dependency order, so one may read another global whatever
 the declaration order — across modules too, and whether it names the global or
 reaches it through a call. A cycle among them is an error.
@@ -460,15 +476,24 @@ looser than the binary operators, `as`, and the value-producing unary operators
 
 #### Prohibited Operators
 
-Wado intentionally omits certain operators found in other languages:
-
-- No `++`/`--`: use `x += 1` and `x -= 1` instead. These operators cause undefined behavior in C/C++ and add unnecessary complexity.
-- No `**` power operator: use the `pow(x, y)` function instead. `**` has counterintuitive precedence in languages that have it (e.g., Python's `-1**2 = -1`).
+Wado has no `++`/`--`: write `x += 1` and `x -= 1`. It has no `**` power
+operator: call `f64::pow(x, y)` or `f32::pow(x, y)`. See
+[WEP: Operator Precedence](./wep-2026-01-11-operator-precedence.md) for why.
 
 #### Type Cast (`as`)
 
-The `as` operator converts between primitive types, and reinterprets a value
-across a newtype boundary — any two types sharing an ultimate base:
+The `as` operator converts between primitive types. It also reinterprets a
+value across a newtype boundary, between any two types sharing an ultimate base.
+It converts a `flags` value to and from `u32`, and coerces a collection literal
+to its target type (see
+[Collection Literal Coercion](#collection-literal-coercion)).
+
+Some primitive pairs refuse it. `f16` and `bf16` take no `as` in either
+direction, and an integer converts to `char` only from `u8` (see
+[char Casting and Conversion](#char-casting-and-conversion)).
+
+`as` binds tighter than every binary operator and looser than a prefix unary
+operator: `-x as u32` is `(-x) as u32`, and `a / b as f64` is `a / (b as f64)`.
 
 ```wado
 let i = 42;
@@ -499,13 +524,20 @@ let d = (3 | 4) & 6;    // 6 (| first due to parentheses)
 Wado supports mathematical comparison chaining, allowing natural range expressions. It borrows Python's syntax, but not Python's evaluation:
 
 ```wado
-// Valid chains (same direction)
-a < b < c       // Equivalent to: (a < b) & (b < c)
-a > b > c       // Equivalent to: (a > b) & (b > c)
-a <= b <= c     // Equivalent to: (a <= b) & (b <= c)
-a >= b >= c     // Equivalent to: (a >= b) & (b >= c)
-a == b == c     // Equivalent to: (a == b) & (b == c)
-0 <= x <= 100   // Natural range check
+a < b < c       // (a < b) & (b < c)
+a >= b >= c     // (a >= b) & (b >= c)
+a == b == c     // (a == b) & (b == c)
+0 <= x <= 100   // a range check
+```
+
+A chain uses operators from one group only: ascending (`<`, `<=`), descending
+(`>`, `>=`), or equality (`==`). `!=` never chains. Any other chain is a parse
+error:
+
+```wado
+a < b > c       // Error: mixed directions
+a == b < c      // Error: mixing == and inequality
+a != b != c     // Error: != chaining not allowed
 ```
 
 A chain evaluates every operand exactly once, left to right, and then tests
@@ -513,23 +545,8 @@ them. It does not short-circuit, so a later operand runs even where an earlier
 comparison already decided the answer. Write `&&` where an operand must not run
 on that path.
 
-```wado
-// Invalid chains (semantic error)
-a < b > c       // Error: mixed directions
-a > b < c       // Error: mixed directions
-a < b >= c      // Error: mixing < and >=
-a == b < c      // Error: mixing == and inequality
-a != b != c     // Error: != chaining not allowed
-```
-
-Chaining rules:
-
-1. Same-direction inequality: `<`/`<=` can only chain with `<`/`<=`, and `>`/`>=` can only chain with `>`/`>=`
-2. Equality chaining: `==` can only chain with `==`
-3. No `!=` chaining: `!=` cannot be chained (the meaning of `a != b != c` is ambiguous)
-4. No mixing: cannot mix equality operators with inequality operators
-
-See `docs/wep-2026-01-11-operator-precedence.md` for detailed rationale.
+See [WEP: Operator Precedence](./wep-2026-01-11-operator-precedence.md) for the
+rationale.
 
 ## Control Flow
 
@@ -575,6 +592,8 @@ if let Some(x) = opt {
 
 When the scrutinee of `if let`, `match`, or `matches` is a reference type (`&T` or `&mut T`), patterns match against the underlying type. Payload bindings become references — e.g. matching `&Option<T>` with `Some(x)` gives `x: &T`, not `x: T` (Rust-compatible, RFC 2005).
 
+A destructuring `let` or `for` binding follows the same rule, and so does a reference met below the top of a pattern: `for let [a, b] of &pairs` gives `a: &A`, and `[n, { x, .. }]` against `[i32, &Point]` gives `x: &i32`.
+
 ```wado
 let opt: Option<i32> = Option::<i32>::Some(42);
 let ro = &opt;
@@ -618,7 +637,7 @@ while i < 10 {
 
 ```wado
 let items: List<i32> = [1, 2, 3];
-let mut iter = items.iter();
+let mut iter = items.into_iter();
 
 while let Some(x) = iter.next() {
     println(`${x}`);
@@ -657,7 +676,7 @@ The condition part of a C-style for loop can use `let` pattern matching:
 
 ```wado
 let items: List<i32> = [10, 20, 30];
-let mut iter = items.iter();
+let mut iter = items.into_iter();
 
 for ; let Some(x) = iter.next(); {
     println(`${x}`);
@@ -694,31 +713,15 @@ for let x of my_collection {
 }
 ```
 
-#### For-of desugaring
+#### Semantics
 
-```wado
-// Source
-for let item of collection {
-    body(item);
-}
+`for let item of collection { body }` calls `collection.into_iter()` once,
+before the first iteration. Each iteration then calls `next()` on the result,
+binds the element to `item` and runs the body. The loop ends when `next()`
+returns `None`.
 
-// Desugars to
-scope: {
-    let mut $iter = collection.into_iter();
-    loop {
-        if let Some($item) = $iter.next() {
-            let item = $item;
-            body(item);
-        } else {
-            break;
-        }
-    }
-}
-```
-
-#### Note
-
-The binding is a copy of each element (value semantics), so modifying it does not affect the original collection. For-of works with any type implementing `IntoIterator`, not just arrays.
+The binding is a copy of each element (value semantics), so modifying it does
+not affect the original collection.
 
 The binding must match every element, as a `let` pattern must. A pattern that can fail (`for let Some(x) of xs`, a narrowing type pattern) is a compile error. Match on the element in the body instead.
 
@@ -1034,7 +1037,7 @@ if shape matches { Circle(_) | Square(_) } { ... }
 
 #### Nested Sub-Patterns in Tuple/Struct Destructuring
 
-Tuple and struct patterns support literal, variant, enum, or-pattern, and range sub-patterns. These are lowered into guard conditions with appropriate checks:
+Tuple and struct patterns support literal, variant, enum, or-pattern, and range sub-patterns:
 
 ```wado
 // Literal sub-patterns in tuples
@@ -1121,11 +1124,9 @@ if opt matches { Some(x) && x > 0 } { }  // OK
 ### Branch Hints
 
 `builtin::cold_path()` marks the code path that contains it as cold (rarely
-executed). It is a statement with no runtime effect: it changes only code
-generation. The branch that syntactically contains the call is annotated with a
-Wasm branch hint so the engine lays out the other side as the predicted-taken
-path, and the cold path is excluded from the inliner's cost estimate (a small
-hot function stays inlinable even when it guards a large error path).
+executed). It is a statement with no runtime effect. It is a performance hint:
+the compiler and the Wasm engine treat the other side of the branch that
+contains it as the likely one.
 
 Because it is a plain statement rather than a condition wrapper, `cold_path()`
 works anywhere a branch body does — including an `if let` or `match` arm, where
@@ -1133,7 +1134,7 @@ no boolean condition is available:
 
 ```wado
 // Error/abort guard: the taken branch is cold.
-fn get(self, i: i32) -> T {
+fn get(&self, i: i32) -> i32 {
     if i >= self.len {
         builtin::cold_path();
         panic("index out of bounds");
@@ -1155,7 +1156,7 @@ Placed on the fall-through after a guard whose taken branch diverges, it hints
 the guard as likely-taken — the guard-clause idiom:
 
 ```wado
-fn lookup(self, key: String) -> i32 {
+fn lookup(&self, key: String) -> i32 {
     if let Some(v) = self.fast_path(key) {
         return v;
     }
@@ -1167,8 +1168,9 @@ fn lookup(self, key: String) -> i32 {
 ### Optimization Barrier
 
 `builtin::black_box(value)` returns `value` unchanged but never as a
-compile-time constant, so a computation reading it is not folded away. It emits
-no instruction. Use it to keep a test or benchmark measuring the work it names:
+compile-time constant, so the compiler does not fold away a computation reading
+it. It emits no instruction. Use it to keep a test or benchmark measuring the
+work it names:
 
 ```wado
 test "sign extension folds the redundant mask" {
@@ -1178,9 +1180,32 @@ test "sign extension folds the redundant mask" {
 
 Without it, `to_i8(300)` folds to `44` and the test no longer reaches `to_i8`.
 
-The barrier holds for the whole Wado pipeline: every NIR and WIR pass sees an
-unknown value. It ends at codegen, which emits the operand where the call stood,
-so the Wasm engine downstream is free to fold the constant.
+The barrier binds the Wado compiler only. The Wasm engine that runs the program
+is still free to fold the value.
+
+### Embedded Data
+
+`List::<T>::from_le_bytes(bytes)` reads `bytes` as little-endian `T`s, back to
+back, for any `T: FromLeBytes`: the fixed-width integers, `f16`, `bf16`, `f32`
+and `f64`. It panics when the byte count is not a whole number of `T`s.
+
+When the argument is a byte string literal or `#include_bytes` and `T` is
+concrete, the compiler folds the call into a constant, so no decode loop runs at
+startup. A long list is created from a data segment with one `array.new_data`,
+and the Wasm grows by the byte count alone. A short one is built inline, where
+that encodes smaller. Either way the result is an ordinary `List<T>`. A ragged
+literal is not folded, and panics as it would at run time. Nor is a call whose
+`T` is a newtype with its own `FromLeBytes`, which decides what the bytes mean.
+
+`builtin::array_new_data::<T>(bytes)` is the same fold returning an `Array<T>`,
+for a caller building its own container. It has no run-time form, so its
+argument must be a literal, `T` must be a numeric primitive, and the byte count
+must be a whole number of `T`s. Each is a compile error otherwise.
+
+```wado
+let weights = List::<f32>::from_le_bytes(#include_bytes("./weights.bin"));
+let bias = List::<bf16>::from_le_bytes(b"\x80\x3f\x00\x40");   // [1.0, 2.0]
+```
 
 ## Memory Model
 
@@ -1188,13 +1213,13 @@ so the Wasm engine downstream is free to fold the constant.
 
 - Wasm-GC based: Garbage collection delegated to runtime
 - Lifetime inference: No explicit lifetime annotations required
-- Value semantics: Every value is deeply copied on assignment, parameter passing, and return — references (`&T`, `&mut T`) are the only types that share state
+- Value semantics: a value is deeply copied on assignment, parameter passing, and return. References (`&T`, `&mut T`) share state instead, and an affine resource moves
 
 ### Value Semantics
 
 See [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
-Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule uniformly. The only exceptions are reference types (`&T`, `&mut T`), which alias the underlying value.
+Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule uniformly. There are two exceptions. Reference types (`&T`, `&mut T`) alias the underlying value. An affine resource is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource linearity](#resource-linearity)).
 
 ```wado
 struct Point { x: i32, y: i32 }
@@ -1221,31 +1246,35 @@ denotes; it may not rely on the number of copies performed to produce it.
 
 ### Type Mapping at Component Boundaries
 
-Wado types are stored internally as WebAssembly core and GC types, and lift/lower to Component Model types when crossing component boundaries (the Canonical ABI). The compiler performs this conversion automatically, letting Wado use optimal internal representations (e.g. Wasm GC structs) while interoperating through standard CM types at the boundary.
+Wado types lift and lower to Component Model types when they cross a component boundary (the Canonical ABI). The compiler performs this conversion automatically.
 
 The table below is the Wado↔CM correspondence, read in both directions: Wado→CM when generating a component's exported interface, and CM→Wado when importing an external component (`use { Iface } from "./c.wasm" with { type: "wasm" }`, see [Wasm Module and Component Imports](#wasm-module-and-component-imports)). CM types are written in their WIT spelling.
 
-| Wado Type                 | Internal Representation    | CM Type at Boundary       | Notes                                                                                      |
-| ------------------------- | -------------------------- | ------------------------- | ------------------------------------------------------------------------------------------ |
-| `bool`                    | `i32`                      | `bool`                    | Boolean value                                                                              |
-| `char`                    | `i32`                      | `char`                    | Unicode scalar value                                                                       |
-| `i8`, `i16`, `i32`, `i64` | `i32`, `i32`, `i32`, `i64` | `s8`, `s16`, `s32`, `s64` | Signed integers                                                                            |
-| `u8`, `u16`, `u32`, `u64` | `i32`, `i32`, `i32`, `i64` | `u8`, `u16`, `u32`, `u64` | Unsigned integers                                                                          |
-| `i128`, `u128`            | GC `struct {u64, i64/u64}` | `record { low, high }`    | Prelude structs, so each crosses as its own record                                         |
-| `f32`, `f64`              | `f32`, `f64`               | `f32`, `f64`              | Floating point                                                                             |
-| `String`                  | GC `array i8` (UTF-8)      | `string`                  | UTF-8 string, GC-managed internally                                                        |
-| `List<T>`                 | GC `array T`               | `list<T>`                 | Dynamic array, GC-managed internally                                                       |
-| `TreeMap<K, V>`           | GC `struct` (AA tree)      | `map<K, V>`               | `K` is `bool`, `char`, `String`, or an integer; a repeated key takes the last pair's value |
-| `[T1, T2, ...]`           | GC `struct {T1, T2, ...}`  | `tuple<T1, T2, ...>`      | Tuple types                                                                                |
-| `Option<T>`               | GC variant                 | `option<T>`               | Optional value                                                                             |
-| `Result<T, E>`            | GC variant                 | `result<T, E>`            | Result type; `result<ok>` and bare `result` are the payload-elided forms                   |
-| `struct { ... }`          | GC `struct`                | `record { ... }`          | Wasm GC struct internally, record at CM boundary                                           |
-| `enum { ... }`            | `i32`                      | `enum { ... }`            | Enumeration without payloads                                                               |
-| `variant { ... }`         | GC variant                 | `variant { ... }`         | Variant/sum type with payloads                                                             |
-| `flags { ... }`           | `i32`/`i64`                | `flags { ... }`           | Bit flags                                                                                  |
-| `resource`                | `i32` (handle)             | `resource`                | Resource handle; owned and borrowed handles both map here                                  |
-| `Stream<T>`               | CM stream (P3)             | `stream<T>`               | Component Model async stream                                                               |
-| `Future<T>`               | CM future (P3)             | `future<T>`               | Component Model async future                                                               |
+| Wado Type                 | CM Type at Boundary       | Notes                                                                                      |
+| ------------------------- | ------------------------- | ------------------------------------------------------------------------------------------ |
+| `bool`                    | `bool`                    | Boolean value                                                                              |
+| `char`                    | `char`                    | Unicode scalar value                                                                       |
+| `i8`, `i16`, `i32`, `i64` | `s8`, `s16`, `s32`, `s64` | Signed integers                                                                            |
+| `u8`, `u16`, `u32`, `u64` | `u8`, `u16`, `u32`, `u64` | Unsigned integers                                                                          |
+| `i128`, `u128`            | `record { low, high }`    | Prelude structs, so each crosses as its own record                                         |
+| `f32`, `f64`              | `f32`, `f64`              | Floating point                                                                             |
+| `String`                  | `string`                  | UTF-8 string                                                                               |
+| `List<T>`                 | `list<T>`                 | Dynamic array                                                                              |
+| `TreeMap<K, V>`           | `map<K, V>`               | `K` is `bool`, `char`, `String`, or an integer; a repeated key takes the last pair's value |
+| `[T1, T2, ...]`           | `tuple<T1, T2, ...>`      | Tuple types                                                                                |
+| `Option<T>`               | `option<T>`               | Optional value                                                                             |
+| `Result<T, E>`            | `result<T, E>`            | Result type; `result<ok>` and bare `result` are the payload-elided forms                   |
+| `struct { ... }`          | `record { ... }`          | Record                                                                                     |
+| `enum { ... }`            | `enum { ... }`            | Enumeration without payloads                                                               |
+| `variant { ... }`         | `variant { ... }`         | Variant/sum type with payloads                                                             |
+| `flags { ... }`           | `flags { ... }`           | Bit flags                                                                                  |
+| `resource`                | `resource`                | Resource handle; owned and borrowed handles both map here                                  |
+| `Stream<T>`               | `stream<T>`               | Component Model async stream                                                               |
+| `Future<T>`               | `future<T>`               | Component Model async future                                                               |
+
+`f16` and `bf16` have no Component Model type, so they do not cross a component
+boundary. An `export fn` whose signature names either one is a compile error.
+See [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
 
 ### The Prelude
 
@@ -1255,13 +1284,14 @@ The prelude (`core:prelude`) is automatically imported into every module, provid
 
 - `String` - UTF-8 string type
 - `List<T>` - Dynamic array type
-- `Tuple<T1, T2, ...>` - Alias for `[T1, T2, ...]`
-- `Option<T>` and its variants: `Some(x)`, `None` (also accessible via `null` keyword)
-- `Result<T, E>` and its variants: `Ok(x)`, `Err(e)`
+- `Option<T>` and its cases `Some(x)` and `None` (`null` also denotes `None`)
+- `Result<T, E>` and its cases `Ok(x)` and `Err(e)`
 - `Stream<T>` - Component Model async stream
 - `Future<T>` - Component Model async future
-- `Pollable` - WASI I/O polling resource
 - `i128`, `u128` - 128-bit integer types
+
+A case is written bare (`Some(x)`) only where an expected type says which type
+it belongs to. Elsewhere it is qualified: `Option::Some(x)`.
 
 #### Disabling the Prelude
 
@@ -1269,34 +1299,40 @@ The prelude (`core:prelude`) is automatically imported into every module, provid
 #![no_prelude]  // At the top of a module
 
 // Now you must explicitly import everything
-use {String, List, Tuple, Option, Result, Stream, Future, Pollable} from "core:prelude";
+use {String, List, Option, Result, Stream, Future} from "core:prelude";
 ```
 
 ### Primitive Types
 
-Wasm primitive types are built into the language (no import required):
+Primitive types are built into the language (no import required):
 
 ```wado
 // Numeric
 i8, i16, i32, i64
 u8, u16, u32, u64
 f32, f64
+f16, bf16   // half precision: storage only, no arithmetic
 
 // Basic
 bool
 char
 ```
 
+`f16` and `bf16` hold a value but do no arithmetic, and `as` does not cast them.
+`to_bits` / `from_bits` reach the bits, and `From` / `TryFrom` / `from_f32`
+convert the value. A comparison widens both operands to `f32` and compares
+those. See [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
+
 ### Associated Constants
 
-Associated constants are compile-time constants defined in `impl` blocks using the `const` keyword. They are inlined at every use site and cannot be mutated.
+Associated constants are compile-time constants defined in `impl` blocks using the `const` keyword. They cannot be mutated.
 
 ```wado
 impl f64 {
     pub const PI: f64 = 3.14159265358979323846;
 }
 
-let pi = f64::PI;  // inlined as the literal value
+let pi = f64::PI;
 ```
 
 Primitive types provide built-in associated constants and static methods. See [`core:prelude`](./stdlib-core-prelude.md) for the full list.
@@ -1316,8 +1352,6 @@ let low = a.low();
 let high = a.high();
 ```
 
-WebAssembly has no native 128-bit integer type, so Wado represents them as pairs of 64-bit values. Addition, subtraction and multiplication use Wasm Wide Arithmetic instructions (`i64.add128`, `i64.sub128`, `i64.mul_wide_u`). Wasm has no 128-bit divide, so division and the bitwise operations are software implementations.
-
 Available operations:
 
 | Category   | Operations                                                     |
@@ -1328,8 +1362,8 @@ Available operations:
 | Conversion | `from_u64()`, `from_i64()`, `low()`, `high()`, `as`, `TryFrom` |
 
 Literal and range patterns work on them in every pattern position, nested ones
-included: `match [x, y] { [1..=5, _] => … }`. Each lowers to the same `Eq` /
-`Ord` call the equivalent comparison does.
+included: `match [x, y] { [1..=5, _] => … }`. Each pattern matches exactly when
+the equivalent `==` or range comparison holds.
 
 `as` casts follow Rust semantics in both directions:
 
@@ -1354,7 +1388,12 @@ Wado exposes WebAssembly SIMD via the `core:simd` module. A single primitive typ
 | Unsigned | `u8x16`, `u16x8`, `u32x4`, `u64x2` |
 | Float    | `f32x4`, `f64x2`                   |
 
-All SIMD newtypes share the `v128` base and can be reinterpreted via `as` cast (zero-cost). Each type provides `splat()` construction, `extract_lane()` access, comparison methods (`eq`, `lt`, `gt`, `le`, `ge`, `ne`), and operator overloading (`+`, `-`, `*`, `/`, `&`, `|`, `^`, `~`, `<<`, `>>`).
+All SIMD newtypes share the `v128` base and can be reinterpreted via `as` cast (zero-cost). Each type provides `splat()` construction, lane access, per-lane comparison methods such as `eq` and `lt`, and the operators its lanes support. The sets differ by type, following the Wasm SIMD instruction set:
+
+- `/` exists only on `f32x4` and `f64x2`, and the bitwise operators only on the integer types.
+- `i8x16` and `u8x16` have no `*`.
+- `u64x2` compares only with `eq` and `ne`.
+- `i8x16` and `i16x8` read a lane with `extract_lane_s` or `extract_lane_u`; the other types use `extract_lane`.
 
 Sequence literal coercion is supported via `impl From<Array<i32>> for i32x4`:
 
@@ -1367,7 +1406,7 @@ let sum = v + w;                   // [11, 12, 13, 14]
 let mask = v.lt(&w);              // per-lane comparison mask
 ```
 
-Beyond basic arithmetic and comparison, types provide specialized operations: saturating arithmetic (`add_sat_s/u`, `sub_sat_s/u`), lane narrowing/extension, extended multiplication, pairwise addition, type conversion between integer and float, and bit selection. See the `core:simd` module documentation for the full API.
+Beyond basic arithmetic and comparison, types provide specialized operations: saturating arithmetic (`add_sat_s/u` and `sub_sat_s/u` on signed types, `add_sat` and `sub_sat` on unsigned ones), lane narrowing/extension, extended multiplication, pairwise addition, type conversion between integer and float, and bit selection. See the `core:simd` module documentation for the full API.
 
 #### Relaxed SIMD
 
@@ -1378,7 +1417,7 @@ Relaxed SIMD operations trade strict determinism for performance. Edge-case beha
 - Truncation: `i32x4::relaxed_trunc_f32x4_s/u`, `relaxed_trunc_f64x2_s/u_zero`
 - Lane select: `relaxed_laneselect` on `i8x16`, `i16x8`, `i32x4`, `i64x2`
 - Swizzle: `i8x16.relaxed_swizzle`
-- Dot product: `i16x8.relaxed_dot_i8x16_i7x16_s`, `i32x4.relaxed_dot_i8x16_i7x16_add_s`
+- Dot product: `i16x8.relaxed_dot_i8x16_i7x16_s`, `i32x4::relaxed_dot_i8x16_i7x16_add_s(a, b, &c)`
 - Q15 multiply: `i16x8.relaxed_q15mulr_s`
 
 Relaxed SIMD is not modeled as an effect because: (1) results are deterministic within an environment, (2) hardware behavior cannot be intercepted, and (3) standard floats already have similar NaN non-determinism.
@@ -1425,14 +1464,14 @@ read_value(&mut x);   // OK: &mut i32 coerces to &i32
 
 #### Key Differences from Rust (GC-Based Memory Model)
 
-| Aspect                 | Rust                       | Wado                      |
-| ---------------------- | -------------------------- | ------------------------- |
-| Memory management      | Ownership + borrow checker | Garbage collection        |
-| Multiple mutable refs  | Not allowed                | Allowed                   |
-| Returning local refs   | Not allowed (dangling)     | Allowed (GC keeps alive)  |
-| Reference to reference | `&&T` (rare)               | `&&T` (fully supported)   |
-| Lifetime annotations   | Required                   | Not needed                |
-| Borrow checking        | Compile-time               | None (runtime GC instead) |
+| Aspect                 | Rust                       | Wado                     |
+| ---------------------- | -------------------------- | ------------------------ |
+| Memory management      | Ownership + borrow checker | Garbage collection       |
+| Multiple mutable refs  | Not allowed                | Allowed                  |
+| Returning local refs   | Not allowed (dangling)     | Allowed (GC keeps alive) |
+| Reference to reference | `&&T` (rare)               | `&&T` (fully supported)  |
+| Lifetime annotations   | Required                   | Not needed               |
+| Borrow checking        | Compile-time               | None; resources move     |
 
 #### Returning References to Local Variables
 
@@ -1470,19 +1509,19 @@ let r2 = &mut x;  // OK in Wado (no borrow checker)
 - Cost: Runtime overhead from garbage collection
 - Safety: Memory safety guaranteed by GC, not compile-time checks
 
-#### Method Receiver: `self` by Value is Prohibited
+#### Method Receiver: `self` by Value
 
-In method definitions, the `self` parameter must always be a reference (`&self` or `&mut self`). Bare `self` (by value) is a syntax error:
+A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on a resource, or on an aggregate that holds one:
 
 ```wado
 impl Point {
     fn sum(&self) -> i32 { ... }          // OK: immutable reference
     fn reset(&mut self) { ... }           // OK: mutable reference
-    // fn consume(self) -> i32 { ... }    // ERROR: `self` by value is not allowed
+    // fn consume(self) -> i32 { ... }    // ERROR: `self` by value is only allowed on a resource
 }
 ```
 
-In languages with ownership semantics (e.g., Rust), `self` by value transfers ownership to the method, preventing subsequent use of the receiver. Wado has no ownership system — there is no concept of "consuming" a value — so `self` by value serves no purpose. The parser rejects it with a clear error message guiding the user to `&self` or `&mut self`.
+A by-value `self` moves the receiver into the method, so the caller's binding cannot be used afterward. That is how an affine resource is consumed (see [Resource linearity](#resource-linearity)). A value type has nothing to consume, so `self` by value on one is a compile error. See [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md).
 
 #### `mut` Parameters
 
@@ -1495,12 +1534,12 @@ fn increment(mut n: i32) -> i32 {
 }
 
 fn normalize(mut s: String) -> String {
-    s = s.to_uppercase();  // rebinds local binding
+    s = s.to_ascii_uppercase();  // rebinds local binding
     return s;
 }
 ```
 
-The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function, except references (`&T`, `&mut T`) which share state with the caller. This applies uniformly to primitives, structs, `String`, and `List<T>`. Inside the callee, both reassignment (`p = new_value`) and in-place mutations — field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`) — operate on the callee's local copy and are not visible to the caller. To let the callee mutate the caller's value, declare the parameter as `&mut T` and pass a `&mut`-reference at the call site.
+The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function. This applies uniformly to primitives, structs, `String`, and `List<T>`. References (`&T`, `&mut T`) are the exception: they share state with the caller. An affine resource is never copied: passing it moves it. Inside the callee, reassignment (`p = new_value`) and in-place mutation operate on the callee's local copy and are not visible to the caller. In-place mutation covers field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`). To let the callee mutate the caller's value, declare the parameter as `&mut T` and pass a `&mut`-reference at the call site.
 
 ```wado
 fn countdown(mut n: i32) with Stdout {
@@ -1539,27 +1578,15 @@ fn bad(n: i32) {
 #### Design Principles
 
 - Value semantics: deep-copied on assignment, parameter passing, and return — passing a `String` to a function gives the callee its own buffer
-- Mutable through the local binding: methods like `push_str` and operators like `+=` modify the receiver in place, but never the caller's binding
+- Mutable through the local binding: `push_str` modifies the receiver in place and `+=` reassigns the binding, but neither reaches the caller's value
 - GC-managed: Memory is automatically managed by Wasm GC
 - UTF-8 encoding: Direct mapping to Component Model `string`
 
 #### Semantics and Encoding
 
 - Semantically, a `String` is a sequence of Unicode scalar values
-- Internally represented as a UTF-8 byte array (`List<u8>`)
 - Invalid UTF-8 byte sequences are not allowed; all String values must be valid UTF-8
 - This ensures interoperability with Component Model `string` type and safe string operations
-
-#### Internal Structure
-
-```wado
-// Conceptual representation (not user-visible)
-struct String {
-    data: GcArray<u8>,   // UTF-8 bytes
-    len: i32,            // Length in bytes
-    capacity: i32,       // Buffer capacity for += operations
-}
-```
 
 #### Index Access (Prohibited)
 
@@ -1570,18 +1597,18 @@ let s = "Hello世界";
 
 // Prohibited
 s[0]      // Compile error
-s[0..5]   // Compile error
+s[0..<5]  // Compile error
 ```
 
 Use explicit methods instead:
 
 ```wado
 // Byte-level access
-let bytes: List<u8> = s.bytes();
+let bytes: List<u8> = s.bytes().collect();
 let first_byte = bytes[0];
 
 // Character-level access
-let chars: List<char> = s.chars();
+let chars: List<char> = s.chars().collect();
 let first_char = chars[0];
 
 // Other methods
@@ -1605,7 +1632,7 @@ for let b of "hello".bytes() {
 
 ##### String Building
 
-The `append` method provides efficient O(1) amortized string building:
+`push_str` appends to a `String` in place:
 
 ```wado
 let mut builder = String::with_capacity(20);
@@ -1616,6 +1643,10 @@ builder.push_str("World!");
 
 // `+` operator for two-string concatenation
 let combined = "Hello, " + "World!";  // "Hello, World!"
+
+// `join` concatenates a list with a separator
+let parts: List<String> = ["a", "b", "c"];
+let joined = parts.join(",");         // "a,b,c"
 ```
 
 #### Concatenation
@@ -1628,78 +1659,14 @@ let s2 = " world";
 let s3 = s1 + s2;  // Creates new String
 ```
 
-##### Mutation (`+=` operator)
+##### Reassignment (`+=` operator)
 
-The `+=` operator provides efficient in-place concatenation:
+`a += b` is `a = a + b` through `Add`. `String` follows the same rule as every other type:
 
 ```wado
 let mut s = "hello";
-s += " world";     // Efficient: uses internal capacity
-s += "!";          // May reallocate if capacity exceeded
-```
-
-##### Implementation
-
-`+=` desugars to `String::add_assign(&mut s, suffix)` which manages an internal buffer with amortized O(1) complexity.
-
-##### Pre-allocation
-
-```wado
-// Allocate capacity upfront for efficient building
-let mut result = String::with_capacity(1000);
-for let item of items {
-    result += item;  // No reallocations if within capacity
-}
-```
-
-#### Operator Consistency
-
-The `+=` operator has special semantics for String:
-
-```wado
-// For numeric types
-x += 5  ≡  x = x + 5  // Exact equivalence
-
-// For String
-s += t  ≈  s = s + t  // Same result, different implementation
-                      // += is more efficient (no intermediate allocation)
-```
-
-This special treatment will be generalized via traits in the future, allowing user types to define their own `+=` behavior.
-
-#### Performance Guidelines
-
-##### Efficient patterns
-
-```wado
-// 1. Pre-allocate when size is known
-let mut s = String::with_capacity(estimated_size);
-for let item of items {
-    s += item;
-}
-
-// 2. Use += for repeated concatenation
-let mut result = "";
-result += "Line 1\n";
-result += "Line 2\n";
-result += "Line 3\n";
-
-// 3. Join arrays of strings (future)
-let parts = ["a", "b", "c"];
-let result = parts.join(",");
-```
-
-##### Inefficient patterns
-
-```wado
-// Avoid: creates intermediate String objects
-let s = "a" + "b" + "c" + "d";
-
-// Prefer:
-let mut s = "a";
-s += "b";
-s += "c";
-s += "d";
+s += " world";     // s = s + " world"
+s += "!";
 ```
 
 See `docs/wep-2026-01-15-string-type-design.md` for design rationale.
@@ -1718,14 +1685,14 @@ let disabled = false;
 The `null` keyword is equivalent to `None` and represents the absence of a value:
 
 ```wado
-let missing: Option<i32> = null;  // Same as None
-let also_missing = None;          // Standard library identifier
+let missing: Option<i32> = null;            // Same as None
+let also_missing = Option::<i32>::None;
 
 // Both are equivalent
-assert null == None;
+assert missing == also_missing;
 ```
 
-Note: `null` is a language keyword, while `None` is an identifier from the prelude (`Option::None`). They compile to the same instructions.
+Note: `null` is a language keyword, while `None` is a case of the prelude's `Option`. Bare `None` needs an expected type to say which `Option` it belongs to.
 
 A bare `null` — one no expected type has pinned — has the type `Option<!>`: a value of every `Option<T>` and of no other type. That is what a type converts from to accept `null` where an `Option` is not expected, which is how `core:value::Value` takes JSON's `null` in a literal:
 
@@ -1741,7 +1708,7 @@ let doc: Value = { name: "Alice", nickname: null };
 
 #### Character Literals
 
-Character literals use single quotes and represent a Unicode scalar value. While internally represented as a 32-bit value (like `u32`), `char` is a distinct type with Unicode semantics—similar to how `String` differs from `List<u8>`:
+Character literals use single quotes and represent a Unicode scalar value. `char` is a distinct type with Unicode semantics, not an integer, just as `String` is not `List<u8>`:
 
 ```wado
 let letter = 'A';
@@ -1751,7 +1718,7 @@ let emoji = '😀';        // Direct Unicode character
 let newline = '\n';
 ```
 
-See [Escape Sequences](#escape-sequences) for supported escapes (`\'` for char, `\"` for string).
+See [Escape Sequences](#escape-sequences) for the supported escapes.
 
 ```wado
 let a = '\u0041';         // 'A' (BMP)
@@ -1800,7 +1767,7 @@ Casting `char` to non-integer types is a compile error:
 ```wado
 let c = 'A';
 let f = c as f64;     // compile error: char can only be cast to integer types
-let s = c as String;  // compile error: char can only be cast to integer types
+let s = c as String;  // compile error: the two types share no representation
 ```
 
 #### Integer Literals
@@ -1843,7 +1810,7 @@ let e: i8 = 0xFF;                 // compile error: literal out of range for `i8
 let f: i8 = 0xFF as i8;           // OK: explicit bit-pattern reinterpretation (value: -1)
 let g: i32 = 0xFFFF_FFFF;         // compile error: literal out of range for `i32`: 0xFFFF_FFFF
 let h: i32 = 0xFFFF_FFFF as i32;  // OK: explicit bit-pattern reinterpretation (value: -1)
-let i: u32 = 0x1_0000_0000;       // compile error: 33-bit value does not fit in u32
+let i: u32 = 0x1_0000_0000;       // compile error: literal out of range for `u32`: 0x1_0000_0000
 ```
 
 A literal that nothing coerces falls back to `i32`, and the same range check applies there. `-NUM` is checked as one literal, so it reaches the signed minimum.
@@ -1875,11 +1842,22 @@ let explicit_positive = 2.5e+10;
 
 ##### Type coercion
 
-Floating-point literals coerce to either `f32` or `f64` when the target type is known:
+Floating-point literals coerce to `f32`, `f64`, `f16` or `bf16` when the target type is known:
 
 ```wado
 let single: f32 = 3.14;
 let double: f64 = 3.14159265358979;
+let half: f16 = 0.5;
+let weights: List<bf16> = [0.5, -1.25, 3.0];
+```
+
+A literal is rounded once, from its decimal text to the nearest value of its
+type, ties to even. One that rounds past the type's largest finite value is a
+compile error, as an integer literal past its type's range is:
+
+```wado
+let x: f16 = 65520.0;             // compile error: literal out of range for `f16`: 65520.0
+let y: f32 = 1e39;                // compile error: literal out of range for `f32`: 1e39
 ```
 
 Type conversion (via `as`):
@@ -1913,9 +1891,7 @@ The content must be ASCII; each `\xNN` escape (two hex digits) or source
 character contributes one byte, and the standard escapes (`\n`, `\t`, `\\`,
 `\"`, `\0`, `\r`, `\'`) are also accepted. Unicode escapes (`\u{...}` /
 `\uHHHH`) are rejected — a Unicode escape denotes a scalar, not a byte; use
-`\xNN` for a raw byte. A byte string lowers directly to a constant data segment
-— never an element-by-element builder — so a large blob costs nothing to
-optimize. (`#include_bytes("path")` produces the same `ByteList` from a file.)
+`\xNN` for a raw byte. (`#include_bytes("path")` produces the same `ByteList` from a file.)
 The default type is `ByteList`, but newtype literal coercion lets it flow into a
 `List<u8>` context (or any type whose base is `List<u8>`) with no cast.
 
@@ -1939,8 +1915,8 @@ except where the table names one:
 
 | Escape   | Character                   |
 | -------- | --------------------------- |
-| `\'`     | Single quote (char only)    |
-| `\"`     | Double quote (string only)  |
+| `\'`     | Single quote                |
+| `\"`     | Double quote                |
 | `` \` `` | Backtick (template only)    |
 | `\\`     | Backslash                   |
 | `\/`     | Forward slash               |
@@ -1951,15 +1927,14 @@ except where the table names one:
 | `\t`     | Tab                         |
 | `\0`     | Null                        |
 | `\$`     | Dollar sign (template only) |
-| `\{`     | Left brace (literal `{`)    |
-| `\}`     | Right brace (literal `}`)   |
+| `\{`     | Left brace (template only)  |
+| `\}`     | Right brace (template only) |
 | `\uHHHH` | Unicode BMP (4 hex digits)  |
 | `\u{H+}` | Unicode full range          |
 
-In a template string only `${` opens an interpolation, so `{` and `}` are already
-literal and need no escaping. Use `\$` to write a literal `$` before a `{`
-(e.g. `` `\${x}` `` renders the text `${x}`). `\{` / `\}` remain accepted but are
-no longer necessary.
+In a template string only `${` opens an interpolation, so `{` and `}` are
+literal and need no escaping, though `\{` and `\}` are accepted. Use `\$` to
+write a literal `$` before a `{` (e.g. `` `\${x}` `` renders the text `${x}`).
 
 For characters outside BMP (U+10000 and above), use either:
 
@@ -1994,7 +1969,7 @@ let pretty = `${p:#?}`;          // pretty-print: "Point {\n  x: 10,\n  y: 20,\n
 // `${p}` (Display) needs an `impl Display` for `Point`; use `${p:?}` for debug output.
 
 // Braces are literal — JSON embeds cleanly without escaping
-let json = `${"key": "${name}"}`;  // {"key": "Alice"}
+let json = `{"key": "${name}"}`;  // {"key": "Alice"}
 ```
 
 See [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md) for the full specifier table, [WEP: Format Traits](./wep-2026-02-01-format-traits.md) for the trait/Formatter infrastructure, and [WEP: Inspect](./wep-2026-02-21-inspect-debug-output.md) for the `:?` debug output format.
@@ -2031,7 +2006,7 @@ let trailing = [1, 2, 3,];            // Trailing comma allowed
 
 ##### Tuple Types
 
-Tuple types use bracket syntax `[T1, T2, ...]`. `Tuple<T1, T2, ...>` is available as an alias.
+Tuple types use bracket syntax `[T1, T2, ...]`.
 
 ```wado
 let point: [i32, i32] = [10, 20];
@@ -2099,24 +2074,24 @@ fn fail(msg: String) -> ! {
 
 #### List Literals
 
-Arrays require explicit conversion from tuple literals using `as` or implicit coercion when the target type is known at compile time.
+A bracket literal becomes a `List` through an explicit `as`, or through implicit coercion where the target type is known.
 
 ```wado
 // Explicit conversion with `as`
 let numbers = [1, 2, 3, 4, 5] as List<i32>;
 
 // Implicit coercion (target type known)
-fn takes_array(a: List<i32>) { ... }
-takes_array([1, 2, 3]);  // OK - compiler knows List<i32> is expected
+fn takes_list(a: List<i32>) { ... }
+takes_list([1, 2, 3]);  // OK - compiler knows List<i32> is expected
 
 // Type annotation
-let explicit: List<i32> = [1, 2, 3];  // Coerced to array
+let explicit: List<i32> = [1, 2, 3];  // Coerced to List
 ```
 
 ##### Coercion Rules
 
-- Compile-time: When the target type is known (function parameter, type annotation), implicit coercion is allowed
-- Runtime/ambiguous: Explicit `as List<T>` is required
+- Where the target type is known (a function parameter, a type annotation), the literal coerces implicitly
+- Elsewhere it is a tuple, and `as List<T>` converts it
 
 ```wado
 let t = [1, 2, 3];               // Tuple [i32, i32, i32] - no context
@@ -2142,15 +2117,11 @@ let mixed: [i32, String, bool] = [1, "hello", true];
 
 See `docs/wep-2026-01-15-tuple-and-array-literals.md` for detailed rationale.
 
-##### List Operations
-
-Arrays support index-based access and assignment:
-
 ##### List Constructors
 
 ```wado
-let arr = List::<i32>::with_capacity(10);     // empty array with pre-allocated capacity
-let bools = List::<bool>::filled(100, true);  // array of 100 elements, all true
+let arr = List::<i32>::with_capacity(10);     // empty list with room for 10 elements
+let bools = List::<bool>::filled(100, true);  // list of 100 elements, all true
 ```
 
 ##### List Operations
@@ -2162,7 +2133,7 @@ let mut arr: List<i32> = [1, 2, 3];
 let first = arr[0];  // 1
 
 // Index assignment (write)
-arr[0] = 100;        // Requires mutable array
+arr[0] = 100;        // Requires a `let mut` binding
 arr[1] = 200;
 
 // List methods
@@ -2172,25 +2143,29 @@ let len = arr.len(); // Get length
 
 ##### Index Assignment Rules
 
-- Requires the array variable to be declared with `let mut`
+- Requires the list binding to be declared with `let mut`
 - Index must be within bounds (runtime check, traps if out of bounds)
-- Works with arrays of any element type
+- Works with lists of any element type
 
 Sorting (stable, O(n log n) worst case):
 
-| Method        | Mutates? | Comparator                      |
-| ------------- | -------- | ------------------------------- |
-| `sort()`      | Yes      | `<` (requires `T: Ord`)         |
-| `sort_by()`   | Yes      | Custom `fn(&T, &T) -> Ordering` |
-| `sorted()`    | No       | `<` (requires `T: Ord`)         |
-| `sorted_by()` | No       | Custom `fn(&T, &T) -> Ordering` |
+| Method        | Mutates? | Comparator                          |
+| ------------- | -------- | ----------------------------------- |
+| `sort()`      | Yes      | `Ord::cmp` (requires `T: Ord`)      |
+| `sort_by()`   | Yes      | Custom `fn mut(&T, &T) -> Ordering` |
+| `sorted()`    | No       | `Ord::cmp` (requires `T: Ord`)      |
+| `sorted_by()` | No       | Custom `fn mut(&T, &T) -> Ordering` |
+
+On a float, `Ord` is the IEEE 754 total order rather than the order `<` gives,
+so a NaN still has a place in a sorted list. See
+[WEP: The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md).
 
 ```wado
 let mut nums: List<i32> = [5, 3, 8, 1];
 nums.sort();                             // in-place ascending
 
 let orig: List<i32> = [5, 3, 8, 1];
-let asc = orig.sorted();                // returns new sorted array
+let asc = orig.sorted();                // returns a new sorted list
 ```
 
 #### Collection Literal Coercion
@@ -2254,7 +2229,7 @@ coercion is not attempted.
 `..base` inside a literal merges through `LiteralSpread`, last write wins:
 
 ```wado
-internal trait LiteralSpread {
+pub trait LiteralSpread with () {
     fn spread_literal(&mut self, base: Self);
 }
 ```
@@ -2263,7 +2238,7 @@ A type without the impl rejects `..base` where it is written, and a sequence
 literal cannot carry one at all — `[..xs, 4]` is a tuple spread.
 
 See [`docs/wep-2026-08-24-literal-from-array.md`](./wep-2026-08-24-literal-from-array.md)
-for the lowering, the impl-selection rule, and the newtype peel.
+for the impl-selection rule and newtype targets.
 
 ### Compile-Time Location Literals
 
@@ -2273,10 +2248,10 @@ Compile-time location literals provide source location information at compile ti
 | ------------------------ | ---------- | -------------------------------------------------- |
 | `#file`                  | `String`   | Current source file path                           |
 | `#line`                  | `i32`      | Current line number (1-indexed)                    |
-| `#function`              | `String`   | Fully specialized function name                    |
+| `#function`              | `String`   | Name of the enclosing function                     |
 | `#data`                  | `String`   | `__DATA__` section content (compile error if none) |
 | `#include_str("path")`   | `String`   | External file content as string                    |
-| `#include_bytes("path")` | `List<u8>` | External file content as bytes                     |
+| `#include_bytes("path")` | `ByteList` | External file content as bytes                     |
 
 ```wado
 fn example() {
@@ -2301,25 +2276,25 @@ __DATA__
 
 #### `#include_str` and `#include_bytes`
 
-`#include_str("path")` reads an external file at compile time and returns its content as a `String`. The file must be valid UTF-8; otherwise, a compile error is raised. `#include_bytes("path")` returns the raw bytes as `List<u8>` without UTF-8 validation.
+`#include_str("path")` reads an external file at compile time and returns its content as a `String`. The file must be valid UTF-8; otherwise, a compile error is raised. `#include_bytes("path")` returns the raw bytes as `ByteList` without UTF-8 validation.
 
 The path argument must be a string literal. Paths are resolved relative to the source file containing the expression. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
 
 ```wado
 let template = #include_str("./templates/header.html");
-let icon: List<u8> = #include_bytes("./assets/logo.png");
+let icon: ByteList = #include_bytes("./assets/logo.png");
 ```
 
 #### `#function` Format
 
-Returns the fully specialized name without signature:
+Returns the name without type arguments or signature:
 
-| Context        | `#function` value            |
-| -------------- | ---------------------------- |
-| Free function  | `my_function`                |
-| Method         | `Point::distance`            |
-| Generic method | `List<String>::len`          |
-| Closure        | `parent_function::{closure}` |
+| Context                 | `#function` value            |
+| ----------------------- | ---------------------------- |
+| Free function           | `my_function`                |
+| Method                  | `Point::distance`            |
+| Method of `Box<String>` | `Box::name`                  |
+| Closure                 | `parent_function::{closure}` |
 
 #### Call-site evaluation in default arguments
 
@@ -2386,8 +2361,7 @@ A `?` in the body needs the return type known — via `-> Type` or an expected
 
 A closure declares no effects; they are inferred from the body.
 `with` after the parameter list, or after `-> Type`, would be that declaration,
-which the compiler does not carry yet and rejects. A handler body therefore
-needs a block or parentheses:
+and is a compile error. A handler body therefore needs a block or parentheses:
 
 ```wado
 let f = || (with Log => &mut sink do { Log::emit(`hi`); });
@@ -2414,7 +2388,7 @@ does with its reference _parameters_, which nothing in the language states — s
 
 ### Function References
 
-A bare function name is an expression of function type. It evaluates to a value of type `fn(P...) -> R [with E...]` matching the function's signature — internally a zero-capture closure over the named function.
+A bare function name is an expression of function type. It evaluates to a value of type `fn(P...) -> R [with E...]` matching the function's signature.
 
 ```wado
 fn double(n: i32) -> i32 { return n * 2; }
@@ -2428,7 +2402,7 @@ let g: fn(i32) -> i32 = double;
 
 Key points:
 
-- Function values carry no observable identity at the Wado level. The runtime uses a Wasm `ref` under the hood, but the language does not let you distinguish "value vs reference to value" — there is no state to observe, and no way to compare two `fn` values.
+- Function values carry no observable identity. There is no state to observe, and no way to compare two `fn` values.
 - `&` and `&mut` apply to `fn`-typed values like to any other value, with no special-casing:
   - `&f` has type `&fn(...)`; `&mut f` (on a mutable binding) has type `&mut fn(...)`.
   - These references behave per the [Reference Types](#reference-types) rules. `&fn(...)` is _not_ a synonym for `fn(...)`; passing one where the other is expected is a type error.
@@ -2437,8 +2411,8 @@ Key points:
 - Generic functions taken as values need their type arguments pinned. Two principled forms are supported:
   - Turbofish on the name itself: `let f = identity::<i32>;` evaluates to a `fn(i32) -> i32` value, and a non-call use like `apply(identity::<i32>, 7)` works the same way.
   - An expected `fn(...)` type at the use site: `let f: fn(i32) -> i32 = identity;` and `apply(identity, 7)` (where `apply`'s parameter is `fn(i32) -> i32`) both pin the type arguments through positional inference against the expected signature.
-  - When neither form applies, the compiler emits a dedicated diagnostic suggesting turbofish or a closure wrapper (`|x| identity(x)`). The error replaces the older "unknown function" cascade that used to leak from `UNKNOWN` typing.
-- Functions that appear at the Component Model boundary still cannot carry function-typed values across — see the closure WEP.
+  - When neither form applies, it is a compile error, and the diagnostic suggests turbofish or a closure wrapper (`|x| identity(x)`).
+- A function type cannot cross the Component Model boundary: an `export fn` whose signature names one is a compile error. See the closure WEP.
 
 ### Default Arguments
 
@@ -2478,7 +2452,7 @@ The same holds for an instance or static method, where the `impl` block's parame
 
 - `self` cannot have a default.
 - Function types do not carry default information; assigning a function with defaults to a `fn(...)` type erases them, and every call site of that variable must supply every argument.
-- Closures cannot declare defaults: a closure value's arity must match its `fn(...)` type. The parser accepts `= expr` on closure parameters for recovery only and the elaborator rejects it.
+- Closures cannot declare defaults: a closure value's arity must match its `fn(...)` type, so `= expr` on a closure parameter is a compile error.
 - `export fn` cannot declare defaults — exported functions appear in the component's WIT signature where every parameter is required by the CM ABI. Split into a private helper plus a thin `export fn` wrapper if defaults are needed.
 - Trait methods may declare defaults only in the trait definition; implementations receive every parameter and cannot add, remove, or change defaults. Direct `impl Type { ... }` methods (not part of any trait) may declare defaults freely.
 
@@ -2587,12 +2561,12 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
 }
 ```
 
-A hole handle answers `lit()` / `raw()` (the preceding segment, escapes
-processed or preserved), `get(&t)` (the value, `V`), `source()` (the
-expression text), `has_spec()`, and `fmt(&t, f)` (rendering as the untagged
-template would). Every answer but `get` and `fmt` is a constant, so after
-monomorphization the tag body is one constant append per segment and one typed
-operation per hole — what an untagged template costs.
+A hole handle answers `index()` (its position), `lit()` / `raw()` (the
+preceding segment, escapes processed or preserved), `get(&t)` (the value, `V`),
+`source()` (the expression text), `has_spec()`, and `fmt(&t, f)` (rendering as
+the untagged template would). `ReflectTemplate::<T>::tail()` and `raw_tail()`
+give the segment after the last hole. Every answer but `get` and `fmt` is a
+constant.
 
 Holes are evaluated once, left to right, before the tag runs. A tag may carry
 effects and return any type. Whether a call folds at compile time is the
@@ -2606,7 +2580,7 @@ for the type, the desugaring and the cost model.
 
 ### Newtype
 
-`type T = U` creates a newtype - a distinct type that shares representation with its base type.
+`type T = U` creates a newtype: a distinct type with the same values as its base type. See [WEP: Newtype Semantics](./wep-2026-01-29-newtype-semantics.md).
 
 ```wado
 type Meters = f64;
@@ -2626,7 +2600,7 @@ let raw: f64 = m as f64;      // explicit cast required
 - `T` is a distinct type from `U` (no implicit conversion)
 - `T` inherits all methods, operators, and traits from `U`
 - Explicit `as` cast required to convert between `T` and `U`
-- Zero runtime cost (same Wasm representation)
+- Zero runtime cost
 - Literal coercion to `T` when type context expects `T`
 
 A newtype does not carry an invariant of its own. `as` converts in both
@@ -2677,25 +2651,9 @@ For complete type isolation where you want to hide base type methods, use a stru
 struct Miles { value: i32 }
 ```
 
-### Literal Types
-
-```wado
-// String literal types
-type Direction = "north" | "south" | "east" | "west";
-
-// Numeric literal types
-type Digit = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
-
-// Object literal types
-type Status = {
-    status: "loading" | "success" | "error",
-    message: String,
-};
-```
-
 ### Structs
 
-Wado uses `struct` for structured data types. Internally they are implemented as Wasm-GC structs, and automatically converted to Component Model `record` at component boundaries.
+Wado uses `struct` for structured data types. A struct crosses a component boundary as a Component Model `record`.
 
 ```wado
 // Struct definition
@@ -2705,17 +2663,11 @@ struct User {
     active: bool,
 }
 
-// Struct with recursive type (enabled by GC)
+// Recursive struct
 struct Node {
     value: i32,
     next: Option<Node>,
 }
-
-// Inline struct type
-type UserData = struct {
-    name: String,
-    age: i32,
-};
 ```
 
 #### Field Visibility
@@ -2730,7 +2682,7 @@ pub struct Config {
 }
 ```
 
-Within the defining module, all fields (including private ones) are accessible for construction, reading, and mutation. From another file in the same package, `internal` (and `pub`) fields are accessible; from another package, only `pub` fields are. Reading, setting, or binding a field beyond its reach produces a compile error — whether through field access (`c.secret`), a struct literal (`Config { secret: ... }`), or a destructuring pattern (`let Config { secret, .. } = c`, `match`). A non-reachable field may still be _omitted_ from a struct literal in another module when it has a default expression (`f: T = expr`): the default is evaluated in the defining module, so the field is never read or set across the boundary and encapsulation is preserved. A non-reachable field without a default cannot be satisfied from another module, so such a struct can only be constructed by a function within reach.
+Within the defining module, all fields (including private ones) are accessible for construction, reading, and mutation. From another file in the same package, `internal` (and `pub`) fields are accessible; from another package, only `pub` fields are. Reading, setting, or binding a field beyond its reach is a compile error, whether through field access (`c.secret`), a struct literal (`Config { secret: ... }`), or a destructuring pattern (`let Config { secret, .. } = c`, `match`). A non-reachable field may still be _omitted_ from a struct literal in another module when it has a default expression (`f: T = expr`): the default is evaluated in the defining module, so the field is never read or set across the boundary and encapsulation is preserved. A non-reachable field without a default cannot be satisfied from another module, so such a struct can only be constructed by a function within reach.
 
 #### Struct Construction
 
@@ -2793,7 +2745,7 @@ for let { x, y } of points {
 
 #### Auto-derived Traits
 
-Structs derive `Eq` (field-wise equality) and `Ord` (lexicographic comparison by field declaration order) when all fields implement those traits, synthesized on demand rather than for every struct — see [Bound-Driven Eq / Ord](#bound-driven-eq--ord). A user-provided `impl Eq` or `impl Ord` takes precedence.
+Structs derive `Eq` (field-wise equality) and `Ord` (lexicographic comparison by field declaration order) when all fields implement those traits. They are derived where a use or bound needs them, not for every struct. See [Bound-Driven Eq / Ord](#bound-driven-eq--ord). A user-provided `impl Eq` or `impl Ord` takes precedence.
 
 For generic structs, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Foo<T>`, `impl<T: Ord> Ord for Foo<T>`.
 
@@ -2822,15 +2774,15 @@ let c = ServerConfig { host: "localhost", port: 3000 };
 ServerConfig { port: 3000 };  // compile error: missing required field 'host'
 ```
 
-Default expressions are evaluated at the construction site. They must be effect-free (validated by the effect system) and cannot reference other fields. Field shorthand (`{ host }`) and destructuring are unaffected — destructuring sees every field regardless of defaults.
+Default expressions are evaluated at the construction site. They must be effect-free and cannot reference other fields. Field shorthand (`{ host }`) and destructuring are unaffected: destructuring sees every field regardless of defaults.
 
 A non-generic struct whose every field has a default auto-derives `Default`. A fieldless struct has no field to default, so it qualifies. See [Default Trait](#default-trait).
 
 ### Generic Type Inference
 
-Wado infers type arguments for generic type constructors (struct literals and variant constructors) using two complementary mechanisms:
+Wado infers type arguments for struct literals, variant constructors, and generic function and method calls. It uses two complementary mechanisms.
 
-Forward inference derives type parameters from the values provided (fields or payload arguments):
+Forward inference derives type parameters from the values provided (fields, payloads, or arguments):
 
 ```wado
 struct Box<T> { value: T }
@@ -2848,7 +2800,7 @@ let ok: Result<i32, String> = Result::Ok(42);
 // T=i32 from payload (forward), E=String from annotation (backward)
 ```
 
-When both mechanisms are available, forward inference takes precedence for type parameters that appear in the payload, and backward inference fills in any remaining parameters.
+When both mechanisms apply, they must agree. An untyped literal takes its type from the expected type, so `let x: Option<i64> = Option::Some(42)` is an `Option<i64>`. A value whose type is already fixed must match it: with `y: i32`, `let b: Box<i64> = Box { value: y }` is a type mismatch. Backward inference fills in any parameter the values do not mention.
 
 A turbofish on the type name pins the arguments outright. It reaches a parameter
 no field mentions, and it overrides one a field would otherwise settle. It says
@@ -2863,26 +2815,27 @@ let n: Box<i32> = Box::<i64> { … };     // error: the annotation disagrees
 
 #### Scope of inference
 
-| Constructor kind       | Forward | Backward | Status              |
-| ---------------------- | ------- | -------- | ------------------- |
-| Struct literals        | yes     | yes      | implemented         |
-| Variant constructors   | yes     | yes      | implemented         |
-| Generic function calls | —       | —        | not yet implemented |
-| Generic method calls   | —       | —        | not yet implemented |
-
-For generic function and method calls, explicit turbofish syntax is required:
+| Site                   | Forward (from values) | Backward (from expected type) |
+| ---------------------- | --------------------- | ----------------------------- |
+| Struct literals        | yes                   | yes                           |
+| Variant constructors   | yes                   | yes                           |
+| Generic function calls | yes                   | yes                           |
+| Generic method calls   | yes                   | yes                           |
 
 ```wado
 fn identity<T>(x: T) -> T { return x; }
-let x = identity::<i32>(42);           // turbofish required (for now)
-// let y = identity(42);               // not yet supported
+fn none_of<T>() -> Option<T> { return null; }
+
+let x = identity(42);                  // T=i32 from the argument
+let s = identity("hi");                // T=String from the argument
+let n: Option<i64> = none_of();        // T=i64 from the annotation
 ```
 
 A `_` inside a turbofish leaves that type-argument slot for inference while the
 others stay explicit, reusing the same inference an omitted turbofish uses. The
-explicit (non-`_`) arguments always win; an uninferable `_` is the same error as
-an omitted turbofish on an uninferable parameter. It is scoped to turbofish
-arguments — a `_` in a plain type annotation (`let xs: Array<_>`) is rejected.
+explicit (non-`_`) arguments always win. An uninferable `_` is the same error as
+an omitted turbofish on an uninferable parameter. A `_` works only in a
+turbofish: in a plain type annotation (`let xs: List<_>`) it is an error.
 
 A turbofish may also stop short of the declared parameters. The ones it does not
 name are inferred, as a `_` in their place would be.
@@ -2895,7 +2848,7 @@ let b = pick::<i32>(1, true);          // stops short: infers the second
 
 ### Traits
 
-Traits define shared behavior that types can implement. Wado uses static dispatch for trait methods - all calls are resolved at compile time.
+Traits define shared behavior that types can implement. Trait methods use static dispatch: every call is resolved at compile time.
 
 A `trait` and an `interface` are declared in the type namespace: one name reaches one declaration wherever it is written. Neither denotes a type. Each names a set of operations, and no value has one as its type, so a type position naming one is a compile error. A trait reaches a type only as a bound (`fn f<T: Greet>(x: T)`).
 
@@ -3005,9 +2958,12 @@ r.greet();  // Returns "Beep boop" (inherent method wins)
 A trait contributes candidates only where its declaration is in scope: declared
 in this module, imported by name or alias, re-exported to it through `pub use`,
 or one of the prelude's. Importing a type brings none of the traits its impls
-mention, and a bound is a name like any other — calling a supertrait's method
+mention. A bound is a name like any other, so calling a supertrait's method
 through `T: Sub` needs `Base` imported too. This is what keeps a library's new
 blanket impl from changing what a call means in a module that never named it.
+
+Not yet enforced for a supertrait's method called through a bound. See
+[WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md#scope-gates-method-calls-not-the-bounds-path).
 
 ##### The Order
 
@@ -3039,6 +2995,13 @@ because the fix differs:
 - Two impls of one trait, neither written for the receiver. A blanket has no
   name to call it by, so the fix is an `impl Tr for TheType`, which generality
   puts above both.
+
+Wado has no fully qualified `<Type as Trait>::method()` form, because a leading
+`<` in expression position begins JSX. A call names its trait with the
+trait-qualified form `Trait::method(recv, …)` instead (see
+[WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)). An
+associated function with no `self` has no receiver argument to bind `Self`
+from, so that form cannot name it.
 
 Arguments filter candidates before the ranks run: one trait at several argument
 lists is an overload set the call's arguments choose from (see
@@ -3133,7 +3096,7 @@ impl<T: CollectionBuilder<Output = T>> Collection for T {
 }
 ```
 
-This avoids the need for explicit `impl Collection for ...` on every self-building type. The compiler resolves `T::Element` via associated type projection on the type parameter.
+This avoids the need for explicit `impl Collection for ...` on every self-building type. `T::Element` names the `Element` that `T`'s `CollectionBuilder` impl binds.
 
 #### Impl Type Parameters Are Declared
 
@@ -3168,7 +3131,7 @@ The bound's subject is not itself determined this way: `A: Eq` says what `A` mus
 
 #### Standard Library Traits
 
-The prelude defines `IndexValue`, `IndexAssign`, and `Index` traits using associated types. See [Indexing Traits](#indexing-traits) for full definitions.
+The prelude defines the indexing traits `IndexValue`, `IndexAssign`, `IndexRef`, and `IndexRefMut`, each with an associated `Output` type. See [Indexing Traits](#indexing-traits) for full definitions.
 
 #### Trait Bounds
 
@@ -3206,19 +3169,6 @@ impl<T: Eq> Eq for Pair<T> {
 }
 ```
 
-#### Not Yet Implemented
-
-- Trait objects (`dyn Trait`)
-- Fully qualified `<Type as Trait>::method()`. Permanently out — a leading `<`
-  in expression position is JSX's. The trait-qualified (UFCS) form
-  `Trait::method(recv, …)` is implemented instead (see
-  [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)); an
-  associated function with no `self` has no receiver argument to bind `Self`
-  from and stays unspellable
-- A namespaced trait in bound position (`T: conv::Convert`). An impl head takes
-  one (`impl conv::Convert<String> for S`), and a bound names the trait it
-  imported by name
-
 ### Coherence and Orphan Rules
 
 Wado enforces coherence: a `(Trait, Type)` pair is implemented once. A second impl of one pair is rejected where it is written, and the orphan rules below keep two packages from each writing one.
@@ -3229,13 +3179,17 @@ That is a rule about where impls may be written, not about how many apply to a c
 
 The unit of coherence is a package — all source files compiled together from the same `wado.toml` project. Types and traits are classified relative to that boundary:
 
-| Module source                        | Classification |
-| ------------------------------------ | -------------- |
-| `./file.wado` (relative path import) | Local          |
-| Entry-point file                     | Local          |
-| `core:*` (standard library)          | Foreign        |
-| `wasi:*` (WASI interfaces)           | Foreign        |
-| Remote URL                           | Foreign        |
+| Module source                                       | Classification |
+| --------------------------------------------------- | -------------- |
+| `./file.wado` (relative path import)                | Local          |
+| Entry-point file                                    | Local          |
+| A module a Kiln generator produces for this package | Local          |
+| A `[dependencies]` package                          | Foreign        |
+| `core:*` (standard library)                         | Foreign        |
+| `wasi:*` (WASI interfaces)                          | Foreign        |
+| `web:*` (Web API bindings)                          | Foreign        |
+| A Wasm asset (`with { type: "wasm" }` or `"wat"`)   | Foreign        |
+| Remote URL                                          | Foreign        |
 
 #### The Orphan Rule
 
@@ -3331,21 +3285,12 @@ impl<..T: Inspect> Tag for [..T] { … }
 impl<..T: Eq> Tag for [..T] { … }     // ERROR: overlapping variadic impls
 ```
 
-Bounds do not separate them: a pack's bounds are checked at monomorphization,
-not at selection. A trait's own arguments do separate them, since they make the
+Bounds do not separate them. A trait's own arguments do, since they make the
 two impls of different traits:
 
 ```wado
 impl<..T> Conv<i32> for [..T] { … }    // OK
 impl<..T> Conv<String> for [..T] { … } // OK — a different trait
-```
-
-A variadic impl target must be the bare `[..T]`. A pack alongside other
-elements, or under a reference, is not supported yet:
-
-```wado
-impl<..T> Tag for [i32, ..T] { … }    // ERROR: not supported yet
-impl<..T> Tag for &[..T] { … }        // ERROR: not supported yet
 ```
 
 #### One Trait at Two Argument Lists
@@ -3432,7 +3377,7 @@ pub trait Iterator {
 /// Types that can be converted into an iterator
 pub trait IntoIterator {
     type Item;
-    type Iter;  // The iterator type
+    type Iter: Iterator<Item = Self::Item>;
 
     /// Creates an iterator from a value
     fn into_iter(&self) -> Self::Iter;
@@ -3484,9 +3429,9 @@ let total = arr.iter_value().filter(|x| x % 2 == 1).sum();  // Some(9)
 
 #### Value Semantics
 
-By-value iteration (`into_iter()`, `for let x of list`) returns copies of elements. Reference iteration yields references instead: `iter()` and `for let x of &list` yield `&T`, and `for let x of &mut list` yields `&mut T`.
+By-value iteration (`into_iter()`, `iter_value()`, `for let x of list`) returns copies of elements. Reference iteration yields references instead: `iter_ref()` and `for let x of &list` yield `&T`, and `iter_ref_mut()` and `for let x of &mut list` yield `&mut T`.
 
-`&mut` iteration enables in-place mutation for element types with an addressable interior — `struct`, `List`, `String`, `i128`/`u128` — whose `&mut T` is the element's shared GC handle:
+`&mut` iteration mutates elements in place when the element type has an addressable interior: `struct`, `List`, `String`, `i128`/`u128`. A write through the `&mut T` lands on the element:
 
 ```wado
 for let p of &mut points {
@@ -3502,9 +3447,9 @@ for let mut i = 0; i < arr.len(); i += 1 {
 }
 ```
 
-Where nothing survives the copy — `primitive`, `enum`, `flags`, `fn` — taking `&mut` of a field or element is a compile error outright, whether written `&mut x.f` / `&mut xs[i]` or taken implicitly by a `&mut self` receiver. A _local_ is fine: its box is the variable's own storage.
+For `primitive`, `enum`, `flags`, and `fn`, nothing survives the copy, so taking `&mut` of a field or element is a compile error outright. That holds whether it is written `&mut x.f` / `&mut xs[i]` or taken implicitly by a `&mut self` receiver. A `&mut` of a _local_ is fine, since it writes to the variable itself.
 
-A `variant` place admits `&mut`: its payload is a shared GC struct, so mutation _through_ it lands, though replacing the whole value does not.
+A `variant` place admits `&mut`. Its payload is shared, so a mutation _through_ it lands, though replacing the whole value does not.
 
 #### Custom Iterables
 
@@ -3537,19 +3482,19 @@ Iterators support `map`, `filter`, and `fold` for functional-style data processi
 let arr: List<i32> = [1, 2, 3, 4, 5];
 
 // map - transform each element
-let doubled = arr.iter().map(|x| x * 2).collect();
+let doubled = arr.into_iter().map(|x| x * 2).collect();
 // [2, 4, 6, 8, 10]
 
 // filter - keep elements matching predicate
-let evens = arr.iter().filter(|x| x % 2 == 0).collect();
+let evens = arr.into_iter().filter(|x| x % 2 == 0).collect();
 // [2, 4]
 
 // fold - reduce to single value
-let sum = arr.iter().fold(0, |acc, x| acc + x);
+let sum = arr.into_iter().fold(0, |acc, x| acc + x);
 // 15
 
 // Chaining combinators
-let result = arr.iter()
+let result = arr.into_iter()
     .filter(|x| x > 2)
     .map(|x| x * 10)
     .collect();
@@ -3604,9 +3549,7 @@ pub trait Ord: Eq {
 On a float it is IEEE 754-2019 `totalOrder`, so it separates `-0.0` from `0.0`
 and places each NaN at one end rather than calling it equal to what it met.
 
-A comparison operator lowers to an instruction where the type has one. Where it
-does not, a type stating what its operators mean answers first, and any other
-type reads `Ord::cmp`:
+On every type but a float, a comparison operator means what `Ord::cmp` answers:
 
 - `a < b` desugars to `Ord::cmp(&a, &b) == Ordering::Less`
 - `a > b` desugars to `Ord::cmp(&a, &b) == Ordering::Greater`
@@ -3614,10 +3557,9 @@ type reads `Ord::cmp`:
 - `a >= b` desugars to `Ord::cmp(&a, &b) != Ordering::Less`
 
 A float is the one type whose operators are not its `Ord`: all four are IEEE,
-so a NaN answers false and the two zeroes are one value. `f32` and `f64` get
-that from their instructions and `f16` / `bf16` state it, so every float reads
-the same. One trait cannot carry both orders, because `Ordering` has three
-cases and an IEEE comparison has four answers. See
+so a NaN answers false and the two zeroes are one value. This holds for `f16`
+and `bf16` as for `f32` and `f64`. One trait cannot carry both orders, because
+`Ordering` has three cases and an IEEE comparison has four answers. See
 [WEP: The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md).
 
 #### Default Implementations
@@ -3651,15 +3593,16 @@ pub trait Default {
 | Type                                                                 | `default()` |
 | -------------------------------------------------------------------- | ----------- |
 | `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `i128`, `u128` | `0`         |
-| `f32`, `f64`                                                         | `0.0`       |
+| `f16`, `bf16`, `f32`, `f64`                                          | `0.0`       |
 | `bool`                                                               | `false`     |
 | `char`                                                               | `'\0'`      |
 | `String`                                                             | `""`        |
-| `List<T>`                                                            | `[]`        |
+| `Array<T>`, `List<T>`                                                | `[]`        |
 | `Option<T>`                                                          | `null`      |
-| `TreeMap<K, V>`                                                      | `{}`        |
+| `TreeMap<K, V>` (`K: Ord`)                                           | `{}`        |
+| `TreeSet<T>` (`T: Ord`)                                              | `[]`        |
 
-`Result<T, E>` does not implement `Default` — there is no obvious choice between `Ok` and `Err`.
+`Result<T, E>` does not implement `Default`, since there is no obvious choice between `Ok` and `Err`.
 
 #### Usage
 
@@ -3675,7 +3618,7 @@ let arr = make_default::<List<String>>();  // []
 
 #### Auto-Derivation
 
-`Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`), synthesized on demand where a `S::default()` call, a `T: Default` bound, or an `impl Default for S;` marker needs it — not for every eligible struct. A fieldless struct qualifies, having exactly one value; this is what lets a marker like `NoFields` serve as a type parameter's default. See [Struct Field Defaults](#struct-field-defaults). A user-written `impl Default for S` overrides the auto-derived one. Generic structs require an explicit impl.
+`Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`). It is derived where a `S::default()` call, a `T: Default` bound, or an `impl Default for S;` marker needs it, not for every eligible struct. A fieldless struct qualifies, having exactly one value. This is what lets a marker like `NoFields` serve as a type parameter's default. See [Struct Field Defaults](#struct-field-defaults). A user-written `impl Default for S` overrides the auto-derived one. Generic structs require an explicit impl.
 
 ```wado
 struct Config {
@@ -3698,7 +3641,7 @@ impl Default for Point {
 
 ### String Parsing Traits
 
-Two prelude traits parse a value from text, both taking any `AsStrSlice` and returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. The built-in scalars (`char`, `bool`, the integer types, `f32`/`f64`) implement both; `String` implements only the lenient one, since taking a string as itself cannot fail.
+Two prelude traits parse a value from text, both taking any `AsStrSlice` and returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. `char`, `bool`, the integer types (`i128`/`u128` included), and the float types implement both; `String` implements only the lenient one, since taking a string as itself cannot fail.
 
 ```wado
 i32::from_str("42")              // Ok(42)
@@ -3795,10 +3738,11 @@ A parameter with no default is left open by a bound that writes nothing there:
 `T: Pick` holds for every `impl Pick<K>`, and the body cannot say which `K`.
 `T: Pick<String>` names it, and holds only for `impl Pick<String>`.
 
-Two bounds on one trait are two obligations, each asking for what it writes, so
-`T: Pick + Pick<String>` also asks for `impl Pick<i32>`. A method call on such a
-parameter reads the bound that writes arguments. The trait is one either way, so
-naming it selects nothing.
+Two bounds on one trait are two obligations, each asking for what it writes.
+Under `trait Pick<K = i32>`, `T: Pick + Pick<String>` asks for `impl Pick<i32>`
+as well as `impl Pick<String>`. A method call on such a parameter reads the
+bound that writes arguments. The trait is one either way, so naming it selects
+nothing.
 
 An impl and a bound already in scope read a written argument differently.
 
@@ -3831,32 +3775,51 @@ pub trait IndexValue<IndexType> {
 ```wado
 /// Assigns value to element at index
 pub trait IndexAssign<IndexType> {
-    type Input;
-    fn index_assign(&mut self, index: IndexType, value: Self::Input);
+    type Output;
+    fn index_assign(&mut self, index: IndexType, value: Self::Output);
 }
 ```
 
-#### Index - Reference Read
+#### IndexRef - Reference Read
 
 ```wado
-/// Returns element by reference (for reference-type elements only)
-pub trait Index<IndexType> {
-    type Output;
-    fn index(&self, index: IndexType) -> &Self::Output;
+/// Returns element by shared reference
+pub trait IndexRef<IndexType> {
+    type Output: Ref;
+    fn index_ref(&self, index: IndexType) -> &Self::Output;
 }
 ```
 
-#### Design Note
+#### IndexRefMut - Mutable Reference
 
-`IndexValue` returns by value because Wasm GC's `array.get` instruction copies elements. For primitives like `i32`, you cannot get `&i32` from an array element. `Index` is for containers of reference-type elements where returning a reference is possible.
+```wado
+/// Returns element by mutable reference
+pub trait IndexRefMut<IndexType> {
+    type Output: RefMut;
+    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
+}
+```
 
-`List<T>` implements `IndexValue` and `IndexAssign`:
+#### Dispatch
+
+A use site reads the trait that matches what it does with the element:
+
+- A bare read `c[i]` copies the element out through `IndexValue`.
+- An assignment `c[i] = v` writes through `IndexAssign`.
+- `&c[i]` and a `&self` receiver take `IndexRef` when the container has it, and a copy otherwise.
+- A `&mut self` receiver and a field write `c[i].f = v` take `IndexRefMut`. On a container without it they are compile errors.
+
+`Ref` and `RefMut` are sealed marker traits the compiler provides. `Ref` holds for a type whose value `&T` can alias, such as a `struct`, `List`, `String`, tuple, `variant`, `fn`, `i128`/`u128`, or reference. `RefMut` holds for the `Ref` types mutated in place rather than replaced on assignment, which excludes `variant` and `fn`. A scalar, `enum`, `flags`, or `resource` element is neither, so it is read and written by value only.
+
+`List<T>` and `Array<T>` implement `IndexValue` and `IndexAssign` for every element type, `IndexRef` when `T: Ref`, and `IndexRefMut` when `T: RefMut`:
 
 ```wado
 let mut arr: List<i32> = [1, 2, 3];
 let x = arr[0];    // IndexValue::index_value
 arr[1] = 100;      // IndexAssign::index_assign
 ```
+
+See [WEP: Indexing Traits Design](./wep-2026-01-20-indexing-traits.md).
 
 ### Enums, Variants, and Flags
 
@@ -3896,7 +3859,7 @@ match c {
 }
 ```
 
-Enums auto-derive `Display` as the bare case name (`Red`), distinct from `Inspect`'s `Color::Red`. `Eq` (discriminant equality) and `Ord` (declaration order) derive the same on-demand way as for structs — see [Auto-derived Traits](#structs) above.
+Enums auto-derive `Display` as the bare case name (`Red`), distinct from `Inspect`'s `Color::Red`. `Eq` (discriminant equality) and `Ord` (declaration order) derive the same on-demand way as for structs. See [Auto-derived Traits](#auto-derived-traits) above.
 
 Enums can have `impl` blocks:
 
@@ -3953,8 +3916,8 @@ if let Some(x) = opt {
     println(`Got: ${x}`);
 }
 
-// Custom variant pattern matching with tuple destructuring
-// Note: pattern uses case name only, not Type::CaseName
+// Custom variant pattern matching with tuple destructuring.
+// A pattern names the case bare or qualified (`ParseResult::Fail`).
 variant ParseResult {
     Fail,
     Number([i32, i32]),  // start, end positions
@@ -3974,21 +3937,7 @@ match s {
 }
 ```
 
-#### Implementation Status
-
-- Variant declarations and construction: implemented
-- Generic variant type inference (forward from payload, backward from annotation): implemented
-- `if let` pattern matching for `Option<T>`: implemented
-- `if let` pattern matching for non-generic custom variants: implemented
-- Tuple payload pattern destructuring (`if let Foo([a, b]) = x`): implemented
-- `match` expression/statement: implemented
-- `matches` operator: implemented
-- Match ergonomics (`&T` scrutinees in `let`/`if let`/`match`/`matches`; payload bindings become refs onto the scrutinee's own storage, never a copy): implemented
-- Nested sub-patterns in tuple/struct destructuring (literal, variant, enum): implemented
-- Generic custom variant pattern matching (e.g., `Maybe<T>`): not yet implemented
-- `Result<T, E>` pattern matching: not yet implemented
-
-Note: `Option<T>` and `Result<T, E>` are declared as variants in `core:prelude`.
+`Option<T>` and `Result<T, E>` are declared as variants in `core:prelude`.
 
 Flags (bit flags - Component Model `flags`):
 
@@ -4024,9 +3973,9 @@ assert rw as u32 == 3;
 // They produce a compile error; use bitwise operators (|, &, ^) instead
 ```
 
-Flags auto-derive `Eq` and `Ord` over their raw bits, the same on-demand way enums derive theirs over the discriminant — see [Auto-derived Traits](#structs).
+Flags auto-derive `Eq` and `Ord` over their raw bits, the same on-demand way enums derive theirs over the discriminant. See [Auto-derived Traits](#auto-derived-traits).
 
-Flags are implemented as newtypes over `u32`. Member names can carry `#[cm("...")]` attributes for Component Model name mapping:
+A flags type is a newtype over `u32`: an integer literal coerces to it, `as` converts to and from `u32`, and it inherits `u32`'s methods. Member names can carry `#[cm("...")]` attributes for Component Model name mapping:
 
 ```wado
 pub flags PathFlags {
@@ -4061,7 +4010,7 @@ let opt = map.get("x");          // returns Option<V>
 map.try_insert("x", 99);         // inserts only if absent; reports whether it did
 
 // Keys preserve insertion order
-let keys = map.keys();  // returns List<K> in insertion order
+let keys = map.keys();  // an iterator over the keys, in insertion order
 
 // Functional-update spread: seed from a base map, then override/add keys
 let m2: TreeMap<String, i32> = { ..map, "x": 99, "w": 40 };
@@ -4138,7 +4087,7 @@ The explicit marker `impl Serialize for T;` still works — write it to force th
 
 ### Bound-Driven Eq / Ord
 
-`Eq` / `Ord` derive the same on-demand way: the impl for `T` is synthesized only where a `==` / `<` call site, a bound, or an explicit marker needs it — not for every declared type. No existing call site's behavior changes.
+`Eq` / `Ord` derive the same on-demand way: the impl for `T` is synthesized only where a `==` / `<` call site, a bound, or an explicit marker needs it. It is not synthesized for every declared type.
 
 The explicit marker `impl Eq for T;` / `impl Ord for T;` is a hard guarantee, not just a request: a compile error, with a reason chain, at the marker's own span if any field or case is ineligible:
 
@@ -4153,7 +4102,7 @@ impl Eq for Handler;
 
 `${x:?}` / `${x:#?}` (`Inspect`, plainly or indented) work for every type — no bound needed.
 
-`${x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one; a struct, variant, or generic container needs a hand-written `impl Display`, otherwise `${x}` is a compile error and `${x:?}` gives its debug form. So `T: Display` certifies a real string representation — e.g. `String::push_display` takes any `Display`. `${x:#}` runs the same `Display` with `Formatter.alternate` set; an impl that ignores the flag renders identically.
+`${x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one. So do the prelude's sequences, tuples and ranges, where their elements allow it. Any other struct or variant needs a hand-written `impl Display`; otherwise `${x}` is a compile error and `${x:?}` gives its debug form. So `T: Display` certifies a real string representation. For example, `String::push_display` takes any `Display`. `${x:#}` runs the same `Display` with `Formatter.alternate` set; an impl that ignores the flag renders identically.
 
 ```wado
 fn describe<T>(v: &T) -> String { return `${v:?}`; }         // any type
@@ -4198,6 +4147,7 @@ The same `Serialize` and `Deserialize` trait impls work with both `core:json` an
 
 ```wado
 use { parse } from "core:args";
+use { Deserialize } from "core:serde";
 
 struct Cli {
     #[wire(positional)] input: String,
@@ -4351,7 +4301,6 @@ file-private name is a visibility error, like any other import. See [Re-export S
 | Core library  | `"core:<module>"`             | `"core:cli"`, `"core:json"`          |
 | CM coordinate | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
 | Library alias | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
-| Remote (HTTP) | `"https://..."`               | `"https://example.com/lib.wado"`     |
 | Local file    | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
 
 A specifier names a package only — no interface segment; interfaces and members are selected in the `use { ... }` list. `core:`/`wasi:` are bundled coordinates, not a separate scheme. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
@@ -4364,32 +4313,36 @@ Module paths are validated before loading to provide clear error messages:
 
 Namespace Resolution (a namespace is reserved iff the compiler bundles it):
 
+<<<<<<< HEAD
 1. Bundled namespaces `core:` / `wasi:` — resolved from embedded stdlib.
+||||||| 03599b7966
+1. Bundled namespaces `core:` / `wasi:` / `web:` — resolved from embedded stdlib.
+=======
+1. Bundled namespaces `core:` / `wasi:` / `web:`: resolved from the embedded stdlib.
+>>>>>>> origin/main
 
-2. Open coordinates `<ns>:<pkg>` (any other namespace) — resolved from the default registry, or a `with`/manifest source override.
+2. Open coordinates `<ns>:<pkg>` (any other namespace): resolved from a `[dependencies]` entry in `wado.toml` or an inline `with` source. An undeclared coordinate is an error.
 
-3. Library aliases `lib:<nick>` — indirection (rename, short name, multiple majors, or a dependency with no public coordinate), resolved via `wado.toml` or an inline `with`.
+3. Library aliases `lib:<nick>`: resolved via `wado.toml` or an inline `with`. An alias renames a dependency, shortens its name, tells two major versions apart, or names a dependency with no public coordinate.
 
-4. Remote modules (`http://` or `https://`): Delegated to CompilerHost.
+4. Local modules (`./` or `../`): Resolved relative to importing module.
 
-5. Local modules (`./` or `../`): Resolved relative to importing module.
+5. Invalid paths: Paths not matching any pattern are rejected.
+   - Error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`
 
-6. Invalid paths: Paths not matching any pattern are rejected.
-   - Error: `invalid module path 'xxx'; use './' for local modules or a 'namespace:package' coordinate`
-
-Bare names (`"router"`) are rejected. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md) for resolution and version rules.
+Bare names (`"router"`) are rejected. The one exception is a bare key in `[dependencies]`, which is deprecated and draws a warning. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md) for resolution and version rules.
 
 ### Symbol Notation
 
 A symbol is named `MODULE#SYMBOL` — the written form used by docs, `wado query`, and diagnostics. `MODULE` is the import specifier verbatim (quoted as in `use`; quotes may be dropped for a scheme or bare name with no whitespace). `SYMBOL` uses Wado's own operators, so its kind is visible from the separator: `::` for static scope, `.` for an instance method, `^` for a trait-impl member.
 
 ```
-core:json#parse                      # free function / global
-core:math#f64::PI                    # associated const / static fn
-core:collections#TreeMap.get         # instance method
-core:prelude#List<String>::len       # generics use Wado angle brackets
-core:fmt#Point^Display::fmt          # trait-impl member
-"./utils.wado"#Helper::new           # relative path — must be quoted
+core:json#to_string                        # free function / global
+core:collections#TreeMap::new              # associated const / static fn
+core:collections#TreeMap.get               # instance method
+core:collections#TreeMap<String, i32>.get  # generics use Wado angle brackets
+core:url#Url^Display::fmt                  # trait-impl member
+"./utils.wado"#Helper::new                 # relative path — must be quoted
 ```
 
 See [WEP: Symbol Notation](./wep-2026-06-14-symbol-notation.md).
@@ -4411,19 +4364,16 @@ use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
 
 // 2. Core library (core:*)
 use {println, eprintln} from "core:cli";
-use {format} from "core:fmt";
+use {to_string, from_string} from "core:json";
 
-// 3. Remote modules (https:)
-use {ApiClient} from "https://example.com/api.wado";
-
-// 4. Local files (relative path, extension required)
+// 3. Local files (relative path, extension required)
 use {Helper} from "./utils.wado";
 use {Config} from "../config.wado";
 
-// 5. CM coordinate (resolved via wado.toml or default registry)
+// 4. CM coordinate (declared in wado.toml, or given an inline `with` source)
 use {Regexp} from "docs:regex";
 
-// 6. Library alias (rename / private / coordinate-less dependency)
+// 5. Library alias (rename / private / coordinate-less dependency)
 use {Router} from "lib:router";
 ```
 
@@ -4457,31 +4407,26 @@ Use `with { ... }` to specify import metadata:
 ```wado
 // Inline dependency source (single-file scripts; no wado.toml needed).
 // Same vocabulary as a [dependencies] value, with an exact version.
-use {Regexp} from "docs:regex@1.0.0";  // exact pin via the specifier
-use {Router} from "lib:router" with { git = "https://github.com/user/router.git", ref = "v1.0" };
-use {Parse}  from "lib:rx"     with { registry = "oci://ghcr.io/acme", package = "docs:regex", version = "1.0.0" };
+use {Regexp} from "docs:regex@1.0.0" with { registry: "oci://ghcr.io/acme" };  // exact pin via the specifier
+use {Router} from "lib:router" with { git: "https://github.com/user/router.git", ref: "v1.0" };
+use {Parse}  from "lib:rx"     with { registry: "oci://ghcr.io/acme", package: "docs:regex", version: "1.0.0" };
 
 // Type attribute (REQUIRED for non-.wado imports)
 use {sin, cos} from "./libm.wasm" with { type: "wasm" };
-
-// WIT specification for Wasm imports (optional)
-use {foo} from "./external.wasm" with {
-    type: "wasm",
-    wit: "./external.wit",
-};
 ```
 
 An inline `with` source and a `wado.toml` entry for the same specifier are mutually exclusive. Version ranges (`^`/`~`/`=`) are allowed only in `wado.toml`, where a lock file resolves them; the specifier `@ver` and a single-file `with` take an exact version — a range there is an error.
 
 #### Type Attribute Requirement
 
-| Import Source      | `type` Attribute         | Notes                          |
-| ------------------ | ------------------------ | ------------------------------ |
-| `.wado` files      | Optional                 | Type inferred from Wado source |
-| `.wasm` files      | Required                 | `type: "wasm"`                 |
-| `core:*`, `wasi:*` | Not applicable           | Bundled namespace handling     |
-| `https:` URLs      | Required for non-`.wado` | Must specify content type      |
-| CM / `lib:` deps   | Optional                 | Type inferred from package     |
+| Import Source               | `type` Attribute         | Notes                          |
+| --------------------------- | ------------------------ | ------------------------------ |
+| `.wado` files               | Optional                 | Type inferred from Wado source |
+| `.wasm` files               | Required                 | `type: "wasm"`                 |
+| `.wat` files                | Required                 | `type: "wat"`                  |
+| `core:*`, `wasi:*`, `web:*` | Not applicable           | Bundled namespace handling     |
+| `https:` URLs               | Required for non-`.wado` | Must specify content type      |
+| CM / `lib:` deps            | Optional                 | Type inferred from package     |
 
 #### Rationale
 
@@ -4497,14 +4442,14 @@ A `use` clause whose source is neither a `.wado` module nor a Wasm asset (`.wasm
 // Gale generates a parser from an ANTLR4 grammar
 use { Parser } from "./Calc.g4" with {
     generator: {
-        module: "wado:gale@0.1",
+        module: "wado-lang:gale",
     },
 };
 
 // With supplementary input files (paths relative to the source file)
 use { RustParser } from "./Rust.g4" with {
     generator: {
-        module: "wado:gale@0.1",
+        module: "wado-lang:gale",
         inputs: ["./RustLexer.g4"],
     },
 };
@@ -4525,16 +4470,23 @@ Generators are declared in `[build-dependencies]` of `wado.toml` (a build-only g
 
 ```toml
 [build-dependencies]
-gale = { registry = "wado", package = "gale", version = "0.1" }
+"wado-lang:gale" = { version = "^0.0.9" }
 ```
 
-A bare `use { ... } from "./schema.g4"` against such a file with no `with` clause is a hard error (`Code::KilnMissingWith`). Two `use` clauses for the same `from` in the same file collapse to a single invocation if their `(module, inputs, options, output_dir)` match; mismatched clauses are a duplicate-generator error.
+A bare `use { ... } from "./schema.g4"` against such a file with no `with` clause is a hard error (`KILN_MISSING_WITH`). Two `use` clauses for the same `from` in the same file collapse to a single invocation if their `(module, inputs, options, output_dir)` match; mismatched clauses are a duplicate-generator error.
 
-A file that is not `.wado` is only ever reached through a generator. When a `use` names one and no invocation produced a module for that schema, the import is a hard error (`Code::KilnNoGeneratedModule`); the compiler never falls back to parsing the schema as Wado.
+A file that is not `.wado` is only ever reached through a generator. When a `use` names one and no invocation produced a module for that schema, the import is a hard error (`KILN_NO_GENERATED_MODULE`); the compiler never falls back to parsing the schema as Wado.
 
 #### Authoring a generator
 
-A generator is a normal Wado package whose `wado.toml` declares a `[package].generator` entry pointing at a module that exports the `core:kiln/generator` world:
+A generator is a normal Wado package whose `wado.toml` maps the `core:kiln/generator` world to a module under `[world]`:
+
+```toml
+[world]
+"core:kiln/generator" = "src/generator.wado"
+```
+
+That module exports the world's `generate` function:
 
 ```wado
 use { Request, Response, Error } from "core:kiln";
@@ -4548,9 +4500,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 }
 ```
 
-The compiler extracts the `Options` shape from the generator's IR and type-checks every call site against it. Generators run in a deterministic sandbox (no clocks, randomness, network, environment, or filesystem): every input they see arrives by value, listed at the use site. Outputs are persisted under `build/kiln/<synthesized-id>/` and stamped with a `#![generated(by = "...", sources = [...])]` header. Cache state is recorded per invocation in `<output_dir>/<primary>.kiln.json`, beside the generated outputs; a subsequent compile skips the generator when its content-addressed cache key matches the one recorded there. `wado.lock` stays dependency-pin-only.
-
-In hosts that cannot execute generators (today's wasm32-bundled LSP / browser playground), Kiln falls back to consume-only mode: the compiler reads cached generated `.wado` files from disk and emits a stale-cache warning if hashes do not match. Projects that want a full LSP experience in such hosts commit `build/kiln/` and `wado.lock` to their repository.
+Every use site's `options` is type-checked against the generator's `Options`. Generators run in a deterministic sandbox (no clocks, randomness, network, environment, or filesystem): every input they see arrives by value, listed at the use site. Outputs are persisted under `build/kiln/<synthesized-id>/` and stamped with a `#![generated(by = "...", sources = [...])]` header. A compile reruns a generator only when its inputs have changed.
 
 ### Wasm Module and Component Imports
 
@@ -4588,18 +4538,18 @@ use utils from "./utils.wado";
 utils::helper_function();      // not utils["helper_function"], as it's analyzed at compile time
 ```
 
-A namespace import makes all pub symbols from the source module available. At the source level, symbols are accessed with the `ns::` prefix. Internally, the compiler desugars the prefix away during the desugar phase and registers all pub symbols from the source module as named imports:
+A namespace import binds one name, the namespace. The source module's pub symbols are reached through the `ns::` prefix and are not imported under their bare names, so `distance(p1, p2)` below is an unknown function:
 
 ```wado
 use geo from "./geo.wado";
 
 // Functions
-geo::distance(p1, p2);           // → distance(p1, p2)
+geo::distance(p1, p2);
 
 // Types (structs, enums, variants)
-let p: geo::Point = geo::Point::origin();   // → Point, Point::origin()
-let c = geo::Color::Red;                    // → Color::Red
-let s = geo::Shape::Circle(3.14);           // → Shape::Circle(3.14)
+let p: geo::Point = geo::Point::origin();
+let c = geo::Color::Red;
+let s = geo::Shape::Circle(3.14);
 
 // Traits and types in an `impl` header, on either side
 impl geo::Show for Local { ... }
@@ -4629,8 +4579,10 @@ use utils from "./utils.wado";                   // Namespace import
 
 // Prohibited patterns
 use * from "core:cli";           // Wildcard not allowed
-use println from "core:cli";     // Named items require curly braces
+use {*} from "core:cli";         // Wildcard not allowed
 ```
+
+Without braces, `use println from "core:cli"` is a namespace import named `println`, so the function is `println::println`.
 
 ### Calling Effect Operations
 
@@ -4685,24 +4637,24 @@ use {sin, cos, sine} from "lib:math";
 Re-export rules:
 
 - `pub use` combines `pub` visibility with import syntax
-- Can only re-export `pub` symbols from the source module
+- A re-export reaches no further than the symbol it names (see [Re-export visibility](#re-export-visibility))
 - Re-export chains are resolved transparently (A re-exports from B, B re-exports from C)
 - Circular re-exports are prohibited
 - Wildcards prohibited: `pub use * from "..."` is not allowed
 
 ### Exception: The Prelude
 
-The prelude is automatically imported into every module, making `Option`, `Result`, `Stream`, `Future`, and `Pollable` available without explicit imports.
+The prelude is automatically imported into every module, making `String`, `List`, `Option`, `Result`, `Stream`, `Future`, and the prelude traits available without explicit imports.
 
 ### Standard Library
 
 ```
 core            # core: namespace for the core library
-├── prelude     # Automatically imported (Option, Result, Stream, Future, Pollable)
+├── prelude     # Automatically imported (String, List, Option, Result, Stream, Future)
 ├── cli         # CLI helpers (println, eprintln, args, env, exit, ...)
 ├── serde       # Serialization traits (Serialize, Deserialize, Serializer, Deserializer)
 ├── json        # JSON format implementation (to_string, from_string)
-├── collections # TreeMap
+├── collections # TreeMap, TreeSet
 ├── base64      # Base64 encoding/decoding
 ├── zlib        # Compression
 ├── ...
@@ -4712,10 +4664,7 @@ wasi            # wasi: namespace for system interfaces
 ├── ...
 ```
 
-For full API documentation, see:
-
-- Core Standard Library — one reference per module: [`prelude`](./stdlib-core-prelude.md), [`cli`](./stdlib-core-cli.md), [`collections`](./stdlib-core-collections.md), [`serde`](./stdlib-core-serde.md), [`json`](./stdlib-core-json.md), [`json_nsd`](./stdlib-core-json_nsd.md), [`value`](./stdlib-core-value.md), [`base64`](./stdlib-core-base64.md), [`zlib`](./stdlib-core-zlib.md), [`simd`](./stdlib-core-simd.md), [`url`](./stdlib-core-url.md), [`kiln`](./stdlib-core-kiln.md)
-- [WASI Standard Library Reference](./stdlib-wasi.md), and [`wasi:webgpu`](./stdlib-wasi-webgpu.md) in a reference of its own
+The [cheatsheet's Standard Library section](./cheatsheet.md#standard-library) links the API reference for every module.
 
 ### Global Functions defined in `core:prelude`
 
@@ -4741,12 +4690,15 @@ guarded operand never runs when its guard fails. An operand the run did not
 reach is reported as `<not evaluated>`.
 
 ```wado
+let list: List<i32> = [1, 2, 3];
 let i = 99;
 assert i < list.len() && list[i] == 1;
 // condition: i < list.len() && list[i] == 1
 // i: 99
+// list: [1, 2, 3]
 // list.len(): 3
 // i < list.len(): false
+// i: <not evaluated>
 // list[i]: <not evaluated>
 // list[i] == 1: <not evaluated>
 ```
@@ -4762,7 +4714,7 @@ value yourself.
 
 ## Testing
 
-Wado has built-in support for writing and running tests. Test declarations are first-class syntax, and the `wado test` command provides a test runner similar to `cargo test` or `moon test`.
+Tests are first-class syntax: a `test` block declares one, and `wado test` runs them. The runner's flags, file discovery and output are described by `wado test --help` and [WEP: Test Discovery](./wep-2026-05-02-test-discovery.md).
 
 ### Test Declaration Syntax
 
@@ -4774,7 +4726,7 @@ test "addition works" {
     assert 1 + 1 == 2;
 }
 
-// Unnamed test (identified by file:line)
+// Unnamed test
 test {
     let result = compute_something();
     assert result > 0;
@@ -4830,19 +4782,15 @@ test {
 - Tests can use any effects (side effects are allowed in tests)
 - Attributes (e.g., `#[expect_trap]`, `#[TODO]`, `#[timeout_ms(N)]`, `#[synopsis]`) may appear before the `test` keyword
 
-#### Test Identification
-
-- Named tests: identified by their string name
-- Unnamed tests: identified by `{filename}:{line_number}`
-
 ### Test Semantics
 
 #### Execution
 
-- Each test runs in isolation with fresh state
-- Test order is deterministic (declaration order within a file)
+- Each test runs in isolation with fresh state: every global starts from its initializer
+- Tests are independent, so they may run in any order, and concurrently
 - A test passes if it completes without panicking or trapping
 - A test fails if `assert` fails, `panic` is called, or a trap occurs
+- Test blocks belong to the `test` world. Compiling for any other world leaves them out
 
 #### `#[expect_trap]` Attribute
 
@@ -4868,7 +4816,7 @@ The `#[TODO]` attribute marks a test as a placeholder for a feature not yet impl
 
 #### `#[timeout_ms(N)]` Attribute
 
-The `#[timeout_ms(N)]` attribute overrides the default test timeout (5000ms) for a specific test. `N` is an integer literal specifying the timeout in milliseconds. If a test exceeds its timeout, it is interrupted and reported as failed with a message suggesting the `#[timeout_ms(N)]` attribute. This is useful for tests that involve expensive computation or I/O:
+The `#[timeout_ms(N)]` attribute overrides the default test timeout (5000ms) for a specific test. `N` is an integer literal specifying the timeout in milliseconds. If a test exceeds its timeout, it is interrupted and fails. This is useful for tests that involve expensive computation or I/O:
 
 ```wado
 #[timeout_ms(30000)]
@@ -4900,7 +4848,7 @@ Tests marked with `#[TODO]` are reported separately from regular tests. They do 
 | Body traps              | todo (pending)  | None — the feature is still unimplemented |
 | Body completes normally | todo (resolved) | Remove `#[TODO]` — the feature now works  |
 
-A resolved TODO test is a hard failure (exit code 1). This enforces cleanup: once the underlying feature is implemented, the `#[TODO]` attribute must be removed so the test joins the regular pass/fail pool.
+A resolved TODO test fails the run. This enforces cleanup: once the underlying feature is implemented, the `#[TODO]` attribute must be removed so the test joins the regular pass/fail pool.
 
 A pending TODO test never causes a failure. This means fixing a compiler bug cannot increase the failure count — newly-passing TODO tests appear as "resolved" on the TODO axis rather than as unexpected failures on the pass/fail axis.
 
@@ -4910,110 +4858,12 @@ The `#![TODO]` inner attribute applies TODO semantics to an entire module:
 
 - If the module fails to compile, it is reported as a single pending TODO entry.
 - If the module compiles successfully, each test block is implicitly treated as `#[TODO]`.
-- If the module compiles and all tests pass (i.e., the feature is implemented), it is reported as resolved — a hard failure.
-
-#### Output Format
-
-The test runner displays results grouped by file. Regular tests use `✓` (green) and `✗` (red). TODO tests use `·` (yellow, pending) and `✓` (cyan, resolved):
-
-```
-Running tests in math_test.wado... (compiled in 50ms)
-  ✓ addition (2ms)
-  ✗ division_edge_case (3ms)
-    assertion failed at line 15
-  · future_feature # TODO (1ms)
-  ✓ now_works # TODO resolved (2ms)
-    remove the #[TODO] attribute
-```
-
-At the end of the run, a TODO summary section lists all TODO tests with their status:
-
-```
-TODO tests (3):
-  · pending   math_test.wado — future_feature
-  ✓ resolved  math_test.wado — now_works
-  · pending   unimpl_test.wado — #![TODO] module
-
-1 TODO test(s) resolved — remove the #[TODO] attribute
-```
-
-The final summary line reports both axes:
-
-```
-N passed, N failed; N todo (M resolved) (duration)
-```
-
-#### Exit Codes
-
-| Condition                                 | Exit Code |
-| ----------------------------------------- | --------- |
-| All regular tests pass, no resolved TODOs | 0         |
-| One or more regular tests fail            | 1         |
-| One or more TODO tests resolved           | 1         |
-
-##### Effects
-
-- Tests implicitly have access to all effects (no `with` declaration required)
-- This allows tests to perform I/O, use the filesystem, etc.
-
-##### No Runtime Overhead
-
-- Test functions are only included when running `wado test`
-- Regular compilation (`wado compile`, `wado run`) excludes test code via dead code elimination
-
-### Test Runner CLI
-
-The `wado test` command discovers and runs tests:
-
-```sh
-# Auto-discover every *.wado file under the project root
-wado test
-
-# Run tests in specific file(s)
-wado test path/to/file.wado
-wado test path                 # walk path with the discovery rules
-
-# Filter discovered files by path (shell wildcard, not regex)
-wado test --filter '*addition*'
-
-# Show help
-wado test --help
-```
-
-#### Discovery (WEP 2026-05-02)
-
-When no files are specified, `wado test` walks the project root for every
-`*.wado` file. The walker honours `.gitignore`, `.gitmodules`, dot-prefixed
-paths, nested `wado.toml` package boundaries, and the root manifest's
-`[test].exclude` glob list. Symbolic links are followed once each, with
-canonical-path cycle detection. Sub-packages (any directory containing its
-own `wado.toml`) are run as separate package contexts and reported with a
-`=== package: <label> ===` banner; an `=== aggregate ===` block sums the
-three axes when more than one package ran.
-
-Files without `test` blocks are still parsed and compiled; only files with
-test blocks register and run tests. Compile failures are tracked on a
-separate axis from test failures and produce a non-zero exit.
-
-#### Filtering
-
-`--filter <pattern>` matches discovered file paths using shell wildcards
-(`*`, `?`, `[...]`); regex syntax is not supported. Wrap the term in `*`s
-to match anywhere within a path (e.g. `'*foo*'`).
-
-#### Output and Exit Codes
-
-See Test Outcome Model above for the full output format, TODO summary, and
-exit code rules. The summary prints three axes — compile, test, todo — and
-the run exits non-zero whenever any of `compile failed`, `test failed`, or
-`todo resolved` is non-zero.
+- If the module compiles and all tests pass (i.e., the feature is implemented), it is reported as resolved, which fails the run.
 
 ### Test File Conventions
 
-`*_test.wado` is the recommended convention for files that contain only
-tests, but the runner no longer requires the suffix: every `*.wado` file
-discovered under the project root is visited, and any file with `test`
-blocks contributes its tests.
+`*_test.wado` is the recommended name for a file that contains only tests. The
+suffix is not required: any file with `test` blocks contributes its tests.
 
 ```
 src/
@@ -5051,38 +4901,48 @@ test "add negative numbers" {
 
 ## Concurrency Model
 
-### Stack Switching Based (Colorless)
+Wado follows the Component Model's concurrency model. It has no `await`: a
+wait blocks the current task until the value is ready, so an ordinary function
+may wait without saying so in its signature.
+
+### Async Imports
+
+A Component Model `async func` import is an interface operation declared
+`async fn op(...) -> AsyncCall<T>`. Calling it starts the call and returns an
+`AsyncCall<T>` at once. The caller decides when to wait:
+
+- `.wait()` blocks until the call returns, then yields its `T`.
+- `.cancel()` abandons the call.
+- `.join(&set)` adds the call to a `WaitableSet`, so one wait covers several
+  calls and streams.
 
 ```wado
-// No async keyword needed in function implementations
-fn fetch_user(id: i32) -> Result<User, HttpError> with Http {
-    let response = Http::get(`users/${id}`)?;  // Even if Http::get is async in WIT
-    let user = response.json()?;
-    return Ok(user);
-}
+use { Client, Request, Response, ErrorCode } from "wasi:http";
 
-// Called normally
-fn main() with Http {
-    let user = fetch_user(1);
-}
-
-// Concurrent execution
-fn load_data() -> Data with Http {
-    let [users, posts] = join(
-        || fetch_users(),
-        || fetch_posts(),
-    );
-    return Data { users, posts };
+fn fetch(req: Request) -> Result<Response, ErrorCode> with Client {
+    let call = Client::send(req);   // the request starts; nothing waits yet
+    // ... work here runs while the host handles the request ...
+    return call.wait();             // blocks until the response arrives
 }
 ```
 
-Wado is colorless: a function's signature does not record whether it suspends,
-so an asynchronous callee imposes nothing on its caller and one implementation
-serves both. Suspension is Wasm stack switching, not a source-level transform.
+An `AsyncCall<T>` is used once: after `wait` or `cancel` it must not be touched
+again. A handler for an async operation resumes with the `T` itself, and the
+caller's `.wait()` returns it at once. See
+[WEP: Generic `AsyncCall<T>`](./wep-2026-04-22-subtask-generic.md) and
+[WEP: Effect Handler](./wep-2026-04-11-effect-handler.md).
 
-The `async` keyword appears only in world declarations, where the Component
-Model surface has to match WIT's `async func` signature for an export. Effect
-declarations and function implementations never use it.
+### Async Exports
+
+An `export async fn` uses the Component Model async calling convention. Its
+body delivers the result with [`task return`](#task-return-statement) and may
+keep running afterwards, for example to write a response's trailers.
+
+### Streams and Futures
+
+`Stream<T>` and `Future<T>` are unbuffered channels. A `write` blocks until the
+other end reads, and a `read` blocks until the other end writes, so the two ends
+must be driven by different tasks.
 
 ## Effect System
 
@@ -5096,18 +4956,16 @@ The Effect System is equivalent to:
 
 ### Effect Definition
 
-Effects can be defined in two ways:
-
-1. Effect interfaces (declaring operations as free functions):
+An effect is declared as an `interface`, whose operations are free functions:
 
 ```wado
-// WASI CLI effects (see wasi:cli for real definitions)
+// WASI CLI effects (see wasi:cli for the real definitions)
 interface Stdout {
-    fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+    fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
 }
 
 interface Stderr {
-    fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+    fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
 }
 
 interface Environment {
@@ -5116,21 +4974,16 @@ interface Environment {
     fn get_initial_cwd() -> Option<String>;
 }
 
-// Custom effect interfaces
+// A custom effect interface
 interface Http {
-    fn get(url: String) -> Response;
-    fn post(url: String, body: String) -> Response;
-}
-
-interface Dom {
-    fn query(selector: String) -> Option<Element>;
-    fn create_element(tag: String) -> Element;
+    fn get(url: String) -> String;
+    fn post(url: String, body: String) -> String;
 }
 ```
 
 #### Default Implementations
 
-An `interface` is a trait with a different dispatch story, and its members are written exactly as a trait's are: an operation is a signature ending in `;`, or a signature followed by a block. That block is the operation's default implementation — what the operation does when it is dispatched with no handler installed. Without one, dispatching an unhandled operation traps.
+An `interface` is a trait with a different dispatch story, and its members are written exactly as a trait's are: an operation is a signature ending in `;`, or a signature followed by a block. That block is the operation's default implementation: what the operation does when it is dispatched with no handler installed. Without one, dispatching an unhandled operation traps.
 
 ```wado
 interface Log {
@@ -5142,58 +4995,55 @@ interface Log {
 }
 ```
 
-A default fills a handler that leaves the operation out, and it is what `..forward` reaches when the outermost handler forwards an operation nobody else handles — so a layer that only decorates one operation is installable on its own. An explicit `..trap` still wins: a mock that says an operation must not be called means it.
+A default fills a handler that leaves the operation out, and it is what `..forward` reaches when the outermost handler forwards an operation nobody else handles. So a layer that only decorates one operation is installable on its own. An explicit `..trap` still wins: a mock that says an operation must not be called means it.
 
-A default is a handler body, so it runs in the outer scope like every other one (see [Handlers](#handlers)): an `Effect::op(...)` inside a default reaches the next handler out, not the handler the default is filling. That is what keeps a forward from recursing into itself, and it is the one place the analogy with a trait's default method stops — a trait default calling `self.other()` reaches the impl's override, a filled operation's does not.
+A default is a handler body, so it runs in the outer scope like every other one (see [Handlers](#handlers)): an `Effect::op(...)` inside a default reaches the next handler out, not the handler the default is filling. That is what keeps a forward from recursing into itself, and it is the one place the analogy with a trait's default method stops. A trait default calling `self.other()` reaches the impl's override, and a filled operation's call does not.
+
+A parameter may declare a default, and a call that omits the argument gets it filled in at the call site, as a function call does. The handler receives the argument already in place.
 
 Beyond a name, parameters and a return type, an operation declares nothing else. Each of these is a compile error, for the reason given:
 
-- a body on an operation a Component Model import backs (one carrying `#[cm(...)]`, and every `resource` method) — its no-handler case is the CM adapter, so the body could never run;
-- a body on an `async` operation — its call site is typed as an `AsyncCall`, which a plain body does not produce;
-- a `self` receiver — an operation is called as `Effect::op(args)`, with no receiver to bind it to;
-- a parameter default — a call site is a dispatch wrapper, which takes the arguments as declared;
-- a `with` clause — an operation's effects are not required at its call sites, so one would let a default perform a capability its caller never declared; a default has to be performable wherever it is dispatched, which means pure or `#[ambient]` code;
-- a `#[retain(...)]` attribute — an operation dispatches to a handler, whose own body states what it keeps, so one here would constrain call sites on a promise the handler never makes;
-- type parameters — dispatch holds one slot per operation, not one per instantiation.
+- A body on an operation a Component Model import backs (one carrying `#[cm(...)]`, and every `resource` method). Its no-handler case is the CM adapter, so the body could never run.
+- A body on an `async` operation. Its call site is typed as an `AsyncCall`, which a plain body does not produce.
+- A `self` receiver. An operation is called as `Effect::op(args)`, with no receiver to bind it to.
+- A `with` clause. An operation's effects are not required at its call sites, so one would let a default perform a capability its caller never declared. A default has to be performable wherever it is dispatched, which means pure or `#[ambient]` code.
+- A `#[retain(...)]` attribute. An operation dispatches to a handler, whose own body states what it keeps, so one here would constrain call sites on a promise the handler never makes.
+- Type parameters. Dispatch holds one slot per operation, not one per instantiation.
 
-#### Colorless Async
+#### Async Operations
 
-- Effect declarations never use the `async` keyword—Wado is fully colorless
-- The `async` keyword only appears in world export declarations (the Component Model surface)
-- WIT's `async func` is handled transparently via Wasm Stack Switching at runtime
-
-#### 2. Methods with effect requirements
+An operation that maps to a WIT `async func` is declared `async fn`, and its return type must be `AsyncCall<T>`. How a caller waits on the result is in [Async Imports](#async-imports).
 
 ```wado
-// Methods can declare required effects
-impl TcpStream {
-    fn read(&mut self, buffer: &mut List<u8>) -> Result<i32, IoError> with Network;
-    fn write(&mut self, data: &List<u8>) -> Result<i32, IoError> with Network;
-    fn close(&mut self) with Network;
+// From wasi:http
+#[cm("wasi:http/client@0.3.0")]
+pub interface Client {
+    #[cm("wasi:http/client@0.3.0#send")]
+    async fn send(request: Request) -> AsyncCall<Result<Response, ErrorCode>>;
 }
-
-impl TcpListener {
-    fn accept(&self) -> Result<TcpStream, IoError> with Network;
-}
-
-// Free functions can also require effects
-fn listen(addr: String) -> Result<TcpListener, IoError> with Network;
 ```
 
-This approach makes effect requirements explicit and visible in method signatures, maintaining consistency with the language's design philosophy of being clear and explicit.
+A function that calls an async operation is not itself async. `async` marks only the operation, and the `export async fn` of a world export (see [`task return`](#task-return-statement)).
 
 ### Effect Declaration in Functions
 
 ```wado
 // Declare required effects with `with`
 fn greet(name: String) with Stdout {
-    Stdout::write_via_stream(to_stream(`Hello, ${name}!\n`));
+    println(`Hello, ${name}!`);
 }
 
 // Multiple effects
 fn show_env() with (Stdout, Environment) {
     let args = Environment::get_arguments();
-    Stdout::write_via_stream(to_stream(`Arguments: ${args}\n`));
+    println(`Arguments: ${args:?}`);
+}
+
+// A method declares its effects the same way
+impl Logger {
+    fn log(&self, message: String) with Stderr {
+        eprintln(`${self.prefix}${message}`);
+    }
 }
 
 // No effects = pure function
@@ -5243,9 +5093,9 @@ pub fn env(name: String) -> Option<String> with Environment {
 
 - Effect operations use `::` syntax: `use {Effect::{op1, op2}} from "..."`
 - Multiple operations can be imported: `Effect::{op1, op2, op3}`
-- Renaming is supported: `use {op as renamed} from "..."`
+- Renaming is supported: `use {Effect::{op as renamed}} from "..."`
 - Wildcards are prohibited: `use {Effect::{*}}` is not allowed
-- The `with` declaration is still required for effect tracking
+- An imported operation demands what `Effect::op()` demands (see [Effect Propagation](#effect-propagation))
 
 #### Name Resolution
 
@@ -5266,17 +5116,22 @@ pub fn log(message: String) with (Stdout, Stderr) {
 
 ### Effect Propagation
 
-- Local functions: Inferred
-- pub functions: Must be explicit
+Every function declares its effects, whatever its visibility. Nothing is inferred from the body. A call demands of its caller:
+
+- for a function, the effects in its `with` clause;
+- for an operation of a host-backed interface (one carrying `#[cm(...)]`), that interface;
+- for an operation of a user-defined interface, nothing. An installed handler answers it, and it traps where none is installed (see [Handlers](#handlers)).
 
 ```wado
-// Local functions are inferred
-fn internal() {
-    callee();  // Automatically inherits callee's effects
+fn helper() {
+    println("x");      // ERROR: missing effect 'Stdout' required by 'println'
 }
 
-// Public functions must be explicit
-pub fn api_function() with (Http, FileSystem) {
+fn next_id() -> i32 {
+    return Counter::next();   // OK: `Counter` is a user-defined interface
+}
+
+pub fn report() with (Stdout, Preopens) {   // `pub` changes nothing
     // ...
 }
 ```
@@ -5299,7 +5154,6 @@ Effect parameters:
 
 - Are declared with the `effect` keyword in generic parameter lists
 - At most one effect parameter is allowed per function
-- Do not participate in monomorphization (effects are erased at runtime)
 - Are inferred from the effects of function-typed arguments at each call site; when multiple function-typed arguments reference the same effect parameter, `E` resolves to the union of all their effects
 - Can coexist with type parameters: `<T, effect E>`
 - Test functions implicitly have all effects
@@ -5324,7 +5178,7 @@ fn draw<S: Source>(s: &mut S) -> i32 with Stdout {  // required: `s.next()` need
 
 A call reaches a method through a type parameter's bound in three shapes: a method call on a receiver whose type is the parameter, a static call written `T::make()`, and a `for-of` over an iterable whose type is the parameter. None of them knows which impl runs, so each demands what the trait method declares.
 
-`stores` is exempt, since it says which reference parameters a body keeps. An `interface` is exempt as a whole: its operations declare no effects, and a handler method answers an operation rather than implementing a trait contract.
+An `interface` is exempt: its operations declare no effects, and a handler method answers an operation rather than implementing a trait contract.
 
 #### The Trait Head
 
@@ -5361,7 +5215,7 @@ A fixed head demands the same effects of every caller. An open one is resolved f
 
 A head that writes nothing reads as `with _`, so a bare trait is open rather than pure. Publishing an undecided contract is reported: a `pub` trait warns, a file-private or `internal` one remarks, and `#[allow(undecided_effects)]` on the declaration or `#![allow(undecided_effects)]` on the module waives it while the decision is pending.
 
-A body dispatching on a type parameter has no impl to read. In `s.read()`, where `s: S` and `S: Source`, an open head's hole survives, and the enclosing function forwards it with `with _`. Every trait in the standard library says `with ()` instead. An impl of one that performs I/O is a design error, for comparison, conversion and iteration alike.
+A body dispatching on a type parameter has no impl to read. In `s.next()`, where `s: S` and `S: Source`, an open head's hole survives, and the enclosing function forwards it with `with _`. Every trait in the standard library says `with ()` instead. An impl of one that performs I/O is a design error, for comparison, conversion and iteration alike.
 
 See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).
 
@@ -5388,7 +5242,6 @@ Type pack parameters:
 - Appear inside tuple types as `[..T]` (type pack spread)
 - Can be mixed with fixed type elements: `[A, ..T]`, `[..T, B]`
 - Type arguments are inferred from tuple argument types at call sites
-- Expansion happens at monomorphization time
 
 #### Multiple Type Packs
 
@@ -5406,9 +5259,9 @@ concat([1, "x"], [true]);   // A = [i32, String], B = [bool]
 
 A tuple holding two packs (`[..A, ..B]`) settles neither pack, because matching
 it against a concrete tuple admits every split. Such a tuple is legal anywhere.
-It just cannot be the only thing naming a pack: something else must settle each
-one — another parameter, a turbofish, or an annotation — and then the tuple is
-checked against the arity they fix.
+It just cannot be the only thing naming a pack. Something else must settle each
+one: another parameter, a turbofish, or an annotation. The tuple is then checked
+against the arity they fix.
 
 ```wado
 fn wrap<X, ..A, ..B, Y>(x: X, a: [..A], b: [..B], y: Y) -> [X, ..A, ..B, Y] {
@@ -5421,7 +5274,7 @@ joined([[1], [true]], [1, true, "x"]);    // ERROR: expected `[i32, bool]`
 
 fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { … }
 middle::<[i32], String, [bool]>([1, "mid", true]);   // the turbofish settles them
-middle([1, "mid", true]);                 // ERROR: cannot infer `Pre`, `Post`
+middle([1, "mid", true]);                 // ERROR: cannot infer `Pre`, `K`, `Post`
 ```
 
 A pack nothing settles is reported at the use site as an uninferred type
@@ -5464,7 +5317,7 @@ rejected where it is written.
 
 #### Lexical note
 
-`..` is a single token (`DotDot`). Writing `...` (three dots) is a parse error with the diagnostic _"unexpected `...`; did you mean `..`?"_.
+`..` is one token. Writing `...` (three dots) is a parse error with the diagnostic _"unexpected `...`; did you mean `..`?"_.
 
 #### Value Spread
 
@@ -5476,7 +5329,7 @@ let b = [..a, true];   // b: [i32, String, bool]
 let c = [42, ..a];     // c: [i32, i32, String]
 ```
 
-The spread expression is evaluated exactly once. For non-trivial expressions (e.g., function calls), the compiler introduces a temporary binding to avoid duplicate evaluation:
+The spread expression is evaluated exactly once:
 
 ```wado
 // make_pair() is called once, not twice
@@ -5485,7 +5338,7 @@ let t = [..make_pair(), 30];
 
 ### Handlers
 
-A handler is an `impl Effect for Type` whose methods may use `resume value` to deliver a value to the suspended caller. The `with E => h do { body }` block installs `h` as the handler for effect `E` for the duration of `body`. The `=>` arrow reads as a dispatch binding ("calls to `E` go to `h`"); it is not an assignment, since each `with` pushes onto a per-effect handler chain that is restored on exit.
+A handler is an `impl Effect for Type` whose methods may use `resume value` to deliver a value to the suspended caller. The `with E => h do { body }` block installs `h` as the handler for effect `E` for the duration of `body`. The `=>` arrow reads as a dispatch binding ("calls to `E` go to `h`"), not an assignment. An inner `with` for the same effect takes over until its body ends, and the outer handler answers again after it.
 
 ```wado
 with Stdin => &mut mock do { ... }
@@ -5493,7 +5346,7 @@ with Stdin => &mut s, Stdout => &mut o do { ... }
 with &mut bundle do { ... }                       // bundled (omits effect name)
 ```
 
-See `docs/wep-2026-01-27-effect-system-design.md` for resource-as-effect and effect propagation design, and `docs/wep-2026-04-11-effect-handler.md` for handler syntax, dispatch lowering, and `MockCM`.
+See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md) for resource-as-effect and effect propagation, and [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md) for handler syntax and semantics.
 
 ## World System
 
@@ -5509,139 +5362,97 @@ Worlds are classified into two categories:
 - Hosted world: A world that a runtime knows how to instantiate and drive. The runtime provides all imports and invokes the exports according to a defined lifecycle. Examples: `wasi:cli/command` (executed by `wado run`), `wasi:http/service` (executed by `wado serve`). Informally called a "well-known world."
 - Library world: A world that defines a component's public API for composition. It is not directly executed by a runtime; instead, other components import its exports. Example: a `json` library that exports parsing functions.
 
-This distinction is not part of the Component Model specification — the CM treats all worlds uniformly. In Wado, the distinction matters for tooling: `wado run` and `wado serve` select a hosted world, while `wado.toml`'s `lib` field defines a library world.
+This distinction is not part of the Component Model specification, which treats all worlds uniformly. In Wado, the distinction matters for tooling: `wado run` and `wado serve` select a hosted world, while `wado.toml`'s `[package].lib` field defines a library world.
 
 ### World Declaration
 
+A world imports whole interfaces and exports interfaces or functions:
+
 ```wado
-world WorldName {
-    import EffectName {
-        function_name_1,
-        function_name_2,
-    }
+#[cm("example:app/plugin@0.1.0")]
+pub world Plugin {
+    import Stdout;
+    import Environment;
 
-    import AnotherEffect {
-        function_name_3,
-    }
-
-    // Use async for exports that map to WIT's "async func" (CM surface only)
-    export async fn exported_function(arg: Type) -> ReturnType;
-    export fn synchronous_function() -> i32;
+    export Run;                                              // an interface
+    export fn transform(input: String) -> String;            // a function
+    export async fn fetch(url: String) -> Result<String, String>;
 }
 ```
 
-> TBD: Component/Module Structure
-> The relationship between files, modules, and components is still under discussion. The intended design is "1 file = 1 module, 1 component = multiple modules", but the exact syntax for declaring which modules compose a component has not been finalized.
+- `import Iface;` and `export Iface;` name a `pub interface`. The interface's own `#[cm(...)]` gives its Component Model name and version.
+- `export [async] fn name(...) -> T;` exports a freestanding function. `async` marks an export that maps to a WIT `async func`.
+- `#[cm("namespace:package/world@version")]` on the world gives its Component Model name.
 
-Note: The `async` keyword only appears in world export declarations to indicate correspondence with WIT's `async func`. This is the only place `async` appears in Wado—effect declarations and function implementations are fully colorless.
+A package's `wado.toml` maps each hosted world it targets to an entry file in its `[world]` table, and `[package].lib` names the entry of its library world. See [WEP: Package Manifest](./wep-2026-02-14-package-manifest.md).
 
 ### WASI CLI World Example
 
-The standard WASI CLI `command` world in Wado syntax:
+The standard WASI CLI `command` world, as `wasi:cli` declares it:
 
 ```wado
-// Based on wasi:cli@0.3.0-rc-2025-09-16 command world
-// Effect definitions are in "core:cli" (see cli.wado)
+#[cm("wasi:cli/command@0.3.0")]
+pub world Command {
+    import Environment;
+    import Exit;
+    import Stdin;
+    import Stdout;
+    import Stderr;
+    import TerminalStdin;
+    import TerminalStdout;
+    import TerminalStderr;
+    import MonotonicClock;
+    import SystemClock;
+    import Timezone;
+    import Preopens;
+    import IpNameLookup;
+    import Random;
+    import Insecure;
+    import InsecureSeed;
 
-world Command {
-    // Standard I/O streams
-    import Stdout {
-        write_via_stream,
-    }
-
-    import Stderr {
-        write_via_stream,
-    }
-
-    import Stdin {
-        read_via_stream,
-    }
-
-    // Environment access
-    import Environment {
-        get_arguments,
-        get_environment,
-        get_initial_cwd,
-    }
-
-    // Process control
-    import Exit {
-        exit,
-        exit_with_code,
-    }
-
-    // Terminal interaction (optional)
-    import TerminalStdin {
-        get_terminal_stdin,
-    }
-
-    import TerminalStdout {
-        get_terminal_stdout,
-    }
-
-    import TerminalStderr {
-        get_terminal_stderr,
-    }
-
-    // Entry point: maps to WIT's "run: async func() -> result"
-    // async keyword only appears here (world export) - the CM surface
-    export async fn run() -> Result<(), ()>;
+    export Run;
 }
+```
 
-// Declare conformance to the Command hosted world
-contract Command;
+`Run` declares `async fn run() -> AsyncCall<Result<(), ()>>`. A program implements it with an `export fn run()`:
 
-// Implementation — `export` exposes it at the CM boundary
+```wado
+use { println, Stdout } from "core:cli";
+
 export fn run() with Stdout {
     println("Hello, WASI world!");
 }
 ```
 
-### Multiple Worlds
+### Selecting a World
 
-A single codebase can define multiple worlds for different deployment targets:
+A program does not name its world in source. The `--world` option of `wado compile` selects it, or the `[world]` table of `wado.toml` maps each world to its entry file. Without either, `wado compile` and `wado run` target `wasi:cli/command`, and `wado serve` targets `wasi:http/service`.
 
-```wado
-world BrowserApp {
-    import Dom {
-        query_selector,
-        create_element,
-    }
+A package may target several worlds, one entry file each:
 
-    export fn mount(root: String);
-}
-
-world CliApp {
-    import Stdout {
-        write_via_stream,
-    }
-
-    export fn run() -> Result<(), ()>;
-}
-
-// Declare conformance — select world at compile time
-contract CliApp;  // or: contract BrowserApp;
+```toml
+[world]
+"wasi:cli/command" = "src/cli.wado"
+"wasi:http/service" = "src/server.wado"
 ```
 
 ### Design Notes
 
-- Explicit function listing: Unlike WIT's `include` directive, Wado requires listing each imported function explicitly for clarity
-- Effect-based imports: Imports are organized by effect, which maps to WIT interfaces
-- Type signatures on exports: Export declarations include full function signatures
-- async keyword: Only appears in world export declarations (the Component Model surface); effect declarations and implementations are fully colorless
-- Versioning: Version information (`@0.3.0-rc-2025-09-16`) is specified in the effect definitions (e.g., `cli.wado`), not in the world declaration
+- Interface imports: a world imports whole interfaces, as a WIT world does.
+- Versions: the `#[cm(...)]` of each interface and of the world carries its version (`@0.3.0`).
+- Exports: an interface export takes its signatures from the interface. A function export spells its own.
 
 ## Error Handling
 
-### Unrecoverable Errors (Wasm Exceptions)
+### Unrecoverable Errors (Traps)
 
 ```wado
-panic("Fatal error");      // Immediate termination
-unreachable();             // Unreachable code
-assert condition;          // Condition check, panic on failure
+panic("Fatal error");      // logs the message to stderr, then traps
+unreachable();             // traps
+assert condition;          // panics when the condition is false
 ```
 
-These cannot be caught in Wado; the program terminates.
+A trap cannot be caught in Wado. It ends the program.
 
 ### Recoverable Errors (Result Type)
 
@@ -5650,8 +5461,8 @@ fn parse_int(s: String) -> Result<i32, ParseError> {
     // ...
 }
 
-fn read_config(path: String) -> Result<Config, ConfigError> with FileSystem {
-    let content = FileSystem::read(path)
+fn read_config(path: String) -> Result<Config, ConfigError> with Preopens {
+    let content = fs::read_to_string(path)
         .map_err(|e| ConfigError::Io(e))?;
     let config = parse_config(content)?;
     return Ok(config);
@@ -5666,7 +5477,7 @@ match result {
 
 ## WASI / Browser Support
 
-Wado targets WASI Preview 3 (0.3.0-rc-2025-09-16), which introduces native `stream<T>` and `future<T>` types that map directly to Wado's `Stream<T>` and `Future<T>`.
+Wado targets WASI Preview 3 (0.3.0), which introduces native `stream<T>` and `future<T>` types that map directly to Wado's `Stream<T>` and `Future<T>`.
 
 All Wado types map directly to Component Model (WIT) types. See the [Type Mapping at Component Boundaries](#type-mapping-at-component-boundaries) table in the Type System section for the complete mapping reference.
 
@@ -5674,26 +5485,26 @@ All Wado types map directly to Component Model (WIT) types. See the [Type Mappin
 
 Wado effects map to WASI P3 interfaces:
 
-| Wado Effect   | WASI Interface         | Key Functions                                         |
-| ------------- | ---------------------- | ----------------------------------------------------- |
-| `Stdout`      | `wasi:cli/stdout`      | `write-via-stream(stream<u8>)`                        |
-| `Stderr`      | `wasi:cli/stderr`      | `write-via-stream(stream<u8>)`                        |
-| `Stdin`       | `wasi:cli/stdin`       | `read-via-stream() -> tuple<stream<u8>, future<...>>` |
-| `Environment` | `wasi:cli/environment` | `get-arguments()`, `get-environment()`                |
-| `Exit`        | `wasi:cli/exit`        | `exit(result)`, `exit-with-code(u8)`                  |
+| Wado Effect   | WASI Interface         | Key Functions                                                           |
+| ------------- | ---------------------- | ----------------------------------------------------------------------- |
+| `Stdout`      | `wasi:cli/stdout`      | `write-via-stream(stream<u8>) -> future<result<_, error-code>>`         |
+| `Stderr`      | `wasi:cli/stderr`      | `write-via-stream(stream<u8>) -> future<result<_, error-code>>`         |
+| `Stdin`       | `wasi:cli/stdin`       | `read-via-stream() -> tuple<stream<u8>, future<result<_, error-code>>>` |
+| `Environment` | `wasi:cli/environment` | `get-arguments()`, `get-environment()`                                  |
+| `Exit`        | `wasi:cli/exit`        | `exit(result)`, `exit-with-code(u8)`                                    |
 
 ### Entry Points
 
-Entry points are integrated in World system.
+Each hosted world defines its entry point:
 
-Each hosted world defines its entry point. Currently supported:
+| World                 | Entry Point                                                               | Driver       |
+| --------------------- | ------------------------------------------------------------------------- | ------------ |
+| `wasi:cli/command`    | `export fn run()`                                                         | `wado run`   |
+| `wasi:http/service`   | `export async fn handle(request: Request) -> Result<Response, ErrorCode>` | `wado serve` |
+| `core:kiln/generator` | `export fn generate(...)`                                                 | Kiln         |
+| `test`                | the entry module's `test` blocks                                          | `wado test`  |
 
-| Hosted World        | Entry Point                                                               | CLI Command  |
-| ------------------- | ------------------------------------------------------------------------- | ------------ |
-| `wasi:cli/command`  | `export fn run()`                                                         | `wado run`   |
-| `wasi:http/service` | `export async fn handle(request: Request) -> Result<Response, ErrorCode>` | `wado serve` |
-
-When no explicit `contract` declaration is present, the runtime determines the expected world (e.g., `wado run` expects `wasi:cli/command`).
+`test` is a synthetic world: it exports the entry module's `test` blocks and nothing else. See [Selecting a World](#selecting-a-world) for how a program's world is chosen.
 
 ### `task return` Statement
 
@@ -5719,10 +5530,10 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 - `task return` is only valid inside `export async fn` bodies.
 - An `export async fn` body must carry a `task return`. One that carries none can never deliver, so every call of it would reach the boundary with the task unfinished; the compiler rejects it instead. A body whose every path provably exits first (`panic`, an endless loop) has no delivery to make and is exempt.
 - Whether a `task return` under a branch is reached is not checked. A path that misses it traps at the boundary, the same as a declared result the body never binds.
-- Regular `return` is forbidden in `async fn` bodies — it would exit the Wasm function without notifying the CM runtime.
+- Regular `return` is forbidden in `async fn` bodies. It would exit the Wasm function without notifying the CM runtime.
 - The `task return` expression is type-checked against the declared return type of the enclosing `export async fn`.
 - `task return` names the function's result, and where it goes depends on who entered the function. The Component Model runtime receives it when the export binding did; a Wado caller receives it as an ordinary return value.
-- The `async` keyword asks nothing of a call site; Wado has no `await` and is fully colorless. `async` only appears in `export async fn` declarations to signal CM async calling convention at the component boundary.
+- The `async` of an `export async fn` asks nothing of a Wado call site, which calls it as any other function. It selects the CM async calling convention at the component boundary.
 
 ### Attribute Syntax for Component Model Linking
 
@@ -5730,23 +5541,29 @@ Use `#[cm(...)]` attributes to link Wado definitions to Component Model interfac
 
 ```wado
 // Link an effect interface to a CM interface
-#[cm("wasi:cli/stdout@0.3.0-rc-2025-09-16")]
+#[cm("wasi:cli/stdout@0.3.0")]
 pub interface Stdout {
-    #[cm("wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream")]
-    fn write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode>;
+    #[cm("wasi:cli/stdout@0.3.0#write-via-stream")]
+    fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
 }
 
 // Link a resource to a CM resource
-#[cm("wasi:cli/terminal-output@0.3.0-rc-2025-09-16")]
-resource TerminalOutput;
+#[cm("wasi:cli/terminal-output@0.3.0#terminal-output")]
+pub resource TerminalOutput;
 
-// Link an enum to a CM enum
-pub enum ErrorCode {  // Maps to WIT: enum error-code
-    Io,               // Maps to WIT: io
-    IllegalByteSequence,  // Maps to WIT: illegal-byte-sequence
-    Pipe,             // Maps to WIT: pipe
+// Link an enum to a CM enum, and each case to its WIT case
+#[cm("wasi:cli/types@0.3.0#error-code")]
+pub enum ErrorCode {
+    #[cm("io")]
+    Io,
+    #[cm("illegal-byte-sequence")]
+    IllegalByteSequence,
+    #[cm("pipe")]
+    Pipe,
 }
 ```
+
+`#[cm_params("name", ...)]` on an operation gives the CM-side names of its parameters. Without it, each parameter's CM name is its Wado name in kebab-case.
 
 #### Resource linearity
 
@@ -5761,37 +5578,73 @@ The representation follows from the linearity. An affine resource crosses the Co
 `resource Child extends Parent` declares that a child handle is usable wherever the parent is. Both resources must declare `linearity = "unrestricted"`, because an upcast copies the handle and an affine one may not be copied. Single inheritance only, and a cycle is an error.
 
 ```wado
+<<<<<<< HEAD
 #[cm("web:dom/event-target", linearity = "unrestricted", classes = "0..=1")]
 resource EventTarget {
     #[cm("web:dom/event-target#add-event-listener")]
     #[cm_params("self", "kind")]
     fn add_event_listener(&self, kind: String);
+||||||| 03599b7966
+#[cm("web:dom/event-target", linearity = "unrestricted")]
+resource EventTarget {
+    #[cm("web:dom/event-target#add-event-listener")]
+    #[cm_params("self", "kind")]
+    fn add_event_listener(&self, kind: String);
+=======
+#[cm("example:ui/target", linearity = "unrestricted")]
+resource Target {
+    #[cm("example:ui/target#add-listener")]
+    fn add_listener(&self, kind: String);
+>>>>>>> origin/main
 }
 
+<<<<<<< HEAD
 #[cm("web:dom/node", linearity = "unrestricted", classes = "1..=1")]
 resource Node extends EventTarget {
     #[cm("web:dom/node#text-content")]
     #[cm_params("self")]
     fn text_content(&self) -> Option<String>;
+||||||| 03599b7966
+#[cm("web:dom/node", linearity = "unrestricted")]
+resource Node extends EventTarget {
+    #[cm("web:dom/node#text-content")]
+    #[cm_params("self")]
+    fn text_content(&self) -> Option<String>;
+=======
+#[cm("example:ui/widget", linearity = "unrestricted")]
+resource Widget extends Target {
+    #[cm("example:ui/widget#label")]
+    fn label(&self) -> Option<String>;
+>>>>>>> origin/main
 }
 
-fn use_it(n: Node) {
-    n.add_event_listener("click");   // inherited, no cast
-    let t: EventTarget = n;          // upcast is implicit
+fn use_it(w: Widget) {
+    w.add_listener("click");   // inherited, no cast
+    let t: Target = w;         // upcast is implicit
 }
 ```
 
 Rules:
 
 - The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet. `&mut T`, container elements (`List<T>`, `Option<T>`, …) and function types are invariant.
+<<<<<<< HEAD
 - Narrowing back to a child is never implicit. It is written as a type pattern (below), which tests the class the host tagged the handle with.
 - `classes = "lo..=hi"` numbers those classes: a resource's own is `lo`, and the resources extending it hold the rest. A child's range lies past its parent's own class inside the parent's, siblings share none, and an `extends` tree declares `classes` on every resource or on none. A type pattern narrows only to a resource that declares them.
 - `==` and `!=` compare two handles when one type extends the other. The host hands out one handle per object, so equal handles name one object. An unrestricted resource is `Eq`, so a type holding one derives `Eq` too. There is no ordering.
 - A child may not redeclare a method it inherits, and a name reachable through both the chain and a trait impl is ambiguous — write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
+||||||| 03599b7966
+- Narrowing back to a child is never implicit. It is written as a type pattern (below), which asks the host whether the handle really is one.
+- `==` and `!=` compare two handles when one type extends the other, and ask the host whether both name one object. There is no ordering.
+- A child may not redeclare a method it inherits, and a name reachable through both the chain and a trait impl is ambiguous — write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
+=======
+- Narrowing back to a child is never implicit. It is written as a type pattern (below), which asks the host whether the handle really is one.
+- `==` and `!=` compare two handles when one type extends the other, and ask the host whether both name one object. There is no ordering.
+- A child may not redeclare a method it inherits. A name reachable through both the chain and a trait impl is ambiguous: write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
+>>>>>>> origin/main
 - Static methods (no `&self`) are not inherited, and `Self` in an inherited method names the resource that declares it.
-- Generic resources take no part in `extends` yet.
+- A generic resource takes no part in `extends`.
 
-See [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md) for the design and what is not built yet.
+See [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md) for the design and its known gaps.
 
 ### Type Patterns
 
@@ -5803,20 +5656,20 @@ Whether the pattern can fail is decided statically, from the subject's type `S`:
 | ----------------- | -------------------------------------------------------------------- |
 | `S <: T`          | irrefutable — an upcast, or an ordinary type annotation              |
 | `T <: S`, `T ≠ S` | refutable — a runtime test, and only where `extends` relates the two |
-| otherwise         | a type error, as a mismatched annotation is today                    |
+| otherwise         | a type error, as a mismatched annotation is                          |
 
-An irrefutable ascription still drives type context, so `let x: i64 = 42` coerces the literal as before. A refutable one needs a pattern position that admits failure, so `let` and a `for` binding reject it exactly as they reject `Some(x)`:
+An irrefutable ascription still drives type context, so `let x: i64 = 42` coerces the literal. A refutable one needs a pattern position that admits failure, so `let` and a `for` binding reject it exactly as they reject `Some(x)`:
 
 ```wado
 let n: Node = el;                                   // Element <: Node — irrefutable upcast
 let input: HtmlInputElement = el;                   // ERROR: refutable pattern in `let`
 let input: HtmlInputElement = el else { return; };  // the guard form
 if let input: HtmlInputElement = el { ... }
-if e matches { _: KeyboardEvent } { ... }           // the predicate form
+if node matches { _: Element } { ... }              // the predicate form
 
-match e {
-    ke: KeyboardEvent => ke.key(),
-    me: MouseEvent => `${me.client_x()}`,
+match node {
+    input: HtmlInputElement => input.value(),
+    elem: Element => elem.tag_name(),
     _ => "other",                                   // required: the hierarchy is open
 }
 ```
@@ -5852,13 +5705,13 @@ fn error_handler() { panic("error"); }
 
 #### `#[benign(E, ...)]`
 
-Lets a function perform the listed effects without declaring `with E`, and stops them from propagating to callers — for effects that are observationally pure (unobservable through the function's interface). Only the named effects are suppressed; others propagate normally, and the world import for each is still required. The compiler cannot verify observational purity, so this is an unchecked assertion that must be audited. See [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md).
+Lets a function perform the listed effects without declaring `with E`, and stops them from propagating to callers. It is meant for effects that are observationally pure, that is, unobservable through the function's interface. Only the named effects are suppressed. Others propagate normally, and the world import for each is still required. The compiler cannot verify observational purity, so this is an unchecked assertion that must be audited. See [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md).
 
 ```wado
 #[benign(InsecureSeed)]
-fn make<K, V>() -> HashMap<K, V> {
-    let seed = get_insecure_seed(); // performed here, not required of callers
-    return HashMap { seed, /* ... */ };
+fn hash_seed() -> u64 {
+    let [seed, _] = InsecureSeed::get_insecure_seed(); // not required of callers
+    return seed;
 }
 ```
 
@@ -5874,12 +5727,15 @@ struct Foo {
 }
 ```
 
-#### `#[allow(dead_code)]`
+#### `#[allow(...)]`
 
-Waives the unused / test-only diagnostic on the item carrying it. As the module
-inner attribute `#![allow(dead_code)]` it waives the lint for every item in the
-file. `dead_code` is the only lint this takes, and there is no `#[deny(...)]`.
-See [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
+Waives a lint on the item carrying it. As the module inner attribute
+`#![allow(...)]` it waives the lint for every item in the file. There is no
+`#[deny(...)]`. The lints are:
+
+- `dead_code`: an unused or test-only item. See [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
+- `shadowed_name`: a binder that takes a name already reaching a known symbol.
+- `undecided_effects`: a trait head that writes no `with` clause (see [The Trait Head](#the-trait-head)).
 
 ```wado
 #[allow(dead_code)]
@@ -5903,6 +5759,20 @@ global PORT: i32 = 8080;                        // read from an env var
 global BUILD_ID: String = "dev";                // -D build.id=...
 ```
 
+#### `#[unavailable("reason")]`
+
+Declares a name that is deliberately not offered, on a declaration with no body. A call to it is an error that reports the reason. The reason is the only argument, and a removal writes its version into it. The declaration reserves a name rather than a signature, so its parameters are never checked against a call. It goes on a module function, an `impl` method, or a trait method. See [WEP: Declared Absence](./wep-2026-09-13-declared-absence.md).
+
+```wado
+impl File {
+    #[unavailable("write `open_with(Options::default())` instead")]
+    pub fn open(&self);
+
+    #[unavailable("removed in 0.5.0; use `open_with`")]
+    pub fn open_timeout(&self);
+}
+```
+
 #### `#[expect_trap]`
 
 Test block attribute. Marks a test that is expected to trap. The test passes if the body traps, and fails if it completes normally.
@@ -5918,12 +5788,10 @@ test "panics on invalid input" {
 
 Test block attribute. Marks a test for an unimplemented feature. TODO tests are reported on a separate axis from regular pass/fail results:
 
-- If the body traps, the test is pending (expected — the feature is still unimplemented).
-- If the body completes normally, the test is resolved (hard failure — the `#[TODO]` attribute must be removed).
+- If the body traps, the test is pending. That is expected while the feature is unimplemented.
+- If the body completes normally, the test is resolved. That is a hard failure: the `#[TODO]` attribute must be removed.
 
-Pending TODO tests never cause the test runner to fail. Resolved TODO tests always cause the test runner to fail with exit code 1.
-
-See Test Outcome Model in the Testing section for the full specification.
+A pending TODO test never fails the run, and a resolved one always does. See [Test Outcome Model](#test-outcome-model).
 
 ```wado
 #[TODO]
@@ -5946,7 +5814,7 @@ test "slow computation" {
 
 #### `#[synopsis]`
 
-Test block attribute. The test runs like any other, and `wado doc` renders its body as the module's `## Synopsis` section — a compiled, always-current usage example. See [WEP: Synopsis Tests](./wep-2026-04-26-synopsis-tests.md).
+Test block attribute. The test runs like any other, and `wado doc` renders its body as the module's `## Synopsis` section, a usage example that is compiled and so stays current. See [WEP: Synopsis Tests](./wep-2026-04-26-synopsis-tests.md).
 
 ```wado
 #[synopsis]
@@ -5956,9 +5824,16 @@ test {
 }
 ```
 
-#### `#[wire(name = "...")]` / `#[wire(name_policy = "...")]` / `#[wire(positional)]`
+#### `#[wire(name = "...")]` / `#[wire(name_policy = "...")]` / `#[wire(number = N)]` / `#[wire(positional)]`
 
-Controls serialization/deserialization behavior for struct fields. `#[wire(name = "...")]` overrides the wire-form key for a single field; `#[wire(name_policy = "...")]` (on a struct) renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...). A field is optional on deserialization when it has a default value (`f: T = expr`), falling back to that expression when absent — the single mechanism for optional fields. `#[wire(positional)]` marks a field as ordinal: it is resolved by position, never by name (name-only and sequence-only formats ignore the hint), which [`core:args`](./wep-2026-06-22-core-args.md) uses to bind a bare token to the field. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md) and [`core:serde`](./stdlib-core-serde.md).
+Controls serialization and deserialization of struct fields. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md) and [`core:serde`](./stdlib-core-serde.md).
+
+- `#[wire(name = "...")]` overrides the wire key of one field.
+- `#[wire(name_policy = "...")]` on a struct renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...).
+- `#[wire(number = N)]` gives a field the numeric key that number-keyed formats such as `core:protobuf` read. A struct carries it on every field or on none, and a numbered struct satisfies `WireNumbered`. See [WEP: Grog](./wep-2026-09-22-grog.md).
+- `#[wire(positional)]` marks a field as ordinal: it is resolved by position, never by name. Name-only and sequence-only formats ignore the hint. [`core:args`](./wep-2026-06-22-core-args.md) uses it to bind a bare token to the field.
+
+A field is optional on deserialization when it has a default value (`f: T = expr`), and it falls back to that expression when absent. This is the only mechanism for optional fields.
 
 ### Standard Library Attributes
 
@@ -5979,9 +5854,9 @@ Module-level inner attribute. Marks the entire module as TODO for `wado test`. T
 
 - If compilation fails, the module is reported as a single pending TODO entry.
 - If compilation succeeds, all test blocks are implicitly treated as `#[TODO]` tests.
-- If the module compiles and all tests pass, it is reported as resolved (hard failure — the `#![TODO]` attribute must be removed).
+- If the module compiles and all tests pass, it is reported as resolved. That is a hard failure: the `#![TODO]` attribute must be removed.
 
-See Test Outcome Model in the Testing section for the full specification.
+See [Test Outcome Model](#test-outcome-model).
 
 ```wado
 #![TODO]
@@ -5993,7 +5868,7 @@ test "not yet implemented" {
 
 #### `#![generated]`
 
-Module-level inner attribute. Indicates that the module contains machine-generated code (e.g. from `wado-from-idl` or `gale`). Stored in the AST but not carried into TIR or later compilation stages. Reserved for future tooling use: language services may prohibit editing generated modules, and coverage tools may exclude them.
+Module-level inner attribute. Indicates that the module contains machine-generated code (e.g. from `wado-from-idl` or `gale`). It does not change how the module compiles. Tools read it: Kiln stamps it on every file it generates, and deletes a stamped file that the current run did not produce.
 
 The attribute accepts optional metadata so that generators can attach provenance information directly to the attribute instead of as free-form comments. Two argument shapes are supported inside the parentheses:
 
@@ -6012,42 +5887,38 @@ Conventional keys are `by` (the tool that produced the file) and `sources` (the 
 
 #### `#![wasm_module("name")]`
 
-Module-level inner attribute. All items in this module are compiled into a separate Wasm core module with the given name, rather than into the main GC core module.
+Module-level inner attribute. All items in this module are compiled into a separate Wasm core module with the given name, which owns its own linear memory.
 
-This is the mechanism by which the compiler produces the multi-module component structure required by the Component Model. Items marked with `#![wasm_module]` are extracted from the main compilation pipeline and emitted as a standalone core module with its own linear memory.
+The Component Model requires a component to provide a linear memory and a `realloc` function for data crossing the boundary. `core:allocator` provides both as the core module `"mem"`, the only `wasm_module` in the standard library.
 
 ```wado
 #![wasm_module("mem")]
 #![no_prelude]
 
-global mut __heap_offset: i32 = 1024;
+global mut heap_offset: i32 = 8;
 
-#[export_name("realloc")]
+#[allocator("bump")]
 export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     // ...
 }
 ```
 
-Currently, the only `wasm_module` in the standard library is `"mem"`, defined in `core:allocator`. See [The "mem" Core Module](#the-mem-core-module) for details.
+#### `#[allocator("name")]`
+
+Marks a function in a `wasm_module` as the `realloc` implementation named `name`. The world selects which one the component uses: `bump` for CLI programs, `freelist` for HTTP services, and `debug` for the test world. `debug` never reuses freed memory and fills it with `0xFF`.
 
 #### `#[export_name("name")]`
 
-Overrides the Wasm export name of a function within its core module. Without this attribute, the export name is derived from the function's module-qualified path.
-
-```wado
-#[export_name("realloc")]
-export fn bump_realloc(...) -> i32 { ... }
-// Exported as "realloc" instead of "bump_realloc"
-```
+Overrides the Wasm export name of a function within its core module.
 
 #### `#[canonical("namespace", "name")]`
 
-Declares that a builtin function is imported as a Component Model canonical built-in. Used in `core:builtin` to map intrinsic declarations to CM imports. Functions without this attribute compile directly to Wasm instructions.
+Declares that a bodyless function is imported rather than defined. Used in `core:builtin` to map intrinsic declarations to their imports.
 
 | Namespace       | Description                                                    |
 | --------------- | -------------------------------------------------------------- |
 | `"wasi"`        | CM canonical builtins (streams, futures, tasks)                |
-| `"mem"`         | Memory operations from the "mem" core module                   |
+| `"mem"`         | Exports of the `"mem"` core module (`realloc`)                 |
 | `"wasm:<path>"` | Exports of an imported core-wasm asset (e.g. the bundled libm) |
 
 ```wado
@@ -6060,24 +5931,24 @@ fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 
 #### `#[compiler_item("name")]`
 
-Marks a stdlib declaration as the resolution for a compiler-recognized item. The compiler uses these annotations to bind specific stdlib symbols (types, traits, methods, variant/enum cases) to the Rust-side enum `CompilerItem` so downstream passes (synthesis, lowering, codegen) can look them up by key instead of by hard-coded name. Renaming a stdlib item on the Wado side stays transparent as long as the `#[compiler_item("...")]` argument is unchanged.
+Binds a stdlib declaration to the language item of that name, such as `#[compiler_item("option")]` on `variant Option` or `#[compiler_item("display")]` on the `Display` trait. It is valid only in `core:*` modules, and an error elsewhere.
 
-Examples: `#[compiler_item("option")]` on `variant Option`, `#[compiler_item("option_some")]` on the `Some` case, `#[compiler_item("display")]` on the `Display` trait, `#[compiler_item("string_push_str")]` on the `String::push_str` method.
+#### `#![stdlib("path")]`
 
-The attribute is only valid inside `core::*` modules; the elaborator rejects it on user code.
+Module-level inner attribute. Names the bundled stdlib module a file is, such as `#![stdlib("core:cbor")]`. The file is that module however it was loaded, so a file an editor opens directly is the same module an import reaches.
 
 #### `#[cm("namespace:pkg/interface@version")]` / `#[cm_params(...)]`
 
-Links Wado definitions (effects, resources, enums) to Component Model interfaces. See [Attribute Syntax for Component Model Linking](#attribute-syntax-for-component-model-linking).
+Links Wado definitions (interfaces, worlds, resources, enums) to their Component Model names. See [Attribute Syntax for Component Model Linking](#attribute-syntax-for-component-model-linking).
 
 #### `#[retain(...)]` / `#[result(...)]`
 
 What a call does with the reference parameters it is handed: whether its result
 aliases one, and whether it keeps one past the return. Neither is a safety
-condition — every referent is GC-managed, so neither can dangle — and the
-compiler reads both from a function's body. These attributes are for a
-declaration that has none: a `core:builtin` primitive, a Component Model import,
-a `.wasm` / `.wat` asset import. See
+condition, since every referent is GC-managed and cannot dangle. The compiler
+reads both from a function's body. These attributes are for a declaration that
+has none: a `core:builtin` primitive, a Component Model import, a `.wasm` /
+`.wat` asset import. See
 [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 ```wado
@@ -6106,10 +5977,8 @@ dispatched to an impl that has a body, so the impl states it.
 
 #### `#[immediate(...)]`
 
-Names a parameter the call lowers to a Wasm immediate, where codegen reads the
-argument's literal value out of the call itself. The optimizer must leave such
-an argument alone: hoisting it into a global, or forwarding it through a local,
-replaces the literal with a load and the lowering has nothing left to read.
+Names a parameter that becomes a Wasm immediate: the argument's literal value is
+encoded into the instruction itself.
 
 ```wado
 #[immediate(value)]
@@ -6117,16 +5986,16 @@ pub fn v128_const(value: i128) -> v128;
 ```
 
 It names one parameter, unquoted, and repeats for a second. Like
-`#[retain(...)]`, it belongs to a declaration with no body: it describes how
-codegen lowers the call, and a body is called rather than lowered. A `trait` or
-`interface` method requirement is an error for the same reason — it reaches an
-impl, which is called.
+`#[retain(...)]`, it belongs to a declaration with no body, because a body is
+called rather than encoded as one instruction. A `trait` or `interface` method
+requirement is an error for the same reason: it reaches an impl, which is
+called.
 
 #### `#[trap(...)]`
 
-When a call to a declaration with no body traps. Silence means it may trap, so
-the optimizer keeps every call whose result nothing reads. `#[trap(never)]` says
-it never traps, and a check names the one condition it traps on:
+When a call to a declaration with no body traps. Silence means it may trap.
+`#[trap(never)]` says it never traps, and a check names the one condition it
+traps on:
 
 ```wado
 #[trap(never)]
@@ -6164,8 +6033,6 @@ is.
 How a call to a declaration with no body touches linear memory: `read` or
 `write`. Silence means it touches none. A linear-memory address is a plain
 `i32`, so no parameter type says this, and the attribute is the only source.
-A `read` call is not moved across a `write`, and neither is deleted as if it
-touched nothing.
 
 ```wado
 #[linear_memory(read)]
@@ -6177,49 +6044,13 @@ pub fn i32_store(addr: i32, value: i32);
 
 It is written once, and is an error where `#[trap]` is.
 
-### The "mem" Core Module
-
-The Component Model requires each component to provide a linear memory and a `realloc` function. The CM runtime calls `realloc` whenever it needs guest-side linear memory — for example, `stream.read` copies bytes from the host into a guest buffer, and string lifting/lowering also goes through it.
-
-Wado's main core module uses Wasm GC (managed heap) and does not have linear memory. The "mem" core module is a separate core module that provides:
-
-1. Linear memory — a Wasm linear memory for CM data transfer
-2. `realloc` — the CM-required allocator function
-
-The "mem" module is defined in `core:allocator` using `#![wasm_module("mem")]`. The compiler:
-
-1. Extracts all functions and globals from `#![wasm_module("mem")]` sources during WIR construction
-2. Emits them as a standalone core module with its own linear memory
-3. Instantiates the "mem" module as part of the component
-4. Aliases the `realloc` export for use in `canon lift`/`canon lower` options
-5. Shares the "mem" instance with the main core module via imports, so that `builtin::realloc` (declared with `#[canonical("mem", "realloc")]`) resolves to the same function
-
-The component structure looks like:
-
-```
-(component
-  (core module "mem"          ;; from #![wasm_module("mem")]
-    (memory (export "mem") 1)
-    (func (export "realloc") ...)
-    (global (export "__heap_offset") (mut i32) (i32.const 1024)))
-  (core instance "mem" (instantiate "mem"))
-  (core module "main"         ;; GC core module
-    (import "mem" "realloc" (func ...))
-    (import "mem" "mem" (memory 1))
-    ...)
-  (core instance "main" (instantiate "main"
-    (with "mem" (instance "mem"))))
-  (canon lower ... (realloc (func "mem" "realloc")) (memory (memory "mem" "mem")))
-)
-```
-
 ## Appendix
 
 ### Naming Conventions
 
 | Element            | Style            |
 | ------------------ | ---------------- |
-| Project name       | `kebab-case`     |
+| Package name       | `kebab-case`     |
 | Module/file name   | `snake_case`     |
 | Primitive types    | `lowercase`      |
 | User-defined types | `UpperCamelCase` |
@@ -6235,10 +6066,18 @@ Component Model interop: The compiler automatically converts between Wado conven
 - WASI: WebAssembly System Interface
 - CM: Wasm Component Model
 - module: a Wado file
+<<<<<<< HEAD
 - project: a collection of modules
 - Wado standard library: consists of `core:` and `wasi:`
+||||||| 03599b7966
+- project: a collection of modules
+- Wado standard library: consists of `core:`, `wasi:` and `web:`
+=======
+- package: a collection of modules, described by one `wado.toml`
+- Wado standard library: consists of `core:`, `wasi:` and `web:`
+>>>>>>> origin/main
 - effect: the concept; e.g., "the `Stdout` effect"
-- effect interface: the declaration (`effect Stdout { ... }`); synonyms in literature: "effect signature", "effect type"
+- effect interface: the declaration (`interface Stdout { ... }`); synonyms in literature: "effect signature", "effect type"
 - operation: a function in an effect interface; synonym: "effect operation"
 - handler: provides implementations for operations
 - hosted world: a world that a runtime knows how to instantiate and drive (e.g., `wasi:cli/command` for `wado run`, `wasi:http/service` for `wado serve`); informally called "well-known world"

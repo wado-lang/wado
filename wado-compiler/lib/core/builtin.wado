@@ -19,6 +19,7 @@
 
 use { Formatter } from "core:prelude/format.wado";
 use { i128 } from "core:prelude/int128.wado";
+use { ByteList } from "core:prelude/bytes.wado";
 
 /// Completes the current task with a `result<>`, flattened to its one
 /// discriminant: 0 for Ok. Any other result delivers through its own canon.
@@ -102,6 +103,11 @@ pub fn array_set_u8(arr: &mut Array<u8>, idx: i32, value: u8);
 #[result(owned)]
 #[trap(negative = len, result_len = len)]
 pub fn array_new<T>(len: i32) -> Array<T>;
+
+/// An `Array<T>` read from a byte literal as little-endian `T`s, built as a
+/// constant by the compiler. `T` is a numeric primitive.
+#[immediate(bytes)]
+pub fn array_new_data<T>(bytes: ByteList) -> Array<T>;
 
 /// Returns an element from a Array<T> at the given index.
 #[result(part_of = arr)]

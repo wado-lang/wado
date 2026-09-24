@@ -8,7 +8,7 @@ ANTLR4 looks an import up by filename under `-lib`. A Kiln generator reads nothi
 
 ```wado
 use { Parser } from "./M.g4" with {
-    generator: { module: "wado-lang:gale@0.1", inputs: ["./S.g4", "./T.g4"] },
+    generator: { module: "wado-lang:gale", inputs: ["./S.g4", "./T.g4"] },
 };
 ```
 

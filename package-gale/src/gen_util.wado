@@ -1,7 +1,9 @@
 use { Alternative, Element, Visibility } from "./ir.wado";
 use { FOLLOW_PARAM, symbol_char_names, char_hex_name } from "./ident.wado";
 use { CodeWriter } from "lib:wadopoet";
+use { TreeSet } from "core:collections";
 use { unwrap_label } from "./lr_util.wado";
+use { is_ident_byte } from "./text.wado";
 pub use { escape_ident, escape_case, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 
 /// Emit a `// rule visibility: <name> (ignored by codegen, matches ANTLR4)`
@@ -21,6 +23,70 @@ pub fn gen_visibility_comment(w: &mut CodeWriter, visibility: &Visibility) {
         return;
     }
     w.line(`// rule visibility: ${label} (ignored by codegen, matches ANTLR4)`);
+}
+
+/// Every free function generated `text` calls: an identifier followed by `(`
+/// that is neither a method nor the one a `fn` defines.
+pub fn collect_called_names(text: &String, out: &mut TreeSet<String>) {
+    collect_names(text, out, true, &[]);
+}
+
+/// Every identifier generated `text` names that starts with one of `prefixes`.
+pub fn collect_referenced_names(text: &String, prefixes: &List<String>, out: &mut TreeSet<String>) {
+    collect_names(text, out, false, prefixes);
+}
+
+fn collect_names(text: &String, out: &mut TreeSet<String>, calls_only: bool, prefixes: &List<String>) {
+    let n = text.len();
+    let mut i = 0;
+    while i < n {
+        if !is_ident_byte(text.get_byte_unchecked(i)) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < n && is_ident_byte(text.get_byte_unchecked(i)) {
+            i += 1;
+        }
+        if calls_only && is_method_name(text, start) {
+            continue;
+        }
+        let name = text.as_str_slice().slice(start, i);
+        if !prefixes.is_empty() && !prefixes.iter_ref().any(|p| name.starts_with(p)) {
+            continue;
+        }
+        if !calls_only || i < n && text.get_byte_unchecked(i) == b'(' && !follows_fn_keyword(text, start) {
+            out.insert(name.to_string());
+        }
+    }
+}
+
+/// Whether the name at `start` follows a receiver's `.`, not a spread's `..`.
+fn is_method_name(text: &String, start: i32) -> bool {
+    return start >= 1
+        && text.get_byte_unchecked(start - 1) == b'.'
+        && !(start >= 2 && text.get_byte_unchecked(start - 2) == b'.');
+}
+
+fn follows_fn_keyword(text: &String, start: i32) -> bool {
+    return start >= 3 && text.as_str_slice().slice(start - 3, start) == "fn ";
+}
+
+/// The top-level functions generated `text` defines.
+pub fn defined_fn_names(text: &String) -> List<String> {
+    let mut out: List<String> = [];
+    for let line of text.split("\n") {
+        if !line.starts_with("fn ") {
+            continue;
+        }
+        let rest = line.as_str_slice().slice(3, line.len());
+        let mut end = 0;
+        while end < rest.len() && is_ident_byte(rest.get_byte_unchecked(end)) {
+            end += 1;
+        }
+        out.push(rest.slice(0, end).to_string());
+    }
+    return out;
 }
 
 pub fn rule_type_name<S: AsStrSlice>(name: S) -> String {

@@ -133,6 +133,7 @@ impl f16 {
     pub fn to_bits(&self) -> u16;
     pub fn from_bits(bits: u16) -> f16;
     pub fn from_f32(v: f32) -> f16;
+    pub fn from_f64(v: f64) -> f16;
 }
 
 impl From<f16> for f32 { }
@@ -141,7 +142,9 @@ impl TryFrom<f32> for f16 { type Err = ConvertError; }
 impl TryFrom<f64> for f16 { type Err = ConvertError; }
 ```
 
-`bf16` carries the same set.
+`bf16` carries the same set. Both also carry the limits `f32` and `f64` do,
+under Rust's names: `MAX`, `MIN`, `MIN_POSITIVE`, `EPSILON`, `INFINITY`, `NAN`,
+`MANTISSA_DIGITS` and the rest.
 
 Everywhere else in the prelude `From` preserves a value, as `From<u8> for u128`
 does. So bit reinterpretation is not written as `From`. An
@@ -151,9 +154,14 @@ the `as` confusion in a second spelling. Bits go through `to_bits` and
 
 `From` widens, and widening either type into either float is exact. `TryFrom`
 narrows, and answers `Ok` only where the value survives the round trip, which
-is the question a canonical encoder's float ladder asks. `from_f32` narrows
-unconditionally, rounding to nearest even and saturating to an infinity. It is
-a named method rather than a cast, so a lossy step is never silent.
+is the question a canonical encoder's float ladder asks. `from_f32` and
+`from_f64` narrow unconditionally, rounding to nearest even and saturating to an
+infinity. They are named methods rather than casts, so a lossy step is never
+silent.
+
+`from_f64` rounds once. Narrowing to `f32` first and then to the half would
+round twice, and the two disagree where the `f32` lands exactly on a half's
+midpoint that the `f64` was not on.
 
 ### The bit accessors are unsigned across the family
 
@@ -180,10 +188,13 @@ it.
 works unchanged. `${x:?}` prints in exponent notation, which is what a weight's
 magnitude reads best in. A tensor that cannot be printed cannot be debugged.
 
-### Serialization goes through `f32`
+### Serialization writes an `f32` and reads a half
 
-`Serialize` widens to `f32`; `Deserialize` reads an `f32` and narrows with
-`from_f32`. The `Serializer` and `Deserializer` traits gain no methods.
+`Serialize` widens to `f32`, which is exact, so the `Serializer` trait gains no
+methods. The `Deserializer` trait gains `deserialize_f16` and
+`deserialize_bf16`. Each format rounds what it read once, straight into the
+half. JSON and the text formats round the decimal, and CBOR rounds its float or
+integer item. Reading an `f32` and narrowing it would round twice.
 
 Reading rounds rather than using `TryFrom`. A serialized number is decimal text
 or a wider binary float, and almost none of those land exactly on a half
@@ -191,11 +202,34 @@ precision value, so an exact-or-fail read would reject ordinary documents.
 Writing is exact, so a round trip through a format that preserves `f32`
 preserves the value.
 
-### What is deliberately absent
+### A literal is rounded once, from its decimal text
 
-Float literal coercion. `let x: f16 = 1.5;` would need the compiler to round,
-which means writing the prelude's `from_f32` a second time in Rust, and the two
-copies would drift. A literal value is written as its bits.
+`let x: f16 = 1.5;` and `let w: List<bf16> = [0.5, -1.25];` take a float
+literal as `f32` does. A tensor written out as source is a list of such
+literals, and one spelled as bits cannot be read.
+
+The literal is rounded once, from its exact decimal value to the nearest half,
+ties to even. Reading it as an `f64` first and narrowing that is two roundings,
+which disagree where the `f64` lands exactly on a midpoint the decimal was not
+on. Every float literal is rounded this way, `f32` included.
+
+The compiler's rounding and the prelude's `from_f32` start from different
+values, a decimal and an `f32`, so they need not agree where the `f32` is itself
+a rounding. Where it is exact they must, and a fixture pins that, so neither
+copy drifts silently.
+
+A literal past the type's largest finite value is a compile error rather than
+an infinity, as an integer literal past its type's range is.
+
+### Parsing rounds once too
+
+`f16::from_str` and `bf16::from_str` round decimal text straight to the half,
+as a literal does, so parsing agrees with the compiler. `f32::from_str` follows
+the same rule, and every length of mantissa is read exactly. Text past the
+largest finite value parses to an infinity, as it does for `f32` and `f64`.
+`from_str_lenient` takes the same text with `LenientFromStr`'s spellings.
+
+### What is deliberately absent
 
 Conversion between `f16` and `bf16`. Each direction loses something the other
 keeps: `f16` has the shorter exponent range, `bf16` the shorter mantissa.
@@ -223,11 +257,6 @@ except for a NaN, and different bits are different values except for the two
 zeroes, which is all `Eq` needs. `Ord` would take the sign-magnitude key
 `f32`'s own uses, computed on sixteen bits. Nothing measured has asked for
 either.
-
-No associated constants. `f16::NAN` and its siblings cannot be written, because
-a constant initializer is a literal and these types have none.
-
-No `FromStr`, so a half precision value cannot be parsed from text directly.
 
 A half precision tensor cannot be part of a component's public API, so a Loam
 module that exports one has to widen it or hand out its bytes.

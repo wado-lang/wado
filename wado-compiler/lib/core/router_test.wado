@@ -308,6 +308,22 @@ struct FlagParams {
 }
 impl Deserialize for FlagParams;
 
+struct HalfParams {
+    scale: f16,
+    gain: bf16,
+}
+impl Deserialize for HalfParams;
+
+test "router: deserialize a half param rounds its text once" {
+    let mut r = Router::<i32>::new();
+    r.get("/mix/:scale/:gain", 1);
+
+    let m = r.match_path(Method::Get, &"/mix/1.00048828125000000000000001/1.00390625000000000000000001").unwrap();
+    let p = m.params.deserialize::<HalfParams>().unwrap();
+    assert p.scale.to_bits() == 0x3c01;
+    assert p.gain.to_bits() == 0x3f81;
+}
+
 test "router: deserialize a param type that asks for any" {
     let mut r = Router::<i32>::new();
     r.get("/users/:id", 1);

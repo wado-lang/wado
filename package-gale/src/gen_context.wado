@@ -9,12 +9,19 @@ use {
 } from "./ir.wado";
 use { SuperOp } from "./superclass.wado";
 use { LitToken } from "./lexer_gen.wado";
-use { is_single_alt_group, single_alt_group_type_name, dedup_append_arr } from "./gen_util.wado";
+use {
+    is_single_alt_group,
+    single_alt_group_type_name,
+    dedup_append_arr,
+    all_alts_are_single_token,
+    single_token_first,
+} from "./gen_util.wado";
 use { Admits, Diagnostic, DiagnosticKind, DiagnosticOwner, admits_or_everything } from "./gir.wado";
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
-use { gate_body_of } from "./scan_gate.wado";
+use { gate_body_of, SCAN_GATE_HANDLE, SCAN_GATE_FIELD } from "./scan_gate.wado";
+use { PARSER_HANDLE } from "./ident.wado";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
 use { TreeMap } from "core:collections";
 
@@ -125,9 +132,6 @@ pub struct GenContext {
     /// declares the slots, which is what makes this a fixpoint rather than a
     /// local test.
     follow_forward_edges: List<List<String>>,
-    /// Lower pre-interns every set it sees, but an emit site may pick a
-    /// cheaper form, so the registry over-approximates what is called.
-    kind_set_used: List<bool>,
     /// Registry of runtime FOLLOW-continuation masks keyed by canonical
     /// per-depth representation. IDs are assigned in insertion order so
     /// `FOLLOW_MASK_<id>` global names are stable across runs. See
@@ -285,13 +289,50 @@ pub struct GenContext {
     /// re-deriving `binding_name`, which diverges when a token / rule field-name
     /// collision deduped the reference.
     alt_bindings: List<AltBinding>,
+    /// The emitted scan function covering one alternative, by
+    /// `[rule index, surface alt index]`: one function serves the scan and the parse.
+    alt_scan_fns: TreeMap<[i32, i32], String>,
+    /// Per rule, the binding bases its actions read (`rule_binding_reads`).
+    binding_reads: List<Option<List<String>>>,
+    /// Whether the code being emitted is a scan function's, which reaches the
+    /// gate through its parameter rather than through the parser.
+    in_scan_fn: bool,
+    /// By snake name, the kinds of each rule whose scan is one token test.
+    one_token_rules: TreeMap<String, List<String>>,
+    snake_index: TreeMap<String, i32>,
+    /// The block a finished alternative leaves by, where the rule's `@after`
+    /// follows it; a finished alternative returns where this is `null`.
+    alt_exit_label: Option<String>,
+    /// By helper name, the one call a helper that only forwards would make,
+    /// which its callers make instead.
+    forwarded_calls: TreeMap<String, String>,
+}
+
+fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
+    if !all_alts_are_single_token(&rule.alternatives) || rule.alternatives.iter_ref().any(|a| !a.actions.is_empty()) {
+        return null;
+    }
+    let mut kinds: List<String> = [];
+    for let alt of &rule.alternatives {
+        let k = single_token_first(&alt.elements[0]);
+        if !kinds.contains(&k) {
+            kinds.push(k);
+        }
+    }
+    return Option::Some(kinds);
 }
 
 impl GenContext {
     pub fn new(parser_rules: &List<ParserRule>, lit_tokens: &List<LitToken>) -> GenContext {
         let mut rule_index = TreeMap::<String, i32>::new();
+        let mut one_token_rules = TreeMap::<String, List<String>>::new();
+        let mut snake_index = TreeMap::<String, i32>::new();
         for let mut i = 0; i < parser_rules.len(); i += 1 {
             rule_index[parser_rules[i].name] = i;
+            snake_index[parser_rules[i].snake_name] = i;
+            if let Some(kinds) = one_token_rule_kinds(&parser_rules[i]) {
+                one_token_rules[parser_rules[i].snake_name] = kinds;
+            }
         }
         let single_alt_owner = build_single_alt_owner_map(parser_rules);
         let rule_count = parser_rules.len();
@@ -311,7 +352,6 @@ impl GenContext {
             open_end_cache: none_bool_cache(rule_count),
             single_alt_owner,
             kind_set_registry: TreeMap::new(),
-            kind_set_used: [],
             lr_rule_snakes: [],
             follow_rule_snakes: [],
             rule_reads_follow: false_flags(rule_count),
@@ -353,7 +393,165 @@ impl GenContext {
             rule_follow_exact: false,
             rule_captures: TreeMap::new(),
             alt_bindings: [],
+            alt_scan_fns: TreeMap::new(),
+            binding_reads: [],
+            in_scan_fn: false,
+            one_token_rules,
+            snake_index,
+            alt_exit_label: null,
+            forwarded_calls: TreeMap::new(),
         };
+    }
+
+    /// The rule whose scan a scan call to `snake` can call instead: past every
+    /// rule that only forwards to another, with nothing a call site passes.
+    pub fn scan_alias<S: AsStrSlice>(&self, snake: S) -> String {
+        let mut cur = snake.to_string();
+        let mut seen: List<String> = [];
+        while !seen.contains(&cur) {
+            seen.push(cur);
+            let Some(next) = self.scan_forward_target(&cur) else {
+                break;
+            };
+            cur = next;
+        }
+        return cur;
+    }
+
+    fn scan_forward_target(&self, snake: &String) -> Option<String> {
+        if self.needs_scan_atn() || self.rule_reads_follow(snake) {
+            return null;
+        }
+        let rule = &self.parser_rules[self.snake_index[*snake]];
+        if rule.alternatives.len() != 1
+            || rule.init_action matches { Some(_) }
+            || rule.after_action matches { Some(_) } {
+            return null;
+        }
+        let alt = &rule.alternatives[0];
+        if alt.elements.len() != 1 || !alt.actions.is_empty() {
+            return null;
+        }
+        let RuleRef(r) = &alt.elements[0] else {
+            return null;
+        };
+        if self.rule_reads_follow(&r.snake_name) || self.rule_takes_min_prec_arg(&r.snake_name) {
+            return null;
+        }
+        return Option::Some(r.snake_name);
+    }
+
+    /// Whether the scan of the rule called by `snake` always consumes a token
+    /// when it matches: a single-alt scan guards that itself, and a multi-alt
+    /// one does where every alternative opens on an element that consumes.
+    pub fn scan_callee_consumes<S: AsStrSlice>(&mut self, snake: S) -> bool {
+        let mut visiting: List<i32> = [];
+        return self.rule_scan_consumes(self.snake_index[snake.to_string()], &mut visiting);
+    }
+
+    fn rule_scan_consumes(&mut self, i: i32, visiting: &mut List<i32>) -> bool {
+        if visiting.contains(&i) {
+            return false;
+        }
+        let rule = &self.parser_rules[i];
+        if rule.alternatives.len() == 1 {
+            let name = rule.name;
+            let mut nullable_visiting: List<String> = [];
+            return !self.rule_is_nullable(&name, &mut nullable_visiting);
+        }
+        visiting.push(i);
+        let alts = rule.alternatives;
+        for let alt of &alts {
+            if alt.elements.is_empty() || !self.element_scan_consumes(&alt.elements[0], visiting) {
+                visiting.pop();
+                return false;
+            }
+        }
+        visiting.pop();
+        return true;
+    }
+
+    fn element_scan_consumes(&mut self, e: &Element, visiting: &mut List<i32>) -> bool {
+        return match e {
+            TokenRef(_) | Literal(_) => true,
+            Label(l) => self.element_scan_consumes(&l.element, visiting),
+            RuleRef(r) => self.rule_scan_consumes(self.rule_index[r.name], visiting),
+            _ => false,
+        };
+    }
+
+    /// The kinds a rule matches when its scan is one token test, or `null`.
+    pub fn one_token_rule<S: AsStrSlice>(&self, snake: S) -> Option<List<String>> {
+        return self.one_token_rules.get_str(&self.scan_alias(snake));
+    }
+
+    /// Enter or leave a scan function's body; returns the previous setting.
+    pub fn set_in_scan_fn(&mut self, on: bool) -> bool {
+        let was = self.in_scan_fn;
+        self.in_scan_fn = on;
+        return was;
+    }
+
+    /// The scan gate as a place: the parameter's target inside a scan
+    /// function, the parser's field anywhere else.
+    pub fn scan_gate_place(&self) -> String {
+        if self.in_scan_fn {
+            return `*${SCAN_GATE_HANDLE}`;
+        }
+        return self.scan_gate_path();
+    }
+
+    fn scan_gate_path(&self) -> String {
+        if self.in_scan_fn {
+            return SCAN_GATE_HANDLE;
+        }
+        return `${PARSER_HANDLE}.${SCAN_GATE_FIELD}`;
+    }
+
+    /// `place.field` of the scan gate.
+    pub fn scan_gate_member<S: AsStrSlice>(&self, field: S) -> String {
+        return `${self.scan_gate_path()}.${field}`;
+    }
+
+    /// The trailing gate argument of a scan call, empty without a gate.
+    pub fn scan_gate_arg(&self) -> String {
+        if !self.emit_scan_gate() {
+            return String::new();
+        }
+        if self.in_scan_fn {
+            return `, ${SCAN_GATE_HANDLE}`;
+        }
+        return `, &mut ${self.scan_gate_path()}`;
+    }
+
+    /// A condition rendered against the parameter (`scan_gate_condition`),
+    /// pointed at the gate as this code reaches it.
+    pub fn scan_gate_cond<S: AsStrSlice>(&self, cond: S) -> String {
+        return cond.replace(`${SCAN_GATE_HANDLE}.`, `${self.scan_gate_path()}.`);
+    }
+
+    pub fn set_binding_reads(&mut self, reads: List<Option<List<String>>>) {
+        self.binding_reads = reads;
+    }
+
+    /// Whether an action of the rule being emitted reads the binding `base`.
+    pub fn reads_binding<S: AsStrSlice>(&self, base: S) -> bool {
+        let r = self.current_rule_index;
+        assert r >= 0 && r < self.binding_reads.len(), "gen_parser installs the binding reads before any rule emits";
+        return match &self.binding_reads[r] {
+            Some(reads) => reads.contains_str(base),
+            None => true,
+        };
+    }
+
+    pub fn record_alt_scan_fn<S: AsStrSlice>(&mut self, alt: i32, name: S) {
+        let key = [self.current_rule_index, alt];
+        assert !self.alt_scan_fns.contains_key(key), `alt ${alt} of rule ${self.current_rule_index} already has a scan function`;
+        self.alt_scan_fns[key] = name.to_string();
+    }
+
+    pub fn alt_scan_fn(&self, alt: i32) -> Option<String> {
+        return self.alt_scan_fns.get([self.current_rule_index, alt]);
     }
 
     /// Return the next scan-group id and advance the counter. Replaces the
@@ -723,7 +921,7 @@ impl GenContext {
     /// The members fields a scan simulates as it walks — see `scan_gate.wado`.
     ///
     /// Keeps only what the members block declares, so the set can never name a
-    /// field the generated `SCAN_GATE` has no type or initialiser to copy. The
+    /// field the generated `ScanGate` has no type or initialiser to copy. The
     /// action bodies and the members block are two readings of the grammar and
     /// either can come back empty on its own: a block the translator refuses
     /// warns and declares nothing, which has to degrade to an unsimulated gate
@@ -753,7 +951,7 @@ impl GenContext {
         return gate_body_of(&self.gate_bodies, action_id);
     }
 
-    /// Whether the generated parser carries the `SCAN_GATE` global at all. Off
+    /// Whether the generated parser carries a scan gate at all. Off
     /// leaves every scan byte-identical to one emitted before it existed.
     pub fn emit_scan_gate(&self) -> bool {
         return self.emit_actions && !self.scan_gate_fields.is_empty();
@@ -1629,7 +1827,8 @@ impl GenContext {
     /// suffix's first might be a multi-element alt's leading token
     /// whose suppression at the preceding `RuleRef` would leave the
     /// runtime stranded — this is the css3 selector / HTMLParser
-    /// htmlContent hazard documented in `package-gale/CLAUDE.md`.
+    /// htmlContent hazard, "First-exact deep-nullable suffix" in
+    /// `antlr4-compatibility.md`.
     ///
     /// Single-token elements are trivially first-exact. A `Repeat`
     /// inherits first-exactness from its inner: `b?` where `b : Y` has
@@ -1691,8 +1890,7 @@ impl GenContext {
     ///   closes `ll_nullable_suffix`'s gap.
     /// - Suffix is deep-nullable but NOT first-exact: drop the suffix's
     ///   first and return empty. This is the "first-exact deep-nullable
-    ///   suffix" soundness invariant — see `CLAUDE.md` "Failed
-    ///   Approaches" #3 for the rationale.
+    ///   suffix" soundness invariant in `antlr4-compatibility.md`.
     ///
     /// Only the first case is the whole answer; ask
     /// `call_site_follow_is_exact` which one this is.
@@ -2057,20 +2255,6 @@ impl GenContext {
         return self.kind_set_registry.values().iter_value().collect();
     }
 
-    pub fn kind_set_is_used(&self, id: i32) -> bool {
-        if id < 0 || id >= self.kind_set_used.len() {
-            return false;
-        }
-        return self.kind_set_used[id];
-    }
-
-    fn mark_kind_set_used(&mut self, id: i32) {
-        while self.kind_set_used.len() <= id {
-            self.kind_set_used.push(false);
-        }
-        self.kind_set_used[id] = true;
-    }
-
     /// Intern a recovery sync set (a leaf's FIRST-of-rest). Returns the
     /// `SYNC_<id>` global's id, or `null` for an empty set (the caller passes
     /// `&EMPTY_SYNC`). IDs are insertion-order so names are stable across runs.
@@ -2088,8 +2272,46 @@ impl GenContext {
         return Option::<i32>::Some(id);
     }
 
-    /// All interned sync sets in `SYNC_<id>` order. Consumed by the
-    /// global-emit pass.
+    pub fn set_forwarded_call<S: AsStrSlice, S1: AsStrSlice>(&mut self, helper: S, call: S1) {
+        self.forwarded_calls[helper.to_string()] = call.to_string();
+    }
+
+    pub fn forwarded_call<S: AsStrSlice>(&self, helper: S) -> Option<String> {
+        return self.forwarded_calls.get_str(helper);
+    }
+
+    pub fn set_alt_exit_label(&mut self, label: Option<String>) {
+        self.alt_exit_label = label;
+    }
+
+    /// The statement a finished alternative leaves by, handing on `value`
+    /// (empty for none).
+    pub fn alt_exit<S: AsStrSlice>(&self, value: S) -> String {
+        let Some(label) = &self.alt_exit_label else {
+            return if value.is_empty() { String::from("return;") } else { `return ${value};` };
+        };
+        return if value.is_empty() { `break ${label};` } else { `break ${label}: ${value};` };
+    }
+
+    /// `SYNC_<id>`, the set as the bits a membership test reads, or
+    /// `EMPTY_SYNC`.
+    pub fn sync_bits_ref(&mut self, tokens: &List<String>) -> String {
+        let Some(id) = self.intern_sync_set(tokens) else {
+            return String::from("EMPTY_SYNC");
+        };
+        return `SYNC_${id}`;
+    }
+
+    /// `EXPECTED_<id>`, the set as the kind list a diagnostic names, or
+    /// `EMPTY_SYNC`.
+    pub fn sync_list_ref(&mut self, tokens: &List<String>) -> String {
+        let Some(id) = self.intern_sync_set(tokens) else {
+            return String::from("EMPTY_SYNC");
+        };
+        return `EXPECTED_${id}`;
+    }
+
+    /// The interned sync sets, in id order.
     pub fn sync_sets(&self) -> List<KindSetEntry> {
         return self.sync_set_registry.values().iter_value().collect();
     }
@@ -2144,8 +2366,12 @@ impl GenContext {
         return self.follow_mask_depths[id] >= FOLLOW_MAX_DEPTH;
     }
 
-    /// All interned FOLLOW masks in `FOLLOW_MASK_<id>` order (insertion
-    /// order). Consumed by the global-emit pass.
+    /// The global naming FOLLOW mask `id`.
+    pub fn follow_mask_ref(&self, id: i32) -> String {
+        return `FOLLOW_MASK_${id}`;
+    }
+
+    /// The interned FOLLOW masks, in `FOLLOW_MASK_<id>` order.
     pub fn follow_masks(&self) -> List<FollowMaskEntry> {
         return self.follow_mask_registry.values().iter_value().collect();
     }
@@ -2167,7 +2393,6 @@ impl GenContext {
             return `${expr} == ${tokens[0]}`;
         }
         let id = self.intern_kind_set(tokens);
-        self.mark_kind_set_used(id);
         return `_kind_set_${id}(${expr})`;
     }
 
@@ -2336,7 +2561,6 @@ impl GenContext {
             return `${expr} != ${tokens[0]}`;
         }
         let id = self.intern_kind_set(tokens);
-        self.mark_kind_set_used(id);
         return `!_kind_set_${id}(${expr})`;
     }
 }

@@ -86,7 +86,7 @@ COLON    : ':' ;
 DOT      : '.' ;
 QUESTION : '?' ;
 
-FLOAT  : '-'? ([0-9]+ '.' [0-9]* EXPONENT? | '.' [0-9]+ EXPONENT? | [0-9]+ EXPONENT) ;
+FLOAT  : '-'? [0-9]+ ('.' [0-9]* EXPONENT? | EXPONENT) ;
 INT    : '-'? [0-9]+ ;
 STRING : '"' ~["]* '"' ;
 ID     : [a-zA-Z_] [a-zA-Z0-9_]* ;
