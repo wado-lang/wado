@@ -801,8 +801,8 @@ fn simple_float_to_f64(ai: u8, bits: u64) -> f64 {
 trait CborFloat with () {
     /// A float item, widened to `f64` exactly.
     fn from_float(v: f64) -> Self;
-    /// The major-0 argument `n`, or with `negative` the major-1 value `-1 - n`.
-    fn from_int(n: u64, negative: bool) -> Self;
+    /// `magnitude`, negated where `negative`.
+    fn from_int(magnitude: u64, negative: bool) -> Self;
 }
 
 impl CborFloat for f64 {
@@ -810,14 +810,9 @@ impl CborFloat for f64 {
         return v;
     }
 
-    fn from_int(n: u64, negative: bool) -> f64 {
-        if !negative {
-            return n as f64;
-        }
-        if n == u64::MAX {
-            return -18446744073709551616.0;
-        }
-        return -((n + 1) as f64);
+    fn from_int(magnitude: u64, negative: bool) -> f64 {
+        let v = magnitude as f64;
+        return if negative { -v } else { v };
     }
 }
 
@@ -826,14 +821,9 @@ impl CborFloat for f32 {
         return v as f32;
     }
 
-    fn from_int(n: u64, negative: bool) -> f32 {
-        if !negative {
-            return n as f32;
-        }
-        if n == u64::MAX {
-            return -18446744073709551616.0;
-        }
-        return -((n + 1) as f32);
+    fn from_int(magnitude: u64, negative: bool) -> f32 {
+        let v = magnitude as f32;
+        return if negative { -v } else { v };
     }
 }
 
@@ -842,8 +832,8 @@ impl CborFloat for f16 {
         return f16::from_f64(v);
     }
 
-    fn from_int(n: u64, negative: bool) -> f16 {
-        return f16::from_f32(int_to_odd_f32(n, negative));
+    fn from_int(magnitude: u64, negative: bool) -> f16 {
+        return f16::from_f32(f32::from_int(round_to_odd(magnitude), negative));
     }
 }
 
@@ -852,28 +842,31 @@ impl CborFloat for bf16 {
         return bf16::from_f64(v);
     }
 
-    fn from_int(n: u64, negative: bool) -> bf16 {
-        return bf16::from_f32(int_to_odd_f32(n, negative));
+    fn from_int(magnitude: u64, negative: bool) -> bf16 {
+        return bf16::from_f32(f32::from_int(round_to_odd(magnitude), negative));
     }
 }
 
-/// The value `CborFloat::from_int` names, with the bits f32 drops folded into
-/// its last one, so a half rounding it rounds as it would the integer.
-fn int_to_odd_f32(n: u64, negative: bool) -> f32 {
-    if negative && n == u64::MAX {
-        return -18446744073709551616.0;
+/// The major-0 argument `n`, or with `negative` the major-1 value `-1 - n`.
+fn int_item<T: CborFloat>(n: u64, negative: bool) -> T {
+    if !negative {
+        return T::from_int(n, false);
     }
-    let magnitude = if negative { n + 1 } else { n };
-    let dropped = 40 - i64::clz(magnitude as i64);
-    let mut kept = magnitude;
-    if dropped > 0 {
-        let mask = (1 as u64 << dropped as u64) - 1;
-        if magnitude & mask != 0 {
-            kept = magnitude & ~mask | mask + 1;
-        }
+    if n == u64::MAX {
+        return T::from_float(-18446744073709551616.0);
     }
-    let v = kept as f32;
-    return if negative { -v } else { v };
+    return T::from_int(n + 1, true);
+}
+
+/// `n` with the bits f32 drops folded into its last kept one, so a half
+/// rounding the f32 rounds as it would `n`.
+fn round_to_odd(n: u64) -> u64 {
+    let dropped = 40 - i64::clz(n as i64);
+    if dropped <= 0 {
+        return n;
+    }
+    let mask = (1 as u64 << dropped as u64) - 1;
+    return if n & mask == 0 { n } else { n & ~mask | mask + 1 };
 }
 
 fn is_passthrough_tag(tag: u64) -> bool {
@@ -924,7 +917,7 @@ impl CborDeserializer {
         } else if fai <= AI_8BYTE && (fmajor == MAJOR_UINT || fmajor == MAJOR_NINT) {
             self.pos += 1;
             let arg = self.read_arg(fai)?;
-            return Result::Ok(T::from_int(arg, fmajor == MAJOR_NINT));
+            return Result::Ok(int_item::<T>(arg, fmajor == MAJOR_NINT));
         }
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
@@ -937,7 +930,7 @@ impl CborDeserializer {
                     },
                 },
                 MAJOR_UINT | MAJOR_NINT => {
-                    return Result::Ok(T::from_int(arg, major == MAJOR_NINT));
+                    return Result::Ok(int_item::<T>(arg, major == MAJOR_NINT));
                 },
                 MAJOR_TAG && is_passthrough_tag(arg) => {
                     continue;
