@@ -46,16 +46,10 @@ produced are stated here, each where it applies: [Memory Model](#memory-model),
 
 ### Whitespace
 
-The lexer recognizes exactly four whitespace characters:
-
-| Code Point | Name  |
-| ---------- | ----- |
-| `\u0020`   | Space |
-| `\u000A`   | LF    |
-| `\u000D`   | CR    |
-| `\u0009`   | Tab   |
-
-The lexer skips whitespace between tokens. Other Unicode whitespace characters (e.g., `\u00A0` non-breaking space) are not recognized as whitespace and will cause a lexer error if used outside strings.
+Whitespace separates tokens and is otherwise ignored. Any character with the
+Unicode `White_Space` property is whitespace: space, tab, LF and CR, and also
+characters such as the no-break space (U+00A0) and the ideographic space
+(U+3000).
 
 ### Comments
 
@@ -68,11 +62,17 @@ The lexer skips whitespace between tokens. Other Unicode whitespace characters (
  * Multi-line
  * block comment
  */
+
+//! Module doc comment
+/// Doc comment
 ```
 
 Block comments do not nest.
 
-TODO: the parser keeps comments in the AST.
+A doc comment is a line comment that documents code. `///` documents the item
+that follows it, and consecutive `///` lines form one doc string. `//!`
+documents the module, and appears before any item. Neither changes what a
+program means. See [WEP: Documentation Generation](./wep-2026-02-28-doc-command.md).
 
 ### Shebang
 
@@ -90,12 +90,12 @@ The `__DATA__` marker separates source code from embedded data. Everything after
 ```wado
 use {println} from "core:cli";
 
-fn run() with Stdout {
+export fn run() with Stdout {
     println("Hello!");
 }
 
 __DATA__
-This is raw data that can be accessed via the compiler API.
+This is raw data, not Wado code.
 It can contain any text, including JSON, YAML, or test expectations.
 ```
 
@@ -108,13 +108,13 @@ It can contain any text, including JSON, YAML, or test expectations.
 
 #### Accessing Data
 
-The data section is accessible via the compiler API on the parsed module, which enables tooling like test frameworks to embed expected results directly in source files.
-
 Within Wado code, the content is available through the `#data` compile-time location literal. See [Compile-Time Location Literals](#compile-time-location-literals).
 
 ### Identifiers
 
-Identifiers match the pattern `[a-zA-Z_][a-zA-Z0-9_]*`:
+An identifier starts with an ASCII letter or `_`. Each later character is `_`
+or any Unicode letter or number (a character with the `Alphabetic` property or a
+numeric general category):
 
 ```wado
 foo
@@ -124,22 +124,34 @@ FooBar
 FOO_BAR
 _private
 name123
+café        // OK: `é` is not the first character
+é           // Error: the first character must be ASCII
 ```
 
 Identifiers are case-sensitive.
 
 ### Contextual Keywords
 
-The following keywords are contextual — they act as keywords only in specific syntactic positions and can be used as variable names, field names, and function parameters elsewhere:
+The following keywords are contextual. Each acts as a keyword only in the
+position listed:
 
-| Keyword   | Keyword context                 | Identifier elsewhere                  |
-| --------- | ------------------------------- | ------------------------------------- |
-| `flags`   | `flags` declaration             | Variable, field, parameter            |
-| `type`    | `type` declaration              | Variable, field, parameter            |
-| `of`      | `for let <pattern> of <expr>`   | Variable, field, parameter            |
-| `from`    | `use { ... } from "..."`        | Variable, field, parameter, type name |
-| `test`    | `test "name" { ... }` block     | Variable, field, parameter            |
-| `extends` | `resource Child extends Parent` | Variable, field, parameter            |
+| Keyword   | Keyword context                                     |
+| --------- | --------------------------------------------------- |
+| `flags`   | `flags` declaration                                 |
+| `type`    | `type` declaration                                  |
+| `of`      | `for let <pattern> of <expr>`                       |
+| `from`    | `use { ... } from "..."`                            |
+| `test`    | `test "name" { ... }` block                         |
+| `extends` | `resource Child extends Parent`                     |
+| `do`      | `with Effect => handler do { ... }`                 |
+| `task`    | `task return expr;`                                 |
+| `trap`    | `..trap` rest clause of an effect handler `impl`    |
+| `forward` | `..forward` rest clause of an effect handler `impl` |
+| `resume`  | `resume expr` in an effect handler                  |
+
+Elsewhere each is an ordinary identifier: a variable, field, parameter, or type
+name. `resume` is the exception. It is a keyword in every expression position,
+so it serves only as a field name.
 
 ```wado
 // 'of' as a variable name
@@ -196,7 +208,8 @@ let b = if c { 1; } else { 2; };       // also 1 or 2
 let u = if c { g(); () } else { () };  // ()
 ```
 
-Only `if`, `match` and [labeled blocks](#labeled-blocks) produce a block value.
+Only `if`, `match`, `with … do` and [labeled blocks](#labeled-blocks) produce a
+block value.
 A brace in value position is a struct literal: `let x = { 1 };` is an error, and
 `let p = { x: 1, y: 2 };` is an implicit struct literal.
 
@@ -333,14 +346,18 @@ fn wrap<T>(value: T) -> i32 {
 }
 ```
 
-`enum`/`variant`/`flags` declarations, methods on a local type (a local
-`impl`/`trait` block), and generic local `type` (newtype) are not yet
-supported inside a function body. See
+So do local newtypes: `type N<T> = List<T>;`.
+
+A function body may also declare `enum`, `variant` and `flags` items, and
+`impl`/`trait` blocks that give a local type methods.
+
+Not yet implemented. See
 [WEP: Local Item Definitions](./wep-2026-07-09-local-item-definitions.md).
 
 ### Global Variables
 
-Global variables are module-level state that compile directly to WebAssembly globals. Unlike local variables (`let`), globals have module lifetime and are accessed via `global.get`/`global.set` instructions.
+Global variables are module-level state. Unlike local variables (`let`), they
+live as long as the module.
 
 ```wado
 // Immutable global
@@ -382,7 +399,6 @@ fn example() {
 
 #### Initialization Order
 
-An initializer too complex for a Wasm constant runs at module initialization.
 Initializers run in dependency order, so one may read another global whatever
 the declaration order — across modules too, and whether it names the global or
 reaches it through a call. A cycle among them is an error.
@@ -460,15 +476,24 @@ looser than the binary operators, `as`, and the value-producing unary operators
 
 #### Prohibited Operators
 
-Wado intentionally omits certain operators found in other languages:
-
-- No `++`/`--`: use `x += 1` and `x -= 1` instead. These operators cause undefined behavior in C/C++ and add unnecessary complexity.
-- No `**` power operator: use the `pow(x, y)` function instead. `**` has counterintuitive precedence in languages that have it (e.g., Python's `-1**2 = -1`).
+Wado has no `++`/`--`: write `x += 1` and `x -= 1`. It has no `**` power
+operator: call `f64::pow(x, y)` or `f32::pow(x, y)`. See
+[WEP: Operator Precedence](./wep-2026-01-11-operator-precedence.md) for why.
 
 #### Type Cast (`as`)
 
-The `as` operator converts between primitive types, and reinterprets a value
-across a newtype boundary — any two types sharing an ultimate base:
+The `as` operator converts between primitive types. It also reinterprets a
+value across a newtype boundary, between any two types sharing an ultimate base.
+It converts a `flags` value to and from `u32`, and coerces a collection literal
+to its target type (see
+[Collection Literal Coercion](#collection-literal-coercion)).
+
+Some primitive pairs refuse it. `f16` and `bf16` take no `as` in either
+direction, and an integer converts to `char` only from `u8` (see
+[char Casting and Conversion](#char-casting-and-conversion)).
+
+`as` binds tighter than every binary operator and looser than a prefix unary
+operator: `-x as u32` is `(-x) as u32`, and `a / b as f64` is `a / (b as f64)`.
 
 ```wado
 let i = 42;
@@ -499,13 +524,20 @@ let d = (3 | 4) & 6;    // 6 (| first due to parentheses)
 Wado supports mathematical comparison chaining, allowing natural range expressions. It borrows Python's syntax, but not Python's evaluation:
 
 ```wado
-// Valid chains (same direction)
-a < b < c       // Equivalent to: (a < b) & (b < c)
-a > b > c       // Equivalent to: (a > b) & (b > c)
-a <= b <= c     // Equivalent to: (a <= b) & (b <= c)
-a >= b >= c     // Equivalent to: (a >= b) & (b >= c)
-a == b == c     // Equivalent to: (a == b) & (b == c)
-0 <= x <= 100   // Natural range check
+a < b < c       // (a < b) & (b < c)
+a >= b >= c     // (a >= b) & (b >= c)
+a == b == c     // (a == b) & (b == c)
+0 <= x <= 100   // a range check
+```
+
+A chain uses operators from one group only: ascending (`<`, `<=`), descending
+(`>`, `>=`), or equality (`==`). `!=` never chains. Any other chain is a parse
+error:
+
+```wado
+a < b > c       // Error: mixed directions
+a == b < c      // Error: mixing == and inequality
+a != b != c     // Error: != chaining not allowed
 ```
 
 A chain evaluates every operand exactly once, left to right, and then tests
@@ -513,23 +545,8 @@ them. It does not short-circuit, so a later operand runs even where an earlier
 comparison already decided the answer. Write `&&` where an operand must not run
 on that path.
 
-```wado
-// Invalid chains (semantic error)
-a < b > c       // Error: mixed directions
-a > b < c       // Error: mixed directions
-a < b >= c      // Error: mixing < and >=
-a == b < c      // Error: mixing == and inequality
-a != b != c     // Error: != chaining not allowed
-```
-
-Chaining rules:
-
-1. Same-direction inequality: `<`/`<=` can only chain with `<`/`<=`, and `>`/`>=` can only chain with `>`/`>=`
-2. Equality chaining: `==` can only chain with `==`
-3. No `!=` chaining: `!=` cannot be chained (the meaning of `a != b != c` is ambiguous)
-4. No mixing: cannot mix equality operators with inequality operators
-
-See `docs/wep-2026-01-11-operator-precedence.md` for detailed rationale.
+See [WEP: Operator Precedence](./wep-2026-01-11-operator-precedence.md) for the
+rationale.
 
 ## Control Flow
 
@@ -618,7 +635,7 @@ while i < 10 {
 
 ```wado
 let items: List<i32> = [1, 2, 3];
-let mut iter = items.iter();
+let mut iter = items.into_iter();
 
 while let Some(x) = iter.next() {
     println(`${x}`);
@@ -657,7 +674,7 @@ The condition part of a C-style for loop can use `let` pattern matching:
 
 ```wado
 let items: List<i32> = [10, 20, 30];
-let mut iter = items.iter();
+let mut iter = items.into_iter();
 
 for ; let Some(x) = iter.next(); {
     println(`${x}`);
@@ -694,31 +711,15 @@ for let x of my_collection {
 }
 ```
 
-#### For-of desugaring
+#### Semantics
 
-```wado
-// Source
-for let item of collection {
-    body(item);
-}
+`for let item of collection { body }` calls `collection.into_iter()` once,
+before the first iteration. Each iteration then calls `next()` on the result,
+binds the element to `item` and runs the body. The loop ends when `next()`
+returns `None`.
 
-// Desugars to
-scope: {
-    let mut $iter = collection.into_iter();
-    loop {
-        if let Some($item) = $iter.next() {
-            let item = $item;
-            body(item);
-        } else {
-            break;
-        }
-    }
-}
-```
-
-#### Note
-
-The binding is a copy of each element (value semantics), so modifying it does not affect the original collection. For-of works with any type implementing `IntoIterator`, not just arrays.
+The binding is a copy of each element (value semantics), so modifying it does
+not affect the original collection.
 
 The binding must match every element, as a `let` pattern must. A pattern that can fail (`for let Some(x) of xs`, a narrowing type pattern) is a compile error. Match on the element in the body instead.
 
@@ -1034,7 +1035,7 @@ if shape matches { Circle(_) | Square(_) } { ... }
 
 #### Nested Sub-Patterns in Tuple/Struct Destructuring
 
-Tuple and struct patterns support literal, variant, enum, or-pattern, and range sub-patterns. These are lowered into guard conditions with appropriate checks:
+Tuple and struct patterns support literal, variant, enum, or-pattern, and range sub-patterns:
 
 ```wado
 // Literal sub-patterns in tuples
@@ -1121,11 +1122,9 @@ if opt matches { Some(x) && x > 0 } { }  // OK
 ### Branch Hints
 
 `builtin::cold_path()` marks the code path that contains it as cold (rarely
-executed). It is a statement with no runtime effect: it changes only code
-generation. The branch that syntactically contains the call is annotated with a
-Wasm branch hint so the engine lays out the other side as the predicted-taken
-path, and the cold path is excluded from the inliner's cost estimate (a small
-hot function stays inlinable even when it guards a large error path).
+executed). It is a statement with no runtime effect. It is a performance hint:
+the compiler and the Wasm engine treat the other side of the branch that
+contains it as the likely one.
 
 Because it is a plain statement rather than a condition wrapper, `cold_path()`
 works anywhere a branch body does — including an `if let` or `match` arm, where
@@ -1133,7 +1132,7 @@ no boolean condition is available:
 
 ```wado
 // Error/abort guard: the taken branch is cold.
-fn get(self, i: i32) -> T {
+fn get(&self, i: i32) -> i32 {
     if i >= self.len {
         builtin::cold_path();
         panic("index out of bounds");
@@ -1155,7 +1154,7 @@ Placed on the fall-through after a guard whose taken branch diverges, it hints
 the guard as likely-taken — the guard-clause idiom:
 
 ```wado
-fn lookup(self, key: String) -> i32 {
+fn lookup(&self, key: String) -> i32 {
     if let Some(v) = self.fast_path(key) {
         return v;
     }
@@ -1167,8 +1166,9 @@ fn lookup(self, key: String) -> i32 {
 ### Optimization Barrier
 
 `builtin::black_box(value)` returns `value` unchanged but never as a
-compile-time constant, so a computation reading it is not folded away. It emits
-no instruction. Use it to keep a test or benchmark measuring the work it names:
+compile-time constant, so the compiler does not fold away a computation reading
+it. It emits no instruction. Use it to keep a test or benchmark measuring the
+work it names:
 
 ```wado
 test "sign extension folds the redundant mask" {
@@ -1178,9 +1178,8 @@ test "sign extension folds the redundant mask" {
 
 Without it, `to_i8(300)` folds to `44` and the test no longer reaches `to_i8`.
 
-The barrier holds for the whole Wado pipeline: every NIR and WIR pass sees an
-unknown value. It ends at codegen, which emits the operand where the call stood,
-so the Wasm engine downstream is free to fold the constant.
+The barrier binds the Wado compiler only. The Wasm engine that runs the program
+is still free to fold the value.
 
 ## Memory Model
 
@@ -1188,13 +1187,13 @@ so the Wasm engine downstream is free to fold the constant.
 
 - Wasm-GC based: Garbage collection delegated to runtime
 - Lifetime inference: No explicit lifetime annotations required
-- Value semantics: Every value is deeply copied on assignment, parameter passing, and return — references (`&T`, `&mut T`) are the only types that share state
+- Value semantics: a value is deeply copied on assignment, parameter passing, and return. References (`&T`, `&mut T`) share state instead, and an affine resource moves
 
 ### Value Semantics
 
 See [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
-Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule uniformly. The only exceptions are reference types (`&T`, `&mut T`), which alias the underlying value.
+Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule uniformly. There are two exceptions. Reference types (`&T`, `&mut T`) alias the underlying value. An affine resource is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource linearity](#resource-linearity)).
 
 ```wado
 struct Point { x: i32, y: i32 }
