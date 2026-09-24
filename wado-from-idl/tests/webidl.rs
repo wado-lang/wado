@@ -32,8 +32,9 @@ impl Definitions {
     }
 
     fn generate(&self) -> (String, Vec<String>) {
-        let WebIdlOutput { module, skipped } =
-            transform(&self.build()).expect("the slice should transform");
+        let WebIdlOutput {
+            module, skipped, ..
+        } = transform(&self.build()).expect("the slice should transform");
         (WadoCodeGenerator::new().generate(&module), skipped)
     }
 }

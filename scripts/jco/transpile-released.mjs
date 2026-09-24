@@ -6,7 +6,7 @@
 //   node -e "import('<dir>/<name>.js').then(m => m.run.run())"
 
 import { transpile } from "@bytecodealliance/jco";
-import { readFile, writeFile, mkdir, symlink, rm } from "node:fs/promises";
+import { copyFile, readdir, readFile, writeFile, mkdir, symlink, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 const wasmPath = process.argv[2];
@@ -18,14 +18,22 @@ const here = dirname(new URL(import.meta.url).pathname);
 const name = basename(wasmPath).replace(/\.wasm$/, "");
 const outDir = process.argv[3] ?? wasmPath.replace(/\.wasm$/, "-jco-released");
 
-// jco's own WASI shim (`preview3-shim`) serves every import a Wado program
-// makes, so the transpile is the plain one.
-const { files } = await transpile(await readFile(wasmPath), { name });
+// jco's own WASI shim (`preview3-shim`) serves the `wasi:*` imports, and
+// `package-web`'s glue each `web:<package>/*` import, copied beside the output.
+const glueDir = join(here, "../../package-web/glue");
+const glue = (await readdir(glueDir)).filter((file) => /^[a-z]+\.js$/.test(file));
+const map = Object.fromEntries(
+  glue.map((file) => [`web:${basename(file, ".js")}/*`, `./web-${file}#*`]),
+);
+const { files } = await transpile(await readFile(wasmPath), { name, map });
 
 for (const [file, bytes] of Object.entries(files)) {
   const p = join(outDir, file);
   await mkdir(dirname(p), { recursive: true });
   await writeFile(p, bytes);
+}
+for (const file of glue) {
+  await copyFile(join(glueDir, file), join(outDir, `web-${file}`));
 }
 await writeFile(join(outDir, "package.json"), '{"type":"module"}\n');
 // The output imports the shim by bare specifier, and `outDir` is usually a temp

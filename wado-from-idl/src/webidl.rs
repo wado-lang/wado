@@ -7,6 +7,7 @@ use serde::Deserialize;
 use wado_compiler::ast::HandleClasses;
 
 use crate::WadoCodeGenerator;
+use crate::glue;
 use crate::ir::{WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource, WadoType};
 use crate::naming::{to_kebab_case, to_snake_case, to_upper_camel_case, to_wado_identifier};
 
@@ -121,12 +122,37 @@ enum Flow {
     Out,
 }
 
-/// The generated module, and every member the slice could not express.
+/// The generated module, what the glue does for each of its functions, and
+/// every member the slice could not express.
 #[derive(Debug)]
 pub struct WebIdlOutput {
     pub module: WadoModule,
+    /// Each function's JavaScript half, keyed by its `#[cm]` path.
+    pub js: IndexMap<String, JsMember>,
+    /// Each resource's `WebIDL` interface name, keyed by its Wado name.
+    pub interfaces: IndexMap<String, String>,
     /// `Interface.member: reason`, in source order.
     pub skipped: Vec<String>,
+}
+
+/// What a function does with the JavaScript object it reaches. `Get`, `Set` and
+/// `Call` act on the receiver; the interface names are `WebIDL`'s.
+#[derive(Debug)]
+pub enum JsMember {
+    Get(String),
+    Set(String),
+    Call(String),
+    Static {
+        interface: String,
+        name: String,
+    },
+    New {
+        interface: String,
+    },
+    /// The `[Global]` object itself.
+    Global,
+    /// An attribute of the `[Global]` object.
+    GlobalGet(String),
 }
 
 /// One interface with its partials and mixins folded in. `defined` is false
@@ -139,23 +165,33 @@ struct Merged<'a> {
     members: Vec<&'a Member>,
 }
 
-/// A member's lowering: a function, or the Wado name it would have had and
-/// why there is none.
-type Lowered = std::result::Result<WadoFunction, (String, String)>;
+/// A member's lowering: a function and its JavaScript half, or the Wado name it
+/// would have had and why there is none.
+type Lowered = std::result::Result<(WadoFunction, JsMember), (String, String)>;
 
-/// The module binding the `web:<package>` interfaces, naming `source` in its
-/// header, and the skipped members.
+/// The module binding the `web:<package>` interfaces and its glue, each naming
+/// `source` in its header.
 ///
 /// # Errors
 ///
 /// See [`transform`].
-pub fn generate(snapshot: &Snapshot, source: &str) -> Result<(String, Vec<String>)> {
-    let WebIdlOutput {
-        mut module,
-        skipped,
-    } = transform(snapshot)?;
-    module.source_files = vec![source.to_string()];
-    Ok((WadoCodeGenerator::new().generate(&module), skipped))
+pub fn generate(snapshot: &Snapshot, source: &str) -> Result<Generated> {
+    let mut output = transform(snapshot)?;
+    output.module.source_files = vec![source.to_string()];
+    Ok(Generated {
+        wado: WadoCodeGenerator::new().generate(&output.module),
+        glue: glue::generate(&output, source),
+        skipped: output.skipped,
+    })
+}
+
+/// A package's generated files, and the members the slice could not express.
+pub struct Generated {
+    /// The Wado module declaring the `web:<package>` imports.
+    pub wado: String,
+    /// The JavaScript module serving them from the browser's objects.
+    pub glue: String,
+    pub skipped: Vec<String>,
 }
 
 /// Transform a snapshot into the module binding the `web:<package>` interfaces.
@@ -178,10 +214,18 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
 
     let classes = number_classes(&merged)?;
     let mut skipped = Vec::new();
+    let mut js = IndexMap::new();
     let mut resources: IndexMap<&str, WadoResource> = IndexMap::new();
     for (name, iface) in &merged {
         let path = lowering.interface_path(name);
-        let methods = lowering.methods_of(name, &path, iface, &mut skipped);
+        let methods = lowering
+            .methods_of(name, &path, iface, &mut skipped)
+            .into_iter()
+            .map(|(function, member)| {
+                js.insert(function.cm_attr.clone(), member);
+                function
+            })
+            .collect();
         resources.insert(
             name,
             WadoResource {
@@ -198,11 +242,23 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     reject_overrides(&merged, &resources)?;
 
     let mut module = WadoModule::new(snapshot.package.clone(), snapshot.webref.clone());
-    module
-        .interfaces
-        .extend(lowering.global_effect(&merged, &resources)?);
+    if let Some((effect, members)) = lowering.global_effect(&merged, &resources)? {
+        for (function, member) in effect.functions.iter().zip(members) {
+            js.insert(function.cm_attr.clone(), member);
+        }
+        module.interfaces.push(effect);
+    }
+    let interfaces = resources
+        .iter()
+        .map(|(name, r)| (r.name.clone(), (*name).to_string()))
+        .collect();
     module.resources = resources.into_values().collect();
-    Ok(WebIdlOutput { module, skipped })
+    Ok(WebIdlOutput {
+        module,
+        js,
+        interfaces,
+        skipped,
+    })
 }
 
 /// Each interface's handle classes: its own, then its descendants' right after.
@@ -364,17 +420,18 @@ impl Lowering<'_> {
         path: &str,
         merged: &Merged<'_>,
         skipped: &mut Vec<String>,
-    ) -> Vec<WadoFunction> {
-        let mut candidates: IndexMap<String, (Vec<WadoFunction>, Vec<String>)> = IndexMap::new();
+    ) -> Vec<(WadoFunction, JsMember)> {
+        let mut candidates: IndexMap<String, (Vec<(WadoFunction, JsMember)>, Vec<String>)> =
+            IndexMap::new();
         for member in &merged.members {
             for lowered in self.lower_member(iface, path, member) {
                 match lowered {
-                    Ok(function) => {
+                    Ok(binding) => {
                         candidates
-                            .entry(function.name.clone())
+                            .entry(binding.0.name.clone())
                             .or_default()
                             .0
-                            .push(function);
+                            .push(binding);
                     }
                     Err((name, reason)) => candidates.entry(name).or_default().1.push(reason),
                 }
@@ -411,11 +468,14 @@ impl Lowering<'_> {
                 }
                 let kebab = to_kebab_case(name);
                 let mut out = vec![match self.lower_type(idl_type, Flow::Out) {
-                    Ok(ty) => Ok(function(
-                        getter,
-                        format!("{path}#{kebab}"),
-                        vec![self_param(iface)],
-                        Some(ty),
+                    Ok(ty) => Ok((
+                        function(
+                            getter,
+                            format!("{path}#{kebab}"),
+                            vec![self_param(iface)],
+                            Some(ty),
+                        ),
+                        JsMember::Get(name.clone()),
                     )),
                     Err(reason) => Err((getter, reason)),
                 }];
@@ -427,11 +487,14 @@ impl Lowering<'_> {
                         ty,
                         wit_name: "value".to_string(),
                     };
-                    out.push(Ok(function(
-                        format!("set_{}", to_snake_case(name)),
-                        format!("{path}#set-{kebab}"),
-                        vec![self_param(iface), value],
-                        None,
+                    out.push(Ok((
+                        function(
+                            format!("set_{}", to_snake_case(name)),
+                            format!("{path}#set-{kebab}"),
+                            vec![self_param(iface), value],
+                            None,
+                        ),
+                        JsMember::Set(name.clone()),
                     )));
                 }
                 out
@@ -447,14 +510,20 @@ impl Lowering<'_> {
                 } else {
                     to_wado_identifier(name)
                 };
-                let receiver = match special.as_str() {
-                    "" => Some(self_param(iface)),
-                    "static" => None,
+                let (receiver, js) = match special.as_str() {
+                    "" => (Some(self_param(iface)), JsMember::Call(name.clone())),
+                    "static" => (
+                        None,
+                        JsMember::Static {
+                            interface: iface.to_string(),
+                            name: name.clone(),
+                        },
+                    ),
                     _ => return vec![Err((wado_name, format!("{special} operation")))],
                 };
                 vec![self.lower_operation(
                     iface,
-                    wado_name,
+                    (wado_name, js),
                     format!("{path}#{}", to_kebab_case(name)),
                     receiver,
                     arguments,
@@ -469,9 +538,12 @@ impl Lowering<'_> {
                 if ext_attrs.iter().any(|a| a.name == "HTMLConstructor") {
                     return vec![Err(("new".to_string(), "HTMLConstructor".to_string()))];
                 }
+                let js = JsMember::New {
+                    interface: iface.to_string(),
+                };
                 vec![self.lower_operation(
                     iface,
-                    "new".to_string(),
+                    ("new".to_string(), js),
                     format!("{path}#new"),
                     None,
                     arguments,
@@ -486,7 +558,7 @@ impl Lowering<'_> {
     fn lower_operation(
         &self,
         iface: &str,
-        wado_name: String,
+        (wado_name, js): (String, JsMember),
         cm_attr: String,
         receiver: Option<WadoParam>,
         arguments: &[Argument],
@@ -521,7 +593,7 @@ impl Lowering<'_> {
                 wit_name: to_kebab_case(&arg.name),
             });
         }
-        Ok(function(wado_name, cm_attr, params, return_type))
+        Ok((function(wado_name, cm_attr, params, return_type), js))
     }
 
     /// The Wado type of a `WebIDL` type, or why the slice has none. A union is
@@ -583,12 +655,13 @@ impl Lowering<'_> {
     }
 
     /// The effect handing out the first handle: the `[Global]` interface, and
-    /// each of its read-only attributes typed as another slice resource.
+    /// each of its read-only attributes typed as another slice resource. Each
+    /// function comes with its JavaScript half, in order.
     fn global_effect(
         &self,
         merged: &IndexMap<&str, Merged<'_>>,
         resources: &IndexMap<&str, WadoResource>,
-    ) -> Result<Option<WadoInterface>> {
+    ) -> Result<Option<(WadoInterface, Vec<JsMember>)>> {
         let mut globals = merged.iter().filter(|(_, iface)| iface.global);
         let Some((name, global)) = globals.next() else {
             return Ok(None);
@@ -611,6 +684,7 @@ impl Lowering<'_> {
             &to_kebab_case(name),
             &global_type,
         )];
+        let mut members = vec![JsMember::Global];
         let methods: IndexSet<&str> = resources[name]
             .methods
             .iter()
@@ -629,10 +703,11 @@ impl Lowering<'_> {
                 let wado_name = to_wado_identifier(name);
                 if methods.contains(wado_name.as_str()) {
                     functions.push(accessor(wado_name, &to_kebab_case(name), &ty));
+                    members.push(JsMember::GlobalGet(name.clone()));
                 }
             }
         }
-        Ok(Some(WadoInterface {
+        let effect = WadoInterface {
             name: to_upper_camel_case(self.package),
             doc_comment: Some(format!(
                 "The `web:{}` entry points, which hand out the first handle.",
@@ -640,7 +715,8 @@ impl Lowering<'_> {
             )),
             cm_interface: path,
             functions,
-        }))
+        };
+        Ok(Some((effect, members)))
     }
 }
 

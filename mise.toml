@@ -572,13 +572,14 @@ depends = ["webidl-deps"]
 run = "node scripts/webidl/snapshot.mjs package-web/idl/dom.webidl.json"
 
 [tasks.update-package-web]
-description = "Regenerate package-web's web:dom bindings from the vendored WebIDL snapshot"
+description = "Regenerate package-web's web:dom bindings and glue from the vendored WebIDL snapshot"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 cargo run -p wado-from-idl -- \
     --webidl package-web/idl/dom.webidl.json \
-    --output-dir package-web/src
+    --output-dir package-web/src \
+    --glue-dir package-web/glue
 """
 
 [tasks.update-stdlib-kiln]
@@ -775,6 +776,19 @@ timeout 120 node -e "
   import('$OUT/hello.js').then(m => m.run.run())
     .catch(e => { console.error(e); process.exit(1); });
 "
+"""
+
+[tasks.test-web-glue]
+description = "Run example/web-browser on Node against a DOM stub, through package-web's glue"
+depends = ["jco-deps"]
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+WORK="$(mktemp -d)"
+# V8 has no wide-arithmetic, which float formatting emits.
+cargo run -q -p wado-cli -- compile -f no-wide-arithmetic -o "$WORK/main.wasm" example/web-browser/src/main.wado
+node scripts/jco/transpile-released.mjs "$WORK/main.wasm" "$WORK/jco"
+WEB_BROWSER_JS="$WORK/jco/main.js" timeout 120 node --test "package-web/glue/*.test.mjs"
 """
 
 
