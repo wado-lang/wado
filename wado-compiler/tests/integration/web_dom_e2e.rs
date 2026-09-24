@@ -3,6 +3,7 @@
 
 use std::sync::{Arc, Mutex};
 
+use wado_compiler::ast::HandleClasses;
 use wasmtime::Store;
 use wasmtime::StoreContextMut;
 use wasmtime::component::{Component, Linker};
@@ -139,7 +140,6 @@ const HTML_ELEMENT: u16 = 3;
 const HTML_INPUT_ELEMENT: u16 = 4;
 const DOCUMENT: u16 = 5;
 const EVENT: u16 = 7;
-const CLASS_STRIDE: f64 = 137_438_953_472.0;
 
 /// Every field a `web:dom` method reads, on whichever object carries it.
 #[derive(Default)]
@@ -153,7 +153,7 @@ struct Object {
 
 fn handle(class: u16, index: usize) -> f64 {
     let index = u32::try_from(index).expect("the stub never grows past u32");
-    f64::from(class) * CLASS_STRIDE + f64::from(index)
+    f64::from(class) * HandleClasses::STRIDE + f64::from(index)
 }
 
 impl DomObjects {
@@ -168,7 +168,7 @@ impl DomObjects {
     }
 
     fn at(&mut self, handle: f64) -> &mut Object {
-        let index = (handle % CLASS_STRIDE) as usize;
+        let index = (handle % HandleClasses::STRIDE) as usize;
         assert!(
             index < self.objects.len() && self.handle_of(index) == handle,
             "the guest passed handle {handle}, which the stub never minted"

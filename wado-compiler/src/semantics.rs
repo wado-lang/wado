@@ -1229,9 +1229,8 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     }
 }
 
-/// Register the program's own CM bindings, so the back end and WIT emission see
-/// them. The stdlib's are in the shared registry and a component dependency's
-/// are folded in by `fold_component_interfaces`.
+/// Register the CM bindings the program's own modules declare, for the back end
+/// and WIT emission to read.
 fn register_user_cm_modules<H: CompilerHost>(
     registry: &mut Arc<CmInterfaceRegistry>,
     modules: &IndexMap<ModuleSource, Module>,

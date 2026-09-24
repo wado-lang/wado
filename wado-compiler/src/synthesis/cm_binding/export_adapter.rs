@@ -127,12 +127,20 @@ fn lower_to_flat_inner(
                 cm_type,
             }]
         }
-        ResolvedType::Resource { .. }
-        | ResolvedType::Enum { .. }
-        | ResolvedType::GenericResource { .. }
-        | ResolvedType::Flags { .. } => {
-            // Resource handles (incl. Future/Stream/Own/Borrow), enums, and
-            // flags bitmasks are i32
+        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+            let tt = ctx.type_table.borrow();
+            let scalar = tt.handle_scalar(type_id).expect("a resource is a handle");
+            let [cm_type] = flat_types_from_type_id(scalar, tir_modules, &tt)[..] else {
+                unreachable!("a handle is one scalar");
+            };
+            let local = alloc_local(next_local, locals, scalar);
+            stmts.push(let_stmt("$flat", local, scalar, value));
+            vec![FlatLocal {
+                index: local,
+                cm_type,
+            }]
+        }
+        ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => {
             let local = alloc_local(next_local, locals, TypeTable::I32);
             stmts.push(let_stmt("$flat", local, TypeTable::I32, value));
             vec![FlatLocal {
@@ -839,7 +847,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 // values per the canonical ABI. Iterate the TIR struct decl
                 // and recursively lift each field, then construct a
                 // `StructLiteral`. Resource handles, enums, flags, and
-                // unknown types fall through to i32 passthrough.
+                // unknown types pass their one flat value through.
                 if let Some(struct_decl) = find_struct_decl(&named.name, tir_modules) {
                     let mut offset = 0;
                     let mut fields_out = Vec::with_capacity(struct_decl.fields.len());
@@ -929,8 +937,8 @@ pub(super) fn synthesize_lift_from_flat_params(
                         lift_ctx,
                     );
                 }
-                // Resource handles, enums, unknown types → i32 passthrough
-                (local_ref(flat_param_locals[0], "$p", TypeTable::I32), 1)
+                let scalar = cm_val_type_to_type_id(flat_types[0]);
+                (local_ref(flat_param_locals[0], "$p", scalar), 1)
             }
         },
         Type::Generic(generic) => match generic.name.as_str() {

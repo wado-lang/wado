@@ -1,26 +1,33 @@
 // No host implements `web:dom` here: a handler answers what the program calls,
 // and the host fills every import with a trap for what it does not.
-use { Document, Dom, Element, HtmlElement, HtmlInputElement, Node } from "./dom.wado";
-
-// A handle is `class * 2^37 + index`, the class being the one `#[cm(classes)]`
-// numbers: Node 1, Element 2, HtmlElement 3, HtmlInputElement 4, Document 5.
-global CLASS_STRIDE: f64 = 137438953472.0;
+use {
+    Document,
+    Dom,
+    Element,
+    HtmlElement,
+    HtmlInputElement,
+    Node,
+    DOCUMENT_CLASS,
+    HANDLE_CLASS_STRIDE,
+    HTML_ELEMENT_CLASS,
+    HTML_INPUT_ELEMENT_CLASS,
+} from "./dom.wado";
 
 struct FakeDom {
     texts: List<String>,
 }
 
 fn handle(class: f64, index: i32) -> f64 {
-    return class * CLASS_STRIDE + index as f64;
+    return class * HANDLE_CLASS_STRIDE + index as f64;
 }
 
 fn index_of(this: &Node) -> i32 {
-    return f64::fmod(*this as f64, CLASS_STRIDE) as i32;
+    return f64::fmod(*this as f64, HANDLE_CLASS_STRIDE) as i32;
 }
 
 impl Dom for FakeDom {
     fn document(&mut self) -> Document {
-        resume handle(5.0, 0) as Document;
+        resume handle(DOCUMENT_CLASS, 0) as Document;
     }
 
     ..trap
@@ -29,7 +36,7 @@ impl Dom for FakeDom {
 impl Document for FakeDom {
     fn create_element(&mut self, this: &Document, local_name: String, options: Option<String>) -> Element {
         self.texts.push("");
-        let class = if local_name == "input" { 4.0 } else { 3.0 };
+        let class = if local_name == "input" { HTML_INPUT_ELEMENT_CLASS } else { HTML_ELEMENT_CLASS };
         resume handle(class, self.texts.len()) as Element;
     }
 
@@ -79,7 +86,7 @@ test "handles compare equal when they name one object" {
     with &mut dom do {
         let doc = Dom::document();
         let div = doc.create_element("div", null);
-        assert `${div:?}` == "Element#0x6000000001";
+        assert `${div:?}` == "Element#412316860417.0";
         let as_node: Node = div;
         assert as_node == div;
         assert div != doc.create_element("div", null);

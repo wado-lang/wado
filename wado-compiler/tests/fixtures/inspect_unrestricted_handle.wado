@@ -1,0 +1,16 @@
+// An unrestricted handle is an `f64`, and `as` accepts any `f64` as one, so it
+// inspects as that `f64`: a NaN or an out-of-range handle renders, never traps.
+#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted", classes = "0..=1")]
+resource Node {}
+
+test "a handle inspects as its f64" {
+    assert `${(137438953479.0 as Node):?}` == "Node#137438953479.0";
+}
+
+test "a handle no host minted still inspects" {
+    assert `${(builtin::black_box(f64::NAN) as Node):?}` == "Node#NaN";
+    assert `${(builtin::black_box(1.0e300) as Node):?}` == "Node#1e300";
+}
+
+__DATA__
+{"test": {}}

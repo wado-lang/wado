@@ -80,6 +80,66 @@ test "text content concatenates the descendants' text" {
     };
 }
 
+test "setting a document's text content changes nothing" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        doc.set_text_content(Option::Some("x"));
+        assert doc.text_content() == null;
+        assert doc.body() != null;
+    };
+}
+
+#[expect_trap]
+test "a node appended into itself is a hierarchy error" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let div = Dom::document().create_element("div", null);
+        div.append_child(div);
+    };
+}
+
+#[expect_trap]
+test "an ancestor appended into its descendant is a hierarchy error" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let outer = doc.create_element("div", null);
+        let inner = doc.create_element("div", null);
+        outer.append_child(inner);
+        inner.append_child(outer);
+    };
+}
+
+#[expect_trap]
+test "the document is never a child" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        doc.create_element("div", null).append_child(doc);
+    };
+}
+
+#[expect_trap]
+test "the document holds one element" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        doc.append_child(doc.create_element("html", null));
+    };
+}
+
+#[expect_trap]
+test "a text node holds no children" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let p = doc.create_element("p", null);
+        p.set_text_content(Option::Some("text"));
+        p.first_child().unwrap().append_child(doc.create_element("b", null));
+    };
+}
+
 test "an element is found by id once it is in the document" {
     let mut dom = FakeDom::new();
     with &mut dom do {

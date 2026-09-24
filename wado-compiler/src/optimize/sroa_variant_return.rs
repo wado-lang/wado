@@ -869,13 +869,19 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
             PrimitiveType::Char => Some(SlotShape::Direct(Pad::Char)),
             PrimitiveType::V128 => None,
         },
-        ResolvedType::Resource { def } if type_table.is_unrestricted_resource(*def) => {
-            Some(SlotShape::Direct(Pad::Float(payload)))
+        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+            let scalar = type_table
+                .handle_scalar(payload)
+                .expect("a resource is a handle");
+            Some(SlotShape::Direct(if scalar == TypeTable::F64 {
+                Pad::Float(payload)
+            } else {
+                Pad::Int(payload)
+            }))
         }
-        ResolvedType::Enum { .. }
-        | ResolvedType::Flags { .. }
-        | ResolvedType::Resource { .. }
-        | ResolvedType::GenericResource { .. } => Some(SlotShape::Direct(Pad::Int(payload))),
+        ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => {
+            Some(SlotShape::Direct(Pad::Int(payload)))
+        }
         ResolvedType::Struct { .. }
         | ResolvedType::BuiltinArray(_)
         | ResolvedType::Variant { .. } => Some(SlotShape::Wrapped),

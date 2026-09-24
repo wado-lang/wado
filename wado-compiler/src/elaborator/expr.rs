@@ -232,10 +232,11 @@ fn handle_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<St
         tt.is_unrestricted_handle(target),
     ) {
         (false, false) => return None,
-        (true, true) => {
-            return (tt.resource_join(source, target) != Some(target))
-                .then(|| "`as` only upcasts a handle; a type pattern narrows one".to_string());
+        (true, true) if tt.resource_join(source, target) == Some(target) => return None,
+        (true, true) if tt.is_resource_narrowing(source, target) => {
+            return Some("`as` only upcasts a handle; a type pattern narrows one".to_string());
         }
+        (true, true) => return Some("neither resource extends the other".to_string()),
         (true, false) => target,
         (false, true) => source,
     };

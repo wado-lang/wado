@@ -946,16 +946,21 @@ pub(super) fn scalar_store_op(
 }
 
 /// The load a one-value CM type that is none of the sized declarations reads
-/// back with, and the type it yields: a resource handle, or an unrestricted one.
+/// back with, and the type it yields: [`scalar_store_op`]'s inverse.
 pub(super) fn handle_load_op(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
 ) -> (&'static str, TypeId) {
-    let resolved = cm_interface_registry.resolve_type(ty);
-    match cm_interface_registry.cm_flatten(&resolved)[..] {
-        [cm_abi::CmValType::F64] => ("f64_load", TypeTable::F64),
-        _ => ("i32_load", TypeTable::I32),
-    }
+    let [flat] = cm_interface_registry.cm_flatten(ty)[..] else {
+        panic!("a handle is one flat value: {ty:?}");
+    };
+    let load = match flat {
+        cm_abi::CmValType::I32 => "i32_load",
+        cm_abi::CmValType::I64 => "i64_load",
+        cm_abi::CmValType::F32 => "f32_load",
+        cm_abi::CmValType::F64 => "f64_load",
+    };
+    (load, cm_val_type_to_type_id(flat))
 }
 
 /// Check whether a return type needs lifting from a flat i32 discriminant to a GC struct.
@@ -1018,12 +1023,12 @@ fn flatten_export_type_inner(
                     flatten_variant_type(&variant_decl, out, tir_modules, type_table, names);
                 } else if let Some(struct_decl) = find_struct_decl(&named.name, tir_modules) {
                     flatten_struct_type(&struct_decl, out, tir_modules, type_table, names);
-                } else if let Some(nt_type_id) = find_newtype_type_id(&named.name, tir_modules) {
-                    // A newtype flattens as its base, not the i32 fallback below,
-                    // so the flat signature matches the canonical ABI.
-                    flat_types_from_type_id_inner(nt_type_id, out, tir_modules, type_table, names);
+                } else if let Some(type_id) = find_newtype_type_id(&named.name, tir_modules)
+                    .or_else(|| find_resource_type_id(&named.name, tir_modules, type_table))
+                {
+                    flat_types_from_type_id_inner(type_id, out, tir_modules, type_table, names);
                 } else {
-                    // Resource handles, enums, unknown → i32
+                    // Enums, unknown → i32
                     out.push(cm_abi::CmValType::I32);
                 }
             }
@@ -1166,10 +1171,12 @@ fn flat_types_from_type_id_inner(
                 panic!("struct `{name}` has no TIR declaration; cannot compute its flat CM types");
             }
         }
-        ResolvedType::Resource { def } if type_table.is_unrestricted_resource(*def) => {
-            out.push(cm_abi::CmValType::F64);
+        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+            let scalar = type_table
+                .handle_scalar(type_id)
+                .expect("a resource is a handle");
+            flat_types_from_type_id_inner(scalar, out, tir_modules, type_table, names);
         }
-        ResolvedType::Resource { .. } => out.push(cm_abi::CmValType::I32),
         ResolvedType::Enum { .. } => out.push(cm_abi::CmValType::I32),
         ResolvedType::Variant { def } => {
             if let Some(variant_decl) = variant_decl_of(*def, tir_modules) {
@@ -1220,9 +1227,6 @@ fn flat_types_from_type_id_inner(
         }
         ResolvedType::Flags { .. } => {
             // Flags are u32 at the CM ABI level
-            out.push(cm_abi::CmValType::I32);
-        }
-        ResolvedType::GenericResource { .. } => {
             out.push(cm_abi::CmValType::I32);
         }
         _ => {} // Never, Error, Unknown, etc.
@@ -1306,6 +1310,19 @@ pub(super) fn find_newtype_type_id(
         .flat_map(|module| &module.newtypes)
         .filter(|nt| nt.name == name)
         .find_map(|nt| nt.type_id)
+}
+
+/// Find the `TypeId` of a resource declaration by name across all TIR modules.
+pub(super) fn find_resource_type_id(
+    name: &str,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &TypeTable,
+) -> Option<TypeId> {
+    tir_modules
+        .values()
+        .flat_map(|module| &module.resources)
+        .filter(|resource| resource.name == name)
+        .find_map(|resource| type_table.find_resource_type(resource.def))
 }
 
 /// Create a `VariantTag` TIR expression (extracts i32 discriminant).
@@ -1536,7 +1553,7 @@ pub(super) fn param_needs_lifting(type_id: TypeId, tt: &TypeTable) -> bool {
     match tt.get(type_id) {
         ResolvedType::Primitive(prim) => matches!(prim, PrimitiveType::Bool),
         ResolvedType::Unit => true,
-        // Single-i32 handle-shaped types flow through.
+        // One-scalar handle-shaped types flow through.
         ResolvedType::Resource { .. }
         | ResolvedType::Enum { .. }
         | ResolvedType::Flags { .. }

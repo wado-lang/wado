@@ -842,9 +842,8 @@ pub struct TypeTable {
     /// [`Self::cm_decl_in_module_named`]: a caller holding an interface FQ can
     /// spell that without an interner.
     cm_decl_index: IndexMap<(String, Option<CmNamespace>, String), DefId>,
-    /// Resources declared `#[cm(..., linearity = "unrestricted")]`: a copyable
-    /// handle to a host object, outside the affine resource discipline. The
-    /// value is the classes its handles carry, where it declares them.
+    /// Resources declared `#[cm(..., linearity = "unrestricted")]`, with the
+    /// classes their handles carry where they declare them.
     unrestricted_resources: IndexMap<DefId, Option<HandleClasses>>,
     /// `resource Child extends Parent`, child → parent.
     resource_parents: IndexMap<DefId, DefId>,
@@ -1174,10 +1173,23 @@ impl TypeTable {
         self.unrestricted_resources.get(&def).copied().flatten()
     }
 
+    /// The scalar a resource handle is: an `f64` for an unrestricted resource,
+    /// an `i32` for any other. `None` where `ty` is not a resource.
+    #[must_use]
+    pub fn handle_scalar(&self, ty: TypeId) -> Option<TypeId> {
+        match self.get(ty) {
+            ResolvedType::Resource { def } if self.is_unrestricted_resource(*def) => {
+                Some(Self::F64)
+            }
+            ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => Some(Self::I32),
+            _ => None,
+        }
+    }
+
     /// Whether `ty` is an unrestricted resource, whose handle is an `f64`.
     #[must_use]
     pub fn is_unrestricted_handle(&self, ty: TypeId) -> bool {
-        matches!(self.get(ty), ResolvedType::Resource { def } if self.is_unrestricted_resource(*def))
+        self.handle_scalar(ty) == Some(Self::F64)
     }
 
     /// Record `child extends parent`, already validated by the caller.

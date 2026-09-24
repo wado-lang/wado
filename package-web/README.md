@@ -32,7 +32,8 @@ test "the app renders a heading" {
 ```
 
 `FakeDom` holds a tree, text, attributes and an input's value. A call it does
-not answer traps.
+not answer traps, and so does an insertion the DOM standard rejects with a
+`HierarchyRequestError`.
 
 ## Layout
 
@@ -40,7 +41,8 @@ not answer traps.
   (`mise run update-webidl-snapshot`).
 - `src/dom.wado` — the bindings generated from it
   (`mise run update-package-web`). Do not edit by hand.
-- `src/fake_dom.wado` — `FakeDom`, written by hand.
+- `src/fake_dom.wado` — `FakeDom`, written by hand. It mints handles from the
+  class numbers `dom.wado` generates.
 - `src/lib.wado` — the facade `wado-lang:web` names. A name a wider slice
   generates must be added here; a test fails until it is.
 

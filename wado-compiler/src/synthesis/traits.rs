@@ -4340,7 +4340,8 @@ fn generate_fn_inspect_fn(
     func
 }
 
-/// Generate `Inspect` for an opaque handle (a resource, Future, Stream), rendered as `Name#0x<hex>`.
+/// Generate `Inspect` for an opaque handle (a resource, Future, Stream), rendered as `Name#0x<hex>`,
+/// or as `Name#<f64>` for an unrestricted one.
 #[allow(clippy::too_many_arguments)]
 fn generate_opaque_inspect_fn(
     receiver: &FqTypeName,
@@ -4366,34 +4367,36 @@ fn generate_opaque_inspect_fn(
 
     let fmt = || local_expr(1, "f", fmt_type, span);
     let deref_self = deref_local(0, "self", ref_type, resource_type, span);
-    // An unrestricted handle is an integer-valued `f64`, so `i64` holds it exactly.
-    let (handle, handle_type) = if tt.is_unrestricted_handle(resource_type) {
-        let bits = common::cast(deref_self, TypeTable::F64);
-        (common::cast(bits, TypeTable::I64), TypeTable::I64)
+    // `as` makes a handle of any `f64`, NaN included, so the `f64` renders as one.
+    let scalar = tt
+        .handle_scalar(resource_type)
+        .expect("a resource is a handle");
+    let (prefix, trait_name, method) = if scalar == TypeTable::F64 {
+        ("#", inspect_trait, inspect_method)
     } else {
-        (common::cast(deref_self, TypeTable::I32), TypeTable::I32)
+        ("#0x", lower_hex_trait, lower_hex_method)
     };
-    let hex_stmt = inspect_call(
-        handle,
-        handle_type,
+    let handle_stmt = inspect_call(
+        common::cast(deref_self, scalar),
+        scalar,
         fmt(),
         trait_env,
         module_source,
         tt,
         span,
-        lower_hex_trait,
-        lower_hex_method,
+        trait_name,
+        method,
     );
     let body = TirBlock::new(
         vec![
             write_str_stmt(
-                format!("{type_name}#0x"),
+                format!("{type_name}{prefix}"),
                 fmt(),
                 string_type,
                 span,
                 formatter_fq,
             ),
-            hex_stmt,
+            handle_stmt,
         ],
         span,
     );
