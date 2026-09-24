@@ -1351,8 +1351,8 @@ fn "core:prelude/fpfmt.wado/big_shl"(n, bits) {
     let end: i32;
     let item: u32;
     let used_28: i32;
-    let $sroa_$iter_1_repr: ref Array<u32>;
-    let $sroa_$iter_1_index: i32;
+    let $sroa_$iter_1_repr_36: ref Array<u32>;
+    let $sroa_$iter_1_index_37: i32;
     words = bits / 32;
     rest = bits % 32;
     if rest != 0 {
@@ -1376,13 +1376,13 @@ fn "core:prelude/fpfmt.wado/big_shl"(n, bits) {
             };
         };
         end = n.used;
-        $sroa_$iter_1_repr = n.repr;
-        $sroa_$iter_1_index = 0;
+        $sroa_$iter_1_repr_36 = n.repr;
+        $sroa_$iter_1_index_37 = 0;
         b124: block {
             l125: loop {
-                break_if b124 $sroa_$iter_1_index >= end;
-                item = builtin::array_get_value<u32>($sroa_$iter_1_repr, $sroa_$iter_1_index);
-                $sroa_$iter_1_index = $sroa_$iter_1_index + 1;
+                break_if b124 $sroa_$iter_1_index_37 >= end;
+                item = builtin::array_get_value<u32>($sroa_$iter_1_repr_36, $sroa_$iter_1_index_37);
+                $sroa_$iter_1_index_37 = $sroa_$iter_1_index_37 + 1;
                 used_28 = shifted.used;
                 if @unlikely(used_28 >= builtin::array_len(shifted.repr)) {
                     cold_path;
@@ -2341,28 +2341,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = $mv$data$start + ($mv$data$end - $mv$data$start);
     offset = $mv$data$start;
     block {
-<<<<<<< HEAD
-        l137: loop {
-            $sroa_data_start_48 = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b138: block {
-                l139: loop {
-                    break_if b138 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
-||||||| 03599b796
-        l137: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b138: block {
-                l139: loop {
-                    break_if b138 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
-=======
         l193: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b194: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b194: block {
                 l195: loop {
                     break_if b194 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
->>>>>>> origin/main
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l195;
                 };

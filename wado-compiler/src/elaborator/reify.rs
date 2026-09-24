@@ -17,23 +17,9 @@ use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Sever
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
-<<<<<<< HEAD
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::module_source::ModuleSource;
-use crate::name::{
-    FqTypeName, IDENTITY_TEST_METHOD, NARROWING_TEST_METHOD, Receiver, global_init_function,
-    global_name,
-};
-||||||| 03599b796
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{
-    FqTypeName, IDENTITY_TEST_METHOD, INTERNAL_PREFIX, NARROWING_TEST_METHOD, Receiver,
-    global_init_function, global_name,
-};
-=======
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{FqTypeName, INTERNAL_PREFIX, Receiver, global_init_function, global_name};
->>>>>>> origin/main
+use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
@@ -58,13 +44,7 @@ use crate::compiler_item::{CompilerItem, Resolved};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
-<<<<<<< HEAD
-use crate::elaborator::call::{RECEIVER, omits_a_default};
-||||||| 03599b796
-use crate::elaborator::call::omits_a_default;
-=======
-use crate::elaborator::call::{ARRAY_NEW_DATA, omits_a_default};
->>>>>>> origin/main
+use crate::elaborator::call::{ARRAY_NEW_DATA, RECEIVER, omits_a_default};
 use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
 use crate::elaborator::expr::{
@@ -10445,7 +10425,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         None
     }
 
-<<<<<<< HEAD
     /// A constant pattern whose `==` annotate dispatched to `Eq`: the scrutinee
     /// held in the local annotate reserved, matching where the call holds.
     fn compare_constant_by_eq(
@@ -10481,21 +10460,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Wrap `inner` in the reference kind of `scrutinee_type` for match
-    /// ergonomics. Walks the reference layers of the scrutinee: a `&mut`
-    /// sets `&mut` unless a `&` is also present (most restrictive wins),
-    /// matching `Elaborator::resolve_if_pattern`'s `RefBinding`. A
-    /// non-reference scrutinee returns `inner` unchanged.
-||||||| 03599b796
-    /// Wrap `inner` in the reference kind of `scrutinee_type` for match
-    /// ergonomics. Walks the reference layers of the scrutinee: a `&mut`
-    /// sets `&mut` unless a `&` is also present (most restrictive wins),
-    /// matching `Elaborator::resolve_if_pattern`'s `RefBinding`. A
-    /// non-reference scrutinee returns `inner` unchanged.
-=======
     /// `inner` wrapped in the reference kind of `scrutinee_type` for match
     /// ergonomics, as `Elaborator::peel_scrutinee_refs` reckons it.
->>>>>>> origin/main
     fn apply_scrutinee_ref_kind(&self, scrutinee_type: TypeId, inner: TypeId) -> TypeId {
         use crate::tir::ResolvedType;
         let mut cur = scrutinee_type;
