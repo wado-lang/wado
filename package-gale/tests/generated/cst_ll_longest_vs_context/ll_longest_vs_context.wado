@@ -1040,7 +1040,7 @@ global CTX_EMPTY: i32 = 0;
 struct AtnKeyMap {
     keys: List<i64>,
     vals: List<i32>,
-    len: i32,
+    used: List<i32>,
 }
 
 impl AtnKeyMap {
@@ -1050,13 +1050,16 @@ impl AtnKeyMap {
 
     fn with_slots(slots: i32) -> AtnKeyMap {
         assert slots & slots - 1 == 0, "slot count is a power of two";
-        let mut keys: List<i64> = List::with_capacity(slots);
-        let mut vals: List<i32> = List::with_capacity(slots);
-        for let mut i = 0; i < slots; i += 1 {
-            keys.push(-1);
-            vals.push(-1);
+        return AtnKeyMap { keys: List::filled(slots, -1 as i64), vals: List::filled(slots, -1), used: [] };
+    }
+
+    fn clear(&mut self) {
+        for let mut j = 0; j < self.used.len(); j += 1 {
+            let s = self.used[j];
+            self.keys[s] = -1;
+            self.vals[s] = -1;
         }
-        return AtnKeyMap { keys, vals, len: 0 };
+        self.used.clear();
     }
 
     fn slot_of(&self, k: i64) -> i32 {
@@ -1074,19 +1077,18 @@ impl AtnKeyMap {
     }
 
     fn set(&mut self, k: i64, v: i32) {
-        if (self.len + 1) * 2 > self.keys.len() {
+        if (self.used.len() + 1) * 2 > self.keys.len() {
             let mut grown = AtnKeyMap::with_slots(self.keys.len() * 2);
-            for let mut i = 0; i < self.keys.len(); i += 1 {
-                if self.keys[i] >= 0 {
-                    grown.set(self.keys[i], self.vals[i]);
-                }
+            for let mut j = 0; j < self.used.len(); j += 1 {
+                let s = self.used[j];
+                grown.set(self.keys[s], self.vals[s]);
             }
             *self = grown;
         }
         let i = self.slot_of(k);
         if self.keys[i] < 0 {
             self.keys[i] = k;
-            self.len += 1;
+            self.used.push(i);
         }
         self.vals[i] = v;
     }
@@ -1274,6 +1276,15 @@ impl CfgSet {
         };
     }
 
+    fn clear(&mut self) {
+        self.state.clear();
+        self.alt.clear();
+        self.rs.clear();
+        self.pr.clear();
+        self.pctx.clear();
+        self.index.clear();
+    }
+
     fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, rs: i32, pr: i32, pctx: i32) -> [i32, bool] {
         assert pr + 2 < CFG_KEY_PR_SLOT, `ATN config precedence ${pr} exceeds packed-key slot`;
         assert alt + 1 < CFG_KEY_ALT_SLOT, `ATN config alt ${alt} exceeds packed-key slot`;
@@ -1312,31 +1323,53 @@ impl CfgSet {
     }
 }
 
-fn atn_closure(sim: &AtnSim, arena: &mut CtxArena, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<AtnConfig> {
-    let mut cset = CfgSet::new();
-    let mut expanded: List<i32> = [];
-    let mut rset = CfgSet::new();
-    let mut work: List<AtnConfig> = *seeds;
+struct ClosureScratch {
+    cset: CfgSet,
+    rset: CfgSet,
+    work: List<AtnConfig>,
+    expanded: List<i32>,
+}
+
+impl ClosureScratch {
+    fn new() -> ClosureScratch {
+        return ClosureScratch { cset: CfgSet::new(), rset: CfgSet::new(), work: [], expanded: [] };
+    }
+}
+
+fn atn_closure(
+    sim: &AtnSim,
+    arena: &mut CtxArena,
+    seeds: &List<AtnConfig>,
+    rstk: &List<i32>,
+    scratch: &mut ClosureScratch,
+) -> List<AtnConfig> {
+    scratch.cset.clear();
+    scratch.rset.clear();
+    scratch.expanded.clear();
+    scratch.work.clear();
+    for let mut i = 0; i < seeds.len(); i += 1 {
+        scratch.work.push(seeds[i]);
+    }
     let mut guard = 0;
-    while let Some(c) = work.pop() {
+    while let Some(c) = scratch.work.pop() {
         guard += 1;
         if guard > ATN_CLOSURE_GUARD {
             break;
         }
-        let res = cset.add(arena, c.state, c.alt, c.rs, c.pr, c.pctx);
+        let res = scratch.cset.add(arena, c.state, c.alt, c.rs, c.pr, c.pctx);
         let idx = res.0;
-        while expanded.len() <= idx {
-            expanded.push(-9);
+        while scratch.expanded.len() <= idx {
+            scratch.expanded.push(-9);
         }
-        let merged_pctx = cset.pctx[idx];
-        if expanded[idx] == merged_pctx {
+        let merged_pctx = scratch.cset.pctx[idx];
+        if scratch.expanded[idx] == merged_pctx {
             continue;
         }
-        expanded[idx] = merged_pctx;
+        scratch.expanded[idx] = merged_pctx;
         let cur = AtnConfig { state: c.state, alt: c.alt, pctx: merged_pctx, rs: c.rs, pr: c.pr };
-        atn_expand(sim, arena, &cur, rstk, &mut work, &mut rset);
+        atn_expand(sim, arena, &cur, rstk, &mut scratch.work, &mut scratch.rset);
     }
-    return rset.to_list();
+    return scratch.rset.to_list();
 }
 
 fn atn_expand(
@@ -1401,17 +1434,26 @@ fn atn_collapse_into_caller_loop(
         }
         return cur.pctx;
     }
-    let edges = arena.edges[cur.pctx];
+    let edges = &arena.edges[cur.pctx];
+    let mut collapses = false;
+    for let mut i = 0; i < edges.len(); i += 1 {
+        let e = &edges[i];
+        if e.0 >= 0 && sim.state_collapse_to[e.0] == cur.state && cur.pr >= e.1 {
+            collapses = true;
+            break;
+        }
+    }
+    if !collapses {
+        return cur.pctx;
+    }
     let mut kept: List<[i32, i32, i32]> = [];
-    for let e of &edges {
+    for let mut i = 0; i < edges.len(); i += 1 {
+        let e = &edges[i];
         if e.0 >= 0 && sim.state_collapse_to[e.0] == cur.state && cur.pr >= e.1 {
             work.push(AtnConfig { state: cur.state, alt: cur.alt, pctx: e.2, rs: cur.rs, pr: e.1 });
         } else {
             kept.push(*e);
         }
-    }
-    if kept.len() == edges.len() {
-        return cur.pctx;
     }
     if kept.is_empty() {
         return -1;
@@ -1600,7 +1642,8 @@ pub fn atn_predict_with_stack(
         }
         seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, pctx: CTX_EMPTY, rs: rs_init, pr: min_prec });
     }
-    let mut configs = atn_closure(sim, &mut arena, &seeds, rule_stack);
+    let mut scratch = ClosureScratch::new();
+    let mut configs = atn_closure(sim, &mut arena, &seeds, rule_stack, &mut scratch);
     let mut pos = start_pos;
     let mut prev = atn_unique_alts(&configs);
     let limit = tokens.len() - start_pos + 8;
@@ -1628,7 +1671,7 @@ pub fn atn_predict_with_stack(
         let token = if pos < tokens.len() { tokens[pos] } else { eof };
         let moved = atn_move(sim, &configs, token, eof);
         pos += 1;
-        configs = atn_closure(sim, &mut arena, &moved, rule_stack);
+        configs = atn_closure(sim, &mut arena, &moved, rule_stack, &mut scratch);
     }
 }
 pub global TK_WS: i32 = 0;

@@ -575,13 +575,17 @@ this grammar and input at 216.991 ms/iter against Gale's 2.535
   scan, not the simulator (2026-07)**: an LR self-reference that competes with
   its own alternative's later delimiter drops to `min_prec = 0` and carries the
   suffix continuation as a mask, so each loop entry scans the operator's suffix
-  and then checks the continuation still stands. The gate rides the static LR
-  dispatch, so a rule already routed to the simulator keeps its precedence and
-  still diverges on the climbing cases — `lr_atn_mid_operand.g4` pins that half,
-  two cases `#[TODO]`. The simulator answer had been priced out for the static
-  half — on the dev profile over 40 statements it took `SELECT … BETWEEN 1 AND
-  10 AND y = 2` from 41 ms to 2.3 s.
-- **`lr_between.g4` is still ATN-class and may not need to be.** Its shared-delimiter
+  and then checks the continuation still stands. The simulator answer had been
+  priced out for the static half — on the dev profile over 40 statements it took
+  `SELECT … BETWEEN 1 AND 10 AND y = 2` from 41 ms to 2.3 s. A rule already
+  routed to the simulator now decides its loop entry with full context whenever
+  the caller mandates the lookahead token, which closed `lr_atn_mid_operand.g4`
+  and `lr_between.g4` (2026-09) at a price this descriptor shows: its input went
+  from about 40 µs to 0.76 s at `-O2`. The ambiguity is real, so each such
+  decision looks ahead to EOF, and `stat`'s tournament scans `expr` once per
+  alternative before the parse decides the same positions again. Over 15 lines
+  that is 214 predictions, 14k closure steps, and about 86 configurations a step.
+- **`lr_between.g4` is ATN-class and may not need to be.** Its shared-delimiter
   competition sits in an _atom_ alternative (`'between' expr 'and' expr` — no leading
   self-reference), so the continuation gate above does not reach it. The question it
   asks is the same one, so the same gate may apply; if it does, the simulator comes
