@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790288290975,
+  "lastUpdate": 1790292446054,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59433,6 +59433,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 240302,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2d1f863c26be470a1a9e7e66b320701826991414",
+          "message": "Merge pull request #2151 from wado-lang/gale-resolve-todos\n\nfix(gale): resolve 15 TODO tests with ANTLR4-style recovery; LR loop prediction 16× faster",
+          "timestamp": "2026-09-25T08:01:25+09:00",
+          "tree_id": "84359973c8fa2dcd3d6d0e7131462c8ee99420b3",
+          "url": "https://github.com/wado-lang/wado/commit/2d1f863c26be470a1a9e7e66b320701826991414"
+        },
+        "date": 1790292445057,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6703,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
             "unit": "bytes"
           }
         ]
