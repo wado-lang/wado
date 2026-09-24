@@ -54,7 +54,7 @@ follow the HTML standard's serialization. `example/web-ssr` prints a page with
 - `glue/dom.js` — the browser glue generated beside them: one shim per
   member, over a table that hands out one handle per object, tagged with its
   nearest class in the slice. `mise run test-web-glue` runs it on Node against
-  the DOM stub in `glue/dom-stub.mjs`.
+  jsdom (`glue/dom.test.mjs`).
 - `src/surface_dom.wado` — `SurfaceDom`, written by hand. It mints handles from
   the class numbers `dom.wado` generates.
 - `src/lib.wado` — the facade `wado-lang:web` names. A name a wider slice

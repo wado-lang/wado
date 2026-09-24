@@ -6,7 +6,7 @@ DOM. Under `wado test`, `SurfaceDom` answers them instead.
 
 ```sh
 mise run web-browser-demo   # build, then serve on http://127.0.0.1:8089
-mise run test-web-glue      # run it on Node against a DOM stub
+mise run test-web-glue      # run it on Node against jsdom
 wado test                   # run its tests against SurfaceDom
 ```
 
