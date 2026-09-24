@@ -307,7 +307,13 @@ pub struct GenContext {
     alt_exit_label: Option<String>,
     /// By helper name, the one call a helper that only forwards would make,
     /// which its callers make instead.
-    forwarded_calls: TreeMap<String, String>,
+    forwarded_calls: TreeMap<String, Forwarded>,
+}
+
+/// A forwarding helper's one call, and the call-site stamps it sets first.
+pub struct Forwarded {
+    pub stamps: List<String>,
+    pub call: String,
 }
 
 fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
@@ -2314,11 +2320,11 @@ impl GenContext {
         return Option::<i32>::Some(id);
     }
 
-    pub fn set_forwarded_call<S: AsStrSlice, S1: AsStrSlice>(&mut self, helper: S, call: S1) {
-        self.forwarded_calls[helper.to_string()] = call.to_string();
+    pub fn set_forwarded_call<S: AsStrSlice>(&mut self, helper: S, forwarded: Forwarded) {
+        self.forwarded_calls[helper.to_string()] = forwarded;
     }
 
-    pub fn forwarded_call<S: AsStrSlice>(&self, helper: S) -> Option<String> {
+    pub fn forwarded_call<S: AsStrSlice>(&self, helper: S) -> Option<Forwarded> {
         return self.forwarded_calls.get_str(helper);
     }
 

@@ -1127,17 +1127,21 @@ fn emit_gated_pick<S: AsStrSlice, S1: AsStrSlice>(
     if ctx.is_trace() {
         w.line(wado`trace_pick(p, "${rule_display.to_string()}", ${idx});`);
     }
-    w.line(&alt_helper_exit(fn_name, idx, ctx));
+    emit_alt_helper_exit(w, fn_name, idx, ctx);
 }
 
-/// The statement that runs alternative `idx` as the rule's finished
-/// alternative: its helper, or the one call a forwarding helper would make.
-pub fn alt_helper_exit<S: AsStrSlice>(fn_name: S, idx: i32, ctx: &GenContext) -> String {
+/// The statements that run alternative `idx` as the rule's finished
+/// alternative: its helper, or what a forwarding helper would do.
+pub fn emit_alt_helper_exit<S: AsStrSlice>(w: &mut CodeWriter, fn_name: S, idx: i32, ctx: &GenContext) {
     let helper = `${fn_name}_alt_${idx}`;
-    if let Some(call) = ctx.forwarded_call(&helper) {
-        return ctx.alt_exit(call);
+    if let Some(forwarded) = ctx.forwarded_call(&helper) {
+        for let stamp of &forwarded.stamps {
+            w.line(stamp);
+        }
+        w.line(&ctx.alt_exit(forwarded.call));
+        return;
     }
-    return ctx.alt_exit(`${helper}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)})`);
+    w.line(&ctx.alt_exit(`${helper}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)})`));
 }
 
 /// Join predicate conditions into one short-circuit `(c0) && (c1)` guard.

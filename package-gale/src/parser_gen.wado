@@ -49,7 +49,7 @@ use {
     defined_fn_names,
     join_kinds,
 } from "./gen_util.wado";
-use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
+use { Forwarded, GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, FnSpec, ParamSpec, wado } from "lib:wadopoet";
 use { TreeMap, TreeSet } from "core:collections";
 use {
@@ -142,7 +142,7 @@ use {
     alt_initial_gate_conditions,
     mark_alt_gate_answered,
     alt_vals_arg,
-    alt_helper_exit,
+    emit_alt_helper_exit,
     ambiguous_group_predicate_gated,
     call_arg_suffix,
     current_rule_emits_vals,
@@ -429,7 +429,7 @@ pub fn gen_alt_scan_fn<S: AsStrSlice>(
     let text = bw.to_string();
     if let Some(callee) = forwarded_scan_callee(&text, &params) {
         ctx.record_alt_scan_fn(alt_index, &callee);
-        ctx.set_forwarded_call(&name, &callee);
+        ctx.set_forwarded_call(&name, Forwarded { stamps: [], call: callee });
         return;
     }
     ctx.record_alt_scan_fn(alt_index, &name);
@@ -459,7 +459,12 @@ fn forwarded_scan_callee(body: &String, params: &String) -> Option<String> {
 /// its helper forwards to where it only forwards.
 fn hoisted_scan_call<S: AsStrSlice>(base_name: S, i: i32, ctx: &GenContext) -> String {
     let name = scan_alt_helper_name(base_name, i);
-    return `${ctx.forwarded_call(&name).unwrap_or(name)}(tokens, start${scan_trailing_args(ctx)})`;
+    let callee = if let Some(f) = ctx.forwarded_call(&name) {
+        f.call;
+    } else {
+        name;
+    };
+    return `${callee}(tokens, start${scan_trailing_args(ctx)})`;
 }
 
 /// What a scan call passes after the position: the gate, and the caller's
@@ -3445,8 +3450,8 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                         ctx,
                     );
                     let helper_body = hw.to_string();
-                    if let Some(call) = forwarded_rule_call(&helper_body) {
-                        ctx.set_forwarded_call(&helper_name, &call);
+                    if let Some(forwarded) = forwarded_rule_call(&helper_body) {
+                        ctx.set_forwarded_call(&helper_name, forwarded);
                     } else {
                         f.emit_begin(w);
                         w.write(&helper_body);
@@ -3602,19 +3607,30 @@ fn gen_parse_fn_named<S: AsStrSlice>(
     }
 }
 
-/// The rule call an alternative helper's body is and nothing else, which its
-/// callers can make themselves.
-fn forwarded_rule_call(body: &String) -> Option<String> {
-    let tail = ");\nreturn;\n";
-    let text = body.as_str_slice();
-    if !text.starts_with("_parse_") || !text.ends_with(tail) {
+/// The rule call an alternative helper's body is and nothing else, with its
+/// call-site stamps, which its callers can make themselves.
+fn forwarded_rule_call(body: &String) -> Option<Forwarded> {
+    let mut stamps: List<String> = [];
+    let mut rest: List<String> = [];
+    for let line of body.lines() {
+        if rest.is_empty() && (line.starts_with("p.site = ") || line.starts_with("p.atn_ret_pending = ")) {
+            stamps.push(line.to_string());
+        } else {
+            rest.push(line.to_string());
+        }
+    }
+    if rest.len() != 2 || rest[1] != "return;" {
         return null;
     }
-    let call = text.slice(0, text.len() - tail.len() + 1);
-    if call.chars().any(|c| c == ';' || c == '\n') {
+    let call = rest[0].as_str_slice();
+    if !call.starts_with("_parse_") || !call.ends_with(");") {
         return null;
     }
-    return Option::Some(call.to_string());
+    let expr = call.slice(0, call.len() - 1);
+    if expr.chars().any(|c| c == ';') {
+        return null;
+    }
+    return Option::Some(Forwarded { stamps, call: expr.to_string() });
 }
 
 /// An alternative body that runs no `@after` of its own.
@@ -8544,10 +8560,10 @@ fn emit_index_pick_dispatch<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
         let idx = sorted_indices[i];
         w.begin(`if ${var} == ${idx}`);
-        w.line(&alt_helper_exit(&fn_name, idx, ctx));
+        emit_alt_helper_exit(w, &fn_name, idx, ctx);
         w.end();
     }
-    w.line(&alt_helper_exit(&fn_name, sorted_indices[sorted_indices.len() - 1], ctx));
+    emit_alt_helper_exit(w, &fn_name, sorted_indices[sorted_indices.len() - 1], ctx);
 }
 
 
@@ -8774,7 +8790,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             if skip > 0 {
                 w.line(`p.pos -= ${skip};`);
             }
-            w.line(&alt_helper_exit(&fn_name, *idx, ctx));
+            emit_alt_helper_exit(w, &fn_name, *idx, ctx);
         },
         Consume(c) => {
             // Shared-prefix terminal: advance past it (the chosen `_alt_<idx>`
