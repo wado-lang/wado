@@ -913,13 +913,9 @@ fn collect_child_blocks(body: &Body, node: NodeRef, out: &mut Vec<BlockId>) {
     });
 }
 
-/// True when some value-producing block under `node` has a last statement that
-/// is a non-unit clobbering call. `insert_reloads` appends a reload (which
-/// yields unit) after such a tail, replacing the block's observed value — so a
-/// non-unit value-tail clobber makes the loop ineligible. A `Block` child of an
-/// *expression* is value-producing (its tail is the value); a `Block` child of
-/// a *statement* (loop body, `if`-statement arm) discards its tail, so appending
-/// there is harmless and stays eligible.
+/// True when some value-producing block under `node` ends in a non-unit value
+/// that `insert_reloads` would append a reload after, displacing that value.
+/// Only a `Block` child of an expression yields its tail.
 fn has_nonunit_clobber_value_tail(
     ctx: &LicmCtx,
     body: &Body,
@@ -935,8 +931,8 @@ fn has_nonunit_clobber_value_tail(
             if let NodeRef::Block(b) = c
                 && let Some(&last) = body.blocks[b].stmts.last()
                 && let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[last].kind
-                && clobbers.clobbers(ctx, body, *e)
                 && body.exprs[*e].type_id != TypeTable::UNIT
+                && node_contains_clobber(ctx, body, NodeRef::Stmt(last), clobbers)
             {
                 hit = true;
             }
