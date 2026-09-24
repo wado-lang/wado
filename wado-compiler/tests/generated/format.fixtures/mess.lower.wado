@@ -48,8 +48,6 @@ global CM_EVENT_SUBTASK: i32 = 1;
 
 global CM_SUBTASK_STARTED: u32 = 1;
 
-global HANDLE_CLASS_STRIDE: f64 = 137438953472.0;
-
 global HANDLE_LIMIT: f64 = 9007199254740992.0;
 
 global mut $modules_initialized: bool = false;
@@ -4836,15 +4834,15 @@ fn cm_lower_array_u8(arr: List<u8>) -> i64 {
     return core::rt::cm_lower_list_u8(arr."core:prelude/list.wado/List<u8>::internal_raw_data_ref"(), 0, len);
 }
 
-fn handle_class(handle: f64) -> i32 {
+fn handle_class(handle: f64, stride: f64) -> i32 {
     let sign_clear: bool = (core::builtin::i64_reinterpret_f64(handle) >= 0);
     if !((sign_clear && (handle < core::rt::HANDLE_LIMIT)) && (core::builtin::f64_floor(handle) == handle)) {
         return -1;
     }
-    return core::builtin::f64_floor((handle / core::rt::HANDLE_CLASS_STRIDE)) as i32;
+    return core::builtin::f64_floor((handle / stride)) as i32;
 }
 
-fn inspect_handle(f: &mut Formatter, name: String, handle: f64, class: i32) {
+fn inspect_handle(f: &mut Formatter, name: String, handle: f64, class: i32, stride: f64) {
     "core::prelude/traits.wado::struct_open"(f, name);
     if (class < 0) {
         "core::prelude/traits.wado::struct_field"(f, String { repr: packed"handle", used: 6 }, true);
@@ -4854,7 +4852,7 @@ fn inspect_handle(f: &mut Formatter, name: String, handle: f64, class: i32) {
         Box<i32> { value: class }."i32^core:prelude/traits.wado/Inspect::inspect"(f);
         "core::prelude/traits.wado::struct_field_end"(f);
         "core::prelude/traits.wado::struct_field"(f, String { repr: packed"object_id", used: 9 }, false);
-        let object_id: i64 = (handle - (class as f64 * core::rt::HANDLE_CLASS_STRIDE)) as i64;
+        let object_id: i64 = (handle - (class as f64 * stride)) as i64;
         Box<i64> { value: object_id }."i64^core:prelude/traits.wado/Inspect::inspect"(f);
     }
     "core::prelude/traits.wado::struct_field_end"(f);
