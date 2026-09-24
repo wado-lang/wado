@@ -2647,35 +2647,73 @@ impl Parser {
     }
 }
 
+fn scan_stat_alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    atn.stack.push(8);
+    pos = scan_expr(tokens, pos, atn, 0);
+    atn.stack.pop();
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_and { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_BANG { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_stat_alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    atn.stack.push(17);
+    pos = scan_expr(tokens, pos, atn, 0);
+    atn.stack.pop();
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_stat(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let start = pos;
+    let mut pos = pos;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_0(kind) {
+        let mut best: i32 = -1;
+        let try_0_end = scan_stat_alt_0(tokens, start, atn);
+        if try_0_end > best { best = try_0_end; }
+        let try_1_end = scan_stat_alt_1(tokens, start, atn);
+        if try_1_end > best { best = try_1_end; }
+        if best >= 0 { pos = best; return pos; }
+        return -1;
+    }
+    return -1;
+}
+
 fn scan_expr_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_ID {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_LIT_between {
-            pos = start + 1;
-            try_1: {
-                atn.stack.push(29);
-                pos = scan_expr(tokens, pos, atn, 0);
-                atn.stack.pop();
-                if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_and { break try_1; }
-                pos += 1;
-                atn.stack.push(33);
-                pos = scan_expr(tokens, pos, atn, 1);
-                atn.stack.pop();
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_ID {
+        pos = start + 1;
+        return pos;
+    } else if kind == TK_LIT_between {
+        pos = start + 1;
+        try_2: {
+            atn.stack.push(29);
+            pos = scan_expr(tokens, pos, atn, 0);
+            atn.stack.pop();
+            if pos < 0 { break try_2; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_and { break try_2; }
+            pos += 1;
+            atn.stack.push(33);
+            pos = scan_expr(tokens, pos, atn, 1);
+            atn.stack.pop();
+            if pos < 0 { break try_2; }
+            return pos;
         }
+        return -1;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_expr_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
@@ -2718,21 +2756,6 @@ fn _parse_stat__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_stat__inner_scan_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(8);
-    pos = scan_expr(tokens, pos, atn, 0);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_and { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_BANG { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_stat__inner_alt_1(p: &mut Parser) -> () {
     p.site = 1;
     p.atn_ret_pending = 17;
@@ -2741,25 +2764,14 @@ fn _parse_stat__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_stat__inner_scan_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(17);
-    pos = scan_expr(tokens, pos, atn, 0);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_stat__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_0 = _parse_stat__inner_scan_0(_sd_tokens, _sd_pos, &mut p.atn);
-        let _sd_p_1 = _parse_stat__inner_scan_1(_sd_tokens, _sd_pos, &mut p.atn);
+        let _sd_p_0 = scan_stat_alt_0(_sd_tokens, _sd_pos, &mut p.atn);
+        let _sd_p_1 = scan_stat_alt_1(_sd_tokens, _sd_pos, &mut p.atn);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -2804,8 +2816,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     if kind == TK_ID {
         p.take();
         return;
-    }
-    if kind == TK_LIT_between {
+    } else if kind == TK_LIT_between {
         p.take();
         p.site = 4;
         p.atn_ret_pending = 29;

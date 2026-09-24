@@ -1557,39 +1557,35 @@ struct AVals {
 fn scan_a(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LIT_x {
-            try_0: {
-                pos = scan_sub(tokens, pos);
-                if pos < 0 { break try_0; }
-                pos = scan_sub(tokens, pos);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_LIT_y {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_LIT_g {
-            pos = start + 1;
-            try_2: {
-                pos = scan_sub(tokens, pos);
-                if pos < 0 { break try_2; }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_x && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-                    let sp = pos;
-                    pos = scan_sub(tokens, pos);
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
-                }
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_LIT_x {
+        try_0: {
+            pos = scan_sub(tokens, pos);
+            if pos < 0 { break try_0; }
+            pos = scan_sub(tokens, pos);
+            if pos < 0 { break try_0; }
+            return pos;
         }
+        return -1;
+    } else if kind == TK_LIT_y {
+        pos = start + 1;
+        return pos;
+    } else if kind == TK_LIT_g {
+        pos = start + 1;
+        try_2: {
+            pos = scan_sub(tokens, pos);
+            if pos < 0 { break try_2; }
+            while pos < tokens.len() && tokens[pos] == TK_LIT_x && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+                let sp = pos;
+                pos = scan_sub(tokens, pos);
+                if pos < 0 { pos = sp; break; }
+                if pos == sp { break; }
+            }
+            return pos;
+        }
+        return -1;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_sub(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -1669,15 +1665,13 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> AVals {
             p.emit(`${p.text_between(vals._span_lo_tail, vals._span_hi_tail)}\n`);
         }
         return vals;
-    }
-    if kind == TK_LIT_y {
+    } else if kind == TK_LIT_y {
         let my_label = p.take();
         if !p.speculating {
             p.emit(`${p.token_text(my_label)}\n`);
         }
         return vals;
-    }
-    if kind == TK_LIT_g {
+    } else if kind == TK_LIT_g {
         p.take();
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
         let mut _plus_first = true;

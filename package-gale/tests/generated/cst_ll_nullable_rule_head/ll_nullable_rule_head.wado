@@ -1509,30 +1509,26 @@ impl Parser {
 fn scan_member(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LIT_type {
-            pos = start + 1;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else if _kind_set_1(alt_kind) {
-            try_1: {
-                pos = scan_fn_decl(tokens, pos, follow);
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_LIT_type {
+        pos = start + 1;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_0; }
+            pos += 1;
+            return pos;
         }
+        return -1;
+    } else if _kind_set_1(kind) {
+        try_1: {
+            pos = scan_fn_decl(tokens, pos, follow);
+            if pos < 0 { break try_1; }
+            return pos;
+        }
+        return -1;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_fn_decl(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
@@ -1612,8 +1608,7 @@ fn _parse_member__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_ID, &SYNC_1, false);
         p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
         return;
-    }
-    if _kind_set_1(kind) {
+    } else if _kind_set_1(kind) {
         p.site = 1;
         _parse_fn_decl(p, follow);
         return;

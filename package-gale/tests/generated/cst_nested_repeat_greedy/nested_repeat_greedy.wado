@@ -1472,7 +1472,7 @@ impl Parser {
 fn _parse_s__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
-    if kind == TK_LIT_a {
+    if _kind_set_0(kind) {
         p.take();
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
         let mut _plus_first = true;
@@ -1511,88 +1511,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         p.expect(TK_LIT_x, &SYNC_2, false);
         p.expect(TK_EOF, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_LIT_b {
-        p.take();
-        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
-        let mut _plus_first = true;
-        loop {
-            if p.recovering { break; }
-            if !_plus_first {
-                let mut rep_scan_pos: i32 = -1;
-                rep_scan: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_x { break rep_scan; }
-                    pos += 1;
-                    if pos <= p.pos { break rep_scan; }
-                    let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if !(rep_body_end_kind == TK_LIT_x) {
-                        let rep_body_end = pos;
-                        let mut rep_body_end_ok = false;
-                        rep_body_end_scan: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_x { break rep_body_end_scan; }
-                            pos += 1;
-                            if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_body_end_scan; }
-                            pos += 1;
-                            rep_body_end_ok = true;
-                        }
-                        pos = rep_body_end;
-                        if !rep_body_end_ok { break rep_scan; }
-                    }
-                    rep_scan_pos = pos;
-                }
-                if rep_scan_pos < 0 { break; }
-            }
-            _plus_first = false;
-            p.expect(TK_LIT_x, &SYNC_1, false);
-            if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_back(&SYNC_1, &EXPECTED_1); }
-        }
-        p.expect(TK_LIT_x, &SYNC_2, false);
-        p.expect(TK_EOF, &EMPTY_SYNC, true);
-        return;
-    }
-    if kind == TK_LIT_d {
-        p.take();
-        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
-        let mut _plus_first = true;
-        loop {
-            if p.recovering { break; }
-            if !_plus_first {
-                let mut rep_scan_pos: i32 = -1;
-                rep_scan: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_x { break rep_scan; }
-                    pos += 1;
-                    if pos <= p.pos { break rep_scan; }
-                    let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if !(rep_body_end_kind == TK_LIT_x) {
-                        let rep_body_end = pos;
-                        let mut rep_body_end_ok = false;
-                        rep_body_end_scan: {
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_x { break rep_body_end_scan; }
-                            pos += 1;
-                            if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_body_end_scan; }
-                            pos += 1;
-                            rep_body_end_ok = true;
-                        }
-                        pos = rep_body_end;
-                        if !rep_body_end_ok { break rep_scan; }
-                    }
-                    rep_scan_pos = pos;
-                }
-                if rep_scan_pos < 0 { break; }
-            }
-            _plus_first = false;
-            p.expect(TK_LIT_x, &SYNC_1, false);
-            if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_back(&SYNC_1, &EXPECTED_1); }
-        }
-        p.expect(TK_LIT_x, &SYNC_2, false);
-        p.expect(TK_EOF, &EMPTY_SYNC, true);
-        return;
-    }
-    if kind == TK_LIT_e {
+    } else if kind == TK_LIT_e {
         p.take();
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { p.sync_enter(&SYNC_3, &EXPECTED_3); }
         if p.peek_kind() == TK_LIT_x {
@@ -1601,8 +1520,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         p.expect(TK_LIT_y, &SYNC_2, false);
         p.expect(TK_EOF, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_LIT_f {
+    } else if kind == TK_LIT_f {
         p.take();
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
         loop {
@@ -1625,8 +1543,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         p.expect(TK_LIT_x, &SYNC_2, false);
         p.expect(TK_EOF, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_LIT_g {
+    } else if kind == TK_LIT_g {
         p.take();
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
         loop {
@@ -1737,6 +1654,10 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
         return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &_token_names());
     }
     return String::new();
+}
+
+fn _kind_set_0(k: i32) -> bool {
+    return k matches { TK_LIT_a | TK_LIT_b | TK_LIT_d };
 }
 
 global EMPTY_SYNC: List<i32> = [];

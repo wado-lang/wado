@@ -30,7 +30,7 @@ use {
     lexer_grammar_run_action_ids,
     lexer_mode_attr_use,
 } from "./lexer_gen.wado";
-use { gen_parser, grammar_at_end_conflict_rules } from "./parser_gen.wado";
+use { gen_parser, grammar_scans_through_atn } from "./parser_gen.wado";
 use { collect_members, translate_gate_bodies } from "./action_gen.wado";
 use { gen_kind_set_helpers, gen_follow_mask_globals, gen_sync_set_globals } from "./kind_set_gen.wado";
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
@@ -244,11 +244,9 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         }
     }
     let lowered = lower_for_analysis(grammar, &lit_tokens, &mut ctx);
-    let at_end_rules = grammar_at_end_conflict_rules(grammar, &lowered, &mut ctx);
-    if at_end_rules.contains(&true) {
+    if grammar_scans_through_atn(grammar, &lowered, &mut ctx) {
         ctx.mark_needs_scan_atn();
     }
-    ctx.set_at_end_atn_rules(at_end_rules);
     // Every grammar reads its recovery sets off the ATN; only the simulator's
     // grammars also embed it.
     let atn = build_atn_with(grammar, &lowered);

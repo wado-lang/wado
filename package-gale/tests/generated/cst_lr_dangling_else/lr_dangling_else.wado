@@ -2361,41 +2361,37 @@ impl Parser {
 fn scan_e_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LIT_if {
-            pos = start + 1;
-            try_0: {
-                pos = scan_e(tokens, pos, 0);
-                if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_then { break try_0; }
-                pos += 1;
-                pos = scan_e(tokens, pos, 0);
-                if pos < 0 { break try_0; }
-                if pos < tokens.len() && tokens[pos] == TK_LIT_else {
-                    let sp = pos;
-                    sg_0_done: {
-                        sg_0: {
-                            pos += 1;
-                            pos = scan_e(tokens, pos, 0);
-                            if pos < 0 { break sg_0; }
-                            break sg_0_done;
-                        }
-                        pos = -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_LIT_if {
+        pos = start + 1;
+        try_0: {
+            pos = scan_e(tokens, pos, 0);
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_then { break try_0; }
+            pos += 1;
+            pos = scan_e(tokens, pos, 0);
+            if pos < 0 { break try_0; }
+            if pos < tokens.len() && tokens[pos] == TK_LIT_else {
+                let sp = pos;
+                sg_0_done: {
+                    sg_0: {
+                        pos += 1;
+                        pos = scan_e(tokens, pos, 0);
+                        if pos < 0 { break sg_0; }
+                        break sg_0_done;
                     }
-                    if pos < 0 { pos = sp; }
+                    pos = -1;
                 }
-                break scan_alts;
+                if pos < 0 { pos = sp; }
             }
-            return -1;
-        } else if alt_kind == TK_INT {
-            pos = start + 1;
-            break scan_alts;
-        } else {
-            return -1;
+            return pos;
         }
+        return -1;
+    } else if kind == TK_INT {
+        pos = start + 1;
+        return pos;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_e_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -2469,8 +2465,7 @@ fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
             _parse_e(p);
         }
         return;
-    }
-    if kind == TK_INT {
+    } else if kind == TK_INT {
         p.take();
         return;
     }

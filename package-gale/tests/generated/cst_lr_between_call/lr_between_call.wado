@@ -2671,32 +2671,28 @@ impl Parser {
 fn scan_expr_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_INT {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_LIT_between {
-            pos = start + 1;
-            try_1: {
-                atn.stack.push(20);
-                pos = scan_expr(tokens, pos, atn, 0);
-                atn.stack.pop();
-                if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_and { break try_1; }
-                pos += 1;
-                atn.stack.push(24);
-                pos = scan_expr(tokens, pos, atn, 2);
-                atn.stack.pop();
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_INT {
+        pos = start + 1;
+        return pos;
+    } else if kind == TK_LIT_between {
+        pos = start + 1;
+        try_3: {
+            atn.stack.push(20);
+            pos = scan_expr(tokens, pos, atn, 0);
+            atn.stack.pop();
+            if pos < 0 { break try_3; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_and { break try_3; }
+            pos += 1;
+            atn.stack.push(24);
+            pos = scan_expr(tokens, pos, atn, 2);
+            atn.stack.pop();
+            if pos < 0 { break try_3; }
+            return pos;
         }
+        return -1;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_expr_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
@@ -2814,8 +2810,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     if kind == TK_INT {
         p.take();
         return;
-    }
-    if kind == TK_LIT_between {
+    } else if kind == TK_LIT_between {
         p.take();
         p.site = 5;
         p.atn_ret_pending = 20;

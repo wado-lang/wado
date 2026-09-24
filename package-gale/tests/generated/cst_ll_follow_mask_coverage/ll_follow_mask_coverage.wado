@@ -1518,8 +1518,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_t(p);
         p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_LIT_free {
+    } else if kind == TK_LIT_free {
         p.take();
         p.site = 3;
         _parse_a(p, 0);

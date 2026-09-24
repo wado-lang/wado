@@ -1534,34 +1534,69 @@ impl Parser {
     }
 }
 
+fn scan_stmt_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+    let mut pos = pos;
+    pos = scan_e(tokens, pos, gate, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_stmt_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+    let mut pos = pos;
+    pos = scan_e(tokens, pos, gate, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_stmt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+    let start = pos;
+    let start_gate = *gate;
+    let mut pos = pos;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_0(kind) {
+        let mut best: i32 = -1;
+        let mut best_gate = *gate;
+        let try_0_end = scan_stmt_alt_0(tokens, start, gate);
+        if try_0_end > best { best = try_0_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_1_end = scan_stmt_alt_1(tokens, start, gate);
+        if try_1_end > best { best = try_1_end; best_gate = *gate; }
+        if best >= 0 {
+            pos = best;
+            *gate = best_gate;
+            return pos;
+        }
+        return -1;
+    }
+    return -1;
+}
+
 fn scan_e_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     let start = pos;
     let start_gate = *gate;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_ID {
-            pos = start + 1;
-            try_0: {
-                if !((gate.no_struct == 0)) { break try_0; }
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_LB {
-            pos = start + 1;
-            try_1: {
-                pos = scan_e(tokens, pos, gate, 0);
-                if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_RB { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_ID && (gate.no_struct == 0) {
+        pos = start + 1;
+        try_1: {
+            if !((gate.no_struct == 0)) { break try_1; }
+            return pos;
         }
+        return -1;
+    } else if kind == TK_LB {
+        pos = start + 1;
+        try_2: {
+            pos = scan_e(tokens, pos, gate, 0);
+            if pos < 0 { break try_2; }
+            if pos >= tokens.len() || tokens[pos] != TK_RB { break try_2; }
+            pos += 1;
+            return pos;
+        }
+        return -1;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_e_lr_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
@@ -1616,27 +1651,11 @@ fn _parse_start(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
-fn _parse_stmt__inner_scan_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
-    let mut pos = pos;
-    pos = scan_e(tokens, pos, gate, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_stmt__inner_alt_0(p: &mut Parser) -> () {
     p.site = 1;
     _parse_e(p);
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;
-}
-
-fn _parse_stmt__inner_scan_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
-    let mut pos = pos;
-    pos = scan_e(tokens, pos, gate, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn _parse_stmt__inner(p: &mut Parser) -> () {
@@ -1646,9 +1665,9 @@ fn _parse_stmt__inner(p: &mut Parser) -> () {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_1 = _parse_stmt__inner_scan_1(_sd_tokens, _sd_pos, &mut p.scan_gate);
+        let _sd_p_1 = scan_stmt_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate);
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_0 = _parse_stmt__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate);
+        let _sd_p_0 = scan_stmt_alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -1690,8 +1709,7 @@ fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     if kind == TK_ID && (p.no_struct == 0) {
         p.expect(TK_ID, &SYNC_1, true);
         return;
-    }
-    if kind == TK_LB {
+    } else if kind == TK_LB {
         p.take();
         p.site = 5;
         _parse_e(p);

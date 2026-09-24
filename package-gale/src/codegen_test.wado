@@ -712,12 +712,12 @@ Y : 'Y' ;
 ";
     let mut tg = parse_grammar(tinput, "test.g4");
     let tout = generate(&mut tg, &DEFAULT_OPTIONS).source;
-    assert str_contains(&tout, "fn _parse_s__inner_scan_0(");
+    assert str_contains(&tout, "fn scan_s_alt_0(");
 }
 
 test "an alternative's scan helper is emitted once for the scan and the parse" {
-    // Alt 0 opens both of `scan_r`'s partitions, so the scan side hoists it;
-    // the parse side's tournament scans it too, and must call that function.
+    // Alt 0 is contested in `scan_r`, so the scan side emits its function; the
+    // parse side's tournament scans it too, and must call that function.
     let input = "grammar T;
 s : r EOF ;
 r : a X | A a Y | B a Z ;
@@ -983,8 +983,12 @@ ID : [e-k]+ ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, "fn scan_l("), output;
-    for let arm of ["alt_kind == TK_A", "suffix_kind == TK_L", "_sk == TK_L"] {
+    for let f of ["fn scan_l(", "fn _parse_l__inner("] {
+        let body = extract_fn_body(&output, f);
+        assert body.len() > 0, output;
+        assert !str_contains(&body, "if kind == TK_A {"), body;
+    }
+    for let arm of ["suffix_kind == TK_L", "_sk == TK_L"] {
         assert !str_contains(&output, arm), output;
     }
 }
@@ -2137,8 +2141,7 @@ test "dispatch branches sharing a sub-dispatch are emitted once" {
     assert count_substr(&body, "if p.peek_kind() == TK_A") == 0, `A got its own branch: ${body}`;
 }
 
-// Alt 1 (`n`) is reachable from the {A,B} partition it shares with alt 0 and
-// from its own {C} partition, so its body must be hoisted, not copied twice.
+// Alts 0 and 1 share `A` and `B`, which the token after them tells apart.
 global REPEATED_SCAN_ALT_G4: String = "
 grammar T;
 s : e EOF ;
@@ -2152,19 +2155,19 @@ K : 'k' ;
 WS : [ \\t\\r\\n]+ -> skip ;
 ";
 
-test "a scan alt reached from several partitions is emitted once" {
+test "a scan decides by the parse's lookahead, not by scanning every candidate" {
     let mut g = parse(REPEATED_SCAN_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, "fn scan_e_alt_1("), `alt 1 was not hoisted into a helper: ${output}`;
     let scan_e = extract_fn_body(&output, "fn scan_e(");
-    assert count_substr(&scan_e, "scan_e_alt_1(tokens, start") == 2, `both partitions must call the hoisted helper: ${scan_e}`;
-    assert count_substr(&scan_e, "scan_n(tokens, pos") == 0, `alt 1 body still inlined in scan_e: ${scan_e}`;
+    assert str_contains(&scan_e, "if la_1 == TK_LIT_LPAREN {"), scan_e;
+    assert str_contains(&scan_e, "return scan_e_alt_0(tokens, start"), scan_e;
+    assert str_contains(&scan_e, "return scan_e_alt_1(tokens, start"), scan_e;
 }
 
-test "a scan alt reached once stays inline" {
+test "an uncontested alternative is scanned in place" {
     let mut g = parse(REPEATED_SCAN_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    assert !str_contains(&output, "fn scan_e_alt_2("), `single-use alt 2 was hoisted: ${output}`;
+    assert !str_contains(&output, "fn scan_e_alt_2("), output;
 }
 
 // `RustParser.g4`'s `crate : innerAttribute* item* EOF`: the reserve walks the

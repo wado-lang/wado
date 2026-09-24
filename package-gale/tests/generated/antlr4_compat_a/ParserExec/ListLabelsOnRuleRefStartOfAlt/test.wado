@@ -1559,24 +1559,20 @@ impl Parser {
 fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_NOT {
-            pos = start + 1;
-            try_0: {
-                pos = scan_expression(tokens, pos, follow, 3);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_IDENTIFIER {
-            pos = start + 1;
-            break scan_alts;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_NOT {
+        pos = start + 1;
+        try_0: {
+            pos = scan_expression(tokens, pos, follow, 3);
+            if pos < 0 { break try_0; }
+            return pos;
         }
+        return -1;
+    } else if kind == TK_IDENTIFIER {
+        pos = start + 1;
+        return pos;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_expression_lr_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
@@ -1673,8 +1669,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
         p.site = 0;
         _parse_expression(p, follow, 3);
         return;
-    }
-    if kind == TK_IDENTIFIER {
+    } else if kind == TK_IDENTIFIER {
         p.take();
         return;
     }

@@ -1595,40 +1595,36 @@ struct ArgsVals {
 fn scan_continue_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_FOR {
-            pos = start + 1;
-            if pos < tokens.len() && tokens[pos] == TK_FOR && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-                let sp = pos;
-                pos += 1;
-                if pos < 0 { pos = sp; }
-            }
-            break scan_alts;
-        } else if alt_kind == TK_BREAK {
-            pos = start + 1;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_BREAK { break try_1; }
-                pos += 1;
-                while pos < tokens.len() && tokens[pos] == TK_BREAK {
-                    pos += 1;
-                }
-                if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_IF {
-            pos = start + 1;
-            while pos < tokens.len() && tokens[pos] == TK_IF && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-                pos += 1;
-            }
-            break scan_alts;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_FOR {
+        pos = start + 1;
+        if pos < tokens.len() && tokens[pos] == TK_FOR && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+            let sp = pos;
+            pos += 1;
+            if pos < 0 { pos = sp; }
         }
+        return pos;
+    } else if kind == TK_BREAK {
+        pos = start + 1;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos] != TK_BREAK { break try_1; }
+            pos += 1;
+            while pos < tokens.len() && tokens[pos] == TK_BREAK {
+                pos += 1;
+            }
+            if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { break try_1; }
+            pos += 1;
+            return pos;
+        }
+        return -1;
+    } else if kind == TK_IF {
+        pos = start + 1;
+        while pos < tokens.len() && tokens[pos] == TK_IF && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+            pos += 1;
+        }
+        return pos;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_continue_lr_3(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
@@ -1738,8 +1734,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
             }
         }
         return vals;
-    }
-    if kind == TK_BREAK {
+    } else if kind == TK_BREAK {
         p.b.set_alt(1);
         p.take();
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }
@@ -1773,8 +1768,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_2);
         }
         return vals;
-    }
-    if kind == TK_IF {
+    } else if kind == TK_IF {
         p.b.set_alt(2);
         p.expect(TK_IF, &SYNC_3, true);
         loop {

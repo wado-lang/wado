@@ -1584,8 +1584,7 @@ fn _parse_stmt__inner(p: &mut Parser) -> () {
         }
         p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_LIT_var {
+    } else if kind == TK_LIT_var {
         p.take();
         p.expect(TK_ID, &SYNC_5, false);
         if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { p.sync_enter(&SYNC_5, &EXPECTED_5); }
@@ -1639,8 +1638,7 @@ fn _parse_stmt__inner(p: &mut Parser) -> () {
         }
         p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_LIT_put {
+    } else if kind == TK_LIT_put {
         p.take();
         p.expect(TK_ID, &SYNC_6, false);
         p.expect(TK_LIT_EQ, &SYNC_2, false);
@@ -1667,8 +1665,7 @@ fn _parse_stmt__inner(p: &mut Parser) -> () {
         p.expect(TK_LIT_HASH, &SYNC_4, false);
         p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_LIT_tok {
+    } else if kind == TK_LIT_tok {
         p.take();
         p.expect(TK_ID, &SYNC_1, false);
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_enter(&SYNC_1, &EXPECTED_1); }

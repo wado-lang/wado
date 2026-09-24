@@ -1529,8 +1529,7 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_LIT_SEMI, &SYNC_1, false);
         p.expect(TK_EOF, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_LIT_W {
+    } else if kind == TK_LIT_W {
         p.take();
         p.site = 1;
         _parse_wild(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);

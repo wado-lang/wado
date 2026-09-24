@@ -1504,8 +1504,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         }
         p.expect(TK_EOF, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_LIT_q {
+    } else if kind == TK_LIT_q {
         p.take();
         if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_enter(&SYNC_4, &EXPECTED_4); }
         let mut _plus_first = true;

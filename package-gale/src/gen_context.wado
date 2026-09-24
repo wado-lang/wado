@@ -210,9 +210,6 @@ pub struct GenContext {
     /// when `needs_atn`); read by the rule emitter to route an `AtEndConflict`
     /// multi-alt `Ambiguous` site through `atn_predict_with_stack`.
     atn_rule_body_decisions: List<i32>,
-    /// Per-rule: whether an `AtEndConflict` of the rule routes to the simulator,
-    /// so its scan decides by the same simulation. Indexed by rule.
-    at_end_atn_rules: List<bool>,
     /// When set, parser emit adds trace logging (rule enter/ok/fail plus
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
@@ -382,7 +379,6 @@ impl GenContext {
             scan_group_counter: 0,
             lr_loop_entry_decisions: [],
             atn_rule_body_decisions: [],
-            at_end_atn_rules: [],
             trace: false,
             fragment_entries: [],
             emit_actions: false,
@@ -924,24 +920,11 @@ impl GenContext {
         return self.atn_rule_body_decisions[rule];
     }
 
-    pub fn set_at_end_atn_rules(&mut self, rules: List<bool>) {
-        self.at_end_atn_rules = rules;
-    }
-
-    /// The decision a scan of `rule` picks its alternative by, or -1 where the
-    /// scan runs its longest-match tournament.
-    pub fn scan_atn_body_decision(&self, rule: i32) -> i32 {
-        if rule < 0 || rule >= self.at_end_atn_rules.len() || !self.at_end_atn_rules[rule] {
-            return -1;
-        }
-        return self.atn_rule_body_decision(rule);
-    }
-
     /// Enable trace instrumentation in the generated parser (the
     /// `trace: true` generator option / `gale gen --trace`). Read across
     /// parser emit — by `gen_parser_struct` / `gen_rule_entry_wrapper`
     /// for the rule enter/ok/fail frames, and by `gen_multi_alt_body` /
-    /// `gen_prediction_code` for the multi-alt scan/pick/try lines.
+    /// `gen_prediction_code_inner` for the multi-alt scan/pick/try lines.
     pub fn set_trace(&mut self, on: bool) {
         self.trace = on;
     }
@@ -2108,7 +2091,7 @@ impl GenContext {
     /// `scan_X_lr_N` generated for them so nested scans can recurse through
     /// them correctly. The dispatch sites all run a real longest-match
     /// tournament (`gen_scan_winner_tournament` for the group dispatchers,
-    /// `gen_scan_partition_body` per partition): every candidate scans once
+    /// `emit_scan_side_tournament` for a rule's): every candidate scans once
     /// from the decision point and the greatest end wins, with ties resolved
     /// to the first grammar alt. Each per-candidate LR scan is bounded by
     /// the scan-helper structure, so the tournament stays linear in the

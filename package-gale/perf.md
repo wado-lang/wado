@@ -257,31 +257,6 @@ re-measure before committing. Candidates read off the profile above:
   leaves ~2000 comparisons on the fall-through path. ASCII resolves early (single-char
   branches are sorted and come first), so this is a worst case rather than a
   benchmark-visible cost. A sorted interval table with a binary search would bound it.
-- **A guarded alt re-tests the token its partition guard already matched
-  (landed for the single-token guard, 2026-09-03).**
-  `gen_scan_multi_alt` binds `alt_kind = pos < tokens.len() ? tokens[pos] :
-  TK_EOF` and branches on it; a single-token partition
-  (`groups_tokens[g] == [TK_IDENTIFIER]`, say) whose winning alt's first
-  element is a `Token` of that exact kind re-read the same comparison —
-  `if pos >= tokens.len() || tokens[pos] != TK_IDENTIFIER { break try_0; }`
-  right after the branch that already established it. `guard_implies_first_token`
-  (`parser_gen.wado`) elides that element and starts the alt body at
-  `pos = start + 1`. Extending it past a single-token guard needs proving the
-  alt's first element accepts every token the guard admits — a check the
-  landed version does not make, so it stays at exactly one token. Isolated on
-  `sqlite_parse`, three alternating pairs, best-of-three: **1.150 → 1.120
-  ms/iter (+2.6%)**, all 3 rounds disjoint; 18 sites elide in the SQLite
-  parser (`scan_any_name`'s `TK_IDENTIFIER` / `TK_STRING_LITERAL` /
-  `TK_OPEN_PAR` arms among them).
-
-  **Left open:** the multi-token case this bullet originally named. Inside
-  `scan_keyword`, `_kind_set_37(tokens[pos])` re-tests a keyword-partition
-  guard that already contains every token `_kind_set_37` would test. Closing
-  it needs the accepted-set-covers-guard-set proof the landed version
-  sidesteps by requiring exactly one token — worth it only if a future
-  profile still shows `_kind_set_*` self-time (2.6–4.7% pre-landing) after
-  the single-token cut.
-
 - **Scan time grows exponentially with nesting (measured, deferred 2026-09).**
   On the dev profile, one parse takes these times:
 

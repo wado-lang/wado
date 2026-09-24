@@ -1841,68 +1841,60 @@ fn scan_pow_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 fn scan_signed_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_PLUS {
-            pos = start + 1;
-            try_0: {
-                pos = scan_signed_atom(tokens, pos, follow);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_MINUS {
-            pos = start + 1;
-            try_1: {
-                pos = scan_signed_atom(tokens, pos, follow);
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
-            return -1;
-        } else if _kind_set_2(alt_kind) {
-            try_2: {
-                pos = scan_func_(tokens, pos, follow);
-                if pos < 0 { break try_2; }
-                break scan_alts;
-            }
-            return -1;
-        } else if _kind_set_3(alt_kind) {
-            try_3: {
-                pos = scan_atom(tokens, pos, follow);
-                if pos < 0 { break try_3; }
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_PLUS {
+        pos = start + 1;
+        try_0: {
+            pos = scan_signed_atom(tokens, pos, follow);
+            if pos < 0 { break try_0; }
+            return pos;
         }
+        return -1;
+    } else if kind == TK_MINUS {
+        pos = start + 1;
+        try_1: {
+            pos = scan_signed_atom(tokens, pos, follow);
+            if pos < 0 { break try_1; }
+            return pos;
+        }
+        return -1;
+    } else if _kind_set_2(kind) {
+        try_2: {
+            pos = scan_func_(tokens, pos, follow);
+            if pos < 0 { break try_2; }
+            return pos;
+        }
+        return -1;
+    } else if _kind_set_3(kind) {
+        try_3: {
+            pos = scan_atom(tokens, pos, follow);
+            if pos < 0 { break try_3; }
+            return pos;
+        }
+        return -1;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if _kind_set_6(alt_kind) {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_LPAREN {
-            pos = start + 1;
-            try_3: {
-                pos = scan_expression(tokens, pos, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 { break try_3; }
-                if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_3; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_6(kind) {
+        pos = start + 1;
+        return pos;
+    } else if kind == TK_LPAREN {
+        pos = start + 1;
+        try_3: {
+            pos = scan_expression(tokens, pos, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+            if pos < 0 { break try_3; }
+            if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_3; }
+            pos += 1;
+            return pos;
         }
+        return -1;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_func_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
@@ -2090,19 +2082,16 @@ fn _parse_signed_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 9;
         _parse_signed_atom(p, follow);
         return;
-    }
-    if kind == TK_MINUS {
+    } else if kind == TK_MINUS {
         p.take();
         p.site = 10;
         _parse_signed_atom(p, follow);
         return;
-    }
-    if _kind_set_2(kind) {
+    } else if _kind_set_2(kind) {
         p.site = 11;
         _parse_func_(p, follow);
         return;
-    }
-    if _kind_set_3(kind) {
+    } else if _kind_set_3(kind) {
         p.site = 12;
         _parse_atom(p, follow);
         return;
@@ -2133,18 +2122,15 @@ fn _parse_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 13;
         _parse_scientific(p);
         return;
-    }
-    if kind == TK_VARIABLE {
+    } else if kind == TK_VARIABLE {
         p.site = 14;
         _parse_variable(p);
         return;
-    }
-    if _kind_set_4(kind) {
+    } else if _kind_set_4(kind) {
         p.site = 15;
         _parse_constant(p);
         return;
-    }
-    if kind == TK_LPAREN {
+    } else if kind == TK_LPAREN {
         p.take();
         p.site = 16;
         _parse_expression(p, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);

@@ -2384,8 +2384,7 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_B, &SYNC_1, false);
         p.expect(TK_EOF, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_LIT_q {
+    } else if kind == TK_LIT_q {
         p.take();
         p.site = 1;
         p.atn_ret_pending = 19;
@@ -2419,13 +2418,6 @@ fn _parse_s(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_r__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_B, &EMPTY_SYNC, true);
     return;
-}
-
-fn _parse_r__inner_scan_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn _parse_r__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {

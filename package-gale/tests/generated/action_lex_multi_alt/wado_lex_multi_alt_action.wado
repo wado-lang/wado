@@ -1576,16 +1576,12 @@ impl Parser {
 fn scan_item(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if _kind_set_0(alt_kind) {
-            pos = start + 1;
-            break scan_alts;
-        } else {
-            return -1;
-        }
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_0(kind) {
+        pos = start + 1;
+        return pos;
     }
-    return pos;
+    return -1;
 }
 
 fn _parse_prog__inner(p: &mut Parser) -> () {
@@ -1630,8 +1626,7 @@ fn _parse_item__inner(p: &mut Parser) -> () {
              p.emit("A") 
         }
         return;
-    }
-    if kind == TK_BB {
+    } else if kind == TK_BB {
         p.take();
         if !p.speculating {
              p.emit("B") 

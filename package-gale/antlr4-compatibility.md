@@ -480,19 +480,24 @@ ATN simulator (next section), never a try-fail-retry loop. Only the repeat-exit
 probe rewinds, and it decides nothing — it re-parses a failed element to
 record where the error is.
 
-### Multi-alt dispatch — a longest-match tournament
+### Multi-alt dispatch — prediction, then a longest-match tournament
 
-Multi-alt dispatch is a scan-side longest-match tournament: candidate
-alts are partitioned by their depth-0 first token, and within a partition
-every candidate is scanned from the same start, keeping the greatest
-successful end. A scan-length tie resolves to the lowest grammar
-alternative — ANTLR4's ambiguity resolution (SQLite's single-table `FROM`
-picks `table_or_subquery (',' table_or_subquery)*` over the `join_clause`
-catch-all). This is not first-success-wins — that is unsound when
-alts share a prefix and tie on static length (`'mut'? IDENT` vs `path '('
-… ')'` on `N(n)`). An alt whose suffix is unscannable at a tournament
-site is a codegen-time panic; the fix is to file an issue, never to add
-backtracking.
+A rule's parse and its scan choose an alternative with one emitter
+(`gen_rule_pick`). Each arm tests the first token its overlap group admits,
+and a contested group descends the SLL prediction tree. The scan must make the
+parse's choice: a scan that chose differently would accept an input the parse
+rejects, or the reverse. So only how each side reads a token and commits
+differs.
+
+Where the tree gives up, every candidate is scanned from the same start and
+the greatest successful end wins. A scan-length tie resolves to the lowest
+grammar alternative — ANTLR4's ambiguity resolution (SQLite's single-table
+`FROM` picks `table_or_subquery (',' table_or_subquery)*` over the
+`join_clause` catch-all). This is not first-success-wins — that is unsound
+when alts share a prefix and tie on static length (`'mut'? IDENT` vs
+`path '(' … ')'` on `N(n)`). An alt whose suffix is unscannable at a
+tournament site is a codegen-time panic; the fix is to file an issue, never
+to add backtracking.
 
 Emit reaches that tournament by two routes. The SLL prediction tree may
 give up (`Ambiguous`), or it may resolve the decision into a token cascade

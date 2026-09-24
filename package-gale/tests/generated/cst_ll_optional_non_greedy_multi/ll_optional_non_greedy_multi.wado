@@ -2437,62 +2437,58 @@ impl Parser {
 fn scan_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LIT_if {
-            pos = start + 1;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_y { break try_0; }
-                pos += 1;
-                pos = scan_statement(tokens, pos, follow);
-                if pos < 0 { break try_0; }
-                if pos < tokens.len() && tokens[pos] == TK_LIT_else {
-                    let sp = pos;
-                    sg_0_done: {
-                        sg_0: {
-                            pos += 1;
-                            pos = scan_statement(tokens, pos, follow);
-                            if pos < 0 { break sg_0; }
-                            break sg_0_done;
-                        }
-                        pos = -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_LIT_if {
+        pos = start + 1;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_y { break try_0; }
+            pos += 1;
+            pos = scan_statement(tokens, pos, follow);
+            if pos < 0 { break try_0; }
+            if pos < tokens.len() && tokens[pos] == TK_LIT_else {
+                let sp = pos;
+                sg_0_done: {
+                    sg_0: {
+                        pos += 1;
+                        pos = scan_statement(tokens, pos, follow);
+                        if pos < 0 { break sg_0; }
+                        break sg_0_done;
                     }
-                    if pos < 0 { pos = sp; }
+                    pos = -1;
                 }
-                break scan_alts;
+                if pos < 0 { pos = sp; }
             }
-            return -1;
-        } else if alt_kind == TK_LIT_when {
-            pos = start + 1;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_y { break try_1; }
-                pos += 1;
-                pos = scan_statement(tokens, pos, follow);
-                if pos < 0 { break try_1; }
-                if pos < tokens.len() && tokens[pos] == TK_LIT_otherwise {
-                    let sp = pos;
-                    sg_1_done: {
-                        sg_1: {
-                            pos += 1;
-                            pos = scan_statement(tokens, pos, follow);
-                            if pos < 0 { break sg_1; }
-                            break sg_1_done;
-                        }
-                        pos = -1;
-                    }
-                    if pos < 0 { pos = sp; }
-                }
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_LIT_x {
-            pos = start + 1;
-            break scan_alts;
-        } else {
-            return -1;
+            return pos;
         }
+        return -1;
+    } else if kind == TK_LIT_when {
+        pos = start + 1;
+        try_1: {
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_y { break try_1; }
+            pos += 1;
+            pos = scan_statement(tokens, pos, follow);
+            if pos < 0 { break try_1; }
+            if pos < tokens.len() && tokens[pos] == TK_LIT_otherwise {
+                let sp = pos;
+                sg_1_done: {
+                    sg_1: {
+                        pos += 1;
+                        pos = scan_statement(tokens, pos, follow);
+                        if pos < 0 { break sg_1; }
+                        break sg_1_done;
+                    }
+                    pos = -1;
+                }
+                if pos < 0 { pos = sp; }
+            }
+            return pos;
+        }
+        return -1;
+    } else if kind == TK_LIT_x {
+        pos = start + 1;
+        return pos;
     }
-    return pos;
+    return -1;
 }
 
 fn _parse_start__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -2568,8 +2564,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _parse_statement(p, follow);
         }
         return;
-    }
-    if kind == TK_LIT_when {
+    } else if kind == TK_LIT_when {
         p.take();
         p.expect(TK_LIT_y, &SYNC_0, false);
         p.site = 3;
@@ -2582,8 +2577,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _parse_statement(p, follow);
         }
         return;
-    }
-    if kind == TK_LIT_x {
+    } else if kind == TK_LIT_x {
         p.take();
         return;
     }

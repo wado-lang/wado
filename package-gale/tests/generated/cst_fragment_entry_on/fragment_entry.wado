@@ -1504,30 +1504,26 @@ impl Parser {
 fn scan_item(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LIT_set {
-            pos = start + 1;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_LIT_main {
-            try_1: {
-                pos = scan_main(tokens, pos);
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_LIT_set {
+        pos = start + 1;
+        try_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_0; }
+            pos += 1;
+            return pos;
         }
+        return -1;
+    } else if kind == TK_LIT_main {
+        try_1: {
+            pos = scan_main(tokens, pos);
+            if pos < 0 { break try_1; }
+            return pos;
+        }
+        return -1;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_main(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -1614,8 +1610,7 @@ fn _parse_item__inner(p: &mut Parser) -> () {
         p.expect(TK_ID, &SYNC_1, false);
         p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_LIT_main {
+    } else if kind == TK_LIT_main {
         p.site = 1;
         _parse_main(p);
         return;

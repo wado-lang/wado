@@ -1516,8 +1516,7 @@ fn _parse_primary__inner(p: &mut Parser) -> () {
             p.emit(`ID ${p.token_text(id)}\n`);
         }
         return;
-    }
-    if kind == TK_LIT_enum && (!(p.enum_keyword)) {
+    } else if kind == TK_LIT_enum && (!(p.enum_keyword)) {
         p.expect(TK_LIT_enum, &EMPTY_SYNC, true);
         if !p.speculating {
             p.emit(`enum\n`);

@@ -1537,28 +1537,21 @@ fn scan_tree_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 fn scan_tree(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_ID {
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_0(kind) {
+        if kind == TK_ID {
             let mut best: i32 = -1;
-            try_1: {
-                pos = scan_path(tokens, pos, follow);
-                if pos < 0 { break try_1; }
-                if pos > best { best = pos; }
-            }
             let try_0_end = scan_tree_alt_0(tokens, start, follow);
             if try_0_end > best { best = try_0_end; }
-            if best >= 0 { pos = best; break scan_alts; }
+            let try_1_end = scan_path(tokens, start, follow);
+            if try_1_end > best { best = try_1_end; }
+            if best >= 0 { pos = best; return pos; }
             return -1;
-        } else if alt_kind == TK_SEP {
-            pos = scan_tree_alt_0(tokens, start, follow);
-            if pos >= 0 { break scan_alts; }
-            return -1;
-        } else {
-            return -1;
+        } else if kind == TK_SEP {
+            return scan_tree_alt_0(tokens, start, follow);
         }
     }
-    return pos;
+    return -1;
 }
 
 fn scan_path(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {

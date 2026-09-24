@@ -1530,24 +1530,68 @@ struct AVals {
     i: i32 = 0,
 }
 
+fn scan_s_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_a(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_s_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_a(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
+    let start = pos;
+    let mut pos = pos;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_ID {
+        let la_1 = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
+        if la_1 == TK_LIT_SEMI {
+            return scan_s_alt_0(tokens, start);
+        } else if la_1 == TK_LIT_DOT {
+            return scan_s_alt_1(tokens, start);
+        } else {
+            let mut best: i32 = -1;
+            let try_0_end = scan_s_alt_0(tokens, start);
+            if try_0_end > best { best = try_0_end; }
+            let try_1_end = scan_s_alt_1(tokens, start);
+            if try_1_end > best { best = try_1_end; }
+            if best >= 0 { pos = best; return pos; }
+        }
+    }
+    return -1;
+}
+
+fn scan_a_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_a_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_ID {
-            let mut best: i32 = -1;
-            pos = start + 1;
-            if pos > best { best = pos; }
-            pos = start + 1;
-            if pos > best { best = pos; }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
-        } else {
-            return -1;
-        }
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_ID {
+        return scan_a_alt_0(tokens, start);
     }
-    return pos;
+    return -1;
 }
 
 fn _parse_s__inner_alt_0(p: &mut Parser) -> () {
@@ -1557,29 +1601,11 @@ fn _parse_s__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_s__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_a(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_s__inner_alt_1(p: &mut Parser) -> () {
     p.site = 1;
     _parse_b(p, 2);
     p.expect(TK_LIT_DOT, &EMPTY_SYNC, true);
     return;
-}
-
-fn _parse_s__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_a(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn _parse_s__inner(p: &mut Parser) -> () {
@@ -1593,8 +1619,8 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         } else {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_s__inner_scan_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = _parse_s__inner_scan_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = scan_s_alt_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = scan_s_alt_1(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {

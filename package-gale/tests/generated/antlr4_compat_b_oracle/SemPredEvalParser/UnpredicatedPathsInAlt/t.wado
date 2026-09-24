@@ -1498,33 +1498,37 @@ impl Parser {
     }
 }
 
+fn scan_a_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if !((false)) { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_INT { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_a_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_INT { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_ID {
-            let mut best: i32 = -1;
-            pos = start + 1;
-            try_0: {
-                if !((false)) { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_INT { break try_0; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            pos = start + 1;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_INT { break try_1; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_ID {
+        if (false) {
+            return scan_a_alt_0(tokens, start);
         } else {
-            return -1;
+            return scan_a_alt_1(tokens, start);
         }
     }
-    return pos;
+    return -1;
 }
 
 fn scan_b(tokens: &Array<i32>, pos: i32) -> i32 {

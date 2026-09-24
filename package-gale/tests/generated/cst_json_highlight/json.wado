@@ -2102,48 +2102,53 @@ impl Parser {
     }
 }
 
+fn scan_obj_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    pos = scan_pair(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
+        let sp = pos;
+        sg_0_done: {
+            sg_0: {
+                pos += 1;
+                pos = scan_pair(tokens, pos);
+                if pos < 0 { break sg_0; }
+                break sg_0_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_obj_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_obj(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LIT_LBRACE {
-            let mut best: i32 = -1;
-            pos = start + 1;
-            try_0: {
-                pos = scan_pair(tokens, pos);
-                if pos < 0 { break try_0; }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-                    let sp = pos;
-                    sg_0_done: {
-                        sg_0: {
-                            pos += 1;
-                            pos = scan_pair(tokens, pos);
-                            if pos < 0 { break sg_0; }
-                            break sg_0_done;
-                        }
-                        pos = -1;
-                    }
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { break try_0; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            pos = start + 1;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { break try_1; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_LIT_LBRACE {
+        let la_1 = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
+        if la_1 == TK_STRING {
+            return scan_obj_alt_0(tokens, start);
+        } else if la_1 == TK_LIT_RBRACE {
+            return scan_obj_alt_1(tokens, start);
         }
     }
-    return pos;
+    return -1;
 }
 
 fn scan_pair(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -2157,80 +2162,81 @@ fn scan_pair(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
+fn scan_arr_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
+    pos += 1;
+    pos = scan_value(tokens, pos);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
+        let sp = pos;
+        sg_1_done: {
+            sg_1: {
+                pos += 1;
+                pos = scan_value(tokens, pos);
+                if pos < 0 { break sg_1; }
+                break sg_1_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_arr_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_arr(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LIT_LBRACKET {
-            let mut best: i32 = -1;
-            pos = start + 1;
-            try_0: {
-                pos = scan_value(tokens, pos);
-                if pos < 0 { break try_0; }
-                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-                    let sp = pos;
-                    sg_1_done: {
-                        sg_1: {
-                            pos += 1;
-                            pos = scan_value(tokens, pos);
-                            if pos < 0 { break sg_1; }
-                            break sg_1_done;
-                        }
-                        pos = -1;
-                    }
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break try_0; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            pos = start + 1;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break try_1; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_LIT_LBRACKET {
+        let la_1 = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
+        if _kind_set_0(la_1) {
+            return scan_arr_alt_0(tokens, start);
+        } else if la_1 == TK_LIT_RBRACKET {
+            return scan_arr_alt_1(tokens, start);
         }
     }
-    return pos;
+    return -1;
 }
 
 fn scan_value(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if _kind_set_0(alt_kind) {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_LIT_LBRACE {
-            try_2: {
-                pos = scan_obj(tokens, pos);
-                if pos < 0 { break try_2; }
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_LIT_LBRACKET {
-            try_3: {
-                pos = scan_arr(tokens, pos);
-                if pos < 0 { break try_3; }
-                break scan_alts;
-            }
-            return -1;
-        } else if _kind_set_1(alt_kind) {
-            pos = start + 1;
-            break scan_alts;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_1(kind) {
+        pos = start + 1;
+        return pos;
+    } else if kind == TK_LIT_LBRACE {
+        try_2: {
+            pos = scan_obj(tokens, pos);
+            if pos < 0 { break try_2; }
+            return pos;
         }
+        return -1;
+    } else if kind == TK_LIT_LBRACKET {
+        try_3: {
+            pos = scan_arr(tokens, pos);
+            if pos < 0 { break try_3; }
+            return pos;
+        }
+        return -1;
+    } else if _kind_set_2(kind) {
+        pos = start + 1;
+        return pos;
     }
-    return pos;
+    return -1;
 }
 
 fn _parse_json__inner(p: &mut Parser) -> () {
@@ -2387,7 +2393,7 @@ fn _parse_arr__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACKET {
         p.pos += 1;
-        if _kind_set_2(p.peek_kind()) {
+        if _kind_set_0(p.peek_kind()) {
             p.pos -= 1;
             return _parse_arr__inner_alt_0(p);
         } else if p.peek_kind() == TK_LIT_RBRACKET {
@@ -2417,33 +2423,18 @@ fn _parse_arr(p: &mut Parser) -> () {
 fn _parse_value__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
-    if kind == TK_STRING {
+    if _kind_set_1(kind) {
         p.take();
         return;
-    }
-    if kind == TK_NUMBER {
-        p.take();
-        return;
-    }
-    if kind == TK_LIT_LBRACE {
+    } else if kind == TK_LIT_LBRACE {
         p.site = 6;
         _parse_obj(p);
         return;
-    }
-    if kind == TK_LIT_LBRACKET {
+    } else if kind == TK_LIT_LBRACKET {
         p.site = 7;
         _parse_arr(p);
         return;
-    }
-    if kind == TK_LIT_true {
-        p.take();
-        return;
-    }
-    if kind == TK_LIT_false {
-        p.take();
-        return;
-    }
-    if kind == TK_LIT_null {
+    } else if _kind_set_2(kind) {
         p.take();
         return;
     }
@@ -2599,15 +2590,15 @@ pub fn highlight<S: AsStrSlice>(input: S) -> String {
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_NUMBER | TK_STRING };
+    return k matches { TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_false | TK_LIT_null | TK_LIT_true | TK_NUMBER | TK_STRING };
 }
 
 fn _kind_set_1(k: i32) -> bool {
-    return k matches { TK_LIT_false | TK_LIT_null | TK_LIT_true };
+    return k matches { TK_NUMBER | TK_STRING };
 }
 
 fn _kind_set_2(k: i32) -> bool {
-    return k matches { TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_false | TK_LIT_null | TK_LIT_true | TK_NUMBER | TK_STRING };
+    return k matches { TK_LIT_false | TK_LIT_null | TK_LIT_true };
 }
 
 global EMPTY_SYNC: List<i32> = [];

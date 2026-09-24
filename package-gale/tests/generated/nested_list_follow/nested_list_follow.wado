@@ -1509,55 +1509,51 @@ impl Parser {
 fn scan_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LIT_LBRACKET {
-            pos = start + 1;
-            try_0: {
-                if pos < tokens.len() && _kind_set_0(tokens[pos]) {
-                    let sp = pos;
-                    sg_1_done: {
-                        sg_1: {
-                            pos = scan_item(tokens, pos, 0);
-                            if pos < 0 { break sg_1; }
-                            while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-                                let sp = pos;
-                                sg_2_done: {
-                                    sg_2: {
-                                        pos += 1;
-                                        pos = scan_item(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-                                        if pos < 0 { break sg_2; }
-                                        break sg_2_done;
-                                    }
-                                    pos = -1;
-                                }
-                                if pos < 0 { pos = sp; break; }
-                                if pos == sp { break; }
-                            }
-                            break sg_1_done;
-                        }
-                        pos = -1;
-                    }
-                    if pos < 0 { pos = sp; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_ID {
-            pos = start + 1;
-            if pos < tokens.len() && tokens[pos] == TK_LIT_LT && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_LIT_LBRACKET {
+        pos = start + 1;
+        try_0: {
+            if pos < tokens.len() && _kind_set_0(tokens[pos]) {
                 let sp = pos;
-                pos = scan_targs(tokens, pos, follow);
+                sg_1_done: {
+                    sg_1: {
+                        pos = scan_item(tokens, pos, 0);
+                        if pos < 0 { break sg_1; }
+                        while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
+                            let sp = pos;
+                            sg_2_done: {
+                                sg_2: {
+                                    pos += 1;
+                                    pos = scan_item(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
+                                    if pos < 0 { break sg_2; }
+                                    break sg_2_done;
+                                }
+                                pos = -1;
+                            }
+                            if pos < 0 { pos = sp; break; }
+                            if pos == sp { break; }
+                        }
+                        break sg_1_done;
+                    }
+                    pos = -1;
+                }
                 if pos < 0 { pos = sp; }
             }
-            break scan_alts;
-        } else {
-            return -1;
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break try_0; }
+            pos += 1;
+            return pos;
         }
+        return -1;
+    } else if kind == TK_ID {
+        pos = start + 1;
+        if pos < tokens.len() && tokens[pos] == TK_LIT_LT && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+            let sp = pos;
+            pos = scan_targs(tokens, pos, follow);
+            if pos < 0 { pos = sp; }
+        }
+        return pos;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_targs(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
@@ -1705,8 +1701,7 @@ fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_ID {
+    } else if kind == TK_ID {
         p.take();
         if p.peek_kind() == TK_LIT_LT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             p.site = 5;

@@ -1563,26 +1563,22 @@ fn scan_term(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 fn scan_factor(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_INT {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_LIT_LPAREN {
-            pos = start + 1;
-            try_1: {
-                pos = scan_expr(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_INT {
+        pos = start + 1;
+        return pos;
+    } else if kind == TK_LIT_LPAREN {
+        pos = start + 1;
+        try_1: {
+            pos = scan_expr(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+            if pos < 0 { break try_1; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_1; }
+            pos += 1;
+            return pos;
         }
+        return -1;
     }
-    return pos;
+    return -1;
 }
 
 fn _parse_prog__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -1695,8 +1691,7 @@ fn _parse_factor__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if kind == TK_INT {
         p.take();
         return;
-    }
-    if kind == TK_LIT_LPAREN {
+    } else if kind == TK_LIT_LPAREN {
         p.take();
         p.site = 5;
         _parse_expr(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);

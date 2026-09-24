@@ -1502,8 +1502,7 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_C, &SYNC_3, false);
         p.expect(TK_EOF, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_LIT_m {
+    } else if kind == TK_LIT_m {
         p.take();
         if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { p.sync_alts(&SYNC_4, &EXPECTED_4); }
         let grp_kind = p.peek_kind();

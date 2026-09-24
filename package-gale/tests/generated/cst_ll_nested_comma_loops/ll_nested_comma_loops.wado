@@ -1550,29 +1550,25 @@ fn scan_alt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 fn scan_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LBRACE {
-            pos = start + 1;
-            try_0: {
-                if pos < tokens.len() && tokens[pos] == TK_ID {
-                    let sp = pos;
-                    pos = scan_fields(tokens, pos, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                    if pos < 0 { pos = sp; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_RBRACE { break try_0; }
-                pos += 1;
-                break scan_alts;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_LBRACE {
+        pos = start + 1;
+        try_0: {
+            if pos < tokens.len() && tokens[pos] == TK_ID {
+                let sp = pos;
+                pos = scan_fields(tokens, pos, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                if pos < 0 { pos = sp; }
             }
-            return -1;
-        } else if alt_kind == TK_ID {
-            pos = start + 1;
-            break scan_alts;
-        } else {
-            return -1;
+            if pos >= tokens.len() || tokens[pos] != TK_RBRACE { break try_0; }
+            pos += 1;
+            return pos;
         }
+        return -1;
+    } else if kind == TK_ID {
+        pos = start + 1;
+        return pos;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
@@ -1732,8 +1728,7 @@ fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         p.expect(TK_RBRACE, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_ID {
+    } else if kind == TK_ID {
         p.take();
         return;
     }

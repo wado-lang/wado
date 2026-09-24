@@ -1404,6 +1404,56 @@ impl Parser {
     }
 }
 
+fn scan_a_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
+    pos += 1;
+    while pos < tokens.len() && tokens[pos] == TK_LIT_b {
+        pos += 1;
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_c { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_a_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_b { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_d { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
+    let start = pos;
+    let mut pos = pos;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_LIT_a {
+        let la_1 = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
+        if la_1 == TK_LIT_b {
+            let la_2 = if pos + 2 < tokens.len() { tokens[pos + 2] } else { TK_EOF };
+            if la_2 == TK_LIT_c {
+                return scan_a_alt_0(tokens, start);
+            } else if la_2 == TK_LIT_d {
+                return scan_a_alt_1(tokens, start);
+            } else {
+                let mut best: i32 = -1;
+                let try_0_end = scan_a_alt_0(tokens, start);
+                if try_0_end > best { best = try_0_end; }
+                let try_1_end = scan_a_alt_1(tokens, start);
+                if try_1_end > best { best = try_1_end; }
+                if best >= 0 { pos = best; return pos; }
+            }
+        } else if la_1 == TK_LIT_c {
+            return scan_a_alt_0(tokens, start);
+        }
+    }
+    return -1;
+}
+
 fn _parse_a__inner_alt_0(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_enter(&SYNC_0, &EXPECTED_0); }
@@ -1426,34 +1476,11 @@ fn _parse_a__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_a__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
-    pos += 1;
-    while pos < tokens.len() && tokens[pos] == TK_LIT_b {
-        pos += 1;
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_c { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_a__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_1, false);
     p.expect(TK_LIT_b, &SYNC_2, false);
     p.expect(TK_LIT_d, &EMPTY_SYNC, true);
     return;
-}
-
-fn _parse_a__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_b { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_d { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn _parse_a__inner(p: &mut Parser) -> () {
@@ -1472,8 +1499,8 @@ fn _parse_a__inner(p: &mut Parser) -> () {
                 p.pos -= 1;
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_a__inner_scan_0(_sd_tokens, _sd_pos);
-                let _sd_p_1 = _parse_a__inner_scan_1(_sd_tokens, _sd_pos);
+                let _sd_p_0 = scan_a_alt_0(_sd_tokens, _sd_pos);
+                let _sd_p_1 = scan_a_alt_1(_sd_tokens, _sd_pos);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {

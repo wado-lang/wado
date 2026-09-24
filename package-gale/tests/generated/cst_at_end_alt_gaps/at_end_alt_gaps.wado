@@ -2369,71 +2369,69 @@ impl Parser {
 fn scan_entry(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LIT_LPAREN {
-            pos = start + 1;
-            try_0: {
-                atn.stack.push(21);
-                pos = scan_typespec(tokens, pos, atn);
-                atn.stack.pop();
-                if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_LIT_new {
-            pos = start + 1;
-            try_1: {
-                atn.stack.push(28);
-                pos = scan_typespec(tokens, pos, atn);
-                atn.stack.pop();
-                if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { break try_1; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_INT { break try_1; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_LIT_LPAREN {
+        pos = start + 1;
+        try_0: {
+            atn.stack.push(21);
+            pos = scan_typespec(tokens, pos, atn);
+            atn.stack.pop();
+            if pos < 0 { break try_0; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_0; }
+            pos += 1;
+            return pos;
         }
+        return -1;
+    } else if kind == TK_LIT_new {
+        pos = start + 1;
+        try_1: {
+            atn.stack.push(28);
+            pos = scan_typespec(tokens, pos, atn);
+            atn.stack.pop();
+            if pos < 0 { break try_1; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { break try_1; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_INT { break try_1; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break try_1; }
+            pos += 1;
+            return pos;
+        }
+        return -1;
     }
+    return -1;
+}
+
+fn scan_typespec_alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_typespec_alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
     return pos;
 }
 
 fn scan_typespec(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_ID {
-            let _atn_alt = atn_predict_once(&ATN_SIM, 2, atn, tokens, pos, TK_EOF, 0);
-            if _atn_alt == 1 {
-                pos = start + 1;
-                try_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { break try_1; }
-                    pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break try_1; }
-                    pos += 1;
-                    break scan_alts;
-                }
-                return -1;
-            }
-            if _atn_alt == 0 {
-                pos = start + 1;
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_ID {
+        let _atn_alt = atn_predict_once(&ATN_SIM, 2, atn, tokens, pos, TK_EOF, 0);
+        if _atn_alt == 1 {
+            return scan_typespec_alt_1(tokens, start, atn);
         }
+        return scan_typespec_alt_0(tokens, start, atn);
     }
-    return pos;
+    return -1;
 }
 
 fn _parse_prog__inner(p: &mut Parser) -> () {
@@ -2506,8 +2504,7 @@ fn _parse_entry__inner(p: &mut Parser) -> () {
         _parse_typespec(p);
         p.expect(TK_LIT_RPAREN, &EMPTY_SYNC, true);
         return;
-    }
-    if kind == TK_LIT_new {
+    } else if kind == TK_LIT_new {
         p.take();
         p.site = 2;
         p.atn_ret_pending = 28;
@@ -2547,27 +2544,9 @@ fn _parse_typespec__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_typespec__inner_scan_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_typespec__inner_alt_0(p: &mut Parser) -> () {
     p.expect(TK_ID, &EMPTY_SYNC, true);
     return;
-}
-
-fn _parse_typespec__inner_scan_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn _parse_typespec__inner(p: &mut Parser) -> () {

@@ -1580,35 +1580,44 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
+fn scan_expr_atom_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_expr_atom_alt_2(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_ID {
-            let mut best: i32 = -1;
-            pos = start + 1;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_0; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_0; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
-            pos = start + 1;
-            if pos > best { best = pos; }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
-        } else if alt_kind == TK_INT {
-            pos = start + 1;
-            break scan_alts;
-        } else {
-            return -1;
-        }
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_ID {
+        let mut best: i32 = -1;
+        let try_1_end = scan_expr_atom_alt_1(tokens, start);
+        if try_1_end > best { best = try_1_end; }
+        let try_2_end = scan_expr_atom_alt_2(tokens, start);
+        if try_2_end > best { best = try_2_end; }
+        if best >= 0 { pos = best; return pos; }
+        return -1;
     }
-    return pos;
+    if kind == TK_INT {
+        pos = start + 1;
+        return pos;
+    }
+    return -1;
 }
 
 fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -1735,29 +1744,9 @@ fn _parse_expr__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_expr__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_expr__inner_alt_2(p: &mut Parser) -> () {
     p.expect(TK_ID, &SYNC_6, true);
     return;
-}
-
-fn _parse_expr__inner_scan_2(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
@@ -1766,8 +1755,8 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     if kind == TK_ID {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_1 = _parse_expr__inner_scan_1(_sd_tokens, _sd_pos);
-        let _sd_p_2 = _parse_expr__inner_scan_2(_sd_tokens, _sd_pos);
+        let _sd_p_1 = scan_expr_atom_alt_1(_sd_tokens, _sd_pos);
+        let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_1 > _sd_best_p {

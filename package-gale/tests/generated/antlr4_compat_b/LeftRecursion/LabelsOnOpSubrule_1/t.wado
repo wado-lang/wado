@@ -1525,26 +1525,22 @@ impl Parser {
 fn scan_e_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_INT {
-            pos = start + 1;
-            break scan_alts;
-        } else if alt_kind == TK_LIT_LPAREN {
-            pos = start + 1;
-            try_1: {
-                pos = scan_e(tokens, pos, 0);
-                if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_INT {
+        pos = start + 1;
+        return pos;
+    } else if kind == TK_LIT_LPAREN {
+        pos = start + 1;
+        try_2: {
+            pos = scan_e(tokens, pos, 0);
+            if pos < 0 { break try_2; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_2; }
+            pos += 1;
+            return pos;
         }
+        return -1;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_e_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -1605,8 +1601,7 @@ fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
             
         }
         return;
-    }
-    if kind == TK_LIT_LPAREN {
+    } else if kind == TK_LIT_LPAREN {
         p.take();
         p.site = 3;
         _parse_e(p);

@@ -1525,30 +1525,38 @@ struct EVals {
     result: String = "",
 }
 
+fn scan_e_atom_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
+    pos += 1;
+    pos = scan_e(tokens, pos, 2);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_e_atom_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_e_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_ID {
-            let mut best: i32 = -1;
-            pos = start + 1;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break try_0; }
-                pos += 1;
-                pos = scan_e(tokens, pos, 2);
-                if pos < 0 { break try_0; }
-                if pos > best { best = pos; }
-            }
-            pos = start + 1;
-            if pos > best { best = pos; }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
-        } else {
-            return -1;
-        }
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_ID {
+        let mut best: i32 = -1;
+        let try_0_end = scan_e_atom_alt_0(tokens, start);
+        if try_0_end > best { best = try_0_end; }
+        let try_1_end = scan_e_atom_alt_1(tokens, start);
+        if try_1_end > best { best = try_1_end; }
+        if best >= 0 { pos = best; return pos; }
+        return -1;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_e_lr_2(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -1612,17 +1620,6 @@ fn _parse_e__inner_alt_0(p: &mut Parser, vals: EVals = EVals {}) -> EVals {
     return vals;
 }
 
-fn _parse_e__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
-    pos += 1;
-    pos = scan_e(tokens, pos, 2);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_e__inner_alt_1(p: &mut Parser, vals: EVals = EVals {}) -> EVals {
     let mut vals = vals;
     let id = p.expect(TK_ID, &SYNC_2, true);
@@ -1632,13 +1629,6 @@ fn _parse_e__inner_alt_1(p: &mut Parser, vals: EVals = EVals {}) -> EVals {
     return vals;
 }
 
-fn _parse_e__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_e__inner_atom(p: &mut Parser, vals: EVals = EVals {}, min_prec: i32 = 0) -> EVals {
     let mut vals = vals;
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { p.sync_alts(&SYNC_1, &EXPECTED_1); }
@@ -1646,8 +1636,8 @@ fn _parse_e__inner_atom(p: &mut Parser, vals: EVals = EVals {}, min_prec: i32 = 
     if kind == TK_ID {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_0 = _parse_e__inner_scan_0(_sd_tokens, _sd_pos);
-        let _sd_p_1 = _parse_e__inner_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_0 = scan_e_atom_alt_0(_sd_tokens, _sd_pos);
+        let _sd_p_1 = scan_e_atom_alt_1(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {

@@ -1510,31 +1510,45 @@ fn trace_try<S: AsStrSlice>(p: &Parser, rule: S, alt: i32, ok: bool) {
     trace(`${trace_pad(p.trace_depth)}  try ${rule.to_string()} alt#${alt}: ${r}`, { rule: rule.to_string(), alt, ok }, TRACE_TARGET);
 }
 
+fn scan_a_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_X { return -1; }
+    pos += 1;
+    pos = scan_a(tokens, pos, follow);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos] == TK_Y && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+        pos += 1;
+    }
+    return pos;
+}
+
+fn scan_a_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_X { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_a(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_X {
-            let mut best: i32 = -1;
-            pos = start + 1;
-            try_0: {
-                pos = scan_a(tokens, pos, follow);
-                if pos < 0 { break try_0; }
-                if pos < tokens.len() && tokens[pos] == TK_Y && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-                    pos += 1;
-                }
-                if pos > best { best = pos; }
-            }
-            pos = start + 1;
-            if pos > best { best = pos; }
-            if best >= 0 { pos = best; break scan_alts; }
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_X {
+        let la_1 = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
+        if la_1 == TK_X {
+            return scan_a_alt_0(tokens, start, follow);
+        } else if _kind_set_0(la_1) {
+            return scan_a_alt_1(tokens, start, follow);
         } else {
-            return -1;
+            let mut best: i32 = -1;
+            let try_0_end = scan_a_alt_0(tokens, start, follow);
+            if try_0_end > best { best = try_0_end; }
+            let try_1_end = scan_a_alt_1(tokens, start, follow);
+            if try_1_end > best { best = try_1_end; }
+            if best >= 0 { pos = best; return pos; }
         }
     }
-    return pos;
+    return -1;
 }
 
 fn _parse_r__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -1614,28 +1628,9 @@ fn _parse_a__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_a__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_X { return -1; }
-    pos += 1;
-    pos = scan_a(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_Y && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        pos += 1;
-    }
-    return pos;
-}
-
 fn _parse_a__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_X, &EMPTY_SYNC, true);
     return;
-}
-
-fn _parse_a__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_X { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -1653,8 +1648,8 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.pos -= 1;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_a__inner_scan_0(_sd_tokens, _sd_pos, follow);
-            let _sd_p_1 = _parse_a__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            let _sd_p_0 = scan_a_alt_0(_sd_tokens, _sd_pos, follow);
+            let _sd_p_1 = scan_a_alt_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, "a", 0, _sd_p_0);
             trace_scan_alt(p, "a", 1, _sd_p_1);
             let mut _sd_best_i: i32 = -1;

@@ -1561,34 +1561,30 @@ impl Parser {
 fn scan_declarator_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LIT_STAR {
-            pos = start + 1;
-            try_0: {
-                pos = scan_declarator(tokens, pos, 1);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_LIT_LPAREN {
-            pos = start + 1;
-            try_1: {
-                pos = scan_declarator(tokens, pos, 0);
-                if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_ID {
-            pos = start + 1;
-            break scan_alts;
-        } else {
-            return -1;
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if kind == TK_LIT_STAR {
+        pos = start + 1;
+        try_3: {
+            pos = scan_declarator(tokens, pos, 1);
+            if pos < 0 { break try_3; }
+            return pos;
         }
+        return -1;
+    } else if kind == TK_LIT_LPAREN {
+        pos = start + 1;
+        try_4: {
+            pos = scan_declarator(tokens, pos, 0);
+            if pos < 0 { break try_4; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_4; }
+            pos += 1;
+            return pos;
+        }
+        return -1;
+    } else if kind == TK_ID {
+        pos = start + 1;
+        return pos;
     }
-    return pos;
+    return -1;
 }
 
 fn scan_declarator_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -1688,15 +1684,13 @@ fn _parse_declarator__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
         p.site = 5;
         _parse_declarator(p, 1);
         return;
-    }
-    if kind == TK_LIT_LPAREN {
+    } else if kind == TK_LIT_LPAREN {
         p.take();
         p.site = 6;
         _parse_declarator(p);
         p.expect(TK_LIT_RPAREN, &SYNC_1, true);
         return;
-    }
-    if kind == TK_ID {
+    } else if kind == TK_ID {
         p.take();
         return;
     }

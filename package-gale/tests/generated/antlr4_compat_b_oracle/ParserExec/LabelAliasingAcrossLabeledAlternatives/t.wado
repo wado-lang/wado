@@ -1499,16 +1499,12 @@ struct AVals {
 fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if _kind_set_0(alt_kind) {
-            pos = start + 1;
-            break scan_alts;
-        } else {
-            return -1;
-        }
+    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    if _kind_set_0(kind) {
+        pos = start + 1;
+        return pos;
     }
-    return pos;
+    return -1;
 }
 
 fn _parse_start__inner(p: &mut Parser) -> () {
@@ -1573,8 +1569,7 @@ fn _parse_a__inner(p: &mut Parser) -> AVals {
             p.emit(`${p.text_between(vals._span_lo_label, vals._span_hi_label)}\n`);
         }
         return vals;
-    }
-    if kind == TK_LIT_y {
+    } else if kind == TK_LIT_y {
         p.b.set_alt(1);
         let label = p.take();
         if !p.speculating {

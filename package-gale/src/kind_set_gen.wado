@@ -39,6 +39,7 @@ pub fn expect_set_call(ctx: &mut GenContext, kinds: &List<String>) -> String {
 
 enum LookaheadAccess {
     Scan,
+    ScanKind,
     Parse,
     ParseKind,
 }
@@ -55,7 +56,8 @@ fn join_lookahead_condition(
             result.push_str(" && ");
         }
         let part = match access {
-            Scan => {
+            ScanKind && d == 0 => ctx.kind_check_str(&sig[d], "kind"),
+            Scan | ScanKind => {
                 let idx_expr = if d == 0 { `pos` } else { `pos + ${d}` };
                 let check = ctx.kind_check_str(&sig[d], `tokens[${idx_expr}]`);
                 `${idx_expr} < tokens.len() && ${check}`;
@@ -205,6 +207,11 @@ fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &List<String>) {
 
 pub fn build_lookahead_condition(ctx: &mut GenContext, pos_sets: &List<List<String>>, depth: i32) -> String {
     return join_lookahead_condition(ctx, pos_sets, depth, LookaheadAccess::ParseKind);
+}
+
+/// `build_lookahead_condition` inside a scan, which reads `kind` as the parse does.
+pub fn build_scan_lookahead_condition(ctx: &mut GenContext, pos_sets: &List<List<String>>, depth: i32) -> String {
+    return join_lookahead_condition(ctx, pos_sets, depth, LookaheadAccess::ScanKind);
 }
 
 pub fn find_needed_depth(all_position_sets: &List<List<List<String>>>) -> i32 {

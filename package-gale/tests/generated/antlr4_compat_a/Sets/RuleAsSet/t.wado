@@ -1471,15 +1471,7 @@ fn _parse_a__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { p.sync_alts(&SYNC_0, &EXPECTED_0); }
     alt_done: {
         let kind = p.peek_kind();
-        if kind == TK_LIT_a {
-            p.take();
-            break alt_done;
-        }
-        if kind == TK_LIT_b {
-            p.take();
-            break alt_done;
-        }
-        if kind == TK_LIT_c {
+        if _kind_set_0(kind) {
             p.take();
             break alt_done;
         }
@@ -1565,6 +1557,10 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
         return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
     return String::new();
+}
+
+fn _kind_set_0(k: i32) -> bool {
+    return k matches { TK_LIT_a | TK_LIT_b | TK_LIT_c };
 }
 
 global EMPTY_SYNC: List<i32> = [];

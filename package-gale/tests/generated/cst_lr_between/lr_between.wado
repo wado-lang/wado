@@ -2679,8 +2679,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     if kind == TK_ID {
         p.take();
         return;
-    }
-    if kind == TK_LIT_between {
+    } else if kind == TK_LIT_between {
         p.take();
         p.site = 5;
         p.atn_ret_pending = 20;
