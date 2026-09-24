@@ -8,7 +8,7 @@
 //! `container_sroa`'s whitelist and nested-`List<List<T>>` demotion. Its
 //! recursion guard reports `false` at any recursive call site.
 
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::rc::Rc;
 
 use crate::compiler_item::SeqField;
@@ -29,6 +29,7 @@ use crate::module_source::ModuleSource;
 use crate::name::shallow_copy_helper_name;
 use crate::nir::FuncId;
 use crate::optimize::dce::{DescriptorCache, callee_descriptor};
+use crate::optimize::heap_effect::{HeapEffects, HeapFrame};
 use cranelift_entity::EntityRef;
 
 /// A function's canonical [`FuncId`]: the wrapper / demoted / shallow sets key
@@ -94,6 +95,8 @@ pub fn demote_value_copies(
     }
 
     let type_table = project.type_table.clone();
+    let heap_types = type_table.borrow();
+    let effects = HeapEffects::new(project, &heap_types);
     let mut analyzer = Analyzer {
         funcs: &project.functions,
         descriptors,
@@ -124,6 +127,7 @@ pub fn demote_value_copies(
             &f.params,
             fi,
             &mut analyzer,
+            &effects,
             &mut site_elig,
             &mut site_key,
         );
@@ -386,16 +390,22 @@ fn collect_sites(
     params: &[NirParam],
     fi: usize,
     an: &mut Analyzer,
+    effects: &HeapEffects,
     site_elig: &mut IndexMap<(usize, u32), bool>,
     site_key: &mut IndexMap<(usize, u32), FuncKey>,
 ) {
+    let heap = SharedElements {
+        effects,
+        params: params.iter().map(|p| p.local_index).collect(),
+        frame: OnceCell::new(),
+    };
     for block in reachable_blocks(body) {
         let stmts = body.blocks[block].stmts.clone();
         for s in stmts {
             if let Some((value, target)) = stmt_binding(body, s)
                 && let Some(key) = wrapper_call_key(body, value, wrappers)
             {
-                let elig = demote_candidate(body, value, target, params, an);
+                let elig = demote_candidate(body, value, target, params, an, &heap);
                 let loc = (fi, target);
                 site_elig
                     .entry(loc)
@@ -442,6 +452,7 @@ fn demote_candidate(
     target_idx: u32,
     params: &[NirParam],
     an: &mut Analyzer,
+    heap: &SharedElements,
 ) -> bool {
     let arg0 = match &body.exprs[value].kind {
         ExprKind::Call { args, .. } => args[0].expr,
@@ -474,9 +485,42 @@ fn demote_candidate(
                 || an.arg_local_is_element_clean(body, root);
             if !clean {
                 compiler_trace!("demote", "arg root local {} not element-clean — skip", root);
+                return false;
             }
-            clean
+            let exposed = heap.exposed(body, value, target_idx, root);
+            if exposed {
+                compiler_trace!("demote", "elements of local {} exposed — skip", root);
+            }
+            !exposed
         }
+    }
+}
+
+/// The heap view of one body that decides whether a spine copy may share its
+/// elements with the list it copies. The frame is built on first use.
+struct SharedElements<'e, 't> {
+    effects: &'e HeapEffects<'t>,
+    params: Vec<u32>,
+    frame: OnceCell<HeapFrame>,
+}
+
+impl SharedElements<'_, '_> {
+    /// Whether a spine copy of the list `value` builds from `root`, bound to
+    /// `target`, may see an element written: through a handle other than the
+    /// two, or by the caller once the copy's contents escape.
+    fn exposed(&self, body: &Body, value: ExprId, target: u32, root: u32) -> bool {
+        let Some(keys) = self.effects.element_reach(body.exprs[value].type_id) else {
+            return true;
+        };
+        let frame = self
+            .frame
+            .get_or_init(|| HeapFrame::new(self.effects, body, &self.params));
+        let own = |op: Operand| {
+            op.as_expr()
+                .and_then(|e| storage_root(body, e))
+                .is_some_and(|l| l == target || l == root)
+        };
+        frame.written(self.effects, body, &keys, root, own) || frame.outlives(target)
     }
 }
 

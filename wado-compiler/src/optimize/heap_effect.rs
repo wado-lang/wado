@@ -65,6 +65,16 @@ impl TypeSet {
         changed
     }
 
+    /// Whether `self ∩ other` is non-empty.
+    fn meets(&self, other: &TypeSet) -> bool {
+        match (self.any, other.any) {
+            (true, true) => true,
+            (true, false) => !other.keys.is_empty(),
+            (false, true) => !self.keys.is_empty(),
+            (false, false) => self.keys.iter().any(|k| other.keys.contains(k)),
+        }
+    }
+
     /// `self ∪= a ∩ b`.
     fn union_meet(&mut self, a: &TypeSet, b: &TypeSet) {
         match (a.any, b.any) {
@@ -366,6 +376,20 @@ impl<'t> HeapEffects<'t> {
         holds_reference(tt, *element)
     }
 
+    /// Every object type an element of the list `ty` may reach, or `None` where
+    /// `ty` is no list.
+    pub(super) fn element_reach(&self, ty: TypeId) -> Option<Rc<TypeSet>> {
+        let tt = self.type_table;
+        let ty = strip_handles(ty, tt);
+        let ResolvedType::GenericInstance { type_args, .. } = tt.get(ty) else {
+            return None;
+        };
+        let [element] = type_args.as_slice() else {
+            return None;
+        };
+        tt.is_list(ty).then(|| self.reach(*element))
+    }
+
     /// Every object type a value of `ty` may reach, itself included.
     pub(super) fn reach(&self, ty: TypeId) -> Rc<TypeSet> {
         let key = self.type_table.type_key(ty);
@@ -609,7 +633,27 @@ impl Keys {
             Keys::Set(set) => set.contains(key),
         }
     }
+
+    fn meets(&self, set: &TypeSet) -> bool {
+        match self {
+            Keys::One(k) => set.contains(*k),
+            Keys::Set(mine) => mine.meets(set),
+        }
+    }
+
+    /// Whether some key is in `self`, `a` and `b` alike.
+    fn meets_both(&self, a: &TypeSet, b: &TypeSet) -> bool {
+        match self {
+            Keys::One(k) => a.contains(*k) && b.contains(*k),
+            Keys::Set(mine) => {
+                let mut both = TypeSet::default();
+                both.union_meet(a, b);
+                mine.meets(&both)
+            }
+        }
+    }
 }
+
 
 /// One read or write of an object: where it happens, through which operand,
 /// and which field, where it names one.
@@ -1452,12 +1496,34 @@ impl HeapFrame {
         local: u32,
         answered: impl Fn(Operand) -> bool,
     ) -> bool {
+        self.call_may_keys(
+            effects,
+            body,
+            call,
+            effect,
+            &Keys::One(key),
+            local,
+            &answered,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn call_may_keys(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        call: ExprId,
+        effect: Effect,
+        keys: &Keys,
+        local: u32,
+        answered: &impl Fn(Operand) -> bool,
+    ) -> bool {
         let h = self.local_root(local);
         let h_escapes = h.is_none_or(|r| !self.prov[r as usize].is_fresh());
         let (target, args) = call_parts(effects, body, call);
         if let Target::Summary(t) = target
             && h_escapes
-            && t.access(effect).elsewhere.contains(key)
+            && keys.meets(&t.access(effect).elsewhere)
         {
             return true;
         }
@@ -1468,15 +1534,59 @@ impl HeapFrame {
             let ty = body.operand_type(a);
             match target {
                 Target::Summary(t) => {
-                    t.access(effect).through_args.contains(key) && effects.reach(ty).contains(key)
+                    keys.meets_both(&t.access(effect).through_args, &effects.reach(ty))
                 }
                 Target::Builtin { declaration, array } => {
                     (effect == Effect::Read || declaration.mut_params.contains(&j))
-                        && builtin_touches(effects, ty, array).contains(key)
+                        && keys.meets(&builtin_touches(effects, ty, array))
                 }
-                Target::Opaque => effects.reach(ty).contains(key),
+                Target::Opaque => keys.meets(&effects.reach(ty)),
             }
         })
+    }
+
+    /// Whether a store, or a call other than through the arguments `answered`
+    /// accepts, may write an object of a type in `keys` that `local` holds or
+    /// reaches.
+    pub(super) fn written(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        keys: &Rc<TypeSet>,
+        local: u32,
+        answered: impl Fn(Operand) -> bool,
+    ) -> bool {
+        let h = self.local_root(local);
+        let wanted = Keys::Set(Rc::clone(keys));
+        self.accesses.iter().any(|a| {
+            a.effect == Effect::Write
+                && a.keys.meets(keys)
+                && self.shares(h, OperandNode::Node(self.parent[a.node as usize]))
+        }) || self.calls.iter().any(|&call| {
+            self.call_may_keys(
+                effects,
+                body,
+                call,
+                Effect::Write,
+                &wanted,
+                local,
+                &answered,
+            )
+        })
+    }
+
+    /// Whether objects `local` holds may still be reached from outside the
+    /// body once it returns: through its result, a global, or a parameter
+    /// other than the one they came from.
+    pub(super) fn outlives(&self, local: u32) -> bool {
+        let Some(h) = self.local_root(local) else {
+            return true;
+        };
+        let prov = self.prov[h as usize];
+        !prov.is_fresh()
+            && (h == self.parent[RET as usize]
+                || h == self.parent[ELSEWHERE as usize]
+                || prov.params.count_ones() > 1)
     }
 
     /// Whether an access at a site `at` accepts may reach field `field` of the

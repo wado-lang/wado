@@ -1,0 +1,87 @@
+// A value copy of `*y` demoted to a spine copy shares `y`'s elements, so it
+// stays deep while another handle may write one of them: an aliasing
+// parameter, a global, a closure, a callee, or the caller once the copy
+// escapes.
+
+use { println, Stdout } from "core:cli";
+
+struct S {
+    v: i32,
+}
+
+global mut G: List<S> = [];
+
+#[inline(never)]
+fn through_param(y: &List<S>, m: &mut List<S>) -> i32 {
+    let mut x = *y;
+    x.truncate(1);
+    m[0].v = 99;
+    return x[0].v;
+}
+
+#[inline(never)]
+fn through_global(y: &List<S>) -> i32 {
+    let mut x = *y;
+    x.truncate(1);
+    G[0].v = 99;
+    return x[0].v;
+}
+
+#[inline(never)]
+fn through_closure(y: &List<S>, mut f: fn mut()) -> i32 {
+    let mut x = *y;
+    x.truncate(1);
+    f();
+    return x[0].v;
+}
+
+#[inline(never)]
+fn poke(m: &mut List<S>) {
+    m[0].v = 99;
+}
+
+#[inline(never)]
+fn through_call(y: &List<S>, m: &mut List<S>) -> i32 {
+    let mut x = *y;
+    x.truncate(1);
+    poke(m);
+    return x[0].v;
+}
+
+#[inline(never)]
+fn escape(y: &List<S>) -> Slice<S> {
+    let mut x = *y;
+    x.truncate(1);
+    return x[0..<1];
+}
+
+#[inline(never)]
+fn fresh() -> List<S> {
+    let lit: List<S> = [S { v: builtin::black_box(1) }, S { v: 2 }];
+    return lit;
+}
+
+export fn run() with Stdout {
+    let mut a = fresh();
+    println(`${through_param(&a, &mut a)}`);
+
+    G = fresh();
+    println(`${through_global(&G)}`);
+
+    let mut c = fresh();
+    let k = through_closure(&c, || { c[0].v = 99; });
+    println(`${k}`);
+
+    let mut d = fresh();
+    println(`${through_call(&d, &mut d)}`);
+
+    let mut e = fresh();
+    let view = escape(&e);
+    e[0].v = 99;
+    println(`${view[0].v}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n1\n1\n1\n1\n"
+}
