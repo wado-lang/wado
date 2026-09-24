@@ -50,7 +50,7 @@ use task_return::{expand_task_returns_in_func, reduce_task_returns_in_func, spli
 use type_fixup::{
     collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
 };
-use types::{Boundary, flat_types_from_ast_type, flat_types_from_type_id};
+use types::{Boundary, Slot, flat_types_from_ast_type, flat_types_from_type_id};
 pub use types::{
     LiftContext, cm_discriminant_byte_size, cm_flags_byte_size, cm_type_to_type_id,
     flatten_param_type,
@@ -1051,7 +1051,7 @@ fn validate_boundary_representable(
 }
 
 /// Reject a param or return type with no Component Model value representation
-/// in any world: an empty record, or a 128-bit, `v128` or half scalar.
+/// in any world: an empty record, a `()` param, or a 128-bit, `v128` or half scalar.
 fn signature_representable(
     params: impl Iterator<Item = TypeId>,
     result: TypeId,
@@ -1059,9 +1059,19 @@ fn signature_representable(
     tt: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
 ) -> Result<(), String> {
-    params.chain(std::iter::once(result)).try_for_each(|tid| {
-        types::check_cm_boundary_representable(tid, boundary, tt, tir_modules, &mut Vec::new())
-    })
+    params
+        .map(|tid| (tid, Slot::Value))
+        .chain(std::iter::once((result, Slot::Optional)))
+        .try_for_each(|(tid, slot)| {
+            types::check_cm_boundary_representable(
+                tid,
+                slot,
+                boundary,
+                tt,
+                tir_modules,
+                &mut Vec::new(),
+            )
+        })
 }
 
 /// The boundary carries what the world declares, so the export's signature has

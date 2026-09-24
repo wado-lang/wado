@@ -560,6 +560,7 @@ pub(super) fn is_wasm_flat_type(type_id: TypeId) -> bool {
 /// itself: WIT has no recursive types, and synthesis would inline one forever.
 pub(super) fn check_cm_boundary_representable(
     type_id: TypeId,
+    slot: Slot,
     boundary: Boundary,
     type_table: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
@@ -568,12 +569,21 @@ pub(super) fn check_cm_boundary_representable(
     let names = CmStdlibNames::from_type_table(type_table);
     check_cm_boundary_representable_inner(
         type_id,
+        slot,
         boundary,
         type_table,
         tir_modules,
         &names,
         visited,
     )
+}
+
+/// Where a type sits: `()` fills only a slot the Component Model lets stay empty,
+/// a function result, a `result` arm or a case payload.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Slot {
+    Value,
+    Optional,
 }
 
 /// Which way a signature crosses: an import also carries a borrowed resource
@@ -586,6 +596,7 @@ pub(super) enum Boundary {
 
 fn check_cm_boundary_representable_inner(
     type_id: TypeId,
+    slot: Slot,
     boundary: Boundary,
     type_table: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
@@ -609,9 +620,10 @@ fn check_cm_boundary_representable_inner(
 
     // Container shapes resolve through the type-table accessors regardless of
     // their declaring module, keeping this free of source-prefix branching.
-    let recurse = |tid, visited: &mut Vec<TypeId>| {
+    let recurse = |tid, slot, visited: &mut Vec<TypeId>| {
         check_cm_boundary_representable_inner(
             tid,
+            slot,
             boundary,
             type_table,
             tir_modules,
@@ -621,10 +633,10 @@ fn check_cm_boundary_representable_inner(
     };
     let result = (|visited: &mut Vec<TypeId>| {
         if let Some(inner) = type_table.as_option(type_id) {
-            return recurse(inner, visited);
+            return recurse(inner, Slot::Value, visited);
         }
         if let Some(elem) = type_table.as_list(type_id) {
-            return recurse(elem, visited);
+            return recurse(elem, Slot::Value, visited);
         }
         if let Some(elems) = type_table.as_tuple(type_id) {
             if elems.is_empty() {
@@ -635,7 +647,7 @@ fn check_cm_boundary_representable_inner(
                 );
             }
             for e in elems {
-                recurse(e, visited)?;
+                recurse(e, Slot::Value, visited)?;
             }
             return Ok(());
         }
@@ -655,6 +667,11 @@ fn check_cm_boundary_representable_inner(
             }
             // Scalars, plain discriminants, bitflags, and plain resource
             // handles lower to an i32 handle identically in every world.
+            R::Unit if slot == Slot::Value => Err(
+                "`()` has no Component Model representation here — it stands only where a \
+                 type may be absent: a function result, a `Result` arm or a case payload"
+                    .to_string(),
+            ),
             R::Primitive(_) | R::Unit | R::Enum { .. } | R::Flags { .. } | R::Resource { .. } => {
                 Ok(())
             }
@@ -665,7 +682,7 @@ fn check_cm_boundary_representable_inner(
                 let item = type_table.compiler_type_item(*def);
                 let args = type_args.clone();
                 for &a in &args {
-                    recurse(a, visited)?;
+                    recurse(a, Slot::Optional, visited)?;
                 }
                 if let Some(&payload) = args.first()
                     && let Some(reason) = match item {
@@ -696,7 +713,7 @@ fn check_cm_boundary_representable_inner(
                         let field_tys: Vec<TypeId> =
                             decl.fields.iter().map(|f| f.type_id).collect();
                         for ft in field_tys {
-                            recurse(ft, visited)?;
+                            recurse(ft, Slot::Value, visited)?;
                         }
                         Ok(())
                     }
@@ -711,7 +728,7 @@ fn check_cm_boundary_representable_inner(
                 Some(decl) => {
                     let payloads: Vec<TypeId> = decl.cases.iter().map(|c| c.payload).collect();
                     for p in payloads {
-                        recurse(p, visited)?;
+                        recurse(p, Slot::Optional, visited)?;
                     }
                     Ok(())
                 }
@@ -727,7 +744,7 @@ fn check_cm_boundary_representable_inner(
                 if item == Some(CompilerItem::Result) {
                     let args = type_args.clone();
                     for a in args {
-                        recurse(a, visited)?;
+                        recurse(a, Slot::Optional, visited)?;
                     }
                     Ok(())
                 } else if item == Some(CompilerItem::TreeMap) {
@@ -740,7 +757,7 @@ fn check_cm_boundary_representable_inner(
                     if let Some(reason) = map_key_rejection(type_table, key) {
                         return Err(reason);
                     }
-                    recurse(value, visited)
+                    recurse(value, Slot::Value, visited)
                 } else {
                     Err(format!(
                         "generic type `{}` has no Component Model value representation",
@@ -750,12 +767,14 @@ fn check_cm_boundary_representable_inner(
             }
             R::Newtype { base_type, .. } => {
                 let base = *base_type;
-                recurse(base, visited)
+                recurse(base, slot, visited)
             }
             R::Ref(inner) | R::MutRef(inner) if boundary == Boundary::Import => {
                 let inner = *inner;
                 match type_table.get(type_table.representation_head(inner)) {
-                    R::Resource { .. } | R::GenericResource { .. } => recurse(inner, visited),
+                    R::Resource { .. } | R::GenericResource { .. } => {
+                        recurse(inner, Slot::Value, visited)
+                    }
                     _ => Err(format!(
                         "a reference crosses a Component Model import only as a borrowed \
                          resource handle, and `{}` borrows no resource",
