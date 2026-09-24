@@ -2966,7 +2966,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report a type-pattern arm an earlier guardless one always takes first:
-    /// every value of its type is already a value of the earlier arm's.
+    /// one taking every value, or every value of the later arm's type.
     fn check_shadowed_narrowings(&self, arms: &[MatchArm], classified: &[(bool, Pat)]) {
         let mut shadowed = Vec::new();
         {
@@ -2975,35 +2975,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Pat::Narrow(target) = pattern else {
                     continue;
                 };
-                let earlier =
+                let taken_by = |earlier: TypeId| {
+                    format!(
+                        "unreachable arm: every `{}` is `{}`, which an earlier arm already takes",
+                        tt.type_name(*target),
+                        tt.type_name(earlier)
+                    )
+                };
+                let message =
                     classified[..later]
                         .iter()
                         .zip(arms)
                         .find_map(|((guardless, earlier), arm)| match earlier {
-                            Pat::Narrow(earlier) if *guardless => {
-                                let takes = tt.type_key(*earlier) == tt.type_key(*target)
-                                    || tt.is_resource_narrowing(*earlier, *target);
-                                takes.then_some(Some(*earlier))
-                            }
-                            Pat::Wild if *guardless => Some(match &arm.pattern {
+                            _ if !*guardless => None,
+                            Pat::Narrow(earlier) => (tt.type_key(*earlier) == tt.type_key(*target)
+                                || tt.is_resource_narrowing(*earlier, *target))
+                            .then(|| taken_by(*earlier)),
+                            Pat::Wild => Some(match &arm.pattern {
                                 ast::Pattern::Typed { id, .. } => {
-                                    self.sem.types.pattern_ascriptions.get(id).copied()
+                                    taken_by(self.sem.types.pattern_ascriptions[id])
                                 }
-                                _ => None,
+                                _ => {
+                                    "unreachable arm: an earlier arm takes every value".to_string()
+                                }
                             }),
                             _ => None,
                         });
-                let message = match earlier {
-                    Some(Some(earlier)) => format!(
-                        "unreachable arm: every `{}` is `{}`, which an earlier arm \
-                         already takes",
-                        tt.type_name(*target),
-                        tt.type_name(earlier)
-                    ),
-                    Some(None) => "unreachable arm: an earlier arm takes every value".to_string(),
-                    None => continue,
-                };
-                shadowed.push((arms[later].span, message));
+                if let Some(message) = message {
+                    shadowed.push((arms[later].span, message));
+                }
             }
         }
         for (span, message) in shadowed {
@@ -3610,7 +3610,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The struct declaration an unnamed literal's target names, or `None`
-    /// where it declares none and the literal interns by its fields.
+    /// where it declares none and the literal interns by its fields. A generic
+    /// struct built from `From<Array<…>>` reads the literal as key-value pairs.
     pub(super) fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<DefId> {
         match *self.tysys.type_table.borrow().get(expected_type?) {
             ResolvedType::Struct {
@@ -3618,7 +3619,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ..
             } => Some(def),
             ResolvedType::GenericInstance { def, .. } => {
-                self.lookup_struct_fields_of_decl(def).map(|_| def)
+                let converts = self
+                    .tysys
+                    .compiler_trait_def(CompilerItem::From)
+                    .is_some_and(|from| self.tysys.trait_env.converts_from_array(def, from));
+                (!converts && self.lookup_struct_fields_of_decl(def).is_some()).then_some(def)
             }
             _ => None,
         }

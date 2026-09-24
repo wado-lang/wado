@@ -1,0 +1,16 @@
+// An item or an import spelled `resume` is refused like a binding: nothing
+// could name it afterwards, since `resume` there begins `resume value`.
+use { println as resume } from "core:cli";
+
+struct resume { a: i32 }
+
+fn resume() {}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "`resume` cannot be a name: it is the keyword that begins `resume value`",
+  "compile_error_count": 3,
+  "compile_error_codes": ["INVALID_SYNTAX"]
+}

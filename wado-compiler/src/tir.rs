@@ -6773,6 +6773,12 @@ impl TirFunction {
         self.method_info.is_some()
     }
 
+    /// Whether the first parameter is the `self` receiver.
+    #[inline]
+    pub fn takes_self(&self) -> bool {
+        self.params.first().is_some_and(|p| p.name == "self")
+    }
+
     /// Returns true if this is a trait method (implements a trait)
     #[inline]
     pub fn is_trait_method(&self) -> bool {

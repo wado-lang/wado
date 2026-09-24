@@ -5,8 +5,6 @@ struct Holder { resume: i32 }
 
 fn take(resume: i32) -> i32 { return 0; }
 
-struct resume { a: i32 }
-
 export fn run() {
     let resume = 42;
     let h = Holder { resume: 1 };
@@ -14,4 +12,8 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error_codes": ["INVALID_SYNTAX"]}
+{
+  "compile_error": "`resume` cannot be a name: it is the keyword that begins `resume value`",
+  "compile_error_count": 2,
+  "compile_error_codes": ["INVALID_SYNTAX"]
+}

@@ -162,12 +162,7 @@ fn carries_resource_rec(
 /// if `func` is not an instance method.
 fn instance_method_key(func: &TirFunction) -> Option<String> {
     let info = func.method_info.as_ref()?;
-    let first = func.params.first()?;
-    if first.name == "self" {
-        Some(info.base_dispatch_key())
-    } else {
-        None
-    }
+    func.takes_self().then(|| info.base_dispatch_key())
 }
 
 /// Record `func` if it is an instance method whose `self` is taken by value

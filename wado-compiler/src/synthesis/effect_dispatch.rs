@@ -3238,7 +3238,7 @@ fn build_handler_impl_index(
                 HandlerMethodTarget {
                     mangled_name: func.name.clone(),
                     method_info: method_info.clone(),
-                    takes_self: func.params.first().is_some_and(|p| p.name == "self"),
+                    takes_self: func.takes_self(),
                 },
             );
         }

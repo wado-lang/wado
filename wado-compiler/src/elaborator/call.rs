@@ -1006,904 +1006,885 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // dispatches on `effective_name` (after any `Self::` / `T::`
         // prefix rewriting) while `ident` is kept around for LSP
         // segment-edge recording and other AST-id needs.
-        let (callee_opt, display_name): (Option<CalleeRef>, String) =
-            if let CalleeIdentKind::Operation {
+        let imported_operation = match &callee_kind {
+            CalleeIdentKind::Operation {
                 interface,
                 operation,
                 ..
-            } = &callee_kind
-            {
+            } => {
                 if let Some(member) = self.tysys.resolutions.declared_if_walked(ident.id)
                     && self.record_reference_to_decl(ident.id, member, ident.span)
                 {
                     return TypeTable::ERROR;
                 }
+                Some(self.effect_operation_callee(*interface, operation))
+            }
+            _ => None,
+        };
+        let (callee_opt, display_name): (Option<CalleeRef>, String) = if let Some(callee) =
+            imported_operation
+        {
+            (Some(callee), effective_name.to_string())
+        } else if let Some(pos) = effective_name.find("::") {
+            let prefix = &effective_name[..pos];
+            let suffix = &effective_name[pos + 2..];
+
+            // Builtin functions: resolve through core:builtin module. The
+            // prefix names the module directly rather than an import, but it
+            // buys no extra reach — a declaration there is visible exactly as
+            // any other module's is.
+            if prefix == "builtin" {
+                let builtin_source = ModuleSource::builtin();
+                self.check_namespaced_visibility(&builtin_source, suffix, ident.span);
+                self.check_simd_lane_immediates(suffix, &call.args);
                 (
-                    Some(self.effect_operation_callee(*interface, operation)),
+                    self.callee_in_module(&builtin_source, suffix),
                     effective_name.to_string(),
                 )
-            } else if let Some(pos) = effective_name.find("::") {
-                let prefix = &effective_name[..pos];
-                let suffix = &effective_name[pos + 2..];
-
-                // Builtin functions: resolve through core:builtin module. The
-                // prefix names the module directly rather than an import, but it
-                // buys no extra reach — a declaration there is visible exactly as
-                // any other module's is.
-                if prefix == "builtin" {
-                    let builtin_source = ModuleSource::builtin();
-                    self.check_namespaced_visibility(&builtin_source, suffix, ident.span);
-                    self.check_simd_lane_immediates(suffix, &call.args);
-                    (
-                        self.callee_in_module(&builtin_source, suffix),
-                        effective_name.to_string(),
-                    )
+            }
+            // Static method call (Type::method). Static methods are
+            // registered with mangled names "Type::method".
+            else if self.is_static_method_at(receiver_site, prefix, suffix) {
+                // Record the receiver-type segment (prefix) as a reference to
+                // the type's decl. After `Self::` / `T::` rewriting, `prefix`
+                // is the concrete type name and the segment's AstId is the
+                // `Self` / `T` token — the edge correctly resolves clicks on
+                // `Self` to the concrete type's decl.
+                if let Some(prefix_seg) = ident.segments.first() {
+                    self.record_item_reference_by_name(prefix_seg.id, prefix);
                 }
-                // Static method call (Type::method). Static methods are
-                // registered with mangled names "Type::method".
-                else if self.is_static_method_at(receiver_site, prefix, suffix) {
-                    // Record the receiver-type segment (prefix) as a reference to
-                    // the type's decl. After `Self::` / `T::` rewriting, `prefix`
-                    // is the concrete type name and the segment's AstId is the
-                    // `Self` / `T` token — the edge correctly resolves clicks on
-                    // `Self` to the concrete type's decl.
-                    if let Some(prefix_seg) = ident.segments.first() {
-                        self.record_item_reference_by_name(prefix_seg.id, prefix);
-                    }
-                    // Record the method segment (suffix) as a reference to the
-                    // declaration this call resolves to. The impl selection knows
-                    // which one answered — two conversion impls on a type declare
-                    // the same `from`, and only the argument's type separates
-                    // them. It covers trait impls only; an inherent static has no
-                    // selection and reaches the index instead.
-                    if let Some(suffix_seg) = ident.segments.get(1) {
-                        // The same resolution the call itself uses, not a second
-                        // one: two resolutions of one call disagree, which is what
-                        // the edge then records.
-                        let selected = self
-                            .resolve_static_callee(StaticQuery {
-                                site: receiver_site,
-                                arg_types: &args,
-                                ..StaticQuery::of(prefix, suffix)
-                            })
-                            .found()
-                            .and_then(|callee| callee.method_ref.method_id);
-                        let method_def = selected.or_else(|| {
-                            self.qualified_method_decl_at(receiver_site, prefix, suffix)
-                        });
-                        if let Some(method_def) = method_def
-                            && self.record_reference_to_decl(
-                                suffix_seg.id,
-                                method_def,
-                                suffix_seg.span,
-                            )
-                        {
-                            return TypeTable::ERROR;
-                        }
-                    }
-                    // The method's own parameters, in the dense space its type
-                    // arguments are indexed by — an effect or `fn`-bound parameter
-                    // holds no slot in one.
-                    let mtype_params: Vec<ast::GenericParam> = self
-                        .lookup_static_method_type_params(prefix, suffix)
-                        .into_iter()
-                        .filter(ast::GenericParam::is_real_type_param)
-                        .collect();
-                    // Before anything counts slots, since a pack's arguments are
-                    // one per element until they are grouped.
-                    let mut written = type_args.clone();
-                    if self.group_variadic_type_args_of(
-                        suffix,
-                        &mtype_params,
-                        &mut written,
-                        call.span,
-                    ) {
-                        return TypeTable::ERROR;
-                    }
-                    // An omitted turbofish infers both levels; a partial one keeps
-                    // what it named and infers only its `_` slots. The call's own
-                    // `type_args` stay as written.
-                    let (impl_type_args_inferred, mut method_type_args) = self
-                        .static_call_type_args(
-                            StaticCallee {
-                                type_name: prefix,
-                                method_name: suffix,
-                                receiver_key: None,
-                            },
-                            &call.args,
-                            &args,
-                            expected_type,
-                            call.span,
-                            written,
-                        );
-                    // A method-level parameter bound only through another's
-                    // associated type (`..V` off `Holes`) is projected once the
-                    // owner is inferred, as the free-function path does; the
-                    // bound check below then sees it concrete.
-                    if !method_type_args.is_empty() {
-                        self.project_assoc_bound_args(&mtype_params, &mut method_type_args);
-                    }
-                    // Record `[impl_args, method_args]` — the same order
-                    // `lookup_static_method_param_types` substitutes in — since reify
-                    // needs both halves to rebuild the mangled `__<Type>__<method>`.
-                    // The instance type is UNKNOWN: a static call anchors no
-                    // `GenericInstance`, so reify reads `expression_types` instead.
-                    {
-                        let mut combined = impl_type_args_inferred.clone();
-                        combined.extend_from_slice(&method_type_args);
-                        self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
-                    }
-                    self.report_uninferred_static_method_type_args(
-                        prefix,
-                        suffix,
-                        &impl_type_args_inferred,
-                        &method_type_args,
-                        call.span,
-                        None,
-                    );
-                    // The type prefix is what `Self` means here, so a bound written
-                    // `Assoc = Self::Item` projects off it as it does on a method call.
-                    let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
-                    // Enforce the static method's type-arg bounds (shared rule).
-                    if !method_type_args.is_empty() {
-                        let self_binding = SelfBinding {
-                            type_id: self.tysys.get_base_type(receiver_type),
-                            declaring_trait: None,
-                        };
-                        self.enforce_type_arg_bounds(
-                            &mtype_params,
-                            &method_type_args,
-                            Some(self_binding),
-                            call.span,
-                        );
-                    }
-                    // Handle From conversions with no explicit impl: reflexive and newtype.
-                    if suffix == "from" && args.len() == 1 {
-                        let arg_type = args[0];
-                        let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
-
-                        // Reflexive `T::from(T_val)`: the outer Call evaporates, so
-                        // tag it `NewtypeFromCollapse` or reify emits a `Call` the
-                        // elaborator never built. Matched by canonical decl identity,
-                        // since two modules' `Instant` share a bare name. Generic
-                        // instances compare by name: a decl key drops type args.
-                        let arg_is_generic = {
-                            let tt = self.tysys.type_table.borrow();
-                            matches!(
-                                tt.get(tt.peel_refs(arg_type)),
-                                ResolvedType::GenericInstance { .. }
-                                    | ResolvedType::GenericResource { .. }
-                            )
-                        };
-                        let is_reflexive = if arg_is_generic {
-                            arg_type_name == prefix
-                        } else if let Some(arg_key) = self.type_decl_key(arg_type) {
-                            Some(arg_key) == self.decl_key_or_local(prefix)
-                        } else {
-                            arg_type_name == prefix
-                        };
-                        if is_reflexive {
-                            self.record_desugar(call.id, DesugarKind::NewtypeFromCollapse);
-                            return args[0];
-                        }
-
-                        // Newtype→Base: u64::from(UserId_val) where type UserId = u64
-                        let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
-                        if let Some(base_id) = base_of_arg
-                            && self.tysys.type_table.borrow().type_name(base_id) == prefix
-                        {
-                            self.record_desugar(call.id, DesugarKind::NewtypeFromUnwrap);
-                            // Reify rebuilds the newtype `Cast` from the
-                            // recorded `DesugarKind`; project only the result type.
-                            return base_id;
-                        }
-
-                        // Base→Newtype: UserId::from(u64_val) where type UserId = u64
-                        if let Some(newtype_type_id) = self.lookup_newtype(prefix) {
-                            let base_opt = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .get_newtype_base(newtype_type_id);
-                            if let Some(base_id) = base_opt
-                                && self.tysys.type_table.borrow().type_name(base_id)
-                                    == arg_type_name
-                            {
-                                self.record_desugar(call.id, DesugarKind::NewtypeFromWrap);
-                                // Reify rebuilds the newtype `Cast` from
-                                // the recorded `DesugarKind`; project only the type.
-                                return newtype_type_id;
-                            }
-                        }
-                    }
-
-                    // Literal args resolved against `TypeParam`/`Unknown` fell back to
-                    // i32/f64, so re-coerce once the substitution is known. A
-                    // non-generic call is checked too, or a mismatch only shows at
-                    // codegen, as an invalid module rather than at its own span.
-                    // Keyed at the receiver's own segment, as the resolution that
-                    // recorded the use→def edge above is: a key derived from the
-                    // bare name asks the caller's frame, which an alias leaves
-                    // without that name at all.
-                    let receiver_key = self.impl_target_at(receiver_site, prefix);
-                    // The same argument the selection above read: without it this
-                    // re-check resolves a different declaration than the call was
-                    // mangled to.
-                    let resolved = self.static_callee_params(
-                        &receiver_key,
-                        receiver_type,
-                        suffix,
-                        prefix,
-                        &args,
-                        None,
-                    );
-                    if self.report_ambiguous_static(&resolved, suffix, call.span) {
-                        return TypeTable::ERROR;
-                    }
-                    // No candidate the arguments admitted — the same report the
-                    // static-call spelling makes. Unreported, the call is mangled
-                    // anyway and reaches WIR build unresolved.
-                    if resolved.found().is_none()
-                        && !args.is_empty()
-                        && !self.has_inherent_static_method(prefix, suffix, Some(&receiver_key))
-                        && self.report_unmatched_static_arg(
-                            StaticReceiver {
-                                key: Some(&receiver_key),
-                                ty: Some(receiver_type),
-                                ..StaticReceiver::of(prefix)
-                            },
-                            suffix,
-                            &args,
-                            call.span,
-                        )
+                // Record the method segment (suffix) as a reference to the
+                // declaration this call resolves to. The impl selection knows
+                // which one answered — two conversion impls on a type declare
+                // the same `from`, and only the argument's type separates
+                // them. It covers trait impls only; an inherent static has no
+                // selection and reaches the index instead.
+                if let Some(suffix_seg) = ident.segments.get(1) {
+                    // The same resolution the call itself uses, not a second
+                    // one: two resolutions of one call disagree, which is what
+                    // the edge then records.
+                    let selected = self
+                        .resolve_static_callee(StaticQuery {
+                            site: receiver_site,
+                            arg_types: &args,
+                            ..StaticQuery::of(prefix, suffix)
+                        })
+                        .found()
+                        .and_then(|callee| callee.method_ref.method_id);
+                    let method_def = selected
+                        .or_else(|| self.qualified_method_decl_at(receiver_site, prefix, suffix));
+                    if let Some(method_def) = method_def
+                        && self.record_reference_to_decl(suffix_seg.id, method_def, suffix_seg.span)
                     {
                         return TypeTable::ERROR;
                     }
-                    // The count and the defaults come from the declaration, so the
-                    // arity is enforced whether or not the receiver filled the
-                    // types. The types are checked per parameter below, where a
-                    // slot this call could not fill is skipped rather than the
-                    // whole list dropped.
-                    let (raw_param_types, optional) = match resolved.found() {
-                        Some(callee) => (
-                            callee.params.param_types.clone(),
-                            Some(
-                                callee
-                                    .params
-                                    .param_defaults
-                                    .iter()
-                                    .filter(|(_, default)| default.is_some())
-                                    .count(),
-                            ),
-                        ),
-                        None => (Vec::new(), None),
+                }
+                // The method's own parameters, in the dense space its type
+                // arguments are indexed by — an effect or `fn`-bound parameter
+                // holds no slot in one.
+                let mtype_params: Vec<ast::GenericParam> = self
+                    .lookup_static_method_type_params(prefix, suffix)
+                    .into_iter()
+                    .filter(ast::GenericParam::is_real_type_param)
+                    .collect();
+                // Before anything counts slots, since a pack's arguments are
+                // one per element until they are grouped.
+                let mut written = type_args.clone();
+                if self.group_variadic_type_args_of(suffix, &mtype_params, &mut written, call.span)
+                {
+                    return TypeTable::ERROR;
+                }
+                // An omitted turbofish infers both levels; a partial one keeps
+                // what it named and infers only its `_` slots. The call's own
+                // `type_args` stay as written.
+                let (impl_type_args_inferred, mut method_type_args) = self.static_call_type_args(
+                    StaticCallee {
+                        type_name: prefix,
+                        method_name: suffix,
+                        receiver_key: None,
+                    },
+                    &call.args,
+                    &args,
+                    expected_type,
+                    call.span,
+                    written,
+                );
+                // A method-level parameter bound only through another's
+                // associated type (`..V` off `Holes`) is projected once the
+                // owner is inferred, as the free-function path does; the
+                // bound check below then sees it concrete.
+                if !method_type_args.is_empty() {
+                    self.project_assoc_bound_args(&mtype_params, &mut method_type_args);
+                }
+                // Record `[impl_args, method_args]` — the same order
+                // `lookup_static_method_param_types` substitutes in — since reify
+                // needs both halves to rebuild the mangled `__<Type>__<method>`.
+                // The instance type is UNKNOWN: a static call anchors no
+                // `GenericInstance`, so reify reads `expression_types` instead.
+                {
+                    let mut combined = impl_type_args_inferred.clone();
+                    combined.extend_from_slice(&method_type_args);
+                    self.record_generic_instantiation(call.id, combined, TypeTable::UNKNOWN);
+                }
+                self.report_uninferred_static_method_type_args(
+                    prefix,
+                    suffix,
+                    &impl_type_args_inferred,
+                    &method_type_args,
+                    call.span,
+                    None,
+                );
+                // The type prefix is what `Self` means here, so a bound written
+                // `Assoc = Self::Item` projects off it as it does on a method call.
+                let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
+                // Enforce the static method's type-arg bounds (shared rule).
+                if !method_type_args.is_empty() {
+                    let self_binding = SelfBinding {
+                        type_id: self.tysys.get_base_type(receiver_type),
+                        declaring_trait: None,
                     };
-                    let substituted: Vec<TypeId> =
-                        if method_type_args.is_empty() && impl_type_args_inferred.is_empty() {
-                            raw_param_types
-                        } else {
-                            let mut combined_type_args = impl_type_args_inferred.clone();
-                            combined_type_args.extend_from_slice(&method_type_args);
-                            raw_param_types
-                                .iter()
-                                .map(|&t| self.tysys.substitute_type_params(t, &combined_type_args))
-                                .collect()
-                        };
-                    self.recoerce_literal_args(&call.args, &mut args, &substituted);
-                    // Per-argument checking alone passes a call of the wrong length:
-                    // the loop below reaches neither a missing argument nor a
-                    // surplus one, and the call reaches codegen as an invalid
-                    // module. `Self::arg_count_fits` is the same rule the other
-                    // static spellings check.
-                    //
-                    // From the same answer `raw_param_types` came from, so the two
-                    // cannot disagree: an overloaded name yields no count to check
-                    // — the overload path picks the impl by argument, and reports
-                    // its own mismatch.
-                    if let Some(optional) = optional
-                        && !Self::arg_count_fits(args.len(), substituted.len(), optional)
+                    self.enforce_type_arg_bounds(
+                        &mtype_params,
+                        &method_type_args,
+                        Some(self_binding),
+                        call.span,
+                    );
+                }
+                // Handle From conversions with no explicit impl: reflexive and newtype.
+                if suffix == "from" && args.len() == 1 {
+                    let arg_type = args[0];
+                    let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
+
+                    // Reflexive `T::from(T_val)`: the outer Call evaporates, so
+                    // tag it `NewtypeFromCollapse` or reify emits a `Call` the
+                    // elaborator never built. Matched by canonical decl identity,
+                    // since two modules' `Instant` share a bare name. Generic
+                    // instances compare by name: a decl key drops type args.
+                    let arg_is_generic = {
+                        let tt = self.tysys.type_table.borrow();
+                        matches!(
+                            tt.get(tt.peel_refs(arg_type)),
+                            ResolvedType::GenericInstance { .. }
+                                | ResolvedType::GenericResource { .. }
+                        )
+                    };
+                    let is_reflexive = if arg_is_generic {
+                        arg_type_name == prefix
+                    } else if let Some(arg_key) = self.type_decl_key(arg_type) {
+                        Some(arg_key) == self.decl_key_or_local(prefix)
+                    } else {
+                        arg_type_name == prefix
+                    };
+                    if is_reflexive {
+                        self.record_desugar(call.id, DesugarKind::NewtypeFromCollapse);
+                        return args[0];
+                    }
+
+                    // Newtype→Base: u64::from(UserId_val) where type UserId = u64
+                    let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
+                    if let Some(base_id) = base_of_arg
+                        && self.tysys.type_table.borrow().type_name(base_id) == prefix
                     {
+                        self.record_desugar(call.id, DesugarKind::NewtypeFromUnwrap);
+                        // Reify rebuilds the newtype `Cast` from the
+                        // recorded `DesugarKind`; project only the result type.
+                        return base_id;
+                    }
+
+                    // Base→Newtype: UserId::from(u64_val) where type UserId = u64
+                    if let Some(newtype_type_id) = self.lookup_newtype(prefix) {
+                        let base_opt = self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .get_newtype_base(newtype_type_id);
+                        if let Some(base_id) = base_opt
+                            && self.tysys.type_table.borrow().type_name(base_id) == arg_type_name
+                        {
+                            self.record_desugar(call.id, DesugarKind::NewtypeFromWrap);
+                            // Reify rebuilds the newtype `Cast` from
+                            // the recorded `DesugarKind`; project only the type.
+                            return newtype_type_id;
+                        }
+                    }
+                }
+
+                // Literal args resolved against `TypeParam`/`Unknown` fell back to
+                // i32/f64, so re-coerce once the substitution is known. A
+                // non-generic call is checked too, or a mismatch only shows at
+                // codegen, as an invalid module rather than at its own span.
+                // Keyed at the receiver's own segment, as the resolution that
+                // recorded the use→def edge above is: a key derived from the
+                // bare name asks the caller's frame, which an alias leaves
+                // without that name at all.
+                let receiver_key = self.impl_target_at(receiver_site, prefix);
+                // The same argument the selection above read: without it this
+                // re-check resolves a different declaration than the call was
+                // mangled to.
+                let resolved = self.static_callee_params(
+                    &receiver_key,
+                    receiver_type,
+                    suffix,
+                    prefix,
+                    &args,
+                    None,
+                );
+                if self.report_ambiguous_static(&resolved, suffix, call.span) {
+                    return TypeTable::ERROR;
+                }
+                // No candidate the arguments admitted — the same report the
+                // static-call spelling makes. Unreported, the call is mangled
+                // anyway and reaches WIR build unresolved.
+                if resolved.found().is_none()
+                    && !args.is_empty()
+                    && !self.has_inherent_static_method(prefix, suffix, Some(&receiver_key))
+                    && self.report_unmatched_static_arg(
+                        StaticReceiver {
+                            key: Some(&receiver_key),
+                            ty: Some(receiver_type),
+                            ..StaticReceiver::of(prefix)
+                        },
+                        suffix,
+                        &args,
+                        call.span,
+                    )
+                {
+                    return TypeTable::ERROR;
+                }
+                // The count and the defaults come from the declaration, so the
+                // arity is enforced whether or not the receiver filled the
+                // types. The types are checked per parameter below, where a
+                // slot this call could not fill is skipped rather than the
+                // whole list dropped.
+                let (raw_param_types, optional) = match resolved.found() {
+                    Some(callee) => (
+                        callee.params.param_types.clone(),
+                        Some(
+                            callee
+                                .params
+                                .param_defaults
+                                .iter()
+                                .filter(|(_, default)| default.is_some())
+                                .count(),
+                        ),
+                    ),
+                    None => (Vec::new(), None),
+                };
+                let substituted: Vec<TypeId> =
+                    if method_type_args.is_empty() && impl_type_args_inferred.is_empty() {
+                        raw_param_types
+                    } else {
+                        let mut combined_type_args = impl_type_args_inferred.clone();
+                        combined_type_args.extend_from_slice(&method_type_args);
+                        raw_param_types
+                            .iter()
+                            .map(|&t| self.tysys.substitute_type_params(t, &combined_type_args))
+                            .collect()
+                    };
+                self.recoerce_literal_args(&call.args, &mut args, &substituted);
+                // Per-argument checking alone passes a call of the wrong length:
+                // the loop below reaches neither a missing argument nor a
+                // surplus one, and the call reaches codegen as an invalid
+                // module. `Self::arg_count_fits` is the same rule the other
+                // static spellings check.
+                //
+                // From the same answer `raw_param_types` came from, so the two
+                // cannot disagree: an overloaded name yields no count to check
+                // — the overload path picks the impl by argument, and reports
+                // its own mismatch.
+                if let Some(optional) = optional
+                    && !Self::arg_count_fits(args.len(), substituted.len(), optional)
+                {
+                    let _ = self.emit(TypeError::ArgumentCountMismatch {
+                        expected: substituted.len(),
+                        found: args.len(),
+                        span: call.span,
+                    });
+                    return TypeTable::ERROR;
+                }
+                for (i, arg) in args.iter().enumerate() {
+                    // A slot neither the receiver nor the turbofish filled says
+                    // only "whatever this instantiation binds", which every
+                    // argument satisfies. Checking against it rejects the call
+                    // the declaration was written to accept.
+                    if let Some(&expected) = substituted.get(i)
+                        && !self.is_unbound_type_param(expected)
+                    {
+                        self.typecheck(
+                            *arg,
+                            expected,
+                            call.args.get(i).map_or(call.span, ast::Expr::span),
+                        );
+                    }
+                }
+
+                // WEP 2026-05-26: `resolve_static_method_call_from_qualified`
+                // records the resolved `FunctionRef` under `call.id` itself
+                // (`static_method_dispatch`) so reify can reproduce the same
+                // `Call` shape without re-running impl lookup, mangled-name
+                // construction, or monomorph-info shaping — facts reify
+                // cannot reconstruct from the AST alone. It returns only a
+                // typed placeholder.
+                return self.resolve_static_method_call_from_qualified(
+                    prefix,
+                    suffix,
+                    &args,
+                    &impl_type_args_inferred,
+                    &method_type_args,
+                    call.id,
+                    call.span,
+                    ctx,
+                );
+            }
+            // Check if this is a flags type method call: Perms::none(), Perms::all()
+            // A newtype reaches its base's constants and keeps its own type:
+            // `M::none()` on `type M = Perm` is `Perm::none() as M`.
+            else if let Some((flags_info, named)) =
+                self.flags_members_through_newtype(receiver_site, prefix)
+                && matches!(suffix, "none" | "all")
+            {
+                if let Some(prefix_seg) = ident.segments.first() {
+                    self.record_item_reference_by_name(prefix_seg.id, prefix);
+                }
+                // Reify rebuilds the flags `none()` / `all()`
+                // constant from the AST + flags info; the body walk
+                // projects only the result type.
+                return named.unwrap_or(flags_info.type_id);
+            }
+            // Check if this is a variant case construction (Color::Red)
+            else if let Some(variant_info) =
+                self.variant_of_callee(&callee_kind, receiver_site, prefix)
+            {
+                // Clone needed data to release the borrow on self
+                let variant_info = variant_info.clone();
+                let case_match = variant_info
+                    .cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, c)| c.name == suffix)
+                    .map(|(i, c)| (i, c.clone()));
+                let prefix_owned = prefix.to_string();
+
+                // Find the case by name
+                if let Some((_case_index, case_data)) = case_match {
+                    self.record_qualified_case(ident, &prefix_owned, case_data.ast_id);
+                    // Each variant case has exactly one payload.
+                    // Unit variants expect 0 args, non-unit variants expect 1 arg.
+                    let payload_is_unit = matches!(
+                        self.tysys.type_table.borrow().get(case_data.payload),
+                        ResolvedType::Unit
+                    );
+                    let expected_args = usize::from(!payload_is_unit);
+
+                    if args.len() != expected_args {
                         let _ = self.emit(TypeError::ArgumentCountMismatch {
-                            expected: substituted.len(),
+                            expected: expected_args,
                             found: args.len(),
                             span: call.span,
                         });
                         return TypeTable::ERROR;
                     }
-                    for (i, arg) in args.iter().enumerate() {
-                        // A slot neither the receiver nor the turbofish filled says
-                        // only "whatever this instantiation binds", which every
-                        // argument satisfies. Checking against it rejects the call
-                        // the declaration was written to accept.
-                        if let Some(&expected) = substituted.get(i)
-                            && !self.is_unbound_type_param(expected)
+
+                    let payload = args.into_iter().next();
+
+                    let variant_type = if variant_info.type_params.is_empty() {
+                        // A generic case's payload type is a parameter
+                        // `infer_variant_type_args` binds from this very
+                        // argument, so only a concrete one has a type to check.
+                        if let Some(payload) = payload {
+                            self.typecheck(payload, case_data.payload, call.span);
+                        }
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .type_id_of_decl(variant_info.defined_at)
+                    } else {
                         {
-                            self.typecheck(
-                                *arg,
-                                expected,
-                                call.args.get(i).map_or(call.span, ast::Expr::span),
+                            let inferred = self.tysys.infer_variant_type_args(
+                                &self.annotate_ctx,
+                                &variant_info,
+                                &case_data,
+                                payload,
+                                expected_type,
+                                &[],
                             );
+                            self.defer_uninferable_variant(
+                                inferred,
+                                &prefix_owned,
+                                &variant_info,
+                                call.span,
+                            )
                         }
-                    }
+                    };
 
-                    // WEP 2026-05-26: `resolve_static_method_call_from_qualified`
-                    // records the resolved `FunctionRef` under `call.id` itself
-                    // (`static_method_dispatch`) so reify can reproduce the same
-                    // `Call` shape without re-running impl lookup, mangled-name
-                    // construction, or monomorph-info shaping — facts reify
-                    // cannot reconstruct from the AST alone. It returns only a
-                    // typed placeholder.
-                    return self.resolve_static_method_call_from_qualified(
-                        prefix,
-                        suffix,
-                        &args,
-                        &impl_type_args_inferred,
-                        &method_type_args,
-                        call.id,
-                        call.span,
-                        ctx,
-                    );
+                    // WEP 2026-05-26: record generic
+                    // type args for variant constructors. Non-generic
+                    // variants emit a `Variant` (no type_args) and the
+                    // recording is skipped via the empty-`type_args`
+                    // guard inside `record_generic_instantiation`.
+                    let type_args = match self.tysys.type_table.borrow().get(variant_type) {
+                        ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                        _ => Vec::new(),
+                    };
+                    self.record_generic_instantiation(call.id, type_args, variant_type);
+
+                    return variant_type;
                 }
-                // Check if this is a flags type method call: Perms::none(), Perms::all()
-                // A newtype reaches its base's constants and keeps its own type:
-                // `M::none()` on `type M = Perm` is `Perm::none() as M`.
-                else if let Some((flags_info, named)) =
-                    self.flags_members_through_newtype(receiver_site, prefix)
-                    && matches!(suffix, "none" | "all")
-                {
-                    if let Some(prefix_seg) = ident.segments.first() {
-                        self.record_item_reference_by_name(prefix_seg.id, prefix);
-                    }
-                    // Reify rebuilds the flags `none()` / `all()`
-                    // constant from the AST + flags info; the body walk
-                    // projects only the result type.
-                    return named.unwrap_or(flags_info.type_id);
-                }
-                // Check if this is a variant case construction (Color::Red)
-                else if let Some(variant_info) =
-                    self.variant_of_callee(&callee_kind, receiver_site, prefix)
-                {
-                    // Clone needed data to release the borrow on self
-                    let variant_info = variant_info.clone();
-                    let case_match = variant_info
-                        .cases
+                // If no matching case, check for From<T> synthesis requests
+                else if suffix == "from" && args.len() == 1 {
+                    let target_type_id = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .type_id_of_decl(variant_info.defined_at);
+                    let from_type = args[0];
+                    let from_type_name = self.tysys.type_table.borrow().type_name(from_type);
+                    let from_trait_name = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .compiler_trait_name(CompilerItem::From)
+                        .to_string();
+                    // `impl From<X> for Prefix;` — a body-less derivation
+                    // request. Both the flag and the trait reference are
+                    // header facts, so the impls are reached by the target's
+                    // canonical key rather than by scanning one module's AST
+                    // for a matching written name.
+                    let matching_impl = self
+                        .tysys
+                        .trait_env
+                        .all_impl_keys(&self.impl_target(prefix))
                         .iter()
-                        .enumerate()
-                        .find(|(_, c)| c.name == suffix)
-                        .map(|(i, c)| (i, c.clone()));
-                    let prefix_owned = prefix.to_string();
-
-                    // Find the case by name
-                    if let Some((_case_index, case_data)) = case_match {
-                        self.record_qualified_case(ident, &prefix_owned, case_data.ast_id);
-                        // Each variant case has exactly one payload.
-                        // Unit variants expect 0 args, non-unit variants expect 1 arg.
-                        let payload_is_unit = matches!(
-                            self.tysys.type_table.borrow().get(case_data.payload),
-                            ResolvedType::Unit
-                        );
-                        let expected_args = usize::from(!payload_is_unit);
-
-                        if args.len() != expected_args {
-                            let _ = self.emit(TypeError::ArgumentCountMismatch {
-                                expected: expected_args,
-                                found: args.len(),
-                                span: call.span,
-                            });
-                            return TypeTable::ERROR;
-                        }
-
-                        let payload = args.into_iter().next();
-
-                        let variant_type = if variant_info.type_params.is_empty() {
-                            // A generic case's payload type is a parameter
-                            // `infer_variant_type_args` binds from this very
-                            // argument, so only a concrete one has a type to check.
-                            if let Some(payload) = payload {
-                                self.typecheck(payload, case_data.payload, call.span);
-                            }
-                            self.tysys
-                                .type_table
-                                .borrow()
-                                .type_id_of_decl(variant_info.defined_at)
-                        } else {
-                            {
-                                let inferred = self.tysys.infer_variant_type_args(
-                                    &self.annotate_ctx,
-                                    &variant_info,
-                                    &case_data,
-                                    payload,
-                                    expected_type,
-                                    &[],
-                                );
-                                self.defer_uninferable_variant(
-                                    inferred,
-                                    &prefix_owned,
-                                    &variant_info,
-                                    call.span,
-                                )
-                            }
-                        };
-
-                        // WEP 2026-05-26: record generic
-                        // type args for variant constructors. Non-generic
-                        // variants emit a `Variant` (no type_args) and the
-                        // recording is skipped via the empty-`type_args`
-                        // guard inside `record_generic_instantiation`.
-                        let type_args = match self.tysys.type_table.borrow().get(variant_type) {
-                            ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
-                            _ => Vec::new(),
-                        };
-                        self.record_generic_instantiation(call.id, type_args, variant_type);
-
-                        return variant_type;
-                    }
-                    // If no matching case, check for From<T> synthesis requests
-                    else if suffix == "from" && args.len() == 1 {
-                        let target_type_id = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .type_id_of_decl(variant_info.defined_at);
-                        let from_type = args[0];
-                        let from_type_name = self.tysys.type_table.borrow().type_name(from_type);
-                        let from_trait_name = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .compiler_trait_name(CompilerItem::From)
-                            .to_string();
-                        // `impl From<X> for Prefix;` — a body-less derivation
-                        // request. Both the flag and the trait reference are
-                        // header facts, so the impls are reached by the target's
-                        // canonical key rather than by scanning one module's AST
-                        // for a matching written name.
-                        let matching_impl = self
-                            .tysys
-                            .trait_env
-                            .all_impl_keys(&self.impl_target(prefix))
-                            .iter()
-                            .filter_map(|key| self.tysys.trait_env.impl_headers.get(key))
-                            .any(|header| {
-                                header.is_synthesize_request
-                                    && header.trait_head_name() == Some(from_trait_name.as_str())
-                                    && matches!(header.trait_ty(), Some(ast::Type::Generic(generic))
+                        .filter_map(|key| self.tysys.trait_env.impl_headers.get(key))
+                        .any(|header| {
+                            header.is_synthesize_request
+                                && header.trait_head_name() == Some(from_trait_name.as_str())
+                                && matches!(header.trait_ty(), Some(ast::Type::Generic(generic))
                                     if generic.args.len() == 1
                                         && self.get_type_name_full(&generic.args[0])
                                             == from_type_name)
-                            });
-                        if matching_impl {
-                            return self.resolve_from_call(target_type_id, from_type, call.id);
+                        });
+                    if matching_impl {
+                        return self.resolve_from_call(target_type_id, from_type, call.id);
+                    }
+                }
+                return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
+            }
+            // An operation dispatch, `Stdout::write()` or `ns::Counter::next()`
+            // alike. Ahead of the namespace arm below, which reads the
+            // operation as a static method on the interface and mangles a body
+            // nothing declares.
+            else if let Some((decl, operation)) = self.dispatched_operation(ident) {
+                (
+                    Some(self.effect_operation_callee(decl, &operation)),
+                    effective_name.to_string(),
+                )
+            }
+            // If prefix is a known type (struct/enum/newtype/flags) with no matching
+            // static method, emit a compile error.
+            else if self.tysys.is_known_type_name(prefix) {
+                return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
+            }
+            // Namespace import: `use ns from "..."` then `ns::Type::method()`
+            // or `ns::VariantType::Case(...)`.
+            else if let Some(ns_source) = self.namespace_alias_source(prefix, call.callee.id()) {
+                // suffix may be "Type::method" or plain "func"
+                if let Some(inner_pos) = suffix.find("::") {
+                    let type_name = &suffix[..inner_pos];
+                    let method_name = &suffix[inner_pos + 2..];
+
+                    // Check if this is a variant construction in the namespace.
+                    // `ns::Type::Case` names `Type` with its middle segment,
+                    // which the resolve walk answered for under the `ns$Type`
+                    // alias — so the declaration comes from the site rather
+                    // than from asking the namespace module about a spelling.
+                    let ns_variant = self
+                        .qualified_owner_decl(ident)
+                        .and_then(|def| self.tysys.all_variant_cases.get(&def))
+                        .cloned();
+                    if let Some(variant_info) = ns_variant {
+                        let case_match = variant_info
+                            .cases
+                            .iter()
+                            .enumerate()
+                            .find(|(_, c)| c.name == method_name)
+                            .map(|(i, c)| (i, c.clone()));
+                        if let Some((_case_index, case_data)) = case_match {
+                            self.record_namespaced_case(ident, case_data.ast_id);
+                            let payload_is_unit = matches!(
+                                self.tysys.type_table.borrow().get(case_data.payload),
+                                ResolvedType::Unit
+                            );
+                            let expected_args = usize::from(!payload_is_unit);
+                            if args.len() != expected_args {
+                                let _ = self.emit(TypeError::ArgumentCountMismatch {
+                                    expected: expected_args,
+                                    found: args.len(),
+                                    span: call.span,
+                                });
+                                return TypeTable::ERROR;
+                            }
+                            let payload = args.into_iter().next();
+                            let variant_type = if variant_info.type_params.is_empty() {
+                                self.tysys
+                                    .type_table
+                                    .borrow()
+                                    .type_id_of_decl(variant_info.defined_at)
+                            } else {
+                                {
+                                    let inferred = self.tysys.infer_variant_type_args(
+                                        &self.annotate_ctx,
+                                        &variant_info,
+                                        &case_data,
+                                        payload,
+                                        expected_type,
+                                        &[],
+                                    );
+                                    self.defer_uninferable_variant(
+                                        inferred,
+                                        type_name,
+                                        &variant_info,
+                                        call.span,
+                                    )
+                                }
+                            };
+
+                            // Record generic type args for
+                            // namespace-qualified variant ctors.
+                            let type_args = match self.tysys.type_table.borrow().get(variant_type) {
+                                ResolvedType::GenericInstance { type_args, .. } => {
+                                    type_args.clone()
+                                }
+                                _ => Vec::new(),
+                            };
+                            self.record_generic_instantiation(call.id, type_args, variant_type);
+
+                            return variant_type;
                         }
                     }
-                    return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
-                }
-                // An operation dispatch, `Stdout::write()` or `ns::Counter::next()`
-                // alike. Ahead of the namespace arm below, which reads the
-                // operation as a static method on the interface and mangles a body
-                // nothing declares.
-                else if let Some((decl, operation)) = self.dispatched_operation(ident) {
-                    (
-                        Some(self.effect_operation_callee(decl, &operation)),
-                        effective_name.to_string(),
-                    )
-                }
-                // If prefix is a known type (struct/enum/newtype/flags) with no matching
-                // static method, emit a compile error.
-                else if self.tysys.is_known_type_name(prefix) {
-                    return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
-                }
-                // Namespace import: `use ns from "..."` then `ns::Type::method()`
-                // or `ns::VariantType::Case(...)`.
-                else if let Some(ns_source) =
-                    self.namespace_alias_source(prefix, call.callee.id())
-                {
-                    // suffix may be "Type::method" or plain "func"
-                    if let Some(inner_pos) = suffix.find("::") {
-                        let type_name = &suffix[..inner_pos];
-                        let method_name = &suffix[inner_pos + 2..];
 
-                        // Check if this is a variant construction in the namespace.
-                        // `ns::Type::Case` names `Type` with its middle segment,
-                        // which the resolve walk answered for under the `ns$Type`
-                        // alias — so the declaration comes from the site rather
-                        // than from asking the namespace module about a spelling.
-                        let ns_variant = self
-                            .qualified_owner_decl(ident)
-                            .and_then(|def| self.tysys.all_variant_cases.get(&def))
-                            .cloned();
-                        if let Some(variant_info) = ns_variant {
-                            let case_match = variant_info
-                                .cases
-                                .iter()
-                                .enumerate()
-                                .find(|(_, c)| c.name == method_name)
-                                .map(|(i, c)| (i, c.clone()));
-                            if let Some((_case_index, case_data)) = case_match {
-                                self.record_namespaced_case(ident, case_data.ast_id);
-                                let payload_is_unit = matches!(
-                                    self.tysys.type_table.borrow().get(case_data.payload),
-                                    ResolvedType::Unit
-                                );
-                                let expected_args = usize::from(!payload_is_unit);
-                                if args.len() != expected_args {
-                                    let _ = self.emit(TypeError::ArgumentCountMismatch {
-                                        expected: expected_args,
-                                        found: args.len(),
-                                        span: call.span,
-                                    });
-                                    return TypeTable::ERROR;
-                                }
-                                let payload = args.into_iter().next();
-                                let variant_type = if variant_info.type_params.is_empty() {
-                                    self.tysys
-                                        .type_table
-                                        .borrow()
-                                        .type_id_of_decl(variant_info.defined_at)
-                                } else {
-                                    {
-                                        let inferred = self.tysys.infer_variant_type_args(
-                                            &self.annotate_ctx,
-                                            &variant_info,
-                                            &case_data,
-                                            payload,
-                                            expected_type,
-                                            &[],
-                                        );
-                                        self.defer_uninferable_variant(
-                                            inferred,
-                                            type_name,
-                                            &variant_info,
-                                            call.span,
-                                        )
-                                    }
-                                };
-
-                                // Record generic type args for
-                                // namespace-qualified variant ctors.
-                                let type_args =
-                                    match self.tysys.type_table.borrow().get(variant_type) {
-                                        ResolvedType::GenericInstance { type_args, .. } => {
-                                            type_args.clone()
-                                        }
-                                        _ => Vec::new(),
-                                    };
-                                self.record_generic_instantiation(call.id, type_args, variant_type);
-
-                                return variant_type;
-                            }
-                        }
-
-                        // The branch below reads the middle segment as a type, and
-                        // says so here where nothing names one — otherwise the call
-                        // types `unknown` with nothing reported, and whatever first
-                        // uses the result complains about `unknown`.
-                        //
-                        // The site is asked first: a field default carrying this
-                        // spelling is re-walked where its author's alias is not in
-                        // scope, so the spelling alone answers for nothing there.
-                        let receiver_site = ident.owner_segment().map(|seg| seg.id);
-                        let names_a_member = receiver_site
-                            .is_some_and(|site| self.decl_key_at(site, type_name).is_some())
-                            || self.namespace_member(prefix, type_name).is_some();
-                        if !names_a_member {
-                            let _ = self.emit(TypeError::UnknownFunction {
-                                name: format!("{prefix}::{suffix}"),
-                                span: call.span,
-                            });
-                            return TypeTable::ERROR;
-                        }
-
-                        // Static method call on a type from the namespace module.
-                        let method_type_args = type_args.clone();
-
-                        // `ns::Type::method` never reaches the bare-spelling check,
-                        // so the ladder is enforced here. The receiver is named at
-                        // its own segment, which the walk answered for.
-                        {
-                            let receiver = self.impl_target_at(receiver_site, type_name);
-                            let qualified = format!("{type_name}::{method_name}");
-                            self.check_static_call_visibility(
-                                &receiver,
-                                &qualified,
-                                Some(call.id),
-                                call.span,
-                            );
-                        }
-
-                        // The importing module never names `Type` on its own, so a
-                        // bare-name search reaches no impl on it: the callee then
-                        // loses its trait segment and names a body nothing
-                        // declares, which WIR build reports as an unresolved call.
-                        let ns_key = self.namespace_member(prefix, type_name).map(|def| {
-                            trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
+                    // The branch below reads the middle segment as a type, and
+                    // says so here where nothing names one — otherwise the call
+                    // types `unknown` with nothing reported, and whatever first
+                    // uses the result complains about `unknown`.
+                    //
+                    // The site is asked first: a field default carrying this
+                    // spelling is re-walked where its author's alias is not in
+                    // scope, so the spelling alone answers for nothing there.
+                    let receiver_site = ident.owner_segment().map(|seg| seg.id);
+                    let names_a_member = receiver_site
+                        .is_some_and(|site| self.decl_key_at(site, type_name).is_some())
+                        || self.namespace_member(prefix, type_name).is_some();
+                    if !names_a_member {
+                        let _ = self.emit(TypeError::UnknownFunction {
+                            name: format!("{prefix}::{suffix}"),
+                            span: call.span,
                         });
-                        // The receiver's own type, off the declaration the namespace
-                        // named. A trait-frame signature is read at it, and the
-                        // importing module cannot name `Type` to re-resolve one.
-                        let ns_receiver_type =
-                            self.namespace_member(prefix, type_name).and_then(|def| {
-                                let ast_id = self.tysys.resolutions.defs().ast_id(def);
-                                self.tysys.type_table.borrow().type_of_symbol(&ast_id)
-                            });
-                        // The receiver's own type arguments, and the method's, as
-                        // the two-segment spelling infers them. Reading only a
-                        // written turbofish mangled `ns::Cell::wrap(7)` with no
-                        // arguments at all, and reported nothing where none could
-                        // be inferred.
-                        let (impl_type_args_inferred, method_type_args) = self
-                            .static_call_type_args(
-                                StaticCallee {
-                                    type_name,
-                                    method_name,
-                                    receiver_key: ns_key.as_ref(),
-                                },
-                                &call.args,
-                                &args,
-                                expected_type,
-                                call.span,
-                                method_type_args,
-                            );
-                        self.report_uninferred_static_method_type_args(
+                        return TypeTable::ERROR;
+                    }
+
+                    // Static method call on a type from the namespace module.
+                    let method_type_args = type_args.clone();
+
+                    // `ns::Type::method` never reaches the bare-spelling check,
+                    // so the ladder is enforced here. The receiver is named at
+                    // its own segment, which the walk answered for.
+                    {
+                        let receiver = self.impl_target_at(receiver_site, type_name);
+                        let qualified = format!("{type_name}::{method_name}");
+                        self.check_static_call_visibility(
+                            &receiver,
+                            &qualified,
+                            Some(call.id),
+                            call.span,
+                        );
+                    }
+
+                    // The importing module never names `Type` on its own, so a
+                    // bare-name search reaches no impl on it: the callee then
+                    // loses its trait segment and names a body nothing
+                    // declares, which WIR build reports as an unresolved call.
+                    let ns_key = self.namespace_member(prefix, type_name).map(|def| {
+                        trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
+                    });
+                    // The receiver's own type, off the declaration the namespace
+                    // named. A trait-frame signature is read at it, and the
+                    // importing module cannot name `Type` to re-resolve one.
+                    let ns_receiver_type =
+                        self.namespace_member(prefix, type_name).and_then(|def| {
+                            let ast_id = self.tysys.resolutions.defs().ast_id(def);
+                            self.tysys.type_table.borrow().type_of_symbol(&ast_id)
+                        });
+                    // The receiver's own type arguments, and the method's, as
+                    // the two-segment spelling infers them. Reading only a
+                    // written turbofish mangled `ns::Cell::wrap(7)` with no
+                    // arguments at all, and reported nothing where none could
+                    // be inferred.
+                    let (impl_type_args_inferred, method_type_args) = self.static_call_type_args(
+                        StaticCallee {
                             type_name,
                             method_name,
-                            &impl_type_args_inferred,
-                            &method_type_args,
-                            call.span,
-                            ns_key.as_ref(),
-                        );
-                        let resolved = self.resolve_static_callee(StaticQuery {
-                            site: ident.segments.get(1).map(|segment| segment.id),
                             receiver_key: ns_key.as_ref(),
-                            arg_types: &args,
-                            receiver_type: ns_receiver_type,
-                            receiver_args: &impl_type_args_inferred,
-                            ..StaticQuery::of(type_name, method_name)
+                        },
+                        &call.args,
+                        &args,
+                        expected_type,
+                        call.span,
+                        method_type_args,
+                    );
+                    self.report_uninferred_static_method_type_args(
+                        type_name,
+                        method_name,
+                        &impl_type_args_inferred,
+                        &method_type_args,
+                        call.span,
+                        ns_key.as_ref(),
+                    );
+                    let resolved = self.resolve_static_callee(StaticQuery {
+                        site: ident.segments.get(1).map(|segment| segment.id),
+                        receiver_key: ns_key.as_ref(),
+                        arg_types: &args,
+                        receiver_type: ns_receiver_type,
+                        receiver_args: &impl_type_args_inferred,
+                        ..StaticQuery::of(type_name, method_name)
+                    });
+                    if self.report_ambiguous_static(&resolved, method_name, call.span) {
+                        return TypeTable::ERROR;
+                    }
+                    let method_ref = resolved
+                        .found()
+                        .map(|callee| callee.method_ref.clone())
+                        .unwrap_or_else(|| {
+                            StaticMethodRef::new(
+                                ns_source.clone(),
+                                type_name,
+                                method_name,
+                                None,
+                                None,
+                            )
                         });
-                        if self.report_ambiguous_static(&resolved, method_name, call.span) {
-                            return TypeTable::ERROR;
-                        }
-                        let method_ref = resolved
-                            .found()
-                            .map(|callee| callee.method_ref.clone())
-                            .unwrap_or_else(|| {
-                                StaticMethodRef::new(
-                                    ns_source.clone(),
-                                    type_name,
-                                    method_name,
-                                    None,
-                                    None,
-                                )
-                            });
-                        let trait_name = method_ref.trait_name.clone();
-                        let struct_module = method_ref.module.clone();
+                    let trait_name = method_ref.trait_name.clone();
+                    let struct_module = method_ref.module.clone();
 
-                        // The bare `Type::method` branch records this edge, but the
-                        // spelling `ns::Type::method` resolves no static under the
-                        // name `ns`, so a namespaced call lands here. `ident` is
-                        // `ns::Type::method`, so the method is its third segment —
-                        // the position `record_namespaced_case` also reads.
-                        if let Some(method_seg) = ident.segments.get(2)
-                            && let Some(method_def) = method_ref.method_id.or_else(|| {
-                                // The receiver is `ns::Type`, whose middle segment
-                                // the resolve walk answered for under the `ns$Type`
-                                // alias. No spelling is re-resolved from the call
-                                // site's frame, which declares its own `Type`.
-                                let defs = self.tysys.resolutions.defs();
-                                let receiver = trait_env::ImplTargetKey::of_decl(
-                                    defs,
-                                    self.qualified_owner_decl(ident)?,
-                                );
-                                self.qualified_method_decl_id(&receiver, method_name)
-                            })
-                            && self.record_reference_to_decl(
-                                method_seg.id,
-                                method_def,
-                                method_seg.span,
-                            )
-                        {
-                            return TypeTable::ERROR;
-                        }
+                    // The bare `Type::method` branch records this edge, but the
+                    // spelling `ns::Type::method` resolves no static under the
+                    // name `ns`, so a namespaced call lands here. `ident` is
+                    // `ns::Type::method`, so the method is its third segment —
+                    // the position `record_namespaced_case` also reads.
+                    if let Some(method_seg) = ident.segments.get(2)
+                        && let Some(method_def) = method_ref.method_id.or_else(|| {
+                            // The receiver is `ns::Type`, whose middle segment
+                            // the resolve walk answered for under the `ns$Type`
+                            // alias. No spelling is re-resolved from the call
+                            // site's frame, which declares its own `Type`.
+                            let defs = self.tysys.resolutions.defs();
+                            let receiver = trait_env::ImplTargetKey::of_decl(
+                                defs,
+                                self.qualified_owner_decl(ident)?,
+                            );
+                            self.qualified_method_decl_id(&receiver, method_name)
+                        })
+                        && self.record_reference_to_decl(method_seg.id, method_def, method_seg.span)
+                    {
+                        return TypeTable::ERROR;
+                    }
 
-                        // Qualify by the module the impl was located in:
-                        // `helper::Pair` and a local `Pair` are different
-                        // declarations. Where the resolution answered under another
-                        // name it peeled a newtype to its base, and the base owns
-                        // the impl the call is mangled under.
-                        // A concrete block hosts its function under the head it
-                        // wrote, arguments included, as the two-segment spelling
-                        // names it.
-                        let receiver =
-                            if let Some(head) = self.concrete_impl_head_of(Some(&method_ref)) {
-                                head
-                            } else if method_ref.type_name == type_name {
-                                self.namespace_member(prefix, type_name).map_or_else(
-                                    || FqTypeName::shape(&struct_module, type_name),
-                                    |def| FqTypeName::of_head(self.tysys.resolutions.defs(), def),
-                                )
-                            } else {
-                                FqTypeName::shape(&struct_module, &method_ref.type_name)
-                            };
-                        let final_mangled = MethodName::format_local(
-                            &receiver,
-                            method_ref.trait_name.as_ref(),
-                            method_name,
-                        );
+                    // Qualify by the module the impl was located in:
+                    // `helper::Pair` and a local `Pair` are different
+                    // declarations. Where the resolution answered under another
+                    // name it peeled a newtype to its base, and the base owns
+                    // the impl the call is mangled under.
+                    // A concrete block hosts its function under the head it
+                    // wrote, arguments included, as the two-segment spelling
+                    // names it.
+                    let receiver = if let Some(head) = self.concrete_impl_head_of(Some(&method_ref))
+                    {
+                        head
+                    } else if method_ref.type_name == type_name {
+                        self.namespace_member(prefix, type_name).map_or_else(
+                            || FqTypeName::shape(&struct_module, type_name),
+                            |def| FqTypeName::of_head(self.tysys.resolutions.defs(), def),
+                        )
+                    } else {
+                        FqTypeName::shape(&struct_module, &method_ref.type_name)
+                    };
+                    let final_mangled = MethodName::format_local(
+                        &receiver,
+                        method_ref.trait_name.as_ref(),
+                        method_name,
+                    );
 
-                        // The receiver's arguments come first: the declaration
-                        // numbers its own slots 0.. and the method's after them, so
-                        // one flat list substitutes by index (as the two-segment
-                        // spelling does).
-                        let mut combined_type_args = impl_type_args_inferred.clone();
-                        combined_type_args.extend_from_slice(&method_type_args);
-                        let mut return_type = resolved.return_type();
-                        if !combined_type_args.is_empty() {
-                            return_type = self
-                                .tysys
-                                .substitute_type_params(return_type, &combined_type_args);
-                        }
+                    // The receiver's arguments come first: the declaration
+                    // numbers its own slots 0.. and the method's after them, so
+                    // one flat list substitutes by index (as the two-segment
+                    // spelling does).
+                    let mut combined_type_args = impl_type_args_inferred.clone();
+                    combined_type_args.extend_from_slice(&method_type_args);
+                    let mut return_type = resolved.return_type();
+                    if !combined_type_args.is_empty() {
+                        return_type = self
+                            .tysys
+                            .substitute_type_params(return_type, &combined_type_args);
+                    }
 
-                        let monomorph_info = if combined_type_args.is_empty() {
-                            None
-                        } else {
-                            Some(MonomorphInfo {
-                                generic_name: final_mangled.clone(),
-                                impl_type_args: impl_type_args_inferred.clone(),
-                                method_type_args: method_type_args.clone(),
-                                is_blanket: false,
-                            })
-                        };
+                    let monomorph_info = if combined_type_args.is_empty() {
+                        None
+                    } else {
+                        Some(MonomorphInfo {
+                            generic_name: final_mangled.clone(),
+                            impl_type_args: impl_type_args_inferred.clone(),
+                            method_type_args: method_type_args.clone(),
+                            is_blanket: false,
+                        })
+                    };
 
-                        // From the same resolution the identity and the return type
-                        // came from: a second lookup here answers with no list, and
-                        // an inherited default body then goes unchecked.
-                        let (
-                            CalleeParams {
-                                param_is_mut,
-                                param_defaults,
-                                param_types,
-                                self_in_args,
-                                defaults_module,
-                            },
-                            declares_params,
-                        ) = resolved.params();
+                    // From the same resolution the identity and the return type
+                    // came from: a second lookup here answers with no list, and
+                    // an inherited default body then goes unchecked.
+                    let (
+                        CalleeParams {
+                            param_is_mut,
+                            param_defaults,
+                            param_types,
+                            self_in_args,
+                            defaults_module,
+                        },
+                        declares_params,
+                    ) = resolved.params();
 
-                        let func_ref = FunctionRef {
-                            module_source: struct_module,
-                            name: final_mangled,
-                            monomorph_info,
-                            // The receiver `final_mangled` was built from: DCE and
-                            // monomorphization key on this, so a different one here
-                            // names a different type than the call reaches.
-                            method_info: Some(LocalMethodName::new(
-                                receiver,
-                                trait_name,
-                                method_name.to_string(),
-                            )),
-                        };
+                    let func_ref = FunctionRef {
+                        module_source: struct_module,
+                        name: final_mangled,
+                        monomorph_info,
+                        // The receiver `final_mangled` was built from: DCE and
+                        // monomorphization key on this, so a different one here
+                        // names a different type than the call reaches.
+                        method_info: Some(LocalMethodName::new(
+                            receiver,
+                            trait_name,
+                            method_name.to_string(),
+                        )),
+                    };
 
-                        let checked: Vec<TypeId> = if method_type_args.is_empty() {
-                            param_types.clone()
-                        } else {
-                            param_types
-                                .iter()
-                                .map(|&t| self.tysys.substitute_type_params(t, &method_type_args))
-                                .collect()
-                        };
-                        self.recoerce_literal_args(&call.args, &mut args, &checked);
-                        // The same check the bare `Type::method` spelling gets: a
-                        // count is only skipped where no signature answered.
-                        let arg_spans = arg_spans_of(&call.args, args.len(), call.span);
-                        if declares_params
-                            && !self.check_static_call_args(
-                                &checked,
-                                &args,
-                                &arg_spans,
-                                &param_defaults,
-                                call.span,
-                            )
-                        {
-                            return TypeTable::ERROR;
-                        }
-
-                        let defaults_module =
-                            defaults_module.unwrap_or_else(|| func_ref.module_source.clone());
-                        let own_slots = method_ref
-                            .method_id
-                            .and_then(|def| self.tysys.signatures.method_sig(def))
-                            .map(MethodSig::own_type_param_ids)
-                            .unwrap_or_default();
-                        let type_bindings = slot_type_bindings(
-                            &self.tysys.type_table,
-                            &own_slots,
-                            &method_type_args,
-                        );
-                        self.record_default_walk(
-                            call.id,
-                            &args,
+                    let checked: Vec<TypeId> = if method_type_args.is_empty() {
+                        param_types.clone()
+                    } else {
+                        param_types
+                            .iter()
+                            .map(|&t| self.tysys.substitute_type_params(t, &method_type_args))
+                            .collect()
+                    };
+                    self.recoerce_literal_args(&call.args, &mut args, &checked);
+                    // The same check the bare `Type::method` spelling gets: a
+                    // count is only skipped where no signature answered.
+                    let arg_spans = arg_spans_of(&call.args, args.len(), call.span);
+                    if declares_params
+                        && !self.check_static_call_args(
                             &checked,
+                            &args,
+                            &arg_spans,
                             &param_defaults,
-                            Some(defaults_module.clone()),
-                            &type_bindings,
-                            ctx,
-                        );
-
-                        let key = call.id;
-                        self.sem.types.static_method_dispatch.insert(
-                            key,
-                            StaticMethodDispatch {
-                                method_def: method_ref.method_id,
-                                defaults_module,
-                                function_ref: func_ref,
-                                param_is_mut,
-                                type_args: vec![],
-                                param_defaults,
-                                param_types,
-                                self_in_args,
-                            },
-                        );
-
-                        // Reify rebuilds the `Call` from the recorded
-                        // `static_method_dispatch`; the body walk projects
-                        // only the result type.
-                        return return_type;
+                            call.span,
+                        )
+                    {
+                        return TypeTable::ERROR;
                     }
-                    // `use`'s namespace form registers only the reachable members
-                    // as `ns$member`; this arm looks the module up directly, so it
-                    // owes the same visibility check — otherwise a path names what
-                    // an import of the identical symbol is refused.
-                    self.check_namespaced_visibility(&ns_source, suffix, ident.span);
-                    // `ns::func` — a plain free-function call through a namespace
-                    // import (the `suffix.find("::")` arm above always returns for
-                    // the `Type::method` / `Variant::Case` shapes). Record a use→def
-                    // edge to the target function in the namespace module so
-                    // liveness sees it reached and the Design-B effect checker sees
-                    // its declared effects. The whole-path `ident.id` is the key the
-                    // effect walker resolves free calls on (`check_effects_semantic`),
-                    // and the suffix segment id is the key LSP jump-to-def uses.
-                    let def_key = self
-                        .symbols
-                        .lookup_in_module(&ns_source, suffix)
-                        .map(|sym| sym.defined_at);
-                    if let Some(def_key) = def_key {
-                        self.record_reference_to_def(ident.id, def_key);
-                        if let Some(seg) = ident.segments.get(1) {
-                            self.record_reference_to_def(seg.id, def_key);
-                        }
+
+                    let defaults_module =
+                        defaults_module.unwrap_or_else(|| func_ref.module_source.clone());
+                    let own_slots = method_ref
+                        .method_id
+                        .and_then(|def| self.tysys.signatures.method_sig(def))
+                        .map(MethodSig::own_type_param_ids)
+                        .unwrap_or_default();
+                    let type_bindings =
+                        slot_type_bindings(&self.tysys.type_table, &own_slots, &method_type_args);
+                    self.record_default_walk(
+                        call.id,
+                        &args,
+                        &checked,
+                        &param_defaults,
+                        Some(defaults_module.clone()),
+                        &type_bindings,
+                        ctx,
+                    );
+
+                    let key = call.id;
+                    self.sem.types.static_method_dispatch.insert(
+                        key,
+                        StaticMethodDispatch {
+                            method_def: method_ref.method_id,
+                            defaults_module,
+                            function_ref: func_ref,
+                            param_is_mut,
+                            type_args: vec![],
+                            param_defaults,
+                            param_types,
+                            self_in_args,
+                        },
+                    );
+
+                    // Reify rebuilds the `Call` from the recorded
+                    // `static_method_dispatch`; the body walk projects
+                    // only the result type.
+                    return return_type;
+                }
+                // `use`'s namespace form registers only the reachable members
+                // as `ns$member`; this arm looks the module up directly, so it
+                // owes the same visibility check — otherwise a path names what
+                // an import of the identical symbol is refused.
+                self.check_namespaced_visibility(&ns_source, suffix, ident.span);
+                // `ns::func` — a plain free-function call through a namespace
+                // import (the `suffix.find("::")` arm above always returns for
+                // the `Type::method` / `Variant::Case` shapes). Record a use→def
+                // edge to the target function in the namespace module so
+                // liveness sees it reached and the Design-B effect checker sees
+                // its declared effects. The whole-path `ident.id` is the key the
+                // effect walker resolves free calls on (`check_effects_semantic`),
+                // and the suffix segment id is the key LSP jump-to-def uses.
+                let def_key = self
+                    .symbols
+                    .lookup_in_module(&ns_source, suffix)
+                    .map(|sym| sym.defined_at);
+                if let Some(def_key) = def_key {
+                    self.record_reference_to_def(ident.id, def_key);
+                    if let Some(seg) = ident.segments.get(1) {
+                        self.record_reference_to_def(seg.id, def_key);
                     }
-                    (
-                        self.callee_in_module(&ns_source, suffix),
-                        effective_name.to_string(),
-                    )
-                } else {
-                    (None, effective_name.to_string())
                 }
-            }
-            // The call's own reference site, answered by the module that wrote it
-            // (WEP 2026-08-12) — not by the module the walk is standing in, which
-            // for a parameter default is the caller's.
-            else if let Some(callee) = self
-                .tysys
-                .resolutions
-                .declared_if_walked(ident.id)
-                .filter(|def| self.tysys.resolutions.defs().kind(*def) == DefKind::Function)
-            {
-                if self.record_reference_to_decl(ident.id, callee, ident.span) {
-                    return TypeTable::ERROR;
-                }
-                (Some(self.callee_of(callee)), effective_name.to_string())
-            }
-            // `panic` / `unreachable` where no site answered — a synthesised call.
-            // A module declaring either name of its own is answered above.
-            else if matches!(effective_name, "panic" | "unreachable") {
                 (
-                    self.callee_in_module(&ModuleSource::rt(), effective_name),
+                    self.callee_in_module(&ns_source, suffix),
                     effective_name.to_string(),
                 )
             } else {
-                // Unknown function - will report error
                 (None, effective_name.to_string())
-            };
+            }
+        }
+        // The call's own reference site, answered by the module that wrote it
+        // (WEP 2026-08-12) — not by the module the walk is standing in, which
+        // for a parameter default is the caller's.
+        else if let Some(callee) = self
+            .tysys
+            .resolutions
+            .declared_if_walked(ident.id)
+            .filter(|def| self.tysys.resolutions.defs().kind(*def) == DefKind::Function)
+        {
+            if self.record_reference_to_decl(ident.id, callee, ident.span) {
+                return TypeTable::ERROR;
+            }
+            (Some(self.callee_of(callee)), effective_name.to_string())
+        }
+        // `panic` / `unreachable` where no site answered — a synthesised call.
+        // A module declaring either name of its own is answered above.
+        else if matches!(effective_name, "panic" | "unreachable") {
+            (
+                self.callee_in_module(&ModuleSource::rt(), effective_name),
+                effective_name.to_string(),
+            )
+        } else {
+            // Unknown function - will report error
+            (None, effective_name.to_string())
+        };
 
         // Resolve the callee down to a single `CalleeRef`. For unknown
         // callees we emit `UnknownFunction` and fall back to a sentinel in

@@ -455,13 +455,9 @@ impl SymbolTable {
 
         // A member reaches as far as the owner reaches from here, and no
         // farther than it reaches from its own declaration.
-        let (owner, member) = name.rsplit_once("::")?;
+        let (owner, _) = name.rsplit_once("::")?;
         let owner_reach = self.effective_visibility_with_visited(module_source, owner, visited)?;
-        let owner_sym = self
-            .member_owner_with_visited(module_source, name, &mut Vec::new())?
-            .0;
-        let declaring = owner_sym.module_source().clone();
-        let qualified = format!("{}::{member}", owner_sym.name);
+        let (declaring, qualified) = self.declared_member(module_source, name, &mut Vec::new())?;
         let member_reach =
             self.effective_visibility_with_visited(&declaring, &qualified, visited)?;
         Some(owner_reach.narrower(member_reach))
@@ -573,24 +569,26 @@ impl SymbolTable {
             );
         }
 
-        let (owner, member) = self.member_owner_with_visited(module_source, name, visited)?;
-        let declaring = owner.module_source().clone();
-        let qualified = format!("{}::{member}", owner.name);
+        let (declaring, qualified) = self.declared_member(module_source, name, visited)?;
         self.lookup_in_module_with_visited(&declaring, &qualified, visited)
     }
 
-    /// The interface or resource an `Owner::member` name reaches from
-    /// `module_source`, through whatever re-exports `Owner`, with the member.
-    fn member_owner_with_visited<'a>(
+    /// Where an `Owner::member` name reached from `module_source` is declared:
+    /// the owning interface or resource's module, and the member's name there.
+    fn declared_member(
         &self,
         module_source: &ModuleSource,
-        name: &'a str,
+        name: &str,
         visited: &mut Vec<(ModuleSource, String)>,
-    ) -> Option<(&Symbol, &'a str)> {
+    ) -> Option<(ModuleSource, String)> {
         let (owner, member) = name.rsplit_once("::")?;
         let owner = self.lookup_in_module_with_visited(module_source, owner, visited)?;
-        matches!(owner.kind, SymbolKind::Effect(_) | SymbolKind::Resource(_))
-            .then_some((owner, member))
+        matches!(owner.kind, SymbolKind::Effect(_) | SymbolKind::Resource(_)).then(|| {
+            (
+                owner.module_source().clone(),
+                format!("{}::{member}", owner.name),
+            )
+        })
     }
 
     /// Whether `name` names a type every module reads without importing it:
