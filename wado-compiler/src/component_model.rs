@@ -5,6 +5,7 @@
 //! - Component Model ABI: type conversion and support checking for CM codegen
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::convert::Infallible;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -13,7 +14,8 @@ use wasm_encoder::ValType;
 use crate::ast;
 use crate::ast::{
     AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericType, InterfaceDecl, Item,
-    NamedType, NamespacedGenericType, Type, cm_import_of, declares_unrestricted,
+    NamedType, NamespacedGenericType, Type, cm_function_path, cm_import_of, declares_unrestricted,
+    world_import_of,
 };
 use crate::attribute::CM_PARAMS;
 use crate::canonical::{CmDecl, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
@@ -22,7 +24,7 @@ use crate::cm_abi::{
     layout_fields_with_registry, layout_option_with_registry, layout_result_with_registry,
     layout_tuple_with_registry, layout_variant_with_registry, plain_size_align,
 };
-use crate::defs::DefId;
+use crate::defs::{DefId, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{DeclName, DeclPath, IDENTITY_TEST_METHOD, NARROWING_TEST_METHOD, to_kebab};
 use crate::primitive::PrimitiveType;
@@ -713,6 +715,12 @@ impl CmFunctionInfo {
     #[must_use]
     pub fn used_key(&self) -> String {
         used_wasi_key(&self.interface_name, &self.method_name)
+    }
+
+    /// The CM identifier `interface#function`, as [`CmImport::full_path`] spells it.
+    #[must_use]
+    pub fn cm_identifier(&self) -> String {
+        cm_function_path(&self.interface_path, &self.wasi_func_name)
     }
 
     /// Whether `canon lower` requires the Memory canonical option.
@@ -1517,10 +1525,7 @@ fn collect_interface_decls(modules: &[(&'static str, ast::Module)]) -> Interface
     table
 }
 
-/// The returned map is keyed by the Wado-side identifier (e.g. `Response`)
-/// and points at the interface prefix before the `#` fragment (e.g.
-/// `"wasi:http/types@0.3.0"`). Effects, structs, variants,
-/// enums, flags, resources, and newtypes are all included.
+/// [`cm_definition`] of each item in `module`, keyed by name.
 fn collect_cm_definitions(module: &ast::Module) -> IndexMap<String, String> {
     module
         .items
@@ -1530,9 +1535,27 @@ fn collect_cm_definitions(module: &ast::Module) -> IndexMap<String, String> {
         .collect()
 }
 
+/// The interface each `#[cm(…)]` declaration among `items` binds, keyed by the
+/// declaration.
+pub fn cm_bound_defs<'i>(
+    items: impl IntoIterator<Item = &'i Item>,
+    defs: &DefTable,
+) -> IndexMap<DefId, String> {
+    items
+        .into_iter()
+        .filter_map(|item| {
+            let (_, source) = cm_definition(item)?;
+            let def = defs
+                .of_ast_id(item.id())
+                .expect("a module-level declaration has a DefId");
+            Some((def, source))
+        })
+        .collect()
+}
+
 /// The name `item` declares and the interface its `#[cm(…)]` binds it to, or
 /// `None` for an item binding none.
-pub fn cm_definition(item: &Item) -> Option<(&str, String)> {
+fn cm_definition(item: &Item) -> Option<(&str, String)> {
     let (name, attrs) = match item {
         Item::Newtype(a) => (&a.name, a.attrs.as_slice()),
         Item::Resource(r) => (&r.name, r.attrs.as_slice()),
@@ -1694,84 +1717,40 @@ impl UserCmTypeBinder<'_> {
     }
 
     fn bind_item(&self, item: &mut Item, sources: &mut SourceInterfaceBatch) -> Result<(), String> {
-        let declares_cm = cm_definition(item).is_some();
-        match item {
-            Item::Function(f) => {
-                let crosses = f.attrs.iter().any(|a| {
-                    a.cm_boundary
-                        .as_ref()
-                        .is_some_and(|b| b.as_world_import().is_some())
-                });
-                let types = f.params.iter_mut().map(|p| &mut p.ty);
-                let site = Crossing {
-                    label: &f.name,
-                    crosses,
-                };
-                self.bind_types(types.chain(f.return_type.as_mut()), &site, sources)
-            }
-            Item::Struct(s) => {
-                let site = Crossing {
-                    label: &s.name,
-                    crosses: declares_cm,
-                };
-                self.bind_types(s.fields.iter_mut().map(|f| &mut f.ty), &site, sources)
-            }
-            Item::Variant(v) => {
-                let site = Crossing {
-                    label: &v.name,
-                    crosses: declares_cm,
-                };
-                let payloads = v.cases.iter_mut().filter_map(|c| c.payload.as_mut());
-                self.bind_types(payloads, &site, sources)
-            }
-            Item::Newtype(a) => {
-                let site = Crossing {
-                    label: &a.name,
-                    crosses: declares_cm,
-                };
-                self.bind_types(std::iter::once(&mut a.ty), &site, sources)
-            }
-            Item::Interface(e) => e.methods.iter_mut().try_for_each(|m| {
-                let site = Crossing {
-                    label: &m.name,
-                    crosses: cm_import_of(&m.attrs).is_some(),
-                };
-                let types = m.params.iter_mut().map(|p| &mut p.ty);
-                self.bind_types(types.chain(m.return_type.as_mut()), &site, sources)
-            }),
-            Item::Resource(r) => r.methods.iter_mut().try_for_each(|m| {
-                let site = Crossing {
-                    label: &m.name,
-                    crosses: declares_cm && cm_import_of(&m.attrs).is_some(),
-                };
-                let types = m.params.iter_mut().map(|p| &mut p.ty);
-                self.bind_types(types.chain(m.return_type.as_mut()), &site, sources)
-            }),
-            Item::Use(_)
-            | Item::Flags(_)
-            | Item::Enum(_)
-            | Item::TupleTypeDecl(_)
-            | Item::BuiltinTypeDecl(_)
-            | Item::Impl(_)
-            | Item::Trait(_)
-            | Item::World(_)
-            | Item::Test(_)
-            | Item::Global(_)
-            | Item::Error(_) => Ok(()),
-        }
+        let item_id = item.id();
+        let declares_cm = || {
+            let def = self
+                .resolutions
+                .defs()
+                .of_ast_id(item_id)
+                .expect("a module-level declaration has a DefId");
+            self.bound.contains_key(&def)
+        };
+        try_for_each_signed_type(item, &mut |site, ty| {
+            let crosses = match site.signer {
+                Signer::Declaration => declares_cm(),
+                Signer::Function => world_import_of(site.attrs).is_some(),
+                Signer::InterfaceOperation => cm_import_of(site.attrs).is_some(),
+                Signer::ResourceMethod => declares_cm() && cm_import_of(site.attrs).is_some(),
+            };
+            self.bind_type(ty, site.label, crosses, sources)
+        })
     }
 
-    fn bind_types<'t>(
+    /// `crosses` says whether `ty` crosses the boundary in `label` or only sits
+    /// in a signature the registry never reads.
+    fn bind_type(
         &self,
-        mut types: impl Iterator<Item = &'t mut Type>,
-        site: &Crossing<'_>,
+        ty: &mut Type,
+        label: &str,
+        crosses: bool,
         sources: &mut SourceInterfaceBatch,
     ) -> Result<(), String> {
         let defs = self.resolutions.defs();
-        let mut leaf = |named: &NamedType, def: DefId| {
+        bind_type_names(ty, self.resolutions, &mut |named, def| {
             if let Some(source) = self.bound.get(&def) {
                 sources.insert(named.id, source.clone());
-            } else if site.crosses && declared_by_program(defs.module(def)) {
+            } else if crosses && defs.module(def).is_program() {
                 let declared = defs.name(def);
                 let written = if named.name == declared {
                     format!("`{declared}`")
@@ -1779,25 +1758,116 @@ impl UserCmTypeBinder<'_> {
                     format!("`{}` (`{declared}`)", named.name)
                 };
                 return Err(format!(
-                    "{written} crosses the Component Model boundary in `{}` but declares no \
-                     interface; bind it with `#[cm(\"<interface>#<name>\")]`",
-                    site.label
+                    "{written} crosses the Component Model boundary in `{label}` but declares \
+                     no interface; bind it with `#[cm(\"<interface>#<name>\")]`"
                 ));
             }
             Ok(())
-        };
-        types.try_for_each(|ty| bind_type_names(ty, self.resolutions, &mut leaf))
+        })
     }
 }
 
-/// Rewrite every type name `ty` writes to the name of the declaration it
-/// reaches, so no consumer downstream reads an alias's spelling. `leaf` sees
-/// each written name with its declaration first.
-pub fn bind_type_names(
+/// What writes a type slot of an item.
+#[derive(Debug, Clone, Copy)]
+pub enum Signer {
+    /// A field, a variant payload or a newtype's base.
+    Declaration,
+    Function,
+    InterfaceOperation,
+    ResourceMethod,
+}
+
+/// Where a type slot sits: what writes it, under which name and attributes.
+pub struct TypeSlotSite<'a> {
+    pub signer: Signer,
+    pub label: &'a str,
+    pub attrs: &'a [Attribute],
+}
+
+/// Visit each type `item` declares or signs, with the site writing it.
+pub fn try_for_each_signed_type<E>(
+    item: &mut Item,
+    visit: &mut impl FnMut(&TypeSlotSite<'_>, &mut Type) -> Result<(), E>,
+) -> Result<(), E> {
+    match item {
+        Item::Struct(s) => {
+            let site = TypeSlotSite::declaration(&s.name, &s.attrs);
+            s.fields
+                .iter_mut()
+                .try_for_each(|f| visit(&site, &mut f.ty))
+        }
+        Item::Variant(v) => {
+            let site = TypeSlotSite::declaration(&v.name, &v.attrs);
+            v.cases
+                .iter_mut()
+                .filter_map(|c| c.payload.as_mut())
+                .try_for_each(|ty| visit(&site, ty))
+        }
+        Item::Newtype(a) => visit(&TypeSlotSite::declaration(&a.name, &a.attrs), &mut a.ty),
+        Item::Function(f) => try_for_each_function_type(f, Signer::Function, visit),
+        Item::Interface(decl) => try_for_each_operation_type(decl, visit),
+        Item::Resource(r) => r
+            .methods
+            .iter_mut()
+            .try_for_each(|m| try_for_each_function_type(m, Signer::ResourceMethod, visit)),
+        Item::Use(_)
+        | Item::Flags(_)
+        | Item::Enum(_)
+        | Item::TupleTypeDecl(_)
+        | Item::BuiltinTypeDecl(_)
+        | Item::Impl(_)
+        | Item::Trait(_)
+        | Item::World(_)
+        | Item::Test(_)
+        | Item::Global(_)
+        | Item::Error(_) => Ok(()),
+    }
+}
+
+/// Visit each parameter and result type of `decl`'s operations.
+pub fn try_for_each_operation_type<E>(
+    decl: &mut InterfaceDecl,
+    visit: &mut impl FnMut(&TypeSlotSite<'_>, &mut Type) -> Result<(), E>,
+) -> Result<(), E> {
+    decl.methods
+        .iter_mut()
+        .try_for_each(|m| try_for_each_function_type(m, Signer::InterfaceOperation, visit))
+}
+
+fn try_for_each_function_type<E>(
+    f: &mut ast::Function,
+    signer: Signer,
+    visit: &mut impl FnMut(&TypeSlotSite<'_>, &mut Type) -> Result<(), E>,
+) -> Result<(), E> {
+    let site = TypeSlotSite {
+        signer,
+        label: &f.name,
+        attrs: &f.attrs,
+    };
+    f.params
+        .iter_mut()
+        .map(|p| &mut p.ty)
+        .chain(f.return_type.as_mut())
+        .try_for_each(|ty| visit(&site, ty))
+}
+
+impl<'a> TypeSlotSite<'a> {
+    fn declaration(label: &'a str, attrs: &'a [Attribute]) -> Self {
+        Self {
+            signer: Signer::Declaration,
+            label,
+            attrs,
+        }
+    }
+}
+
+/// Rewrite every type name `ty` writes to its declaration's name, so no consumer
+/// reads an alias's spelling. `leaf` sees each name with its declaration first.
+pub fn bind_type_names<E>(
     ty: &mut Type,
     resolutions: &Resolutions,
-    leaf: &mut impl FnMut(&NamedType, DefId) -> Result<(), String>,
-) -> Result<(), String> {
+    leaf: &mut impl FnMut(&NamedType, DefId) -> Result<(), E>,
+) -> Result<(), E> {
     let children: Vec<&mut Type> = match ty {
         Type::Named(named) => {
             let Some(def) = resolutions.declared_if_walked(named.id) else {
@@ -1834,19 +1904,6 @@ pub fn bind_type_names(
         .try_for_each(|ty| bind_type_names(ty, resolutions, leaf))
 }
 
-/// Whether `module` is the program's own rather than the stdlib, a component
-/// dependency's binding or a Wasm asset, each of which binds its types itself.
-fn declared_by_program(module: &ModuleSource) -> bool {
-    !module.is_core() && !module.is_binding() && !module.is_wasm_asset()
-}
-
-/// Where a binding writes a type, and whether the type crosses the boundary
-/// there or only sits in a signature the registry never reads.
-struct Crossing<'a> {
-    label: &'a str,
-    crosses: bool,
-}
-
 /// Collect the source interface of every named-type reference reachable from
 /// `module` whose identifier is in `local_names`.
 ///
@@ -1854,67 +1911,17 @@ struct Crossing<'a> {
 /// unanswered — those are primitives (`String`, `bool`, `i32`, ...), generic
 /// type parameters, or names the stdlib never declares.
 fn collect_named_type_sources(
-    module: &ast::Module,
+    module: &mut ast::Module,
     local_names: &IndexMap<String, String>,
 ) -> SourceInterfaceBatch {
     let mut sources = SourceInterfaceBatch::default();
-    for item in &module.items {
-        collect_item_type_sources(&mut sources, item, local_names);
+    for item in &mut module.items {
+        let Ok(()) = try_for_each_signed_type(item, &mut |_, ty| {
+            walk_type(&mut sources, ty, local_names);
+            Ok::<(), Infallible>(())
+        });
     }
     sources
-}
-
-/// Collect the source interfaces of every type reference `item` declares.
-fn collect_item_type_sources(
-    sources: &mut SourceInterfaceBatch,
-    item: &Item,
-    local_names: &IndexMap<String, String>,
-) {
-    use crate::ast::Item;
-    match item {
-        Item::Function(f) => {
-            for param in &f.params {
-                walk_type(sources, &param.ty, local_names);
-            }
-            if let Some(ret) = &f.return_type {
-                walk_type(sources, ret, local_names);
-            }
-        }
-        Item::Struct(s) => {
-            for field in &s.fields {
-                walk_type(sources, &field.ty, local_names);
-            }
-        }
-        Item::Variant(v) => {
-            for case in &v.cases {
-                if let Some(payload) = &case.payload {
-                    walk_type(sources, payload, local_names);
-                }
-            }
-        }
-        Item::Newtype(a) => walk_type(sources, &a.ty, local_names),
-        Item::Interface(effect) => {
-            for method in &effect.methods {
-                for param in &method.params {
-                    walk_type(sources, &param.ty, local_names);
-                }
-                if let Some(ret) = &method.return_type {
-                    walk_type(sources, ret, local_names);
-                }
-            }
-        }
-        Item::Resource(r) => {
-            for method in &r.methods {
-                for param in &method.params {
-                    walk_type(sources, &param.ty, local_names);
-                }
-                if let Some(ret) = &method.return_type {
-                    walk_type(sources, ret, local_names);
-                }
-            }
-        }
-        _ => {}
-    }
 }
 
 /// Recursively descend into a Wado `Type` and answer for every named leaf whose
@@ -2105,9 +2112,9 @@ impl CmInterfaceRegistry {
         // is declared in a different module than the world.
         let mut resolved_modules: Vec<(&'static str, ast::Module)> =
             Vec::with_capacity(modules.len());
-        for (path, module) in modules {
+        for (path, mut module) in modules {
             let local_names = build_local_name_resolver(path, &module, &defs_by_module);
-            let sources = collect_named_type_sources(&module, &local_names);
+            let sources = collect_named_type_sources(&mut module, &local_names);
             registry.extend_source_interfaces(sources);
             registry.register_module_decls(&module, &CmDeclScope::Module);
             resolved_modules.push((path, module));
@@ -2307,10 +2314,7 @@ impl CmInterfaceRegistry {
         // carrying a `#[cm]` world-import boundary.
         for item in &module.items {
             if let Item::Function(func) = item
-                && let Some(cm_func_name) = func
-                    .attrs
-                    .iter()
-                    .find_map(|a| a.cm_boundary.as_ref().and_then(|b| b.as_world_import()))
+                && let Some(cm_func_name) = world_import_of(&func.attrs)
             {
                 let cm_param_names = extract_cm_params_attr(&func.attrs);
                 let params: Vec<(String, String, Type)> = func
@@ -2459,28 +2463,25 @@ impl CmInterfaceRegistry {
         modules: &[(&ModuleSource, &ast::Module)],
         resolutions: &Resolutions,
     ) -> Result<(), UserCmError> {
-        let defs = resolutions.defs();
-        let mut bound = IndexMap::default();
-        for (_, module) in modules {
-            for item in &module.items {
-                if let Some((_, source)) = cm_definition(item) {
-                    let def = defs
-                        .of_ast_id(item.id())
-                        .expect("a module-level declaration has a DefId");
-                    bound.insert(def, source);
-                }
-            }
-        }
+        let bound_by_module: Vec<IndexMap<DefId, String>> = modules
+            .iter()
+            .map(|(_, module)| cm_bound_defs(&module.items, resolutions.defs()))
+            .collect();
+        let bound = bound_by_module
+            .iter()
+            .flatten()
+            .map(|(def, source)| (*def, source.clone()))
+            .collect();
         let binder = UserCmTypeBinder {
             resolutions,
             bound: &bound,
         };
-        for (module_source, module) in modules {
+        for ((module_source, module), module_bound) in modules.iter().zip(&bound_by_module) {
             let mut module = (*module).clone();
             let sources = binder
                 .bind_module(&mut module)
                 .map_err(UserCmError::UnboundType)?;
-            self.register_user_cm_decls(&module, module_source)
+            self.register_user_cm_decls(module_bound.values(), module_source)
                 .map_err(UserCmError::TakenInterface)?;
             self.extend_source_interfaces(sources);
             self.register_module_decls(&module, &CmDeclScope::CmAttributed);
@@ -2488,19 +2489,18 @@ impl CmInterfaceRegistry {
         Ok(())
     }
 
-    /// Claim the interfaces `module` declares types in for it. `Err` names an
-    /// interface another module already declares.
-    fn register_user_cm_decls(
+    /// Claim for `module_source` the interfaces its declarations bind. `Err`
+    /// names an interface another module already declares.
+    fn register_user_cm_decls<'s>(
         &mut self,
-        module: &ast::Module,
+        interfaces: impl Iterator<Item = &'s String> + Clone,
         module_source: &ModuleSource,
     ) -> Result<(), String> {
-        let definitions = collect_cm_definitions(module);
         // A CM interface has one declaring module. Registering into one another
         // module already owns would overwrite that owner, leaving every type it
         // declares unresolvable, and collide in `register_unique`, which would
         // report user code as a stdlib bug.
-        for source in definitions.values() {
+        for source in interfaces.clone() {
             if let Some(existing) = self.existing_cm_decl(source) {
                 return Err(format!(
                     "`{module_source}` declares a Component Model type in interface \
@@ -2513,7 +2513,7 @@ impl CmInterfaceRegistry {
         // dependency's and a lib entry's do. The type-id lookup starts from the
         // interface a type names and asks which module declares it, so without
         // this a record the module has just registered answers "no TypeId".
-        for source in definitions.values() {
+        for source in interfaces {
             self.cm_interface_module_sources
                 .entry(source.clone())
                 .or_insert_with(|| module_source.clone());
@@ -5283,7 +5283,7 @@ mod tests {
     fn registry_from(module_path: &'static str, source: &str) -> CmInterfaceRegistry {
         let lexed = lex(source);
         assert!(lexed.errors.is_empty(), "lexer error: {:?}", lexed.errors);
-        let module = parser::Parser::new(lexed.tokens)
+        let mut module = parser::Parser::new(lexed.tokens)
             .parse_strict()
             .expect("parser error");
         let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
@@ -5291,7 +5291,7 @@ mod tests {
         defs_by_module.insert(module_path, collect_cm_definitions(&module));
         let local_names = build_local_name_resolver(module_path, &module, &defs_by_module);
         let mut registry = CmInterfaceRegistry::new();
-        registry.extend_source_interfaces(collect_named_type_sources(&module, &local_names));
+        registry.extend_source_interfaces(collect_named_type_sources(&mut module, &local_names));
         registry.register_module_decls(&module, &CmDeclScope::Module);
         registry
     }

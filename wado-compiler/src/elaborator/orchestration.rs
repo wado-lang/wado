@@ -10,7 +10,9 @@ use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, Item, Module, Type, declares_unrestricted, wire_numbers_of};
+use crate::ast::{
+    self, Item, Module, Type, declares_unrestricted, wire_numbers_of, world_import_of,
+};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
@@ -3494,16 +3496,8 @@ fn component_world_func_names(module: &Module) -> Vec<String> {
         .items
         .iter()
         .filter_map(|item| match item {
-            Item::Function(func) => {
-                if func.attrs.iter().any(|a| {
-                    a.cm_boundary
-                        .as_ref()
-                        .is_some_and(|b| b.as_world_import().is_some())
-                }) {
-                    Some(func.name.clone())
-                } else {
-                    None
-                }
+            Item::Function(func) if world_import_of(&func.attrs).is_some() => {
+                Some(func.name.clone())
             }
             _ => None,
         })

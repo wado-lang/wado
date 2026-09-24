@@ -61,10 +61,12 @@ pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
 pub mod test_names;
 use crate::ast::UseDecl;
+use std::convert::Infallible;
 use std::sync::Arc;
 
 use crate::component_model::{
-    CmInterfaceRegistry, bind_type_names, cm_definition, wado_primitive_name_to_cm,
+    CmInterfaceRegistry, bind_type_names, cm_bound_defs, try_for_each_operation_type,
+    try_for_each_signed_type, wado_primitive_name_to_cm,
 };
 use crate::defs::DefId;
 use crate::name::entry_dir_of;
@@ -208,7 +210,7 @@ pub struct CompileResult {
 
 /// Report a compilation error the pipeline has no span for — it names the
 /// offending declaration instead.
-fn report_without_span<H: compiler_host::CompilerHost>(
+pub(crate) fn report_without_span<H: compiler_host::CompilerHost>(
     logger: &Logger<'_, H>,
     code: compiler_host::Code,
     message: String,
@@ -734,9 +736,8 @@ fn synthesize_lib_world_info(
     }
 }
 
-/// Names every type a synthesized world's surface writes by the declaration it
-/// reaches, and answers each such site with the interface publishing it: the
-/// world's own for a type it publishes, a `#[cm(…)]` item's own otherwise.
+/// Names each type a synthesized world's surface writes by its declaration, and
+/// answers the site with the world's interface or the `#[cm(…)]` one it binds.
 struct LibTypeBinder<'a> {
     resolutions: &'a resolve::Resolutions,
     registry: &'a CmInterfaceRegistry,
@@ -752,17 +753,17 @@ impl<'a> LibTypeBinder<'a> {
         published: impl Iterator<Item = &'m ast::Item>,
     ) -> Self {
         let defs = resolutions.defs();
-        let def_of = |item: &ast::Item| {
-            defs.of_ast_id(item.id())
-                .expect("a module-level declaration has a DefId")
-        };
         let mut interfaces: hashmap::IndexMap<DefId, String> = published
-            .map(|item| (def_of(item), fq.to_string()))
+            .map(|item| {
+                let def = defs
+                    .of_ast_id(item.id())
+                    .expect("a module-level declaration has a DefId");
+                (def, fq.to_string())
+            })
             .collect();
-        for item in modules.values().flat_map(|module| &module.items) {
-            if let Some((_, source)) = cm_definition(item) {
-                interfaces.entry(def_of(item)).or_insert(source);
-            }
+        let items = modules.values().flat_map(|module| &module.items);
+        for (def, source) in cm_bound_defs(items, defs) {
+            interfaces.entry(def).or_insert(source);
         }
         Self {
             resolutions,
@@ -771,74 +772,30 @@ impl<'a> LibTypeBinder<'a> {
         }
     }
 
-    fn bind_type(&self, ty: &mut ast::Type) {
-        let mut leaf = |named: &ast::NamedType, def: DefId| {
+    fn bind_type(&self, ty: &mut ast::Type) -> Result<(), Infallible> {
+        bind_type_names(ty, self.resolutions, &mut |named, def| {
             if let Some(source) = self.interfaces.get(&def) {
                 self.registry.set_source_interface(named.id, source.clone());
             }
             Ok(())
-        };
-        bind_type_names(ty, self.resolutions, &mut leaf)
-            .expect("naming a type by its declaration refuses nothing");
+        })
     }
 
     fn bind_export(&self, export: &mut world_registry::WorldExportInfo) {
-        for (_, ty) in &mut export.params {
-            self.bind_type(ty);
-        }
-        if let Some(ty) = export.return_type.as_mut() {
-            self.bind_type(ty);
-        }
+        let Ok(()) = export
+            .params
+            .iter_mut()
+            .map(|(_, ty)| ty)
+            .chain(export.return_type.as_mut())
+            .try_for_each(|ty| self.bind_type(ty));
     }
 
-    /// The types `item` declares or signs: fields, payloads, a newtype's base,
-    /// and the parameters and results of its functions and operations.
     fn bind_item(&self, item: &mut ast::Item) {
-        use crate::ast::Item;
-        let types: Vec<&mut ast::Type> = match item {
-            Item::Struct(d) => d.fields.iter_mut().map(|f| &mut f.ty).collect(),
-            Item::Variant(d) => d
-                .cases
-                .iter_mut()
-                .filter_map(|c| c.payload.as_mut())
-                .collect(),
-            Item::Newtype(d) => vec![&mut d.ty],
-            Item::Function(f) => f
-                .params
-                .iter_mut()
-                .map(|p| &mut p.ty)
-                .chain(f.return_type.as_mut())
-                .collect(),
-            Item::Interface(d) => return self.bind_interface(d),
-            Item::Use(_)
-            | Item::Enum(_)
-            | Item::Flags(_)
-            | Item::TupleTypeDecl(_)
-            | Item::BuiltinTypeDecl(_)
-            | Item::Impl(_)
-            | Item::Trait(_)
-            | Item::Resource(_)
-            | Item::World(_)
-            | Item::Test(_)
-            | Item::Global(_)
-            | Item::Error(_) => Vec::new(),
-        };
-        for ty in types {
-            self.bind_type(ty);
-        }
+        let Ok(()) = try_for_each_signed_type(item, &mut |_, ty| self.bind_type(ty));
     }
 
     fn bind_interface(&self, decl: &mut ast::InterfaceDecl) {
-        for method in &mut decl.methods {
-            let types = method
-                .params
-                .iter_mut()
-                .map(|p| &mut p.ty)
-                .chain(method.return_type.as_mut());
-            for ty in types {
-                self.bind_type(ty);
-            }
-        }
+        let Ok(()) = try_for_each_operation_type(decl, &mut |_, ty| self.bind_type(ty));
     }
 }
 
@@ -1372,11 +1329,17 @@ fn compile_after_load<H: CompilerHost>(
 
     // The synthesized world's surface, with every type it writes named by its
     // declaration; owned, so it outlives the `sem` destructure below.
-    let lib_entry_module = match (synth_world_fq.as_ref(), sem.cm_interface_registry()) {
-        (Some(fq), Some(registry)) => {
+    let lib_analysis = synth_world_fq
+        .as_ref()
+        .zip(sem.cm_interface_registry())
+        .map(|(fq, registry)| {
             let resolutions = sem
                 .resolutions()
                 .expect("an analysis with a CM registry has resolutions");
+            (fq, registry, resolutions)
+        });
+    let lib_entry_module = match lib_analysis {
+        Some((fq, registry, resolutions)) => {
             let entry = sem.modules.get(&sem.entry_module_source);
             let published = entry
                 .into_iter()
@@ -1404,7 +1367,7 @@ fn compile_after_load<H: CompilerHost>(
             }
             entry
         }
-        _ => None,
+        None => None,
     };
 
     let mut lib_world_info =
@@ -1474,9 +1437,9 @@ fn compile_after_load<H: CompilerHost>(
     // missing entry and panics, so the refusal has to land here.
     if options.lib_world.is_some()
         && let Some(world) = lib_world_info.as_ref()
-        && let Some(registry) = sem.cm_interface_registry()
-        && let Some(resolutions) = sem.resolutions()
     {
+        let (_, registry, resolutions) =
+            lib_analysis.expect("a synthesized world comes from the library analysis");
         let declared: hashmap::IndexMap<ast::AstId, &ast::Item> = sem
             .modules
             .iter()

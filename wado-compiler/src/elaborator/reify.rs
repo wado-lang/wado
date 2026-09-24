@@ -10649,10 +10649,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 method,
             ))
             .expect("an unrestricted resource registers its `lang` predicates");
-        method_info.cm_name = Some(format!(
-            "{}#{}",
-            binding.interface_path, binding.wasi_func_name
-        ));
+        method_info.cm_name = Some(binding.cm_identifier());
         let module_source = self
             .tysys
             .type_table

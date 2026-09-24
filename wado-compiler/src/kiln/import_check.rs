@@ -133,10 +133,8 @@ pub fn inject_kiln_request_adapter(
         )),
     };
 
-    // Stamp `InputFile` with its shared `core:kiln/types` source so downstream
-    // CM resolution (and the world-synthesis local-type annotation) treats it as
-    // that interface's type, not a generator-local one — otherwise it falls back
-    // to an i32 handle when lifted as a `List<InputFile>` element.
+    // Without its `core:kiln/types` source, CM resolution takes `InputFile` for a
+    // generator-local type and lifts a `List<InputFile>` element as an i32 handle.
     let mut input_file_ty = |module: &mut Module| {
         let named = NamedType::new(module.alloc_ast_id(), "InputFile".to_string(), span);
         source_interfaces.insert(named.id, KILN_TYPES_INTERFACE.to_string());

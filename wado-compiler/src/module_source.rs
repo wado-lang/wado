@@ -694,6 +694,13 @@ impl ModuleSource {
         matches!(self, Self::Binding { .. })
     }
 
+    /// Whether the program declares this module itself, rather than the stdlib,
+    /// a component dependency's binding or a Wasm asset, each binding its own types.
+    #[must_use]
+    pub fn is_program(&self) -> bool {
+        !self.is_core() && !self.is_binding() && !self.is_wasm_asset()
+    }
+
     /// Whether the entry package owns this module: the entry point and the
     /// local modules it reaches. A dependency, `core:` / `wasi:`, a remote and
     /// a Kiln-generated module are all someone else's source.

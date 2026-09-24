@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crate::analyze::Analyzer;
 use crate::ast::{AstId, AstIdSpace, ImplBlock, Item, Module, SelfKind, Visibility};
 use crate::ast_index::AstIndex;
-use crate::compiler_host::{Code, CompilerHost, Diagnostic, LogLevel, Severity};
+use crate::compiler_host::{Code, CompilerHost, LogLevel};
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
@@ -31,7 +31,7 @@ use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
 use crate::wit_emit::{WitContract, WitEmitInput};
 use crate::world_registry::WorldRegistry;
-use crate::{ast, load, loader, parse, symbol_notation};
+use crate::{ast, load, loader, parse, report_without_span, symbol_notation};
 
 /// A ready-to-query analysis result.
 ///
@@ -1233,23 +1233,13 @@ fn register_user_cm_bindings<H: CompilerHost>(
     // folded in by `fold_component_interfaces`.
     let bindings: Vec<(&ModuleSource, &Module)> = modules
         .iter()
-        .filter(|(source, module)| {
-            !source.is_core()
-                && !source.is_binding()
-                && !source.is_wasm_asset()
-                && declares_cm_binding(module)
-        })
+        .filter(|(source, module)| source.is_program() && declares_cm_binding(module))
         .collect();
     if bindings.is_empty() {
         return true;
     }
     let refuse = |code: Code, message: String| {
-        let _ = logger.error(Diagnostic {
-            severity: Severity::Error,
-            code,
-            message,
-            span: None,
-        });
+        report_without_span(logger, code, message);
         false
     };
     let tysys = &mut state.tysys;

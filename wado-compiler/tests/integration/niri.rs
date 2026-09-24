@@ -3687,9 +3687,8 @@ fn seq_lit(table: &mut TypeTable, type_id: TypeId, bytes: Vec<u8>) -> Build {
     container_lit(type_id, packed_array(bytes, array_ty), used)
 }
 
-/// Declare the `String` and `List` items `materialize_seq_via` identifies by,
-/// and the `Array<u8>` the literal it writes names, as the compiler's own table
-/// has them. Returns the `String` type.
+/// Declare `String`, `List` and `Array<u8>` as the compiler's own table has
+/// them, for `materialize_seq_via` to identify by. Returns the `String` type.
 fn register_seq_containers(table: &mut TypeTable) -> TypeId {
     table.make_builtin_array(TypeTable::U8);
     let mut symbols = SymbolTable::new();

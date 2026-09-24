@@ -1,6 +1,5 @@
 //! A `--lib` export signature names the declaration a type reaches, not its
-//! spelling: a struct imported as `u32` crosses as the struct's record, exactly
-//! as it does under its own name.
+//! spelling: a struct imported as `u32` crosses as the struct's record.
 
 use std::path::Path;
 

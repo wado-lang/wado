@@ -1683,6 +1683,21 @@ pub fn cm_import_of(attrs: &[Attribute]) -> Option<&CmImport> {
     attrs.iter().find_map(Attribute::as_cm_import)
 }
 
+/// The world-level function import among `attrs`, wherever it sits: the bare
+/// function name the dependency's world exports.
+#[must_use]
+pub fn world_import_of(attrs: &[Attribute]) -> Option<&str> {
+    attrs
+        .iter()
+        .find_map(|a| a.cm_boundary.as_ref()?.as_world_import())
+}
+
+/// The CM identifier of `function` in the interface at `interface_path`.
+#[must_use]
+pub fn cm_function_path(interface_path: &str, function: &str) -> String {
+    format!("{interface_path}#{function}")
+}
+
 /// Which Component Model boundary a `#[cm(…)]` / `#[canonical(…)]` declaration
 /// crosses: `Canonical` lowers to a CM canonical built-in such as
 /// `canon.task.return`, `Import` resolves to a real import from
@@ -1836,12 +1851,11 @@ impl CmImport {
     /// (e.g., "wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").
     /// Reconstructs the canonical form parsed by `CmImport::parse`.
     pub fn full_path(&self) -> String {
-        let mut path = self.interface_path();
-        if let Some(ref f) = self.function {
-            path.push('#');
-            path.push_str(f);
+        let path = self.interface_path();
+        match &self.function {
+            Some(f) => cm_function_path(&path, f),
+            None => path,
         }
-        path
     }
 }
 
