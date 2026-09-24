@@ -102,6 +102,19 @@ pub fn resolve_ci(grammar_opts: &List<GrammarOption>, rule_opts: &List<GrammarOp
 /// case-insensitively. The original range is always included. When the range
 /// intersects ASCII letters, the opposing-case sub-range is appended.
 /// Non-letter chars are not folded (ANTLR4 only does one-length transforms).
+/// Whether `start..=end`, widened as `fold_range_ci` widens it under `ci`,
+/// holds `c`: the set's membership without building it.
+pub fn folded_range_contains(start: char, end: char, ci: bool, c: char) -> bool {
+    if start <= c <= end {
+        return true;
+    }
+    if !ci || !c.is_ascii_alphabetic() {
+        return false;
+    }
+    let partner = if c.is_ascii_lowercase() { c.to_ascii_uppercase() } else { c.to_ascii_lowercase() };
+    return start <= partner <= end;
+}
+
 pub fn fold_range_ci(start: char, end: char, out: &mut List<CharRange>) {
     out.push(CharRange { start, end });
     if start <= 'z' && end >= 'a' {
@@ -3834,12 +3847,13 @@ fn keyword_elem_ends(
     let len = kw.text.len();
     match elem {
         Literal(s) => {
-            let sets: List<LeadingChars> = s.chars().map(
-                |c| LeadingChars { ranges: folded_ranges(c, c, ci), negated: false, nullable: false },
-            ).collect();
+            let cs: List<char> = s.chars().collect();
             return starts.iter_ref().filter(
-                |p| *p + sets.len() <= len && (0..<sets.len()).all(|i| keyword_chars_in(kw, *p + i, &sets[i], reading)),
-            ).map(|p| *p + sets.len()).collect();
+                |p| *p + cs.len() <= len
+                    && (0..<cs.len()).all(
+                        |i| keyword_chars_admitted(kw, *p + i, reading, |c| folded_range_contains(cs[i], cs[i], ci, c)),
+                    ),
+            ).map(|p| *p + cs.len()).collect();
         },
         RuleRef(name) => {
             let callee = find_lexer_rule(all_rules, name);
@@ -3892,7 +3906,24 @@ fn keyword_elem_ends(
                 frontier = fresh;
             }
         },
-        CharRange(_) | CharClass(_) | AnyChar | Not(_) => {
+        CharRange(pair) => {
+            return starts.iter_ref().filter(
+                |p| *p < len
+                    && keyword_chars_admitted(kw, *p, reading, |c| folded_range_contains(pair.0, pair.1, ci, c)),
+            ).map(|p| *p + 1).collect();
+        },
+        CharClass(cc) && !(cc.negated && ci) => {
+            let admits = |c: char| cc.negated != cc.ranges.iter_ref().any(|r| folded_range_contains(
+                r.start,
+                r.end,
+                ci,
+                c,
+            ));
+            return starts.iter_ref().filter(|p| *p < len && keyword_chars_admitted(kw, *p, reading, admits)).map(
+                |p| *p + 1,
+            ).collect();
+        },
+        CharClass(_) | AnyChar | Not(_) => {
             let mut no_refs: List<String> = [];
             let Some(set) = lexer_elem_leading_chars(elem, all_rules, ci, false, &mut no_refs) else {
                 return unread_keyword_ends(kw, reading, starts);
@@ -3926,9 +3957,23 @@ fn unread_keyword_ends(kw: &KeywordInfo, reading: KeywordReading, starts: &List<
 /// Whether the chars `kw` accepts at `pos` are in `set`: every one when
 /// proving, any one otherwise.
 fn keyword_chars_in(kw: &KeywordInfo, pos: i32, set: &LeadingChars, reading: KeywordReading) -> bool {
+    return keyword_chars_admitted(
+        kw,
+        pos,
+        reading,
+        |c| set.negated != set.ranges.iter_ref().any(|r| c as i32 >= r.0 && c as i32 <= r.1),
+    );
+}
+
+/// Whether `admits` takes the chars `kw` accepts at `pos`: every one when
+/// proving, any one otherwise.
+fn keyword_chars_admitted(kw: &KeywordInfo, pos: i32, reading: KeywordReading, admits: fn(char) -> bool) -> bool {
     let accepts = keyword_accepts(kw, pos);
-    let in_set = |c: &char| set.negated != set.ranges.iter_ref().any(|r| *c as i32 >= r.0 && *c as i32 <= r.1);
-    return if reading matches { Proven } { accepts.iter_ref().all(in_set) } else { accepts.iter_ref().any(in_set) };
+    return if reading matches { Proven } {
+        accepts.iter_ref().all(|c| admits(*c));
+    } else {
+        accepts.iter_ref().any(|c| admits(*c));
+    };
 }
 
 /// Decides whether a keyword candidate may use the classifier shortcut.

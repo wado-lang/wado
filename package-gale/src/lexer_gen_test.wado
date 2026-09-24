@@ -16,7 +16,10 @@ use {
     compute_elem_first_chars,
     resolve_ci,
     lit_name,
+    fold_range_ci,
+    folded_range_contains,
 } from "./lexer_gen.wado";
+use { CharRange } from "./ir.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { MemberDecls, MemberField, MemberMethod } from "./java2wado/jmembers.wado";
 use { SuperOp } from "./superclass.wado";
@@ -458,4 +461,26 @@ test "lit_name renders a grammar literal the way ANTLR4's vocabulary does" {
     let mut quote = String::new();
     quote.push('"');
     assert `${lit_name(quote)}` == "'\"'";
+}
+
+test "folded_range_contains agrees with the ranges fold_range_ci builds" {
+    let bounds: List<[char, char]> = [
+        ['a', 'a'],
+        ['Q', 'Q'],
+        ['0', '9'],
+        ['A', 'z'],
+        ['_', 'c'],
+        ['X', 'b'],
+        ['\u{00C0}', '\u{00FF}'],
+    ];
+    for let [start, end] of bounds {
+        let mut folded: List<CharRange> = [];
+        fold_range_ci(start, end, &mut folded);
+        for let code of 0..<0x100 {
+            let c = char::from_u32(code as u32).unwrap();
+            let built = folded.iter_ref().any(|r| r.start <= c <= r.end);
+            assert folded_range_contains(start, end, true, c) == built;
+            assert folded_range_contains(start, end, false, c) == (start <= c <= end);
+        }
+    }
 }
