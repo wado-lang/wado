@@ -2033,14 +2033,7 @@ fn inline_top_level(
     cold: bool,
 ) -> ExprId {
     let result = try_inline_call_expr(
-        body,
-        value,
-        candidates,
-        frame,
-        type_table,
-        labels,
-        reval,
-        cold,
+        body, value, candidates, frame, type_table, labels, reval, cold,
     );
     if let Some((new_id, inlined_key)) = result {
         if !inlined_funcs.contains(&inlined_key) {
@@ -3130,16 +3123,9 @@ fn inline_calls_in_expr(
             cold,
         );
     }
-    if let Some((new_id, inlined_key)) = try_inline_call_expr(
-        body,
-        e,
-        candidates,
-        frame,
-        type_table,
-        labels,
-        reval,
-        cold,
-    ) {
+    if let Some((new_id, inlined_key)) =
+        try_inline_call_expr(body, e, candidates, frame, type_table, labels, reval, cold)
+    {
         if !inlined_funcs.contains(&inlined_key) {
             inlined_funcs.push(inlined_key);
         }

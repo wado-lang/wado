@@ -21,8 +21,8 @@ use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 use super::arena_query::{
-    block_yields_value, has_break_to, is_local, is_local_operand,
-    promoted_read_count_at, single_payload_binding,
+    block_yields_value, has_break_to, is_local, is_local_operand, promoted_read_count_at,
+    single_payload_binding,
 };
 use super::sroa_variant_return::{Pad, zero_pad};
 
@@ -219,9 +219,8 @@ fn check_fusion_preconditions_if_variant_test(
         return None;
     }
 
-    let else_escapes = else_block.map_or_else(Escapes::default, |eb| {
-        Escapes::of(body, NodeRef::Block(eb))
-    });
+    let else_escapes =
+        else_block.map_or_else(Escapes::default, |eb| Escapes::of(body, NodeRef::Block(eb)));
     if !arms_stay_free(
         body,
         &exits,
@@ -760,10 +759,14 @@ fn fresh_label(body: &Body, stem: String, regions: &[NodeRef]) -> String {
     if free(&stem) {
         return stem;
     }
-    (1..)
-        .map(|n| format!("{stem}_{n}"))
-        .find(|label| free(label))
-        .expect("an unbounded range of labels")
+    let mut serial = 1u32;
+    loop {
+        let label = format!("{stem}_{serial}");
+        if free(&label) {
+            return label;
+        }
+        serial += 1;
+    }
 }
 
 /// Replace exit `s` with `with` in the block holding it.
@@ -1715,15 +1718,20 @@ fn plan_threading(body: &Body, id: ExprId, locals: &[NirLocal]) -> Option<Thread
         .iter()
         .map(|arm| Escapes::of_operand(body, arm.body))
         .collect();
-    if exits.iter().any(|exit| {
-        escapes[selected_arm(body, exit.stmt, &arm_infos)].captured_at(&exit.scope)
-    }) {
+    if exits
+        .iter()
+        .any(|exit| escapes[selected_arm(body, exit.stmt, &arm_infos)].captured_at(&exit.scope))
+    {
         return None;
     }
     // A non-unit match needs a tail value from every threaded arm.
     if !unit_result
         && arm_infos.iter().zip(&selected).any(|(arm, used)| {
-            *used && arm.body.as_expr().is_some_and(|e| !arm_body_decomposable(body, e))
+            *used
+                && arm
+                    .body
+                    .as_expr()
+                    .is_some_and(|e| !arm_body_decomposable(body, e))
         })
     {
         return None;

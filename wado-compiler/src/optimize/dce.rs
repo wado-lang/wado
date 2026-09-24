@@ -2411,23 +2411,20 @@ fn remove_dead_global_sets(
     for store in stores {
         let value = dead_store_value(body, store, used).expect("collected as a dead store");
         let unit = body.exprs[store].type_id;
-        match kept_effect(body, value, type_table) {
-            Some(effect) => {
-                let span = body.exprs[store].span;
-                let stmt = body.stmts.push(StmtNode {
-                    kind: StmtKind::Expr(effect.into()),
-                    span,
-                });
-                let block = body.blocks.push(BlockNode {
-                    stmts: vec![stmt],
-                    span,
-                });
-                body.exprs[store].kind = ExprKind::plain_block(block, unit, "dead_global_store");
-            }
-            None => {
-                let unit = Operand::Value(body.values.alloc_unshared(ValueKind::Unit, unit));
-                body.replace_operand_to(node, store, unit);
-            }
+        if let Some(effect) = kept_effect(body, value, type_table) {
+            let span = body.exprs[store].span;
+            let stmt = body.stmts.push(StmtNode {
+                kind: StmtKind::Expr(effect.into()),
+                span,
+            });
+            let block = body.blocks.push(BlockNode {
+                stmts: vec![stmt],
+                span,
+            });
+            body.exprs[store].kind = ExprKind::plain_block(block, unit, "dead_global_store");
+        } else {
+            let unit = Operand::Value(body.values.alloc_unshared(ValueKind::Unit, unit));
+            body.replace_operand_to(node, store, unit);
         }
     }
 
