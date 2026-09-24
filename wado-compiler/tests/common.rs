@@ -13,7 +13,9 @@
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
-use wasmtime::component::{ComponentExportIndex, Func, Instance, Linker, ResourceTable};
+use wado_compiler::module_source::CmNamespace;
+use wasmtime::component::types::ComponentItem;
+use wasmtime::component::{Component, ComponentExportIndex, Func, Instance, Linker, ResourceTable};
 use wasmtime::{Config, Engine, InstanceAllocationStrategy, PoolingAllocationConfig, Store};
 use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{
@@ -956,6 +958,39 @@ pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     Ok(linker)
 }
 
+/// [`linker`] for `component`, each `web:*` import a trap. Mirrors
+/// `wado_cli::runtime::create_linker`: no Wado host is a browser, so an effect
+/// handler answers a `web:*` call or nothing does.
+pub fn host_linker(component: &Component) -> anyhow::Result<Linker<WasiState>> {
+    let engine = component.engine();
+    let mut linker = linker(engine)?;
+    let component_type = component.component_type();
+    for (interface, import) in component_type.imports(engine) {
+        if !matches!(
+            CmNamespace::split_specifier(interface),
+            Some((CmNamespace::Web, _))
+        ) {
+            continue;
+        }
+        let ComponentItem::ComponentInstance(instance) = import.ty else {
+            anyhow::bail!("`{interface}` is imported as something other than an instance");
+        };
+        let mut linker_instance = linker.instance(interface)?;
+        for (function, export) in instance.exports(engine) {
+            let ComponentItem::ComponentFunc(_) = export.ty else {
+                anyhow::bail!("`{interface}` exports `{function}`, which is not a function");
+            };
+            let name = format!("{interface}#{function}");
+            linker_instance.func_new(function, move |_, _, _, _| {
+                Err(wasmtime::Error::msg(format!(
+                    "`{name}` was called with no effect handler installed for it"
+                )))
+            })?;
+        }
+    }
+    Ok(linker)
+}
+
 /// Compile `source` as the `world_fq` library world, under `allocator` where
 /// one is named and the world's own default otherwise.
 pub fn compile_lib_world(
@@ -1407,7 +1442,6 @@ pub fn run_wasm_with_full_options(
     outgoing_mocks: indexmap::IndexMap<String, OutgoingMockResponse>,
     tls_mocks: indexmap::IndexMap<String, TlsMockResponse>,
 ) -> anyhow::Result<WasmRunResult> {
-    use wasmtime::component::Component;
     use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
 
     let rt = runtime();
@@ -1415,7 +1449,7 @@ pub fn run_wasm_with_full_options(
 
     rt.block_on(async {
         let component = Component::new(engine, &wasm)?;
-        let linker = linker(engine)?;
+        let linker = host_linker(&component)?;
 
         let stdout_pipe = MemoryOutputPipe::new(65536);
         let stdout_clone = stdout_pipe.clone();
@@ -1524,8 +1558,8 @@ pub fn run_test_world(
     let engine = engine();
 
     rt.block_on(async {
-        let component = wasmtime::component::Component::new(engine, wasm)?;
-        let linker = linker(engine)?;
+        let component = Component::new(engine, wasm)?;
+        let linker = host_linker(&component)?;
 
         // Find test exports
         let component_ty = component.component_type();

@@ -1,8 +1,10 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
-use wasmtime::component::{Linker, ResourceTable};
+use wado_compiler::module_source::CmNamespace;
+use wasmtime::component::types::ComponentItem;
+use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{
     Collector, Config, Engine, InstanceAllocationStrategy, OptLevel, PoolingAllocationConfig,
     ProfilingStrategy, Store,
@@ -561,16 +563,53 @@ pub fn create_test_store(
     Ok((Store::new(engine, state), stdout, stderr))
 }
 
-/// Create a Linker with WASI P3 and HTTP bindings.
+/// Create a Linker for `component`: WASI P3, HTTP and TLS, plus a trap for each
+/// `web:*` import.
 ///
 /// # Errors
 ///
-/// Returns an error if WASI bindings cannot be added to the linker.
-pub fn create_linker(engine: &Engine) -> Result<Linker<WasiState>> {
-    let mut linker: Linker<WasiState> = Linker::new(engine);
+/// Returns an error if WASI bindings cannot be added to the linker, or if a
+/// `web:*` import is not an instance of functions.
+pub fn create_linker(component: &Component) -> Result<Linker<WasiState>> {
+    let mut linker: Linker<WasiState> = Linker::new(component.engine());
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
     add_to_linker(&mut linker)?;
+    define_web_imports_as_traps(&mut linker, component)?;
     Ok(linker)
+}
+
+/// No Wado host is a browser, so a `web:*` call is answered by an effect
+/// handler or not at all: each import traps, and only when it is called.
+fn define_web_imports_as_traps(
+    linker: &mut Linker<WasiState>,
+    component: &Component,
+) -> Result<()> {
+    let engine = component.engine();
+    let component_type = component.component_type();
+    for (interface, import) in component_type.imports(engine) {
+        if !matches!(
+            CmNamespace::split_specifier(interface),
+            Some((CmNamespace::Web, _))
+        ) {
+            continue;
+        }
+        let ComponentItem::ComponentInstance(instance) = import.ty else {
+            bail!("`{interface}` is imported as something other than an instance");
+        };
+        let mut linker_instance = linker.instance(interface)?;
+        for (function, export) in instance.exports(engine) {
+            let ComponentItem::ComponentFunc(_) = export.ty else {
+                bail!("`{interface}` exports `{function}`, which is not a function");
+            };
+            let name = format!("{interface}#{function}");
+            linker_instance.func_new(function, move |_, _, _, _| {
+                Err(wasmtime::Error::msg(format!(
+                    "`{name}` was called with no effect handler installed for it"
+                )))
+            })?;
+        }
+    }
+    Ok(())
 }

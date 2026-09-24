@@ -1,0 +1,51 @@
+// No host implements `web:dom` here: a handler answers what the program calls,
+// and the host fills every import with a trap for what it does not.
+use { Document, Dom, Element, Node } from "web:dom";
+
+struct FakeDom {
+    texts: List<String>,
+}
+
+impl Dom for FakeDom {
+    fn document(&mut self) -> Document {
+        resume 0 as Document
+    }
+    ..trap
+}
+
+impl Document for FakeDom {
+    fn create_element(&mut self, this: &Document, local_name: String, options: Option<String>) -> Element {
+        self.texts.push("");
+        resume self.texts.len() as u32 as Element
+    }
+    ..trap
+}
+
+impl Node for FakeDom {
+    fn set_text_content(&mut self, this: &Node, value: Option<String>) {
+        self.texts[*this as u32 as i32 - 1] = value.unwrap_or("");
+        resume ()
+    }
+    fn text_content(&mut self, this: &Node) -> Option<String> {
+        resume Option::Some(self.texts[*this as u32 as i32 - 1])
+    }
+    ..trap
+}
+
+test "a handler serves every call" {
+    let mut dom = FakeDom { texts: [] };
+    with &mut dom do {
+        let el = Dom::document().create_element("div", null);
+        el.set_text_content(Option::Some("hello"));
+        assert el.text_content() == Option::Some("hello");
+    }
+    assert dom.texts == ["hello"];
+}
+
+#[expect_trap]
+test "a call no handler answers traps" {
+    let _ = Dom::window();
+}
+
+__DATA__
+{"test": {}}

@@ -10,7 +10,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{
-    DeclName, DeclPath, FqTypeName, LocalMethodName, MethodName, cm_wrap_async_func_name,
+    DeclName, DeclPath, FqTypeName, LocalMethodName, MethodName, Receiver, cm_wrap_async_func_name,
     dispatch_field_name, dispatch_global_name, dispatch_struct_name, dispatch_wrapper_name,
     effect_default_impl_name, mangle_generic_name,
 };
@@ -2584,17 +2584,14 @@ struct RewriteCtx<'a> {
 /// `cm_name`-tagged shape. Returns `None` if no instantiation matches
 /// (the call falls through to `cm_binding`'s normal rewriting).
 fn pick_resource_wrapper(
-    base_name: &str,
-    decl_module: &ModuleSource,
+    (decl_module, base_name): (ModuleSource, String),
     cm_name: &str,
     call_type_args: &[TypeId],
     ctx: &RewriteCtx<'_>,
 ) -> Option<String> {
-    let candidates = ctx.cm_to_wrappers.get(&(
-        decl_module.clone(),
-        base_name.to_string(),
-        cm_name.to_string(),
-    ))?;
+    let candidates = ctx
+        .cm_to_wrappers
+        .get(&(decl_module, base_name, cm_name.to_string()))?;
     // Exact instantiation match first.
     if let Some((_, name)) = candidates.iter().find(|(args, _)| args == call_type_args) {
         return Some(name.clone());
@@ -2610,12 +2607,24 @@ fn pick_resource_wrapper(
     None
 }
 
-/// Strip leading `Ref`/`MutRef` then return `(decl_module, base_name,
-/// type_args)` for a resource type, if the type is a resource.
-fn extract_resource_instantiation(
-    type_id: TypeId,
-    type_table: &TypeTable,
-) -> Option<(ModuleSource, String, Vec<TypeId>)> {
+/// The resource declaring a `#[cm]` method, as `cm_to_wrappers` keys it: its
+/// module and its declaration name.
+fn declaring_resource(method_info: &LocalMethodName) -> Option<(ModuleSource, String)> {
+    if let Some(name) = method_info.base_trait_name() {
+        return Some((method_info.base_trait_module()?.clone(), name.to_string()));
+    }
+    let Receiver::Type(resource) = method_info.receiver() else {
+        return None;
+    };
+    Some((
+        resource.module()?.clone(),
+        resource.decl_name().into_string(),
+    ))
+}
+
+/// The type args of a resource type behind any `Ref`/`MutRef`, if the type is
+/// a resource.
+fn resource_type_args(type_id: TypeId, type_table: &TypeTable) -> Option<Vec<TypeId>> {
     use crate::tir::ResolvedType;
     let mut tid = type_id;
     loop {
@@ -2623,20 +2632,8 @@ fn extract_resource_instantiation(
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 tid = *inner;
             }
-            ResolvedType::Resource { def } => {
-                return Some((
-                    type_table.def_module(*def).clone(),
-                    type_table.def_name(*def).to_string(),
-                    Vec::new(),
-                ));
-            }
-            ResolvedType::GenericResource { def, type_args } => {
-                return Some((
-                    type_table.def_module(*def).clone(),
-                    type_table.def_name(*def).to_string(),
-                    type_args.clone(),
-                ));
-            }
+            ResolvedType::Resource { .. } => return Some(Vec::new()),
+            ResolvedType::GenericResource { type_args, .. } => return Some(type_args.clone()),
             _ => return None,
         }
     }
@@ -2705,25 +2702,19 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
             if let Some(method_info) = &func.method_info
                 && let Some(cm_name) = &method_info.cm_name
             {
-                // `cm_to_wrappers` is keyed by the resource declaration as it
-                // is written, with the module alongside — the same namespace
-                // the instance path reads off the receiver type.
-                let base_name = method_info.base_trait_name().map_or_else(
-                    || method_info.receiver().decl_key().into_string(),
-                    str::to_string,
-                );
-                let decl_module = func.module_source.clone();
                 // Static resource call: receiver type isn't directly
                 // available, fall back to single-instantiation routing.
-                pick_resource_wrapper(&base_name, &decl_module, cm_name, &[], ctx).map(|wrapper| {
-                    wrapper_call(
-                        wrapper,
-                        args.clone(),
-                        return_type,
-                        expr.span,
-                        ctx.entry_source,
-                    )
-                })
+                declaring_resource(method_info)
+                    .and_then(|resource| pick_resource_wrapper(resource, cm_name, &[], ctx))
+                    .map(|wrapper| {
+                        wrapper_call(
+                            wrapper,
+                            args.clone(),
+                            return_type,
+                            expr.span,
+                            ctx.entry_source,
+                        )
+                    })
             } else if let ModuleSource::Local { path } = &func.module_source
                 && let Some(wrapper) = ctx
                     .user_to_wrapper
@@ -2759,10 +2750,14 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
             // block scopes the read borrow: the body below re-borrows
             // `type_table` mutably (e.g. `make_ref` when a by-value `self`
             // receiver must be wrapped), so the read borrow must not span it.
-            if let Some((_method_info, cm_name)) = mi_cm
-                && let Some((decl_module, base_name, type_args)) = {
+            // The wrapper belongs to the resource declaring the method, which
+            // an `extends` chain can put above the receiver's own type. Such a
+            // resource is never generic, so the receiver's type args are its.
+            if let Some((method_info, cm_name)) = mi_cm
+                && let Some(resource) = declaring_resource(method_info)
+                && let Some(type_args) = {
                     let tt = ctx.type_table.borrow();
-                    extract_resource_instantiation(receiver.type_id, &tt)
+                    resource_type_args(receiver.type_id, &tt)
                 }
             {
                 let return_type = expr.type_id;
@@ -2786,11 +2781,9 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 let mut all_args: Vec<CallArg> = Vec::with_capacity(args.len() + 1);
                 all_args.push(CallArg::new(receiver_arg, false));
                 all_args.extend(args.iter().cloned());
-                pick_resource_wrapper(&base_name, &decl_module, cm_name, &type_args, ctx).map(
-                    |wrapper| {
-                        wrapper_call(wrapper, all_args, return_type, expr.span, ctx.entry_source)
-                    },
-                )
+                pick_resource_wrapper(resource, cm_name, &type_args, ctx).map(|wrapper| {
+                    wrapper_call(wrapper, all_args, return_type, expr.span, ctx.entry_source)
+                })
             } else {
                 None
             }
