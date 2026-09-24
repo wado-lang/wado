@@ -178,6 +178,7 @@ pub fn analyze_ownership(
         aliases_live: IndexSet::default(),
         alias_sites: Vec::new(),
         borrow_escaped: IndexMap::default(),
+        written_through_escape: IndexSet::default(),
         let_sources: IndexMap::default(),
         match_sources: Vec::new(),
         pending_mut_alias: Vec::new(),
@@ -494,10 +495,12 @@ impl Analyzer<'_> {
         let moved_out =
             self.consumed.contains_key(&local) || inputs.place_move_bases.contains(&local);
         // A borrowed source is written through whoever lent it, at a root the
-        // scan above never looks at. A share skips the right-sizing a copy does,
-        // so a binding whose own capacity is read keeps its copy.
+        // scan above never looks at, as is a root a `&mut` outlives. A share
+        // skips the right-sizing a copy does, so a binding whose own capacity is
+        // read keeps its copy.
         path.root != local
             && !path.through_borrow
+            && !self.written_through_escape.contains(&path.root)
             && !inputs.capacity_observed.contains(&local)
             && !moved_out
             && !self.is_mutated_root(local)
@@ -807,6 +810,9 @@ struct Analyzer<'a> {
     /// Locals a reference outlives, by the fields it reaches. Such a local may
     /// be read through that reference after a move, so it stays copied.
     borrow_escaped: IndexMap<u32, FieldEscape>,
+    /// Locals a `&mut` outlives. The write through it is recorded where the
+    /// borrow is taken, but lands wherever the holder runs it.
+    written_through_escape: IndexSet<u32>,
     let_sources: IndexMap<u32, Vec<TirExpr>>,
     match_sources: Vec<(u32, TirExpr)>,
     /// `(by-value arg root, storage the call mutates)` pairs, resolved once the
@@ -1008,6 +1014,14 @@ impl Analyzer<'_> {
             .collect()
     }
 
+    /// [`Self::pin`] for a `&place` / `&mut place` argument naming `root`.
+    fn pin_borrow(&mut self, op: TirUnaryOp, root: u32, place: &TirExpr, kept: &Kept) {
+        if op == TirUnaryOp::MutRef && !matches!(kept, Kept::Transient) {
+            self.written_through_escape.insert(root);
+        }
+        self.pin(root, top_field_of(place), kept);
+    }
+
     /// Pin `root.field` for as long as what the call keeps it in is readable.
     fn pin(&mut self, root: u32, field: Option<u32>, kept: &Kept) {
         match kept {
@@ -1075,7 +1089,7 @@ impl Analyzer<'_> {
             }
             let referent = self.borrow_read(place, live, record);
             if record && let Some(r) = referent {
-                self.pin(r, top_field_of(place), kept);
+                self.pin_borrow(*op, r, place, kept);
             }
         } else {
             self.walk_expr(arg, live, record);
@@ -1107,7 +1121,7 @@ impl Analyzer<'_> {
             }
             let referent = self.borrow_read(place, live, record);
             if record && let Some(r) = referent {
-                self.pin(r, top_field_of(place), kept);
+                self.pin_borrow(*op, r, place, kept);
             }
         } else {
             if record {
@@ -1761,6 +1775,9 @@ impl Analyzer<'_> {
                 if let Some(r) = self.borrow_read(place, live, record)
                     && record
                 {
+                    if matches!(op, TirUnaryOp::MutRef) {
+                        self.written_through_escape.insert(r);
+                    }
                     self.mark_escaped(r, top_field_of(place));
                 }
             }

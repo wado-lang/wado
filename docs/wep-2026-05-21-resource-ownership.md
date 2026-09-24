@@ -433,6 +433,12 @@ disjoint and ignores the very write it was told about. One function mints the ke
 both sides compare (`place::field_owner`), so what a callee records and what a
 caller looks up cannot drift.
 
+A `&mut` that outlives the expression taking it (stored, captured, or kept by
+the callee's return) writes its root wherever its holder runs, which no point in
+the walk names. So no binding shares storage read out of such a root. The
+optimizer's alias query answers the same way: a write through a dereferenced
+field, payload or element reaches whatever the reference was taken from.
+
 An `Index` or a `Variant` step names no type of its own, so a `Field` past one
 answers for the element rather than for the container the caller holds. A path
 reached through either writes the whole of what its root was lent. Keying it by

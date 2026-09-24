@@ -756,11 +756,21 @@ fn write_root(body: &Body, e: ExprId, derefed: bool) -> WriteRoot {
             Some(ie) => write_root(body, ie, true),
             None => WriteRoot::Aliased,
         },
+        // Below a deref, a projection reads the reference out of an aggregate.
+        ExprKind::FieldAccess { .. } | ExprKind::VariantPayload { .. } | ExprKind::Index { .. }
+            if derefed =>
+        {
+            WriteRoot::Aliased
+        }
+        // `*&place` is the place itself.
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        }
-        | ExprKind::Cast { expr: inner, .. }
+        } => match inner.as_expr() {
+            Some(ie) => write_root(body, ie, false),
+            None => WriteRoot::Temp,
+        },
+        ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::Index { expr: inner, .. } => match inner.as_expr() {
