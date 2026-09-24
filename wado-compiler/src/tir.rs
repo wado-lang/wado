@@ -1139,6 +1139,10 @@ impl TypeTable {
         )
     }
 
+    pub fn is_half(&self, id: TypeId) -> bool {
+        self.primitive_head(id).is_some_and(PrimitiveType::is_half)
+    }
+
     pub fn is_numeric(&self, id: TypeId) -> bool {
         self.is_integer(id) || self.is_float(id)
     }
@@ -3895,6 +3899,22 @@ impl TypeTable {
     /// - Both are newtypes with the same ultimate base type
     pub fn share_common_base(&self, a: TypeId, b: TypeId) -> bool {
         self.representation_head(a) == self.representation_head(b)
+    }
+
+    /// The fixed-width primitive a sequence type (`Array<T>`, `List<T>`, or a
+    /// newtype over either) reads from little-endian data; `None` for the rest.
+    pub fn packed_element(&self, seq: TypeId) -> Option<PrimitiveType> {
+        self.primitive_head(self.seq_element(seq)?)
+            .filter(|p| p.data_width().is_some())
+    }
+
+    /// The element type of `Array<T>`, `List<T>`, or a newtype over either.
+    pub fn seq_element(&self, seq: TypeId) -> Option<TypeId> {
+        let head = self.representation_head(seq);
+        match self.get(head) {
+            ResolvedType::BuiltinArray(elem) => Some(*elem),
+            _ => self.as_list(head),
+        }
     }
 
     /// Check if a type is `List<T>` and return the element type if so.

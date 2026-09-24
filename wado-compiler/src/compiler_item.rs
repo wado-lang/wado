@@ -214,6 +214,8 @@ pub enum CompilerItem {
     // ── Traits ────────────────────────────────────────────────────────
     /// `Default` — `Default::default()` synthesis anchor.
     Default,
+    /// `FromLeBytes` — whose prelude impls a folded `List::from_le_bytes` reads.
+    FromLeBytes,
     /// `Reflect` — the identity root every reflected kind sits under, carrying
     /// `type_name` for all of them (WEP 2026-06-13).
     Reflect,
@@ -416,6 +418,8 @@ pub enum CompilerItem {
     /// synthesized `ReflectEnum::members` / `ReflectFlags::members`
     /// call it.
     ListFromTuple,
+    /// `List::from_le_bytes` — a call on a byte literal folds to a constant.
+    ListFromLeBytes,
     /// `Reflect::type_name` — the declaration's name, for every kind.
     ReflectTypeName,
     /// `Reflect::wire_name_policy` — the declaration's `#[wire(name_policy)]`.
@@ -677,6 +681,7 @@ impl CompilerItem {
         Self::StreamWrite,
         Self::CaseStyle,
         Self::Default,
+        Self::FromLeBytes,
         Self::Reflect,
         Self::ReflectStruct,
         Self::ReflectVariant,
@@ -765,6 +770,7 @@ impl CompilerItem {
         Self::AlignmentRight,
         Self::ListPush,
         Self::ListFromTuple,
+        Self::ListFromLeBytes,
         Self::ReflectTypeName,
         Self::ReflectWireNamePolicy,
         Self::TreeMapIndexAssign,
@@ -885,6 +891,7 @@ impl CompilerItem {
             Self::StreamWrite => "stream_write",
             Self::CaseStyle => "case_style",
             Self::Default => "default",
+            Self::FromLeBytes => "from_le_bytes",
             Self::Reflect => "reflect",
             Self::ReflectStruct => "reflect_struct",
             Self::ReflectVariant => "reflect_variant",
@@ -973,6 +980,7 @@ impl CompilerItem {
             Self::AlignmentRight => "alignment_right",
             Self::ListPush => "list_push",
             Self::ListFromTuple => "list_from_tuple",
+            Self::ListFromLeBytes => "list_from_le_bytes",
             Self::ReflectTypeName => "reflect_type_name",
             Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
             Self::TreeMapIndexAssign => "tree_map_index_assign",
@@ -1124,6 +1132,7 @@ impl CompilerItem {
             | Self::StreamWrite
             | Self::CaseStyle
             | Self::Default
+            | Self::FromLeBytes
             | Self::Reflect
             | Self::ReflectStruct
             | Self::ReflectVariant
@@ -1158,6 +1167,7 @@ impl CompilerItem {
             | Self::From
             | Self::ListPush
             | Self::ListFromTuple
+            | Self::ListFromLeBytes
             | Self::ReflectTypeName
             | Self::ReflectWireNamePolicy
             | Self::ReflectStructMembers
@@ -1372,6 +1382,7 @@ impl CompilerItem {
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
             Self::Formatter => CompilerItemKind::Struct,
             Self::Default
+            | Self::FromLeBytes
             | Self::Reflect
             | Self::ReflectStruct
             | Self::ReflectVariant
@@ -1427,6 +1438,7 @@ impl CompilerItem {
             | Self::UpperExp => CompilerItemKind::Trait,
             Self::ListPush
             | Self::ListFromTuple
+            | Self::ListFromLeBytes
             | Self::ReflectTypeName
             | Self::ReflectWireNamePolicy
             | Self::TreeMapIndexAssign

@@ -17,10 +17,90 @@ pub variant Rank {
     Dims(List<Dim>),
 }
 
+/// Every extent `rank` states, or `None` where it leaves one open.
+pub fn static_extents(rank: &Rank) -> Option<List<i32>> {
+    let mut extents: List<i32> = [];
+    match rank {
+        Scalar => {
+        },
+        Unranked => {
+            return null;
+        },
+        Dims(dims) => {
+            for let d of *dims {
+                let Static(e) = d else {
+                    return null;
+                };
+                extents.push(e);
+            }
+        },
+    }
+    return Option::Some(extents);
+}
+
 pub struct ValueInfo {
     pub name: String,
     pub dtype: String,
     pub rank: Rank,
+    /// The elements as little-endian bytes, where the graph carries them.
+    pub data: Option<ByteList> = null,
+}
+
+/// An element type a kernel reaches: the Wado primitive a tensor of it is held
+/// in, and the bytes one element takes in a payload.
+pub struct Element {
+    pub primitive: String,
+    pub width: i32,
+}
+
+/// The one element type the kernels have arithmetic for. Everything a node
+/// produces is in it, and a boundary held in another is converted past it.
+pub global KERNEL_ELEMENT: String = "f32";
+
+/// `dtype`'s element, or `None` for one no kernel reaches, whose payload is not
+/// read. Half precision is held and widened, never computed.
+pub fn element_of(dtype: &String) -> Option<Element> {
+    return match dtype.as_str_slice() {
+        "float" => Option::Some(Element { primitive: KERNEL_ELEMENT, width: 4 }),
+        "float16" => Option::Some(Element { primitive: "f16", width: 2 }),
+        "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2 }),
+        _ => null,
+    };
+}
+
+/// An integer standing for one element, as `int32_data` and the text form write
+/// a half: its bit pattern, which must fit `width` bytes.
+pub fn bit_pattern(tensor: &String, dtype: &String, v: i32, width: i32) -> Result<u32, String> {
+    if v < 0 || v >= 1 << 8 * width {
+        return Result::Err(`${tensor}: ${v} is not a ${dtype} bit pattern`);
+    }
+    return Result::Ok(v as u32);
+}
+
+/// One element's low `width` bytes, little-endian, as the protobuf form lays
+/// out a payload.
+pub fn push_element(bytes: &mut ByteList, bits: u32, width: i32) {
+    for let mut at = 0; at < width; at += 1 {
+        bytes.push((bits >> (8 * at) as u32) as u8);
+    }
+}
+
+/// The extents' product is how many elements the tensor says it has, and a
+/// payload of any other length is a file disagreeing with itself.
+pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) -> Result<(), String> {
+    let mut declared: i64 = if extents.contains(&0) { 0 } else { 1 };
+    for let e of *extents {
+        declared = declared * e as i64;
+        // No payload is longer than what was read, so a product past it is
+        // already wrong and cannot overflow on the way.
+        if declared > elements as i64 {
+            return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared} or more`);
+        }
+    }
+    if declared != elements as i64 {
+        return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared}`);
+    }
+    return Result::Ok(());
 }
 
 /// A tensor an attribute carries, which `Constant` is the operator of. It has
@@ -67,9 +147,8 @@ pub struct Graph {
     pub nodes: List<Node>,
 }
 
-/// The declared inputs that are parameters. An initializer's name may also
-/// appear among them, where it supplies that input's default rather than a
-/// second value, and Loam's weights are the caller's either way.
+/// The declared inputs that are parameters. An input an initializer also names
+/// is that weight's default, and Loam reads it from `Weights`.
 pub fn parameters(inputs: List<ValueInfo>, initializers: &List<ValueInfo>) -> List<ValueInfo> {
     let mut weights: List<String> = [];
     for let vi of *initializers {

@@ -397,6 +397,15 @@ the distinction (e.g. JSON) keep working.
 
 #### `fn deserialize_f64(&mut self) -> Result<f64, DeserializeError>`
 
+#### `fn deserialize_f16(&mut self) -> Result<f16, DeserializeError>`
+
+Rounds what the input spells once, to nearest, into a half. Reading an
+`f32` and narrowing it would round twice.
+
+#### `fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError>`
+
+`deserialize_f16`, into a bf16.
+
 #### `fn deserialize_bool(&mut self) -> Result<bool, DeserializeError>`
 
 #### `fn deserialize_char(&mut self) -> Result<char, DeserializeError>`

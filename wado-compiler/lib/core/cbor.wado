@@ -787,18 +787,86 @@ fn decode_half(bits: u64) -> f64 {
     return val;
 }
 
-/// Decode a major-7 float head into `f64` from its raw argument bits, given the
-/// additional-info code (`AI_8BYTE` binary64, `AI_4BYTE` binary32, `AI_2BYTE`
-/// binary16). All three widen to `f64` exactly, so `deserialize_f32` routes its
-/// *float* arms through this too (only the integer arms differ, to avoid the
-/// double-round `deserialize_f64` would introduce). The caller guarantees `ai`
-/// is one of the three float codes.
+/// A major-7 float head as the `f64` it widens to exactly, from its raw argument
+/// bits. `ai` is `AI_8BYTE`, `AI_4BYTE` or `AI_2BYTE`.
 fn simple_float_to_f64(ai: u8, bits: u64) -> f64 {
     return match ai {
         AI_8BYTE => f64::from_bits(bits),
         AI_4BYTE => f32::from_bits(bits as u32) as f64,
         _ => decode_half(bits),
     };
+}
+
+/// A float a number item decodes into, rounding each kind of item once.
+trait CborFloat with () {
+    /// A float item, widened to `f64` exactly.
+    fn from_float(v: f64) -> Self;
+    /// `magnitude`, negated where `negative`.
+    fn from_int(magnitude: u64, negative: bool) -> Self;
+}
+
+impl CborFloat for f64 {
+    fn from_float(v: f64) -> f64 {
+        return v;
+    }
+
+    fn from_int(magnitude: u64, negative: bool) -> f64 {
+        let v = magnitude as f64;
+        return if negative { -v } else { v };
+    }
+}
+
+impl CborFloat for f32 {
+    fn from_float(v: f64) -> f32 {
+        return v as f32;
+    }
+
+    fn from_int(magnitude: u64, negative: bool) -> f32 {
+        let v = magnitude as f32;
+        return if negative { -v } else { v };
+    }
+}
+
+impl CborFloat for f16 {
+    fn from_float(v: f64) -> f16 {
+        return f16::from_f64(v);
+    }
+
+    fn from_int(magnitude: u64, negative: bool) -> f16 {
+        return f16::from_f32(f32::from_int(round_to_odd(magnitude), negative));
+    }
+}
+
+impl CborFloat for bf16 {
+    fn from_float(v: f64) -> bf16 {
+        return bf16::from_f64(v);
+    }
+
+    fn from_int(magnitude: u64, negative: bool) -> bf16 {
+        return bf16::from_f32(f32::from_int(round_to_odd(magnitude), negative));
+    }
+}
+
+/// The major-0 argument `n`, or with `negative` the major-1 value `-1 - n`.
+fn int_item<T: CborFloat>(n: u64, negative: bool) -> T {
+    if !negative {
+        return T::from_int(n, false);
+    }
+    if n == u64::MAX {
+        return T::from_float(-18446744073709551616.0);
+    }
+    return T::from_int(n + 1, true);
+}
+
+/// `n` with the bits f32 drops folded into its last kept one, so a half
+/// rounding the f32 rounds as it would `n`.
+fn round_to_odd(n: u64) -> u64 {
+    let dropped = 40 - i64::clz(n as i64);
+    if dropped <= 0 {
+        return n;
+    }
+    let mask = (1 as u64 << dropped as u64) - 1;
+    return if n & mask == 0 { n } else { n & ~mask | mask + 1 };
 }
 
 fn is_passthrough_tag(tag: u64) -> bool {
@@ -819,6 +887,62 @@ pub struct CborDeserializer {
 }
 
 impl CborDeserializer {
+    /// A float or integer item, rounded once into `T`.
+    fn read_float<T: CborFloat>(&mut self) -> Result<T, DeserializeError> {
+        // Fast path: a definite float or major-0/1 integer head, decoded without
+        // building a head tuple. Any other case (tags, malformed) leaves `pos`
+        // untouched and falls into the tolerant slow loop below.
+        let b = self.peek_byte()?;
+        let fmajor = b >> 5;
+        let fai = b & 0x1f;
+        if fmajor == MAJOR_SIMPLE {
+            // A compile-time `read_be` size keeps the hot path free of a runtime
+            // width dispatch; `simple_float_to_f64` folds against the constant.
+            match fai {
+                AI_8BYTE => {
+                    self.pos += 1;
+                    return Result::Ok(T::from_float(simple_float_to_f64(AI_8BYTE, self.read_be(8)?)));
+                },
+                AI_4BYTE => {
+                    self.pos += 1;
+                    return Result::Ok(T::from_float(simple_float_to_f64(AI_4BYTE, self.read_be(4)?)));
+                },
+                AI_2BYTE => {
+                    self.pos += 1;
+                    return Result::Ok(T::from_float(simple_float_to_f64(AI_2BYTE, self.read_be(2)?)));
+                },
+                _ => {
+                },
+            }
+        } else if fai <= AI_8BYTE && (fmajor == MAJOR_UINT || fmajor == MAJOR_NINT) {
+            self.pos += 1;
+            let arg = self.read_arg(fai)?;
+            return Result::Ok(int_item::<T>(arg, fmajor == MAJOR_NINT));
+        }
+        loop {
+            let [major, ai, arg, indef] = self.read_head()?;
+            match major {
+                MAJOR_SIMPLE => match ai {
+                    AI_8BYTE | AI_4BYTE | AI_2BYTE => {
+                        return Result::Ok(T::from_float(simple_float_to_f64(ai, arg)));
+                    },
+                    _ => {
+                    },
+                },
+                MAJOR_UINT | MAJOR_NINT => {
+                    return Result::Ok(int_item::<T>(arg, major == MAJOR_NINT));
+                },
+                MAJOR_TAG && is_passthrough_tag(arg) => {
+                    continue;
+                },
+                _ => {
+                },
+            }
+            builtin::cold_path();
+            return Result::Err(DeserializeError::unexpected_type("expected float", self.pos as i64));
+        }
+    }
+
     fn next_byte(&mut self) -> Result<u8, DeserializeError> {
         if self.pos >= self.input.len() {
             builtin::cold_path();
@@ -1573,125 +1697,19 @@ impl Deserializer for CborDeserializer {
     }
 
     fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
-        // Not delegated to `deserialize_f64`: an integer item converts to f32
-        // directly — routing through f64 would double-round large u64 values.
-        // Fast path: a definite float or major-0/1 integer head, decoded without
-        // building a head tuple. Any other case (tags, malformed) leaves `pos`
-        // untouched and falls into the tolerant slow loop below.
-        let b = self.peek_byte()?;
-        let fmajor = b >> 5;
-        let fai = b & 0x1f;
-        if fmajor == MAJOR_SIMPLE {
-            // A compile-time `read_be` size keeps the hot path free of a runtime
-            // width dispatch; `simple_float_to_f64` folds against the constant.
-            match fai {
-                AI_8BYTE => {
-                    self.pos += 1;
-                    return Result::Ok(simple_float_to_f64(AI_8BYTE, self.read_be(8)?) as f32);
-                },
-                AI_4BYTE => {
-                    self.pos += 1;
-                    return Result::Ok(simple_float_to_f64(AI_4BYTE, self.read_be(4)?) as f32);
-                },
-                AI_2BYTE => {
-                    self.pos += 1;
-                    return Result::Ok(simple_float_to_f64(AI_2BYTE, self.read_be(2)?) as f32);
-                },
-                _ => {
-                },
-            }
-        } else if fai <= AI_8BYTE && (fmajor == MAJOR_UINT || fmajor == MAJOR_NINT) {
-            self.pos += 1;
-            let arg = self.read_arg(fai)?;
-            if fmajor == MAJOR_UINT {
-                return Result::Ok(arg as f32);
-            }
-            return Result::Ok(-1.0 - arg as f32);
-        }
-        loop {
-            let [major, ai, arg, indef] = self.read_head()?;
-            match major {
-                MAJOR_SIMPLE => match ai {
-                    AI_8BYTE | AI_4BYTE | AI_2BYTE => {
-                        return Result::Ok(simple_float_to_f64(ai, arg) as f32);
-                    },
-                    _ => {
-                    },
-                },
-                MAJOR_UINT => {
-                    return Result::Ok(arg as f32);
-                },
-                MAJOR_NINT => {
-                    return Result::Ok(-1.0 - arg as f32);
-                },
-                MAJOR_TAG && is_passthrough_tag(arg) => {
-                    continue;
-                },
-                _ => {
-                },
-            }
-            builtin::cold_path();
-            return Result::Err(DeserializeError::unexpected_type("expected float", self.pos as i64));
-        }
+        return self.read_float::<f32>();
     }
 
     fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
-        // Fast path (see `deserialize_f32`): a definite float or major-0/1
-        // integer head decoded without a head tuple; other cases fall through
-        // to the tolerant slow loop with `pos` unchanged.
-        let b = self.peek_byte()?;
-        let fmajor = b >> 5;
-        let fai = b & 0x1f;
-        if fmajor == MAJOR_SIMPLE {
-            match fai {
-                AI_8BYTE => {
-                    self.pos += 1;
-                    return Result::Ok(simple_float_to_f64(AI_8BYTE, self.read_be(8)?));
-                },
-                AI_4BYTE => {
-                    self.pos += 1;
-                    return Result::Ok(simple_float_to_f64(AI_4BYTE, self.read_be(4)?));
-                },
-                AI_2BYTE => {
-                    self.pos += 1;
-                    return Result::Ok(simple_float_to_f64(AI_2BYTE, self.read_be(2)?));
-                },
-                _ => {
-                },
-            }
-        } else if fai <= AI_8BYTE && (fmajor == MAJOR_UINT || fmajor == MAJOR_NINT) {
-            self.pos += 1;
-            let arg = self.read_arg(fai)?;
-            if fmajor == MAJOR_UINT {
-                return Result::Ok(arg as f64);
-            }
-            return Result::Ok(-1.0 - arg as f64);
-        }
-        loop {
-            let [major, ai, arg, indef] = self.read_head()?;
-            match major {
-                MAJOR_SIMPLE => match ai {
-                    AI_8BYTE | AI_4BYTE | AI_2BYTE => {
-                        return Result::Ok(simple_float_to_f64(ai, arg));
-                    },
-                    _ => {
-                    },
-                },
-                MAJOR_UINT => {
-                    return Result::Ok(arg as f64);
-                },
-                MAJOR_NINT => {
-                    return Result::Ok(-1.0 - arg as f64);
-                },
-                MAJOR_TAG && is_passthrough_tag(arg) => {
-                    continue;
-                },
-                _ => {
-                },
-            }
-            builtin::cold_path();
-            return Result::Err(DeserializeError::unexpected_type("expected float", self.pos as i64));
-        }
+        return self.read_float::<f64>();
+    }
+
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        return self.read_float::<f16>();
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        return self.read_float::<bf16>();
     }
 
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {

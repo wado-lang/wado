@@ -6,15 +6,31 @@ global NEG_ZERO_BITS: u64 = 9223372036854775808;
 
 global POW10: List<u64> = deferred null;
 
+global POW10_COARSE: List<u64> = deferred null;
+
 global POW10_FINE: List<u64> = deferred null;
 
 global POW10_K: i32 = 27;
+
+pub global BINARY64: BinaryFormat = deferred null;
+
+pub global BINARY32: BinaryFormat = deferred null;
+
+pub global BINARY16: BinaryFormat = deferred null;
+
+pub global BFLOAT16: BinaryFormat = deferred null;
 
 pub global PARSE_DIGITS_MAX: i32 = 19;
 
 pub global PARSE_EXP_MAX: i32 = 350;
 
 pub global PARSE_EXP_MIN: i32 = -351;
+
+global EXPONENT_SATURATION: i64 = 1000000000000000;
+
+global MIDPOINT_DIGITS_MAX: i32 = 800;
+
+global POW5_13: u32 = 1220703125;
 
 global F16_SIGN: u16 = 32768;
 
@@ -60,6 +76,11 @@ pub struct FormatResult {
     pub digits: u64,
     pub exponent: i32,
     pub n_digits: i32,
+}
+
+pub struct BinaryFormat {
+    pub precision: i32,
+    pub exponent_bits: i32,
 }
 
 pub struct u128 {
@@ -595,6 +616,15 @@ pub struct "StructField<core:prelude/int128.wado/u128,u64>" {
     wire_number: i32,
 }
 
+pub struct "StructField<core:prelude/fpfmt.wado/BinaryFormat,i32>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+    wire_number: i32,
+}
+
 pub struct "StructField<core:prelude/fpfmt.wado/FormatResult,i32>" {
     index: i32,
     field_name: String,
@@ -842,6 +872,12 @@ pub struct "Slice<core:prelude/string.wado/String>" {
     end: i32,
 }
 
+pub struct "SliceValueIter<u32>" {
+    repr: &Array<u32>,
+    index: i32,
+    end: i32,
+}
+
 pub struct "SliceValueIter<u8>" {
     repr: &Array<u8>,
     index: i32,
@@ -943,6 +979,24 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,i32>" {
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,&Array<u8>>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+    wire_number: i32,
+}
+
+pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u32>,i32>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+    wire_number: i32,
+}
+
+pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u32>,&Array<u32>>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1760,8 +1814,24 @@ pub struct "Box<core:prelude/types.wado/Option<i32>>" {
     value: Option<i32>,
 }
 
-pub struct "Box<core:prelude/types.wado/Option<f64>>" {
-    value: Option<f64>,
+pub struct "Box<core:prelude/types.wado/Option<u64>>" {
+    value: Option<u64>,
+}
+
+pub struct "Box<core:prelude/types.wado/Result<f16,core:prelude/intparse.wado/ParseFloatError>>" {
+    value: Result<f16, ParseFloatError>,
+}
+
+pub struct "Box<core:prelude/types.wado/Result<bf16,core:prelude/intparse.wado/ParseFloatError>>" {
+    value: Result<bf16, ParseFloatError>,
+}
+
+pub struct "Box<core:prelude/types.wado/Result<f16,core:prelude/traits.wado/LenientParseError>>" {
+    value: Result<f16, LenientParseError>,
+}
+
+pub struct "Box<core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/LenientParseError>>" {
+    value: Result<bf16, LenientParseError>,
 }
 
 pub struct "Box<core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>>" {
@@ -1848,8 +1918,8 @@ pub struct "Box<core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/Pa
     value: Result<u64, ParseIntError>,
 }
 
-pub struct "Box<core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>>" {
-    value: Result<f64, ParseFloatError>,
+pub struct "Box<core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseFloatError>>" {
+    value: Result<u64, ParseFloatError>,
 }
 
 pub struct "Box<core:prelude/types.wado/Result<bool,core:prelude/primitive.wado/ParseBoolError>>" {
@@ -1936,6 +2006,10 @@ pub struct "Box<core:prelude/types.wado/Result<f32,core:prelude/traits.wado/Leni
     value: Result<f32, LenientParseError>,
 }
 
+pub struct "Box<core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>>" {
+    value: Result<f64, ParseFloatError>,
+}
+
 pub struct "Box<core:prelude/types.wado/Result<f64,core:prelude/traits.wado/LenientParseError>>" {
     value: Result<f64, LenientParseError>,
 }
@@ -1986,10 +2060,6 @@ pub struct "Box<core:prelude/types.wado/Option<u16>>" {
 
 pub struct "Box<core:prelude/types.wado/Option<u32>>" {
     value: Option<u32>,
-}
-
-pub struct "Box<core:prelude/types.wado/Option<u64>>" {
-    value: Option<u64>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<[i32,char]>>" {
@@ -2126,6 +2196,10 @@ pub struct "Box<core:prelude/types.wado/Option<fn mut(u8)->bool>>" {
 
 pub struct "Box<core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>>" {
     value: Option<&Array<String>>,
+}
+
+pub struct "Box<core:prelude/types.wado/Option<&Array<u32>>>" {
+    value: Option<&Array<u32>>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>>" {
@@ -2570,6 +2644,14 @@ pub fn "$field_get$core:prelude/fpfmt.wado/FormatResult$i32"(v: &FormatResult, i
     };
 }
 
+pub fn "$field_get$core:prelude/fpfmt.wado/BinaryFormat$i32"(v: &BinaryFormat, index: i32) -> i32 {
+    return match index {
+        0 => v.precision,
+        1 => v.exponent_bits,
+        _ => core::builtin::unreachable(),
+    };
+}
+
 pub fn f16::to_bits(self: Box<f16>) -> u16 {
     return core::builtin::u16_reinterpret_f16(self.value);
 }
@@ -2647,7 +2729,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/int128.wado", used: 24 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 162 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 163 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: self.high != 0\n", used: 27 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"self.high: ", used: 11 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -2700,7 +2782,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/int128.wado", used: 24 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 198 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 199 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: a >> (mant_bits - 1) as u64 == 1\n", used: 45 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"a: ", used: 3 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -3971,14 +4053,6 @@ fn "core/prelude/array.wado/seq_eq<u8>"(a: &Array<u8>, a_start: i32, a_end: i32,
     return true;
 }
 
-pub fn "core:prelude/slice.wado/Slice<u8>::get_unchecked"(self: &Slice<u8>, index: i32) -> u8 {
-    return core::builtin::array_get_value::<u8>(self.repr, (self.start + index));
-}
-
-pub fn "core:prelude/slice.wado/Slice<u8>::len"(self: &Slice<u8>) -> i32 {
-    return (self.end - self.start);
-}
-
 pub fn "Array<u8>::len"(self: &Array<u8>) -> i32 {
     return core::builtin::array_len::<u8>(self);
 }
@@ -4067,6 +4141,16 @@ pub fn "core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/strin
     }
 }
 
+pub fn "core:prelude/list.wado/List<u32>::push"(self: &mut List<u32>, value: u32) {
+    let used: i32 = self.used;
+    if (used >= self.repr."Array<u32>::len"()) {
+        core::builtin::cold_path();
+        self."core:prelude/list.wado/List<u32>::grow"();
+    }
+    self.repr."Array<u32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(used, value);
+    self.used = (used + 1);
+}
+
 pub fn "core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(self: &mut String, other: &String) {
     other."&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self);
 }
@@ -4076,6 +4160,14 @@ pub fn "core/builtin/array_copy<u8>"(dst: &mut Array<u8>, dst_offset: i32, src: 
 
 fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/From<Array<T>>::from"(elements: Array<u64>) -> List<u64> {
     return List<u64> { repr: elements, used: core::builtin::array_len::<u64>(&elements) };
+}
+
+pub fn "core:prelude/slice.wado/Slice<u8>::get_unchecked"(self: &Slice<u8>, index: i32) -> u8 {
+    return core::builtin::array_get_value::<u8>(self.repr, (self.start + index));
+}
+
+pub fn "core:prelude/slice.wado/Slice<u8>::len"(self: &Slice<u8>) -> i32 {
+    return (self.end - self.start);
 }
 
 pub fn "core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(self: &mut String, other: String) {
@@ -4088,6 +4180,22 @@ pub fn "core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prel
 
 fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self: &&String, out: &mut String) {
     *self."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(out);
+}
+
+fn "Array<u32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(self: &mut Array<u32>, index: i32, value: u32) {
+    core::builtin::array_set::<u32>(self, index, value);
+}
+
+pub fn "core:prelude/list.wado/List<u32>::grow"(self: &mut List<u32>) {
+    let capacity: i32 = self.repr."Array<u32>::len"();
+    let new_capacity: i32 = "core::prelude/primitive.wado::i32::max"((capacity * 2), 4);
+    let mut new_repr: Array<u32> = core::builtin::array_new::<u32>(new_capacity);
+    core::builtin::array_copy::<u32>(&mut new_repr, 0, &self.repr, 0, self.used);
+    self.repr = new_repr;
+}
+
+pub fn "Array<u32>::len"(self: &Array<u32>) -> i32 {
+    return core::builtin::array_len::<u32>(self);
 }
 
 pub fn "core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(self: &mut String, other: StrSlice) {
@@ -4593,6 +4701,22 @@ pub fn "$field_get$core:prelude/slice.wado/Slice<core:prelude/string.wado/String
 }
 
 #[retain(v)]
+pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<u32>$&Array<u32>"(v: &SliceValueIter<u32>, index: i32) -> &Array<u32> {
+    return match index {
+        0 => v.repr,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<u32>$i32"(v: &SliceValueIter<u32>, index: i32) -> i32 {
+    return match index {
+        1 => v.index,
+        2 => v.end,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+#[retain(v)]
 pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<u8>$&Array<u8>"(v: &SliceValueIter<u8>, index: i32) -> &Array<u8> {
     return match index {
         0 => v.repr,
@@ -4753,7 +4877,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<i32>"(self: Box<core:prelude
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<f64>$f64"(v: Box<core:prelude/types.wado/Option<f64>>, index: i32) -> f64 {
+pub fn "$case_extract$core:prelude/types.wado/Option<u64>$u64"(v: Box<core:prelude/types.wado/Option<u64>>, index: i32) -> u64 {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -4763,14 +4887,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<f64>$f64"(v: Box<core:prelu
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<f64>$f64"(payload: f64, index: i32) -> Option<f64> {
+pub fn "$case_construct$core:prelude/types.wado/Option<u64>$u64"(payload: u64, index: i32) -> Option<u64> {
     return match index {
-        0 => Option<f64>::Some(payload),
+        0 => Option<u64>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<f64>$()"(v: Box<core:prelude/types.wado/Option<f64>>, index: i32) {
+pub fn "$case_extract$core:prelude/types.wado/Option<u64>$()"(v: Box<core:prelude/types.wado/Option<u64>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -4780,14 +4904,190 @@ pub fn "$case_extract$core:prelude/types.wado/Option<f64>$()"(v: Box<core:prelud
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<f64>$()"(payload: (), index: i32) -> Option<f64> {
+pub fn "$case_construct$core:prelude/types.wado/Option<u64>$()"(payload: (), index: i32) -> Option<u64> {
     return match index {
-        1 => Option<f64>::None,
+        1 => Option<u64>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$variant_tag$core:prelude/types.wado/Option<f64>"(self: Box<core:prelude/types.wado/Option<f64>>) -> i32 {
+pub fn "$variant_tag$core:prelude/types.wado/Option<u64>"(self: Box<core:prelude/types.wado/Option<u64>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<f16,core:prelude/intparse.wado/ParseFloatError>$f16"(v: Box<core:prelude/types.wado/Result<f16,core:prelude/intparse.wado/ParseFloatError>>, index: i32) -> f16 {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f16,core:prelude/intparse.wado/ParseFloatError>$f16"(payload: f16, index: i32) -> Result<f16, ParseFloatError> {
+    return match index {
+        0 => Result<f16, ParseFloatError>::Ok(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<f16,core:prelude/intparse.wado/ParseFloatError>$core:prelude/intparse.wado/ParseFloatError"(v: Box<core:prelude/types.wado/Result<f16,core:prelude/intparse.wado/ParseFloatError>>, index: i32) -> ParseFloatError {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f16,core:prelude/intparse.wado/ParseFloatError>$core:prelude/intparse.wado/ParseFloatError"(payload: ParseFloatError, index: i32) -> Result<f16, ParseFloatError> {
+    return match index {
+        1 => Result<f16, ParseFloatError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f16,core:prelude/intparse.wado/ParseFloatError>$()"(payload: (), index: i32) -> Result<f16, ParseFloatError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Result<f16,core:prelude/intparse.wado/ParseFloatError>"(self: Box<core:prelude/types.wado/Result<f16,core:prelude/intparse.wado/ParseFloatError>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<bf16,core:prelude/intparse.wado/ParseFloatError>$bf16"(v: Box<core:prelude/types.wado/Result<bf16,core:prelude/intparse.wado/ParseFloatError>>, index: i32) -> bf16 {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<bf16,core:prelude/intparse.wado/ParseFloatError>$bf16"(payload: bf16, index: i32) -> Result<bf16, ParseFloatError> {
+    return match index {
+        0 => Result<bf16, ParseFloatError>::Ok(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<bf16,core:prelude/intparse.wado/ParseFloatError>$core:prelude/intparse.wado/ParseFloatError"(v: Box<core:prelude/types.wado/Result<bf16,core:prelude/intparse.wado/ParseFloatError>>, index: i32) -> ParseFloatError {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<bf16,core:prelude/intparse.wado/ParseFloatError>$core:prelude/intparse.wado/ParseFloatError"(payload: ParseFloatError, index: i32) -> Result<bf16, ParseFloatError> {
+    return match index {
+        1 => Result<bf16, ParseFloatError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<bf16,core:prelude/intparse.wado/ParseFloatError>$()"(payload: (), index: i32) -> Result<bf16, ParseFloatError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Result<bf16,core:prelude/intparse.wado/ParseFloatError>"(self: Box<core:prelude/types.wado/Result<bf16,core:prelude/intparse.wado/ParseFloatError>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/LenientParseError>$f16"(v: Box<core:prelude/types.wado/Result<f16,core:prelude/traits.wado/LenientParseError>>, index: i32) -> f16 {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/LenientParseError>$f16"(payload: f16, index: i32) -> Result<f16, LenientParseError> {
+    return match index {
+        0 => Result<f16, LenientParseError>::Ok(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/LenientParseError>$core:prelude/traits.wado/LenientParseError"(v: Box<core:prelude/types.wado/Result<f16,core:prelude/traits.wado/LenientParseError>>, index: i32) -> LenientParseError {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/LenientParseError>$core:prelude/traits.wado/LenientParseError"(payload: LenientParseError, index: i32) -> Result<f16, LenientParseError> {
+    return match index {
+        1 => Result<f16, LenientParseError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<f16, LenientParseError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/LenientParseError>"(self: Box<core:prelude/types.wado/Result<f16,core:prelude/traits.wado/LenientParseError>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/LenientParseError>$bf16"(v: Box<core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/LenientParseError>>, index: i32) -> bf16 {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/LenientParseError>$bf16"(payload: bf16, index: i32) -> Result<bf16, LenientParseError> {
+    return match index {
+        0 => Result<bf16, LenientParseError>::Ok(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/LenientParseError>$core:prelude/traits.wado/LenientParseError"(v: Box<core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/LenientParseError>>, index: i32) -> LenientParseError {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/LenientParseError>$core:prelude/traits.wado/LenientParseError"(payload: LenientParseError, index: i32) -> Result<bf16, LenientParseError> {
+    return match index {
+        1 => Result<bf16, LenientParseError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/LenientParseError>$()"(payload: (), index: i32) -> Result<bf16, LenientParseError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/LenientParseError>"(self: Box<core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/LenientParseError>>) -> i32 {
     return $variant_tag(self.value);
 }
 
@@ -5707,7 +6007,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Result<u64,core:prelude/intparse.wa
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>$f64"(v: Box<core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>>, index: i32) -> f64 {
+pub fn "$case_extract$core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseFloatError>$u64"(v: Box<core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseFloatError>>, index: i32) -> u64 {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -5717,14 +6017,14 @@ pub fn "$case_extract$core:prelude/types.wado/Result<f64,core:prelude/intparse.w
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>$f64"(payload: f64, index: i32) -> Result<f64, ParseFloatError> {
+pub fn "$case_construct$core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseFloatError>$u64"(payload: u64, index: i32) -> Result<u64, ParseFloatError> {
     return match index {
-        0 => Result<f64, ParseFloatError>::Ok(payload),
+        0 => Result<u64, ParseFloatError>::Ok(payload),
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>$core:prelude/intparse.wado/ParseFloatError"(v: Box<core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>>, index: i32) -> ParseFloatError {
+pub fn "$case_extract$core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseFloatError>$core:prelude/intparse.wado/ParseFloatError"(v: Box<core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseFloatError>>, index: i32) -> ParseFloatError {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -5734,20 +6034,20 @@ pub fn "$case_extract$core:prelude/types.wado/Result<f64,core:prelude/intparse.w
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>$core:prelude/intparse.wado/ParseFloatError"(payload: ParseFloatError, index: i32) -> Result<f64, ParseFloatError> {
+pub fn "$case_construct$core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseFloatError>$core:prelude/intparse.wado/ParseFloatError"(payload: ParseFloatError, index: i32) -> Result<u64, ParseFloatError> {
     return match index {
-        1 => Result<f64, ParseFloatError>::Err(payload),
+        1 => Result<u64, ParseFloatError>::Err(payload),
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>$()"(payload: (), index: i32) -> Result<f64, ParseFloatError> {
+pub fn "$case_construct$core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseFloatError>$()"(payload: (), index: i32) -> Result<u64, ParseFloatError> {
     return match index {
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$variant_tag$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>"(self: Box<core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>>) -> i32 {
+pub fn "$variant_tag$core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseFloatError>"(self: Box<core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseFloatError>>) -> i32 {
     return $variant_tag(self.value);
 }
 
@@ -6669,6 +6969,50 @@ pub fn "$variant_tag$core:prelude/types.wado/Result<f32,core:prelude/traits.wado
     return $variant_tag(self.value);
 }
 
+pub fn "$case_extract$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>$f64"(v: Box<core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>>, index: i32) -> f64 {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>$f64"(payload: f64, index: i32) -> Result<f64, ParseFloatError> {
+    return match index {
+        0 => Result<f64, ParseFloatError>::Ok(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>$core:prelude/intparse.wado/ParseFloatError"(v: Box<core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>>, index: i32) -> ParseFloatError {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>$core:prelude/intparse.wado/ParseFloatError"(payload: ParseFloatError, index: i32) -> Result<f64, ParseFloatError> {
+    return match index {
+        1 => Result<f64, ParseFloatError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>$()"(payload: (), index: i32) -> Result<f64, ParseFloatError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>"(self: Box<core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
 pub fn "$case_extract$core:prelude/types.wado/Result<f64,core:prelude/traits.wado/LenientParseError>$f64"(v: Box<core:prelude/types.wado/Result<f64,core:prelude/traits.wado/LenientParseError>>, index: i32) -> f64 {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -7202,44 +7546,6 @@ pub fn "$case_construct$core:prelude/types.wado/Option<u32>$()"(payload: (), ind
 }
 
 pub fn "$variant_tag$core:prelude/types.wado/Option<u32>"(self: Box<core:prelude/types.wado/Option<u32>>) -> i32 {
-    return $variant_tag(self.value);
-}
-
-pub fn "$case_extract$core:prelude/types.wado/Option<u64>$u64"(v: Box<core:prelude/types.wado/Option<u64>>, index: i32) -> u64 {
-    if ($variant_tag(v.value) != index) {
-        core::builtin::unreachable();
-    };
-    return match index {
-        0 => $variant_payload(v.value, case=0),
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$case_construct$core:prelude/types.wado/Option<u64>$u64"(payload: u64, index: i32) -> Option<u64> {
-    return match index {
-        0 => Option<u64>::Some(payload),
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$case_extract$core:prelude/types.wado/Option<u64>$()"(v: Box<core:prelude/types.wado/Option<u64>>, index: i32) {
-    if ($variant_tag(v.value) != index) {
-        core::builtin::unreachable();
-    };
-    return match index {
-        1 => $variant_payload(v.value, case=1),
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$case_construct$core:prelude/types.wado/Option<u64>$()"(payload: (), index: i32) -> Option<u64> {
-    return match index {
-        1 => Option<u64>::None,
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$variant_tag$core:prelude/types.wado/Option<u64>"(self: Box<core:prelude/types.wado/Option<u64>>) -> i32 {
     return $variant_tag(self.value);
 }
 
@@ -8621,6 +8927,46 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<core:prelude/string.w
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u32>>$&Array<u32>"(v: Box<core:prelude/types.wado/Option<&Array<u32>>>, index: i32) -> &Array<u32> {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+#[retain(payload)]
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u32>>$&Array<u32>"(payload: &Array<u32>, index: i32) -> Option<&Array<u32>> {
+    return match index {
+        0 => Option<&Array<u32>>::Some(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u32>>$()"(v: Box<core:prelude/types.wado/Option<&Array<u32>>>, index: i32) {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u32>>$()"(payload: (), index: i32) -> Option<&Array<u32>> {
+    return match index {
+        1 => Option<&Array<u32>>::None,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<u32>>"(self: Box<core:prelude/types.wado/Option<&Array<u32>>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
 pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$core:prelude/list.wado/List<u8>"(v: Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>>, index: i32) -> List<u8> {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -8661,7 +9007,12 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/list.wado/List<
 
 pub fn "$initialize_module"() {
     core::prelude/fpfmt.wado::POW10 = "core::prelude/list.wado::core:prelude/list.wado/List<u64>^core:prelude/traits.wado/From<Array<T>>::from"([1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000, 100000000000, 1000000000000, 10000000000000, 100000000000000, 1000000000000000, 10000000000000000, 100000000000000000, 1000000000000000000, 10000000000000000000]);
+    core::prelude/fpfmt.wado::POW10_COARSE = "core::prelude/list.wado::core:prelude/list.wado/List<u64>^core:prelude/traits.wado/From<Array<T>>::from"([9244100769003082158, 2331608335343510136, 12404635893250474764, 14934650266808366570, 5910495864778290617, 5142877117464292731, 12064114410120881697, 12622167777931096654, 7312877456945461815, 9745314011399999080, 6518754469289960081, 14714928903009965784, 15744403932561434696, 12626303854077184414, 11746114382721246819, 12718228212127407596, 13658706619031801779, 18308159190397764633, 10273702932711667006, 6088502188546649756, 4733321751740631166, 16598062275523971834, 915538744049291538, 11796442215211893655, 13407807929942597099, 10588892233814828051, 2422963254366584020, 10830740992659433045, 4209185567039092847, 16791723050533251565, 17498005798264095394, 18078137856785627587, 3933290470431885570, 14134776518227074636, 12292541425473992838, 10845844145321538985, 11417981541647679048, 8601490892183123069, 14576447477258439112, 9223372036854775808, 0, 0, 14901161193847656250, 0, 0, 12037062152420224081, 11065503397408397604, 0, 9723461371658033917, 7611128154919104931, 16113757790975053352, 15709099088952724969, 16721424822051837077, 15513681152740284628, 12689709186578246116, 6827560182880305039, 13856584293446594592, 10250665447337476733, 1466078993672598279, 2575331249103045366, 16560843210556190337, 10310543607939835386, 17344994892919524477, 13377742608693866209, 7896285879677171346, 9867298837582875615, 10806454419566533849, 5385653213018257806, 962163898128633416, 17458768723248864463, 13574758819556003052, 4439498980731556221, 14103081061443981063, 758345818024902856, 171258419585080376, 11392378155556871081, 7784369436827535057, 5279584310227164867]);
     core::prelude/fpfmt.wado::POW10_FINE = "core::prelude/list.wado::core:prelude/list.wado/List<u64>^core:prelude/traits.wado/From<Array<T>>::from"([9223372036854775808, 11529215046068469760, 14411518807585587200, 18014398509481984000, 11258999068426240000, 14073748835532800000, 17592186044416000000, 10995116277760000000, 13743895347200000000, 17179869184000000000, 10737418240000000000, 13421772800000000000, 16777216000000000000, 10485760000000000000, 13107200000000000000, 16384000000000000000, 10240000000000000000, 12800000000000000000, 16000000000000000000, 10000000000000000000, 12500000000000000000, 15625000000000000000, 9765625000000000000, 12207031250000000000, 15258789062500000000, 9536743164062500000, 11920928955078125000]);
+    core::prelude/fpfmt.wado::BINARY64 = BinaryFormat { precision: 53, exponent_bits: 11 };
+    core::prelude/fpfmt.wado::BINARY32 = BinaryFormat { precision: 24, exponent_bits: 8 };
+    core::prelude/fpfmt.wado::BINARY16 = BinaryFormat { precision: 11, exponent_bits: 5 };
+    core::prelude/fpfmt.wado::BFLOAT16 = BinaryFormat { precision: 8, exponent_bits: 8 };
 }
 
 pub fn "$initialize_modules"() {
@@ -8856,6 +9207,14 @@ fn "$value_copy$core:prelude/types.wado/Result<f64,core:prelude/traits.wado/Leni
 }
 
 #[retain(v)]
+fn "$value_copy$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>"(v: Result<f64, ParseFloatError>) -> Result<f64, ParseFloatError> {
+    return match v {
+        Ok($vc_payload_0) => Result<f64, ParseFloatError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<f64, ParseFloatError>::Err("ops.all_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseFloatError"($vc_payload_1)),
+    };
+}
+
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<f32,core:prelude/traits.wado/LenientParseError>"(v: Result<f32, LenientParseError>) -> Result<f32, LenientParseError> {
     return match v {
         Ok($vc_payload_0) => Result<f32, LenientParseError>::Ok($vc_payload_0),
@@ -9020,10 +9379,10 @@ fn "$value_copy$core:prelude/types.wado/Result<bool,core:prelude/primitive.wado/
 }
 
 #[retain(v)]
-fn "$value_copy$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>"(v: Result<f64, ParseFloatError>) -> Result<f64, ParseFloatError> {
+fn "$value_copy$core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseFloatError>"(v: Result<u64, ParseFloatError>) -> Result<u64, ParseFloatError> {
     return match v {
-        Ok($vc_payload_0) => Result<f64, ParseFloatError>::Ok($vc_payload_0),
-        Err($vc_payload_1) => Result<f64, ParseFloatError>::Err("ops.all_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseFloatError"($vc_payload_1)),
+        Ok($vc_payload_0) => Result<u64, ParseFloatError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<u64, ParseFloatError>::Err("ops.all_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseFloatError"($vc_payload_1)),
     };
 }
 
@@ -9189,6 +9548,38 @@ fn "$value_copy$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/Conv
 }
 
 #[retain(v)]
+fn "$value_copy$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/LenientParseError>"(v: Result<bf16, LenientParseError>) -> Result<bf16, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<bf16, LenientParseError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<bf16, LenientParseError>::Err("ops.all_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+#[retain(v)]
+fn "$value_copy$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/LenientParseError>"(v: Result<f16, LenientParseError>) -> Result<f16, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<f16, LenientParseError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<f16, LenientParseError>::Err("ops.all_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+#[retain(v)]
+fn "$value_copy$core:prelude/types.wado/Result<bf16,core:prelude/intparse.wado/ParseFloatError>"(v: Result<bf16, ParseFloatError>) -> Result<bf16, ParseFloatError> {
+    return match v {
+        Ok($vc_payload_0) => Result<bf16, ParseFloatError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<bf16, ParseFloatError>::Err("ops.all_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseFloatError"($vc_payload_1)),
+    };
+}
+
+#[retain(v)]
+fn "$value_copy$core:prelude/types.wado/Result<f16,core:prelude/intparse.wado/ParseFloatError>"(v: Result<f16, ParseFloatError>) -> Result<f16, ParseFloatError> {
+    return match v {
+        Ok($vc_payload_0) => Result<f16, ParseFloatError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<f16, ParseFloatError>::Err("ops.all_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseFloatError"($vc_payload_1)),
+    };
+}
+
+#[retain(v)]
 fn "$value_copy$core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>"(v: SliceValueIter<core:prelude/string.wado/String>) -> SliceValueIter<core:prelude/string.wado/String> {
     return SliceValueIter<core:prelude/string.wado/String> { repr: v.repr, index: v.index, end: v.end };
 }
@@ -9204,6 +9595,11 @@ fn "$value_copy$core:prelude/range.wado/RangeInclusive<i32>"(v: RangeInclusive<i
 #[retain(v)]
 fn "$value_copy$core:prelude/slice.wado/SliceValueIter<u8>"(v: SliceValueIter<u8>) -> SliceValueIter<u8> {
     return SliceValueIter<u8> { repr: v.repr, index: v.index, end: v.end };
+}
+
+#[retain(v)]
+fn "$value_copy$core:prelude/slice.wado/SliceValueIter<u32>"(v: SliceValueIter<u32>) -> SliceValueIter<u32> {
+    return SliceValueIter<u32> { repr: v.repr, index: v.index, end: v.end };
 }
 
 #[retain(v)]
@@ -9372,6 +9768,14 @@ fn "$value_copy$Array<u64>"(v: Array<u64>) -> Array<u64> {
     return core::builtin::array_clone::<u64>(&v);
 }
 
+fn "$value_copy$Array<u32>"(v: Array<u32>) -> Array<u32> {
+    return core::builtin::array_clone::<u32>(&v);
+}
+
+fn "$value_copy$core:prelude/list.wado/List<u32>"(v: List<u32>) -> List<u32> {
+    return List<u32> { repr: core::builtin::array_clone_prefix::<u32>(&v.repr, v.used), used: v.used };
+}
+
 #[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>"(v: Option<WaitEvent>) -> Option<WaitEvent> {
     return match v {
@@ -9515,6 +9919,10 @@ fn "$value_copy$[i64,i64]"(v: [i64, i64]) -> [i64, i64] {
     return [i64,i64] { 0: v.0, 1: v.1 };
 }
 
+fn "$value_copy$core:prelude/fpfmt.wado/BinaryFormat"(v: BinaryFormat) -> BinaryFormat {
+    return BinaryFormat { precision: v.precision, exponent_bits: v.exponent_bits };
+}
+
 fn "$value_copy$core:prelude/list.wado/List<u64>"(v: List<u64>) -> List<u64> {
     return List<u64> { repr: core::builtin::array_clone_prefix::<u64>(&v.repr, v.used), used: v.used };
 }
@@ -9524,6 +9932,10 @@ fn array_get_value();
 fn array_len();
 
 fn array_set();
+
+fn array_new();
+
+fn array_copy();
 
 fn array_clone();
 

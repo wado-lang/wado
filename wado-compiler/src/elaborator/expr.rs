@@ -27,11 +27,13 @@ use super::types::{FunctionContext, TypeError, VarRef};
 use super::util;
 use crate::ast::{RangeExpr, Visibility};
 use crate::compiler_item::CompilerItem;
+use crate::const_eval::{Value, eval_cast, is_signed_int, prim_of};
 use crate::defs::DefId;
 use crate::elaborator::control_flow::{
     collect_unresolved_null_breaks, collect_unresolved_null_tails,
     collect_unresolved_null_tails_in_block,
 };
+use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::infer::unify;
 use crate::elaborator::sem::decls::FunctionSig;
 use crate::elaborator::sem::types::{
@@ -589,9 +591,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Default type: i32 if integer-compatible, f64 if float-only
                 if util::is_float_only_literal(repr) {
                     // Must be float (has decimal point or negative exponent)
-                    if let Err(message) = util::parse_float_literal(repr) {
+                    if let Err(error) = float_literal_bits(repr, FloatFormat::F64) {
                         let _ = self.emit(TypeError::InvalidLiteral {
-                            message,
+                            message: error.message(repr),
                             span: lit.span,
                         });
                     }
@@ -5285,8 +5287,46 @@ impl LiteralOrdValue {
         match (self, other) {
             (LiteralOrdValue::Int(a), LiteralOrdValue::Int(b)) => a > b,
             (LiteralOrdValue::Float(a), LiteralOrdValue::Float(b)) => a > b,
+            (LiteralOrdValue::Int(a), LiteralOrdValue::Float(b)) => *a as f64 > *b,
+            (LiteralOrdValue::Float(a), LiteralOrdValue::Int(b)) => *a > *b as f64,
             (LiteralOrdValue::Char(a), LiteralOrdValue::Char(b)) => a > b,
             _ => false, // different kinds — type mismatch error handles this
+        }
+    }
+
+    /// The value as `const_eval` holds it; `None` past 64 bits.
+    fn to_const(&self) -> Option<Value> {
+        match *self {
+            LiteralOrdValue::Int(v) if v < 0 => Some(Value::Int {
+                value: i64::try_from(v).ok()? as u64,
+                prim: PrimitiveType::I64,
+            }),
+            LiteralOrdValue::Int(v) => Some(Value::Int {
+                value: u64::try_from(v).ok()?,
+                prim: PrimitiveType::U64,
+            }),
+            LiteralOrdValue::Float(value) => Some(Value::Float {
+                value,
+                prim: PrimitiveType::F64,
+            }),
+            LiteralOrdValue::Char(c) => char::from_u32(c).map(Value::Char),
+        }
+    }
+
+    fn from_const(value: Value) -> Option<Self> {
+        match value {
+            Value::Int { value, prim } if is_signed_int(prim) => {
+                Some(LiteralOrdValue::Int(i128::from(value as i64)))
+            }
+            Value::Int { value, .. } => Some(LiteralOrdValue::Int(i128::from(value))),
+            Value::Float { value, .. } => Some(LiteralOrdValue::Float(value)),
+            Value::Char(c) => Some(LiteralOrdValue::Char(c as u32)),
+            Value::Bool(_) => None,
+            Value::Null
+            | Value::Unit
+            | Value::Aggregate { .. }
+            | Value::Seq { .. }
+            | Value::Variant { .. } => unreachable!("`eval_cast` yields a scalar"),
         }
     }
 }
@@ -5294,29 +5334,15 @@ impl LiteralOrdValue {
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Extract a compile-time orderable value from a literal expression.
     /// Returns the value in its native representation to avoid precision loss.
-    fn extract_literal_ord_value(expr: &Expr) -> Option<LiteralOrdValue> {
+    fn extract_literal_ord_value(&self, expr: &Expr) -> Option<LiteralOrdValue> {
         match expr {
             Expr::Literal(lit) => match &lit.value {
-                Literal::Number(s) => {
-                    let s = s.replace('_', "");
-                    if s.contains('.') {
-                        s.parse::<f64>().ok().map(LiteralOrdValue::Float)
-                    } else if s.starts_with("0x") || s.starts_with("0X") {
-                        i128::from_str_radix(&s[2..], 16)
-                            .ok()
-                            .map(LiteralOrdValue::Int)
-                    } else if s.starts_with("0b") || s.starts_with("0B") {
-                        i128::from_str_radix(&s[2..], 2)
-                            .ok()
-                            .map(LiteralOrdValue::Int)
-                    } else if s.starts_with("0o") || s.starts_with("0O") {
-                        i128::from_str_radix(&s[2..], 8)
-                            .ok()
-                            .map(LiteralOrdValue::Int)
-                    } else {
-                        s.parse::<i128>().ok().map(LiteralOrdValue::Int)
-                    }
+                Literal::Number(s) if util::is_float_only_literal(s) => {
+                    float_literal_bits(s, FloatFormat::F64)
+                        .ok()
+                        .map(|bits| LiteralOrdValue::Float(f64::from_bits(bits)))
                 }
+                Literal::Number(s) => util::parse_i128_literal(s).ok().map(LiteralOrdValue::Int),
                 Literal::Char(s) => unescape_char(s)
                     .ok()
                     .map(|c| LiteralOrdValue::Char(c as u32)),
@@ -5326,13 +5352,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => None,
             },
             Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => {
-                match Self::extract_literal_ord_value(&unary.expr)? {
+                match self.extract_literal_ord_value(&unary.expr)? {
                     LiteralOrdValue::Int(v) => Some(LiteralOrdValue::Int(-v)),
                     LiteralOrdValue::Float(v) => Some(LiteralOrdValue::Float(-v)),
                     LiteralOrdValue::Char(_) => None,
                 }
             }
-            Expr::Cast(cast) => Self::extract_literal_ord_value(&cast.expr),
+            Expr::Cast(cast) => {
+                let recorded = self.sem.types.expression_types.get(&expr.id()).copied()?;
+                let target = prim_of(recorded, &self.tysys.type_table.borrow())?;
+                let source = self.extract_literal_ord_value(&cast.expr)?.to_const()?;
+                LiteralOrdValue::from_const(eval_cast(source, target)?)
+            }
             _ => None,
         }
     }
@@ -5394,8 +5425,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check for reversed range literals (start > end)
-        if let Some(start_val) = Self::extract_literal_ord_value(&range.start)
-            && let Some(end_val) = Self::extract_literal_ord_value(&range.end)
+        if let Some(start_val) = self.extract_literal_ord_value(&range.start)
+            && let Some(end_val) = self.extract_literal_ord_value(&range.end)
         {
             let is_reversed = start_val.is_greater_than(&end_val);
             if is_reversed {

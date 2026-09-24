@@ -2578,12 +2578,7 @@ impl FunctionTranslator<'_, '_> {
         let arena = self.body;
         let expr = &arena.exprs[expr_id];
         match &expr.kind {
-            ExprKind::PackedArray(b) => {
-                // A raw constant `Array<u8>` (the `repr` of a `String` / `List<u8>`
-                // literal). The struct wrapping comes from the enclosing
-                // `StructLiteral`.
-                self.translate_packed_array(b)
-            }
+            ExprKind::PackedArray(data) => self.translate_packed_array(data, expr.type_id),
             // Orphaned tombstone: never materialised (DCE drops it first).
             ExprKind::Dead => WirInstr::Nop,
 

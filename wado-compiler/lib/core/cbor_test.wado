@@ -131,7 +131,7 @@ test "Appendix A: bignums (tag 2/3)" {
 test "Appendix A: floats" {
     // Wado has no f16; f32/f64 always emit their native head.
     let f1: f32 = 100000.0;
-    let f2: f32 = 3.4028234663852886e38;
+    let f2 = f32::MAX;
     assert enc(&f1) == "fa47c35000";
     assert enc(&f2) == "fa7f7fffff";
     assert enc::<f64>(&1.1) == "fb3ff199999999999a";
@@ -252,6 +252,23 @@ test "decode: non-preferred integer encodings widen correctly" {
     // An integer item decodes into a float target through the fast path.
     assert from_bytes::<f64, ByteList>(hex("1a000f4240")).unwrap() == 1000000.0;
     assert from_bytes::<f64, ByteList>(hex("20")).unwrap() == -1.0;
+}
+
+test "decode: a negative integer item rounds once into a float" {
+    // -(2^25 + 3) and -(2^54 + 3): adding the -1 after the cast rounds twice.
+    assert from_bytes::<f32, ByteList>(hex("3a02000002")) matches { Ok(v) && v == -33554436.0 };
+    assert from_bytes::<f64, ByteList>(hex("3b0040000000000002")) matches { Ok(v) && v == -18014398509481988.0 };
+    assert from_bytes::<f64, ByteList>(hex("3bffffffffffffffff")) matches { Ok(v) && v == -18446744073709551616.0 };
+}
+
+test "decode: a half rounds its item once" {
+    // Each lands just above a half's midpoint, which f32 holds exactly.
+    assert from_bytes::<f16, ByteList>(hex("fb3ff0020000000001")) matches { Ok(v) && v.to_bits() == 0x3c01 };
+    assert from_bytes::<bf16, ByteList>(hex("fb3ff0100000000001")) matches { Ok(v) && v.to_bits() == 0x3f81 };
+    assert from_bytes::<bf16, ByteList>(hex("1b1010000000000001")) matches { Ok(v) && v.to_bits() == 0x5d81 };
+    assert from_bytes::<bf16, ByteList>(hex("3b1010000000000000")) matches { Ok(v) && v.to_bits() == 0xdd81 };
+    assert from_bytes::<f16, ByteList>(hex("00")) matches { Ok(v) && v.to_bits() == 0 };
+    assert from_bytes::<f16, ByteList>(hex("f93c01")) matches { Ok(v) && v.to_bits() == 0x3c01 };
 }
 
 test "round-trip: 128-bit integers and bignums" {

@@ -1,0 +1,13 @@
+// `builtin::array_new_data` reads a byte literal as a constant `Array<T>`.
+
+export fn run() {
+    let a = builtin::array_new_data::<f32>(b"\x00\x00\x80\x3f\x00\x00\x20\xc0");
+    assert builtin::array_len(&a) == 2;
+    assert builtin::array_get_value(&a, 0) == 1.0;
+    assert builtin::array_get_value(&a, 1) == -2.5;
+    let b: Array<u16> = builtin::array_new_data::<u16>(b"\x34\x12");
+    assert builtin::array_get_value(&b, 0) == 0x1234;
+}
+
+__DATA__
+{}

@@ -32,10 +32,16 @@ use {
 } from "core:serde";
 
 use {
-    parse as fpfmt_parse,
+    BFLOAT16,
+    BINARY16,
+    BINARY32,
+    BINARY64,
+    BinaryFormat,
+    decimal_scale,
+    push_exponent_digit,
+    round_decimal,
+    round_truncated_decimal,
     PARSE_DIGITS_MAX as FPFMT_DIGITS_MAX,
-    PARSE_EXP_MAX as FPFMT_EXP_MAX,
-    PARSE_EXP_MIN as FPFMT_EXP_MIN,
 } from "core:prelude/fpfmt.wado";
 use { encode_with as base64_encode_with, decode as base64_decode, Encoding } from "core:base64";
 
@@ -811,9 +817,14 @@ struct ScannedNumber {
     /// the scale without consuming the mantissa budget, so a value like
     /// `0.0000000000000000000001` keeps its one significant digit.
     frac_lead_zeros: i32,
-    /// Explicit `e`/`E` exponent, saturating past fpfmt's domain.
-    exp: i32,
+    /// Explicit `e`/`E` exponent, saturating as `push_exponent_digit` does.
+    exp: i64,
     has_frac_or_exp: bool,
+    /// A nonzero digit past the ones `digits` holds.
+    inexact: bool,
+    /// The digits and point as written, the span `round_truncated_decimal` rereads.
+    mantissa_start: i32,
+    mantissa_end: i32,
 }
 
 impl ScannedNumber {
@@ -827,29 +838,32 @@ impl ScannedNumber {
             frac_lead_zeros: 0,
             exp: 0,
             has_frac_or_exp: false,
+            inexact: false,
+            mantissa_start: 0,
+            mantissa_end: 0,
         };
     }
 }
 
-/// Reconstructs the f64 value of a scanned number token. Exponents outside
-/// fpfmt's domain clamp to ±infinity / ±zero.
-fn scanned_to_f64(n: &ScannedNumber) -> f64 {
+fn scanned_to_f64(n: &ScannedNumber, input: &ByteSlice) -> f64 {
+    return f64::from_bits(scanned_to_bits(n, input, &BINARY64));
+}
+
+/// Rounds a scanned number token once into `format`, as its bits.
+fn scanned_to_bits(n: &ScannedNumber, input: &ByteSlice, format: &BinaryFormat) -> u64 {
+    let sign = if n.neg { format.sign_bit() } else { 0 };
     if n.digits == 0 {
-        return if n.neg { -0.0 } else { 0.0 };
+        return sign;
     }
     // Integer digits beyond the accumulated ones shift the scale up; every
-    // fraction digit (accumulated or a skipped leading zero) shifts it down;
-    // dropped trailing fraction digits only truncate precision.
+    // fraction digit (accumulated or a skipped leading zero) shifts it down.
     let extra_int_digits = if n.int_digits > FPFMT_DIGITS_MAX { n.int_digits - FPFMT_DIGITS_MAX } else { 0 };
-    let eff_p = n.exp - n.frac_digits - n.frac_lead_zeros + extra_int_digits;
-    if eff_p > FPFMT_EXP_MAX {
-        return if n.neg { f64::NEG_INFINITY } else { f64::INFINITY };
+    let p = decimal_scale(n.exp, extra_int_digits - n.frac_digits - n.frac_lead_zeros);
+    if !n.inexact {
+        return sign | round_decimal(n.digits, p, format);
     }
-    if eff_p < FPFMT_EXP_MIN {
-        return if n.neg { -0.0 } else { 0.0 };
-    }
-    let v = fpfmt_parse(n.digits, eff_p);
-    return if n.neg { -v } else { v };
+    let digits = input.slice(n.mantissa_start, n.mantissa_end);
+    return sign | round_truncated_decimal(n.digits, p, digits, format);
 }
 
 /// True when `b` is one of JSON's four whitespace bytes. `json_ws_end` is the
@@ -1430,16 +1444,8 @@ impl JsonDeserializer {
         }
     }
 
-    /// Scans the JSON number token at `pos` into the caller-provided `out`.
-    /// `lead` is the byte at `pos` as `peek_after_whitespace` returned it, so
-    /// whitespace is already skipped and -1 means end of input; every
-    /// `parse_*_with_lead` below takes it on the same terms.
-    ///
-    /// Only the first `FPFMT_DIGITS_MAX` significant digits are accumulated;
-    /// dropped fraction digits merely truncate precision, while dropped
-    /// integer digits shift the scale via `int_digits`.
-    /// Writing into a scratch struct keeps a `Result<ScannedNumber>` aggregate
-    /// off the hot decode path.
+    /// Scans the number token at `pos`, whose byte `peek_after_whitespace` gave
+    /// as `lead` (-1 at end of input), into the scratch `out`.
     fn scan_number_into(&mut self, lead: i32, out: &mut ScannedNumber) -> Result<(), DeserializeError> {
         let input = self.input;
         let len = input.len();
@@ -1472,6 +1478,7 @@ impl JsonDeserializer {
         // a significance test nor a budget test per digit: leading zeros, the
         // digits that fit the mantissa budget, then the ones past it.
         let zeros_start = pos;
+        let mut inexact = false;
         if first == b'0' {
             while pos < len && input.get_unchecked(pos) as i32 == b'0' {
                 pos += 1;
@@ -1495,6 +1502,7 @@ impl JsonDeserializer {
         let mut acc_digits = pos - sig_start;
         if pos == cap {
             while pos < len && digit_value(input.get_unchecked(pos) as i32) <= 9 {
+                inexact = inexact || input.get_unchecked(pos) as i32 != b'0';
                 pos += 1;
             }
         }
@@ -1530,11 +1538,13 @@ impl JsonDeserializer {
             acc_digits += frac_digits;
             if pos == frac_cap {
                 while pos < len && digit_value(input.get_unchecked(pos) as i32) <= 9 {
+                    inexact = inexact || input.get_unchecked(pos) as i32 != b'0';
                     pos += 1;
                 }
             }
         }
-        let mut exp = 0;
+        let mantissa_end = pos;
+        let mut exp: i64 = 0;
         if pos < len {
             let eb = input.get_unchecked(pos) as i32;
             if eb == b'e' || eb == b'E' {
@@ -1559,12 +1569,7 @@ impl JsonDeserializer {
                     if d > 9 {
                         break;
                     }
-                    // Stop accumulating once past fpfmt's domain: the value
-                    // stays exact where it matters and saturates (instead of
-                    // overflowing i32) on absurd exponents.
-                    if exp <= FPFMT_EXP_MAX {
-                        exp = exp * 10 + d as i32;
-                    }
+                    exp = push_exponent_digit(exp, d as i32);
                     pos += 1;
                 }
                 if exp_neg {
@@ -1580,6 +1585,9 @@ impl JsonDeserializer {
         out.frac_lead_zeros = frac_lead_zeros;
         out.exp = exp;
         out.has_frac_or_exp = has_frac_or_exp;
+        out.inexact = inexact;
+        out.mantissa_start = zeros_start;
+        out.mantissa_end = mantissa_end;
         return Result::Ok(());
     }
 
@@ -1609,7 +1617,7 @@ impl JsonDeserializer {
         }
         // Decimal point or exponent — reconstruct via f64 (e.g. 1e2 → 100).
         let v = checked_int_f64(
-            scanned_to_f64(n),
+            scanned_to_f64(n, &self.input),
             i32::MIN as f64,
             i32::MAX as f64 + 1.0,
             "value out of range for i32",
@@ -1695,7 +1703,7 @@ impl JsonDeserializer {
             return Result::Ok(v);
         }
         let v = checked_int_f64(
-            scanned_to_f64(n),
+            scanned_to_f64(n, &self.input),
             -TWO_POW_63,
             TWO_POW_63,
             "value out of range for i64",
@@ -1745,7 +1753,7 @@ impl JsonDeserializer {
             ));
         }
         let v = checked_int_f64(
-            scanned_to_f64(n),
+            scanned_to_f64(n, &self.input),
             0.0,
             TWO_POW_64,
             "value out of range for u64",
@@ -1757,13 +1765,19 @@ impl JsonDeserializer {
     /// Parses an f64 directly from `self.input` using fpfmt, without an
     /// intermediate String allocation.
     pub fn parse_f64_direct(&mut self) -> Result<f64, DeserializeError> {
-        return self.parse_f64_with_lead(self.peek_after_whitespace());
+        return Result::Ok(f64::from_bits(self.parse_float_bits(&BINARY64)?));
     }
 
-    fn parse_f64_with_lead(&mut self, lead: i32) -> Result<f64, DeserializeError> {
+    /// `parse_f64_direct`, rounded once into f32 rather than through f64.
+    pub fn parse_f32_direct(&mut self) -> Result<f32, DeserializeError> {
+        return Result::Ok(f32::from_bits(self.parse_float_bits(&BINARY32)? as u32));
+    }
+
+    /// The next number token rounded once into `format`, as its bits.
+    fn parse_float_bits(&mut self, format: &BinaryFormat) -> Result<u64, DeserializeError> {
         let n = &mut self.scratch;
-        self.scan_number_into(lead, n)?;
-        return Result::Ok(scanned_to_f64(n));
+        self.scan_number_into(self.peek_after_whitespace(), n)?;
+        return Result::Ok(scanned_to_bits(n, &self.input, format));
     }
 
     /// Skips a string token without allocating. Shares `scan_string_run` with
@@ -2215,12 +2229,19 @@ impl Deserializer for JsonDeserializer {
     }
 
     fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
-        let v = self.parse_f64_direct()?;
-        return Result::Ok(v as f32);
+        return self.parse_f32_direct();
     }
 
     fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
         return self.parse_f64_direct();
+    }
+
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        return Result::Ok(f16::from_bits(self.parse_float_bits(&BINARY16)? as u16));
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        return Result::Ok(bf16::from_bits(self.parse_float_bits(&BFLOAT16)? as u16));
     }
 
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {

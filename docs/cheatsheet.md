@@ -198,10 +198,12 @@ bool
 i128, u128
 
 // half precision: storage only, no arithmetic and no `as` cast.
-// Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32`.
+// Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32` /
+// `from_f64`, text via `from_str` (each rounded once, as a literal is).
 // Every comparison hands the widened value to f32's, so `==` and `<` are IEEE
 // and `Ord` is the total order — the same split f32 has.
 f16, bf16
+let w: List<bf16> = [0.5, -1.25];   // a float literal rounds once, ties to even
 
 // Composites
 String                  // UTF-8 string
@@ -1262,7 +1264,7 @@ let pi = f64::PI;
 let max = i32::MAX;
 ```
 
-Primitives provide built-in constants: `f64::PI`, `f64::INFINITY`, `f64::NAN`, `i32::MAX`, `i32::MIN`, etc. See [`core:prelude`](./stdlib-core-prelude.md).
+Primitives provide built-in constants: `f64::PI`, `f64::INFINITY`, `f64::NAN`, `f64::MAX`, `f64::EPSILON`, `i32::MAX`, `i32::MIN`, etc. Every float type, `f16` and `bf16` included, carries Rust's limits (`MAX`, `MIN`, `MIN_POSITIVE`, `EPSILON`, `MANTISSA_DIGITS`, …). See [`core:prelude`](./stdlib-core-prelude.md).
 
 ## Primitive Type Methods
 
@@ -1584,6 +1586,13 @@ let data = #data;           // __DATA__ section content (String)
 
 let src = #include_str("./runtime.wado");  // include file as String
 let icon = #include_bytes("./icon.png");   // include file as ByteList
+```
+
+A literal read as numbers becomes a constant, with no decode loop at startup.
+See [the spec](./spec.md#embedded-data).
+
+```wado
+let w = List::<f32>::from_le_bytes(#include_bytes("./w.bin"));  // little-endian f32s
 ```
 
 Paths in `#include_str` and `#include_bytes` are resolved relative to the source file. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).

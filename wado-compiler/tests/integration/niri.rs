@@ -23,7 +23,8 @@ use wado_compiler::nir::{
 };
 use wado_compiler::nir_arena::{
     ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, BlockRole, Body,
-    ExprId, ExprKind, ExprNode, Operand, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
+    ExprId, ExprKind, ExprNode, Operand, PackedData, PatId, PatKind, PatNode, StmtId, StmtKind,
+    StmtNode,
 };
 use wado_compiler::nir_value_graph::ValueKind;
 use wado_compiler::niri::{
@@ -3532,7 +3533,13 @@ fn array_literal(type_id: TypeId, elements: Vec<Build>) -> Build {
 }
 
 fn packed_array(bytes: Vec<u8>, type_id: TypeId) -> Build {
-    Rc::new(move |b| Operand::Expr(pe(b, ExprKind::PackedArray(bytes.clone()), type_id)))
+    Rc::new(move |b| {
+        Operand::Expr(pe(
+            b,
+            ExprKind::PackedArray(PackedData::new(bytes.clone(), PrimitiveType::U8)),
+            type_id,
+        ))
+    })
 }
 
 fn shared_ref(inner: Build, type_id: TypeId) -> Build {
@@ -3743,7 +3750,7 @@ fn a_constant_string_call_result_becomes_a_literal() {
         .find(|f| f.field_index == SeqField::Backing.index())
         .and_then(|f| f.value.as_expr())
         .expect("a backing operand");
-    assert_matches!(&body.exprs[backing].kind, ExprKind::PackedArray(b) if b == b"hi");
+    assert_matches!(&body.exprs[backing].kind, ExprKind::PackedArray(b) if b.as_bytes() == Some(b"hi".as_slice()));
     assert_eq!(
         fields
             .iter()
@@ -3794,7 +3801,7 @@ fn a_container_still_copying_its_contents_becomes_a_literal_once() {
         .find(|f| f.field_index == SeqField::Backing.index())
         .and_then(|f| f.value.as_expr())
         .expect("a backing operand");
-    assert_matches!(&body.exprs[backing].kind, ExprKind::PackedArray(b) if b == b"hi");
+    assert_matches!(&body.exprs[backing].kind, ExprKind::PackedArray(b) if b.as_bytes() == Some(b"hi".as_slice()));
     assert!(
         !interp.reduce_local_in_body(&mut body, e),
         "the literal it wrote is left alone",

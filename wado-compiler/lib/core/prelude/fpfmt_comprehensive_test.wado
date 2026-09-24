@@ -8,7 +8,7 @@
 // Copyright 2025 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-use { short, digits, check_special, SpecialKind, parse_text } from "core:prelude/fpfmt.wado";
+use { short, digits, check_special, SpecialKind } from "core:prelude/fpfmt.wado";
 use { println, Stdout } from "core:cli";
 
 // format_exp with '+' sign and zero-padded exponent (matching Go %e style)
@@ -106,11 +106,11 @@ fn run_batch(bits: &List<u64>, expected: &List<String>, batch_name: String) -> i
             }
         }
 
-        let parsed = parse_text(&actual.as_str_slice());
-        if !parsed matches { Some(v) && v == f } {
+        let parsed = f64::from_str(&actual);
+        if !parsed matches { Ok(v) && v == f } {
             failures = failures + 1;
             if failures <= 10 {
-                println(`FAIL [${batch_name}][${i}]: parse_text("${actual}") did not round-trip`);
+                println(`FAIL [${batch_name}][${i}]: f64::from_str("${actual}") did not round-trip`);
             }
         }
     }
