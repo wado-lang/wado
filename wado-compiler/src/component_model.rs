@@ -5097,7 +5097,7 @@ mod tests {
             for ty in param_types(&registry, interface, method) {
                 assert_matches!(
                     ty,
-                    Type::Named(n) if n.name == "u32",
+                    Type::Named(n) if n.name == "f64",
                     "{interface}::{method} keeps a handle behind a reference"
                 );
             }
