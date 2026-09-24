@@ -4045,10 +4045,9 @@ fn collect_component_asset(asset: &WasmAsset, project: &NirPackage) -> Vec<u8> {
         .interfaces()
         .filter(|interface| asset.component_interface_fqs.contains(&interface.path))
         .flat_map(|interface| {
-            let path = interface.path.clone();
-            interface.functions.into_iter().filter_map(move |func| {
+            interface.functions.into_iter().filter_map(|func| {
                 let used = project.used_wasi_functions.contains(&func.used_key());
-                (!used).then(|| format!("{path}#{}", func.wasi_func_name))
+                (!used).then(|| func.cm_identifier())
             })
         })
         .collect();
