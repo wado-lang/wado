@@ -2606,7 +2606,7 @@ for the type, the desugaring and the cost model.
 
 ### Newtype
 
-`type T = U` creates a newtype - a distinct type that shares representation with its base type.
+`type T = U` creates a newtype: a distinct type with the same values as its base type. See [WEP: Newtype Semantics](./wep-2026-01-29-newtype-semantics.md).
 
 ```wado
 type Meters = f64;
@@ -2626,7 +2626,7 @@ let raw: f64 = m as f64;      // explicit cast required
 - `T` is a distinct type from `U` (no implicit conversion)
 - `T` inherits all methods, operators, and traits from `U`
 - Explicit `as` cast required to convert between `T` and `U`
-- Zero runtime cost (same Wasm representation)
+- Zero runtime cost
 - Literal coercion to `T` when type context expects `T`
 
 A newtype does not carry an invariant of its own. `as` converts in both
@@ -2693,9 +2693,11 @@ type Status = {
 };
 ```
 
+Not yet implemented.
+
 ### Structs
 
-Wado uses `struct` for structured data types. Internally they are implemented as Wasm-GC structs, and automatically converted to Component Model `record` at component boundaries.
+Wado uses `struct` for structured data types. A struct crosses a component boundary as a Component Model `record`.
 
 ```wado
 // Struct definition
@@ -2705,18 +2707,23 @@ struct User {
     active: bool,
 }
 
-// Struct with recursive type (enabled by GC)
+// Recursive struct
 struct Node {
     value: i32,
     next: Option<Node>,
 }
+```
 
-// Inline struct type
+An inline struct type names a struct shape without a separate declaration:
+
+```wado
 type UserData = struct {
     name: String,
     age: i32,
 };
 ```
+
+Not yet implemented.
 
 #### Field Visibility
 
@@ -2730,7 +2737,7 @@ pub struct Config {
 }
 ```
 
-Within the defining module, all fields (including private ones) are accessible for construction, reading, and mutation. From another file in the same package, `internal` (and `pub`) fields are accessible; from another package, only `pub` fields are. Reading, setting, or binding a field beyond its reach produces a compile error — whether through field access (`c.secret`), a struct literal (`Config { secret: ... }`), or a destructuring pattern (`let Config { secret, .. } = c`, `match`). A non-reachable field may still be _omitted_ from a struct literal in another module when it has a default expression (`f: T = expr`): the default is evaluated in the defining module, so the field is never read or set across the boundary and encapsulation is preserved. A non-reachable field without a default cannot be satisfied from another module, so such a struct can only be constructed by a function within reach.
+Within the defining module, all fields (including private ones) are accessible for construction, reading, and mutation. From another file in the same package, `internal` (and `pub`) fields are accessible; from another package, only `pub` fields are. Reading, setting, or binding a field beyond its reach is a compile error, whether through field access (`c.secret`), a struct literal (`Config { secret: ... }`), or a destructuring pattern (`let Config { secret, .. } = c`, `match`). A non-reachable field may still be _omitted_ from a struct literal in another module when it has a default expression (`f: T = expr`): the default is evaluated in the defining module, so the field is never read or set across the boundary and encapsulation is preserved. A non-reachable field without a default cannot be satisfied from another module, so such a struct can only be constructed by a function within reach.
 
 #### Struct Construction
 
@@ -2793,7 +2800,7 @@ for let { x, y } of points {
 
 #### Auto-derived Traits
 
-Structs derive `Eq` (field-wise equality) and `Ord` (lexicographic comparison by field declaration order) when all fields implement those traits, synthesized on demand rather than for every struct — see [Bound-Driven Eq / Ord](#bound-driven-eq--ord). A user-provided `impl Eq` or `impl Ord` takes precedence.
+Structs derive `Eq` (field-wise equality) and `Ord` (lexicographic comparison by field declaration order) when all fields implement those traits. They are derived where a use or bound needs them, not for every struct. See [Bound-Driven Eq / Ord](#bound-driven-eq--ord). A user-provided `impl Eq` or `impl Ord` takes precedence.
 
 For generic structs, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Foo<T>`, `impl<T: Ord> Ord for Foo<T>`.
 
@@ -2822,15 +2829,15 @@ let c = ServerConfig { host: "localhost", port: 3000 };
 ServerConfig { port: 3000 };  // compile error: missing required field 'host'
 ```
 
-Default expressions are evaluated at the construction site. They must be effect-free (validated by the effect system) and cannot reference other fields. Field shorthand (`{ host }`) and destructuring are unaffected — destructuring sees every field regardless of defaults.
+Default expressions are evaluated at the construction site. They must be effect-free and cannot reference other fields. Field shorthand (`{ host }`) and destructuring are unaffected: destructuring sees every field regardless of defaults.
 
 A non-generic struct whose every field has a default auto-derives `Default`. A fieldless struct has no field to default, so it qualifies. See [Default Trait](#default-trait).
 
 ### Generic Type Inference
 
-Wado infers type arguments for generic type constructors (struct literals and variant constructors) using two complementary mechanisms:
+Wado infers type arguments for struct literals, variant constructors, and generic function and method calls. It uses two complementary mechanisms.
 
-Forward inference derives type parameters from the values provided (fields or payload arguments):
+Forward inference derives type parameters from the values provided (fields, payloads, or arguments):
 
 ```wado
 struct Box<T> { value: T }
@@ -2848,7 +2855,7 @@ let ok: Result<i32, String> = Result::Ok(42);
 // T=i32 from payload (forward), E=String from annotation (backward)
 ```
 
-When both mechanisms are available, forward inference takes precedence for type parameters that appear in the payload, and backward inference fills in any remaining parameters.
+When both mechanisms apply, they must agree. An untyped literal takes its type from the expected type, so `let x: Option<i64> = Option::Some(42)` is an `Option<i64>`. A value whose type is already fixed must match it: with `y: i32`, `let b: Box<i64> = Box { value: y }` is a type mismatch. Backward inference fills in any parameter the values do not mention.
 
 A turbofish on the type name pins the arguments outright. It reaches a parameter
 no field mentions, and it overrides one a field would otherwise settle. It says
@@ -2863,26 +2870,27 @@ let n: Box<i32> = Box::<i64> { … };     // error: the annotation disagrees
 
 #### Scope of inference
 
-| Constructor kind       | Forward | Backward | Status              |
-| ---------------------- | ------- | -------- | ------------------- |
-| Struct literals        | yes     | yes      | implemented         |
-| Variant constructors   | yes     | yes      | implemented         |
-| Generic function calls | —       | —        | not yet implemented |
-| Generic method calls   | —       | —        | not yet implemented |
-
-For generic function and method calls, explicit turbofish syntax is required:
+| Site                   | Forward (from values) | Backward (from expected type) |
+| ---------------------- | --------------------- | ----------------------------- |
+| Struct literals        | yes                   | yes                           |
+| Variant constructors   | yes                   | yes                           |
+| Generic function calls | yes                   | yes                           |
+| Generic method calls   | yes                   | yes                           |
 
 ```wado
 fn identity<T>(x: T) -> T { return x; }
-let x = identity::<i32>(42);           // turbofish required (for now)
-// let y = identity(42);               // not yet supported
+fn none_of<T>() -> Option<T> { return null; }
+
+let x = identity(42);                  // T=i32 from the argument
+let s = identity("hi");                // T=String from the argument
+let n: Option<i64> = none_of();        // T=i64 from the annotation
 ```
 
 A `_` inside a turbofish leaves that type-argument slot for inference while the
 others stay explicit, reusing the same inference an omitted turbofish uses. The
-explicit (non-`_`) arguments always win; an uninferable `_` is the same error as
-an omitted turbofish on an uninferable parameter. It is scoped to turbofish
-arguments — a `_` in a plain type annotation (`let xs: Array<_>`) is rejected.
+explicit (non-`_`) arguments always win. An uninferable `_` is the same error as
+an omitted turbofish on an uninferable parameter. A `_` works only in a
+turbofish: in a plain type annotation (`let xs: List<_>`) it is an error.
 
 A turbofish may also stop short of the declared parameters. The ones it does not
 name are inferred, as a `_` in their place would be.
@@ -2895,7 +2903,7 @@ let b = pick::<i32>(1, true);          // stops short: infers the second
 
 ### Traits
 
-Traits define shared behavior that types can implement. Wado uses static dispatch for trait methods - all calls are resolved at compile time.
+Traits define shared behavior that types can implement. Trait methods use static dispatch: every call is resolved at compile time.
 
 A `trait` and an `interface` are declared in the type namespace: one name reaches one declaration wherever it is written. Neither denotes a type. Each names a set of operations, and no value has one as its type, so a type position naming one is a compile error. A trait reaches a type only as a bound (`fn f<T: Greet>(x: T)`).
 
@@ -3005,9 +3013,12 @@ r.greet();  // Returns "Beep boop" (inherent method wins)
 A trait contributes candidates only where its declaration is in scope: declared
 in this module, imported by name or alias, re-exported to it through `pub use`,
 or one of the prelude's. Importing a type brings none of the traits its impls
-mention, and a bound is a name like any other — calling a supertrait's method
+mention. A bound is a name like any other, so calling a supertrait's method
 through `T: Sub` needs `Base` imported too. This is what keeps a library's new
 blanket impl from changing what a call means in a module that never named it.
+
+Not yet enforced for a supertrait's method called through a bound; see
+[WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md#scope-gates-method-calls-not-the-bounds-path).
 
 ##### The Order
 
@@ -3039,6 +3050,13 @@ because the fix differs:
 - Two impls of one trait, neither written for the receiver. A blanket has no
   name to call it by, so the fix is an `impl Tr for TheType`, which generality
   puts above both.
+
+Wado has no fully qualified `<Type as Trait>::method()` form, because a leading
+`<` in expression position begins JSX. A call names its trait with the
+trait-qualified form `Trait::method(recv, …)` instead (see
+[WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)). An
+associated function with no `self` has no receiver argument to bind `Self`
+from, so that form cannot name it.
 
 Arguments filter candidates before the ranks run: one trait at several argument
 lists is an overload set the call's arguments choose from (see
@@ -3133,7 +3151,7 @@ impl<T: CollectionBuilder<Output = T>> Collection for T {
 }
 ```
 
-This avoids the need for explicit `impl Collection for ...` on every self-building type. The compiler resolves `T::Element` via associated type projection on the type parameter.
+This avoids the need for explicit `impl Collection for ...` on every self-building type. `T::Element` names the `Element` that `T`'s `CollectionBuilder` impl binds.
 
 #### Impl Type Parameters Are Declared
 
@@ -3168,7 +3186,7 @@ The bound's subject is not itself determined this way: `A: Eq` says what `A` mus
 
 #### Standard Library Traits
 
-The prelude defines `IndexValue`, `IndexAssign`, and `Index` traits using associated types. See [Indexing Traits](#indexing-traits) for full definitions.
+The prelude defines the indexing traits `IndexValue`, `IndexAssign`, `IndexRef`, and `IndexRefMut`, each with an associated `Output` type. See [Indexing Traits](#indexing-traits) for full definitions.
 
 #### Trait Bounds
 
@@ -3208,16 +3226,8 @@ impl<T: Eq> Eq for Pair<T> {
 
 #### Not Yet Implemented
 
-- Trait objects (`dyn Trait`)
-- Fully qualified `<Type as Trait>::method()`. Permanently out — a leading `<`
-  in expression position is JSX's. The trait-qualified (UFCS) form
-  `Trait::method(recv, …)` is implemented instead (see
-  [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)); an
-  associated function with no `self` has no receiver argument to bind `Self`
-  from and stays unspellable
-- A namespaced trait in bound position (`T: conv::Convert`). An impl head takes
-  one (`impl conv::Convert<String> for S`), and a bound names the trait it
-  imported by name
+- Trait objects (`dyn Trait`); see [WEP: Struct and Trait System](./wep-2026-01-13-struct-and-trait.md#8-trait-objects-dynamic-dispatch).
+- A namespaced trait in bound position (`T: conv::Convert`). An impl head takes one (`impl conv::Convert<String> for S`).
 
 ### Coherence and Orphan Rules
 
@@ -3229,13 +3239,17 @@ That is a rule about where impls may be written, not about how many apply to a c
 
 The unit of coherence is a package — all source files compiled together from the same `wado.toml` project. Types and traits are classified relative to that boundary:
 
-| Module source                        | Classification |
-| ------------------------------------ | -------------- |
-| `./file.wado` (relative path import) | Local          |
-| Entry-point file                     | Local          |
-| `core:*` (standard library)          | Foreign        |
-| `wasi:*` (WASI interfaces)           | Foreign        |
-| Remote URL                           | Foreign        |
+| Module source                                       | Classification |
+| --------------------------------------------------- | -------------- |
+| `./file.wado` (relative path import)                | Local          |
+| Entry-point file                                    | Local          |
+| A module a Kiln generator produces for this package | Local          |
+| A `[dependencies]` package                          | Foreign        |
+| `core:*` (standard library)                         | Foreign        |
+| `wasi:*` (WASI interfaces)                          | Foreign        |
+| `web:*` (Web API bindings)                          | Foreign        |
+| A Wasm asset (`with { type: "wasm" }` or `"wat"`)   | Foreign        |
+| Remote URL                                          | Foreign        |
 
 #### The Orphan Rule
 
@@ -3331,8 +3345,7 @@ impl<..T: Inspect> Tag for [..T] { … }
 impl<..T: Eq> Tag for [..T] { … }     // ERROR: overlapping variadic impls
 ```
 
-Bounds do not separate them: a pack's bounds are checked at monomorphization,
-not at selection. A trait's own arguments do separate them, since they make the
+Bounds do not separate them. A trait's own arguments do, since they make the
 two impls of different traits:
 
 ```wado
@@ -3340,13 +3353,16 @@ impl<..T> Conv<i32> for [..T] { … }    // OK
 impl<..T> Conv<String> for [..T] { … } // OK — a different trait
 ```
 
-A variadic impl target must be the bare `[..T]`. A pack alongside other
-elements, or under a reference, is not supported yet:
+A variadic impl target may also carry a pack alongside other elements, or under
+a reference:
 
 ```wado
-impl<..T> Tag for [i32, ..T] { … }    // ERROR: not supported yet
-impl<..T> Tag for &[..T] { … }        // ERROR: not supported yet
+impl<..T> Tag for [i32, ..T] { … }
+impl<..T> Tag for &[..T] { … }
 ```
+
+Not yet implemented: only the bare `[..T]` is accepted today. See
+[WEP: Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md#5-coherence-rules).
 
 #### One Trait at Two Argument Lists
 
@@ -3432,7 +3448,7 @@ pub trait Iterator {
 /// Types that can be converted into an iterator
 pub trait IntoIterator {
     type Item;
-    type Iter;  // The iterator type
+    type Iter: Iterator<Item = Self::Item>;
 
     /// Creates an iterator from a value
     fn into_iter(&self) -> Self::Iter;
@@ -3484,9 +3500,9 @@ let total = arr.iter_value().filter(|x| x % 2 == 1).sum();  // Some(9)
 
 #### Value Semantics
 
-By-value iteration (`into_iter()`, `for let x of list`) returns copies of elements. Reference iteration yields references instead: `iter()` and `for let x of &list` yield `&T`, and `for let x of &mut list` yields `&mut T`.
+By-value iteration (`into_iter()`, `iter_value()`, `for let x of list`) returns copies of elements. Reference iteration yields references instead: `iter_ref()` and `for let x of &list` yield `&T`, and `iter_ref_mut()` and `for let x of &mut list` yield `&mut T`.
 
-`&mut` iteration enables in-place mutation for element types with an addressable interior — `struct`, `List`, `String`, `i128`/`u128` — whose `&mut T` is the element's shared GC handle:
+`&mut` iteration mutates elements in place when the element type has an addressable interior: `struct`, `List`, `String`, `i128`/`u128`. A write through the `&mut T` lands on the element:
 
 ```wado
 for let p of &mut points {
@@ -3502,9 +3518,9 @@ for let mut i = 0; i < arr.len(); i += 1 {
 }
 ```
 
-Where nothing survives the copy — `primitive`, `enum`, `flags`, `fn` — taking `&mut` of a field or element is a compile error outright, whether written `&mut x.f` / `&mut xs[i]` or taken implicitly by a `&mut self` receiver. A _local_ is fine: its box is the variable's own storage.
+For `primitive`, `enum`, `flags`, and `fn`, nothing survives the copy, so taking `&mut` of a field or element is a compile error outright. That holds whether it is written `&mut x.f` / `&mut xs[i]` or taken implicitly by a `&mut self` receiver. A `&mut` of a _local_ is fine, since it writes to the variable itself.
 
-A `variant` place admits `&mut`: its payload is a shared GC struct, so mutation _through_ it lands, though replacing the whole value does not.
+A `variant` place admits `&mut`. Its payload is shared, so a mutation _through_ it lands, though replacing the whole value does not.
 
 #### Custom Iterables
 
@@ -3537,19 +3553,19 @@ Iterators support `map`, `filter`, and `fold` for functional-style data processi
 let arr: List<i32> = [1, 2, 3, 4, 5];
 
 // map - transform each element
-let doubled = arr.iter().map(|x| x * 2).collect();
+let doubled = arr.into_iter().map(|x| x * 2).collect();
 // [2, 4, 6, 8, 10]
 
 // filter - keep elements matching predicate
-let evens = arr.iter().filter(|x| x % 2 == 0).collect();
+let evens = arr.into_iter().filter(|x| x % 2 == 0).collect();
 // [2, 4]
 
 // fold - reduce to single value
-let sum = arr.iter().fold(0, |acc, x| acc + x);
+let sum = arr.into_iter().fold(0, |acc, x| acc + x);
 // 15
 
 // Chaining combinators
-let result = arr.iter()
+let result = arr.into_iter()
     .filter(|x| x > 2)
     .map(|x| x * 10)
     .collect();
@@ -3604,9 +3620,7 @@ pub trait Ord: Eq {
 On a float it is IEEE 754-2019 `totalOrder`, so it separates `-0.0` from `0.0`
 and places each NaN at one end rather than calling it equal to what it met.
 
-A comparison operator lowers to an instruction where the type has one. Where it
-does not, a type stating what its operators mean answers first, and any other
-type reads `Ord::cmp`:
+On every type but a float, a comparison operator means what `Ord::cmp` answers:
 
 - `a < b` desugars to `Ord::cmp(&a, &b) == Ordering::Less`
 - `a > b` desugars to `Ord::cmp(&a, &b) == Ordering::Greater`
@@ -3614,9 +3628,8 @@ type reads `Ord::cmp`:
 - `a >= b` desugars to `Ord::cmp(&a, &b) != Ordering::Less`
 
 A float is the one type whose operators are not its `Ord`: all four are IEEE,
-so a NaN answers false and the two zeroes are one value. `f32` and `f64` get
-that from their instructions and `f16` / `bf16` state it, so every float reads
-the same. One trait cannot carry both orders, because `Ordering` has three
+so a NaN answers false and the two zeroes are one value. This holds for `f16`
+and `bf16` as for `f32` and `f64`. One trait cannot carry both orders, because `Ordering` has three
 cases and an IEEE comparison has four answers. See
 [WEP: The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md).
 
@@ -3651,15 +3664,16 @@ pub trait Default {
 | Type                                                                 | `default()` |
 | -------------------------------------------------------------------- | ----------- |
 | `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `i128`, `u128` | `0`         |
-| `f32`, `f64`                                                         | `0.0`       |
+| `f16`, `bf16`, `f32`, `f64`                                          | `0.0`       |
 | `bool`                                                               | `false`     |
 | `char`                                                               | `'\0'`      |
 | `String`                                                             | `""`        |
-| `List<T>`                                                            | `[]`        |
+| `Array<T>`, `List<T>`                                                | `[]`        |
 | `Option<T>`                                                          | `null`      |
-| `TreeMap<K, V>`                                                      | `{}`        |
+| `TreeMap<K, V>` (`K: Ord`)                                           | `{}`        |
+| `TreeSet<T>` (`T: Ord`)                                              | `[]`        |
 
-`Result<T, E>` does not implement `Default` — there is no obvious choice between `Ok` and `Err`.
+`Result<T, E>` does not implement `Default`, since there is no obvious choice between `Ok` and `Err`.
 
 #### Usage
 
@@ -3675,7 +3689,7 @@ let arr = make_default::<List<String>>();  // []
 
 #### Auto-Derivation
 
-`Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`), synthesized on demand where a `S::default()` call, a `T: Default` bound, or an `impl Default for S;` marker needs it — not for every eligible struct. A fieldless struct qualifies, having exactly one value; this is what lets a marker like `NoFields` serve as a type parameter's default. See [Struct Field Defaults](#struct-field-defaults). A user-written `impl Default for S` overrides the auto-derived one. Generic structs require an explicit impl.
+`Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`). It is derived where a `S::default()` call, a `T: Default` bound, or an `impl Default for S;` marker needs it, not for every eligible struct. A fieldless struct qualifies, having exactly one value. This is what lets a marker like `NoFields` serve as a type parameter's default. See [Struct Field Defaults](#struct-field-defaults). A user-written `impl Default for S` overrides the auto-derived one. Generic structs require an explicit impl.
 
 ```wado
 struct Config {
@@ -3698,7 +3712,7 @@ impl Default for Point {
 
 ### String Parsing Traits
 
-Two prelude traits parse a value from text, both taking any `AsStrSlice` and returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. The built-in scalars (`char`, `bool`, the integer types, `f32`/`f64`) implement both; `String` implements only the lenient one, since taking a string as itself cannot fail.
+Two prelude traits parse a value from text, both taking any `AsStrSlice` and returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. `char`, `bool`, the integer types (`i128`/`u128` included), and `f32`/`f64` implement both; `String` implements only the lenient one, since taking a string as itself cannot fail.
 
 ```wado
 i32::from_str("42")              // Ok(42)
@@ -3795,8 +3809,9 @@ A parameter with no default is left open by a bound that writes nothing there:
 `T: Pick` holds for every `impl Pick<K>`, and the body cannot say which `K`.
 `T: Pick<String>` names it, and holds only for `impl Pick<String>`.
 
-Two bounds on one trait are two obligations, each asking for what it writes, so
-`T: Pick + Pick<String>` also asks for `impl Pick<i32>`. A method call on such a
+Two bounds on one trait are two obligations, each asking for what it writes.
+Under `trait Pick<K = i32>`, `T: Pick + Pick<String>` asks for `impl Pick<i32>`
+as well as `impl Pick<String>`. A method call on such a
 parameter reads the bound that writes arguments. The trait is one either way, so
 naming it selects nothing.
 
@@ -3831,32 +3846,51 @@ pub trait IndexValue<IndexType> {
 ```wado
 /// Assigns value to element at index
 pub trait IndexAssign<IndexType> {
-    type Input;
-    fn index_assign(&mut self, index: IndexType, value: Self::Input);
+    type Output;
+    fn index_assign(&mut self, index: IndexType, value: Self::Output);
 }
 ```
 
-#### Index - Reference Read
+#### IndexRef - Reference Read
 
 ```wado
-/// Returns element by reference (for reference-type elements only)
-pub trait Index<IndexType> {
-    type Output;
-    fn index(&self, index: IndexType) -> &Self::Output;
+/// Returns element by shared reference
+pub trait IndexRef<IndexType> {
+    type Output: Ref;
+    fn index_ref(&self, index: IndexType) -> &Self::Output;
 }
 ```
 
-#### Design Note
+#### IndexRefMut - Mutable Reference
 
-`IndexValue` returns by value because Wasm GC's `array.get` instruction copies elements. For primitives like `i32`, you cannot get `&i32` from an array element. `Index` is for containers of reference-type elements where returning a reference is possible.
+```wado
+/// Returns element by mutable reference
+pub trait IndexRefMut<IndexType> {
+    type Output: RefMut;
+    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
+}
+```
 
-`List<T>` implements `IndexValue` and `IndexAssign`:
+#### Dispatch
+
+A use site reads the trait that matches what it does with the element:
+
+- A bare read `c[i]` copies the element out through `IndexValue`.
+- An assignment `c[i] = v` writes through `IndexAssign`.
+- `&c[i]` and a `&self` receiver take `IndexRef` when the container has it, and a copy otherwise.
+- A `&mut self` receiver and a field write `c[i].f = v` take `IndexRefMut`. On a container without it they are compile errors.
+
+`Ref` and `RefMut` are sealed marker traits the compiler provides. `Ref` holds for a type whose value `&T` can alias, such as a `struct`, `List`, `String`, tuple, `variant`, `fn`, `i128`/`u128`, or reference. `RefMut` holds for the `Ref` types mutated in place rather than replaced on assignment, which excludes `variant` and `fn`. A scalar, `enum`, `flags`, or `resource` element is neither, so it is read and written by value only.
+
+`List<T>` and `Array<T>` implement `IndexValue` and `IndexAssign` for every element type, `IndexRef` when `T: Ref`, and `IndexRefMut` when `T: RefMut`:
 
 ```wado
 let mut arr: List<i32> = [1, 2, 3];
 let x = arr[0];    // IndexValue::index_value
 arr[1] = 100;      // IndexAssign::index_assign
 ```
+
+See [WEP: Indexing Traits Design](./wep-2026-01-20-indexing-traits.md).
 
 ### Enums, Variants, and Flags
 
@@ -3896,7 +3930,7 @@ match c {
 }
 ```
 
-Enums auto-derive `Display` as the bare case name (`Red`), distinct from `Inspect`'s `Color::Red`. `Eq` (discriminant equality) and `Ord` (declaration order) derive the same on-demand way as for structs — see [Auto-derived Traits](#structs) above.
+Enums auto-derive `Display` as the bare case name (`Red`), distinct from `Inspect`'s `Color::Red`. `Eq` (discriminant equality) and `Ord` (declaration order) derive the same on-demand way as for structs. See [Auto-derived Traits](#auto-derived-traits) above.
 
 Enums can have `impl` blocks:
 
@@ -3953,8 +3987,8 @@ if let Some(x) = opt {
     println(`Got: ${x}`);
 }
 
-// Custom variant pattern matching with tuple destructuring
-// Note: pattern uses case name only, not Type::CaseName
+// Custom variant pattern matching with tuple destructuring.
+// A pattern names the case bare or qualified (`ParseResult::Fail`).
 variant ParseResult {
     Fail,
     Number([i32, i32]),  // start, end positions
@@ -3974,21 +4008,7 @@ match s {
 }
 ```
 
-#### Implementation Status
-
-- Variant declarations and construction: implemented
-- Generic variant type inference (forward from payload, backward from annotation): implemented
-- `if let` pattern matching for `Option<T>`: implemented
-- `if let` pattern matching for non-generic custom variants: implemented
-- Tuple payload pattern destructuring (`if let Foo([a, b]) = x`): implemented
-- `match` expression/statement: implemented
-- `matches` operator: implemented
-- Match ergonomics (`&T` scrutinees in `let`/`if let`/`match`/`matches`; payload bindings become refs onto the scrutinee's own storage, never a copy): implemented
-- Nested sub-patterns in tuple/struct destructuring (literal, variant, enum): implemented
-- Generic custom variant pattern matching (e.g., `Maybe<T>`): not yet implemented
-- `Result<T, E>` pattern matching: not yet implemented
-
-Note: `Option<T>` and `Result<T, E>` are declared as variants in `core:prelude`.
+`Option<T>` and `Result<T, E>` are declared as variants in `core:prelude`.
 
 Flags (bit flags - Component Model `flags`):
 
@@ -4024,9 +4044,9 @@ assert rw as u32 == 3;
 // They produce a compile error; use bitwise operators (|, &, ^) instead
 ```
 
-Flags auto-derive `Eq` and `Ord` over their raw bits, the same on-demand way enums derive theirs over the discriminant — see [Auto-derived Traits](#structs).
+Flags auto-derive `Eq` and `Ord` over their raw bits, the same on-demand way enums derive theirs over the discriminant. See [Auto-derived Traits](#auto-derived-traits).
 
-Flags are implemented as newtypes over `u32`. Member names can carry `#[cm("...")]` attributes for Component Model name mapping:
+A flags type is a newtype over `u32`: an integer literal coerces to it, `as` converts to and from `u32`, and it inherits `u32`'s methods. Member names can carry `#[cm("...")]` attributes for Component Model name mapping:
 
 ```wado
 pub flags PathFlags {
