@@ -30,6 +30,7 @@ use {
 use { MemberDecls, members_present } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
 use { clip_to_scalars } from "./g4/unicode.wado";
+use { is_ident_char } from "./text.wado";
 use {
     ModeAttrUse,
     body_mode_attr_use,
@@ -326,6 +327,7 @@ pub fn gen_lexer<S: AsStrSlice>(
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
     let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);
+    let routes = lexer_rule_routes(&grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, grammar_ci);
     // A superClass base is wired independently of the action language.
     let ea = lexer_grammar_executes_actions(grammar) || !sc_name.is_empty();
     let act_rule_names = executed_action_rule_names(grammar);
@@ -345,8 +347,7 @@ pub fn gen_lexer<S: AsStrSlice>(
     gen_lexer_match_fns(
         w,
         &grammar.lexer_rules,
-        &keywords,
-        lit_tokens,
+        &routes,
         &grammar.options,
         atn_class,
         ea,
@@ -359,6 +360,7 @@ pub fn gen_lexer<S: AsStrSlice>(
     gen_tokenize_fn(
         w,
         &grammar.lexer_rules,
+        &routes,
         lit_tokens,
         &grammar.mode_names,
         &keywords,
@@ -657,20 +659,17 @@ fn lexer_flag<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, field:
 fn gen_lexer_match_fns<S: AsStrSlice>(
     w: &mut CodeWriter,
     lexer_rules: &List<LexerRule>,
-    keywords: &List<KeywordInfo>,
-    lit_tokens: &List<LitToken>,
+    routes: &List<LexerRuleRoute>,
     grammar_opts: &List<GrammarOption>,
     atn_class: &TreeMap<String, i32>,
     ea: bool,
     hm: bool,
     sc_name: S,
 ) {
-    let empty_opts: List<GrammarOption> = [];
-    let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
-    check_lexer_calls_resolve(lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
-    for let rule of lexer_rules {
-        if lexer_rule_has_match_fn(rule, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci) {
-            gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class, ea, hm, sc_name);
+    check_lexer_calls_resolve(lexer_rules, routes);
+    for let mut i = 0; i < lexer_rules.len(); i += 1 {
+        if routes[i].has_match_fn() {
+            gen_lexer_match_fn(w, &lexer_rules[i], lexer_rules, grammar_opts, atn_class, ea, hm, sc_name);
         }
     }
 }
@@ -683,7 +682,7 @@ fn gen_lexer_match_fns<S: AsStrSlice>(
 /// lexer rule references is called by name and needs one whatever dispatch
 /// decided; a non-recursive fragment is inlined at each use site instead.
 ///
-/// `lexer_rule_has_match_fn` is this reduced to "does the rule get its own".
+/// `has_match_fn` is this reduced to "does the rule get its own".
 pub variant LexerRuleRoute {
     /// Own `try_` matcher, reached from the first-char dispatch.
     Matcher,
@@ -722,8 +721,44 @@ pub struct LexerLiteralRoute {
     pub also_matcher: bool,
 }
 
-pub fn lexer_rule_route(
+impl LexerRuleRoute {
+    /// Whether the first-char dispatch calls the rule's own matcher.
+    pub fn is_dispatched(&self) -> bool {
+        return self matches { Matcher };
+    }
+
+    /// Whether the rule gets its own `try_` matcher.
+    pub fn has_match_fn(&self) -> bool {
+        return match self {
+            Matcher | RecursiveFragment => true,
+            Virtual | InlinedFragment => false,
+            Keyword(k) => k.also_matcher,
+            SharedLiteral(l) => l.also_matcher,
+            Subsumed(s) => s.also_matcher,
+        };
+    }
+}
+
+/// Every lexer rule's route, by declaration index.
+pub fn lexer_rule_routes(
+    lexer_rules: &List<LexerRule>,
+    keywords: &List<KeywordInfo>,
+    lit_tokens: &List<LitToken>,
+    grammar_opts: &List<GrammarOption>,
+    grammar_ci: bool,
+) -> List<LexerRuleRoute> {
+    let mut routes: List<LexerRuleRoute> = [];
+    for let rule of lexer_rules {
+        let route = lexer_rule_route(rule, &routes, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
+        routes.push(route);
+    }
+    return routes;
+}
+
+/// `rule`'s route, given the routes of the rules declared before it.
+fn lexer_rule_route(
     rule: &LexerRule,
+    earlier: &List<LexerRuleRoute>,
     lexer_rules: &List<LexerRule>,
     keywords: &List<KeywordInfo>,
     lit_tokens: &List<LitToken>,
@@ -749,7 +784,7 @@ pub fn lexer_rule_route(
     if let Some(const_name) = literal_duplicate_const(rule, lexer_rules, lit_tokens, grammar_opts, grammar_ci) {
         return LexerRuleRoute::SharedLiteral(LexerLiteralRoute { const_name, also_matcher: called });
     }
-    let by = lexer_rule_subsumers(rule, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
+    let by = lexer_rule_subsumers(rule, earlier, lexer_rules);
     if !by.is_empty() {
         return LexerRuleRoute::Subsumed(LexerSubsumedRoute { by, also_matcher: called });
     }
@@ -758,29 +793,14 @@ pub fn lexer_rule_route(
 
 /// The earlier rules that make every match `rule` could make, so it never wins
 /// the tie. Empty unless the grammar's shape shows it.
-fn lexer_rule_subsumers(
-    rule: &LexerRule,
-    lexer_rules: &List<LexerRule>,
-    keywords: &List<KeywordInfo>,
-    lit_tokens: &List<LitToken>,
-    grammar_opts: &List<GrammarOption>,
-    grammar_ci: bool,
-) -> List<String> {
-    let index = lexer_rules.iter_ref().position(|r| r.name == rule.name).unwrap();
+fn lexer_rule_subsumers(rule: &LexerRule, earlier: &List<LexerRuleRoute>, lexer_rules: &List<LexerRule>) -> List<String> {
+    let index = earlier.len();
+    assert lexer_rules[index].name == rule.name, "routes are derived in declaration order";
     let mut refs: List<String> = [];
     if lexer_alts_are_rule_refs(&rule.body, &mut refs) {
         let mut by: List<String> = [];
         for let name of &refs {
-            if !lexer_rule_outranks(
-                name,
-                index,
-                rule.mode,
-                lexer_rules,
-                keywords,
-                lit_tokens,
-                grammar_opts,
-                grammar_ci,
-            ) {
+            if !lexer_rule_outranks(name, rule.mode, earlier, lexer_rules) {
                 return [];
             }
             if !by.contains(name) {
@@ -790,19 +810,10 @@ fn lexer_rule_subsumers(
         return by;
     }
     for let mut i = 0; i < index; i += 1 {
-        let earlier = &lexer_rules[i];
-        if earlier.body.iter_ref().any(|alt| lexer_alt_offers_whole(alt, &rule.name))
-            && lexer_rule_outranks(
-                &earlier.name,
-                index,
-                rule.mode,
-                lexer_rules,
-                keywords,
-                lit_tokens,
-                grammar_opts,
-                grammar_ci,
-            ) {
-            return [earlier.name];
+        let prior = &lexer_rules[i];
+        if prior.body.iter_ref().any(|alt| lexer_alt_offers_whole(alt, &rule.name))
+            && lexer_rule_outranks(&prior.name, rule.mode, earlier, lexer_rules) {
+            return [prior.name];
         }
     }
     return [];
@@ -848,60 +859,22 @@ fn lexer_alt_offers_whole(alt: &LexerAlternative, name: &String) -> bool {
     return offers && rest_optional;
 }
 
-/// Whether token rule `name` is dispatched ahead of the rule at `index` in the
-/// same mode, and matches whatever its body does: no predicate can refuse it.
-fn lexer_rule_outranks(
-    name: &String,
-    index: i32,
-    mode: i32,
-    lexer_rules: &List<LexerRule>,
-    keywords: &List<KeywordInfo>,
-    lit_tokens: &List<LitToken>,
-    grammar_opts: &List<GrammarOption>,
-    grammar_ci: bool,
-) -> bool {
+/// Whether token rule `name` is one of the `earlier` rules, dispatched in
+/// `mode`, and matches whatever its body does: no predicate can refuse it.
+fn lexer_rule_outranks(name: &String, mode: i32, earlier: &List<LexerRuleRoute>, lexer_rules: &List<LexerRule>) -> bool {
     let Some(at) = lexer_rules.iter_ref().position(|r| r.name == *name) else {
         return false;
     };
-    let earlier = &lexer_rules[at];
-    if at >= index || earlier.mode != mode || earlier.is_fragment {
+    if at >= earlier.len() {
+        return false;
+    }
+    let prior = &lexer_rules[at];
+    if prior.mode != mode || prior.is_fragment || !earlier[at].is_dispatched() {
         return false;
     }
     let mut preds: List<i32> = [];
-    collect_lexer_predicate_ids(earlier, lexer_rules, &mut preds);
-    return preds.is_empty()
-        && lexer_rule_is_dispatched(earlier, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
-}
-
-/// Whether the first-char dispatch calls `rule`'s own matcher: exactly when
-/// `lexer_rule_route` leaves the rule to it.
-fn lexer_rule_is_dispatched(
-    rule: &LexerRule,
-    lexer_rules: &List<LexerRule>,
-    keywords: &List<KeywordInfo>,
-    lit_tokens: &List<LitToken>,
-    grammar_opts: &List<GrammarOption>,
-    grammar_ci: bool,
-) -> bool {
-    return lexer_rule_route(rule, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci) matches { Matcher };
-}
-
-/// Whether `rule` gets its own `try_` matcher.
-fn lexer_rule_has_match_fn(
-    rule: &LexerRule,
-    lexer_rules: &List<LexerRule>,
-    keywords: &List<KeywordInfo>,
-    lit_tokens: &List<LitToken>,
-    grammar_opts: &List<GrammarOption>,
-    grammar_ci: bool,
-) -> bool {
-    return match lexer_rule_route(rule, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci) {
-        Matcher | RecursiveFragment => true,
-        Virtual | InlinedFragment => false,
-        Keyword(k) => k.also_matcher,
-        SharedLiteral(l) => l.also_matcher,
-        Subsumed(s) => s.also_matcher,
-    };
+    collect_lexer_predicate_ids(prior, lexer_rules, &mut preds);
+    return preds.is_empty();
 }
 
 /// Every `try_` call the emitter is about to make resolves to a matcher.
@@ -910,13 +883,7 @@ fn lexer_rule_has_match_fn(
 /// decided separately. A mismatch would otherwise reach the user as `unknown
 /// function 'try_X'` against generated source, with no way back to the rule that
 /// asked for it — so it is caught here, where the names are still in hand.
-fn check_lexer_calls_resolve(
-    lexer_rules: &List<LexerRule>,
-    keywords: &List<KeywordInfo>,
-    lit_tokens: &List<LitToken>,
-    grammar_opts: &List<GrammarOption>,
-    grammar_ci: bool,
-) {
+fn check_lexer_calls_resolve(lexer_rules: &List<LexerRule>, routes: &List<LexerRuleRoute>) {
     for let caller of lexer_rules {
         let mut called: List<String> = [];
         for let alt of &caller.body {
@@ -925,13 +892,8 @@ fn check_lexer_calls_resolve(
             }
         }
         for let name of &called {
-            let target = find_lexer_rule(lexer_rules, name);
-            let ok = if let Some(t) = target {
-                lexer_rule_has_match_fn(t, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
-            } else {
-                false;
-            };
-            if !ok {
+            let target = lexer_rules.iter_ref().position(|r| r.name == *name);
+            if !(target matches { Some(t) && routes[t].has_match_fn() }) {
                 panic(
                     `lexer rule '${caller.name}' calls ${lexer_try_fn_name(name)}, but '${*name}' has no matcher`,
                 );
@@ -3400,14 +3362,15 @@ fn char_class_disjunction(w: &mut CodeWriter, cc: &CharClass) -> String {
     if cc.ranges.len() == 0 {
         return "(false)";
     }
-    let pattern = cc.ranges.iter_ref().map(|r| char_pat(r.start, r.end)).collect().join(" | ");
+    let pattern = || cc.ranges.iter_ref().map(|r| char_pat(r.start, r.end)).collect().join(" | ");
     if cc.ranges.len() <= SHARED_CHAR_SET_MIN_RANGES {
-        return `(chars[pos] matches { ${pattern} })`;
+        return `(chars[pos] matches { ${pattern()} })`;
     }
+    let key = cc.ranges.iter_ref().map(|r| `${r.start as u32:x}-${r.end as u32:x}`).collect().join(",");
     let name = w.hoist_fn(
-        &pattern,
+        &key,
         "in_char_set_",
-        |name: &String| `fn ${*name}(c: char) -> bool {\n    return c matches { ${pattern} };\n}\n\n`,
+        |name: &String| `fn ${*name}(c: char) -> bool {\n    return c matches { ${pattern()} };\n}\n\n`,
     );
     return `${name}(chars[pos])`;
 }
@@ -3741,7 +3704,7 @@ fn try_extract_keyword_info(
             return null;
         }
     }
-    if text.is_empty() || !text.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+    if text.is_empty() || !text.chars().all(is_ident_char) {
         return null;
     }
     return Option::<KeywordInfo>::Some(KeywordInfo { rule_name: rule.name, text, char_ci });
@@ -3871,13 +3834,12 @@ fn keyword_elem_ends(
     let len = kw.text.len();
     match elem {
         Literal(s) => {
-            let cs: List<char> = s.chars().collect();
+            let sets: List<LeadingChars> = s.chars().map(|c| folded_leading_chars(&[CharRange { start: c, end: c }], ci))
+                .collect();
             return starts.iter_ref().filter(
-                |p| *p + cs.len() <= len
-                    && (0..<cs.len()).all(
-                        |i| keyword_chars_admitted(kw, *p + i, reading, |c| in_folded_range(c, cs[i], cs[i], ci)),
-                    ),
-            ).map(|p| *p + cs.len()).collect();
+                |p| *p + sets.len() <= len
+                    && (0..<sets.len()).all(|i| keyword_chars_in(kw, *p + i, &sets[i], reading)),
+            ).map(|p| *p + sets.len()).collect();
         },
         RuleRef(name) => {
             let callee = find_lexer_rule(all_rules, name);
@@ -3930,32 +3892,37 @@ fn keyword_elem_ends(
                 frontier = fresh;
             }
         },
-        CharRange(pair) => {
-            return starts.iter_ref().filter(
-                |p| *p < len && keyword_chars_admitted(kw, *p, reading, |c| in_folded_range(c, pair.0, pair.1, ci)),
-            ).map(|p| *p + 1).collect();
-        },
-        CharClass(cc) => {
-            if cc.negated && ci {
-                return unread_keyword_ends(kw, reading, starts);
-            }
-            let admits = |c: char| cc.negated != cc.ranges.iter_ref().any(|r| in_folded_range(c, r.start, r.end, ci));
-            return starts.iter_ref().filter(|p| *p < len && keyword_chars_admitted(kw, *p, reading, admits)).map(
-                |p| *p + 1,
-            ).collect();
-        },
         AnyChar => {
             return starts.iter_ref().filter(|p| *p < len).map(|p| *p + 1).collect();
         },
-        Not(_) => {
-            let mut no_refs: List<String> = [];
-            let Some(set) = lexer_elem_leading_chars(elem, all_rules, ci, false, &mut no_refs) else {
-                return unread_keyword_ends(kw, reading, starts);
+        CharRange(_) | CharClass(_) | Not(_) => {
+            let set = match elem {
+                CharRange(pair) => folded_leading_chars(&[CharRange { start: pair.0, end: pair.1 }], ci),
+                CharClass(cc) && !(cc.negated && ci) => LeadingChars {
+                    ..folded_leading_chars(&cc.ranges, ci),
+                    negated: cc.negated,
+                },
+                _ => {
+                    let mut no_refs: List<String> = [];
+                    let Some(set) = lexer_elem_leading_chars(elem, all_rules, ci, false, &mut no_refs) else {
+                        return unread_keyword_ends(kw, reading, starts);
+                    };
+                    set
+                },
             };
             return starts.iter_ref().filter(|p| *p < len && keyword_chars_in(kw, *p, &set, reading)).map(|p| *p + 1).collect(
             );
         },
     }
+}
+
+/// `ranges` widened by `folded_class`, as a leading set.
+fn folded_leading_chars(ranges: &List<CharRange>, ci: bool) -> LeadingChars {
+    let mut folded: List<[i32, i32]> = [];
+    for let r of ranges {
+        folded.extend(&folded_ranges(r.start, r.end, ci));
+    }
+    return LeadingChars { ranges: folded, negated: false, nullable: false };
 }
 
 fn add_keyword_ends(out: &mut List<i32>, ends: &List<i32>) {
@@ -3981,35 +3948,9 @@ fn unread_keyword_ends(kw: &KeywordInfo, reading: KeywordReading, starts: &List<
 /// Whether the chars `kw` accepts at `pos` are in `set`: every one when
 /// proving, any one otherwise.
 fn keyword_chars_in(kw: &KeywordInfo, pos: i32, set: &LeadingChars, reading: KeywordReading) -> bool {
-    return keyword_chars_admitted(
-        kw,
-        pos,
-        reading,
-        |c| set.negated != set.ranges.iter_ref().any(|r| c as i32 >= r.0 && c as i32 <= r.1),
-    );
-}
-
-/// Whether `admits` takes the chars `kw` accepts at `pos`: every one when
-/// proving, any one otherwise.
-fn keyword_chars_admitted(kw: &KeywordInfo, pos: i32, reading: KeywordReading, admits: fn(char) -> bool) -> bool {
     let accepts = keyword_accepts(kw, pos);
-    return if reading matches { Proven } {
-        accepts.iter_ref().all(|c| admits(*c));
-    } else {
-        accepts.iter_ref().any(|c| admits(*c));
-    };
-}
-
-/// Whether `c` is in `start..=end` as `folded_class` widens it.
-fn in_folded_range(c: char, start: char, end: char, ci: bool) -> bool {
-    if c >= start && c <= end {
-        return true;
-    }
-    if !ci || !c.is_ascii_alphabetic() {
-        return false;
-    }
-    let swapped = if c.is_ascii_lowercase() { c.to_ascii_uppercase() } else { c.to_ascii_lowercase() };
-    return swapped >= start && swapped <= end;
+    let in_set = |c: &char| set.negated != set.ranges.iter_ref().any(|r| *c as i32 >= r.0 && *c as i32 <= r.1);
+    return if reading matches { Proven } { accepts.iter_ref().all(in_set) } else { accepts.iter_ref().any(in_set) };
 }
 
 /// Decides whether a keyword candidate may use the classifier shortcut.
@@ -4074,15 +4015,14 @@ fn keyword_first_char_covered(kw: &KeywordInfo, first_chars: &List<[char, char]>
 /// keyword's whole text: the matches `classify_keyword` is asked about.
 fn keyword_carrier_kinds(
     lexer_rules: &List<LexerRule>,
+    routes: &List<LexerRuleRoute>,
     keywords: &List<KeywordInfo>,
-    lit_tokens: &List<LitToken>,
     grammar_opts: &List<GrammarOption>,
-    grammar_ci: bool,
 ) -> List<String> {
     let mut kinds: List<String> = [];
-    for let rule of lexer_rules {
-        if rule.mode != 0
-            || !lexer_rule_is_dispatched(rule, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci) {
+    for let mut i = 0; i < lexer_rules.len(); i += 1 {
+        let rule = &lexer_rules[i];
+        if rule.mode != 0 || !routes[i].is_dispatched() {
             continue;
         }
         let kind = lexer_rule_token_kind(rule);
@@ -4867,7 +4807,7 @@ fn build_mode_try_calls(
     mode: i32,
     lexer_rules: &List<LexerRule>,
     lit_tokens: &List<LitToken>,
-    keywords: &List<KeywordInfo>,
+    routes: &List<LexerRuleRoute>,
     grammar_opts: &List<GrammarOption>,
     grammar_ci: bool,
     act_rule_names: &List<String>,
@@ -4906,9 +4846,9 @@ fn build_mode_try_calls(
             });
         }
     }
-    for let rule of lexer_rules {
-        if rule.mode == mode
-            && lexer_rule_is_dispatched(rule, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci) {
+    for let mut i = 0; i < lexer_rules.len(); i += 1 {
+        let rule = &lexer_rules[i];
+        if rule.mode == mode && routes[i].is_dispatched() {
             let mut call = build_rule_try_call(
                 rule,
                 lexer_rules,
@@ -5000,6 +4940,7 @@ fn index_of_name<S: AsStrSlice>(names: &List<String>, name: S) -> i32 {
 fn gen_tokenize_fn<S: AsStrSlice>(
     w: &mut CodeWriter,
     lexer_rules: &List<LexerRule>,
+    routes: &List<LexerRuleRoute>,
     lit_tokens: &List<LitToken>,
     mode_names: &List<String>,
     keywords: &List<KeywordInfo>,
@@ -5094,7 +5035,7 @@ fn gen_tokenize_fn<S: AsStrSlice>(
                 mi,
                 lexer_rules,
                 lit_tokens,
-                keywords,
+                routes,
                 grammar_opts,
                 grammar_ci,
                 act_rule_names,
@@ -5112,7 +5053,7 @@ fn gen_tokenize_fn<S: AsStrSlice>(
             0,
             lexer_rules,
             lit_tokens,
-            keywords,
+            routes,
             grammar_opts,
             grammar_ci,
             act_rule_names,
@@ -5151,7 +5092,7 @@ fn gen_tokenize_fn<S: AsStrSlice>(
     w.line("lexer.pos = start + 1;");
     w.else_begin("else");
     if !keywords.is_empty() {
-        let kinds = keyword_carrier_kinds(lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
+        let kinds = keyword_carrier_kinds(lexer_rules, routes, keywords, grammar_opts);
         assert !kinds.is_empty(), "an admitted keyword's carrier, or the rule subsuming it, is dispatched";
         let mut gate = if kinds.len() == 1 {
             `best_kind == ${kinds[0]}`;

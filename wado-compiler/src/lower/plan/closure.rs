@@ -2109,9 +2109,8 @@ impl TirRefVisitor for FnParamSpecCollector<'_> {
     }
 }
 
-/// Whether the body assigns one of the fn-params: the value stored is any
-/// `fn(...)`, which the param retyped to `&$Closure_N` cannot hold. A read is
-/// no obstacle, the translator viewing it as canonical wherever `fn(...)` is due.
+/// Finds an assignment to a fn-param, whose `fn(...)` value the param retyped to
+/// `&$Closure_N` cannot hold.
 struct UnspecializableFnParam<'a> {
     fn_param_indices: &'a [u32],
     found: bool,

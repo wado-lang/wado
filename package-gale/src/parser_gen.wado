@@ -177,6 +177,7 @@ use {
     gen_trace_helpers,
 } from "./parser_runtime_gen.wado";
 use { gen_parser_super_interface } from "./superclass.wado";
+use { is_ident_char } from "./text.wado";
 use { MemberDecls } from "./java2wado/jmembers.wado";
 use { AltBinding } from "./attr_resolve.wado";
 use {
@@ -423,7 +424,7 @@ fn forwarded_scan_callee(body: &String, params: &String) -> Option<String> {
         return null;
     }
     let callee = text.slice(head.len(), text.len() - tail.len());
-    if !callee.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+    if !callee.chars().all(is_ident_char) {
         return null;
     }
     return Option::Some(callee.to_string());

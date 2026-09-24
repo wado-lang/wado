@@ -3,6 +3,7 @@ use { FOLLOW_PARAM, symbol_char_names, char_hex_name } from "./ident.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { TreeSet } from "core:collections";
 use { unwrap_label } from "./lr_util.wado";
+use { is_ident_byte } from "./text.wado";
 pub use { escape_ident, escape_case, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 
 /// Emit a `// rule visibility: <name> (ignored by codegen, matches ANTLR4)`
@@ -22,10 +23,6 @@ pub fn gen_visibility_comment(w: &mut CodeWriter, visibility: &Visibility) {
         return;
     }
     w.line(`// rule visibility: ${label} (ignored by codegen, matches ANTLR4)`);
-}
-
-fn is_ident_byte(b: u8) -> bool {
-    return b == b'_' || b.is_ascii_alphanumeric();
 }
 
 /// Every free function generated `text` calls: an identifier followed by `(`
@@ -51,7 +48,7 @@ fn collect_names(text: &String, out: &mut TreeSet<String>, calls_only: bool, pre
         while i < n && is_ident_byte(text.get_byte_unchecked(i)) {
             i += 1;
         }
-        if calls_only && start > 0 && text.get_byte_unchecked(start - 1) == b'.' {
+        if calls_only && is_method_name(text, start) {
             continue;
         }
         let name = text.as_str_slice().slice(start, i);
@@ -62,6 +59,13 @@ fn collect_names(text: &String, out: &mut TreeSet<String>, calls_only: bool, pre
             out.insert(name.to_string());
         }
     }
+}
+
+/// Whether the name at `start` follows a receiver's `.`, not a spread's `..`.
+fn is_method_name(text: &String, start: i32) -> bool {
+    return start >= 1
+        && text.get_byte_unchecked(start - 1) == b'.'
+        && !(start >= 2 && text.get_byte_unchecked(start - 2) == b'.');
 }
 
 fn follows_fn_keyword(text: &String, start: i32) -> bool {

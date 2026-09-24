@@ -1,4 +1,4 @@
-//! `gale dump --lexer` rendering: per lexer rule, `lexer_rule_route` and the
+//! `gale dump --lexer` rendering: per lexer rule, its route and the
 //! `lexer_rule_plan` tree `gen_lexer` emits from, read out.
 //!
 //! Not reported: a repeat directly under another repeat or a `~`. No sequence
@@ -14,8 +14,6 @@ use {
     LexerRepeatElement,
 } from "./ir.wado";
 use {
-    LitToken,
-    KeywordInfo,
     LexerRuleRoute,
     LexerAltsEmit,
     LexerRepeatEmit,
@@ -24,7 +22,7 @@ use {
     collect_keyword_rules,
     resolve_ci,
     lexer_try_fn_name,
-    lexer_rule_route,
+    lexer_rule_routes,
     lexer_alt_suffix,
     find_fragment,
     lexer_rule_plan,
@@ -42,9 +40,7 @@ use { TreeMap } from "core:collections";
 struct DumpCtx {
     rules: List<LexerRule>,
     grammar_opts: List<GrammarOption>,
-    keywords: List<KeywordInfo>,
-    lit_tokens: List<LitToken>,
-    grammar_ci: bool,
+    routes: List<LexerRuleRoute>,
     /// `name -> latn rule index` for the rules routed to the runtime lexer
     /// simulator instead of a static matcher.
     atn_class: TreeMap<String, i32>,
@@ -83,9 +79,13 @@ pub fn render_lexer_dump(grammar: &Grammar) -> String {
     let ctx = DumpCtx {
         rules: grammar.lexer_rules,
         grammar_opts: grammar.options,
-        keywords: collect_keyword_rules(&grammar.lexer_rules, &grammar.options),
-        lit_tokens: collect_literal_tokens(&grammar.parser_rules),
-        grammar_ci: resolve_ci(&grammar.options, &empty_opts),
+        routes: lexer_rule_routes(
+            &grammar.lexer_rules,
+            &collect_keyword_rules(&grammar.lexer_rules, &grammar.options),
+            &collect_literal_tokens(&grammar.parser_rules),
+            &grammar.options,
+            resolve_ci(&grammar.options, &empty_opts),
+        ),
         atn_class: latn_rule_indices(grammar),
     };
 
@@ -93,8 +93,8 @@ pub fn render_lexer_dump(grammar: &Grammar) -> String {
         text: String::with_capacity(256 + 192 * grammar.lexer_rules.len()),
     };
     o.text.push_str(`grammar ${grammar.name} (lexer)\n\n`);
-    for let rule of &grammar.lexer_rules {
-        render_rule(&mut o, &ctx, rule);
+    for let mut i = 0; i < ctx.rules.len(); i += 1 {
+        render_rule(&mut o, &ctx, &ctx.rules[i], &ctx.routes[i]);
     }
     render_summary(&mut o);
     return o.text;
@@ -116,16 +116,7 @@ fn latn_rule_indices(grammar: &Grammar) -> TreeMap<String, i32> {
     return out;
 }
 
-fn render_rule(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule) {
-    let route = lexer_rule_route(
-        rule,
-        &ctx.rules,
-        &ctx.keywords,
-        &ctx.lit_tokens,
-        &ctx.grammar_opts,
-        ctx.grammar_ci,
-    );
-
+fn render_rule(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule, route: &LexerRuleRoute) {
     o.text.push_str(`rule ${rule.name} — `);
     // An ATN-class rule has a matcher, but its body is one `latn_match` call:
     // the static strategies below never apply to it.
@@ -134,11 +125,11 @@ fn render_rule(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule) {
         o.text.push_str(`ATN-class: latn_match (latn rule ${idx})\n`);
         return;
     }
-    count_route(o, &route);
-    o.text.push_str(&route_label(rule, &route));
+    count_route(o, route);
+    o.text.push_str(&route_label(rule, route));
     o.text.push('\n');
 
-    if route_emits_body(&route) {
+    if route_emits_body(route) {
         walk_rule_body(o, ctx, rule);
     }
 }
