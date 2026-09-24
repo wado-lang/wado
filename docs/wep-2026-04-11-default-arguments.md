@@ -172,17 +172,17 @@ and `default_field.wado` each carry one `test` block per row, named after the
 rule, and cross a module boundary in every one — the direction that can tell the
 declaration's scope from the taking site's.
 
-| What the default names                 | Fixture                                                      |
-| -------------------------------------- | ------------------------------------------------------------ |
-| A private item of the declaring module | `default_arg_scope.wado`, `default_field.wado`               |
-| A private _type_ of that module        | `default_arg_scope.wado`                                     |
-| A variant case across the boundary     | `default_arg_scope.wado`, `default_field.wado` (issue #1486) |
-| That module's import alias (`ns::x`)   | `default_arg_scope.wado`, `default_field.wado`               |
-| An earlier parameter                   | `default_arg_scope.wado`, `default_arg_sites.wado`           |
-| The declaration's own type parameter   | `default_arg_callee_type_param.wado`                         |
-| A location literal (call site)         | `default_arg_location_call_site.wado`                        |
-| A file literal (declaring file)        | `default_arg_scope.wado`                                     |
-| Nothing of the caller's                | `default_arg_scope.wado`                                     |
+| What the default names                 | Fixture                                                                                   |
+| -------------------------------------- | ----------------------------------------------------------------------------------------- |
+| A private item of the declaring module | `default_arg_scope.wado`, `default_field.wado`                                            |
+| A private _type_ of that module        | `default_arg_scope.wado`                                                                  |
+| A variant case across the boundary     | `default_arg_scope.wado`, `default_field.wado` (issue #1486)                              |
+| That module's import alias (`ns::x`)   | `default_arg_scope.wado`, `default_field.wado`                                            |
+| An earlier parameter                   | `default_arg_scope.wado`, `default_arg_sites.wado`, `default_arg_earlier_param_once.wado` |
+| The declaration's own type parameter   | `default_arg_callee_type_param.wado`                                                      |
+| A location literal (call site)         | `default_arg_location_call_site.wado`                                                     |
+| A file literal (declaring file)        | `default_arg_scope.wado`                                                                  |
+| Nothing of the caller's                | `default_arg_scope.wado`                                                                  |
 
 A method's default is resolved where declared rather than where called:
 `default_arg_scope.wado`, "a method's default resolves where it is declared".
@@ -195,6 +195,22 @@ fn make_rect(width: f64, height: f64 = width) -> Rect { ... }
 make_rect(10.0);        // → make_rect(10.0, 10.0)
 make_rect(10.0, 20.0);
 ```
+
+The argument is evaluated once, in its place among the others. Where a default
+names a parameter, the call binds its arguments to locals in order and the
+default reads the local, in whatever form it takes, a closure capturing it
+included. A default another default names is bound the same way. A call whose
+defaults name no parameter binds nothing, and the optimizer folds the locals
+away where they are bound (`default_arg_earlier_param_once.wado`):
+
+```wado
+fn twice(a: i32, b: i32 = a + a) -> i32 { ... }
+
+twice(next());          // → { let a = next(); twice(a, a + a) }
+```
+
+A receiver stays in its slot when it is a place, since that is where a
+`&mut self` method writes. Any other receiver is bound ahead of the arguments.
 
 #### Interaction with Function Types
 

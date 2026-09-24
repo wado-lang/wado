@@ -3,8 +3,6 @@
 use crate::elaborator::synth::{ArgProbe, ArgSource};
 use std::cell::RefCell;
 
-use crate::hashmap::IndexMap;
-
 use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
@@ -160,6 +158,9 @@ fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ScopedB
         .cloned()
         .collect()
 }
+
+/// The receiver's parameter name, which a default cannot name.
+pub(super) const RECEIVER: &str = "self";
 
 /// Whether a call supplying `args_len` arguments leaves a defaulted parameter
 /// for a walk to fill. Annotate walks and reify pads on the same answer.
@@ -2369,11 +2370,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Fill `args` from `defaults` up to `param_types`, each default resolved
     /// as its author wrote it in `callee_module`: the caller's bindings are out
-    /// of scope, and a default naming a parameter ahead of it is answered by
-    /// that parameter's already-known type rather than by a second walk of the
-    /// caller's argument. `filled` sees each appended `(index, default,
-    /// resolved type)`. A position no default covers stops the fill and is left
-    /// to the arity check.
+    /// of scope, and each parameter ahead of a default is a local of its
+    /// argument's type, as reify binds it. `filled` sees each appended `(index,
+    /// default, resolved type)`. A position no default covers stops the fill
+    /// and is left to the arity check.
     pub(super) fn fill_trailing_defaults(
         &mut self,
         args: &mut Vec<TypeId>,
@@ -2388,27 +2388,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if args.len() >= param_types.len() || !omits_a_default(args.len(), defaults) {
             return;
         }
-        let mut param_types_so_far: IndexMap<String, TypeId> = IndexMap::default();
-        for (i, arg_type) in args.iter().enumerate() {
-            if let Some((name, _)) = defaults.get(i) {
-                param_types_so_far.insert(name.clone(), *arg_type);
-            }
-        }
         self.resolving_defaults_at(site, callee_module, type_bindings, |s| {
-            for i in args.len()..param_types.len() {
-                let Some((name, Some(default_expr))) = defaults.get(i).cloned() else {
-                    break;
+            ctx.with_caller_bindings_hidden(|ctx| {
+                let bind = |ctx: &mut FunctionContext, name: &str, type_id: TypeId| {
+                    if name != RECEIVER {
+                        ctx.add_local(name.to_string(), type_id, false, None);
+                    }
                 };
-                let expected_type = param_types[i];
-                let resolved = ctx.with_caller_bindings_hidden(|ctx| {
-                    s.with_default_arg_types(param_types_so_far.clone(), |s| {
-                        s.resolve_expr(&default_expr, ctx, Some(expected_type))
-                    })
-                });
-                filled(s, i, &default_expr, resolved);
-                args.push(resolved);
-                param_types_so_far.insert(name, resolved);
-            }
+                for (arg_type, (name, _)) in args.iter().zip(defaults) {
+                    bind(ctx, name, *arg_type);
+                }
+                for i in args.len()..param_types.len() {
+                    let Some((name, Some(default_expr))) = defaults.get(i) else {
+                        break;
+                    };
+                    let resolved = s.resolve_expr(default_expr, ctx, Some(param_types[i]));
+                    filled(s, i, default_expr, resolved);
+                    args.push(resolved);
+                    bind(ctx, name, resolved);
+                }
+            });
         });
     }
 

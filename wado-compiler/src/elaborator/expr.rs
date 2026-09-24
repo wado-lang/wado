@@ -792,13 +792,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // A parameter this default may name. Below the binder tiers, so a
-        // binder the default opens itself shadows the parameter, matching the
-        // scope a reader sees at the declaration.
-        if let Some(&param_type) = self.annotate_ctx.default_arg_types.get(&ident.name) {
-            return param_type;
-        }
-
         // Check for associated constants (e.g., f64::PI, i32::MAX). The
         // constant's body is *foreign* AST owned by `const_module`; we
         // re-resolve it here only for the consumer's inference side effects.

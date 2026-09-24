@@ -7,7 +7,9 @@
 use super::sig::AssocConstSig;
 use std::rc::Rc;
 
-use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
+use crate::ast::{
+    self, AstId, AstVisitor, CompoundAssignOp, Expr, Item, Module, UnaryOp, walk_expr,
+};
 use crate::attribute::{
     self, ALLOC, AMBIENT, BENIGN, EXPORT_NAME, IMMEDIATE, INLINE, LINEAR_MEMORY, PARAM, RESULT,
     RETAIN, SECRET, TRAP, WIRE,
@@ -16,6 +18,7 @@ use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Sever
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
+use crate::lower::plan::value_copy::place::is_source_place;
 use crate::module_source::ModuleSource;
 use crate::name::{
     FqTypeName, IDENTITY_TEST_METHOD, INTERNAL_PREFIX, NARROWING_TEST_METHOD, Receiver,
@@ -45,7 +48,7 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
-use crate::elaborator::call::omits_a_default;
+use crate::elaborator::call::{RECEIVER, omits_a_default};
 use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
 use crate::elaborator::expr::{
@@ -404,12 +407,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// program cannot reach, which downstream phases would discard anyway.
     /// `None` reifies everything.
     pub(crate) emit_live: Option<&'a IndexSet<AstId>>,
-    /// Active parameter-name → already-reified-argument substitutions for the
-    /// default-argument expression being reified. A default resolves under the
-    /// *callee's* perspective, but a reference to an earlier parameter is the
-    /// *caller's* argument, already reified under the caller's — so `reify_ident`
-    /// returns the pre-reified TIR instead of re-resolving the spliced AST.
-    pub(crate) default_arg_overrides: IndexMap<String, TirExpr>,
     /// Active `AstId` → already-reified-`Local` substitutions for the
     /// side-effecting sub-pieces of a compound-assign target, bound once to
     /// `let $caN` before the read/write. Reify returns the bound `Local` for
@@ -551,7 +548,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             tuple_overlay_stack: Vec::new(),
             tuple_overlay_visits: IndexMap::default(),
             emit_live,
-            default_arg_overrides: IndexMap::default(),
             compound_overrides: IndexMap::default(),
             call_site_location: None,
             pending_local_structs: Vec::new(),
@@ -3050,21 +3046,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Run `f` with the default-argument override map suppressed, for a binder
-    /// or control form (closure, block, `if`, `match`, …): a reference the form
-    /// binds itself must resolve to that binding, not to an outer parameter's
-    /// argument. No-op outside a default-argument walk. See
-    /// `reify_pad_args_with_defaults`.
-    fn with_defaults_suppressed<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        if self.default_arg_overrides.is_empty() {
-            return f(self);
-        }
-        let saved = std::mem::take(&mut self.default_arg_overrides);
-        let r = f(self);
-        self.default_arg_overrides = saved;
-        r
-    }
-
     /// Reify an expression. Reads `sem.types.expression_types` for the
     /// type, `sem.types.coercions` for any coercion wrap,
     /// `sem.types.method_dispatch` for method calls,
@@ -3118,10 +3099,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         match expr {
             ast::Expr::Literal(lit) => self.reify_literal(lit, recorded_type, ctx),
-            ast::Expr::Block(block) => self.with_defaults_suppressed(|s| {
-                let block_tir = s.reify_block_value(block, ctx, expected_type);
+            ast::Expr::Block(block) => {
+                let block_tir = self.reify_block_value(block, ctx, expected_type);
                 TirExpr::new(TirExprKind::Block(block_tir), recorded_type, span)
-            }),
+            }
             ast::Expr::Ident(ident) => self.reify_ident(ident, recorded_type, expected_type, ctx),
             ast::Expr::TupleComprehension(comp) => {
                 self.reify_tuple_comprehension(comp, ctx, recorded_type)
@@ -3329,9 +3310,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
             ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
-            ast::Expr::Match(match_expr) => self.with_defaults_suppressed(|s| {
-                s.reify_match_expr(match_expr, ctx, expected_type, recorded_type)
-            }),
+            ast::Expr::Match(match_expr) => {
+                self.reify_match_expr(match_expr, ctx, expected_type, recorded_type)
+            }
             ast::Expr::StructLiteral(struct_lit) => {
                 self.reify_struct_literal(struct_lit, ctx, recorded_type)
             }
@@ -3342,14 +3323,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::TaggedTemplate(tagged) => {
                 self.reify_tagged_template(tagged, ctx, recorded_type)
             }
-            ast::Expr::Matches(m) => self.with_defaults_suppressed(|s| s.reify_matches(m, ctx)),
+            ast::Expr::Matches(m) => self.reify_matches(m, ctx),
             ast::Expr::CompoundAssign(compound) => {
                 self.reify_compound_assign(compound, ctx, recorded_type)
             }
             ast::Expr::TryOp(qm) => self.reify_question_mark(qm, ctx, recorded_type),
-            ast::Expr::Closure(closure) => self.with_defaults_suppressed(|s| {
-                s.reify_closure(closure, ctx, recorded_type, expected_type)
-            }),
+            ast::Expr::Closure(closure) => {
+                self.reify_closure(closure, ctx, recorded_type, expected_type)
+            }
             ast::Expr::Index(index) => self.reify_index(index, ctx, recorded_type),
             ast::Expr::ComparisonChain(chain) => self.reify_comparison_chain(chain, ctx),
             ast::Expr::StaticMethodCall(static_call) => {
@@ -3374,7 +3355,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 )
             }
-            ast::Expr::LabeledBlock(lb) => self.with_defaults_suppressed(|s| {
+            ast::Expr::LabeledBlock(lb) => {
                 // Match `Elaborator::resolve_expr`'s `LabeledBlock`
                 // arm: push a `LabeledBlockTarget`
                 // so any `break label: expr` inside lowers via this
@@ -3388,7 +3369,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // or as the fall-through tail.
                 let branch_expected = expected_type.or(Some(recorded_type));
                 ctx.push_labeled_block_frame(lb.label.clone(), branch_expected);
-                let tir_block = s.reify_block(&lb.block, ctx, branch_expected);
+                let tir_block = self.reify_block(&lb.block, ctx, branch_expected);
                 ctx.pop_labeled_block_frame();
                 TirExpr::new(
                     TirExprKind::LabeledBlock {
@@ -3399,7 +3380,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     recorded_type,
                     span,
                 )
-            }),
+            }
             ast::Expr::Spread(_, _) => {
                 // `Spread` is only valid inside a tuple literal; the
                 // elaborator panics if it sees one at top level.
@@ -3407,9 +3388,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // diagnosed a stray spread.
                 panic!("reify_expr: bare Spread is invalid outside TupleLiteral")
             }
-            ast::Expr::If(if_expr) => self.with_defaults_suppressed(|s| {
-                s.reify_if_expr(if_expr, ctx, expected_type, recorded_type)
-            }),
+            ast::Expr::If(if_expr) => {
+                self.reify_if_expr(if_expr, ctx, expected_type, recorded_type)
+            }
             ast::Expr::Assign(assign) => {
                 // IndexAssign rewrite: `arr[i] = v` lowers to
                 // `arr.index_assign(i, v)`. The elaborator's
@@ -5728,16 +5709,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // The template is the tag's one written argument; a trailing parameter
         // with a default is filled here, as it is for a spelled call.
         let mut args = vec![CallArg::new(literal, false)];
-        self.reify_pad_dispatch_defaults(&tagged.tag, &mut args, &dispatch, tagged.id, span, ctx);
-        let call = TirExpr::new(
-            TirExprKind::Call {
-                type_args: dispatch.type_args,
-                func: Box::new(dispatch.function_ref),
-                args,
-                has_receiver: false,
-            },
-            recorded_type,
+        let prelude = self.reify_pad_dispatch_defaults(
+            &tagged.tag,
+            &mut args,
+            &dispatch,
+            tagged.id,
             span,
+            ctx,
+        );
+        let call = after_default_bindings(
+            prelude,
+            TirExpr::new(
+                TirExprKind::Call {
+                    type_args: dispatch.type_args,
+                    func: Box::new(dispatch.function_ref),
+                    args,
+                    has_receiver: false,
+                },
+                recorded_type,
+                span,
+            ),
         );
         if stmts.is_empty() {
             return call;
@@ -8061,7 +8052,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .collect();
 
             let callee_module = dispatch.function_ref.module_source.clone();
-            self.reify_apply_param_defaults(
+            let prelude = self.reify_apply_param_defaults(
                 &mut args,
                 &dispatch.param_defaults,
                 &dispatch.param_types,
@@ -8073,15 +8064,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
             // Replay the production `Call`'s exact type args (method-level;
             // impl args ride along in `function_ref.monomorph_info`).
-            return TirExpr::new(
-                TirExprKind::Call {
-                    type_args: dispatch.type_args,
-                    func: Box::new(dispatch.function_ref),
-                    args,
-                    has_receiver: false,
-                },
-                recorded_type,
-                static_call.span,
+            return after_default_bindings(
+                prelude,
+                TirExpr::new(
+                    TirExprKind::Call {
+                        type_args: dispatch.type_args,
+                        func: Box::new(dispatch.function_ref),
+                        args,
+                        has_receiver: false,
+                    },
+                    recorded_type,
+                    static_call.span,
+                ),
             );
         }
 
@@ -8158,8 +8152,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         site: AstId,
         span: Span,
         ctx: &mut FunctionContext,
-    ) {
-        self.reify_pad_args_with_defaults(
+    ) -> Vec<TirStmt> {
+        let mut prelude = self.reify_pad_args_with_defaults(
             callee,
             args,
             &dispatch.param_types,
@@ -8169,7 +8163,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ctx,
         );
         let module = dispatch.defaults_module.clone();
-        self.reify_apply_param_defaults(
+        prelude.extend(self.reify_apply_param_defaults(
             args,
             &dispatch.param_defaults,
             &dispatch.param_types,
@@ -8177,7 +8171,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             site,
             span,
             ctx,
-        );
+        ));
+        prelude
     }
 
     fn reify_pad_args_with_defaults(
@@ -8189,14 +8184,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         callee_name: &str,
         site: AstId,
         ctx: &mut FunctionContext,
-    ) {
+    ) -> Vec<TirStmt> {
         // Only an ident callee names a free function with defaults. A
         // namespace-qualified callee (`g::make`) is still a free function —
         // `callee_module` / `callee_name` already carry its resolved home and
         // name — so do NOT bail on `::` here; `lookup_free_func_params` returns
         // empty for anything that is not a free function in `callee_module`.
         let ast::Expr::Ident(_) = callee else {
-            return;
+            return Vec::new();
         };
         let func_params = self.lookup_free_func_params(callee_module, callee_name);
         self.reify_apply_param_defaults(
@@ -8207,7 +8202,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             site,
             callee.span(),
             ctx,
-        );
+        )
     }
 
     /// Pad `args` with reified default values for the trailing `func_params`
@@ -8215,6 +8210,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// declaration order, `callee_module` its defining module (for the
     /// perspective swap), and `call_span` the call site (for location literals).
     /// An absent `param_types` entry means no expected type.
+    ///
+    /// Answers the `let`s binding the slots a default names, which run ahead
+    /// of the call: see [`after_default_bindings`].
     fn reify_apply_param_defaults(
         &mut self,
         args: &mut Vec<CallArg>,
@@ -8224,9 +8222,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         site: AstId,
         call_span: Span,
         ctx: &mut FunctionContext,
-    ) {
+    ) -> Vec<TirStmt> {
         if !omits_a_default(args.len(), func_params) {
-            return;
+            return Vec::new();
         }
         // The walk annotate peeled off for *this* call. Taken before the
         // perspective swap below, which leaves the caller's module — and its
@@ -8245,19 +8243,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if let Some(overlay) = overlay {
             self.tuple_overlay_stack.push(overlay);
         }
-        // A default may name an earlier parameter, which means the caller's
-        // argument — already reified under the caller's perspective in
-        // `args[i]`, or, for a later default, the value synthesized below.
-        // Map parameter name → reified TIR so `reify_ident` hands it back
-        // directly, since the perspective swap below leaves the caller's
-        // module behind. Saved and restored so nested defaults compose.
-        let mut overrides: IndexMap<String, TirExpr> = IndexMap::default();
-        for (i, arg) in args.iter().enumerate() {
-            if let Some((name, _)) = func_params.get(i) {
-                overrides.insert(name.clone(), arg.expr.clone());
-            }
-        }
-        let saved_overrides = std::mem::replace(&mut self.default_arg_overrides, overrides);
 
         // Capture the call site for location literals before the perspective
         // swap below moves to the callee. Only the outermost default walk
@@ -8274,8 +8259,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // A default expression otherwise resolves in the *callee's* lexical
         // scope and may name items the caller cannot see, so swap the module
-        // triple to the callee around the walk. The caller's `ctx` stays, so
-        // earlier-param substitutions keep their bindings.
+        // triple to the callee around the walk. The caller's `ctx` stays, as
+        // the frame the walk's locals are allocated in.
         let loaded = self.loaded_modules;
         let all_sem = self.all_module_semantics;
         let callee_ctx: Option<(&[Item], &ModuleSemantics)> =
@@ -8295,39 +8280,61 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
         });
 
-        for i in args.len()..func_params.len() {
-            let (name, default_ast) = match func_params.get(i) {
-                Some((n, Some(d))) => (n.clone(), d.clone()),
-                _ => break,
-            };
-            // A default declared on a trait method has no body for annotate to
-            // walk, so without the parameter's type here it reifies untyped.
-            let expected = param_types.get(i).copied();
-            let mut resolved =
-                ctx.with_caller_bindings_hidden(|ctx| self.reify_expr(&default_ast, ctx, expected));
-            if let Some(expected) = expected {
-                self.settle_packs_in_default(&mut resolved, expected);
+        let named = slots_named_by_defaults(args.len(), func_params);
+        let mut prelude = Vec::new();
+        ctx.with_caller_bindings_hidden(|ctx| {
+            // Once any slot is bound, every argument is, so each still runs
+            // ahead of what a default reads, in the order the call spells them.
+            if named.contains(&true) {
+                for (arg, (name, _)) in args.iter_mut().zip(func_params) {
+                    // Only a place receiver writes through to the caller.
+                    if name == RECEIVER
+                        && is_source_place(
+                            &arg.expr,
+                            self.tysys.type_table.borrow().compiler_items(),
+                        )
+                    {
+                        continue;
+                    }
+                    let unbound = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, arg.expr.span);
+                    let value = std::mem::replace(&mut arg.expr, unbound);
+                    arg.expr = bind_default_slot(ctx, name, value, &mut prelude);
+                }
             }
-            // Later defaults may reference this one's parameter.
-            self.default_arg_overrides.insert(name, resolved.clone());
-            // `CallArg::is_mut` says the callee may write the caller's storage
-            // through this slot. A default is a value synthesized here, so
-            // there is no caller storage behind it.
-            args.push(CallArg::new(resolved, false));
-        }
+            for (i, named) in named.iter().enumerate().skip(args.len()) {
+                let Some((name, Some(default_ast))) = func_params.get(i) else {
+                    break;
+                };
+                // A default declared on a trait method has no body for annotate
+                // to walk, so without the parameter's type here it reifies
+                // untyped.
+                let expected = param_types.get(i).copied();
+                let mut resolved = self.reify_expr(default_ast, ctx, expected);
+                if let Some(expected) = expected {
+                    self.settle_packs_in_default(&mut resolved, expected);
+                }
+                if *named {
+                    resolved = bind_default_slot(ctx, name, resolved, &mut prelude);
+                }
+                // `CallArg::is_mut` says the callee may write the caller's
+                // storage through this slot. A default is a value synthesized
+                // here, so there is no caller storage behind it.
+                args.push(CallArg::new(resolved, false));
+            }
+        });
 
         if let Some((src, items, sem)) = saved {
             self.current_module_source = src;
             self.current_module_items = items;
             self.sem = sem;
         }
-        self.default_arg_overrides = saved_overrides;
         if captured_call_site {
             self.call_site_location = None;
         }
         if overlay.is_some() {
             self.tuple_overlay_stack.pop();
         }
+        prelude
     }
 
     /// The callee value of a call annotate recorded as indirect, read down to
@@ -8522,7 +8529,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CallArg::new(arg, is_mut)
                 })
                 .collect();
-            self.reify_pad_dispatch_defaults(
+            let prelude = self.reify_pad_dispatch_defaults(
                 &call.callee,
                 &mut arg_exprs,
                 &dispatch,
@@ -8537,15 +8544,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // so re-deriving from `generic_instantiations` (which is the flat
             // impl+method list) would mangle `Container<i32>::make` as
             // `Container::make<i32>` and miss the monomorphized instance.
-            return TirExpr::new(
-                TirExprKind::Call {
-                    type_args: dispatch.type_args,
-                    func: Box::new(dispatch.function_ref),
-                    args: arg_exprs,
-                    has_receiver: false,
-                },
-                recorded_type,
-                span,
+            return after_default_bindings(
+                prelude,
+                TirExpr::new(
+                    TirExprKind::Call {
+                        type_args: dispatch.type_args,
+                        func: Box::new(dispatch.function_ref),
+                        args: arg_exprs,
+                        has_receiver: false,
+                    },
+                    recorded_type,
+                    span,
+                ),
             );
         }
 
@@ -8764,7 +8774,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // only the explicit args, so WIR lowers a call with a missing
             // trailing operand.
             let param_types = self.ann_call_param_types(call.id).unwrap_or_default();
-            self.reify_pad_args_with_defaults(
+            let prelude = self.reify_pad_args_with_defaults(
                 &call.callee,
                 &mut args,
                 &param_types,
@@ -8774,20 +8784,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ctx,
             );
 
-            return TirExpr::new(
-                TirExprKind::Call {
-                    func: Box::new(tir::FunctionRef {
-                        module_source: callee_module,
-                        name: callee_name,
-                        monomorph_info: None,
-                        method_info: None,
-                    }),
-                    type_args,
-                    args,
-                    has_receiver: false,
-                },
-                recorded_type,
-                span,
+            return after_default_bindings(
+                prelude,
+                TirExpr::new(
+                    TirExprKind::Call {
+                        func: Box::new(tir::FunctionRef {
+                            module_source: callee_module,
+                            name: callee_name,
+                            monomorph_info: None,
+                            method_info: None,
+                        }),
+                        type_args,
+                        args,
+                        has_receiver: false,
+                    },
+                    recorded_type,
+                    span,
+                ),
             );
         }
 
@@ -9044,6 +9057,54 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
         });
 
+        // Per-arg `is_mut` comes from the recorded `MethodDispatch`, off the
+        // signature of the method annotate dispatched to.
+        // Zip with the AST args so call sites with fewer args than
+        // declared (a Stage-5 recovery shape) still produce the
+        // right is_mut for the args we have.
+        let mut args: Vec<CallArg> = method_call
+            .args
+            .iter()
+            .zip(
+                dispatch
+                    .param_is_mut
+                    .iter()
+                    .copied()
+                    .chain(std::iter::repeat(false)),
+            )
+            .map(|(a, is_mut)| {
+                let arg_tir = self.reify_expr(a, ctx, None);
+                CallArg::new(arg_tir, is_mut)
+            })
+            .collect();
+
+        // Pad missing trailing args with the method's defaults, standing in the
+        // module that declared them — the same walk the free-function path takes.
+        let mut prelude = self.reify_apply_param_defaults(
+            &mut args,
+            &dispatch.param_defaults,
+            &dispatch.param_types,
+            &dispatch.defaults_module,
+            method_call.id,
+            method_call.span,
+            ctx,
+        );
+        // The receiver runs ahead of the arguments the defaults bound. Only a
+        // place receiver writes through to the caller, and it stays in its slot.
+        let raw_receiver = if prelude.is_empty()
+            || is_source_place(
+                &raw_receiver,
+                self.tysys.type_table.borrow().compiler_items(),
+            ) {
+            raw_receiver
+        } else {
+            let mut bound = Vec::new();
+            let receiver = bind_default_slot(ctx, RECEIVER, raw_receiver, &mut bound);
+            bound.append(&mut prelude);
+            prelude = bound;
+            receiver
+        };
+
         // A receiver the callee can replace rather than write into must be
         // boxed, or the boxing pass has no slot to write the mutation back to
         // and `x.bump()` mutates a copy.
@@ -9074,39 +9135,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `monomorph_info.method_type_args` is zeroed by design).
         let type_args = dispatch.method_type_args.clone();
 
-        // Per-arg `is_mut` comes from the recorded `MethodDispatch`, off the
-        // signature of the method annotate dispatched to.
-        // Zip with the AST args so call sites with fewer args than
-        // declared (a Stage-5 recovery shape) still produce the
-        // right is_mut for the args we have.
-        let mut args: Vec<CallArg> = method_call
-            .args
-            .iter()
-            .zip(
-                dispatch
-                    .param_is_mut
-                    .iter()
-                    .copied()
-                    .chain(std::iter::repeat(false)),
-            )
-            .map(|(a, is_mut)| {
-                let arg_tir = self.reify_expr(a, ctx, None);
-                CallArg::new(arg_tir, is_mut)
-            })
-            .collect();
-
-        // Pad missing trailing args with the method's defaults, standing in the
-        // module that declared them — the same walk the free-function path takes.
-        self.reify_apply_param_defaults(
-            &mut args,
-            &dispatch.param_defaults,
-            &dispatch.param_types,
-            &dispatch.defaults_module,
-            method_call.id,
-            method_call.span,
-            ctx,
-        );
-
         // The call's result type is the resolved method's return type
         // (recorded on the dispatch), not the per-`AstId` `expression_types`
         // entry: that entry can carry a wrong type for the call site, which
@@ -9118,13 +9146,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         } else {
             dispatch.return_type
         };
-        build_tir_method_call(
-            adjusted_receiver,
-            dispatch.function_ref,
-            type_args,
-            args,
-            result_type,
-            method_call.span,
+        after_default_bindings(
+            prelude,
+            build_tir_method_call(
+                adjusted_receiver,
+                dispatch.function_ref,
+                type_args,
+                args,
+                result_type,
+                method_call.span,
+            ),
         )
     }
 
@@ -9281,19 +9312,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         use crate::tir::TirExprKind;
-
-        // Default-argument parameter substitution: while reifying a default
-        // expression, a free reference to an earlier parameter resolves to the
-        // caller's already-reified argument (kept under the caller's
-        // perspective). `reify_expr` clears this map before descending into a
-        // binder / control form (closure, block, …), so a reference shadowed by
-        // an inner binding is never reached here. See
-        // `reify_pad_args_with_defaults`.
-        if !self.default_arg_overrides.is_empty()
-            && let Some(tir) = self.default_arg_overrides.get(&ident.name)
-        {
-            return tir.clone();
-        }
 
         // Canonicalize `ns::member` to its `ns$member` alias, matching
         // `resolve_ident` at annotate time (expr.rs) so reify consults the
@@ -11468,6 +11486,89 @@ fn build_tir_method_call(
     TirExpr::new(
         TirExprKind::method_call(Box::new(receiver), func, type_args, args),
         return_type,
+        span,
+    )
+}
+
+/// Which of `params` a default the call leaves out names, by slot. Read off the
+/// spelling, so a name the default rebinds for itself answers too, at the cost
+/// of a `let`. The receiver never does: no default can name `self`.
+fn slots_named_by_defaults(args_len: usize, params: &[(String, Option<ast::Expr>)]) -> Vec<bool> {
+    let mut named = vec![false; params.len()];
+    for (i, (_, default)) in params.iter().enumerate().skip(args_len) {
+        let Some(default) = default else {
+            break;
+        };
+        let mut spelled = SpelledNames::default();
+        spelled.visit_expr(default);
+        for (slot, (name, _)) in params[..i].iter().enumerate() {
+            named[slot] |= name != RECEIVER && spelled.0.contains(name);
+        }
+    }
+    named
+}
+
+/// Every name an expression spells as an identifier.
+#[derive(Default)]
+struct SpelledNames(IndexSet<String>);
+
+impl AstVisitor for SpelledNames {
+    fn visit_expr(&mut self, expr: &ast::Expr) {
+        if let ast::Expr::Ident(ident) = expr {
+            self.0.insert(ident.name.clone());
+        }
+        walk_expr(self, expr);
+    }
+}
+
+/// Bind `value` once, ahead of the call, to a local a default names the slot
+/// by, and answer the read of it the call passes instead. The receiver no
+/// default can name takes a name of its own.
+fn bind_default_slot(
+    ctx: &mut FunctionContext,
+    param: &str,
+    value: TirExpr,
+    prelude: &mut Vec<TirStmt>,
+) -> TirExpr {
+    let name = if param == RECEIVER {
+        format!("$recv_{}", ctx.fresh_serial())
+    } else {
+        param.to_string()
+    };
+    let (type_id, span) = (value.type_id, value.span);
+    let local_index = ctx.add_local(name.clone(), type_id, false, None);
+    prelude.push(TirStmt::new(
+        TirStmtKind::Let {
+            name: name.clone(),
+            local_index,
+            is_mut: false,
+            is_reactive: false,
+            type_id,
+            value,
+            skip_value_copy: false,
+        },
+        span,
+    ));
+    TirExpr::new(
+        TirExprKind::Local {
+            index: local_index,
+            name,
+        },
+        type_id,
+        span,
+    )
+}
+
+/// `call`, run after the `let`s its defaults bound, where there are any.
+fn after_default_bindings(mut prelude: Vec<TirStmt>, call: TirExpr) -> TirExpr {
+    if prelude.is_empty() {
+        return call;
+    }
+    let (type_id, span) = (call.type_id, call.span);
+    prelude.push(TirStmt::new(TirStmtKind::Expr(call), span));
+    TirExpr::new(
+        TirExprKind::Block(TirBlock::new(prelude, span)),
+        type_id,
         span,
     )
 }
