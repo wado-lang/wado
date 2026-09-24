@@ -1,0 +1,16 @@
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let x: f64 = builtin::black_box(0.5);
+    let y: f32 = builtin::black_box(0.5);
+
+    println(`erf ${f64::erf(x)}`);
+    println(`erf_neg ${f64::erf(-x)}`);
+    println(`erf_zero ${f64::erf(0.0)}`);
+    println(`erf_inf ${f64::erf(f64::INFINITY)}`);
+    println(`erff ${f32::erf(y)}`);
+    println(`erff_neg ${f32::erf(-y)}`);
+}
+
+__DATA__
+{"stdout": "erf 0.5204998778130465\nerf_neg -0.5204998778130465\nerf_zero 0\nerf_inf 1\nerff 0.5204999\nerff_neg -0.5204999\n"}

@@ -1403,6 +1403,10 @@ Euclidean distance: sqrt(x^2 + y^2)
 
 Floating-point remainder of x/y
 
+#### `pub fn erf(x: f32) -> f32`
+
+Error function: `(2/√π) ∫₀ˣ e^(-t²) dt`
+
 #### `pub fn mul_add(x: f32, y: f32, z: f32) -> f32`
 
 `x * y + z`, rounded once instead of twice.
@@ -1709,6 +1713,10 @@ Euclidean distance: sqrt(x^2 + y^2)
 #### `pub fn fmod(x: f64, y: f64) -> f64`
 
 Floating-point remainder of x/y
+
+#### `pub fn erf(x: f64) -> f64`
+
+Error function: `(2/√π) ∫₀ˣ e^(-t²) dt`
 
 #### `pub fn mul_add(x: f64, y: f64, z: f64) -> f64`
 

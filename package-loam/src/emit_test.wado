@@ -163,7 +163,7 @@ g (float[N, 2] "a.b", float[N, 2] "a/b") => (float[N, 2] out)
     assert `${e}` == "a/b and a.b both name `a_b`";
 }
 
-test "an operator with no kernel names itself" {
+test "Erf maps each element through the error function" {
     let source = `
 g (float[N, 2] X) => (float[N, 2] Y)
 <>
@@ -171,9 +171,9 @@ g (float[N, 2] X) => (float[N, 2] Y)
     Y = Erf(X)
 }
 `;
-    let e = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap_err();
+    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
-    assert `${e}` == "Y = Erf: no kernel for this operator";
+    assert out.contains("map(X, |v| f32::erf(v))");
 }
 
 test "a broadcast no kernel covers names both operands" {

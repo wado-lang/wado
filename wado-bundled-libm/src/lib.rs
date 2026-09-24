@@ -160,6 +160,13 @@ pub extern "C" fn libm_round(x: f64) -> f64 {
     libm::round(x)
 }
 
+// Special functions (f64)
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_erf(x: f64) -> f64 {
+    libm::erf(x)
+}
+
 // Trigonometric functions (f32)
 
 #[unsafe(no_mangle)]
@@ -307,6 +314,13 @@ pub extern "C" fn libm_fmaf(x: f32, y: f32, z: f32) -> f32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn libm_roundf(x: f32) -> f32 {
     libm::roundf(x)
+}
+
+// Special functions (f32)
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_erff(x: f32) -> f32 {
+    libm::erff(x)
 }
 
 #[cfg(target_arch = "wasm32")]

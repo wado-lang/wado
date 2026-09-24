@@ -532,14 +532,11 @@ fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
             op,
         }));
     }
-    if let Some(body) = unary_body(&op) {
-        return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
-    }
-    builtin::cold_path();
-    return Result::Err(EmitError::Operator(UnimplementedOperator {
-        node: node.outputs[0],
-        op,
-    }));
+    let Some(body) = unary_body(&op) else {
+        // Stage 0 has a shape rule for no operator the kernels lack.
+        unreachable();
+    };
+    return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
 }
 
 /// A `Constant` is a literal rather than a tensor, so only an operator that
@@ -766,8 +763,6 @@ fn binary_body(op: &String, lhs: &String, rhs: &String) -> Option<String> {
 }
 
 /// The expression a unary operator maps each element through, over `v`.
-/// `Erf` has no entry: `core:prelude` carries no error function, and an
-/// approximation written here would not meet the conformance tolerance.
 fn unary_body(op: &String) -> Option<String> {
     if *op == "Relu" {
         return Option::Some("f32::max(v, 0.0)");
@@ -777,6 +772,9 @@ fn unary_body(op: &String) -> Option<String> {
     }
     if *op == "Tanh" {
         return Option::Some("f32::tanh(v)");
+    }
+    if *op == "Erf" {
+        return Option::Some("f32::erf(v)");
     }
     if *op == "Exp" {
         return Option::Some("f32::exp(v)");
