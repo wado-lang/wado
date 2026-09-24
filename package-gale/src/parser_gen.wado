@@ -1896,7 +1896,9 @@ fn gen_scan_partition_body<S: AsStrSlice>(
         return;
     }
     if plan.atn_dec >= 0 {
-        w.line(`let _atn_alt = atn_predict_once(&ATN_SIM, ${plan.atn_dec}, ${ctx.atn_state_arg()}, tokens, pos, TK_EOF, 0);`);
+        w.line(
+            `let _atn_alt = atn_predict_once(&ATN_SIM, ${plan.atn_dec}, ${ctx.atn_state_arg()}, tokens, pos, TK_EOF, 0);`,
+        );
         for let mut k = 0; k < all_idx.len(); k += 1 {
             w.begin(`if _atn_alt == ${all_idx[k]}`);
             gen_scan_sole_candidate(w, all_idx[k], k < guarded_count, scan_alts, ctx, plan, base_name, guard_tokens);
@@ -8370,7 +8372,9 @@ fn gen_group_branch_body(
 
 /// The simulator's pick of a contested group's alternative, over `tokens` at `pos`.
 fn group_atn_predict_call<S: AsStrSlice, S1: AsStrSlice>(atn_dec: i32, tokens: S, pos: S1, ctx: &GenContext) -> String {
-    return `atn_predict_once(&ATN_SIM, ${atn_dec}, ${ctx.atn_state_arg()}, ${tokens}, ${pos}, TK_EOF, ${atn_prec_arg(ctx)})`;
+    return `atn_predict_once(&ATN_SIM, ${atn_dec}, ${ctx.atn_state_arg()}, ${tokens}, ${pos}, TK_EOF, ${atn_prec_arg(
+        ctx,
+    )})`;
 }
 
 global UNSCANNABLE_ALT: String = "group has an unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";

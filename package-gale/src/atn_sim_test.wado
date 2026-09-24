@@ -260,7 +260,10 @@ test "a recorded verdict is keyed by the caller stack" {
     let sim = decode(&atn);
     let d = optional_decision(&atn);
     let csr = &atn.call_site_returns;
-    let kinds = to_kinds(&[mk(7), mk(4)]);
+    let kinds = to_kinds(&[
+        mk(7),
+        mk(4),
+    ]);
     let mut state = AtnState::new();
     state.stack = [-1, csr[0], csr[1], csr[2], csr[1]];
     let inner = atn_predict_once(&sim, d, &mut state, &kinds, 0, eof);

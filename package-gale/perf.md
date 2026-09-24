@@ -582,22 +582,26 @@ this grammar and input at 216.991 ms/iter against Gale's 2.535
   the caller can continue with the lookahead token too. That closed
   `lr_atn_mid_operand.g4` and `lr_between.g4` (2026-09), and this descriptor
   shows the price. The ambiguity is real, so each such decision looks ahead to
-  EOF. Over 15 lines there are 214 of them. 132 come from three passes over
-  the same positions: `stat`'s tournament scans `expr` once per alternative, and
-  the parse then decides again. The other 82 follow an exit: each enclosing loop
-  then decides the same position again.
+  EOF. Over 15 lines it asked 214 of them. 132 came from three passes over the
+  same positions: `stat`'s tournament scans `expr` once per alternative, and the
+  parse then decides again. The other 82 followed an exit, after which each
+  enclosing loop decided the same position again.
 
-  | 15 lines at `-O2`                     | time   | configs a step |
-  | ------------------------------------- | ------ | -------------- |
-  | before full context                   | ~40 µs | —              |
-  | full context, caller stack kept apart | 0.79 s | ~86            |
-  | caller stack in the context graph     | 0.18 s | ~12            |
+  | at `-O2`                              | 15 lines | 30 lines | predictions (15 lines) |
+  | ------------------------------------- | -------- | -------- | ---------------------- |
+  | before full context                   | ~40 µs   | —        | —                      |
+  | full context, caller stack kept apart | 0.79 s   | 6.3 s    | 214                    |
+  | caller stack in the context graph     | 0.18 s   | 0.74 s   | 214                    |
+  | verdicts recorded on `Parser.atn`     | 0.12 s   | 0.45 s   | 129                    |
+  | an exit answers the enclosing loops   | 0.11 s   | 0.38 s   | 92                     |
 
   Configs that differed only in how deep the caller stack was used to stay
-  apart, and they now merge. At 30 lines that took 6.3 s to 0.74 s. What remains
-  is quadratic: one lookahead to EOF per prediction. Cutting the number of
-  predictions needs a verdict the scan can hand to the parse, and a scan has no
-  instance to keep one on.
+  apart, and now they merge: about 12 a step instead of 86. The parse asks the
+  scan's questions again, and the recorded verdicts answer them. An exit also
+  answers for each enclosing loop the frame returns into, provided no operator
+  that the caller admits for the token was out of the callee's reach. What
+  remains is one prediction per position per tournament scan, each looking
+  ahead to EOF, so quadratic.
 - **`lr_between.g4` is ATN-class and may not need to be.** Its shared-delimiter
   competition sits in an _atom_ alternative (`'between' expr 'and' expr` — no leading
   self-reference), so the continuation gate above does not reach it. The question it

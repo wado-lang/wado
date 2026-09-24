@@ -52,6 +52,15 @@ test "an operand the climb leaves keeps its caller's precedence" {
     );
 }
 
+// The `and` after `X4` is left by every loop around it, and one prediction
+// answers for all of them.
+test "an exit leaves every enclosing loop that returns into the next" {
+    assert_tree(
+        "between X1 and X2 or between X3 and X4 and between X1 and X2 or between X3 and X4 ;",
+        "(stat (expr between (expr (expr (expr X1) and (expr X2)) or (expr between (expr X3) and (expr X4))) and (expr between (expr X1) and (expr (expr X2) or (expr between (expr X3) and (expr X4))))) ;)",
+    );
+}
+
 test "binary and/or chain parses" {
     assert_tree(
         "X1 and X2 or X3 and X4 ;",

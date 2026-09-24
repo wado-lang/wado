@@ -8,7 +8,7 @@ use {
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
 } from "./atn.wado";
-use { AtnState, atn_predict_once } from "./atn_predict.wado";
+use { AtnState, atn_invocation_prec, atn_predict_once } from "./atn_predict.wado";
 
 pub fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
     let mut out = sim;
@@ -251,7 +251,42 @@ pub fn atn_lr_loop_decision(
     if !atn_caller_mandates(sim, &atn.stack, t, eof) {
         return enter;
     }
-    return atn_predict_once(sim, decision, atn, tokens, pos, eof, min_prec);
+    let alt = atn_predict_once(sim, decision, atn, tokens, pos, eof, min_prec);
+    if alt == exit_alt {
+        atn_record_callers_exit(sim, atn, decision, pos, min_prec, t, eof);
+    }
+    return alt;
+}
+
+fn atn_record_callers_exit(sim: &AtnSim, atn: &mut AtnState, decision: i32, pos: i32, min_prec: i32, t: i32, eof: i32) {
+    let dstate = sim.decision_state[decision];
+    let exit_alt = sim.state_tr_count[dstate] - 1;
+    let mut mp = min_prec;
+    for let mut k = atn.stack.len() - 1; k >= 1; k -= 1 {
+        let ret = atn.stack[k];
+        if ret < 0 || sim.state_collapse_to[ret] != dstate {
+            return;
+        }
+        let caller_mp = atn_invocation_prec(sim, &atn.stack, k - 1);
+        if atn_caller_alone_enters(sim, dstate, t, eof, caller_mp, mp) {
+            return;
+        }
+        atn.record_verdict(decision, pos, caller_mp, k, exit_alt);
+        mp = caller_mp;
+    }
+}
+
+fn atn_caller_alone_enters(sim: &AtnSim, dstate: i32, t: i32, eof: i32, caller_mp: i32, mp: i32) -> bool {
+    let s = sim.state_tr_start[dstate];
+    for let mut j = s; j < s + sim.state_tr_count[dstate]; j += 1 {
+        if sim.tr_kind[j] == ATN_TR_PRECEDENCE
+            && sim.tr_prec[j] >= caller_mp
+            && sim.tr_prec[j] < mp
+            && atn_state_cont_admits(sim, sim.tr_target[j], t, eof) {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -> bool {

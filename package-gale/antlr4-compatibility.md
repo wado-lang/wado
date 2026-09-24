@@ -998,6 +998,15 @@ there for the enter-or-exit verdict, which needs full context; which member of
 the group to enter does not, and is re-taken from the scan twins by longest
 match, ties to the first alternative. Fixture: `lr_atn_shared_op.g4`.
 
+An exit the simulator predicts also answers the enclosing loop the frame returns
+into, at the same position. The caller asks enter or exit too, and its answer is
+exit whenever each operator it would enter on the token is one the callee could
+have entered. Every continuation the caller's enter reaches, the callee's enter
+reaches as well, since leaving the callee lands in the caller's loop. The
+callee's enter died first, so the caller's dies no later, and only its exit is
+left. The verdict is recorded for each such caller in turn, and a caller where
+the condition fails asks the simulator itself.
+
 Which gaps stay static is a cost decision as much as a correctness one — one
 prediction is a full closure over the grammar; see [`perf.md`](./perf.md).
 
