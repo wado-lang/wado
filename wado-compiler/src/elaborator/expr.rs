@@ -23,7 +23,7 @@ use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
-use super::types::{FunctionContext, TypeError, VarRef};
+use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::util;
 use crate::ast::{RangeExpr, Visibility};
 use crate::compiler_item::CompilerItem;
@@ -799,9 +799,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return param_type;
         }
 
-        if self.dispatched_operation(ident).is_some() {
-            let _ = self.emit(TypeError::OperationAsValue {
+        if let Some((decl, _)) = self.dispatched_operation(ident) {
+            let callable = if self.tysys.trait_env.effect_decl_index.contains(&decl) {
+                CallableKind::Operation
+            } else {
+                CallableKind::StaticFunction
+            };
+            let _ = self.emit(TypeError::CallableAsValue {
                 name: ident.name.clone(),
+                callable,
                 span: ident.span,
             });
             return TypeTable::ERROR;
@@ -910,6 +916,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // These are defined in core:rt and re-exported by core:prelude
         if matches!(ident.name.as_str(), "panic" | "unreachable") {
             return TypeTable::UNKNOWN;
+        }
+
+        if ident.owner_segment().is_some()
+            && self
+                .lookup_function_signature(&ident.name, None, Some(ident.id))
+                .is_some()
+        {
+            let _ = self.emit(TypeError::CallableAsValue {
+                name: ident.name.clone(),
+                callable: CallableKind::StaticFunction,
+                span: ident.span,
+            });
+            return TypeTable::ERROR;
         }
 
         // Unknown variable - report error
@@ -3046,12 +3065,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    fn exh_int(&self, lo: i128, hi: i128, scrutinee_type: TypeId) -> Pat {
-        Pat::Int {
-            lo,
-            hi,
-            domain: self.int_domain(scrutinee_type),
+    /// `None` for values the type cannot hold, reported where the pattern resolved.
+    fn exh_int(&self, lo: i128, hi: i128, scrutinee_type: TypeId) -> Option<Pat> {
+        let domain = self.int_domain(scrutinee_type);
+        if domain.is_some_and(|d| lo < d.min || hi > d.max) {
+            return None;
         }
+        Some(Pat::Int { lo, hi, domain })
     }
 
     fn exh_literal(&mut self, lit: &Literal, scrutinee_type: TypeId) -> Option<Pat> {
@@ -3086,7 +3106,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => return Some(Pat::Opaque),
         };
         let value = value?;
-        Some(self.exh_int(value, value, scrutinee_type))
+        self.exh_int(value, value, scrutinee_type)
     }
 
     /// The case `name` of the enum or variant `scrutinee_type`, its payload
@@ -3209,7 +3229,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let hi = if inclusive { end_val } else { end_val - 1 };
-        Some(self.exh_int(start_val, hi, scrutinee_type))
+        self.exh_int(start_val, hi, scrutinee_type)
     }
 
     fn format_missing_cases(cases: &[String]) -> String {
@@ -3249,33 +3269,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn check_range_overlaps(&self, classified: &[(bool, Pat)], span: Span) {
-        // Collect ranges per arm (only guardless arms)
-        let mut arm_ranges: Vec<Vec<(i128, i128)>> = Vec::new();
-        for (guardless, pat) in classified {
-            if !*guardless {
-                continue;
-            }
-            let ranges = Self::collect_ranges_from_pattern(pat);
-            if !ranges.is_empty() {
-                arm_ranges.push(ranges);
-            }
-        }
-
-        // Check for overlaps between different arms
-        for i in 0..arm_ranges.len() {
-            for j in (i + 1)..arm_ranges.len() {
-                for &(a_lo, a_hi) in &arm_ranges[i] {
-                    for &(b_lo, b_hi) in &arm_ranges[j] {
-                        if a_lo <= b_hi && b_lo <= a_hi {
-                            let _ = self.emit(TypeError::InvalidPattern {
-                                message: "overlapping range patterns in match arms".to_string(),
-                                span,
-                            });
-                            return;
-                        }
-                    }
+        let mut ranges: Vec<(i128, i128, usize)> = classified
+            .iter()
+            .enumerate()
+            .filter(|(_, (guardless, _))| *guardless)
+            .flat_map(|(arm, (_, pat))| {
+                Self::collect_ranges_from_pattern(pat)
+                    .into_iter()
+                    .map(move |(lo, hi)| (lo, hi, arm))
+            })
+            .collect();
+        ranges.sort_unstable();
+        // Until two arms overlap, another arm reaching `lo` would overlap the
+        // furthest-reaching range too, so that range alone decides.
+        let mut furthest: Option<(i128, usize)> = None;
+        for (lo, hi, arm) in ranges {
+            if let Some((end, other)) = furthest {
+                if other != arm && lo <= end {
+                    let _ = self.emit(TypeError::InvalidPattern {
+                        message: "overlapping range patterns in match arms".to_string(),
+                        span,
+                    });
+                    return;
+                }
+                if hi <= end {
+                    continue;
                 }
             }
+            furthest = Some((hi, arm));
         }
     }
 
@@ -3927,6 +3948,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // mistaken for an explicitly-provided one (matters for the visibility
         // check further down).
         let provided_names: IndexSet<String> = fields.iter().map(|f| f.name.clone()).collect();
+        // A non-pub field may not be set from another module, nor read there
+        // from `base` via a spread. A default is evaluated in the defining
+        // module, so omitting a hidden field that has one keeps encapsulation.
+        let vantage = self.visibility_vantage(Some(struct_lit.id));
+        let hidden_fields: IndexMap<String, Visibility> = match self
+            .struct_fields_of_written_decl(struct_decl)
+            .filter(|_| struct_module_source != vantage)
+        {
+            Some(info) => {
+                let same_package = struct_module_source.same_package(&vantage);
+                info.fields
+                    .iter()
+                    .filter(|(_, _, vis)| !vis.reachable_from(same_package))
+                    .map(|(name, _, vis)| (name.clone(), *vis))
+                    .collect()
+            }
+            None => IndexMap::default(),
+        };
+        let report_hidden = |s: &Self, field_name: &str| {
+            let _ = s.emit(TypeError::PrivateFieldAccess {
+                struct_name: display_name.clone(),
+                field_name: field_name.to_string(),
+                visibility: hidden_fields[field_name],
+                span: struct_lit.span,
+            });
+        };
         if !struct_field_types.is_empty() && struct_lit.spreads.is_empty() {
             // A literal that omits no defaulted field walks no default, and
             // the loop below then only reports the required fields it left
@@ -3961,11 +4008,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let Some(default_expr) =
                             struct_field_defaults.get(idx).and_then(Option::clone)
                         else {
-                            let _ = s.emit(TypeError::MissingField {
-                                struct_name: display_name.clone(),
-                                field_name: expected_name.clone(),
-                                span: struct_lit.span,
-                            });
+                            if hidden_fields.contains_key(expected_name) {
+                                report_hidden(s, expected_name);
+                            } else {
+                                let _ = s.emit(TypeError::MissingField {
+                                    struct_name: display_name.clone(),
+                                    field_name: expected_name.clone(),
+                                    span: struct_lit.span,
+                                });
+                            }
                             continue;
                         };
                         // The declared type still names the struct's own
@@ -3989,28 +4040,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             fields.sort_by_key(|f| f.field_index);
         }
 
-        // Check field visibility: a non-pub field may not be *set* from another
-        // module. Omitting a private field is allowed when it has a default —
-        // the default is evaluated in the defining module, so encapsulation is
-        // preserved — so only flag fields the user explicitly provided, not the
-        // defaults synthesized above.
-        let vantage = self.visibility_vantage(Some(struct_lit.id));
-        if struct_module_source != vantage
-            && let Some(struct_info) = self.struct_fields_of_written_decl(struct_decl)
-        {
-            let same_package = struct_module_source.same_package(&vantage);
-            for (fname, _, vis) in &struct_info.fields {
-                // Flagged when explicitly set, or read from `base` via a spread.
-                let set_explicitly = provided_names.contains(fname);
-                let read_via_spread = !struct_lit.spreads.is_empty() && !set_explicitly;
-                if !vis.reachable_from(same_package) && (set_explicitly || read_via_spread) {
-                    let _ = self.emit(TypeError::PrivateFieldAccess {
-                        struct_name: display_name.clone(),
-                        field_name: fname.clone(),
-                        visibility: *vis,
-                        span: struct_lit.span,
-                    });
-                }
+        for field_name in hidden_fields.keys() {
+            if provided_names.contains(field_name) || !struct_lit.spreads.is_empty() {
+                report_hidden(self, field_name);
             }
         }
 

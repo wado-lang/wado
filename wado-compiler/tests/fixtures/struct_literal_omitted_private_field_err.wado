@@ -1,0 +1,28 @@
+// A literal written outside a struct's module cannot set a field hidden from
+// it, so leaving one out says it is private rather than asking for it.
+use { Secret } from "./sub/internal_field_module.wado";
+
+fn named() -> Secret {
+    return Secret { label: "a" };
+}
+
+fn unnamed() -> Secret {
+    return { label: "b" };
+}
+
+fn prelude() -> List<i32> {
+    return { a: 1 };
+}
+
+export fn run() {
+    let _ = named();
+    let _ = unnamed();
+    let _ = prelude();
+}
+
+__DATA__
+{
+  "compile_error": "field `hidden` of struct `Secret` is private to its defining file",
+  "compile_errors_contains": ["field `repr` of struct `List` is private", "struct 'List' has no field 'a'"],
+  "compile_errors_not_contains": ["missing field"]
+}

@@ -544,7 +544,7 @@ pub fn resolve_wasm_asset_path(
             entry_dir,
             &normalize_module_path(import_source),
         )),
-        ModuleSource::Redirected { uri } => Ok(resolve_module_path(uri, import_source)),
+        ModuleSource::Redirected { uri, .. } => Ok(resolve_module_path(uri, import_source)),
         ModuleSource::Wasm { .. } => Err(LoadError::InvalidModulePath {
             path: import_source.to_string(),
         }),
@@ -1848,7 +1848,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             if !decl_file.is_empty()
                 && let Some(entry_uri) = self.invocations.redirect(decl_file, import_source)
             {
-                return Ok(self.interner.redirected(entry_uri));
+                return Ok(self.interner.redirected(entry_uri, from_module_source));
             }
         }
 
@@ -2002,7 +2002,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     path: module_source.to_string(),
                 })
             }
-            ModuleSource::Redirected { uri } => {
+            ModuleSource::Redirected { uri, .. } => {
                 // Strip the `file:` scheme so the host sees a plain
                 // absolute path. Other schemes are passed through
                 // unchanged so in-memory hosts can use the URI as a key.

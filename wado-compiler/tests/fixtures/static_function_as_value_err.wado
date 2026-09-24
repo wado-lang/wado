@@ -1,0 +1,21 @@
+// A static function is called, never read: on a struct and on a resource
+// alike, the path says what it names where it is written.
+use { Fields } from "wasi:http";
+
+struct Point { x: i32 }
+
+impl Point {
+    fn origin() -> Point { return Point { x: 0 }; }
+}
+
+export fn run() {
+    let a = Point::origin;
+    let b = Fields::new;
+}
+
+__DATA__
+{
+  "compile_error": "is a static function: call it rather than read it as a value",
+  "compile_error_count": 2,
+  "compile_errors_not_contains": ["operation", "unknown identifier"]
+}

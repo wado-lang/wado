@@ -54,6 +54,13 @@ pub(crate) struct StructFieldInfo {
     pub(super) type_param_type_ids: Vec<TypeId>,
 }
 
+/// What a path read as a value names, when only a call can use it.
+#[derive(Debug, Clone, Copy)]
+pub enum CallableKind {
+    Operation,
+    StaticFunction,
+}
+
 /// Each slot whose default names its own or a later parameter, with the name.
 pub(super) fn forward_type_param_defaults(params: &[ast::GenericParam]) -> Vec<(usize, String)> {
     params
@@ -414,9 +421,10 @@ pub enum TypeError {
         name: String,
         span: Span,
     },
-    /// An effect or resource operation read as a value rather than called.
-    OperationAsValue {
+    /// A path naming something only a call can use, read as a value.
+    CallableAsValue {
         name: String,
+        callable: CallableKind,
         span: Span,
     },
 
@@ -1434,11 +1442,21 @@ impl TypeError {
                 format!("unknown identifier '{name}'"),
                 *span,
             ),
-            TypeError::OperationAsValue { name, span } => (
-                Code::UndefinedVariable,
-                format!("`{name}` is an operation: call it rather than read it as a value"),
-                *span,
-            ),
+            TypeError::CallableAsValue {
+                name,
+                callable,
+                span,
+            } => {
+                let what = match callable {
+                    CallableKind::Operation => "an operation",
+                    CallableKind::StaticFunction => "a static function",
+                };
+                (
+                    Code::UndefinedVariable,
+                    format!("`{name}` is {what}: call it rather than read it as a value"),
+                    *span,
+                )
+            }
             TypeError::UnknownBreakLabel { label, span } => (
                 Code::UndefinedVariable,
                 format!("labeled break target not found: no enclosing block labeled '{label}'"),

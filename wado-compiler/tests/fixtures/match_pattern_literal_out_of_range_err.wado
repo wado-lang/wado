@@ -1,0 +1,36 @@
+// A pattern value the scrutinee's type cannot hold is reported as such, and
+// takes no part in coverage: it neither covers nor is unreachable.
+fn by_literal(x: u8) -> i32 {
+    return match x {
+        300 => 1,
+        _ => 2,
+    };
+}
+
+fn by_negative(x: u16) -> i32 {
+    return match x {
+        -1 => 1,
+        _ => 2,
+    };
+}
+
+fn by_range(x: i8) -> i32 {
+    return match x {
+        100..=200 => 1,
+        _ => 2,
+    };
+}
+
+export fn run() {
+    let _ = by_literal(1) + by_negative(1) + by_range(1);
+}
+
+__DATA__
+{
+  "compile_errors_contains": [
+    "literal out of range for `u8`: 300",
+    "literal out of range for `u16`: -1",
+    "literal out of range for `i8`: 200"
+  ],
+  "compile_errors_not_contains": ["unreachable arm", "non-exhaustive"]
+}

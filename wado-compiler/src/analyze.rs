@@ -6,8 +6,8 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{
-    AstId, Function, FunctionSite, Item, Module, UseDecl, UseItem, Visibility, WorldExport,
-    cm_import_of, for_each_function,
+    AstId, AstVisitor, Function, FunctionSite, Item, Module, UseDecl, UseItem, Visibility,
+    WorldExport, cm_import_of, for_each_function, walk_item,
 };
 use crate::attribute::{AttributeFault, check, for_each_attribute};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
@@ -19,6 +19,13 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{
     entry_dir_of, namespace_member_alias, resolve_import_with_invocations, validate_module_path,
 };
+use crate::symbol::{
+    EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
+    ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
+    WorldExportSymbol, WorldImportSymbol, WorldSymbol,
+};
+use crate::syntax::{expression_keyword_name_message, is_expression_keyword};
+use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -57,13 +64,63 @@ fn resolve_use_decl_module_source(
 fn is_wasm_asset_use_decl(use_decl: &UseDecl) -> bool {
     wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()).is_some()
 }
-use crate::symbol::{
-    EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
-    ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
-    WorldExportSymbol, WorldImportSymbol, WorldSymbol,
-};
-use crate::syntax::{expression_keyword_name_message, is_expression_keyword};
-use crate::token::Span;
+
+/// Every name `module` declares spelled like an expression keyword: an item at
+/// any depth, or an enum, variant or flags member. A member reached by `.` may.
+fn keyword_named_declarations(module: &Module) -> Vec<(String, Span)> {
+    struct Names(Vec<(String, Span)>);
+    impl Names {
+        fn check(&mut self, name: &str, span: Span) {
+            if is_expression_keyword(name) {
+                self.0.push((name.to_string(), span));
+            }
+        }
+    }
+    impl AstVisitor for Names {
+        fn visit_item(&mut self, item: &Item) {
+            match item {
+                Item::Function(d) => self.check(&d.name, d.span),
+                Item::Interface(d) => self.check(&d.name, d.span),
+                Item::Struct(d) => self.check(&d.name, d.span),
+                Item::Newtype(d) => self.check(&d.name, d.span),
+                Item::Trait(d) => self.check(&d.name, d.span),
+                Item::Resource(d) => self.check(&d.name, d.span),
+                Item::World(d) => self.check(&d.name, d.span),
+                Item::Global(d) => self.check(&d.name, d.span),
+                Item::BuiltinTypeDecl(d) => self.check(&d.name, d.span),
+                Item::Enum(d) => {
+                    self.check(&d.name, d.span);
+                    for case in &d.cases {
+                        self.check(&case.name, case.name_span);
+                    }
+                }
+                Item::Variant(d) => {
+                    self.check(&d.name, d.span);
+                    for case in &d.cases {
+                        self.check(&case.name, case.name_span);
+                    }
+                }
+                Item::Flags(d) => {
+                    self.check(&d.name, d.span);
+                    for member in &d.flags {
+                        self.check(&member.name, member.name_span);
+                    }
+                }
+                Item::Use(_)
+                | Item::Impl(_)
+                | Item::Test(_)
+                | Item::TupleTypeDecl(_)
+                | Item::Error(_) => {}
+            }
+            walk_item(self, item);
+        }
+    }
+    let mut names = Names(Vec::new());
+    for item in &module.items {
+        names.visit_item(item);
+    }
+    names.0
+}
 
 /// Whether a module's functions may omit a body without naming what backs it.
 fn allows_bodyless_functions(module_source: &ModuleSource) -> bool {
@@ -437,10 +494,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         visibility: Visibility,
         span: Span,
     ) -> Option<AstId> {
-        if is_expression_keyword(name) {
-            let _ = self.reject_keyword_name(module_source, name, span);
-            return None;
-        }
         if let Some(first) = self.symbols.defined_span_in_module(module_source, name) {
             let _ = self.logger.error_in(
                 module_source,
@@ -548,9 +601,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Enum(enum_decl) => {
-                    for case in &enum_decl.cases {
-                        let _ = self.reject_keyword_name(module_source, &case.name, case.name_span);
-                    }
                     let kind = SymbolKind::Enum(EnumSymbol {
                         cases: enum_decl.cases.iter().map(|c| c.name.clone()).collect(),
                     });
@@ -566,9 +616,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Variant(variant_decl) => {
-                    for case in &variant_decl.cases {
-                        let _ = self.reject_keyword_name(module_source, &case.name, case.name_span);
-                    }
                     let kind = SymbolKind::Variant(VariantSymbol {
                         cases: variant_decl.cases.iter().map(|c| c.name.clone()).collect(),
                     });
@@ -852,6 +899,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
         for (source, module) in modules {
             self.check_function_declarations(module, source);
+            for (name, span) in keyword_named_declarations(module) {
+                let _ = self.reject_keyword_name(source, &name, span);
+            }
         }
 
         for (source, module) in modules {
@@ -1080,7 +1130,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         local_name: &str,
         span: Span,
     ) -> Result<(), Bail> {
-        self.reject_keyword_name(module_source, local_name, span)?;
+        if is_expression_keyword(local_name) {
+            return self.reject_keyword_name(module_source, local_name, span);
+        }
         let Some(declared) = self
             .symbols
             .defined_span_in_module(module_source, local_name)

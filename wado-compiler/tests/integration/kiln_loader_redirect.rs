@@ -108,10 +108,11 @@ pub fn greet() {}
         );
     }
 
+    let entry_ms = sem.interner.borrow_mut().entry_point("entry.wado");
     let redirected = sem
         .interner
         .borrow_mut()
-        .redirected("build/kiln/test-invocation/sample.wado");
+        .redirected("build/kiln/test-invocation/sample.wado", &entry_ms);
     assert!(
         sem.modules.contains_key(&redirected),
         "loader should have loaded the generated entry module, got: {:?}",

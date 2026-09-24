@@ -3907,6 +3907,17 @@ impl TypeTable {
         ) && self.as_list(head) == Some(TypeTable::U8)
     }
 
+    /// Whether `id` is a `List` whose element is still open, which a
+    /// byte-string literal settles as `u8`.
+    pub fn is_list_of_open_element(&self, id: TypeId) -> bool {
+        self.as_list(id).is_some_and(|element| {
+            matches!(
+                self.get(element),
+                ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_)
+            )
+        })
+    }
+
     /// Check if a type is `List<T>` and return the element type if so.
     /// Also unwraps Ref/MutRef types to check the inner type.
     pub fn as_list(&self, id: TypeId) -> Option<TypeId> {

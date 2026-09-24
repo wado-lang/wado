@@ -481,12 +481,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if matches!(&lit.value, Literal::Bytes(_) | Literal::IncludeBytes(_))
         );
         if is_bytes_literal {
-            if self
-                .tysys
-                .type_table
-                .borrow()
-                .is_byte_list_representation(target_type)
-            {
+            let (is_byte_list, settles_param) = {
+                let tt = self.tysys.type_table.borrow();
+                (
+                    tt.is_byte_list_representation(target_type),
+                    tt.is_list_of_open_element(target_type),
+                )
+            };
+            let bytes_type = if is_byte_list {
+                Some(target_type)
+            } else if settles_param {
+                Some(self.tysys.type_table.borrow_mut().make_list(TypeTable::U8))
+            } else {
+                None
+            };
+            if let Some(target_type) = bytes_type {
                 if let Expr::Literal(lit) = expr
                     && let Literal::Bytes(raw) = &lit.value
                     && let Err(message) = unescape_bytes(raw)

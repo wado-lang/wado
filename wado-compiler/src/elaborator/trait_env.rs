@@ -2812,7 +2812,10 @@ fn check_all_orphan_rules(
         }
         let package = header.module.package_id();
         let local: &LocalDecls = by_package.entry(package.clone()).or_insert_with(|| {
-            let owned = |def: &&DefId| defs.module(**def).package_id() == package;
+            let owned = |def: &&DefId| {
+                let module = defs.module(**def);
+                is_user_local(module) && module.package_id() == package
+            };
             LocalDecls {
                 types: type_decl_index.iter().filter(owned).copied().collect(),
                 traits: decl_index.iter().filter(owned).copied().collect(),

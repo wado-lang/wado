@@ -85,6 +85,43 @@ impl Ctor {
 
 type Row<'p> = Vec<&'p Pat>;
 
+/// A row of the pattern matrix: its patterns, and what it carries along.
+trait MatrixRow<'p>: Sized {
+    fn pats(&self) -> &[&'p Pat];
+    fn with_pats(&self, pats: Row<'p>) -> Self;
+}
+
+impl<'p> MatrixRow<'p> for Row<'p> {
+    fn pats(&self) -> &[&'p Pat] {
+        self
+    }
+
+    fn with_pats(&self, pats: Row<'p>) -> Self {
+        pats
+    }
+}
+
+/// A row standing for one arm.
+struct ArmRow<'p> {
+    pats: Row<'p>,
+    arm: usize,
+    guardless: bool,
+}
+
+impl<'p> MatrixRow<'p> for ArmRow<'p> {
+    fn pats(&self) -> &[&'p Pat] {
+        &self.pats
+    }
+
+    fn with_pats(&self, pats: Row<'p>) -> Self {
+        Self {
+            pats,
+            arm: self.arm,
+            guardless: self.guardless,
+        }
+    }
+}
+
 /// The values the guardless arms `patterns` leave uncovered, one per head
 /// constructor they miss; empty when the match is exhaustive.
 pub(super) fn uncovered(patterns: &[&Pat]) -> Vec<Witness> {
@@ -96,9 +133,10 @@ pub(super) fn uncovered(patterns: &[&Pat]) -> Vec<Witness> {
             .collect();
     };
     let mut missing: Vec<Witness> = Vec::new();
-    for ctor in ctors {
+    let specialized = specialize_each(&rows, &ctors);
+    for (ctor, sub) in ctors.into_iter().zip(specialized) {
         let arity = ctor.arity();
-        if let Some(args) = first_uncovered(specialize(&rows, &ctor), arity) {
+        if let Some(args) = first_uncovered(sub, arity) {
             let witness = build(&rows, ctor, args);
             match (missing.last_mut(), &witness) {
                 (
@@ -119,65 +157,66 @@ pub(super) fn uncovered(patterns: &[&Pat]) -> Vec<Witness> {
 /// The arms no value reaches: each index whose pattern the guardless arms
 /// before it already cover. A guarded arm covers nothing but may be unreachable.
 pub(super) fn unreachable_arms(arms: &[(bool, &Pat)]) -> Vec<usize> {
-    let mut covering: Vec<Row<'_>> = Vec::new();
-    let mut out = Vec::new();
-    for (index, &(guardless, pattern)) in arms.iter().enumerate() {
-        if !useful(covering.clone(), vec![pattern]) {
-            out.push(index);
-        }
-        if guardless {
-            covering.push(vec![pattern]);
-        }
-    }
-    out
+    let rows = arms
+        .iter()
+        .enumerate()
+        .map(|(arm, &(guardless, pattern))| ArmRow {
+            pats: vec![pattern],
+            arm,
+            guardless,
+        })
+        .collect();
+    let mut reached = vec![false; arms.len()];
+    mark_reached(rows, &mut reached);
+    (0..arms.len()).filter(|&arm| !reached[arm]).collect()
 }
 
-/// Whether some value `q` matches escapes every row of `rows`. A head no
-/// constructor describes (a string, a narrowing) is covered only by a wildcard.
-fn useful<'p>(rows: Vec<Row<'p>>, q: Row<'p>) -> bool {
-    let Some(&head) = q.first() else {
-        return rows.is_empty();
+/// Marks each arm some value reaches: the first row taking it, and every
+/// guarded row ahead of that one.
+fn mark_reached(rows: Vec<ArmRow<'_>>, reached: &mut [bool]) {
+    let Some(first) = rows.first() else {
+        return;
     };
-    if let Pat::Or(alternatives) = head {
-        return alternatives.iter().any(|alternative| {
-            let mut row = vec![alternative];
-            row.extend_from_slice(&q[1..]);
-            useful(rows.clone(), row)
-        });
+    if first.pats.is_empty() {
+        for row in &rows {
+            reached[row.arm] = true;
+            if row.guardless {
+                break;
+            }
+        }
+        return;
     }
     let rows = expand_or(rows);
-    let ctors = match head {
-        Pat::Wild => signature(&rows),
-        Pat::Case { cases, index, .. } => Some(vec![Ctor::Case(Rc::clone(cases), *index)]),
-        Pat::Bool(value) => Some(vec![Ctor::Bool(*value)]),
-        Pat::Int {
-            lo,
-            hi,
-            domain: Some(domain),
-        } => {
-            let mut cut_by = rows.clone();
-            cut_by.push(q.clone());
-            Some(
-                split_domain(&cut_by, *domain)
-                    .into_iter()
-                    .filter(|ctor| matches!(ctor, Ctor::Int(a, b, _) if lo <= a && b <= hi))
-                    .collect(),
-            )
-        }
-        Pat::Product { fields, elements } => {
-            Some(vec![Ctor::Product(fields.clone(), elements.len())])
-        }
-        Pat::Int { domain: None, .. } | Pat::Narrow(_) | Pat::Opaque => None,
-        Pat::Or(_) => unreachable!("an or-pattern head is expanded above"),
+    let groups = match signature(&rows) {
+        Some(ctors) => specialize_each(&rows, &ctors),
+        None => open_groups(&rows),
     };
-    let Some(ctors) = ctors else {
-        return useful(default_rows(&rows), q[1..].to_vec());
-    };
-    ctors.iter().any(|ctor| {
-        specialize(std::slice::from_ref(&q), ctor)
-            .pop()
-            .is_some_and(|specialized| useful(specialize(&rows, ctor), specialized))
-    })
+    for group in groups {
+        mark_reached(group, reached);
+    }
+}
+
+/// A column no constructor set describes, split by value: each row naming one
+/// with the wildcard rows around it, then the wildcard rows alone.
+fn open_groups<'p, R: MatrixRow<'p>>(rows: &[R]) -> Vec<Vec<R>> {
+    let is_wild = |i: &usize| matches!(rows[*i].pats()[0], Pat::Wild);
+    let wild: Vec<usize> = (0..rows.len()).filter(is_wild).collect();
+    let tail = |i: usize| rows[i].with_pats(rows[i].pats()[1..].to_vec());
+    let mut groups: Vec<Vec<R>> = (0..rows.len())
+        .filter(|i| !is_wild(i))
+        .map(|named| {
+            let (before, after) = wild.split_at(wild.partition_point(|&w| w < named));
+            before
+                .iter()
+                .copied()
+                .chain([named])
+                .chain(after.iter().copied())
+                .map(tail)
+                .collect()
+        })
+        .collect();
+    groups.push(default_rows(rows));
+    groups
 }
 
 /// One uncovered value vector for `rows` of `width` columns, if any.
@@ -191,9 +230,10 @@ fn first_uncovered(rows: Vec<Row<'_>>, width: usize) -> Option<Vec<Witness>> {
         rest.insert(0, Witness::Wild);
         return Some(rest);
     };
-    for ctor in ctors {
+    let specialized = specialize_each(&rows, &ctors);
+    for (ctor, sub) in ctors.into_iter().zip(specialized) {
         let arity = ctor.arity();
-        if let Some(mut values) = first_uncovered(specialize(&rows, &ctor), arity + width - 1) {
+        if let Some(mut values) = first_uncovered(sub, arity + width - 1) {
             let rest = values.split_off(arity);
             let mut out = vec![build(&rows, ctor, values)];
             out.extend(rest);
@@ -203,7 +243,7 @@ fn first_uncovered(rows: Vec<Row<'_>>, width: usize) -> Option<Vec<Witness>> {
     None
 }
 
-fn expand_or(rows: Vec<Row<'_>>) -> Vec<Row<'_>> {
+fn expand_or<'p, R: MatrixRow<'p>>(rows: Vec<R>) -> Vec<R> {
     let mut out = Vec::new();
     for row in rows {
         push_expanded(row, &mut out);
@@ -211,25 +251,26 @@ fn expand_or(rows: Vec<Row<'_>>) -> Vec<Row<'_>> {
     out
 }
 
-fn push_expanded<'p>(row: Row<'p>, out: &mut Vec<Row<'p>>) {
-    match row.first() {
-        Some(Pat::Or(alternatives)) => {
-            for alternative in alternatives {
-                let mut expanded = vec![alternative];
-                expanded.extend_from_slice(&row[1..]);
-                push_expanded(expanded, out);
-            }
+fn push_expanded<'p, R: MatrixRow<'p>>(row: R, out: &mut Vec<R>) {
+    if let Some(&head) = row.pats().first()
+        && let Pat::Or(alternatives) = head
+    {
+        for alternative in alternatives {
+            let mut expanded = vec![alternative];
+            expanded.extend_from_slice(&row.pats()[1..]);
+            push_expanded(row.with_pats(expanded), out);
         }
-        _ => out.push(row),
+        return;
     }
+    out.push(row);
 }
 
 /// Every constructor of the head column's type, or `None` where the set is
 /// open (or no row names one) and only a wildcard covers it.
-fn signature(rows: &[Row<'_>]) -> Option<Vec<Ctor>> {
+fn signature<'p, R: MatrixRow<'p>>(rows: &[R]) -> Option<Vec<Ctor>> {
     let head = rows
         .iter()
-        .map(|row| row[0])
+        .map(|row| row.pats()[0])
         .find(|p| !matches!(p, Pat::Wild))?;
     match head {
         Pat::Case { cases, .. } => Some(
@@ -252,10 +293,10 @@ fn signature(rows: &[Row<'_>]) -> Option<Vec<Ctor>> {
 
 /// The domain cut at every range boundary in the column, so each piece lies
 /// wholly inside or outside every range.
-fn split_domain(rows: &[Row<'_>], domain: IntDomain) -> Vec<Ctor> {
+fn split_domain<'p, R: MatrixRow<'p>>(rows: &[R], domain: IntDomain) -> Vec<Ctor> {
     let mut cuts = vec![domain.min, domain.max + 1];
     for row in rows {
-        if let Pat::Int { lo, hi, .. } = row[0] {
+        if let Pat::Int { lo, hi, .. } = row.pats()[0] {
             cuts.extend([
                 (*lo).max(domain.min),
                 hi.saturating_add(1).min(domain.max + 1),
@@ -269,35 +310,63 @@ fn split_domain(rows: &[Row<'_>], domain: IntDomain) -> Vec<Ctor> {
         .collect()
 }
 
-fn specialize<'p>(rows: &[Row<'p>], ctor: &Ctor) -> Vec<Row<'p>> {
-    const WILD: &Pat = &Pat::Wild;
-    let arity = ctor.arity();
-    rows.iter()
-        .filter_map(|row| {
-            let mut out: Row<'p> = match (row[0], ctor) {
-                (Pat::Wild, _) => vec![WILD; arity],
-                (Pat::Case { index, payload, .. }, Ctor::Case(_, wanted)) if index == wanted => {
-                    match (payload, arity) {
-                        (_, 0) => Vec::new(),
-                        (Some(payload), _) => vec![&**payload],
-                        (None, _) => vec![WILD],
-                    }
-                }
-                (Pat::Bool(value), Ctor::Bool(wanted)) if value == wanted => Vec::new(),
-                (Pat::Int { lo, hi, .. }, Ctor::Int(a, b, _)) if lo <= a && b <= hi => Vec::new(),
-                (Pat::Product { elements, .. }, Ctor::Product(..)) => elements.iter().collect(),
-                _ => return None,
-            };
-            out.extend_from_slice(&row[1..]);
-            Some(out)
-        })
-        .collect()
+/// `rows` specialized to each of `ctors`, which [`signature`] and
+/// [`split_domain`] list in order. A row reaches only the constructors its head
+/// can take, so a long match of literals costs its length rather than its square.
+fn specialize_each<'p, R: MatrixRow<'p>>(rows: &[R], ctors: &[Ctor]) -> Vec<Vec<R>> {
+    let mut out: Vec<Vec<R>> = std::iter::repeat_with(Vec::new).take(ctors.len()).collect();
+    for row in rows {
+        let reach = match row.pats()[0] {
+            Pat::Case { index, .. } => {
+                let at = |c: &Ctor| match c {
+                    Ctor::Case(_, i) => *i,
+                    _ => unreachable!("a column holds one kind of constructor"),
+                };
+                ctors.partition_point(|c| at(c) < *index)
+                    ..ctors.partition_point(|c| at(c) <= *index)
+            }
+            Pat::Int { lo, hi, .. } => {
+                let piece = |c: &Ctor| match c {
+                    Ctor::Int(a, b, _) => (*a, *b),
+                    _ => unreachable!("a column holds one kind of constructor"),
+                };
+                ctors.partition_point(|c| piece(c).1 < *lo)
+                    ..ctors.partition_point(|c| piece(c).0 <= *hi)
+            }
+            _ => 0..ctors.len(),
+        };
+        for i in reach {
+            out[i].extend(specialize_row(row.pats(), &ctors[i]).map(|pats| row.with_pats(pats)));
+        }
+    }
+    out
 }
 
-fn default_rows<'p>(rows: &[Row<'p>]) -> Vec<Row<'p>> {
+fn specialize_row<'p>(row: &[&'p Pat], ctor: &Ctor) -> Option<Row<'p>> {
+    const WILD: &Pat = &Pat::Wild;
+    let arity = ctor.arity();
+    let mut out: Row<'p> = match (row[0], ctor) {
+        (Pat::Wild, _) => vec![WILD; arity],
+        (Pat::Case { index, payload, .. }, Ctor::Case(_, wanted)) if index == wanted => {
+            match (payload, arity) {
+                (_, 0) => Vec::new(),
+                (Some(payload), _) => vec![&**payload],
+                (None, _) => vec![WILD],
+            }
+        }
+        (Pat::Bool(value), Ctor::Bool(wanted)) if value == wanted => Vec::new(),
+        (Pat::Int { lo, hi, .. }, Ctor::Int(a, b, _)) if lo <= a && b <= hi => Vec::new(),
+        (Pat::Product { elements, .. }, Ctor::Product(..)) => elements.iter().collect(),
+        _ => return None,
+    };
+    out.extend_from_slice(&row[1..]);
+    Some(out)
+}
+
+fn default_rows<'p, R: MatrixRow<'p>>(rows: &[R]) -> Vec<R> {
     rows.iter()
-        .filter(|row| matches!(row[0], Pat::Wild))
-        .map(|row| row[1..].to_vec())
+        .filter(|row| matches!(row.pats()[0], Pat::Wild))
+        .map(|row| row.with_pats(row.pats()[1..].to_vec()))
         .collect()
 }
 

@@ -91,20 +91,15 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
     index
 }
 
-/// Every generic-parameter list `item` declares that gives a parameter a default.
-fn defaulted_generic_params(item: &Item) -> Vec<Vec<ast::GenericParam>> {
-    struct Lists(Vec<Vec<ast::GenericParam>>);
-    impl AstVisitor for Lists {
-        fn visit_generic_params(&mut self, params: &[ast::GenericParam]) {
-            if params.iter().any(|p| p.default.is_some()) {
-                self.0.push(params.to_vec());
-            }
-            ast::walk_generic_params(self, params);
-        }
+/// Reports a default naming a later parameter, in every generic-parameter
+/// list an item declares, local items included.
+struct ForwardDefaults<'e, 'a, H: CompilerHost>(&'e mut Elaborator<'a, H>);
+
+impl<H: CompilerHost> AstVisitor for ForwardDefaults<'_, '_, H> {
+    fn visit_generic_params(&mut self, params: &[ast::GenericParam]) {
+        self.0.report_forward_type_param_defaults(params);
+        ast::walk_generic_params(self, params);
     }
-    let mut lists = Lists(Vec::new());
-    lists.visit_item(item);
-    lists.0
 }
 
 /// The sentence every `#[unavailable]` declaration in the program reports,
@@ -2185,9 +2180,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let mut test_count = 0usize;
         for item in &module.items {
-            for params in defaulted_generic_params(item) {
-                self.report_forward_type_param_defaults(&params);
-            }
+            ForwardDefaults(self).visit_item(item);
             if let Item::Struct(ast::StructDecl { id, .. })
             | Item::Variant(ast::VariantDecl { id, .. })
             | Item::Newtype(ast::Newtype { id, .. }) = item

@@ -329,7 +329,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ArgClass::FloatLit => tt.is_float(param),
             ArgClass::StrLit => tt.base_type_name(tt.representation_head(param)) == "String",
-            ArgClass::BytesLit => tt.is_byte_list_representation(param),
+            ArgClass::BytesLit => {
+                tt.is_byte_list_representation(param) || tt.is_list_of_open_element(param)
+            }
             ArgClass::NullLit => tt.as_option(param).is_some(),
         }
     }

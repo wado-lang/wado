@@ -1505,7 +1505,7 @@ pub fn decl_file_of(source: &ModuleSource) -> &str {
     match source {
         ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.as_str(),
         ModuleSource::EntryPoint { filename } => filename.as_str(),
-        ModuleSource::Redirected { uri } => uri.as_str(),
+        ModuleSource::Redirected { uri, .. } => uri.as_str(),
         _ => "",
     }
 }
@@ -1520,7 +1520,7 @@ pub fn resolve_import_with_invocations(
     if !invocations.is_empty() {
         let decl_file = decl_file_of(from_module);
         if let Some(entry_uri) = invocations.redirect(decl_file, import_source) {
-            return interner.redirected(entry_uri);
+            return interner.redirected(entry_uri, from_module);
         }
     }
     resolve_import_with_entry(interner, from_module, import_source, entry_module)

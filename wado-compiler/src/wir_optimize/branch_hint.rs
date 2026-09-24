@@ -18,14 +18,57 @@ pub fn infer_branch_hints(module: &mut WirPackage) {
     }
 }
 
-fn infer_in_body(body: &mut [WirInstr]) {
-    for instr in body.iter_mut() {
-        infer_in_instr(instr);
-    }
-    hint_brif_trap_tail(body, false);
+/// How control leaves an instruction, summarized bottom-up once so no question
+/// re-walks a subtree.
+#[derive(Default)]
+struct Flow {
+    /// Always reaches an `unreachable` before any transfer out of it.
+    traps: bool,
+    /// The furthest label outside it a branch inside targets, `u32::MAX` for a
+    /// `return`; `None` when control can leave only by falling through.
+    escape: Option<u32>,
+    /// The flows of a `Seq`'s instructions, which splice into the enclosing line.
+    spliced: Vec<Flow>,
 }
 
-fn infer_in_instr(instr: &mut WirInstr) {
+impl Flow {
+    fn escaping(escape: Option<u32>) -> Self {
+        Self {
+            escape,
+            ..Self::default()
+        }
+    }
+
+    /// A body's flow as seen from outside the label wrapping it.
+    fn through_label(&self) -> Option<u32> {
+        match self.escape? {
+            u32::MAX => Some(u32::MAX),
+            depth => depth.checked_sub(1),
+        }
+    }
+}
+
+/// Whether a straight line traps before anything leaves it, and how far out
+/// it can branch.
+fn line_flow(flows: Vec<Flow>) -> Flow {
+    let traps = flows
+        .iter()
+        .find(|flow| flow.traps || flow.escape.is_some())
+        .is_some_and(|flow| flow.traps);
+    Flow {
+        traps,
+        escape: flows.iter().filter_map(|flow| flow.escape).max(),
+        spliced: flows,
+    }
+}
+
+fn infer_in_body(body: &mut [WirInstr]) -> Flow {
+    let flows: Vec<Flow> = body.iter_mut().map(infer_in_instr).collect();
+    hint_brif_trap_tail(body, &flows, false);
+    line_flow(flows)
+}
+
+fn infer_in_instr(instr: &mut WirInstr) -> Flow {
     match instr {
         WirInstr::If {
             condition,
@@ -33,25 +76,72 @@ fn infer_in_instr(instr: &mut WirInstr) {
             else_body,
             ..
         } => {
-            infer_in_instr(condition);
-            infer_in_body(then_body);
-            if let Some(eb) = else_body {
-                infer_in_body(eb);
-            }
-            let then_traps = arm_always_traps(then_body);
-            let else_traps = else_body.as_deref().is_some_and(arm_always_traps);
+            let condition_flow = infer_in_instr(condition);
+            let then_flow = infer_in_body(then_body);
+            let else_flow = else_body.as_deref_mut().map(infer_in_body);
+            let else_traps = else_flow.as_ref().is_some_and(|flow| flow.traps);
             // Only a single trapping side yields an unambiguous hint.
-            let likely = match (then_traps, else_traps) {
-                (true, false) => false,
-                (false, true) => true,
-                _ => return,
-            };
-            WirInstr::hint_condition(condition, likely);
+            match (then_flow.traps, else_traps) {
+                (true, false) => WirInstr::hint_condition(condition, false),
+                (false, true) => WirInstr::hint_condition(condition, true),
+                _ => {}
+            }
+            Flow {
+                traps: condition_flow.escape.is_none() && then_flow.traps && else_traps,
+                escape: [
+                    condition_flow.escape,
+                    then_flow.through_label(),
+                    else_flow.and_then(|flow| flow.through_label()),
+                ]
+                .into_iter()
+                .flatten()
+                .max(),
+                spliced: Vec::new(),
+            }
         }
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
-            infer_in_body(body);
+        // `br 0` inside targets the block's own end (a Block: fall-through past
+        // it; a Loop: re-entry), counted as an escape from the body: conservative
+        // for the loop, so a hint is only inferred where the trap is unavoidable.
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+            let flow = infer_in_body(body);
+            Flow {
+                traps: flow.traps,
+                escape: flow.through_label(),
+                spliced: Vec::new(),
+            }
         }
-        other => other.for_each_boxed_child_mut(&mut |c| infer_in_instr(c)),
+        WirInstr::Seq(body) => infer_in_body(body),
+        WirInstr::Unreachable => Flow {
+            traps: true,
+            ..Flow::default()
+        },
+        WirInstr::Return { value } => {
+            if let Some(value) = value {
+                infer_in_instr(value);
+            }
+            Flow::escaping(Some(u32::MAX))
+        }
+        WirInstr::Br { depth } => Flow::escaping(Some(*depth)),
+        WirInstr::BrIf { depth, condition } => {
+            Flow::escaping(infer_in_instr(condition).escape.max(Some(*depth)))
+        }
+        WirInstr::BrTable {
+            index,
+            targets,
+            default,
+        } => {
+            let furthest = targets
+                .iter()
+                .chain(std::iter::once(&*default))
+                .max()
+                .copied();
+            Flow::escaping(infer_in_instr(index).escape.max(furthest))
+        }
+        other => {
+            let mut escape = None;
+            other.for_each_boxed_child_mut(&mut |c| escape = escape.max(infer_in_instr(c).escape));
+            Flow::escaping(escape)
+        }
     }
 }
 
@@ -60,131 +150,25 @@ fn infer_in_instr(instr: &mut WirInstr) {
 /// hinted likely. `reaches_trap` is whether the path immediately *after* this
 /// slice unavoidably reaches `unreachable`; the return value is the same
 /// predicate for the path *before* the slice.
-fn hint_brif_trap_tail(instrs: &mut [WirInstr], mut reaches_trap: bool) -> bool {
-    for i in (0..instrs.len()).rev() {
-        if reaches_trap && let WirInstr::BrIf { condition, .. } = &mut instrs[i] {
+fn hint_brif_trap_tail(instrs: &mut [WirInstr], flows: &[Flow], mut reaches_trap: bool) -> bool {
+    for (instr, flow) in instrs.iter_mut().zip(flows).rev() {
+        if reaches_trap && let WirInstr::BrIf { condition, .. } = instr {
             WirInstr::hint_condition(condition, true);
         }
-        // Update `reaches_trap` for the position before `instrs[i]`.
-        match &mut instrs[i] {
-            WirInstr::Unreachable => reaches_trap = true,
-            // `Seq` splices transparently into the straight line.
+        // Update `reaches_trap` for the position before `instr`.
+        match instr {
             WirInstr::Seq(body) => {
-                reaches_trap = hint_brif_trap_tail(body, reaches_trap);
+                reaches_trap = hint_brif_trap_tail(body, &flow.spliced, reaches_trap);
             }
-            other => {
-                if arm_always_traps(std::slice::from_ref(other)) {
-                    reaches_trap = true;
-                } else if may_transfer_out(other, 0) || other.always_diverges() {
-                    // Control may leave (or definitely leaves) through this
-                    // instruction; the path before it no longer unavoidably
-                    // reaches the trap behind us.
-                    reaches_trap = false;
-                }
-            }
+            _ if flow.traps => reaches_trap = true,
+            // Control may leave (or definitely leaves) through this
+            // instruction; the path before it no longer unavoidably reaches
+            // the trap behind us.
+            other if flow.escape.is_some() || other.always_diverges() => reaches_trap = false,
+            _ => {}
         }
     }
     reaches_trap
-}
-
-/// Whether executing this instruction list always reaches an `unreachable`
-/// trap before any control transfer out of it. Conservative: any possible
-/// escape (a `return`, or a branch whose depth leaves the list) answers
-/// `false`.
-fn arm_always_traps(instrs: &[WirInstr]) -> bool {
-    for instr in instrs {
-        match instr {
-            WirInstr::Unreachable => return true,
-            // `Seq` splices transparently into the straight line.
-            WirInstr::Seq(body) => {
-                if arm_always_traps(body) {
-                    return true;
-                }
-                if body.iter().any(|i| may_transfer_out(i, 0)) {
-                    return false;
-                }
-            }
-            // An `if` whose both arms trap, traps.
-            WirInstr::If {
-                condition,
-                then_body,
-                else_body: Some(eb),
-                ..
-            } if !may_transfer_out(condition, 0)
-                && arm_always_traps(then_body)
-                && arm_always_traps(eb) =>
-            {
-                return true;
-            }
-            // A labeled block/loop whose body reaches a trap before escaping it
-            // traps the arm. `br 0` inside targets the block's own end (a Block:
-            // fall-through past it; a Loop: re-entry), which `arm_always_traps`
-            // treats as an escape (returning `false`) — conservative for the
-            // loop case, so a hint is only inferred when the trap is unavoidable.
-            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-                if arm_always_traps(body) {
-                    return true;
-                }
-                if may_transfer_out(instr, 0) {
-                    return false;
-                }
-            }
-            other => {
-                if may_transfer_out(other, 0) {
-                    return false;
-                }
-            }
-        }
-    }
-    false
-}
-
-/// Whether this instruction's subtree can transfer control out of the context
-/// it appears in: a `return`, or a `br`/`br_if`/`br_table` whose depth escapes
-/// the labels introduced within the subtree itself. `nesting` is the number of
-/// labels between `instr` and that context.
-fn may_transfer_out(instr: &WirInstr, nesting: u32) -> bool {
-    match instr {
-        WirInstr::Return { .. } => true,
-        WirInstr::Br { depth } => *depth >= nesting,
-        WirInstr::BrIf { depth, condition } => {
-            *depth >= nesting || may_transfer_out(condition, nesting)
-        }
-        WirInstr::BrTable {
-            index,
-            targets,
-            default,
-        } => {
-            targets
-                .iter()
-                .chain(std::iter::once(default))
-                .any(|d| *d >= nesting)
-                || may_transfer_out(index, nesting)
-        }
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-            body.iter().any(|i| may_transfer_out(i, nesting + 1))
-        }
-        WirInstr::If {
-            condition,
-            then_body,
-            else_body,
-            ..
-        } => {
-            may_transfer_out(condition, nesting)
-                || then_body.iter().any(|i| may_transfer_out(i, nesting + 1))
-                || else_body
-                    .as_ref()
-                    .is_some_and(|eb| eb.iter().any(|i| may_transfer_out(i, nesting + 1)))
-        }
-        WirInstr::Seq(body) => body.iter().any(|i| may_transfer_out(i, nesting)),
-        other => {
-            let mut found = false;
-            other.for_each_child(&mut |c| {
-                found = found || may_transfer_out(c, nesting);
-            });
-            found
-        }
-    }
 }
 
 pub fn select_br_ifs(module: &mut WirPackage) {

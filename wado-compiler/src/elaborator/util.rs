@@ -70,6 +70,29 @@ pub(super) fn check_int_range_negative(
     }
 }
 
+/// Why the integer literal `repr`, sign included, is no value of `target_type`.
+/// `None` for one in range, or one that does not parse, reported where it did.
+pub(super) fn int_literal_range_error(
+    repr: &str,
+    target_type: TypeId,
+    type_table: &TypeTable,
+) -> Option<String> {
+    match repr.strip_prefix('-') {
+        Some(digits) => check_int_range_negative(
+            parse_u128_literal(digits).ok()?,
+            target_type,
+            type_table,
+            digits,
+        ),
+        None => check_int_range_positive(
+            parse_u128_literal(repr).ok()?,
+            target_type,
+            type_table,
+            repr,
+        ),
+    }
+}
+
 /// Normalize a numeric literal representation: remove underscores and lowercase.
 /// This produces a canonical form for parsing (e.g., `"0x_FF"` → `"0xff"`, `"1E10"` → `"1e10"`).
 pub(super) fn normalize_numeric_literal(repr: &str) -> String {

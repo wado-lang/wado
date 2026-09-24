@@ -1685,6 +1685,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .to_string(),
                                 span,
                             });
+                        } else {
+                            self.report_pattern_literal_range(repr, scrutinee_type, span);
                         }
                     }
                     Literal::Null => {
@@ -2328,6 +2330,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .is_some()
     }
 
+    fn report_pattern_literal_range(&mut self, repr: &str, scrutinee_type: TypeId, span: Span) {
+        let message =
+            util::int_literal_range_error(repr, scrutinee_type, &self.tysys.type_table.borrow());
+        if let Some(message) = message {
+            let _ = self.emit(TypeError::InvalidPattern { message, span });
+        }
+    }
+
     /// Validate a range pattern (`0..<10` or `'a'..='z'`) for the body walk,
     /// emitting the bad-bounds / reversed / empty diagnostics. Range
     /// patterns bind nothing and reify rebuilds the real `TirPattern::Range`,
@@ -2356,6 +2366,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return;
         };
+        for bound in [start, end] {
+            if let Pattern::Literal(Literal::Number(repr)) = bound {
+                self.report_pattern_literal_range(repr, scrutinee_type, span);
+            }
+        }
 
         // Check for reversed or empty range
         let inclusive = matches!(kind, RangeKind::Inclusive);
