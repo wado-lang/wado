@@ -1318,7 +1318,8 @@ impl TypeSystem {
             ResolvedType::Flags { .. } => Some(true),
             // The host interns handles, so two are equal exactly when they name one object.
             ResolvedType::Resource { def }
-                if tr == OnBoundTrait::Eq && self.type_table.borrow().is_unrestricted_resource(*def) =>
+                if tr == OnBoundTrait::Eq
+                    && self.type_table.borrow().is_unrestricted_resource(*def) =>
             {
                 Some(true)
             }

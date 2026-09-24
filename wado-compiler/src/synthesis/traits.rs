@@ -4,6 +4,7 @@
 //! Runs before monomorphize.
 
 use std::cell::RefCell;
+use std::convert::identity;
 use std::rc::Rc;
 
 use crate::compiler_item::CompilerItem;
@@ -3620,8 +3621,14 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         let ref_enum_type = type_table.make_ref(enum_type);
 
         if ctx.should_synthesize(receiver, &eq_trait_name.canonical().expect(KEYED)) {
-            let func =
-                generate_enum_eq_fn(receiver, enum_type, ref_enum_type, &eq_trait_name, *span);
+            let func = generate_scalar_eq_fn(
+                receiver,
+                enum_type,
+                ref_enum_type,
+                &eq_trait_name,
+                *span,
+                identity,
+            );
             generated_functions.push(Rc::new(RefCell::new(func)));
             ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
         }
@@ -3677,8 +3684,14 @@ fn generate_flags_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         let ref_flags_type = type_table.make_ref(flags_type);
 
         if ctx.should_synthesize(receiver, &eq_trait_name.canonical().expect(KEYED)) {
-            let func =
-                generate_enum_eq_fn(receiver, flags_type, ref_flags_type, &eq_trait_name, *span);
+            let func = generate_scalar_eq_fn(
+                receiver,
+                flags_type,
+                ref_flags_type,
+                &eq_trait_name,
+                *span,
+                identity,
+            );
             generated_functions.push(Rc::new(RefCell::new(func)));
             ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
         }
@@ -3723,39 +3736,15 @@ fn generate_handle_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '
         }
         let handle_type = type_table.make_resource(resource.def);
         let ref_handle_type = type_table.make_ref(handle_type);
-        let bits = |index, name| {
-            common::cast(
-                deref_local(index, name, ref_handle_type, handle_type, resource.span),
-                TypeTable::F64,
-            )
-        };
-        let method_info = trait_method_info(receiver, &eq_trait_name, "eq");
-        let comparison = TirExpr::new(
-            TirExprKind::Binary {
-                left: Box::new(bits(0, "self")),
-                op: TirBinaryOp::Eq,
-                right: Box::new(bits(1, "other")),
-            },
-            TypeTable::BOOL,
+        let func = generate_scalar_eq_fn(
+            receiver,
+            handle_type,
+            ref_handle_type,
+            &eq_trait_name,
             resource.span,
+            |handle| common::cast(handle, TypeTable::F64),
         );
-        let body = TirBlock::new(
-            vec![TirStmt::new(
-                TirStmtKind::Return {
-                    value: Some(comparison),
-                },
-                resource.span,
-            )],
-            resource.span,
-        );
-        generated_functions.push(Rc::new(RefCell::new(make_synthetic_method(
-            method_info.to_mangled_name(),
-            method_info,
-            binary_method_params(ref_handle_type, resource.span),
-            TypeTable::BOOL,
-            body,
-            binary_method_locals(ref_handle_type),
-        ))));
+        generated_functions.push(Rc::new(RefCell::new(func)));
         ctx.record_impl(receiver, &eq_key);
     }
     module.functions.extend(generated_functions);
@@ -4617,24 +4606,25 @@ fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
     result
 }
 
-/// Generate `EnumName^Eq::eq(&self, &Self) -> bool`
-///
-/// Body: `return *self == *other;` (i32 comparison via enum discriminant)
-fn generate_enum_eq_fn(
+/// Generate `Name^Eq::eq(&self, &Self) -> bool` for a type that compares as
+/// the scalar `scalar` maps each dereferenced operand to.
+fn generate_scalar_eq_fn(
     receiver: &FqTypeName,
-    enum_type: TypeId,
-    ref_enum_type: TypeId,
+    ty: TypeId,
+    ref_type: TypeId,
     eq_trait_name: &FqTraitName,
     span: Span,
+    scalar: fn(TirExpr) -> TirExpr,
 ) -> TirFunction {
     let method_info = trait_method_info(receiver, eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
+    let operand = |index, name| scalar(deref_local(index, name, ref_type, ty, span));
     let comparison = TirExpr::new(
         TirExprKind::Binary {
-            left: Box::new(deref_local(0, "self", ref_enum_type, enum_type, span)),
+            left: Box::new(operand(0, "self")),
             op: TirBinaryOp::Eq,
-            right: Box::new(deref_local(1, "other", ref_enum_type, enum_type, span)),
+            right: Box::new(operand(1, "other")),
         },
         TypeTable::BOOL,
         span,
@@ -4652,10 +4642,10 @@ fn generate_enum_eq_fn(
     make_synthetic_method(
         qualified_name,
         method_info,
-        binary_method_params(ref_enum_type, span),
+        binary_method_params(ref_type, span),
         TypeTable::BOOL,
         body,
-        binary_method_locals(ref_enum_type),
+        binary_method_locals(ref_type),
     )
 }
 
