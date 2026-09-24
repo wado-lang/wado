@@ -682,13 +682,13 @@ impl SolverBridge {
             || Self::OPERATORS.contains(&item)
     }
 
-    pub(crate) fn build(tysys: &TypeSystem) -> Self {
+    pub(crate) fn build(tysys: &TypeSystem, modules: &[ModuleSource]) -> Self {
         let mut lowering = Lowering::default();
         let mut program = Program::default();
         let table = tysys.type_table.borrow();
         lowering.tuple = table.compiler_item_def(CompilerItem::Tuple);
         program.tuple = lowering.tuple.map(|def| lowering.type_decl(def));
-        Self::intern_declarations(tysys, &mut lowering);
+        Self::intern_declarations(tysys, modules, &mut lowering);
         let derivation_sources = Self::derivation_sources(tysys);
         for (&def, &kind) in &derivation_sources {
             if let Some(trait_) = tysys
@@ -713,7 +713,7 @@ impl SolverBridge {
         );
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
-        Self::state_scopes(tysys, &mut lowering, &mut program);
+        Self::state_scopes(tysys, modules, &mut lowering, &mut program);
         Self::state_newtype_bases(tysys, &table, &mut lowering, &mut program);
         Self::derive_all(tysys, &table, &mut lowering, &mut program);
         Self::name_derived_impls(tysys, &mut lowering, &program);
@@ -792,7 +792,7 @@ impl SolverBridge {
 
     /// Intern every declaration and module up front, so a query lowers without
     /// interning and a shape nothing lowered is unknown to it.
-    fn intern_declarations(tysys: &TypeSystem, lowering: &mut Lowering) {
+    fn intern_declarations(tysys: &TypeSystem, modules: &[ModuleSource], lowering: &mut Lowering) {
         for def in tysys
             .all_struct_fields
             .keys()
@@ -819,7 +819,7 @@ impl SolverBridge {
             let head = lowering.type_decl(def);
             lowering.opaque_heads.insert(head);
         }
-        for module in tysys.modules.iter() {
+        for module in modules {
             lowering.module(module);
         }
     }
@@ -948,8 +948,13 @@ impl SolverBridge {
     /// What each module may name. A trait's methods are candidates at a call
     /// site only where that trait's declaration is in scope there
     /// (WEP 2026-09-01); where its impls were written does not enter.
-    fn state_scopes(tysys: &TypeSystem, lowering: &mut Lowering, program: &mut Program) {
-        for module in tysys.modules.iter() {
+    fn state_scopes(
+        tysys: &TypeSystem,
+        modules: &[ModuleSource],
+        lowering: &mut Lowering,
+        program: &mut Program,
+    ) {
+        for module in modules {
             // A declaration reachable under two names is in scope once.
             let traits_in_scope: IndexSet<TraitDeclId> = tysys
                 .resolutions

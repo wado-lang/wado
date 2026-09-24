@@ -4414,16 +4414,9 @@ pub(crate) fn unparse_with_row_into<S: AsRef<str>>(items: &[S], output: &mut Str
             output.push_str(" with ");
             output.push_str(only.as_ref());
         }
-        many => {
-            output.push_str(" with (");
-            for (i, item) in many.iter().enumerate() {
-                if i > 0 {
-                    output.push_str(", ");
-                }
-                output.push_str(item.as_ref());
-            }
-            output.push(')');
-        }
+        many => delimited_into(" with (", ")", many, output, |item, out| {
+            out.push_str(item.as_ref());
+        }),
     }
 }
 

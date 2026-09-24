@@ -1,10 +1,5 @@
-// Two modules each declare `Show` and implement it for one receiver, which
-// neither of them declares. A call through a type parameter bounded by one
-// `Show` must reach that trait's impl.
-//
-// The index saying which module holds an impl keyed the trait by its bare
-// name, so both impls filed under one `Show` and the second bound's dispatch
-// was sent to the first trait's module.
+// Two modules each declare `Show` and implement it for a third module's `P`.
+// A bound on one `Show` dispatches to that trait's impl.
 
 use { P } from "./sub/cross_module_same_name_trait_bound_dispatch_p.wado";
 use { Show as ShowA } from "./sub/cross_module_same_name_trait_bound_dispatch_a.wado";

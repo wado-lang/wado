@@ -1290,29 +1290,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
-    /// The trait a reference site names, in the form a mangled method name
-    /// embeds it: the declaration the site resolves to, plus the type
-    /// arguments the site wrote.
-    ///
-    /// The answer comes from [`crate::resolve::Resolutions`] — resolved once,
-    /// in the module that wrote the reference — so an alias and a second
-    /// module's same-named trait cannot reach the mangle. A site that names no
-    /// declaration carries no identity — see [`Self::fq_trait_name_of`].
+    /// The trait a reference site names, with the type arguments it writes; one
+    /// naming no declaration keeps its spelling.
     pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> FqTraitName {
-        let written = self.get_type_name(ty);
-        let args = trait_env::written_type_args(ty, &self.tysys.resolutions);
-        let head = head_site(ty)
-            .and_then(|site| {
-                let resolutions = &self.tysys.resolutions;
-                match resolutions.get(site) {
-                    Resolution::Binder(_) => Some(FqTraitName::binder(&written)),
-                    _ => resolutions
-                        .declared(site)
-                        .map(|def| FqTraitName::declared(resolutions.defs(), def)),
-                }
-            })
-            .unwrap_or_else(|| FqTraitName::binder(&written));
-        head.with_args(args)
+        let resolutions = &self.tysys.resolutions;
+        let head = self.trait_at_head(ty).map_or_else(
+            || FqTraitName::binder(&self.get_type_name(ty)),
+            |def| FqTraitName::declared(resolutions.defs(), def),
+        );
+        head.with_args(trait_env::written_type_args(ty, resolutions))
     }
 
     /// Record the impl-block resolution facts keyed by the
@@ -1352,8 +1338,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// The trait a marker `impl Trait for T;` names at its head.
-    fn marker_trait(&self, trait_type: &ast::Type) -> Option<DefId> {
+    /// The declaration a trait position names at its head.
+    fn trait_at_head(&self, trait_type: &ast::Type) -> Option<DefId> {
         head_site(trait_type).and_then(|site| self.tysys.resolutions.declared(site))
     }
 
@@ -1384,14 +1370,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .unwrap_or_else(|| {
                     unreachable!("explicit derive marker validated for a non-nominal type")
                 });
-            // The marker's own site says which trait it names; the request is
-            // keyed by that declaration, not by the spelling.
-            if let Some(key) = self.fq_trait_name(trait_type).canonical() {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .record_bound_driven_synth_request_for(target_type_id, &module_source, &key);
-            }
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request_for(target_type_id, &module_source, &trait_);
             return;
         }
         let receiver = Receiver::Type(self.tysys.fq_receiver_head(target_type_id));
@@ -1409,7 +1391,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             &self.type_lookup(),
             target_type_id,
             trait_,
-            trait_type.head_base_name().unwrap_or_default(),
+            self.tysys.resolutions.defs().name(trait_),
         );
         let _ = self.emit(types::TypeError::ExplicitDeriveNotEligible {
             trait_name: self.get_type_name_full(trait_type),
@@ -1427,7 +1409,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let Some(trait_type) = &impl_block.trait_type else {
             return;
         };
-        let marked = self.marker_trait(trait_type);
+        let marked = self.trait_at_head(trait_type);
         if let Some((trait_, on_bound)) =
             marked.and_then(|trait_| Some((trait_, self.tysys.on_bound_of(trait_)?)))
         {
@@ -1651,9 +1633,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.lookup_struct_fields_of_decl(def)
     }
 
-    /// Canonical impl-target key for a type named at a use site, for the impl
-    /// indexes.
-    ///
     /// The impl target a receiver spelling names in the current frame.
     pub(crate) fn impl_target(&self, type_name: &str) -> trait_env::ImplTargetKey {
         self.impl_target_at(None, type_name)
@@ -1759,11 +1738,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         effects
             .iter()
             .map(|effect| {
-                self.effect_named_at(Some(effect.id), effect.span, &effect.name)
-                    .unwrap_or_else(|| tir::EffectRef::Concrete {
-                        name: effect.name.clone(),
-                        module_source: self.current_module_source.clone(),
-                    })
+                self.effect_named_at(Some(effect.id), effect.span, &effect.name);
+                self.tysys
+                    .resolutions
+                    .effect_named(effect, &self.current_module_source)
             })
             .collect()
     }

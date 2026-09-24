@@ -875,12 +875,14 @@ fn push_ref_prefix(out: &mut String, kind: RefKind) {
 }
 
 impl LocalMethodName {
-    /// The declaration of the trait this method implements, for the indices
-    /// keyed by identity. `None` for an inherent method, or where the
-    /// reference reached no declaration.
+    /// The declaration of the trait this method implements; `None` for an
+    /// inherent method.
     #[must_use]
     pub fn trait_decl(&self) -> Option<DefId> {
-        self.trait_name.as_ref().and_then(FqTraitName::canonical)
+        self.trait_name.as_ref().map(|t| {
+            t.canonical()
+                .expect("elaboration rejects a trait reaching no declaration")
+        })
     }
 
     /// The typed receiver shape — the query consumers use to reason about the

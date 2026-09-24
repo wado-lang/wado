@@ -288,10 +288,10 @@ impl ImplHeader {
                 name::FqTraitName::declared(resolutions.defs(), *def)
                     .with_args(trait_.arg_ids.clone()),
             ),
-            ImplTargetKey::TypeParam(_, name) => Some(name::FqTraitName::binder(name)),
-            ImplTargetKey::Ref(_) | ImplTargetKey::Builtin(_) | ImplTargetKey::Undeclared(..) => {
-                None
-            }
+            ImplTargetKey::TypeParam(..)
+            | ImplTargetKey::Ref(_)
+            | ImplTargetKey::Builtin(_)
+            | ImplTargetKey::Undeclared(..) => None,
         }
     }
 
@@ -729,25 +729,17 @@ fn push_module(
     }
 }
 
-/// Where every non-blanket `impl` block lives, in both receiver namespaces, read
-/// off the headers' resolved identities rather than the heads they wrote.
-/// `concrete_only` keeps just the parameterless blocks: the monomorphizer sends
-/// a substituted call to a concrete impl's own module, while a generic impl's
-/// instance is materialised in the receiver type's.
+/// The module each non-blanket `impl` block lives in; `concrete_only` keeps just
+/// the parameterless ones, whose substituted calls go to their own module.
 fn index_impl_modules(
     impl_headers: &IndexMap<DefId, ImplHeader>,
-    resolutions: &Resolutions,
+    defs: &DefTable,
     concrete_only: bool,
 ) -> ImplModuleIndex {
-    let defs = resolutions.defs();
     let mut out = ImplModuleIndex::default();
     for header in impl_headers.values() {
-        // A bodiless derive (`impl Deserialize for Point;`) asks for an impl,
-        // it does not host one. This index answers "which module holds the
-        // code", and answering with the request sends a type-param dispatch to
-        // a module with no body — where it would otherwise have reached the
-        // blanket that serves it. The generated body registers itself in the
-        // synthesis layer, under the module it actually landed in.
+        // A bodiless derive hosts no code; its generated body registers itself
+        // where synthesis lands it.
         if header.is_synthesize_request {
             continue;
         }
@@ -981,13 +973,14 @@ impl TraitEnv {
                             continue;
                         };
                         effect_decl_index.insert(resource_key);
-                        // Index static methods from resource declarations.
-                        // The resource declaration itself is the receiver.
+                        let is_resource = |ty: &ast::Type| {
+                            matches!(ty, ast::Type::Named(n)
+                                if n.name == "Self" || resolutions.declared(n.id) == Some(resource_key))
+                        };
                         for (method_idx, method) in resource.methods.iter().enumerate() {
-                            let has_self = method.params.iter().any(|p| {
-                                matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
-                                    if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == resource.name))
-                                    || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == resource.name)
+                            let has_self = method.params.iter().any(|p| match &p.ty {
+                                ast::Type::Reference(r) | ast::Type::MutReference(r) => is_resource(r),
+                                ty => is_resource(ty),
                             });
                             if !has_self {
                                 resource_static_method_index
@@ -1288,8 +1281,8 @@ impl TraitEnv {
             let key = resolutions.declared(bound.id)?;
             decl_index.contains(&key).then_some(key)
         };
-        let trait_impl_modules = index_impl_modules(&impl_headers, resolutions, false);
-        let concrete_trait_impl_modules = index_impl_modules(&impl_headers, resolutions, true);
+        let trait_impl_modules = index_impl_modules(&impl_headers, defs, false);
+        let concrete_trait_impl_modules = index_impl_modules(&impl_headers, defs, true);
         let decls_by_name = index_decls_by_name(
             defs,
             [&type_decl_index, &decl_index, &effect_decl_index],

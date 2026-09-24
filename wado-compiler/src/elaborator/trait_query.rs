@@ -455,9 +455,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_block: &'i ast::ImplBlock,
     ) -> Option<(&'i ast::Type, String, DefId)> {
         let trait_type = impl_block.trait_type.as_ref()?;
-        let trait_name = self.get_type_name(trait_type);
-        let decl = self.decl_key_at(head_site(trait_type), &trait_name)?;
-        Some((trait_type, trait_name, decl))
+        let decl = self.impl_trait_decl(trait_type)?;
+        Some((trait_type, self.get_type_name(trait_type), decl))
+    }
+
+    /// The trait an `impl` header's trait position names.
+    pub(super) fn impl_trait_decl(&self, trait_type: &ast::Type) -> Option<DefId> {
+        self.decl_key_at(head_site(trait_type), &self.get_type_name(trait_type))
+            .filter(|def| self.is_trait_like(*def))
     }
 
     /// Enforce a trait's associated-type bounds (`type X: Bound`) against an
@@ -976,15 +981,8 @@ impl TypeSystem {
         }
     }
 
-    /// Explain *why* `type_id` does not implement `trait_name` by walking the
-    /// auto-derive / `on_bound` structure. Each returned entry is one step of a
-    /// reason chain, deepest cause last; an empty result means no structural
-    /// explanation is available (the type is itself a leaf — e.g. a function
-    /// type — whose non-conformance the headline message already states).
-    ///
-    /// Only the `Eq` / `Ord` (`automatic` policy) and `Serialize` /
-    /// `Deserialize` (`on_bound` policy) structural-conformance rules are
-    /// explained, since those are the ones a diagnostic can usefully unfold.
+    /// Why `type_id` does not implement a derived trait, one step per member,
+    /// deepest cause last; empty when no member explains it.
     pub(super) fn trait_unimpl_reason_chain(
         &self,
         ctx: &Scope,
@@ -1099,7 +1097,6 @@ impl TypeSystem {
     /// does (`AsStrSlice: Eq<String>`).
     fn bound_supplies(
         &self,
-        scope: &TypeLookup,
         bound: &ast::TraitBound,
         trait_: DefId,
         wanted: &[FqTypeName],
@@ -1111,7 +1108,8 @@ impl TypeSystem {
                 wanted,
             )
         };
-        let Some(named) = scope
+        let Some(named) = self
+            .resolutions
             .bound_decl(bound)
             .filter(|def| self.trait_env.declares_trait(def))
         else {
@@ -1399,7 +1397,7 @@ impl TypeSystem {
                 .is_some_and(|bounds| {
                     bounds
                         .iter()
-                        .any(|b| self.bound_supplies(scope, b, decl, wanted))
+                        .any(|b| self.bound_supplies(b, decl, wanted))
                 });
         }
 
@@ -2316,11 +2314,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resolving its spelling in this frame would miss an aliased one.
         let keyed: Vec<(ElaboratedBound, DefId)> = elaborated
             .iter()
-            .filter_map(|b| {
-                // A synthesised bound carries its referent, so it is read off
-                // the bound rather than looked up by an id the walk never saw.
-                self.trait_decl_of(&b.bound).map(|key| (b.clone(), key))
-            })
+            .filter_map(|b| self.trait_decl_of(&b.bound).map(|key| (b.clone(), key)))
             .collect();
         // Stopping at the first hit would hide the ambiguity, so every bound is
         // scanned — by predicate, leaving only the winner to clone.
@@ -3056,10 +3050,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .iter()
                             .map(|param| (param.clone(), slots.of_name(&param.name)))
                             .collect();
-                        let Some(trait_key) = header
-                            .fq_trait(&self.tysys.resolutions)
-                            .and_then(|t| t.canonical())
-                        else {
+                        let Some(trait_key) = header.trait_def() else {
                             continue;
                         };
                         let Some(trait_type) = header.trait_ty().cloned() else {
@@ -3168,10 +3159,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     })
                 });
                 if bounds_ok {
-                    let Some(trait_key) = header
-                        .fq_trait(&self.tysys.resolutions)
-                        .and_then(|t| t.canonical())
-                    else {
+                    let Some(trait_key) = header.trait_def() else {
                         continue;
                     };
                     result.push(BlanketImplInfo {

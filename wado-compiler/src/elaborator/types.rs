@@ -3504,12 +3504,9 @@ impl<'a> TypeLookup<'a> {
         assoc_name: &str,
     ) -> Option<DefId> {
         self.decls?
-            .bound_declaring_assoc_type(bounds, assoc_name, |bound| self.bound_decl(bound))
-    }
-
-    /// The declaration `bound` names.
-    pub(super) fn bound_decl(&self, bound: &ast::TraitBound) -> Option<DefId> {
-        self.resolutions.bound_decl(bound)
+            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
+                self.resolutions.bound_decl(bound)
+            })
     }
 
     /// The declaration a type reference names.

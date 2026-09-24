@@ -494,12 +494,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if let Some(bounds) = assoc_bounds
                 && let Some((found_trait, info)) = {
-                    // A projection carries its bounds as identities, so each
-                    // rebuilt bound carries its own in `resolved`.
+                    // A rebuilt bound has no walked site, so it carries its
+                    // declaration; one naming none was reported where written.
                     let bounds: Vec<ScopedBound> = bounds
                         .iter()
-                        .map(|b| {
-                            ScopedBound::new(
+                        .filter_map(|b| {
+                            Some(ScopedBound::new(
                                 ast::TraitBound {
                                     id: AstId::fresh(),
                                     name: b.base_name().to_string(),
@@ -507,10 +507,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     assoc_types: Vec::new(),
                                     span,
                                     fn_signature: None,
-                                    resolved: b.canonical(),
+                                    resolved: Some(b.canonical()?),
                                 },
                                 None,
-                            )
+                            ))
                         })
                         .collect();
                     self.find_method_in_trait_bounds(

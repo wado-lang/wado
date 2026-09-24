@@ -221,8 +221,9 @@ module cannot capture the name. Fixture:
 
 A binder declared `effect` answers as the parameter. Any other binder, a type
 parameter among them, names no effect. A name reaching no `interface` or
-resource is rejected where it is written, however many modules declare an effect
-under it, so `with Stdout` needs `Stdout` in scope like any other name.
+resource is rejected where it is written, even when another module declares an
+effect of that name. So `with Stdout` needs `Stdout` in scope like any other
+name.
 `#[benign(E)]` is held to the same rule. Fixtures:
 `error_with_unknown_effect.wado`, `error_with_type_param_effect.wado`,
 `error_benign_unknown_effect.wado`.
@@ -369,8 +370,10 @@ bound resolves like any written one.
 
 Where no such node exists, the reference carries its referent directly. A
 rebuilt bound records it in `TraitBound::resolved`, which the parser leaves
-empty, and every reader takes it ahead of the site — no name to look up, no
-vantage to get wrong.
+empty. Every reader takes it ahead of the site, so there is no name to look up
+and no vantage to get wrong. A rebuilt bound whose original reached no
+declaration is dropped, since the error was already reported where it was
+written. Fixture: `error_assoc_type_unknown_bound_method_call.wado`.
 
 ### 8. Mangled names are rendered once, never parsed
 
@@ -553,10 +556,12 @@ The Component Model boundary, permanent for the reason §9 gives:
 - `cm_decl_in_interface`, the same step taking the interface rather than the
   module: it asks the registry which module declares that interface, so a caller
   holding an interface FQ supplies no vantage of its own. A bundled `wasi:` /
-  `core:` interface is addressed by its module's path through
-  `cm_decl_in_module_named`, for a caller holding no `ModuleSource`.
-- `find_named_type_by_source` and `find_named_type_by_module_name`, which take
-  the same step and answer the `TypeId` the declaration was interned under.
+  `core:` interface records no module in the registry, so it is addressed by its
+  module path through `cm_decl_in_module_named`.
+- `find_named_type_by_source`, which answers the `TypeId` that `cm_decl_in`'s
+  declaration was interned under.
+- `find_named_type_by_module_name`, which scans the interned types for a head of
+  that name in that module.
 - `cm_decl_def`, codegen's entry to the same step, reading the `DefId` off the
   `TypeId` those two return.
 
@@ -857,6 +862,10 @@ spellings is §4's defect one level out.
 Fixtures: `pattern_qualifier_type_args_read_error.wado`,
 `pattern_qualifier_type_param_arg.wado`.
 
+## Roadmap
+
+None. Every open item is a known gap below.
+
 ## Known gap: a CM type can reach outer scope with no identity
 
 A reader that holds only the CM export spells the Wado name by `PascalCase`-ing
@@ -945,9 +954,8 @@ directly works, because both sides mint the same name. The pending fixture is
 A synthesised bound carries its referent (§7); a synthesised `ast::Type` has no
 field to carry one. The Component Model binding synthesis builds types such as
 `Fields`, `Response` and `WaitableSet` whose nodes no walk visited, so the
-frame derivation answers them. What it admits is §7's
-hazard at those nodes: the frame, not the synthesis, decides which declaration a
-spelling reaches.
+frame derivation answers them. What it admits is §7's hazard at those nodes: the
+frame, not the synthesis, decides which declaration a spelling reaches.
 
 ## Known gap: a data declaration binds no `Self` for its own bounds
 

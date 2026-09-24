@@ -530,9 +530,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         bounds
             .iter()
             .filter(|bound| bound.names_a_trait())
-            .filter_map(|bound| Some((bound, self.trait_decl_of(bound)?)))
-            .flat_map(|(bound, root)| {
-                self.supertraits_of_bound(bound)
+            .filter_map(|bound| self.trait_decl_of(bound))
+            .flat_map(|root| {
+                self.supertraits_of(root)
                     .into_iter()
                     .map(move |inherited| (inherited.bound, root, inherited.via))
             })
@@ -555,7 +555,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let Some(root) = self.trait_decl_of(bound) else {
                 continue;
             };
-            for inherited in self.supertraits_of_bound(bound) {
+            for inherited in self.supertraits_of(root) {
                 // A supertrait clause is written in the declaring trait's own
                 // space, not in the frame that wrote the bound reaching it.
                 self.merge_bound(
@@ -622,12 +622,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         out.push((entry(), decl));
     }
 
-    /// The transitive supertraits of the trait `bound` names, each carrying the
+    /// The transitive supertraits of trait `decl`, each carrying the
     /// declaration it names.
-    fn supertraits_of_bound(&self, bound: &ast::TraitBound) -> Vec<InheritedBound> {
-        let Some(decl) = self.trait_decl_of(bound) else {
-            return Vec::new();
-        };
+    fn supertraits_of(&self, decl: DefId) -> Vec<InheritedBound> {
         self.tysys
             .trait_env
             .supertrait_closure_declared(&decl)
@@ -734,9 +731,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> SelfBinding {
         SelfBinding {
             type_id: self.resolve_type(impl_type),
-            declaring_trait: trait_type
-                .and_then(|t| self.tysys.resolutions.declared(t.id()?))
-                .filter(|def| self.is_trait_like(*def)),
+            declaring_trait: trait_type.and_then(|t| self.impl_trait_decl(t)),
         }
     }
 

@@ -8,6 +8,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, is_test_function};
+use crate::resolve::Resolutions;
 use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 
@@ -16,7 +17,7 @@ use crate::ast::{
     Item, Stmt, cm_import_of,
 };
 use crate::compiler_host::Diagnostic;
-use crate::defs::DefId;
+use crate::defs::{DefId, DefKind};
 use crate::elaborator::liveness::is_user_authored;
 use crate::elaborator::orchestration::AnnotateState;
 use crate::elaborator::sem::types::{ForOfIteratorInfo, ImplFacts, TypeAnnotations};
@@ -393,26 +394,21 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
     }
 }
 
-/// A trait method, by the trait's declaring module, the trait name, and the
-/// method name.
-type TraitMethodKey = (ModuleSource, String, String);
+/// A trait method, by the trait's declaration and the method name.
+type TraitMethodKey = (DefId, String);
 
-/// A trait, by its declaring module and name.
-type TraitKey = (ModuleSource, String);
+type TraitKey = DefId;
 
 /// One trait impl, by the head of the type it targets and the trait it
 /// implements.
 type ImplKey = (FqTypeName, TraitKey);
 
 /// The key one `impl Trait for Type` is recorded under. `None` for a trait
-/// whose name carries no declaring module.
+/// reaching no declaration.
 fn impl_key(struct_name: &FqTypeName, trait_name: &FqTraitName) -> Option<ImplKey> {
     Some((
         struct_name.head_only(),
-        (
-            trait_name.module()?.clone(),
-            trait_name.base_name().to_string(),
-        ),
+        trait_name.canonical()?,
     ))
 }
 
@@ -420,20 +416,17 @@ fn impl_key(struct_name: &FqTypeName, trait_name: &FqTraitName) -> Option<ImplKe
 /// `Scope::register_generic_params` gives it.
 fn bound_traits_per_slot(
     type_params: &[ast::GenericParam],
-    sem: &Semantics,
-    trait_by_def: &IndexMap<DefId, TraitKey>,
+    resolutions: &Resolutions,
 ) -> Vec<Vec<TraitKey>> {
-    let Some(resolutions) = sem.resolutions() else {
-        return Vec::new();
-    };
+    let defs = resolutions.defs();
     type_params
         .iter()
         .filter(|p| p.is_real_type_param())
         .map(|p| {
             p.bounds
                 .iter()
-                .filter_map(|bound| resolutions.declared(bound.id))
-                .filter_map(|def| trait_by_def.get(&def).cloned())
+                .filter_map(|bound| resolutions.bound_decl(bound))
+                .filter(|def| matches!(defs.kind(*def), DefKind::Trait))
                 .collect()
         })
         .collect()
@@ -461,7 +454,7 @@ struct OwnedEffectData {
     members: MemberTables,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// `#[cm]` FQ per interface declaration.
-    interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>>,
+    interface_cm_fq: IndexMap<DefId, Option<String>>,
     effect_by_cm_fq: IndexMap<String, EffectRef>,
     /// CM interface FQs the consumer satisfies with a provider component; a
     /// reconstructed host-leaf import in this set is discharged (composition-
@@ -520,19 +513,19 @@ impl OwnedEffectData {
         // A declaration has no body, so `fn_effects` holds nothing for it.
         let mut trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>> =
             IndexMap::default();
-        let mut trait_by_def: IndexMap<DefId, TraitKey> = IndexMap::default();
         let mut open_traits: IndexSet<TraitKey> = IndexSet::default();
         let resolutions = &*state.tysys.resolutions;
+        let defs = resolutions.defs();
         for (src, module) in &sem.modules {
             for item in &module.items {
                 let Item::Trait(trait_decl) = item else {
                     continue;
                 };
-                if let Some(def) = resolutions.declared(trait_decl.id) {
-                    trait_by_def.insert(def, (src.clone(), trait_decl.name.clone()));
-                }
+                let def = defs
+                    .of_ast_id(trait_decl.id)
+                    .expect("every declaration has an identity");
                 if trait_decl.head.is_open() {
-                    open_traits.insert((src.clone(), trait_decl.name.clone()));
+                    open_traits.insert(def);
                 }
                 for method in &trait_decl.methods {
                     let effects = method
@@ -540,10 +533,7 @@ impl OwnedEffectData {
                         .iter()
                         .map(|effect| resolutions.effect_named(effect, src))
                         .collect();
-                    trait_method_effects.insert(
-                        (src.clone(), trait_decl.name.clone(), method.name.clone()),
-                        effects,
-                    );
+                    trait_method_effects.insert((def, method.name.clone()), effects);
                 }
             }
         }
@@ -557,7 +547,7 @@ impl OwnedEffectData {
                     Item::Function(func) if !func.type_params.is_empty() => {
                         fn_bound_traits.insert(
                             func.id,
-                            bound_traits_per_slot(&func.type_params, sem, &trait_by_def),
+                            bound_traits_per_slot(&func.type_params, resolutions),
                         );
                     }
                     Item::Impl(block) => {
@@ -589,8 +579,7 @@ impl OwnedEffectData {
             }
         }
 
-        let mut interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>> =
-            IndexMap::default();
+        let mut interface_cm_fq: IndexMap<DefId, Option<String>> = IndexMap::default();
         // Restricted to closure keys, so a host-leaf import resolves to an
         // effect while a type-only interface (`wasi:cli/types`) resolves to
         // nothing.
@@ -601,7 +590,11 @@ impl OwnedEffectData {
                     continue;
                 };
                 let cm_fq = cm_import_of(&decl.attrs).map(CmImport::interface_path);
-                interface_cm_fq.insert((src.clone(), decl.name.clone()), cm_fq.clone());
+                interface_cm_fq.insert(
+                    defs.of_ast_id(decl.id)
+                        .expect("every declaration has an identity"),
+                    cm_fq.clone(),
+                );
                 let key = EffectRef::Concrete {
                     name: decl.name.clone(),
                     module_source: src.clone(),
@@ -679,7 +672,7 @@ struct EffectIndex<'a> {
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// Interface declaration → its `#[cm]` FQ, for resolving a direct `E::op()`
     /// callee to its effect and FQ.
-    interface_cm_fq: &'a IndexMap<(ModuleSource, String), Option<String>>,
+    interface_cm_fq: &'a IndexMap<DefId, Option<String>>,
     /// CM interface FQ → the effect it declares, for reconstructing a
     /// component's host-leaf imports into effects.
     effect_by_cm_fq: &'a IndexMap<String, EffectRef>,
@@ -704,12 +697,11 @@ fn interface_at<'a>(
     index: &EffectIndex<'a>,
     site: Option<AstId>,
 ) -> Option<(ModuleSource, String, &'a Option<String>)> {
-    let resolutions = sem.resolutions()?;
+    let resolutions = resolutions(sem);
     let def = resolutions.declared(site?)?;
+    let cm_fq = index.interface_cm_fq.get(&def)?;
     let defs = resolutions.defs();
-    let key = (defs.module(def).clone(), defs.name(def).to_string());
-    let cm_fq = index.interface_cm_fq.get(&key)?;
-    Some((key.0, key.1, cm_fq))
+    Some((defs.module(def).clone(), defs.name(def).to_string(), cm_fq))
 }
 
 /// The effects `with E => h do` grants to its body.
@@ -749,7 +741,7 @@ fn binding_granted_effects(
         .effect
         .as_ref()
         .and_then(|ty| match ty {
-            ast::Type::Named(named) => effect_at(sem, named.id, &named.name),
+            ast::Type::Named(named) => resolutions(sem).effect_at(named.id, &named.name),
             _ => None,
         })
         .into_iter()
@@ -1044,15 +1036,15 @@ fn build_propagation_closure_sem(
     direct
 }
 
-/// The effect the name at `site` refers to.
-fn effect_at(sem: &Semantics, site: AstId, name: &str) -> Option<EffectRef> {
-    sem.resolutions()?.effect_at(site, name)
+fn resolutions(sem: &Semantics) -> &Resolutions {
+    sem.resolutions()
+        .expect("effect checks run on an elaborated program")
 }
 
 /// The effect an attribute argument written in `module` refers to. It has no
 /// reference site, so the module's scope decides.
 fn effect_named_in(name: &str, module: &ModuleSource, sem: &Semantics) -> Option<EffectRef> {
-    let resolutions = sem.resolutions()?;
+    let resolutions = resolutions(sem);
     resolutions.effect_decl(resolutions.resolve_in(module, name)?)
 }
 
@@ -1337,7 +1329,7 @@ impl EffectIndex<'_> {
             }
             let mut filled = false;
             for arg in args {
-                let Some(inner) = self.impl_effects.get(&(arg.head_only(), trait_key.clone()))
+                let Some(inner) = self.impl_effects.get(&(arg.head_only(), *trait_key))
                 else {
                     continue;
                 };
@@ -1361,13 +1353,8 @@ impl EffectIndex<'_> {
     /// The effects one trait method declares. `None` for a name no trait
     /// declares, an `interface` operation, or a `resource` method.
     fn effects_declared_by(&self, trait_name: &FqTraitName, method: &str) -> Option<&[EffectRef]> {
-        let module = trait_name.module()?;
         self.trait_method_effects
-            .get(&(
-                module.clone(),
-                trait_name.base_name().to_string(),
-                method.to_string(),
-            ))
+            .get(&(trait_name.canonical()?, method.to_string()))
             .map(Vec::as_slice)
     }
 
@@ -1488,7 +1475,7 @@ fn resolve_bound_effect_params(
             };
             let head = sem.types.fq_base_type_name(type_arg).head_only();
             for key in traits.iter().filter(|key| index.open_traits.contains(*key)) {
-                let Some(declared) = index.impl_effects.get(&(head.clone(), key.clone())) else {
+                let Some(declared) = index.impl_effects.get(&(head.clone(), *key)) else {
                     continue;
                 };
                 resolved_any = true;

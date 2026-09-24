@@ -1034,17 +1034,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             CompilerItem::Ref,
             CompilerItem::RefMut,
         ] {
-            let (sealed_name, sealed) = {
-                let tt = type_table.borrow();
-                let items = tt.compiler_items();
-                let (Some(name), Some(def)) = (
-                    items.trait_name_opt(sealed_item),
-                    items.trait_def(sealed_item),
-                ) else {
-                    continue;
-                };
-                (name.to_string(), def)
+            let Some(sealed) = type_table.borrow().compiler_items().trait_def(sealed_item) else {
+                continue;
             };
+            let sealed_name = resolutions.defs().name(sealed).to_string();
             for header in trait_env.impl_headers.values() {
                 if !is_user_local(&header.module) {
                     continue;
@@ -1213,24 +1206,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for def in all_generic_newtypes.keys() {
                 cache.insert(resolutions.defs().name(*def).to_string());
             }
+            for info in all_resource_types.values() {
+                cache.insert(info.name.clone());
+            }
             for name in PrimitiveType::all_primitive_names() {
                 cache.insert(name.to_string());
             }
             cache
         };
 
-        // Validate type names in struct fields, variant payloads, and newtype definitions.
-        // At this point all type names from all modules are known, so any unrecognized
-        // Named type is truly undefined. This catches undefined types that would silently
-        // become UNKNOWN in static pre-resolution.
-        let resource_type_names: IndexSet<String> = all_resource_types
-            .values()
-            .map(|info| info.name.clone())
-            .collect();
+        // Every module's type names are known here, so an unrecognized one is
+        // undefined rather than left to become UNKNOWN in pre-resolution.
         Self::validate_type_definitions(
             modules,
             &known_type_names,
-            &resource_type_names,
             logger,
             &stdlib_set,
         )?;
@@ -1330,7 +1319,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             cm_interface_registry,
             builtin_registry: Rc::new(builtin_registry),
             included_files,
-            modules: Rc::new(modules.keys().cloned().collect()),
             loaded_module_func_indices: Rc::new(loaded_module_func_indices),
             unavailable: Rc::new(unavailable),
             // Assembled by `build_tir_from_state` between the decl and body
@@ -1568,7 +1556,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         // Every declaration is resolved, so the solver reads them all at once.
         // Selection asks it, so it is built in every profile.
-        state.tysys.solver = Some(Rc::new(SolverBridge::build(&state.tysys)));
+        state.tysys.solver = Some(Rc::new(SolverBridge::build(&state.tysys, &state.sorted_sources)));
 
         // Imported globals: a `use`-brought global's type is the declaring
         // module's declaration fact, so it is filled here — once every decl
@@ -1942,7 +1930,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn validate_type_definitions(
         modules: &IndexMap<ModuleSource, Module>,
         known_type_names: &IndexSet<String>,
-        resource_type_names: &IndexSet<String>,
         logger: &Logger<'_, H>,
         stdlib_set: &IndexSet<ModuleSource>,
     ) -> Result<(), Bail> {
@@ -1991,7 +1978,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             Self::validate_ast_type_names(
                                 &field.ty,
                                 &module_known_names,
-                                resource_type_names,
                                 &type_params,
                                 logger,
                             )?;
@@ -2008,7 +1994,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 Self::validate_ast_type_names(
                                     payload_ty,
                                     &module_known_names,
-                                    resource_type_names,
                                     &type_params,
                                     logger,
                                 )?;
@@ -2024,7 +2009,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         Self::validate_ast_type_names(
                             &newtype_decl.ty,
                             &module_known_names,
-                            resource_type_names,
                             &type_params,
                             logger,
                         )?;
@@ -2036,7 +2020,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             Self::validate_ast_type_names(
                                 &param.ty,
                                 &module_known_names,
-                                resource_type_names,
                                 &type_params,
                                 logger,
                             )?;
@@ -2045,7 +2028,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             Self::validate_ast_type_names(
                                 return_ty,
                                 &module_known_names,
-                                resource_type_names,
                                 &type_params,
                                 logger,
                             )?;
@@ -2054,7 +2036,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             Self::validate_block_type_names(
                                 body,
                                 &module_known_names,
-                                resource_type_names,
                                 &type_params,
                                 logger,
                             )?;
@@ -2072,7 +2053,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             for arg in &g.args {
                                 if let Type::Named(n) = arg
                                     && !module_known_names.contains(&n.name)
-                                    && !resource_type_names.contains(&n.name)
                                 {
                                     type_params.push(&n.name);
                                 }
@@ -2087,7 +2067,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 Self::validate_ast_type_names(
                                     &param.ty,
                                     &module_known_names,
-                                    resource_type_names,
                                     &method_type_params,
                                     logger,
                                 )?;
@@ -2096,7 +2075,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 Self::validate_ast_type_names(
                                     return_ty,
                                     &module_known_names,
-                                    resource_type_names,
                                     &method_type_params,
                                     logger,
                                 )?;
@@ -2105,7 +2083,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 Self::validate_block_type_names(
                                     body,
                                     &module_known_names,
-                                    resource_type_names,
                                     &method_type_params,
                                     logger,
                                 )?;
@@ -2132,7 +2109,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 Self::validate_ast_type_names(
                                     &param.ty,
                                     &module_known_names,
-                                    resource_type_names,
                                     &method_type_params,
                                     logger,
                                 )?;
@@ -2141,7 +2117,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 Self::validate_ast_type_names(
                                     return_ty,
                                     &module_known_names,
-                                    resource_type_names,
                                     &method_type_params,
                                     logger,
                                 )?;
@@ -2150,7 +2125,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 Self::validate_block_type_names(
                                     body,
                                     &module_known_names,
-                                    resource_type_names,
                                     &method_type_params,
                                     logger,
                                 )?;
@@ -2161,7 +2135,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         Self::validate_ast_type_names(
                             &global_decl.ty,
                             &module_known_names,
-                            resource_type_names,
                             &[],
                             logger,
                         )?;
@@ -2170,7 +2143,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         Self::validate_block_type_names(
                             &test_decl.body,
                             &module_known_names,
-                            resource_type_names,
                             &[],
                             logger,
                         )?;
@@ -2186,7 +2158,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn validate_block_type_names(
         block: &ast::Block,
         known_type_names: &IndexSet<String>,
-        resource_type_names: &IndexSet<String>,
         type_params: &[&str],
         logger: &ModuleDiag<'_, '_, H>,
     ) -> Result<(), Bail> {
@@ -2212,7 +2183,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             Self::validate_stmt_type_names(
                 stmt,
                 known_type_names,
-                resource_type_names,
                 type_params,
                 logger,
             )?;
@@ -2277,7 +2247,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn validate_stmt_type_names(
         stmt: &ast::Stmt,
         known_type_names: &IndexSet<String>,
-        resource_type_names: &IndexSet<String>,
         type_params: &[&str],
         logger: &ModuleDiag<'_, '_, H>,
     ) -> Result<(), Bail> {
@@ -2288,7 +2257,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         Self::validate_ast_type_names_inner(
                             ty,
                             known_type_names,
-                            resource_type_names,
                             type_params,
                             logger,
                             true,
@@ -2298,7 +2266,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         Self::validate_ast_type_names(
                             ty,
                             known_type_names,
-                            resource_type_names,
                             type_params,
                             logger,
                         )?;
@@ -2308,7 +2275,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         value,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2317,7 +2283,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_block_type_names(
                         else_block,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2327,7 +2292,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &expr_stmt.expr,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2337,7 +2301,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         value,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2347,7 +2310,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &task_ret.value,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2356,14 +2318,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_condition_type_names(
                     &if_stmt.condition,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
                 Self::validate_block_type_names(
                     &if_stmt.then_block,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2371,7 +2331,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_block_type_names(
                         else_block,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2381,14 +2340,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_condition_type_names(
                     &while_stmt.condition,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
                 Self::validate_block_type_names(
                     &while_stmt.body,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2398,7 +2355,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_stmt_type_names(
                         init,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2407,7 +2363,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_condition_type_names(
                         condition,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2416,7 +2371,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         update,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2424,7 +2378,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_block_type_names(
                     &for_stmt.body,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2433,14 +2386,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &for_of.iterable,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
                 Self::validate_block_type_names(
                     &for_of.body,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2449,7 +2400,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_block_type_names(
                     &loop_stmt.body,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2458,7 +2408,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &ast::Expr::Match(match_expr.clone()),
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2467,7 +2416,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &assert_stmt.condition,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2476,7 +2424,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_block_type_names(
                     &lb.block,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2496,7 +2443,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn validate_condition_type_names(
         condition: &ast::Condition,
         known_type_names: &IndexSet<String>,
-        resource_type_names: &IndexSet<String>,
         type_params: &[&str],
         logger: &ModuleDiag<'_, '_, H>,
     ) -> Result<(), Bail> {
@@ -2505,7 +2451,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     expr,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2517,7 +2462,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             Self::validate_expr_type_names(
                                 expr,
                                 known_type_names,
-                                resource_type_names,
                                 type_params,
                                 logger,
                             )?;
@@ -2526,7 +2470,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             Self::validate_expr_type_names(
                                 expr,
                                 known_type_names,
-                                resource_type_names,
                                 type_params,
                                 logger,
                             )?;
@@ -2542,7 +2485,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn validate_expr_type_names(
         expr: &ast::Expr,
         known_type_names: &IndexSet<String>,
-        resource_type_names: &IndexSet<String>,
         type_params: &[&str],
         logger: &ModuleDiag<'_, '_, H>,
     ) -> Result<(), Bail> {
@@ -2551,14 +2493,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_ast_type_names(
                     &cast.target_type,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
                 Self::validate_expr_type_names(
                     &cast.expr,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2569,7 +2509,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         Self::validate_ast_type_names(
                             ty,
                             known_type_names,
-                            resource_type_names,
                             type_params,
                             logger,
                         )?;
@@ -2578,7 +2517,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &closure.body,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2588,7 +2526,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_turbofish_type_arg(
                         ty,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2596,7 +2533,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &call.callee,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2604,7 +2540,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         arg,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2615,7 +2550,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_turbofish_type_arg(
                         ty,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2623,7 +2557,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &mc.receiver,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2631,7 +2564,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         arg,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2646,7 +2578,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             Self::validate_turbofish_type_arg(
                                 arg,
                                 known_type_names,
-                                resource_type_names,
                                 type_params,
                                 logger,
                             )?;
@@ -2655,7 +2586,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     other => Self::validate_ast_type_names(
                         other,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?,
@@ -2664,7 +2594,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_turbofish_type_arg(
                         ty,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2673,7 +2602,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         arg,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2683,14 +2611,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &bin.left,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
                 Self::validate_expr_type_names(
                     &bin.right,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2699,7 +2625,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &un.expr,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2708,14 +2633,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &assign.target,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
                 Self::validate_expr_type_names(
                     &assign.value,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2724,14 +2647,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &ca.target,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
                 Self::validate_expr_type_names(
                     &ca.value,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2740,7 +2661,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &cc.first,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2748,7 +2668,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         &cmp.right,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2758,14 +2677,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &idx.expr,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
                 Self::validate_expr_type_names(
                     &idx.index,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2774,7 +2691,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &fa.expr,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2783,7 +2699,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_block_type_names(
                     block,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2792,14 +2707,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_condition_type_names(
                     &if_expr.condition,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
                 Self::validate_block_type_names(
                     &if_expr.then_block,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2807,7 +2720,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_block_type_names(
                         else_block,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2817,7 +2729,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &match_expr.expr,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2826,7 +2737,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         Self::validate_expr_type_names(
                             guard,
                             known_type_names,
-                            resource_type_names,
                             type_params,
                             logger,
                         )?;
@@ -2834,7 +2744,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         &arm.body,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2844,7 +2753,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &matches_expr.expr,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2852,7 +2760,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         guard,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2863,7 +2770,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_turbofish_type_arg(
                         ty,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2872,7 +2778,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         &field.value,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2883,7 +2788,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         elem,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2894,7 +2798,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         elem,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2905,7 +2808,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         expr,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2916,7 +2818,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         expr,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2926,7 +2827,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_block_type_names(
                     &lb.block,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2935,7 +2835,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &try_op.expr,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2944,7 +2843,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     inner,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2953,14 +2851,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &range.start,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
                 Self::validate_expr_type_names(
                     &range.end,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -2975,7 +2871,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_expr_type_names(
                         &binding.handler,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2984,7 +2879,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_stmt_type_names(
                         stmt,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                     )?;
@@ -2994,7 +2888,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(
                     &resume.value,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                 )?;
@@ -3010,7 +2903,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         Self::validate_turbofish_type_arg(
                             ty,
                             known_type_names,
-                            resource_type_names,
                             type_params,
                             logger,
                         )?;
@@ -3018,7 +2910,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         Self::validate_ast_type_names(
                             ty,
                             known_type_names,
-                            resource_type_names,
                             type_params,
                             logger,
                         )?;
@@ -3053,14 +2944,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn validate_ast_type_names(
         ty: &Type,
         known_type_names: &IndexSet<String>,
-        resource_type_names: &IndexSet<String>,
         type_params: &[&str],
         logger: &ModuleDiag<'_, '_, H>,
     ) -> Result<(), Bail> {
         Self::validate_ast_type_names_inner(
             ty,
             known_type_names,
-            resource_type_names,
             type_params,
             logger,
             false,
@@ -3070,7 +2959,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn validate_ast_type_names_inner(
         ty: &Type,
         known_type_names: &IndexSet<String>,
-        resource_type_names: &IndexSet<String>,
         type_params: &[&str],
         logger: &ModuleDiag<'_, '_, H>,
         allow_infer: bool,
@@ -3086,9 +2974,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if known_type_names.contains(&named.name) {
                     return Ok(());
                 }
-                if resource_type_names.contains(&named.name) {
-                    return Ok(());
-                }
                 logger.error(TypeError::UnknownType {
                     name: named.name.clone(),
                     span: named.span,
@@ -3100,7 +2985,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_ast_type_names_inner(
                         arg,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                         allow_infer,
@@ -3113,7 +2997,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_ast_type_names_inner(
                         arg,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                         allow_infer,
@@ -3125,7 +3008,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_ast_type_names_inner(
                     inner,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                     allow_infer,
@@ -3136,7 +3018,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_ast_type_names_inner(
                         elem,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                         allow_infer,
@@ -3149,7 +3030,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Self::validate_ast_type_names_inner(
                         param,
                         known_type_names,
-                        resource_type_names,
                         type_params,
                         logger,
                         allow_infer,
@@ -3158,7 +3038,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_ast_type_names_inner(
                     &ft.return_type,
                     known_type_names,
-                    resource_type_names,
                     type_params,
                     logger,
                     allow_infer,
@@ -3180,7 +3059,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn validate_turbofish_type_arg(
         ty: &Type,
         known_type_names: &IndexSet<String>,
-        resource_type_names: &IndexSet<String>,
         type_params: &[&str],
         logger: &ModuleDiag<'_, '_, H>,
     ) -> Result<(), Bail> {
@@ -3189,7 +3067,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             _ => Self::validate_ast_type_names(
                 ty,
                 known_type_names,
-                resource_type_names,
                 type_params,
                 logger,
             ),

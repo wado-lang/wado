@@ -83,9 +83,6 @@ pub(crate) struct TypeSystem {
     /// Key: `[module_source_display, raw_path]`, value: raw bytes.
     pub(crate) included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
 
-    /// Every module this compilation elaborates.
-    pub(crate) modules: Rc<Vec<ModuleSource>>,
-
     /// Per-module index from function name → position in `module.items`
     /// for O(1) lookup. Built globally during annotate; read-only
     /// afterwards.

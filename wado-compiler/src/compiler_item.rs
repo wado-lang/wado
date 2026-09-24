@@ -2029,17 +2029,6 @@ impl CompilerItems {
         }
     }
 
-    /// Non-panicking [`Self::trait_name`]: `None` when the item is not
-    /// registered. Used to classify a trait reference against optional
-    /// anchors (e.g. serde traits, absent unless the program imports serde)
-    /// without forcing every caller to import them.
-    pub fn trait_name_opt(&self, item: CompilerItem) -> Option<&str> {
-        match self.get(item)? {
-            Resolved::Trait { name, .. } => Some(name.as_str()),
-            _ => None,
-        }
-    }
-
     /// The node that declares this trait item. A compiler item is a
     /// declaration the compiler knows by construction, so a consumer asking
     /// "is this that trait?" resolves this to a `DefId` and compares that,

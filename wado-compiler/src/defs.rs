@@ -293,12 +293,8 @@ impl DefTable {
         id
     }
 
-    /// Identify each member a module's items declare, under its owner.
-    ///
-    /// A member the symbol table already collected — an effect or resource
-    /// method, registered there under its `Owner::method` name so it can be
-    /// imported — keeps that identity and is only linked to its owner here.
-    /// Nothing gets two.
+    /// Identify each member a module's items declare, under its owner. One the
+    /// symbol table collected as `Owner::op` keeps that identity as a member.
     fn declare_members(&mut self, module: &ModuleSource, ast: &Module) {
         for item in &ast.items {
             self.declare_item_members(module, item);
@@ -446,7 +442,7 @@ impl DefTable {
                 self.declare(Def {
                     ast_id: member.ast_id,
                     module: module.clone(),
-                    name: member.name,
+                    name: member.name.clone(),
                     kind: member.kind,
                     visibility: member.visibility.unwrap_or(owner_visibility),
                     span: Some(member.span),
@@ -458,6 +454,7 @@ impl DefTable {
             let def = &mut self.defs[id.0 as usize];
             def.parent = Some(owner);
             def.kind = member.kind;
+            def.name = member.name;
             self.defs[owner.0 as usize].members.push(id);
         }
     }

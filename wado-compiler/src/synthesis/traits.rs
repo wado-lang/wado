@@ -4452,13 +4452,11 @@ fn resolve_impl_module_via_env(
         _ => None,
     };
 
-    if let Some(trait_) = trait_name.canonical()
-        && let Some(m) = trait_env.impl_module_for(
-            ImplReceiver::Of(&tt.impl_receiver_key(type_id)),
-            trait_,
-            type_module.as_ref(),
-        )
-    {
+    if let Some(m) = trait_env.impl_module_for(
+        ImplReceiver::Of(&tt.impl_receiver_key(type_id)),
+        trait_name.canonical().expect(KEYED),
+        type_module.as_ref(),
+    ) {
         return m.clone();
     }
     type_module.unwrap_or_else(|| fallback.clone())
