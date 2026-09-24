@@ -386,12 +386,25 @@ pub(super) fn stmt_mentions_local(body: &Body, id: StmtId, idx: u32) -> bool {
     node_mentions_local(body, NodeRef::Stmt(id), idx)
 }
 
-/// Whether `idx` appears anywhere in what `op` reads, skeleton or promoted.
-pub(super) fn operand_mentions_local(body: &Body, op: Operand, idx: u32) -> bool {
+/// Every local `op` reads, skeleton or promoted.
+pub(super) fn operand_read_locals(body: &Body, op: Operand) -> IndexSet<u32> {
+    let mut out = IndexSet::default();
     match op {
-        Operand::Expr(e) => expr_mentions_local(body, e, idx),
-        Operand::Value(v) => body.values.value_reads_local(v, idx),
+        Operand::Value(v) => body.values.collect_opaque_locals(v, &mut out),
+        Operand::Expr(e) => body.for_each_live_node_under(NodeRef::Expr(e), |n| {
+            if let NodeRef::Expr(x) = n
+                && let ExprKind::Local { index, .. } = &body.exprs[x].kind
+            {
+                out.insert(*index);
+            }
+            body.for_each_operand(n, |o| {
+                if let Some(v) = o.as_value() {
+                    body.values.collect_opaque_locals(v, &mut out);
+                }
+            });
+        }),
     }
+    out
 }
 
 fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
@@ -734,7 +747,7 @@ struct AliasEntry {
 }
 
 /// Root of a written-through place chain (an `Assign` target's receiver).
-enum WriteRoot {
+pub(super) enum WriteRoot {
     /// Chain bottoms out at a local (derefs of ref locals resolve through
     /// [`MutRefAliases`]).
     Local(u32),
@@ -746,7 +759,7 @@ enum WriteRoot {
     Temp,
 }
 
-fn write_root(body: &Body, e: ExprId, derefed: bool) -> WriteRoot {
+pub(super) fn write_root(body: &Body, e: ExprId, derefed: bool) -> WriteRoot {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => WriteRoot::Local(*index),
         ExprKind::Unary {

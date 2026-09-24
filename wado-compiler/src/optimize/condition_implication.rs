@@ -17,11 +17,12 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use crate::optimize::arena_query::{
-    binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand, operand_local,
-    operand_mentions_local, storage_root,
+    WriteRoot, binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand, operand_local,
+    operand_read_locals, storage_root, write_root,
 };
 use crate::optimize::gate::{FunctionGate, GatedPass};
-use crate::tir::TypeTable;
+use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
+use crate::tir::{ResolvedType, TypeTable};
 use crate::{hashmap, nir_arena};
 
 /// Run condition implication at the body root on an existing engine session.
@@ -219,9 +220,10 @@ pub(super) fn capture_block_binding(engine: &Engine, op: Operand) -> Option<(u32
     };
     let index = *index;
     let value = sole_unconditional_write(engine, block, index, None)?;
-    let clobbered = modifies_root_matching(engine, NodeRef::Block(block), |root| {
-        operand_mentions_local(engine.body, value, root)
-    });
+    let reads: Vec<u32> = operand_read_locals(engine.body, value)
+        .into_iter()
+        .collect();
+    let clobbered = modifies_any_root(engine, NodeRef::Block(block), &reads);
     (!clobbered).then_some((index, value))
 }
 
@@ -790,40 +792,147 @@ pub(super) fn stmt_modifies(engine: &Engine, s: StmtId, var: u32, bound: BoundKe
 /// [`stmt_modifies`] over an arbitrary node subtree (e.g. the right operand of a
 /// short-circuit `||`).
 pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: BoundKey) -> bool {
-    let roots = [Some(var), bound_root(bound)];
-    modifies_root_matching(engine, node, |root| roots.contains(&Some(root)))
+    let roots: Vec<u32> = [Some(var), bound_root(bound)]
+        .into_iter()
+        .flatten()
+        .collect();
+    modifies_any_root(engine, node, &roots)
 }
 
-/// The local root the expression node itself may modify: an assignment's place,
-/// a `&mut` escape, or a method receiver (which may take `&mut self`).
-fn modified_root(body: &nir_arena::Body, e: ExprId) -> Option<u32> {
-    let place = match &body.exprs[e].kind {
-        ExprKind::Assign { target, .. } => *target,
-        ExprKind::Unary {
-            op: NirUnaryOp::MutRef,
-            expr: inner,
-        } => inner.as_expr()?,
-        ExprKind::Call {
-            args,
-            has_receiver: true,
-            ..
-        } => args.first()?.expr.as_expr()?,
-        _ => return None,
+/// One write an expression node may perform, in the value graph's alias model
+/// (the engine's alias sets), so the two cannot disagree over what a store
+/// reaches.
+#[derive(Clone, Copy)]
+enum Write {
+    /// The slot or storage of this local.
+    Root(u32),
+    /// Storage another handle may reach: every aliased local's.
+    Aliased,
+    /// What a call may do unseen: write every local escaped by `&mut`.
+    Call,
+}
+
+/// Every write the expression node `e` itself may perform. A method receiver
+/// counts whatever the callee declares, since the boxing rewrite can erase the
+/// `&mut self` a type test would read.
+fn for_each_write(engine: &Engine, e: ExprId, sink: &mut impl FnMut(Write)) {
+    let body = &*engine.body;
+    let no_signatures = hashmap::IndexMap::default();
+    let oracle = MutationOracle::new(&no_signatures);
+    expr_witnesses(body, e, &oracle, &mut |w| match w {
+        Witness::Rebind(l) => sink(Write::Root(l)),
+        Witness::MutBorrow(place) => {
+            if let Some(root) = storage_root(body, place) {
+                sink(Write::Root(root));
+            }
+        }
+        Witness::Write(inner) => {
+            if let Some(place) = inner.as_expr() {
+                write_through(engine, place, sink);
+            }
+        }
+        Witness::CalleeArg {
+            expr,
+            verdict,
+            is_mut,
+        } => {
+            if verdict.unwrap_or(is_mut) {
+                write_through(engine, expr, sink);
+            }
+        }
+        Witness::Receiver { expr, .. } | Witness::IndirectArg(expr) => {
+            write_through(engine, expr, sink);
+        }
+    });
+    match &body.exprs[e].kind {
+        ExprKind::Call { func_id, .. } => {
+            if !engine.is_panic_callee(*func_id) && !engine.is_pure_builtin_callee(*func_id) {
+                sink(Write::Call);
+            }
+        }
+        ExprKind::IndirectCall { .. } => sink(Write::Call),
+        _ => {}
+    }
+}
+
+/// A store into `place`: its root's storage, and every aliased local's when the
+/// root is aliased or the chain crosses a reference to storage it does not own.
+fn write_through(engine: &Engine, place: ExprId, sink: &mut impl FnMut(Write)) {
+    match write_root(engine.body, place, false) {
+        WriteRoot::Local(root) => {
+            sink(Write::Root(root));
+            if engine.aliased().contains(&root) || place_crosses_reference(engine, place) {
+                sink(Write::Aliased);
+            }
+        }
+        WriteRoot::Aliased => sink(Write::Aliased),
+        WriteRoot::Temp => {}
+    }
+}
+
+/// Whether some step of the place chain at `e`, its root included, is a
+/// reference. Without a type table every step might be.
+fn place_crosses_reference(engine: &Engine, e: ExprId) -> bool {
+    let Some(types) = engine.value_graph_type_table() else {
+        return true;
     };
-    storage_root(body, place)
+    let mut cur = e;
+    loop {
+        if matches!(
+            types.get(engine.body.exprs[cur].type_id),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) {
+            return true;
+        }
+        let next = match &engine.body.exprs[cur].kind {
+            ExprKind::Unary { expr: inner, .. }
+            | ExprKind::Cast { expr: inner, .. }
+            | ExprKind::FieldAccess { expr: inner, .. }
+            | ExprKind::VariantPayload { expr: inner, .. }
+            | ExprKind::Index { expr: inner, .. } => inner.as_expr(),
+            _ => None,
+        };
+        match next {
+            Some(inner) => cur = inner,
+            None => return false,
+        }
+    }
 }
 
-/// Whether anything under `node` modifies a root `wanted` accepts.
-fn modifies_root_matching(
-    engine: &Engine,
-    node: NodeRef,
-    mut wanted: impl FnMut(u32) -> bool,
-) -> bool {
+/// Whether `w` may change what `root` holds.
+fn write_hits(engine: &Engine, w: Write, root: u32) -> bool {
+    match w {
+        Write::Root(r) => r == root,
+        Write::Aliased => reachable_elsewhere(engine, root),
+        Write::Call => engine.mut_escaped().contains(&root),
+    }
+}
+
+/// Whether another handle may reach what `root` holds: an aliased local, or a
+/// reference, whose pointee the frame does not own.
+fn reachable_elsewhere(engine: &Engine, root: u32) -> bool {
+    engine.aliased().contains(&root)
+        || engine.locals().get(root as usize).is_none_or(|l| {
+            engine.value_graph_type_table().is_none_or(|types| {
+                matches!(
+                    types.get(l.type_id),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                )
+            })
+        })
+}
+
+/// Whether anything under `node` may change what one of `roots` holds.
+fn modifies_any_root(engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
     engine
         .body
         .find_in_live_node_under(node, |n| {
             let NodeRef::Expr(e) = n else { return None };
-            wanted(modified_root(engine.body, e)?).then_some(())
+            let mut hit = false;
+            for_each_write(engine, e, &mut |w| {
+                hit |= roots.iter().any(|&r| write_hits(engine, w, r));
+            });
+            hit.then_some(())
         })
         .is_some()
 }

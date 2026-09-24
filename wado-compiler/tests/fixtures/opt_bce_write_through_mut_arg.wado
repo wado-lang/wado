@@ -1,0 +1,30 @@
+// A callee handed a reborrow of `arr` shrinks `arr` itself, so the second
+// `arr[i]` must check again and panic.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn shrink(l: &mut List<i32>) {
+    l.pop();
+    l.pop();
+}
+
+#[inline(never)]
+fn h(arr: &mut List<i32>, i: i32) with Stdout {
+    let r = &mut *arr;
+    let x = arr[i];
+    shrink(r);
+    let y = arr[i];
+    println(`${x} ${y}`);
+}
+
+export fn run() with Stdout {
+    let mut arr: List<i32> = List::with_capacity(16);
+    arr.push(1);
+    arr.push(2);
+    arr.push(3);
+    h(&mut arr, builtin::black_box(2));
+}
+
+__DATA__
+{"stderr_contains": ["index out of bounds"], "trapped": true}

@@ -18,6 +18,7 @@ use crate::nir_value_graph::ValueKind;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
+use super::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use super::arena_query::{block_contains_loop, has_break_to};
 use super::condition_implication::{
     Binds, BoundKey, Conjunct, InductionStep, build_copy_bindings, capture_block_binding,
@@ -101,6 +102,8 @@ pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCach
         Vec::new()
     };
     let type_table = project.type_table.borrow();
+    let first_param_types = first_param_types(project);
+    let call_immutability = CallImmutability::new(project, &type_table);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -112,9 +115,25 @@ pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCach
             continue;
         }
         let stores_aliased = func.stores_aliased_locals.clone();
-        let NirFunction { body, locals, .. } = &mut *func;
+        let NirFunction {
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            ..
+        } = &mut *func;
         let body = body.as_mut().expect("checked above");
+        let (aliased, untrackable, mut_escaped) = builder_alias_sets(
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            &type_table,
+            &first_param_types,
+            &call_immutability,
+        );
         let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
