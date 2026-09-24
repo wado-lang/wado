@@ -254,6 +254,23 @@ test "decode: non-preferred integer encodings widen correctly" {
     assert from_bytes::<f64, ByteList>(hex("20")).unwrap() == -1.0;
 }
 
+test "decode: a negative integer item rounds once into a float" {
+    // -(2^25 + 3) and -(2^54 + 3): adding the -1 after the cast rounds twice.
+    assert from_bytes::<f32, ByteList>(hex("3a02000002")) matches { Ok(v) && v == -33554436.0 };
+    assert from_bytes::<f64, ByteList>(hex("3b0040000000000002")) matches { Ok(v) && v == -18014398509481988.0 };
+    assert from_bytes::<f64, ByteList>(hex("3bffffffffffffffff")) matches { Ok(v) && v == -18446744073709551616.0 };
+}
+
+test "decode: a half rounds its item once" {
+    // Each lands just above a half's midpoint, which f32 holds exactly.
+    assert from_bytes::<f16, ByteList>(hex("fb3ff0020000000001")) matches { Ok(v) && v.to_bits() == 0x3c01 };
+    assert from_bytes::<bf16, ByteList>(hex("fb3ff0100000000001")) matches { Ok(v) && v.to_bits() == 0x3f81 };
+    assert from_bytes::<bf16, ByteList>(hex("1b1010000000000001")) matches { Ok(v) && v.to_bits() == 0x5d81 };
+    assert from_bytes::<bf16, ByteList>(hex("3b1010000000000000")) matches { Ok(v) && v.to_bits() == 0xdd81 };
+    assert from_bytes::<f16, ByteList>(hex("00")) matches { Ok(v) && v.to_bits() == 0 };
+    assert from_bytes::<f16, ByteList>(hex("f93c01")) matches { Ok(v) && v.to_bits() == 0x3c01 };
+}
+
 test "round-trip: 128-bit integers and bignums" {
     let a: u128 = 18446744073709551616;
     let b: i128 = -18446744073709551617;

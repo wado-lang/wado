@@ -32,6 +32,8 @@ use {
 } from "core:serde";
 
 use {
+    BFLOAT16,
+    BINARY16,
     BINARY32,
     BINARY64,
     BinaryFormat,
@@ -2232,6 +2234,14 @@ impl Deserializer for JsonDeserializer {
 
     fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
         return self.parse_f64_direct();
+    }
+
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        return Result::Ok(f16::from_bits(self.parse_float_bits(&BINARY16)? as u16));
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        return Result::Ok(bf16::from_bits(self.parse_float_bits(&BFLOAT16)? as u16));
     }
 
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {

@@ -348,6 +348,14 @@ test "deserialize f32 rounds the decimal once" {
     assert r matches { Ok(v) && v.to_bits() == 0x3f800001 };
 }
 
+test "deserialize f16 and bf16 round the decimal once" {
+    // Just above a midpoint that f32 holds exactly: through f32 it ties to even.
+    let h: Result<f16, DeserializeError> = from_string("1.00048828125000000000000001");
+    assert h matches { Ok(v) && v.to_bits() == 0x3c01 };
+    let b: Result<bf16, DeserializeError> = from_string("1.00390625000000000000000001");
+    assert b matches { Ok(v) && v.to_bits() == 0x3f81 };
+}
+
 test "deserialize f64 cancels a large exponent against the digits' scale" {
     let mut run = String::with_capacity(4000);
     for let mut i = 0; i < 4000; i += 1 {

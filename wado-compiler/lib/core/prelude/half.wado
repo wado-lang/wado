@@ -11,6 +11,8 @@ use {
     From,
     FromStr,
     Inspect,
+    LenientFromStr,
+    LenientParseError,
     OperatorOrd,
     Ord,
     Ordering,
@@ -18,7 +20,7 @@ use {
 } from "core:prelude/traits.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { BFLOAT16, BINARY16 } from "core:prelude/fpfmt.wado";
-use { ParseFloatError, parse_float_bits } from "core:prelude/intparse.wado";
+use { ParseFloatError, lenient_float_preprocess, parse_float_bits } from "core:prelude/intparse.wado";
 use { AsStrSlice } from "core:prelude/string.wado";
 use { Result } from "core:prelude/types.wado";
 
@@ -77,6 +79,11 @@ impl f16 {
         return f16::from_bits(sign | rounded);
     }
 
+    /// Rounds `v` once to the nearest f16, ties to even, saturating to an infinity.
+    pub fn from_f64(v: f64) -> f16 {
+        return f16::from_f32(round_to_odd_f32(v));
+    }
+
     /// True for a NaN, quiet or signaling.
     pub fn is_nan(&self) -> bool {
         let bits = self.to_bits();
@@ -96,6 +103,18 @@ fn round_to_even(kept: u16, dropped: u32, shift: u32) -> u16 {
         return kept + 1;
     }
     return kept;
+}
+
+/// `v` rounded to the f32 neighbour with an odd last bit where it is inexact.
+/// f32 keeps at least two bits more than a half, so rounding that again is exact.
+fn round_to_odd_f32(v: f64) -> f32 {
+    let near = v as f32;
+    let bits = near.to_bits();
+    if near as f64 == v || v.is_nan() || bits & 1 == 1 {
+        return near;
+    }
+    let beyond = f64::abs(near as f64) > f64::abs(v);
+    return f32::from_bits(if beyond { bits - 1 } else { bits + 1 });
 }
 
 impl bf16 {
@@ -120,6 +139,11 @@ impl bf16 {
         }
         let kept = (bits >> 16) as u16;
         return bf16::from_bits(round_to_even(kept, bits, 16));
+    }
+
+    /// Rounds `v` once to the nearest bf16, ties to even.
+    pub fn from_f64(v: f64) -> bf16 {
+        return bf16::from_f32(round_to_odd_f32(v));
     }
 
     /// True for a NaN, quiet or signaling.
@@ -191,6 +215,22 @@ impl FromStr for bf16 {
     }
 }
 
+impl LenientFromStr for f16 {
+    type Err = LenientParseError;
+
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f16, LenientParseError> {
+        return Result::Ok(f16::from_str(lenient_float_preprocess(s))?);
+    }
+}
+
+impl LenientFromStr for bf16 {
+    type Err = LenientParseError;
+
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<bf16, LenientParseError> {
+        return Result::Ok(bf16::from_str(lenient_float_preprocess(s))?);
+    }
+}
+
 impl TryFrom<f32> for f16 {
     type Err = ConvertError;
 
@@ -207,7 +247,7 @@ impl TryFrom<f64> for f16 {
     type Err = ConvertError;
 
     pub fn try_from(value: f64) -> Result<f16, ConvertError> {
-        let half = f16::from_f32(value as f32);
+        let half = f16::from_f64(value);
         if f64::from(half) == value || half.is_nan() && value.is_nan() {
             return Result::Ok(half);
         }
@@ -231,7 +271,7 @@ impl TryFrom<f64> for bf16 {
     type Err = ConvertError;
 
     pub fn try_from(value: f64) -> Result<bf16, ConvertError> {
-        let half = bf16::from_f32(value as f32);
+        let half = bf16::from_f64(value);
         if f64::from(half) == value || half.is_nan() && value.is_nan() {
             return Result::Ok(half);
         }

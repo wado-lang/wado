@@ -133,6 +133,7 @@ impl f16 {
     pub fn to_bits(&self) -> u16;
     pub fn from_bits(bits: u16) -> f16;
     pub fn from_f32(v: f32) -> f16;
+    pub fn from_f64(v: f64) -> f16;
 }
 
 impl From<f16> for f32 { }
@@ -151,9 +152,14 @@ the `as` confusion in a second spelling. Bits go through `to_bits` and
 
 `From` widens, and widening either type into either float is exact. `TryFrom`
 narrows, and answers `Ok` only where the value survives the round trip, which
-is the question a canonical encoder's float ladder asks. `from_f32` narrows
-unconditionally, rounding to nearest even and saturating to an infinity. It is
-a named method rather than a cast, so a lossy step is never silent.
+is the question a canonical encoder's float ladder asks. `from_f32` and
+`from_f64` narrow unconditionally, rounding to nearest even and saturating to an
+infinity. They are named methods rather than casts, so a lossy step is never
+silent.
+
+`from_f64` rounds once. Narrowing to `f32` first and then to the half would
+round twice, and the two disagree where the `f32` lands exactly on a half's
+midpoint that the `f64` was not on.
 
 ### The bit accessors are unsigned across the family
 
@@ -180,10 +186,13 @@ it.
 works unchanged. `${x:?}` prints in exponent notation, which is what a weight's
 magnitude reads best in. A tensor that cannot be printed cannot be debugged.
 
-### Serialization goes through `f32`
+### Serialization writes an `f32` and reads a half
 
-`Serialize` widens to `f32`; `Deserialize` reads an `f32` and narrows with
-`from_f32`. The `Serializer` and `Deserializer` traits gain no methods.
+`Serialize` widens to `f32`, which is exact, so the `Serializer` trait gains no
+methods. The `Deserializer` trait gains `deserialize_f16` and
+`deserialize_bf16`. Each format rounds what it read once, straight into the
+half. JSON and the text formats round the decimal, and CBOR rounds its float or
+integer item. Reading an `f32` and narrowing it would round twice.
 
 Reading rounds rather than using `TryFrom`. A serialized number is decimal text
 or a wider binary float, and almost none of those land exactly on a half
@@ -216,6 +225,7 @@ an infinity, as an integer literal past its type's range is.
 as a literal does, so parsing agrees with the compiler. `f32::from_str` follows
 the same rule, and every length of mantissa is read exactly. Text past the
 largest finite value parses to an infinity, as it does for `f32` and `f64`.
+`from_str_lenient` takes the same text with `LenientFromStr`'s spellings.
 
 ### What is deliberately absent
 
