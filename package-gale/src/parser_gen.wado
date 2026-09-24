@@ -294,6 +294,7 @@ pub fn gen_parser(
 
 /// `CALL_FOLLOW[site]` indexes the bitset of what may follow that rule call in
 /// its caller, `CALL_FOLLOW_SETS` holding each distinct set once.
+/// `CALL_FOLLOW_ENDS[site]` says whether the caller may end there instead.
 fn gen_call_follow_tables(w: &mut CodeWriter, ctx: &GenContext) {
     let mut set_ids = TreeMap::<String, i32>::new();
     let mut sets: List<String> = [];
@@ -311,6 +312,11 @@ fn gen_call_follow_tables(w: &mut CodeWriter, ctx: &GenContext) {
     }
     w.line(`global CALL_FOLLOW_SETS: List<List<i32>> = [${join_kinds(&sets)}];`);
     w.line(`global CALL_FOLLOW: List<i32> = [${join_kinds(&index)}];`);
+    let mut ends: List<String> = [];
+    for let e of &ctx.recovery_sets().call_follow_ends {
+        ends.push(`${*e}`);
+    }
+    w.line(`global CALL_FOLLOW_ENDS: List<bool> = [${join_kinds(&ends)}];`);
     w.blank();
 }
 
@@ -3983,7 +3989,7 @@ fn gen_alt_elements(
             // input the leaf matches and `sync` is never read).
             let sync = ctx.first_of_elements_from(elements, i + 1);
             let rest_nullable = ctx.tail_is_nullable_deep(elements, i + 1);
-            gen_op_leaf(w, op, ctx, &mut name_counts, &sync, proven, rest_nullable);
+            gen_op_leaf(w, op, ctx, &mut name_counts, &sync, proven, rest_nullable, rest_nullable);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
@@ -4239,14 +4245,16 @@ fn gen_op_leaf(
     sync: &List<String> = &EMPTY_SYNC,
     proven: &List<String> = &EMPTY_SYNC,
     rest_nullable: bool = true,
+    may_end_rule: bool = false,
 ) {
     if leaf_is_proven(op, proven) {
         gen_op_leaf_taken(w, op, ctx, name_counts);
         return;
     }
+    assert !may_end_rule || rest_nullable, "a leaf the rule may end after has a nullable rest";
     // Where the rest of the sequence needs a token EOF is not, the input cannot
     // end after this one, so `expect` does not complete it there.
-    let ends = if rest_nullable || sync.is_empty() { "" } else { ", false" };
+    let ends = if may_end_rule { ", true, true" } else if rest_nullable || sync.is_empty() { "" } else { ", false" };
     // The Parser's `expect` / `match_*` append the matched token to the builder
     // and return the token index. `sync` is the rule's FIRST-of-rest at this
     // position — the set `expect` inserts a missing terminal against, passed by

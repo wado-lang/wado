@@ -73,8 +73,10 @@ Recovery replaces `expect(k)` with `expect_or_recover(k, sync)`:
 1. **match** — consume.
 2. **delete** — if `peek(1) == k`, the current token is spurious: `skip` it, then
    consume `k` (`ExtraToken`).
-3. **insert** — if the current token continues the rule (in FOLLOW), synthesise a
-   zero-width `missing` `k`, do not advance (`MissingToken`).
+3. **insert** — if the current token continues the rule, synthesise a
+   zero-width `missing` `k`, do not advance (`MissingToken`). Where the rule may
+   end after `k`, a token the rules under way continue with also counts, walked
+   outward through the call sites and ending at EOF past the entry rule.
 4. **sync** — otherwise skip tokens into a `K_ERROR` region until a token in
    `FOLLOW(rule) ∪ FIRST(rest) ∪ anchors`; at EOF, fill remaining required
    terminals with `missing` (`UnterminatedConstruct`) where the input may end

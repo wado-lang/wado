@@ -18,6 +18,8 @@ use { bits_set, bits_test, bits_union_into } from "./token_kinds.wado";
 pub struct RecoverySets {
     /// Indexed by `atn_call_site`.
     pub call_follow: List<List<i32>>,
+    /// Indexed by `atn_call_site`: whether the caller may end after the call.
+    pub call_follow_ends: List<bool>,
     /// Indexed by `atn_decision`: before the first entry into the subrule.
     pub decision_entry: List<Option<List<i32>>>,
     /// Indexed by `atn_decision`: after an iteration of a `*` / `+`.
@@ -27,7 +29,7 @@ pub struct RecoverySets {
 }
 
 pub fn empty_recovery_sets() -> RecoverySets {
-    return RecoverySets { call_follow: [], decision_entry: [], decision_back: [], rule_entry: [] };
+    return RecoverySets { call_follow: [], call_follow_ends: [], decision_entry: [], decision_back: [], rule_entry: [] };
 }
 
 struct LocalNext {
@@ -137,10 +139,16 @@ pub fn recovery_sets(atn: &Atn, eof: i32) -> RecoverySets {
     w.settle_rule_first(atn);
 
     let mut call_follow: List<List<i32>> = [];
+    let mut call_follow_ends: List<bool> = [];
     for let ret of &atn.call_site_returns {
-        call_follow.push(
-            if *ret < 0 { [] as List<i32> } else { bits_to_kinds(&w.local_next(atn, *ret).bits, atn.num_tokens) },
-        );
+        if *ret < 0 {
+            call_follow.push([]);
+            call_follow_ends.push(false);
+            continue;
+        }
+        let next = w.local_next(atn, *ret);
+        call_follow.push(bits_to_kinds(&next.bits, atn.num_tokens));
+        call_follow_ends.push(next.reaches_end);
     }
 
     let mut decision_entry: List<Option<List<i32>>> = [];
@@ -166,7 +174,7 @@ pub fn recovery_sets(atn: &Atn, eof: i32) -> RecoverySets {
         let d = rule_body_decision(atn, r);
         rule_entry.push(if d < 0 { null } else { w.expected(atn, atn.decision_state[d]) });
     }
-    return RecoverySets { call_follow, decision_entry, decision_back, rule_entry };
+    return RecoverySets { call_follow, call_follow_ends, decision_entry, decision_back, rule_entry };
 }
 
 /// The state a `+` loop-back re-enters its body at: its one edge not to the

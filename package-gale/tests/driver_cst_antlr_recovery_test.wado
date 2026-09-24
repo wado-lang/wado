@@ -65,10 +65,7 @@ test "a left-recursive rule syncs on its primary alternatives" {
     assert_tree(&rec::parse_expr("( z z ) + 1"), "(expr (e (e ( (e z z) )) + (e 1)))");
 }
 
-// ANTLR4 inserts a missing terminal wherever the token after it can follow,
-// the rules under way included; Gale inserts only against its own sequence.
-#[TODO]
 test "a terminal missing at the end of a rule is inserted where EOF follows" {
-    assert_tree(&rec::parse_loop("x y z"), "(loop x y z <missing TK_LIT_BANG>)");
-    assert_tree(&rec::parse_loop("x y"), "(loop x y <missing TK_LIT_BANG>)");
+    assert_tree(&rec::parse_loop("x y z"), "(loop x y z <missing '!'>)");
+    assert_tree(&rec::parse_loop("x y"), "(loop x y <missing '!'>)");
 }

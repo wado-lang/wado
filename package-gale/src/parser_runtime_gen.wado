@@ -306,6 +306,21 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     w.end();
     w.blank();
 
+    let mut fu = FnSpec::new("follows_rules_under_way");
+    fu.set_receiver("&self");
+    fu.add_param("k", "i32");
+    fu.set_return_type("bool");
+    fu.emit_begin(w);
+    w.begin("for let mut i = self.sites.len() - 1; i >= 0; i -= 1");
+    w.line("let s = self.sites[i];");
+    w.line("if s < 0 { return i == 0 && k == TK_EOF; }");
+    w.line("if kind_set_has(&CALL_FOLLOW_SETS[CALL_FOLLOW[s]], k) { return true; }");
+    w.line("if !CALL_FOLLOW_ENDS[s] { return false; }");
+    w.end();
+    w.line("return k == TK_EOF;");
+    w.end();
+    w.blank();
+
     let mut su = FnSpec::new("skip_until");
     su.set_receiver("&mut self");
     su.add_param("set", "&List<i32>");
@@ -948,6 +963,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     f7.add_param("kind", "i32");
     f7.add_param("sync", "&List<i32>");
     f7.add_param_spec(ParamSpec { name: "rest_nullable", type_str: "bool", default_value: Option::Some("true") });
+    f7.add_param_spec(ParamSpec { name: "may_end_rule", type_str: "bool", default_value: Option::Some("false") });
     f7.set_return_type("i32");
     // Fragment recovery descends into rule entries, so `expect` reaches the
     // parse fns and must carry the base effect they declare.
@@ -985,9 +1001,9 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line("self.skip_one();");
     emit_consume_kind_return(w);
     w.end();
-    // single-token insertion: the current token continues the rule, so the
-    // expected one is missing.
-    w.begin("if kind_set_has(sync, self.kinds[self.pos])");
+    // single-token insertion: the current token continues the rule, or the
+    // rules under way once this one ends, so the expected one is missing.
+    w.begin("if kind_set_has(sync, self.kinds[self.pos]) || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos])");
     w.line("self.report_missing(kind);");
     w.line("let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);");
     w.line("self.b.missing(_syn);");
