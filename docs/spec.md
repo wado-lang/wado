@@ -348,12 +348,6 @@ fn wrap<T>(value: T) -> i32 {
 
 So do local newtypes: `type N<T> = List<T>;`.
 
-A function body may also declare `enum`, `variant` and `flags` items, and
-`impl`/`trait` blocks that give a local type methods.
-
-Not yet implemented. See
-[WEP: Local Item Definitions](./wep-2026-07-09-local-item-definitions.md).
-
 ### Global Variables
 
 Global variables are module-level state. Unlike local variables (`let`), they
@@ -2614,24 +2608,6 @@ For complete type isolation where you want to hide base type methods, use a stru
 struct Miles { value: i32 }
 ```
 
-### Literal Types
-
-```wado
-// String literal types
-type Direction = "north" | "south" | "east" | "west";
-
-// Numeric literal types
-type Digit = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
-
-// Object literal types
-type Status = {
-    status: "loading" | "success" | "error",
-    message: String,
-};
-```
-
-Not yet implemented.
-
 ### Structs
 
 Wado uses `struct` for structured data types. A struct crosses a component boundary as a Component Model `record`.
@@ -2650,17 +2626,6 @@ struct Node {
     next: Option<Node>,
 }
 ```
-
-An inline struct type names a struct shape without a separate declaration:
-
-```wado
-type UserData = struct {
-    name: String,
-    age: i32,
-};
-```
-
-Not yet implemented.
 
 #### Field Visibility
 
@@ -3161,11 +3126,6 @@ impl<T: Eq> Eq for Pair<T> {
 }
 ```
 
-#### Not Yet Implemented
-
-- Trait objects (`dyn Trait`). See [WEP: Struct and Trait System](./wep-2026-01-13-struct-and-trait.md#8-trait-objects-dynamic-dispatch).
-- A namespaced trait in bound position (`T: conv::Convert`). An impl head takes one (`impl conv::Convert<String> for S`).
-
 ### Coherence and Orphan Rules
 
 Wado enforces coherence: a `(Trait, Type)` pair is implemented once. A second impl of one pair is rejected where it is written, and the orphan rules below keep two packages from each writing one.
@@ -3289,17 +3249,6 @@ two impls of different traits:
 impl<..T> Conv<i32> for [..T] { … }    // OK
 impl<..T> Conv<String> for [..T] { … } // OK — a different trait
 ```
-
-A variadic impl target may also carry a pack alongside other elements, or under
-a reference:
-
-```wado
-impl<..T> Tag for [i32, ..T] { … }
-impl<..T> Tag for &[..T] { … }
-```
-
-Not yet implemented: only the bare `[..T]` is accepted today. See
-[WEP: Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md#5-coherence-rules).
 
 #### One Trait at Two Argument Lists
 
@@ -4310,7 +4259,6 @@ file-private name is a visibility error, like any other import. See [Re-export S
 | Core library  | `"core:<module>"`             | `"core:cli"`, `"core:json"`          |
 | CM coordinate | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
 | Library alias | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
-| Remote (HTTP) | `"https://..."`               | `"https://example.com/lib.wado"`     |
 | Local file    | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
 
 A specifier names a package only — no interface segment; interfaces and members are selected in the `use { ... }` list. `core:`/`wasi:`/`web:` are bundled coordinates, not a separate scheme. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
@@ -4329,11 +4277,9 @@ Namespace Resolution (a namespace is reserved iff the compiler bundles it):
 
 3. Library aliases `lib:<nick>`: resolved via `wado.toml` or an inline `with`. An alias renames a dependency, shortens its name, tells two major versions apart, or names a dependency with no public coordinate.
 
-4. Remote modules (`http://` or `https://`): fetched by the host. Not yet implemented. See [WEP: Module Loader Design](./wep-2026-01-24-module-loader.md).
+4. Local modules (`./` or `../`): Resolved relative to importing module.
 
-5. Local modules (`./` or `../`): Resolved relative to importing module.
-
-6. Invalid paths: Paths not matching any pattern are rejected.
+5. Invalid paths: Paths not matching any pattern are rejected.
    - Error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`
 
 Bare names (`"router"`) are rejected. The one exception is a bare key in `[dependencies]`, which is deprecated and draws a warning. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md) for resolution and version rules.
@@ -4372,17 +4318,14 @@ use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
 use {println, eprintln} from "core:cli";
 use {to_string, from_string} from "core:json";
 
-// 3. Remote modules (https:), not yet implemented
-use {ApiClient} from "https://example.com/api.wado";
-
-// 4. Local files (relative path, extension required)
+// 3. Local files (relative path, extension required)
 use {Helper} from "./utils.wado";
 use {Config} from "../config.wado";
 
-// 5. CM coordinate (declared in wado.toml, or given an inline `with` source)
+// 4. CM coordinate (declared in wado.toml, or given an inline `with` source)
 use {Regexp} from "docs:regex";
 
-// 6. Library alias (rename / private / coordinate-less dependency)
+// 5. Library alias (rename / private / coordinate-less dependency)
 use {Router} from "lib:router";
 ```
 
@@ -4422,15 +4365,7 @@ use {Parse}  from "lib:rx"     with { registry: "oci://ghcr.io/acme", package: "
 
 // Type attribute (REQUIRED for non-.wado imports)
 use {sin, cos} from "./libm.wasm" with { type: "wasm" };
-
-// WIT specification for Wasm imports (optional)
-use {foo} from "./external.wasm" with {
-    type: "wasm",
-    wit: "./external.wit",
-};
 ```
-
-The `wit` attribute is not yet implemented: it is accepted and has no effect.
 
 An inline `with` source and a `wado.toml` entry for the same specifier are mutually exclusive. Version ranges (`^`/`~`/`=`) are allowed only in `wado.toml`, where a lock file resolves them; the specifier `@ver` and a single-file `with` take an exact version — a range there is an error.
 
@@ -4948,15 +4883,6 @@ again. A handler for an async operation resumes with the `T` itself, and the
 caller's `.wait()` returns it at once. See
 [WEP: Generic `AsyncCall<T>`](./wep-2026-04-22-subtask-generic.md) and
 [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md).
-
-A structured `join` runs closures concurrently and returns their results as a
-tuple:
-
-```wado
-let [users, posts] = join(|| fetch_users(), || fetch_posts());
-```
-
-Not yet implemented.
 
 ### Async Exports
 

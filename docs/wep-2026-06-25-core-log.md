@@ -240,7 +240,7 @@ call site — there is no `#module` literal to derive one from.
 The timestamp is owned by the sink, not `Event`: container and collector stamps
 record ingestion time, drift under buffering, and not every target has a
 collector. A sink that stamps is a sink over `WallClock`, which is why the choice
-is a type parameter rather than a field — see [Sinks](#sinks).
+is a type parameter rather than a field — see [Output formats](#output-formats).
 
 The default is `NoClock`, so a program that installs nothing logs in every world,
 `core:kiln/generator` included. That is the conservative end of the trade rather
