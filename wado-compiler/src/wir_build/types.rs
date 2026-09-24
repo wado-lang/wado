@@ -896,32 +896,19 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
         {
             let type_table = &*ctx.package.type_table.borrow();
             for (mangled, module_source, cases) in substituted {
-                let cases: Vec<(String, Vec<WirType>)> = cases
+                // A payload not yet registered waits for a later pass. A `fn`
+                // payload's abstract structref is its real representation.
+                let cases: Option<Vec<(String, Vec<WirType>)>> = cases
                     .into_iter()
                     .map(|(name, payload)| {
                         let wir_payload = match type_table.get(payload) {
                             ResolvedType::Unit => Vec::new(),
-                            _ => vec![ctx.type_id_to_wir_type_pending(type_table, payload)],
+                            _ => vec![ctx.try_type_id_to_wir_type(type_table, payload)?],
                         };
-                        (name, wir_payload)
+                        Some((name, wir_payload))
                     })
                     .collect();
-
-                // Skip variants with unresolved payload types (abstract
-                // structref). They will be resolved in a subsequent pass
-                // after their dependencies are registered.
-                let has_unresolved = cases.iter().any(|(_, payloads)| {
-                    payloads.iter().any(|ty| {
-                        matches!(
-                            ty,
-                            WirType::AbstractRef {
-                                heap_type: WirAbstractHeapType::Struct,
-                                ..
-                            }
-                        )
-                    })
-                });
-                if !has_unresolved {
+                if let Some(cases) = cases {
                     to_register.push((mangled, module_source, cases));
                 }
             }

@@ -720,9 +720,9 @@ impl<'a> WirContext<'a> {
 
     /// The `WirType` of `type_id`, or `None` when it has no WIR registration.
     ///
-    /// For the one caller with a real recovery: a tuple interned by CM binding
-    /// synthesis can carry `TypeId`s the registrar never saw, and
-    /// `tuple_constructor_args` then searches for or defines a matching struct.
+    /// For a caller with a real recovery: `register_mono_variants` defers the
+    /// variant to a later pass, and `tuple_constructor_args` searches for or
+    /// defines a struct matching a tuple CM binding synthesis interned.
     pub fn try_type_id_to_wir_type(
         &self,
         type_table: &TypeTable,
