@@ -181,8 +181,6 @@ The world selects the allocator; `--allocator` overrides it:
 
 ## Known Limitations
 
-- An implicit struct literal cannot build a generic struct:
-  `let b: Box<i32> = { value };` is rejected, while `Box { value }` works.
 - A `||` / `&&` chain of thousands of operands overflows the compiler's stack.
 - A GC array cannot be passed to `stream<u8>` directly; it is copied to linear
   memory first ([component-model#525](https://github.com/WebAssembly/component-model/issues/525)).
