@@ -3164,12 +3164,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 value: const_expr, ..
             }) = self.associated_constant_qualified(variant_qualifier, variant_name)
             else {
-                let names_global = self
-                    .sem
-                    .imports
-                    .pattern_ns_member(variant_qualifier, variant_name)
-                    .is_some_and(|alias| self.is_immutable_global(&alias));
-                if names_global {
+                if self
+                    .namespaced_constant(variant_qualifier, variant_name)
+                    .is_some()
+                {
                     return Some(Pat::Opaque);
                 }
                 let is_bare = variant_qualifier.is_none() && !variant_name.contains("::");

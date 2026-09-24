@@ -455,22 +455,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) || matches!(expr, Expr::TemplateString(_));
 
         if is_string_or_template {
-            let base_id = self
-                .tysys
-                .type_table
-                .borrow()
-                .representation_head(target_type);
-            let string_struct_name = self
-                .tysys
-                .type_table
-                .borrow()
-                .compiler_struct_name(CompilerItem::String)
-                .to_string();
-            let is_string_newtype = matches!(
-                self.tysys.type_table.borrow().get(base_id),
-                ResolvedType::Struct { def, .. }
-                    if self.tysys.type_table.borrow().struct_head_name(*def) == string_struct_name
-            ) && target_type != base_id;
+            let is_string_newtype = {
+                let tt = self.tysys.type_table.borrow();
+                let string_struct_name = tt.compiler_struct_name(CompilerItem::String);
+                tt.newtype_representation(target_type).is_some_and(|base| {
+                    matches!(tt.get(base), ResolvedType::Struct { def, .. }
+                        if tt.struct_head_name(*def) == string_struct_name)
+                })
+            };
             if is_string_newtype {
                 // Walk the inner literal / template for fact recording.
                 self.resolve_expr(expr, ctx, None);
@@ -514,16 +506,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // unwrapped base fn type (so unannotated params are inferred from
         // the expected signature) and retag the recorded expression type.
         if matches!(expr, Expr::Closure(_)) {
-            let base_id = self
+            let fn_base = self
                 .tysys
                 .type_table
                 .borrow()
-                .representation_head(target_type);
-            let is_fn_newtype = matches!(
-                self.tysys.type_table.borrow().get(base_id),
-                ResolvedType::Function { .. }
-            ) && target_type != base_id;
-            if is_fn_newtype {
+                .newtype_representation(target_type)
+                .filter(|&base| {
+                    matches!(
+                        self.tysys.type_table.borrow().get(base),
+                        ResolvedType::Function { .. }
+                    )
+                });
+            if let Some(base_id) = fn_base {
                 // Walk the closure for fact recording (param types,
                 // captures, body) under the unwrapped fn type.
                 self.resolve_expr(expr, ctx, Some(base_id));
@@ -601,11 +595,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .representation_head(target_type);
-        if struct_lit.name.is_some()
-            || base == target_type
-            || self.implicit_struct_target(Some(base)).is_none()
-        {
+            .newtype_representation(target_type)?;
+        if struct_lit.name.is_some() || self.implicit_struct_target(Some(base)).is_none() {
             return None;
         }
         self.resolve_expr(expr, ctx, Some(base));

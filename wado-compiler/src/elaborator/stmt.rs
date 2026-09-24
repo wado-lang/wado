@@ -1573,6 +1573,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `name` refers to an immutable global (defined here or imported),
     /// which in pattern position is a constant-value (refutable) match rather
     /// than a fresh binding.
+    /// The alias of the immutable global `ns::NAME` names in a pattern, which is
+    /// a constant-value pattern as the bare `NAME` is.
+    pub(super) fn namespaced_constant(
+        &self,
+        qualifier: Option<&Type>,
+        name: &str,
+    ) -> Option<String> {
+        self.sem
+            .imports
+            .pattern_ns_member(qualifier, name)
+            .filter(|alias| self.is_immutable_global(alias))
+    }
+
     pub(super) fn is_immutable_global(&self, name: &str) -> bool {
         self.sem
             .decls
@@ -1776,13 +1789,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return Vec::new();
                     }
 
-                    // `ns::NAME` naming an immutable global the namespace exports
-                    // is a constant-value pattern, as the bare `NAME` is.
-                    if let Some(alias) = self
-                        .sem
-                        .imports
-                        .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
-                        .filter(|alias| self.is_immutable_global(alias))
+                    if let Some(alias) =
+                        self.namespaced_constant(variant_qualifier.as_ref(), variant_name)
                     {
                         if let Some(id) = *name_id {
                             self.record_item_reference_by_name(id, &alias);
