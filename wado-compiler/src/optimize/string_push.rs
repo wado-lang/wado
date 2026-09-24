@@ -285,11 +285,7 @@ impl AppendFuseRule {
         }
 
         let total = self.sum_expr(engine, &terms, span);
-        let at = engine.alloc_local(
-            format!("$fuse_at_{}", engine.locals().len()),
-            TypeTable::I32,
-            /* is_mut */ false,
-        );
+        let at = engine.alloc_minted_local("fuse_at", TypeTable::I32, /* is_mut */ false);
         let reserve = self.call(
             engine,
             self.ids.reserve_uninit,
@@ -347,11 +343,7 @@ impl AppendFuseRule {
         span: Span,
         stmts: &mut Vec<StmtId>,
     ) -> u32 {
-        let local = engine.alloc_local(
-            format!("$fuse_len_{}", engine.locals().len()),
-            TypeTable::I32,
-            /* is_mut */ false,
-        );
+        let local = engine.alloc_minted_local("fuse_len", TypeTable::I32, /* is_mut */ false);
         let source = engine.clone_expr(arg);
         let call = engine.alloc_expr(
             ExprKind::method_call(self.ids.len, Operand::Expr(source), false, vec![]),

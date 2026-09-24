@@ -24,7 +24,8 @@ use crate::elaborator::types::{
     GenericNewtypeInfo, ImplMemberKind, ParamSlot, RealTypeParams, StructFieldInfo,
 };
 use crate::name::{
-    constant_pattern_local_name, for_body_label, mangle_local_item_name, namespace_member_alias,
+    constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
+    namespace_member_alias,
 };
 use crate::symbol_notation::render;
 use crate::tir::{StructDef, TirTypeParam};
@@ -2674,7 +2675,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let (binding_name, binding_id, binding_name_span) = match &for_of.binding {
             Pattern::Ident { id, name, span } => (name.clone(), Some(*id), Some(*span)),
-            _ => (format!("$pattern_temp_{unique_id}"), None, None),
+            _ => (minted_name("pattern_temp", unique_id), None, None),
         };
 
         let is_mut = for_of.is_mut;

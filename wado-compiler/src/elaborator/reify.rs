@@ -20,8 +20,8 @@ use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTypeName, IDENTITY_TEST_METHOD, INTERNAL_PREFIX, NARROWING_TEST_METHOD, Receiver,
-    global_init_function, global_name,
+    FqTypeName, IDENTITY_TEST_METHOD, NARROWING_TEST_METHOD, Receiver, global_init_function,
+    global_name,
 };
 use crate::symbol::SymbolTable;
 use crate::tir::{
@@ -4612,9 +4612,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 name,
                 span: name_span,
             } => (name.clone(), Some(*id), *name_span),
-            ast::Pattern::Tuple(..) | ast::Pattern::Wildcard => {
-                (format!("$pattern_temp_{unique_id}"), None, Span::default())
-            }
+            ast::Pattern::Tuple(..) | ast::Pattern::Wildcard => (
+                minted_name("pattern_temp", unique_id),
+                None,
+                Span::default(),
+            ),
             _ => {
                 return vec![TirStmt::new(TirStmtKind::Expr(iterable), span)];
             }
@@ -5989,7 +5991,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut base_binding = Vec::new();
         if let Some(spread) = struct_lit.spreads.first() {
             let base_expr = self.reify_expr(&spread.expr, ctx, Some(struct_type));
-            let base_ref = Self::hoist_once(ctx, base_expr, "$base", &mut base_binding);
+            let base_ref = Self::hoist_once(ctx, base_expr, "base", &mut base_binding);
             for (name, field_index, raw_ty, _default) in &decl_fields {
                 if provided.contains(name) {
                     continue;
@@ -7303,7 +7305,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         spread_expr
                     } else {
                         let spread_type_id = spread_expr.type_id;
-                        let tmp_name = format!("$spread_{}", ctx.fresh_serial());
+                        let tmp_name = minted_name("spread", ctx.fresh_serial());
                         let tmp_idx = ctx.add_local(tmp_name.clone(), spread_type_id, false, None);
                         spread_bindings.push((tmp_idx, tmp_name.clone(), spread_expr, elem.span()));
                         TirExpr::new(
@@ -7801,12 +7803,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ast::LiteralMember::Spread(si, sp) => {
                     let expr = self.reify_expr(&sp.expr, ctx, None);
                     base_types[si] = expr.type_id;
-                    base_refs[si] = Some(Self::hoist_once(ctx, expr, "$base", &mut stmts));
+                    base_refs[si] = Some(Self::hoist_once(ctx, expr, "base", &mut stmts));
                 }
                 ast::LiteralMember::Field(pos, f) => {
                     let expr = self.reify_expr(&f.value, ctx, None);
                     explicit_types[pos] = expr.type_id;
-                    explicit_refs[pos] = Some(Self::hoist_once(ctx, expr, "$fld", &mut stmts));
+                    explicit_refs[pos] = Some(Self::hoist_once(ctx, expr, "fld", &mut stmts));
                 }
             }
         }
@@ -7862,18 +7864,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Self::hoist_block(literal, stmts)
     }
 
-    /// Bind `expr` to a fresh `{prefix}_N` temporary (pushed onto `stmts`) so it
-    /// evaluates once in place, unless it is already a local. Returns a reference.
+    /// Bind `expr` to a fresh temporary [`minted_name`] names from `what`
+    /// (pushed onto `stmts`) so it evaluates once in place, unless it is already
+    /// a local. Returns a reference.
     fn hoist_once(
         ctx: &mut FunctionContext,
         expr: TirExpr,
-        prefix: &str,
+        what: &str,
         stmts: &mut Vec<TirStmt>,
     ) -> TirExpr {
         if matches!(expr.kind, TirExprKind::Local { .. }) {
             return expr;
         }
-        let name = format!("{prefix}_{}", ctx.fresh_serial());
+        let name = minted_name(what, ctx.fresh_serial());
         bind_to_local(ctx, name, expr, stmts)
     }
 
@@ -7886,9 +7889,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         stmts: &mut Vec<TirStmt>,
     ) -> TirExpr {
         if !self.is_source_place(&receiver) {
-            return Self::hoist_once(ctx, receiver, "$recv", stmts);
+            return Self::hoist_once(ctx, receiver, "recv", stmts);
         }
-        self.bind_subscripts_ahead(ctx, receiver, "$recv_index", stmts)
+        self.bind_subscripts_ahead(ctx, receiver, "recv_index", stmts)
     }
 
     fn is_source_place(&self, expr: &TirExpr) -> bool {
@@ -7901,14 +7904,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         ctx: &mut FunctionContext,
         mut place: TirExpr,
-        prefix: &str,
+        what: &str,
         stmts: &mut Vec<TirStmt>,
     ) -> TirExpr {
         let type_table = self.tysys.type_table.borrow();
         for subscript in source_place_subscripts_mut(&mut place, type_table.compiler_items()) {
             let unbound = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, subscript.span);
             let value = std::mem::replace(subscript, unbound);
-            *subscript = Self::hoist_once(ctx, value, prefix, stmts);
+            *subscript = Self::hoist_once(ctx, value, what, stmts);
         }
         place
     }
@@ -8260,7 +8263,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         && !captured.contains(name)
                     {
                         let borrow =
-                            self.bind_subscripts_ahead(ctx, value, "$arg_index", &mut prelude);
+                            self.bind_subscripts_ahead(ctx, value, "arg_index", &mut prelude);
                         if *named {
                             let what = minted_name(name, ctx.fresh_serial());
                             let stand_in = ctx.add_local(what, borrow.type_id, false, None);
@@ -8955,7 +8958,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         // Bound ahead of the branch so the deferred expansion
                         // inherits it: the monomorphizer allocates no locals.
                         let mut stmts = Vec::new();
-                        let receiver = Self::hoist_once(ctx, receiver, "$zip", &mut stmts);
+                        let receiver = Self::hoist_once(ctx, receiver, "zip", &mut stmts);
                         // A concrete tuple-of-tuples transposes inline here;
                         // only a type-pack receiver defers expansion to the
                         // monomorphiser via `TupleZip`. Non-generic bodies
@@ -10739,7 +10742,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 (Some(name.clone()), name.clone(), local_index)
             }
             ast::Pattern::Wildcard => {
-                let local_name = format!("{INTERNAL_PREFIX}narrowed");
+                let local_name = minted_name("narrowed", ctx.fresh_serial());
                 let local_index = ctx.add_local(local_name.clone(), target, false, None);
                 (None, local_name, local_index)
             }

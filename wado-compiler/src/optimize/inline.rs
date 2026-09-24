@@ -20,6 +20,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::inline_block_label;
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
@@ -766,14 +767,14 @@ struct InlineLabels {
 }
 
 impl InlineLabels {
-    fn fresh(&mut self, caller: &Body, stem: &str) -> String {
+    fn fresh(&mut self, caller: &Body, callee: &str) -> String {
         let taken = self.taken.get_or_insert_with(|| {
             let mut taken = IndexSet::default();
             collect_inner_labels(caller, NodeRef::Block(caller.root), &mut taken);
             taken
         });
         loop {
-            let label = format!("$inline_{stem}_{}", self.serial);
+            let label = inline_block_label(callee, self.serial);
             self.serial += 1;
             if !taken.contains(&label) {
                 return label;
@@ -2256,17 +2257,7 @@ fn build_inlined_labeled_block(
     labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
 ) -> ExprId {
-    let sanitized_name: String = func_name
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    let label = labels.fresh(caller, &sanitized_name);
+    let label = labels.fresh(caller, func_name);
 
     let local_offset = frame.local_count;
     let callee_param_count = candidate.params.len() as u32;

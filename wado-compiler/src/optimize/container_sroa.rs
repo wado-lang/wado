@@ -2190,8 +2190,8 @@ fn spill(
     {
         return op;
     }
-    let name = format!("$csroa_elem_{}", engine.locals().len());
-    let local_index = engine.alloc_local(name.clone(), type_id, false);
+    let local_index = engine.alloc_minted_local("csroa_elem", type_id, false);
+    let name = engine.locals()[local_index as usize].name.clone();
     out.push(engine.alloc_stmt(
         StmtKind::Let {
             name: name.clone(),

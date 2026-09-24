@@ -430,6 +430,47 @@ pub fn minted_name(what: &str, serial: impl fmt::Display) -> String {
     format!("{INTERNAL_PREFIX}{what}_{serial}")
 }
 
+/// The local a derived `Eq` binds `side`'s payload of variant case `case` to.
+#[must_use]
+pub fn eq_payload_local(side: &str, case: &str, index: u32) -> String {
+    format!("{INTERNAL_PREFIX}eq_{side}_{case}_{index}")
+}
+
+/// `name` told apart by `serial` from a same-spelled name already taken.
+#[must_use]
+pub fn serial_suffixed(name: &str, serial: u32) -> String {
+    format!("{name}_{serial}")
+}
+
+/// The label of a block fusing labeled block `label` with the branch on its
+/// value.
+#[must_use]
+pub fn fused_block_label(label: &str) -> String {
+    format!("{INTERNAL_PREFIX}fused_{label}")
+}
+
+/// The label of a `match` that labeled block `label`'s exits are threaded into.
+#[must_use]
+pub fn threaded_block_label(label: &str) -> String {
+    format!("{INTERNAL_PREFIX}thread_{label}")
+}
+
+/// The label of the block holding an inlined body of `callee`.
+#[must_use]
+pub fn inline_block_label(callee: &str, serial: u32) -> String {
+    let callee: String = callee
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("{INTERNAL_PREFIX}inline_{callee}_{serial}")
+}
+
 /// Label the template-string synthesiser stamps on the block wrapping an
 /// expanded `` `...` `` literal.
 pub const TEMPLATE_BLOCK_LABEL: &str = "$tmpl";

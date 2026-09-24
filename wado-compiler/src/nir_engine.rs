@@ -12,6 +12,7 @@ use cranelift_entity::EntityRef;
 use crate::compiler_trace;
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::minted_name;
 use crate::nir::{FuncId, NirLocal};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
@@ -924,6 +925,13 @@ impl<'a> Engine<'a> {
             is_mut,
         });
         index
+    }
+
+    /// [`Self::alloc_local`] a local a pass mints, named by [`minted_name`] from
+    /// `what` and the index this step takes, never one a caller read earlier.
+    pub fn alloc_minted_local(&mut self, what: &str, type_id: TypeId, is_mut: bool) -> u32 {
+        let index = self.locals.len();
+        self.alloc_local(minted_name(what, index), type_id, is_mut)
     }
 
     /// Build the session's three indices — parent map, local use index, and

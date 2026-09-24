@@ -9,6 +9,7 @@
 //! too — [`FusedValue`] is the only axis the two differ on.
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::{fused_block_label, minted_name, serial_suffixed, threaded_block_label};
 use crate::nir::{NirLiteralPattern, NirLocal};
 use crate::nir_arena::{
     ArmData, BlockId, BlockRole, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId,
@@ -29,6 +30,12 @@ use super::sroa_variant_return::{Pad, zero_pad};
 /// The slot `sroa_variant_return` reserves for the tag in every scalarized
 /// variant return.
 const TAG_SLOT: u32 = 0;
+
+/// What [`minted_name`] says of each local the fusions mint.
+const FUSED_PAYLOAD: &str = "fused_payload";
+const FUSED_SLOT: &str = "fused_slot";
+const SROA_SLOT: &str = "sroa_slot";
+const SROA_AGG: &str = "sroa_agg";
 
 /// Block-level fusion rule for the unified post-inline peephole session.
 /// The rule keeps no per-function state: every precondition is re-derived from
@@ -752,7 +759,7 @@ fn fresh_label(body: &Body, stem: String, regions: &[NodeRef]) -> String {
     }
     let mut serial = 1u32;
     loop {
-        let label = format!("{stem}_{serial}");
+        let label = serial_suffixed(&stem, serial);
         if free(&label) {
             return label;
         }
@@ -1236,7 +1243,7 @@ fn perform_fusion(
     // The fused block encloses the labeled block's body and the arms cloned into it.
     let mut enclosed = vec![NodeRef::Block(lb_block), NodeRef::Block(then_block)];
     enclosed.extend(else_block.map(NodeRef::Block));
-    let fused_label = fresh_label(engine.body, format!("$fused_{}", info.label), &enclosed);
+    let fused_label = fresh_label(engine.body, fused_block_label(&info.label), &enclosed);
     let fusion = Fusion {
         fused_label: &fused_label,
         temp_local: info.temp_local,
@@ -1281,12 +1288,7 @@ fn bind_value(engine: &mut Engine, value: FusedValue) -> BoundValue {
             pattern_payload_binding,
         } => {
             let payload_local = pattern_payload_binding.unwrap_or_else(|| {
-                let next = engine.locals().len() as u32;
-                engine.alloc_local(
-                    format!("$fused_payload_{next}"),
-                    payload_type,
-                    /* is_mut */ false,
-                )
+                engine.alloc_minted_local(FUSED_PAYLOAD, payload_type, /* is_mut */ false)
             });
             BoundValue::Variant {
                 case_index,
@@ -1299,8 +1301,7 @@ fn bind_value(engine: &mut Engine, value: FusedValue) -> BoundValue {
             slots: slots
                 .into_iter()
                 .map(|slot| {
-                    let local_index =
-                        alloc_indexed_local(engine, "$fused_slot_", slot.type_id, false);
+                    let local_index = engine.alloc_minted_local(FUSED_SLOT, slot.type_id, false);
                     BoundSlot {
                         field_index: slot.field_index,
                         local_index,
@@ -1327,7 +1328,7 @@ fn emit_variant_payload_let(engine: &mut Engine, vc: ExprId, f: &Fusion, out: &m
     let value = payload.unwrap_or_else(|| engine.const_operand(ValueKind::Unit, payload_type));
     let stmt = engine.alloc_stmt(
         StmtKind::Let {
-            name: format!("$fused_payload_{payload_local}"),
+            name: minted_name(FUSED_PAYLOAD, payload_local),
             local_index: payload_local,
             is_mut: false,
             is_reactive: false,
@@ -1372,7 +1373,7 @@ fn emit_slot_lets(engine: &mut Engine, elements: &[Operand], f: &Fusion, out: &m
         let value = elements[slot.field_index as usize];
         let stmt = engine.alloc_stmt(
             StmtKind::Let {
-                name: format!("$fused_slot_{}", slot.local_index),
+                name: minted_name(FUSED_SLOT, slot.local_index),
                 local_index: slot.local_index,
                 is_mut: false,
                 is_reactive: false,
@@ -1518,7 +1519,7 @@ fn replacement_for(body: &Body, e: ExprId, f: &Fusion) -> Option<ExprKind> {
             (ci == case_index && is_local_operand(body, *inner, f.temp_local)).then(|| {
                 ExprKind::Local {
                     index: *payload_local,
-                    name: format!("$fused_payload_{payload_local}"),
+                    name: minted_name(FUSED_PAYLOAD, *payload_local),
                 }
             })
         }
@@ -1537,7 +1538,7 @@ fn replacement_for(body: &Body, e: ExprId, f: &Fusion) -> Option<ExprKind> {
             let slot = slots.iter().find(|s| s.field_index == *field_index)?;
             Some(ExprKind::Local {
                 index: slot.local_index,
-                name: format!("$fused_slot_{}", slot.local_index),
+                name: minted_name(FUSED_SLOT, slot.local_index),
             })
         }
     }
@@ -1881,7 +1882,7 @@ fn perform_threading(engine: &mut Engine, match_id: ExprId, plan: ThreadPlan) {
             .iter()
             .filter_map(|arm| arm.body.as_expr().map(NodeRef::Expr)),
     );
-    let fused_label = fresh_label(engine.body, format!("$thread_{}", plan.label), &enclosed);
+    let fused_label = fresh_label(engine.body, threaded_block_label(&plan.label), &enclosed);
     replace_exits(engine, &plan.exits, |engine, s| {
         thread_exit(engine, s, &plan, &fused_label)
     });
@@ -2164,8 +2165,7 @@ fn plan_slot_temp_sroa(
     let mut slots = Vec::with_capacity(fields.len());
     for ((field_index, type_id), pad) in fields.into_iter().zip(pads) {
         let zero = materialize_pad(engine, pad, span);
-        let local_index =
-            alloc_indexed_local(engine, "$sroa_slot_", type_id, /* is_mut */ true);
+        let local_index = engine.alloc_minted_local(SROA_SLOT, type_id, /* is_mut */ true);
         slots.push(BoundSlot {
             field_index,
             local_index,
@@ -2284,7 +2284,7 @@ fn perform_slot_temp_sroa(
             e,
             ExprKind::Local {
                 index: slot.local_index,
-                name: format!("$sroa_slot_{}", slot.local_index),
+                name: minted_name(SROA_SLOT, slot.local_index),
             },
         );
     }
@@ -2305,7 +2305,7 @@ fn perform_slot_temp_sroa(
     for (local_index, type_id, zero) in plan.zeros {
         let decl = engine.alloc_stmt(
             StmtKind::Let {
-                name: format!("$sroa_slot_{local_index}"),
+                name: minted_name(SROA_SLOT, local_index),
                 local_index,
                 is_mut: true,
                 is_reactive: false,
@@ -2378,24 +2378,12 @@ fn scalarize_exit(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa) -> Vec<St
     out
 }
 
-/// Allocate a local named after the index it lands at, so its declared name and
-/// every later mention rebuilt from `local_index` agree by construction.
-fn alloc_indexed_local(engine: &mut Engine, prefix: &str, type_id: TypeId, is_mut: bool) -> u32 {
-    let index = engine.locals().len() as u32;
-    let allocated = engine.alloc_local(format!("{prefix}{index}"), type_id, is_mut);
-    assert_eq!(
-        allocated, index,
-        "a local lands at the index it was named for"
-    );
-    index
-}
-
 /// `$sroa_slot_N = value`, the statement every exit form ends up emitting.
 fn slot_assign(engine: &mut Engine, slot: &BoundSlot, value: Operand, span: Span) -> StmtKind {
     let target = engine.alloc_expr(
         ExprKind::Local {
             index: slot.local_index,
-            name: format!("$sroa_slot_{}", slot.local_index),
+            name: minted_name(SROA_SLOT, slot.local_index),
         },
         slot.type_id,
         span,
@@ -2417,8 +2405,8 @@ fn scalarize_materialized_exit(
     out: &mut Vec<StmtId>,
 ) {
     let agg_type = engine.body.exprs[exit].type_id;
-    let index = alloc_indexed_local(engine, "$sroa_agg_", agg_type, /* is_mut */ false);
-    let name = format!("$sroa_agg_{index}");
+    let index = engine.alloc_minted_local(SROA_AGG, agg_type, /* is_mut */ false);
+    let name = minted_name(SROA_AGG, index);
     out.push(engine.alloc_stmt(
         StmtKind::Let {
             name: name.clone(),

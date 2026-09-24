@@ -9,6 +9,7 @@ use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
+use crate::name::minted_name;
 use crate::package::Package;
 use crate::synthesis::common;
 use crate::synthesis::common::{
@@ -59,9 +60,9 @@ struct Cx<'a> {
 impl Cx<'_> {
     /// Allocate a fresh local slot (used to spill values and to bind variant
     /// payloads inside synthesized structural-drop `match`es).
-    fn alloc_local(&mut self, type_id: TypeId, prefix: &str) -> (u32, String) {
+    fn alloc_local(&mut self, type_id: TypeId, what: &str) -> (u32, String) {
         let idx = self.locals.len() as u32;
-        let name = format!("${prefix}_{idx}");
+        let name = minted_name(what, idx);
         self.locals.push(TirLocal {
             name: name.clone(),
             type_id,

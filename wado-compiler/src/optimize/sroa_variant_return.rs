@@ -5,6 +5,7 @@
 //! Whatever the rewrite misses, [`rebox_stragglers`] wraps back into a variant.
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::minted_name;
 use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal};
 use crate::nir_arena::{
     ArenaStructField, ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef,
@@ -540,7 +541,7 @@ fn rebox_call(
     let (variant_type, layout) = scalarized[&func_id].clone();
 
     let local_index = u32::try_from(locals.len()).expect("local index overflow");
-    let name = format!("$rebox_{local_index}");
+    let name = minted_name("rebox", local_index);
     locals.push(NirLocal {
         name: name.clone(),
         type_id: layout.tuple_type,
@@ -2136,7 +2137,7 @@ fn hoist_call_scrutinees(
         let call_type = body.exprs[call].type_id;
 
         let local_index = func.local_count();
-        let name = format!("$vr_{local_index}");
+        let name = minted_name("vr", local_index);
         func.locals.push(NirLocal {
             name: name.clone(),
             type_id: call_type,

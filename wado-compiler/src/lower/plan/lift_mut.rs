@@ -5,6 +5,7 @@
 //! lifted `Let mut`'s copy, so the statement must exist before it runs.
 
 use crate::flat_package::FlatPackage;
+use crate::name::minted_name;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
     TirStructPatternField, TypeId, TypeTable,
@@ -178,7 +179,7 @@ struct LiftedBindings {
 }
 
 fn fresh_local_name(index: u32) -> String {
-    format!("$match_mut_lift_{index}")
+    minted_name("match_mut_lift", index)
 }
 
 fn prepend_stmts(expr: &mut TirExpr, prefix: Vec<TirStmt>) {

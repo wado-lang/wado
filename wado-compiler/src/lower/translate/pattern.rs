@@ -5,7 +5,7 @@ use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::funcset::FuncKeySet;
 use crate::lower::plan::value_copy::place;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, LocalMethodName};
+use crate::name::{FqTraitName, FqTypeName, LocalMethodName, minted_name};
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, StructDef, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
@@ -303,7 +303,7 @@ fn narrow_into_binding(pattern: &mut TirPattern) -> (TirPattern, TirExpr) {
         panic!("narrow_into_binding takes a Narrow pattern");
     };
     let binding = TirPattern::Binding {
-        name: name.unwrap_or_else(|| format!("$narrowed_{local_index}")),
+        name: name.unwrap_or_else(|| minted_name("narrowed", local_index)),
         local_index,
         type_id,
     };
