@@ -97,6 +97,7 @@ struct CtxArena {
     intern_head: AtnKeyMap,
     intern_next: List<i32>,
     merge_cache: AtnKeyMap,
+    cover_cache: AtnKeyMap,
 }
 
 struct AtnConfig {
@@ -118,6 +119,7 @@ impl CtxArena {
             intern_head: AtnKeyMap::new(),
             intern_next: [],
             merge_cache: AtnKeyMap::new(),
+            cover_cache: AtnKeyMap::new(),
         };
         let empty = arena.push(CTX_BOUNDARY, 0, CTX_EMPTY);
         let unknown = arena.push(CTX_UNKNOWN_RETURN, 0, CTX_EMPTY);
@@ -267,6 +269,35 @@ impl CtxArena {
         let id = self.intern_from(s);
         self.merge_cache.set(ck, id);
         return id;
+    }
+
+    fn covers(&mut self, outer: i32, inner: i32) -> bool {
+        if outer == inner {
+            return true;
+        }
+        let ck = outer as i64 * ATN_MERGE_CACHE_STRIDE + inner as i64;
+        let cached = self.cover_cache.get(ck);
+        if cached >= 0 {
+            return cached == 1;
+        }
+        let so = self.node_start[outer];
+        let no = self.node_len[outer];
+        let si = self.node_start[inner];
+        let ni = self.node_len[inner];
+        let mut i = 0;
+        let mut covered = true;
+        for let mut j = 0; j < ni; j += 1 {
+            while i < no && self.key_cmp(so + i, si + j) < 0 {
+                i += 1;
+            }
+            if i >= no || self.key_cmp(so + i, si + j) != 0 || !self.covers(self.parent[so + i], self.parent[si + j]) {
+                covered = false;
+                break;
+            }
+            i += 1;
+        }
+        self.cover_cache.set(ck, if covered { 1 } else { 0 });
+        return covered;
     }
 }
 
@@ -551,36 +582,22 @@ fn atn_min_alt(alts: &List<i32>) -> i32 {
     return m;
 }
 
-fn atn_single_viable_alt(configs: &List<AtnConfig>) -> i32 {
-    let mut heads = AtnKeyMap::new();
-    let mut ctx: List<i32> = [];
-    let mut min_alt: List<i32> = [];
-    let mut next: List<i32> = [];
+fn atn_min_alt_covers_rest(arena: &mut CtxArena, configs: &List<AtnConfig>, min_alt: i32) -> bool {
+    let mut min_ctx = AtnKeyMap::new();
     for let c of configs {
-        let k = (c.state + 2) as i64 * CFG_KEY_PR_SLOT as i64 + (c.pr + 2) as i64;
-        let head = heads.get(k);
-        let mut g = head;
-        while g >= 0 && ctx[g] != c.pctx {
-            g = next[g];
+        if c.alt == min_alt {
+            min_ctx.set((c.state + 2) as i64 * CFG_KEY_PR_SLOT as i64 + (c.pr + 2) as i64, c.pctx);
         }
-        if g >= 0 {
-            if c.alt < min_alt[g] {
-                min_alt[g] = c.alt;
+    }
+    for let c of configs {
+        if c.alt != min_alt {
+            let e = min_ctx.get((c.state + 2) as i64 * CFG_KEY_PR_SLOT as i64 + (c.pr + 2) as i64);
+            if e < 0 || !arena.covers(e, c.pctx) {
+                return false;
             }
-        } else {
-            heads.set(k, ctx.len());
-            ctx.push(c.pctx);
-            min_alt.push(c.alt);
-            next.push(head);
         }
     }
-    let single = min_alt[0];
-    for let a of &min_alt {
-        if *a != single {
-            return -1;
-        }
-    }
-    return single;
+    return true;
 }
 
 fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
@@ -640,9 +657,8 @@ pub fn atn_predict_with_stack(
         if alts.len() == 1 {
             return alts[0];
         }
-        let single = atn_single_viable_alt(&configs);
-        if single >= 0 {
-            return single;
+        if atn_min_alt_covers_rest(&mut arena, &configs, alts[0]) {
+            return alts[0];
         }
         if atn_all_at_end(sim, &configs) {
             return atn_min_alt(&alts);
