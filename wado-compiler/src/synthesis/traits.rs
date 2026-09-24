@@ -4291,9 +4291,7 @@ fn generate_fn_inspect_fn(
     func
 }
 
-/// Generate Inspect for opaque/resource types (Future, Stream, etc.).
-///
-/// Generate `Inspect` for an opaque resource handle, rendered as `Name#0x<hex>`.
+/// Generate `Inspect` for an opaque handle (a resource, Future, Stream), rendered as `Name#0x<hex>`.
 #[allow(clippy::too_many_arguments)]
 fn generate_opaque_inspect_fn(
     receiver: &FqTypeName,
@@ -4318,23 +4316,13 @@ fn generate_opaque_inspect_fn(
     let qualified_name = method_info.to_mangled_name();
 
     let fmt = || local_expr(1, "f", fmt_type, span);
-    let cast_to = |expr: TirExpr, target_type: TypeId| {
-        TirExpr::new(
-            TirExprKind::Cast {
-                expr: Box::new(expr),
-                target_type,
-            },
-            target_type,
-            span,
-        )
-    };
     let deref_self = deref_local(0, "self", ref_type, resource_type, span);
     // An unrestricted handle is an integer-valued `f64`, so `i64` holds it exactly.
     let (handle, handle_type) = if tt.is_unrestricted_handle(resource_type) {
-        let bits = cast_to(deref_self, TypeTable::F64);
-        (cast_to(bits, TypeTable::I64), TypeTable::I64)
+        let bits = common::cast(deref_self, TypeTable::F64);
+        (common::cast(bits, TypeTable::I64), TypeTable::I64)
     } else {
-        (cast_to(deref_self, TypeTable::I32), TypeTable::I32)
+        (common::cast(deref_self, TypeTable::I32), TypeTable::I32)
     };
     let hex_stmt = inspect_call(
         handle,

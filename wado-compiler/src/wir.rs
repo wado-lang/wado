@@ -795,8 +795,7 @@ impl WirType {
 
     /// True when this type lowers to a Wasm GC reference (`Ref` /
     /// `AbstractRef`), as opposed to a scalar (`i32`/`i64`/`f64`/`v128`/…,
-    /// including `Enum`/`Flags` which are `i32`, and `Unit`). Used to
-    /// reject representation-crossing pass-through casts in WIR build.
+    /// including `Enum`/`Flags` which are `i32`, and `Unit`).
     pub fn is_reference(&self) -> bool {
         matches!(self, Self::Ref { .. } | Self::AbstractRef { .. })
     }

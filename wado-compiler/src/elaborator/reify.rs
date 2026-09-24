@@ -36,7 +36,7 @@ use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{
-    AttrArg, Attribute, HandleClasses, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
+    AttrArg, Attribute, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
     WIRE_NUMBER_RESERVED, wire_number_of, wire_number_written,
 };
 use crate::compiler_item::CompilerItem;
@@ -6762,8 +6762,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         right: TirExpr,
         span: Span,
     ) -> TirExpr {
-        use crate::tir::{TirBinaryOp, TirExprKind, TypeTable};
-
         let is_eq = op == ast::BinaryOp::Eq;
         let (op, left, right) = match identity {
             Identity::Reference if is_eq => (TirBinaryOp::RefEq, left, right),
@@ -10752,16 +10750,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             other => panic!("annotate rejects a narrowing over {other:?}"),
         };
-        let classes = {
+        let (low, high) = {
             let tt = self.tysys.type_table.borrow();
             let ResolvedType::Resource { def } = tt.get(target) else {
                 unreachable!("annotate narrows only to a resource");
             };
             tt.handle_classes(*def)
+                .expect("annotate rejects a narrowing to a resource without classes")
+                .handle_bounds()
         };
-        // Annotate has reported a target without classes; the empty range
-        // keeps the rest of the module well-formed.
-        let (low, high) = classes.map_or((0.0, 0.0), HandleClasses::handle_bounds);
         let handle = || {
             handle_bits(TirExpr::new(
                 TirExprKind::Local {

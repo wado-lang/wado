@@ -5755,7 +5755,7 @@ A `#[cm(...)]` resource may declare what may be done with its handle: `linearity
 
 An affine resource is move-only and carries a drop obligation, per [Resource Ownership](./wep-2026-05-21-resource-ownership.md). An unrestricted one owns nothing, so it is an ordinary copyable value. Assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope.
 
-The representation follows from the linearity. An affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain `f64` the host interprets. `as` relates an unrestricted handle to `f64`, and to nothing else but the handle types it upcasts to.
+The representation follows from the linearity. An affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain `f64` the host interprets. `as` converts an unrestricted handle to or from `f64`, or upcasts it to a resource it extends. No other cast accepts one.
 
 ### Resource Inheritance
 

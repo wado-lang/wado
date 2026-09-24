@@ -178,7 +178,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
             .collect(),
     };
 
-    let mut classes = number_classes(&merged)?;
+    let classes = number_classes(&merged)?;
     let mut skipped = Vec::new();
     let mut resources: IndexMap<&str, WadoResource> = IndexMap::new();
     for (name, iface) in &merged {
@@ -191,7 +191,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
                 doc_comment: None,
                 cm_attr: path,
                 unrestricted: true,
-                classes: classes.shift_remove(name),
+                classes: Some(classes[name].clone()),
                 extends: iface.inheritance.as_deref().map(to_upper_camel_case),
                 methods,
             },

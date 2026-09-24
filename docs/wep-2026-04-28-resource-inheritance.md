@@ -522,9 +522,9 @@ A gap in a range is allowed. It stands for classes the slice leaves out.
 The host tags each object with the class of the nearest ancestor of its runtime
 type that the slice declares. An `HTMLDivElement` in a slice that stops at
 `HTMLElement` carries `HtmlElement`'s class. The host answers this
-`instanceof`-shaped question once, when it first hands the object out, and a type
-wider than the slice degrades to its nearest named ancestor, which is what an open
-world needs.
+`instanceof`-shaped question once, when it first hands the object out. A type the
+slice does not name falls back to its nearest named ancestor, which is what an
+open world needs.
 
 A narrowing to `T` with classes `lo..=hi` lowers to
 `lo * 2^37 <= h && h < (hi + 1) * 2^37` and a branch. It is two float compares
@@ -693,9 +693,9 @@ Narrowing and `Eq` import nothing: the handle already carries what they read.
 
 Upcast and the receiver argument of inherited methods are wasm-level no-ops; the same handle value flows through unchanged.
 
-`as` relates a handle to `f64` and to the handle types it upcasts to, and to
-nothing else. A cast to an integer would round away the class, and a downcast by
-`as` would skip the class test a type pattern makes.
+`as` converts a handle to or from `f64`, or upcasts it to a resource it extends.
+No other cast accepts one. A cast to an integer would lose the class, and a
+downcast by `as` would skip the class test a type pattern makes.
 
 #### Interaction with WIT bundling
 
