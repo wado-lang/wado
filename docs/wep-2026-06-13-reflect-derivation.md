@@ -317,11 +317,11 @@ decided by the subject's own members, below. The two are separate, and only the
 second withholds anything.
 
 The traits and the member handles — `StructField`, `VariantCase`, `EnumCase`,
-`FlagsBit` and `TemplateHole` — are in `core:prelude`'s re-export, so a derivation names
-its bound, and a helper signature names a handle, with no import. They are the
-reflection API, documented where the rest of the prelude is. Like every prelude
-name they are reserved: a module declaring its own `EnumCase` is an error, and
-generated code (wadopoet, Gale) avoids them.
+`FlagsBit` and `TemplateHole` — are in `core:prelude`'s re-export, so a
+derivation names its bound, and a helper signature names a handle, with no
+import. They are the reflection API, documented where the rest of the prelude
+is. Like every prelude name they are reserved: a module declaring its own
+`EnumCase` is an error, and generated code (wadopoet, Gale) avoids them.
 
 A type satisfies a `T: Reflect*` bound only where every one of its members is
 visible. A declaration carries a single synthesized impl, so `members()` is
