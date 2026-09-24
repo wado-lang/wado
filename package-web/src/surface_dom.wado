@@ -32,7 +32,6 @@ variant Content {
 
 // Linked as the DOM standard models the tree.
 struct SurfaceNode {
-    class: f64,
     content: Content,
     attributes: TreeMap<String, String>,
     value: String,
@@ -41,6 +40,44 @@ struct SurfaceNode {
     last_child: i32,
     previous_sibling: i32,
     next_sibling: i32,
+}
+
+struct Children {
+    nodes: &List<SurfaceNode>,
+    at: i32,
+}
+
+impl Iterator for Children {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> {
+        if self.at == NO_NODE {
+            return null;
+        }
+        let child = self.at;
+        self.at = self.nodes[child].next_sibling;
+        return Option::Some(child);
+    }
+}
+
+fn is_ascii_whitespace(c: char) -> bool {
+    return c matches { '\t' | '\n' | '\u{C}' | '\r' | ' ' };
+}
+
+fn is_valid_element_local_name(name: &String) -> bool {
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if first.is_ascii_alphabetic() {
+        return !name.chars().any(|c| is_ascii_whitespace(c) || c matches { '\0' | '/' | '>' });
+    }
+    let in_name = |c: char| c matches { ':' | '_' } || c as u32 >= 0x80;
+    return in_name(first) && chars.all(|c| in_name(c) || c.is_ascii_alphanumeric() || c matches { '-' | '.' });
+}
+
+fn is_valid_attribute_local_name(name: &String) -> bool {
+    return !name.is_empty() && !name.chars().any(|c| is_ascii_whitespace(c) || c matches { '\0' | '/' | '=' | '>' });
 }
 
 fn class_of(content: &Content) -> f64 {
@@ -80,7 +117,7 @@ fn strip_and_collapse_ascii_whitespace(text: &String) -> String {
     let mut out = "";
     let mut gap = false;
     for let c of text.chars() {
-        if c matches { '\t' | '\n' | '\u{C}' | '\r' | ' ' } {
+        if is_ascii_whitespace(c) {
             gap = !out.is_empty();
         } else {
             if gap {
@@ -121,7 +158,6 @@ impl SurfaceDom {
 
     fn push(&mut self, content: Content) -> i32 {
         self.nodes.push(SurfaceNode {
-            class: class_of(&content),
             content,
             attributes: TreeMap::new(),
             value: "",
@@ -139,7 +175,7 @@ impl SurfaceDom {
     }
 
     fn handle(&self, index: i32) -> f64 {
-        return self.nodes[index].class * HANDLE_CLASS_STRIDE + index as f64;
+        return class_of(&self.nodes[index].content) * HANDLE_CLASS_STRIDE + index as f64;
     }
 
     fn index(&self, node: Node) -> i32 {
@@ -178,20 +214,22 @@ impl SurfaceDom {
         return at == ancestor;
     }
 
-    fn children(&self, parent: i32) -> List<i32> {
-        let mut children: List<i32> = [];
-        let mut child = self.nodes[parent].first_child;
-        while child != NO_NODE {
-            children.push(child);
-            child = self.nodes[child].next_sibling;
-        }
-        return children;
+    fn children(&self, parent: i32) -> Children {
+        return Children { nodes: &self.nodes, at: self.nodes[parent].first_child };
     }
 
-    fn child_where(&self, parent: i32, accept: fn(&Content) -> bool) -> i32 {
-        for let child of self.children(parent) {
-            if accept(&self.nodes[child].content) {
-                return child;
+    fn child_where(&self, parent: i32, accept: fn(&SurfaceNode) -> bool) -> i32 {
+        return self.children(parent).find(|child| accept(&self.nodes[child])).unwrap_or(NO_NODE);
+    }
+
+    fn first_inclusive_descendant_where(&self, index: i32, accept: fn(&SurfaceNode) -> bool) -> i32 {
+        if accept(&self.nodes[index]) {
+            return index;
+        }
+        for let child of self.children(index) {
+            let found = self.first_inclusive_descendant_where(child, accept);
+            if found != NO_NODE {
+                return found;
             }
         }
         return NO_NODE;
@@ -207,19 +245,22 @@ impl SurfaceDom {
             Document | Window => panic("HierarchyRequestError: a document or a window is never a child"),
             Doctype => {
                 assert into_document, "HierarchyRequestError: only a document holds a doctype";
-                assert self.child_where(parent, |c| *c matches { Doctype }) == NO_NODE, "HierarchyRequestError: a document holds one doctype";
-                assert self.child_where(parent, |c| *c matches { Element(_) }) == NO_NODE, "HierarchyRequestError: a doctype precedes the element";
+                assert self.child_where(parent, |n| n.content matches { Doctype }) == NO_NODE, "HierarchyRequestError: a document holds one doctype";
+                assert self.child_where(parent, |n| n.content matches { Element(_) }) == NO_NODE, "HierarchyRequestError: a doctype precedes the element";
             },
             Text(_) => {
                 assert !into_document, "HierarchyRequestError: a document holds no text";
             },
             Element(_) => {
-                assert !into_document || self.child_where(parent, |c| *c matches { Element(_) }) == NO_NODE, "HierarchyRequestError: a document holds one element";
+                assert !into_document || self.child_where(parent, |n| n.content matches { Element(_) }) == NO_NODE, "HierarchyRequestError: a document holds one element";
             },
         }
     }
 
     fn serialize_children(&self, parent: i32, out: &mut String) {
+        if self.nodes[parent].content matches { Element(name) && is_void(&name) } {
+            return;
+        }
         let raw_text = self.nodes[parent].content matches { Element(name) && is_raw_text(&name) };
         for let child of self.children(parent) {
             match self.nodes[child].content {
@@ -240,8 +281,8 @@ impl SurfaceDom {
                         out.push('"');
                     }
                     out.push('>');
+                    self.serialize_children(child, out);
                     if !is_void(&name) {
-                        self.serialize_children(child, out);
                         out.push_str(`</${name}>`);
                     }
                 },
@@ -299,22 +340,8 @@ impl SurfaceDom {
         }
     }
 
-    // The first node in tree order, from `index` down, that `accept` takes.
-    fn find(&self, index: i32, accept: &fn(&SurfaceNode) -> bool) -> i32 {
-        if (*accept)(&self.nodes[index]) {
-            return index;
-        }
-        for let child of self.children(index) {
-            let found = self.find(child, accept);
-            if found != NO_NODE {
-                return found;
-            }
-        }
-        return NO_NODE;
-    }
-
     fn title_index(&self) -> i32 {
-        return self.find(DOCUMENT_INDEX, &|n| n.content matches { Element(name) && name == "title" });
+        return self.first_inclusive_descendant_where(DOCUMENT_INDEX, |n| n.content matches { Element(name) && name == "title" });
     }
 
     fn replace_all_text(&mut self, index: i32, text: String) {
@@ -325,7 +352,7 @@ impl SurfaceDom {
     }
 
     fn child_named(&self, parent: i32, local_name: String) -> i32 {
-        return self.child_where(parent, |c| *c matches { Element(name) && name == local_name });
+        return self.child_where(parent, |n| n.content matches { Element(name) && name == local_name });
     }
 
     fn html_child(&self, local_name: String) -> i32 {
@@ -357,6 +384,7 @@ impl Window for SurfaceDom {
 
 impl Document for SurfaceDom {
     fn create_element(&mut self, this: &Document, local_name: String, options: Option<String>) -> Element {
+        assert is_valid_element_local_name(&local_name), "InvalidCharacterError: not a valid element name";
         resume self.handle(self.create(local_name.to_ascii_lowercase())) as Element;
     }
 
@@ -374,7 +402,7 @@ impl Document for SurfaceDom {
     }
 
     fn get_element_by_id(&mut self, this: &Document, element_id: String) -> Option<Element> {
-        resume self.element(self.find(DOCUMENT_INDEX, &|n| n.attributes.get("id") == Option::Some(element_id)));
+        resume self.element(self.first_inclusive_descendant_where(DOCUMENT_INDEX, |n| !element_id.is_empty() && n.attributes.get("id") == Option::Some(element_id)));
     }
 
     fn title(&mut self, this: &Document) -> String {
@@ -523,22 +551,23 @@ impl Element for SurfaceDom {
     }
 
     fn get_attribute(&mut self, this: &Element, qualified_name: String) -> Option<String> {
-        resume self.nodes[self.index(*this)].attributes.get(qualified_name);
+        resume self.nodes[self.index(*this)].attributes.get(qualified_name.to_ascii_lowercase());
     }
 
     fn set_attribute(&mut self, this: &Element, qualified_name: String, value: String) {
+        assert is_valid_attribute_local_name(&qualified_name), "InvalidCharacterError: not a valid attribute name";
         let index = self.index(*this);
-        self.nodes[index].attributes[qualified_name] = value;
+        self.nodes[index].attributes[qualified_name.to_ascii_lowercase()] = value;
         resume ();
     }
 
     fn has_attribute(&mut self, this: &Element, qualified_name: String) -> bool {
-        resume self.nodes[self.index(*this)].attributes.contains_key(qualified_name);
+        resume self.nodes[self.index(*this)].attributes.contains_key(qualified_name.to_ascii_lowercase());
     }
 
     fn remove_attribute(&mut self, this: &Element, qualified_name: String) {
         let index = self.index(*this);
-        self.nodes[index].attributes.remove(qualified_name);
+        self.nodes[index].attributes.remove(qualified_name.to_ascii_lowercase());
         resume ();
     }
 

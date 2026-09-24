@@ -310,6 +310,79 @@ test "the document serializes with its doctype" {
     assert dom.to_html() == "<!DOCTYPE html><html><head></head><body><p>Hi</p></body></html>";
 }
 
+#[expect_trap]
+test "an element name holding a space is an InvalidCharacterError" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        Dom::document().create_element("div onclick=x", null);
+    };
+}
+
+#[expect_trap]
+test "an element name not starting with a letter is an InvalidCharacterError" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        Dom::document().create_element("1div", null);
+    };
+}
+
+#[expect_trap]
+test "an attribute name holding `=` is an InvalidCharacterError" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        Dom::document().create_element("div", null).set_attribute("a=b", "");
+    };
+}
+
+test "a name the DOM accepts is kept" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let el = doc.create_element("my-el.x", null);
+        el.set_attribute("data-a:b", "1");
+        let div = doc.create_element("div", null);
+        div.append_child(el);
+        assert div.get_html() == "<my-el.x data-a:b=\"1\"></my-el.x>";
+    };
+}
+
+test "an attribute name is lowercased" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let div = doc.create_element("div", null);
+        let p = doc.create_element("p", null);
+        p.set_attribute("Class", "x");
+        assert p.get_attribute("CLASS") == Option::Some("x");
+        assert p.has_attribute("class");
+        div.append_child(p);
+        assert div.get_html() == "<p class=\"x\"></p>";
+        p.remove_attribute("CLass");
+        assert !p.has_attribute("class");
+    };
+}
+
+test "a void element's get_html is empty, whatever it holds" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let input = doc.create_element("input", null);
+        input.append_child(doc.create_element("span", null));
+        assert input.get_html() == "";
+    };
+}
+
+test "an empty id is no id" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let div = doc.create_element("div", null);
+        div.set_attribute("id", "");
+        doc.body().unwrap().append_child(div);
+        assert doc.get_element_by_id("") == null;
+    };
+}
+
 test "an input holds its value" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
