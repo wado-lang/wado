@@ -196,16 +196,15 @@ impl Semantics {
         self.state.as_ref().map(|s| &*s.world_registry)
     }
 
-    /// Component Model interface registry produced during annotate: the resolved
-    /// `#[cm(…)]` / `#[cm_import(…)]` view of every CM interface the frontend
-    /// saw, powering binding synthesis, lift/lower, and WIT emission. `None`
-    /// under the same conditions as [`Self::world_registry`].
-    #[must_use]
     /// Name resolution: which declaration a spelling in a module reaches.
+    #[must_use]
     pub(crate) fn resolutions(&self) -> Option<&Resolutions> {
         self.state.as_ref().map(|s| &*s.tysys.resolutions)
     }
 
+    /// The resolved `#[cm(…)]` / `#[cm_import(…)]` view of every CM interface
+    /// the frontend saw. `None` under the same conditions as [`Self::world_registry`].
+    #[must_use]
     pub fn cm_interface_registry(&self) -> Option<&CmInterfaceRegistry> {
         self.state.as_ref().map(|s| &*s.tysys.cm_interface_registry)
     }

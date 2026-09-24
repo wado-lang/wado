@@ -456,7 +456,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<(&'i ast::Type, String, DefId)> {
         let trait_type = impl_block.trait_type.as_ref()?;
         let trait_name = self.get_type_name(trait_type);
-        let decl = head_site(trait_type).and_then(|site| self.decl_key_at(site, &trait_name))?;
+        let decl = self.decl_key_at(head_site(trait_type), &trait_name)?;
         Some((trait_type, trait_name, decl))
     }
 
@@ -2029,13 +2029,11 @@ fn declaring_module_of_kind(
 type DeclaredAssocType = (DefId, ast::AssociatedTypeDecl);
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The trait declaration a reference site names, from
-    /// [`crate::resolve::Resolutions`] and so resolved in the writing module: an
-    /// alias or a second module's same-named trait cannot displace it. An
-    /// interface or resource answers too, since an effect bound names one.
+    /// The trait, interface or resource a bound's reference site names.
     pub(super) fn trait_decl_at(&self, site: AstId) -> Option<DefId> {
         self.tysys.resolutions.declared(site).filter(|def| {
-            self.tysys.trait_env.declares_trait(def) || self.tysys.trait_env.declares_effect(*def)
+            self.tysys.trait_env.declares_trait(def)
+                || self.tysys.resolutions.defs().kind(*def).is_effect()
         })
     }
 

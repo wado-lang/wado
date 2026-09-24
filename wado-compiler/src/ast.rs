@@ -4158,21 +4158,22 @@ impl TraitHead {
         matches!(self, TraitHead::Open { .. } | TraitHead::Undecided)
     }
 
-    /// The sites of a `Fixed` head's effect names, parallel to what
-    /// [`Self::inherited_effects`] answers.
-    pub fn effect_ids(&self) -> &[(AstId, Span)] {
-        match self {
-            TraitHead::Fixed { effect_ids, .. } => effect_ids,
-            TraitHead::Undecided | TraitHead::Pure { .. } | TraitHead::Open { .. } => &[],
-        }
-    }
-
-    /// The effects a method inherits when it declares none of its own.
-    pub fn inherited_effects(&self) -> Vec<String> {
+    /// The effects a method inherits when it declares none of its own, each
+    /// where the head writes it. `unwritten` stands in for a head left out.
+    pub fn inherited_effects(&self, unwritten: Span) -> Vec<(String, Span)> {
         match self {
             TraitHead::Pure { .. } => Vec::new(),
-            TraitHead::Fixed { effects, .. } => effects.clone(),
-            TraitHead::Open { .. } | TraitHead::Undecided => vec![EFFECT_HOLE.to_string()],
+            TraitHead::Fixed {
+                effects,
+                effect_ids,
+                ..
+            } => effects
+                .iter()
+                .cloned()
+                .zip(effect_ids.iter().map(|(_, span)| *span))
+                .collect(),
+            TraitHead::Open { span } => vec![(EFFECT_HOLE.to_string(), *span)],
+            TraitHead::Undecided => vec![(EFFECT_HOLE.to_string(), unwritten)],
         }
     }
 

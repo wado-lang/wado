@@ -1,0 +1,20 @@
+// A default method takes its trait head's effect as the trait's module names
+// it. The impl here imports no `Stdout`, and declares one of its own that the
+// inherited clause must not reach.
+
+use { Greet } from "./sub/trait_head_effect_reaches_impl_module_trait.wado";
+
+interface Stdout {
+    fn write(s: String);
+}
+
+struct Quiet {}
+
+impl Greet for Quiet {}
+
+test "the default method keeps the trait's effect" {
+    assert Quiet {}.greet() == 1;
+}
+
+__DATA__
+{"test": {}}

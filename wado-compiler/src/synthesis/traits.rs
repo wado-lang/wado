@@ -4438,22 +4438,6 @@ fn resolve_impl_module_via_env(
 ) -> ModuleSource {
     let resolved = tt.get(type_id).clone();
 
-    let indexed = matches!(
-        resolved,
-        ResolvedType::Ref(_)
-            | ResolvedType::MutRef(_)
-            | ResolvedType::Primitive(_)
-            | ResolvedType::Unit
-            | ResolvedType::Struct { .. }
-            | ResolvedType::Enum { .. }
-            | ResolvedType::Variant { .. }
-            | ResolvedType::Newtype { .. }
-            | ResolvedType::Flags { .. }
-            | ResolvedType::GenericInstance { .. }
-            | ResolvedType::GenericResource { .. }
-            | ResolvedType::BuiltinArray(_)
-    );
-
     let type_module: Option<ModuleSource> = match &resolved {
         ResolvedType::Struct { .. }
         | ResolvedType::Enum { .. }
@@ -4468,8 +4452,7 @@ fn resolve_impl_module_via_env(
         _ => None,
     };
 
-    if indexed
-        && let Some(trait_) = trait_name.canonical()
+    if let Some(trait_) = trait_name.canonical()
         && let Some(m) = trait_env.impl_module_for(
             ImplReceiver::Of(&tt.impl_receiver_key(type_id)),
             trait_,

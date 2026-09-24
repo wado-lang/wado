@@ -12,8 +12,8 @@ use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTabl
 use crate::token::Span;
 
 use crate::ast::{
-    self, AstId, AstVisitor, AttrArg, Attribute, CmImport, EffectHandlerBinding, Expr, Function,
-    ImplBlock, Item, Stmt, TraitDecl, cm_import_of,
+    self, AstId, AstVisitor, Attribute, CmImport, EffectHandlerBinding, Expr, Function, ImplBlock,
+    Item, Stmt, cm_import_of,
 };
 use crate::compiler_host::Diagnostic;
 use crate::defs::DefId;
@@ -50,6 +50,8 @@ pub enum EffectFault {
     UndeclaredByTrait,
     /// The callee's effects are left open, and the caller forwards none.
     MissingOpen,
+    /// A `#[benign]` argument names no effect in the function's module.
+    UnknownBenign,
 }
 
 /// Error from effect checking
@@ -69,25 +71,41 @@ pub struct EffectError {
 impl From<EffectError> for Diagnostic {
     fn from(e: EffectError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-        let message = match e.fault {
-            EffectFault::Missing(kind) => format!(
-                "missing {} '{}' required by '{}'",
-                kind.noun(),
-                e.missing_effect,
-                e.callee
+        let (code, message) = match e.fault {
+            EffectFault::Missing(kind) => (
+                Code::TypeMismatch,
+                format!(
+                    "missing {} '{}' required by '{}'",
+                    kind.noun(),
+                    e.missing_effect,
+                    e.callee
+                ),
             ),
-            EffectFault::UndeclaredByTrait => format!(
-                "effect '{}' is not declared by trait method '{}'",
-                e.missing_effect, e.callee
+            EffectFault::UndeclaredByTrait => (
+                Code::TypeMismatch,
+                format!(
+                    "effect '{}' is not declared by trait method '{}'",
+                    e.missing_effect, e.callee
+                ),
             ),
-            EffectFault::MissingOpen => format!(
-                "missing effects required by '{}': its trait leaves them to the impl, so declare `with _`",
-                e.callee
+            EffectFault::MissingOpen => (
+                Code::TypeMismatch,
+                format!(
+                    "missing effects required by '{}': its trait leaves them to the impl, so declare `with _`",
+                    e.callee
+                ),
+            ),
+            EffectFault::UnknownBenign => (
+                Code::UnknownType,
+                format!(
+                    "`#[benign({})]` on '{}' names no effect in scope",
+                    e.missing_effect, e.callee
+                ),
             ),
         };
         Diagnostic {
             severity: Severity::Error,
-            code: Code::TypeMismatch,
+            code,
             message,
             span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }
@@ -398,13 +416,6 @@ fn impl_key(struct_name: &FqTypeName, trait_name: &FqTraitName) -> Option<ImplKe
     ))
 }
 
-/// Whether `name` is an effect parameter of the trait or of the method, rather
-/// than an effect declaration the module can resolve.
-fn declares_effect_param(trait_decl: &TraitDecl, method: &Function, name: &str) -> bool {
-    let mut params = trait_decl.type_params.iter().chain(&method.type_params);
-    params.any(|p| p.is_effect && p.name == name)
-}
-
 /// The traits bounding each type parameter, by the slot
 /// `Scope::register_generic_params` gives it.
 fn bound_traits_per_slot(
@@ -523,26 +534,13 @@ impl OwnedEffectData {
                     open_traits.insert((src.clone(), trait_decl.name.clone()));
                 }
                 for method in &trait_decl.methods {
-                    let sites = if method.effects_inherited {
-                        trait_decl.head.effect_ids()
-                    } else {
-                        &method.effect_ids
-                    };
                     let effects = method
                         .effects
                         .iter()
-                        .enumerate()
-                        .map(|(i, name)| {
-                            // A name the trait or the method declares as an
-                            // effect parameter stands for whatever the impl
-                            // brings, so it never resolves to a declaration.
-                            if declares_effect_param(trait_decl, method, name) {
-                                return EffectRef::Param { name: name.clone() };
-                            }
-                            // Every name past the parameter test has a site.
+                        .zip(&method.effect_ids)
+                        .map(|(name, &(site, _))| {
                             // One reaching no effect was reported in elaboration.
-                            let (site, _) = sites[i];
-                            effect_at(sem, site, &closure).unwrap_or_else(|| EffectRef::Concrete {
+                            effect_at(sem, site, name).unwrap_or_else(|| EffectRef::Concrete {
                                 name: name.clone(),
                                 module_source: src.clone(),
                             })
@@ -757,7 +755,7 @@ fn binding_granted_effects(
         .effect
         .as_ref()
         .and_then(|ty| match ty {
-            ast::Type::Named(named) => effect_at(sem, named.id, index.closure),
+            ast::Type::Named(named) => effect_at(sem, named.id, &named.name),
             _ => None,
         })
         .into_iter()
@@ -887,6 +885,20 @@ fn check_function_effects_sem(
     handled: Option<&EffectRef>,
     out: &mut Vec<EffectError>,
 ) {
+    // `#[benign(E)]` admits `E` in the body without a `with E` clause.
+    let mut benign = Vec::new();
+    for (name, span) in benign_effect_names(&func.attrs) {
+        match effect_named_in(&name, module, sem) {
+            Some(effect) => benign.push(effect),
+            None => out.push(EffectError {
+                callee: func.name.clone(),
+                missing_effect: name,
+                fault: EffectFault::UnknownBenign,
+                span,
+                module: module.source_path(),
+            }),
+        }
+    }
     let Some(body) = &func.body else {
         return;
     };
@@ -923,12 +935,7 @@ fn check_function_effects_sem(
     if let Some(effect) = handled {
         current.insert(effect.clone());
     }
-    // `#[benign(E)]` admits `E` in the body without a `with E` clause.
-    for name in benign_effect_names(&func.attrs) {
-        if let Some(effect) = effect_named_in(&name, module, sem, index.closure) {
-            current.insert(effect);
-        }
-    }
+    current.extend(benign);
     // A function holding `Stdout` may call operations that internally need
     // `Stream`, etc.
     let current = expand_through_closure(&current, index.closure);
@@ -1043,40 +1050,16 @@ fn build_propagation_closure_sem(
     direct
 }
 
-/// `def` as an effect, when the propagation closure knows it as one.
-fn effect_of_def(
-    sem: &Semantics,
-    def: DefId,
-    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
-) -> Option<EffectRef> {
-    let defs = sem.resolutions()?.defs();
-    let effect = EffectRef::Concrete {
-        name: defs.name(def).to_string(),
-        module_source: defs.module(def).clone(),
-    };
-    closure.contains_key(&effect).then_some(effect)
-}
-
-/// The effect the `with`-clause name at `site` refers to.
-fn effect_at(
-    sem: &Semantics,
-    site: AstId,
-    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
-) -> Option<EffectRef> {
-    let def = sem.resolutions()?.declared_if_walked(site)?;
-    effect_of_def(sem, def, closure)
+/// The effect the name at `site` refers to.
+fn effect_at(sem: &Semantics, site: AstId, name: &str) -> Option<EffectRef> {
+    sem.resolutions()?.effect_at(site, name)
 }
 
 /// The effect an attribute argument written in `module` refers to. It has no
 /// reference site, so the module's scope decides.
-fn effect_named_in(
-    name: &str,
-    module: &ModuleSource,
-    sem: &Semantics,
-    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
-) -> Option<EffectRef> {
-    let def = sem.resolutions()?.resolve_in(module, name)?;
-    effect_of_def(sem, def, closure)
+fn effect_named_in(name: &str, module: &ModuleSource, sem: &Semantics) -> Option<EffectRef> {
+    let resolutions = sem.resolutions()?;
+    resolutions.effect_decl(resolutions.resolve_in(module, name)?)
 }
 
 /// Expand an effect set through the propagation closure.
@@ -1130,13 +1113,17 @@ fn add_signature_resources(
     }
 }
 
-/// `#[benign(E, F)]` effect names declared on a function.
-fn benign_effect_names(attrs: &[Attribute]) -> Vec<String> {
+/// `#[benign(E, F)]` effect names declared on a function, each with its
+/// attribute's span.
+fn benign_effect_names(attrs: &[Attribute]) -> Vec<(String, Span)> {
     attrs
         .iter()
         .filter(|attr| attr.name == BENIGN)
-        .flat_map(|attr| attr.args.iter().map(AttrArg::as_str))
-        .map(str::to_string)
+        .flat_map(|attr| {
+            attr.args
+                .iter()
+                .map(|arg| (arg.as_str().to_string(), attr.span))
+        })
         .collect()
 }
 

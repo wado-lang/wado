@@ -1197,7 +1197,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> bool {
         self.trait_declares_method(
-            self.decl_key_at(head_site, trait_name),
+            self.decl_key_at(Some(head_site), trait_name),
             method_name,
             |kind| kind != ast::SelfKind::None,
         )
@@ -1213,7 +1213,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> bool {
         self.trait_declares_method(
-            self.decl_key_at(head_site, trait_name),
+            self.decl_key_at(Some(head_site), trait_name),
             method_name,
             |kind| kind == ast::SelfKind::None,
         )
@@ -1453,7 +1453,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if target_type_id == TypeTable::UNKNOWN
             && let Some(head) = &head
             && self
-                .decl_key_at(head.site, &head.name)
+                .decl_key_at(Some(head.site), &head.name)
                 .is_some_and(|key| self.tysys.trait_env.declares_trait(&key))
         {
             // `Take::<A>::take(recv, …)` — the trait-turbofish qualified call
@@ -1466,7 +1466,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // (`Shape::<Sq>::area` writes the receiver — a pre-existing
             // misuse), so that shape keeps its unknown-function error.
             let trait_params = self
-                .decl_key_at(head.site, &head.name)
+                .decl_key_at(Some(head.site), &head.name)
                 .and_then(|key| self.trait_decl_type_params_of(&key))
                 .unwrap_or_default();
             if self.is_trait_instance_method_at(head.site, &head.name, &static_call.method)

@@ -14,6 +14,7 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
 use crate::symbol::SymbolTable;
+use crate::tir::EffectRef;
 use crate::token::Span;
 
 /// What a reference site refers to.
@@ -71,6 +72,8 @@ pub struct Resolutions {
     /// Every binder the walk found taking a name that already reached
     /// something. Collected rather than emitted: this pass holds no logger.
     shadowings: Vec<Shadowing>,
+    /// The binders declared `effect`, the only ones that stand for an effect.
+    effect_binders: hashmap::IndexSet<AstId>,
 }
 
 /// What every module can see, by layer.
@@ -248,6 +251,7 @@ impl Resolutions {
         let scopes = Scopes::build(modules, symbols, &defs);
         let mut refs = IndexMap::default();
         let mut shadowings = Vec::new();
+        let mut effect_binders = hashmap::IndexSet::default();
         for (module_source, module) in modules {
             let mut resolver = Resolver {
                 module: module_source,
@@ -259,6 +263,7 @@ impl Resolutions {
                 scopes: &scopes,
                 refs: &mut refs,
                 shadowings: &mut shadowings,
+                effect_binders: &mut effect_binders,
                 pending_binder: None,
                 irrefutable_pattern: false,
                 lint_shadowing: !module.has_generated()
@@ -273,6 +278,7 @@ impl Resolutions {
             refs,
             scopes,
             shadowings,
+            effect_binders,
         }
     }
 
@@ -339,6 +345,33 @@ impl Resolutions {
     #[must_use]
     pub fn resolve_in(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
         self.scopes.resolve(module, name)
+    }
+
+    /// The effect the `with`-clause name at `site` refers to: a parameter for
+    /// an `effect` binder, the declaration for an `interface` or resource.
+    #[must_use]
+    pub fn effect_at(&self, site: AstId, name: &str) -> Option<EffectRef> {
+        match self.get(site) {
+            Resolution::Binder(binder) => {
+                self.effect_binders
+                    .contains(&binder)
+                    .then(|| EffectRef::Param {
+                        name: name.to_string(),
+                    })
+            }
+            Resolution::Def(def) => self.effect_decl(def),
+            Resolution::Projection(_) | Resolution::Unresolved => None,
+        }
+    }
+
+    /// `def` as an effect, when it declares an `interface` or a resource.
+    #[must_use]
+    pub fn effect_decl(&self, def: DefId) -> Option<EffectRef> {
+        let defs = self.defs();
+        defs.kind(def).is_effect().then(|| EffectRef::Concrete {
+            name: defs.name(def).to_string(),
+            module_source: defs.module(def).clone(),
+        })
     }
 
     /// Every declaration `module` may name — what each name it can write
@@ -423,6 +456,7 @@ struct Resolver<'a> {
     /// Binders in scope, innermost last. A name found here is the enclosing
     /// item's parameter and no module scope is consulted for it.
     binders: Vec<IndexMap<String, AstId>>,
+    effect_binders: &'a mut hashmap::IndexSet<AstId>,
     /// Items declared inside the function body being walked, innermost block
     /// last. Filled as the walk passes each declaration, because a local item
     /// is visible only after it — like a `let`, and unlike a module-level
@@ -502,6 +536,9 @@ impl Resolver<'_> {
         }
         for p in params {
             scope.insert(p.name.clone(), p.id);
+            if p.is_effect {
+                self.effect_binders.insert(p.id);
+            }
         }
         self.binders.push(scope);
     }

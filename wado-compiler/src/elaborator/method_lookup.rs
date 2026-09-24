@@ -758,10 +758,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(module) = ModuleSource::of_primitive_name(struct_name) {
             return module;
         }
-        if let Some(def) = site.map_or_else(
-            || self.decl_key_or_local(struct_name),
-            |site| self.decl_key_at(site, struct_name),
-        ) {
+        if let Some(def) = self.decl_key_at(site, struct_name) {
             return self.tysys.resolutions.defs().module(def).clone();
         }
         self.current_module_source.clone()

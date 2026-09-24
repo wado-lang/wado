@@ -161,6 +161,13 @@ impl DefKind {
         )
     }
 
+    /// Whether a declaration of this kind can stand in a `with` clause: an
+    /// `interface` or a resource.
+    #[must_use]
+    pub fn is_effect(self) -> bool {
+        matches!(self, Self::Effect | Self::Resource)
+    }
+
     /// Whether a declaration of this kind is a case of a sum or bitmask type.
     ///
     /// A case is reachable unqualified wherever its type is in scope, and a

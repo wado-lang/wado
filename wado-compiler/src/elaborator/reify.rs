@@ -629,6 +629,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .zip(&ft.effect_ids)
             .map(|(name, &(site, _))| {
                 self.tysys
+                    .resolutions
                     .effect_at(site, name)
                     .unwrap_or_else(|| EffectRef::Concrete {
                         name: name.clone(),

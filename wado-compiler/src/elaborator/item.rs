@@ -1005,6 +1005,15 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         });
     }
 
+    fn reject_second_effect_param(&mut self, type_params: &[ast::GenericParam]) {
+        if let Some(second) = type_params.iter().filter(|p| p.is_effect).nth(1) {
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message: "multiple effect parameters are not allowed; use a single effect parameter instead".to_string(),
+                span: second.span,
+            });
+        }
+    }
+
     /// The type arguments a head writes, resolved in the current frame — the
     /// reading the impl frame binds through, so a block's recorded arguments
     /// and its bound parameters share one set of positions.
@@ -1036,16 +1045,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             impl_declared_params,
         );
 
-        let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
-        if effect_params.len() > 1 {
-            let _ = self.emit(TypeError::InvalidLiteral {
-                message: "multiple effect parameters are not allowed; use a single effect parameter instead".to_string(),
-                span: effect_params[1].span,
-            });
-        }
-        self.annotate_ctx
-            .trait_ctx
-            .install_effect_params(&func.type_params);
+        self.reject_second_effect_param(&func.type_params);
 
         let offset = method_param_offset(&impl_type_params) as usize;
         let mut next_idx = offset as u32;
@@ -1614,10 +1614,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope.sem.decls.clear_fn_local_items();
         for method in &trait_decl.methods {
             let mut method_scope = scope.enter_inherited_type_param_scope();
-            method_scope
-                .annotate_ctx
-                .trait_ctx
-                .install_effect_params(&method.type_params);
             method_scope.register_generic_params(&method.type_params, next_slot);
             // Both frames are in scope for a default, so both supply the type
             // argument a caller gets by default, in declaration-slot order.
@@ -1667,10 +1663,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for method in &trait_decl.methods {
             scope.reject_declaration_attrs_on_requirement(&trait_decl.name, method);
             let mut method_scope = scope.enter_inherited_type_param_scope();
-            method_scope
-                .annotate_ctx
-                .trait_ctx
-                .install_effect_params(&method.type_params);
+            // The head's names were resolved above, once for every method.
             if !method.effects_inherited {
                 method_scope.resolve_effects(&method.effects, &method.effect_ids);
             }
@@ -2242,10 +2235,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-        scope
-            .annotate_ctx
-            .trait_ctx
-            .install_effect_params(&func.type_params);
         scope.register_generic_params(&func.type_params, 0);
         let type_param_ids: Vec<(String, TypeId)> = scope
             .annotate_ctx
@@ -2339,22 +2328,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
         scope.sem.decls.clear_fn_local_items();
 
-        // Set effect params in scope before `register_generic_params`. Eager
-        // `<F: fn() with E>` bound resolution runs inside
-        // `register_generic_params` and consults `trait_ctx.effect_params`
-        // to recognise `E` as `EffectRef::Param` rather than re-resolving it
-        // to a phantom `EffectRef::Concrete`.
-        let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
-        if effect_params.len() > 1 {
-            let _ = scope.emit(TypeError::InvalidLiteral {
-                message: "multiple effect parameters are not allowed; use a single effect parameter instead".to_string(),
-                span: effect_params[1].span,
-            });
-        }
-        scope
-            .annotate_ctx
-            .trait_ctx
-            .install_effect_params(&func.type_params);
+        scope.reject_second_effect_param(&func.type_params);
 
         scope.register_generic_params(&func.type_params, 0);
 
@@ -2511,10 +2485,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
 
-        // Stash the resolved `Vec<EffectRef>` for reify: reify
-        // cannot reconstruct effect-param canonicalisation without
-        // `trait_ctx.effect_params`, so the annotate phase records
-        // the already-resolved list here keyed by the function's `AstId`.
         let func_key = func.id;
         scope.sem.types.function_effects.insert(func_key, effects);
 
@@ -2621,16 +2591,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.sem.decls.clear_fn_local_items();
 
-        // Bare base trait name (e.g. `"Stream"` for an `impl Stream<u8>`).
-        // Distinct from `trait_name`, which is the full mangled form
-        // (`"Stream<u8>"`) used to make per-instantiation method names
-        // unique. Effect / resource / trait decl indices are keyed by the
-        // canonical `(decl_module, base name)` pair, so we also resolve
-        // the trait reference through the current module's import context
-        // so dispatch synthesis can tell two same-named effects /
-        // resources apart.
-        let base_trait_name: Option<String> = trait_type.map(|t| scope.get_type_name(t));
-
         let frame = scope.enter_impl_method_frame(
             func,
             impl_type,
@@ -2700,34 +2660,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // share the handler-method semantics with effects: an
         // `impl Fields for CountingFields` method is a one-shot handler
         // body just like `impl Counter for BaseCounter`.
-        //
-        if let Some(name) = base_trait_name.as_deref() {
-            let canonical_key = scope.decl_key_or_local(name);
-            let declares =
-                |index: &hashmap::IndexSet<DefId>| canonical_key.filter(|key| index.contains(key));
-            let effect_decl = declares(&scope.tysys.trait_env.effect_decl_index);
-            let resource_decl = declares(&scope.tysys.trait_env.resource_decl_index);
-            if effect_decl.is_some() || resource_decl.is_some() {
-                ctx.in_handler_method = true;
-            }
-            let (decl_ref, is_resource_effect) = match (effect_decl, resource_decl) {
-                (Some(d), _) => (Some(d), false),
-                (None, Some(d)) => (Some(d), true),
-                (None, None) => (None, false),
-            };
-            let async_op = decl_ref.and_then(|decl| {
-                scope
-                    .tysys
-                    .signatures
-                    .resource_method_sig(decl, &func.name)
-                    .filter(|op| op.is_async)
-                    .map(|op| op.cm_name.is_some())
-            });
+        if let Some(handled) = trait_name.and_then(FqTraitName::canonical)
+            && scope.tysys.resolutions.defs().kind(handled).is_effect()
+        {
+            ctx.in_handler_method = true;
+            let is_resource_effect =
+                scope.tysys.resolutions.defs().kind(handled) == DefKind::Resource;
+            let async_op = scope
+                .tysys
+                .signatures
+                .resource_method_sig(handled, &func.name)
+                .filter(|op| op.is_async)
+                .map(|op| op.cm_name.is_some());
             if let Some(cm_backed) = async_op
                 && (is_resource_effect || !cm_backed)
             {
                 let _ = scope.emit(TypeError::AsyncUserEffectHandlerUnsupported {
-                    interface_name: name.to_string(),
+                    interface_name: scope.tysys.resolutions.defs().name(handled).to_string(),
                     op_name: func.name.clone(),
                     span: func.span,
                 });
@@ -2857,10 +2806,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
 
-        // Stash the resolved `Vec<EffectRef>` for reify: reify
-        // cannot reconstruct effect-param canonicalisation without
-        // `trait_ctx.effect_params`, so the annotate phase records
-        // the already-resolved list here keyed by the method's `AstId`.
         let method_key = func.id;
         scope.sem.types.function_effects.insert(method_key, effects);
 

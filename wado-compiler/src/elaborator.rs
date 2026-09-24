@@ -1217,36 +1217,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The declared name of the trait `trait_name` refers to at `site`, past a
-    /// `use … as` or `ns$Trait` alias. No site falls back to the decl indexes.
+    /// `use … as` or `ns$Trait` alias.
     pub(super) fn declared_trait_name(&self, site: Option<AstId>, trait_name: &str) -> String {
-        site.map_or_else(
-            || self.decl_key_or_local(trait_name),
-            |site| self.decl_key_at(site, trait_name),
-        )
-        .map_or_else(
+        self.decl_key_at(site, trait_name).map_or_else(
             || trait_name.to_string(),
             |def| self.tysys.resolutions.defs().name(def).to_string(),
         )
     }
 
-    /// The declaration a written reference names, keyed on the site that wrote it,
-    /// so an alias, a namespace prefix and a function-local item each reach their
-    /// own. `name` is read only for a node no walk reached: CM binding
-    /// synthesis mints types that carry a spelling and nothing else.
-    pub(crate) fn decl_key_at(&self, site: AstId, name: &str) -> Option<DefId> {
-        match self.tysys.resolutions.walked(site) {
-            Some(_) => self.tysys.resolutions.declared(site),
-            None => self.decl_key_in(&self.home_module(site), name),
+    /// The declaration `name` names where it is written: the walk's answer at
+    /// `site`, or the frame's for a node no walk reached.
+    pub(crate) fn decl_key_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
+        match site.filter(|site| self.tysys.resolutions.walked(*site).is_some()) {
+            Some(site) => self.tysys.resolutions.declared(site),
+            None => self.decl_key_or_local(name),
         }
-    }
-
-    /// The declaration `name` reaches where it is written: what the walk
-    /// recorded at `site`, or for a synthesised node with none, the frame's scope.
-    fn decl_written_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
-        site.map_or_else(
-            || self.decl_key_or_local(name),
-            |site| self.tysys.resolutions.declared_if_walked(site),
-        )
     }
 
     /// Whether `name` names a type where it is written: a primitive, or a type
@@ -1254,7 +1239,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(crate) fn names_type_at(&self, site: Option<AstId>, name: &str) -> bool {
         TypeTable::primitive_by_name(name).is_some()
             || self
-                .decl_written_at(site, name)
+                .decl_key_at(site, name)
                 .is_some_and(|def| self.tysys.resolutions.defs().kind(def).is_type())
     }
 
@@ -1702,7 +1687,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         site: Option<AstId>,
         type_name: &str,
     ) -> trait_env::ImplTargetKey {
-        self.decl_written_at(site, type_name).map_or_else(
+        self.decl_key_at(site, type_name).map_or_else(
             || trait_env::ImplTargetKey::of_undeclared(&self.current_module_source, type_name),
             |def| trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def),
         )
@@ -1790,57 +1775,42 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Resolve a `with` clause's effect names to TIR `EffectRef`s.
-    ///
-    /// `effect_ids` is parallel to `effects`: each written name's site, which
-    /// the resolve walk answered. A synthesised list carries no walked sites.
+    /// Resolve a `with` clause's effect names, `effect_ids` being each one's
+    /// site, to TIR `EffectRef`s.
     pub(crate) fn resolve_effects(
         &mut self,
         effects: &[String],
         effect_ids: &[(AstId, Span)],
     ) -> Vec<tir::EffectRef> {
+        assert_eq!(effects.len(), effect_ids.len());
         effects
             .iter()
-            .enumerate()
-            .map(|(i, name)| match effect_ids.get(i) {
-                Some(&(site, span)) if self.tysys.resolutions.walked(site).is_some() => {
-                    self.resolve_effect_at(site, span, name)
-                }
-                _ => self.resolve_unsited_effect(name),
-            })
+            .zip(effect_ids)
+            .map(|(name, &(site, span))| self.resolve_effect_at(site, span, name))
             .collect()
     }
 
     fn resolve_effect_at(&mut self, site: AstId, span: Span, name: &str) -> tir::EffectRef {
-        if let Some(&binder) = self.annotate_ctx.trait_ctx.effect_params.get(name) {
-            self.record_reference(site, binder);
-        } else if let Some(def) = self.tysys.resolutions.declared(site) {
-            self.record_reference_to_decl(site, def, span);
-        }
-        self.tysys.effect_at(site, name).unwrap_or_else(|| {
-            let _ = self.emit(TypeError::UnknownEffect {
-                name: name.to_string(),
-                span,
-            });
-            tir::EffectRef::Concrete {
-                name: name.to_string(),
-                module_source: self.current_module_source.clone(),
+        match self.tysys.resolutions.get(site) {
+            Resolution::Binder(binder) => self.record_reference(site, binder),
+            Resolution::Def(def) => {
+                self.record_reference_to_decl(site, def, span);
             }
-        })
-    }
-
-    /// A synthesised effect name, read in the frame the AST was written in. The
-    /// hole a trait head leaves is a parameter wherever a method inherits it.
-    fn resolve_unsited_effect(&self, name: &str) -> tir::EffectRef {
-        if name == ast::EFFECT_HOLE || self.annotate_ctx.trait_ctx.effect_params.contains_key(name)
-        {
-            return tir::EffectRef::Param {
-                name: name.to_string(),
-            };
+            Resolution::Projection(_) | Resolution::Unresolved => {}
         }
-        self.decl_key_or_local(name)
-            .and_then(|def| self.tysys.effect_decl(def))
-            .unwrap_or_else(|| panic!("a synthesised `with {name}` names no effect"))
+        self.tysys
+            .resolutions
+            .effect_at(site, name)
+            .unwrap_or_else(|| {
+                let _ = self.emit(TypeError::UnknownEffect {
+                    name: name.to_string(),
+                    span,
+                });
+                tir::EffectRef::Concrete {
+                    name: name.to_string(),
+                    module_source: self.current_module_source.clone(),
+                }
+            })
     }
 
     /// Record use→def edges for each imported name in `use { a, b as c } from "..."`
@@ -2261,7 +2231,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let is_handler_method = trait_name
                 .as_ref()
                 .and_then(FqTraitName::canonical)
-                .is_some_and(|key| scope.tysys.trait_env.declares_effect(key));
+                .is_some_and(|key| scope.tysys.resolutions.defs().kind(key).is_effect());
             let is_ref_impl = matches!(
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),

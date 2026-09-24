@@ -678,6 +678,7 @@ enum AssocReceiver {
     Nominal(DefId, Vec<AssocReceiver>),
     Ref(Box<AssocReceiver>),
     MutRef(Box<AssocReceiver>),
+    /// The interned slot of the unerased type: a newtype keeps its own impls.
     Other(TypeId),
 }
 
@@ -2985,7 +2986,7 @@ impl TypeTable {
             ResolvedType::MutRef(inner) => {
                 AssocReceiver::MutRef(Box::new(self.assoc_receiver(*inner)))
             }
-            _ => AssocReceiver::Other(id),
+            unerased => AssocReceiver::Other(self.intern_map.get(unerased).copied().unwrap_or(id)),
         }
     }
 
@@ -3561,19 +3562,21 @@ impl TypeTable {
                     return *answer;
                 }
                 if !self.contains_type_param(substituted_base) {
-                    // An impl on the reference itself answers first.
-                    if let Some(resolved) = self.resolve_assoc_type_of_trait(
-                        substituted_base,
-                        &owning_trait,
-                        &assoc_name,
-                    ) {
-                        return resolved;
-                    }
                     // Associated types are inherited through references (mirrors
                     // method-call auto-deref), so peel `&`/`&mut` before
                     // projecting: a `D` inferred as `&mut MyDe` still projects
-                    // `D::Acc` to `MyDe`'s associated type.
+                    // `D::Acc` to `MyDe`'s associated type. An impl on the
+                    // reference itself answers first.
                     let concrete = self.peel_refs(substituted_base);
+                    if concrete != substituted_base
+                        && let Some(resolved) = self.resolve_assoc_type_of_trait(
+                            substituted_base,
+                            &owning_trait,
+                            &assoc_name,
+                        )
+                    {
+                        return resolved;
+                    }
                     // Identity before spelling: a projection that names its
                     // trait is answered exactly, so two traits declaring the
                     // same associated-type name on one implementor stay apart

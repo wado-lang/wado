@@ -86,10 +86,7 @@ impl FuncInstState {
         ) {
             return Some(m.clone());
         }
-        // Then the receiver identity. Not a same-spelling retry: the
-        // instantiated form above asks the mangled namespace only, while an
-        // identity is answered from whichever namespace holds it — a receiver
-        // that never carried its declaring module is reachable only here.
+        // Then the receiver's head, which an impl written on the bare head keys on.
         if let Some(m) = self.trait_env.concrete_impl_module_for(
             ImplReceiver::Of(info.receiver()),
             trait_,

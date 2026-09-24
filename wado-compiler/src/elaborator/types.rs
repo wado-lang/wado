@@ -3531,16 +3531,11 @@ impl<'a> TypeLookup<'a> {
             .or_else(|| self.declaration_at(Some(bound.id), &bound.name))
     }
 
-    /// The declaration a type reference names.
-    ///
-    /// The site decides: the walk answered for it once, in the module that
-    /// wrote it, so an alias, a namespace prefix and a function-local `struct`
-    /// all reach their own declaration with no vantage supplied here. A binder
-    /// is not a declaration and gets none. The spelling answers only for a node
-    /// the elaborator minted, which carries no site.
+    /// The declaration a type reference names: the walk's answer at `site`, or
+    /// the frame's for a node no walk reached. See `Elaborator::decl_key_at`.
     pub(super) fn declaration_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
-        match site {
-            Some(site) => self.resolutions.declared_if_walked(site),
+        match site.filter(|site| self.resolutions.walked(*site).is_some()) {
+            Some(site) => self.resolutions.declared(site),
             None => self.declaration(name),
         }
     }

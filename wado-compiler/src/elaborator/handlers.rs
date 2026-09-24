@@ -104,7 +104,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let (Some(site), Some(def)) = (site, effect_decl) {
             self.record_reference_to_decl(site, def, effect_ty.span());
         }
-        let effect = site.and_then(|id| self.tysys.effect_at(id, &interface_name));
+        let effect = site.and_then(|id| self.tysys.resolutions.effect_at(id, &interface_name));
         // An effect declares its own parameter defaults, and a `with` clause
         // writes no argument for them.
         let effect_trait =
@@ -358,7 +358,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else {
                 continue;
             };
-            if !self.tysys.trait_env.declares_effect(trait_ref) {
+            if !self.tysys.resolutions.defs().kind(trait_ref).is_effect() {
                 continue;
             }
             let type_args = self

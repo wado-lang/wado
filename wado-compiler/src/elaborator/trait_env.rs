@@ -615,20 +615,10 @@ pub(super) struct ViaClause {
 /// `Eq`.
 pub(super) type SupertraitClosureIndex = IndexMap<DefId, Vec<InheritedBound>>;
 
-/// Every `interface` declaration. Effects are first-class citizens distinct
-/// from traits and have their own impl form (`impl Effect for Type`)
-/// interpreted as installable handlers, so the elaborator and dispatch
-/// synthesis need to distinguish them quickly.
+/// Every `interface` declaration.
 pub(super) type EffectDeclIndex = IndexSet<DefId>;
 
-/// Every `resource` declaration. Resources participate in
-/// `with R => h do` / `impl R for Type` exactly like effects (see WEP
-/// 2026-04-11): both kinds of declaration carry a list of operations that
-/// user handler implementations satisfy and that the dispatch-synthesis
-/// pass routes through wrappers. Indexed separately from effects so the
-/// elaborator can keep diagnostics ("not an effect", "not a resource")
-/// truthful and so the dispatch synthesis can know not to declare the
-/// resource on its wrapper's `effects` list (resources are not effects).
+/// Every `resource` declaration.
 pub(super) type ResourceDeclIndex = IndexSet<DefId>;
 
 /// A method an impl block declares on a type, reachable by name.
@@ -814,12 +804,6 @@ pub struct TraitEnv {
     /// identity can render one for a diagnostic without every caller threading
     /// the table.
     pub(crate) defs: std::sync::Arc<DefTable>,
-    /// Effect name → effect declaration location.
-    pub(super) effect_decl_index: EffectDeclIndex,
-    /// Resource name → resource declaration location. Used alongside
-    /// `effect_decl_index` to recognise handler-installable kinds in `with`
-    /// clauses and `impl R for T` blocks.
-    pub(super) resource_decl_index: ResourceDeclIndex,
     /// Digested headers for every indexed impl block, keyed by the block's
     /// [`DefId`]. Trait/method queries read this instead of re-fetching the
     /// impl block AST from `loaded_modules`. See [`ImplHeader`].
@@ -1355,8 +1339,6 @@ impl TraitEnv {
                 impl_index,
                 all_impl_index,
                 defs: resolutions.defs().clone(),
-                effect_decl_index,
-                resource_decl_index,
                 blanket_param_sources: blanket_param_sources(
                     &impl_headers,
                     &blanket_impls,
@@ -1442,12 +1424,6 @@ impl TraitEnv {
     /// Whether `key` names a trait declaration.
     pub(crate) fn declares_trait(&self, key: &DefId) -> bool {
         self.trait_decl_headers.contains_key(key)
-    }
-
-    /// Whether `def` names an `interface` or a resource: what a `with` clause
-    /// and a handler binding accept.
-    pub(crate) fn declares_effect(&self, def: DefId) -> bool {
-        self.effect_decl_index.contains(&def) || self.resource_decl_index.contains(&def)
     }
 
     /// Every declaration written under `name`, whichever module declares it.

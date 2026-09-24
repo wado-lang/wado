@@ -15,7 +15,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::resource_move_check::carries_affine_resource;
-use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::trait_env::TraitEnv;
 use super::types::{
@@ -27,7 +27,7 @@ use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
 use crate::name::FqTypeName;
-use crate::resolve::{Resolution, Resolutions};
+use crate::resolve::Resolutions;
 
 /// Pipeline-wide type knowledge — the type arena, the cross-module decl
 /// indices, the registries, and the read-only caches built once at
@@ -123,29 +123,6 @@ impl TypeSystem {
             type_id,
             &mut Vec::new(),
         )
-    }
-
-    /// The effect a `with`-clause name at a walked `site` refers to: a
-    /// parameter for a binder, the declaration for an `interface` or resource.
-    pub(crate) fn effect_at(&self, site: AstId, name: &str) -> Option<EffectRef> {
-        match self.resolutions.walked(site)? {
-            Resolution::Binder(_) => Some(EffectRef::Param {
-                name: name.to_string(),
-            }),
-            Resolution::Def(def) => self.effect_decl(def),
-            Resolution::Projection(_) | Resolution::Unresolved => None,
-        }
-    }
-
-    /// `def` as an effect, when it declares an `interface` or a resource.
-    pub(crate) fn effect_decl(&self, def: DefId) -> Option<EffectRef> {
-        let defs = self.resolutions.defs();
-        self.trait_env
-            .declares_effect(def)
-            .then(|| EffectRef::Concrete {
-                name: defs.name(def).to_string(),
-                module_source: defs.module(def).clone(),
-            })
     }
 
     /// The `Type::Case` spelling of the case the resolve walk names at a bare

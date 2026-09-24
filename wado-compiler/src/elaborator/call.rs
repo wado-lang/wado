@@ -517,7 +517,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// no translation back into a spelling.
     fn effect_or_resource_decl_at(&self, site: Option<ast::AstId>) -> Option<DefId> {
         let def = self.tysys.resolutions.declared(site?)?;
-        self.tysys.trait_env.declares_effect(def).then_some(def)
+        self.tysys
+            .resolutions
+            .defs()
+            .kind(def)
+            .is_effect()
+            .then_some(def)
     }
 
     /// The callee of an operation dispatch `[ns::]E::op`, where `E` names an
@@ -1512,7 +1517,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // scope, so the spelling alone answers for nothing there.
                     let receiver_site = ident.owner_segment().map(|seg| seg.id);
                     let names_a_member = receiver_site
-                        .is_some_and(|site| self.decl_key_at(site, type_name).is_some())
+                        .is_some_and(|site| self.decl_key_at(Some(site), type_name).is_some())
                         || self.namespace_member(prefix, type_name).is_some();
                     if !names_a_member {
                         let _ = self.emit(TypeError::UnknownFunction {

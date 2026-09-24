@@ -238,25 +238,6 @@ pub(super) struct TraitContext {
     /// node declaring its receiver binder — what names that binder in a mangle.
     /// The node, not the spelling: a method parameter may shadow the letter.
     pub(super) impl_owner: Option<(DefId, Option<ast::AstId>)>,
-    /// Effect parameters (`<effect E>`) in scope, name → declaration
-    /// `AstId`. `resolve_effects` consults this to classify a name as
-    /// `EffectRef::Param` and to record its use→def edge.
-    pub(super) effect_params: IndexMap<String, ast::AstId>,
-}
-
-impl TraitContext {
-    /// Install the effect parameters declared in `type_params`, replacing
-    /// the enclosing scope's set (restored by the caller's
-    /// [`TypeParamScope`]). Must run BEFORE
-    /// [`Elaborator::register_generic_params`]: eager `<F: fn() with E>`
-    /// bound resolution consults this channel.
-    pub(super) fn install_effect_params(&mut self, type_params: &[ast::GenericParam]) {
-        self.effect_params = type_params
-            .iter()
-            .filter(|p| p.is_effect)
-            .map(|p| (p.name.clone(), p.id))
-            .collect();
-    }
 }
 
 /// Everything [`Elaborator::set_self_binding`] installs, so a scoped install

@@ -6083,10 +6083,15 @@ impl Parser {
                 // the elaborator can register per-method compiler items.
                 let mut method =
                     self.parse_function(Visibility::Private, false, false, attrs, true)?;
-                // A method that declares nothing takes what the head says.
+                // A method that declares nothing takes what the head says, at
+                // sites of its own that the trait's scope answers.
                 if method.effects.is_empty() {
-                    method.effects = head.inherited_effects();
-                    method.effects_inherited = !method.effects.is_empty();
+                    let inherited = head.inherited_effects(name_span);
+                    method.effects_inherited = !inherited.is_empty();
+                    for (effect, span) in inherited {
+                        method.effects.push(effect);
+                        method.effect_ids.push((self.alloc_ast_id(), span));
+                    }
                 }
                 methods.push(method);
             }

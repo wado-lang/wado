@@ -1,0 +1,12 @@
+// A `with` clause names an effect or an effect parameter. A type parameter is
+// neither, so naming one is an error at the clause.
+
+fn f<T>(x: T) with T {
+}
+
+export fn run() {
+    f(1);
+}
+
+__DATA__
+{"compile_error": "'T' is not a declared effect"}
