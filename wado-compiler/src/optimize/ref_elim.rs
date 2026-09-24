@@ -4,6 +4,8 @@
 //! analysis; the referent is then stored unresolved and resolved during the
 //! transform, so a transitive `let r2 = &r1.field` survives `r1`'s removal.
 
+use std::cell::OnceCell;
+
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
@@ -61,12 +63,14 @@ pub(super) fn build_ref_elim(body: &Body, effects: &HeapEffects, params: &[u32])
     // between does not. An inherited shadow (`let r = s`) captures at `s`'s
     // binding, not its own, so it falls back to a whole-body check.
     let facts = collect_capture_facts(body, &refs);
-    let frame = HeapFrame::new(effects, body, params);
+    let frame = OnceCell::new();
     let replaced_elsewhere: IndexSet<u32> = refs
         .iter()
         .filter(|(local, info)| {
-            info.eliminable
-                && replaced_through_heap(body, effects, &frame, **local, info, &refs, &facts)
+            info.eliminable && {
+                let frame = frame.get_or_init(|| HeapFrame::new(effects, body, params));
+                replaced_through_heap(body, effects, frame, **local, info, &refs, &facts)
+            }
         })
         .map(|(&local, _)| local)
         .collect();
@@ -432,19 +436,15 @@ fn replaced_through_heap(
         return false;
     }
     let whole_body = crossed.iter().any(|r| refs[r].inherited);
-    let live = |pos: usize| {
-        whole_body || {
-            let Some(&last_use) = facts.last_use.get(&local) else {
-                return false;
-            };
-            let binding = crossed
-                .iter()
-                .map(|r| facts.binding_pos.get(r).copied().unwrap_or(0))
-                .min()
-                .expect("holds `local`");
-            binding < pos && pos <= extended_live_end(binding, last_use, &facts.loops)
-        }
-    };
+    let window = facts.last_use.get(&local).map(|&last_use| {
+        let binding = crossed
+            .iter()
+            .map(|r| facts.binding_pos.get(r).copied().unwrap_or(0))
+            .min()
+            .expect("holds `local`");
+        (binding, extended_live_end(binding, last_use, &facts.loops))
+    });
+    let live = |pos: usize| whole_body || window.is_some_and(|(from, to)| from < pos && pos <= to);
     frame.place_replaced(effects, body, root, &path, |site| {
         facts.positions.get(&site).is_none_or(|&pos| live(pos))
     })

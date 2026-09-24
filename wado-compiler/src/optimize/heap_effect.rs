@@ -19,7 +19,9 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
-use crate::tir::{BuiltinDeclaration, ResolvedType, ReturnConvention, TypeId, TypeKey, TypeTable};
+use crate::tir::{
+    BuiltinDeclaration, ResolvedType, RetainSpec, ReturnConvention, TypeId, TypeKey, TypeTable,
+};
 
 use super::arena_query::holds_reference;
 
@@ -380,6 +382,14 @@ impl<'t> HeapEffects<'t> {
         holds_reference(tt, *element)
     }
 
+    /// Whether the retain `r` may carry a reference out of `args`.
+    fn retains_reference(&self, body: &Body, r: &RetainSpec<usize>, args: &[Operand]) -> bool {
+        !r.elements
+            || args
+                .get(r.source)
+                .is_none_or(|&a| self.elements_hold_reference(body.operand_type(a)))
+    }
+
     /// Each argument of `call`, in the callee's parameter order, with what the
     /// call keeps of it.
     pub(super) fn kept_args(&self, body: &Body, call: ExprId) -> Vec<(Operand, Kept)> {
@@ -398,19 +408,14 @@ impl<'t> HeapEffects<'t> {
                     },
                     Target::Builtin { declaration, .. } => {
                         let retains = || {
-                            declaration.retains.iter().filter(|r| {
-                                r.source == j
-                                    && (!r.elements
-                                        || self.elements_hold_reference(body.operand_type(a)))
-                            })
-                        };
-                        let returned = match declaration.returns {
-                            Some(ReturnConvention::Owned) => false,
-                            Some(ReturnConvention::PartOf(p)) => p == j,
-                            None => true,
+                            declaration
+                                .retains
+                                .iter()
+                                .filter(|r| r.source == j && self.retains_reference(body, r, &args))
                         };
                         Kept {
-                            in_result: returned || retains().any(|r| r.into.is_none()),
+                            in_result: returns_part_of(declaration, j)
+                                || retains().any(|r| r.into.is_none()),
                             stored: retains().any(|r| r.into.is_some_and(|q| q != j)),
                         }
                     }
@@ -507,9 +512,7 @@ impl<'t> HeapEffects<'t> {
                         self.reach_template(payload, type_args, seen, out);
                     }
                 } else {
-                    {
-                        out.set_any();
-                    }
+                    out.set_any();
                 }
             }
             ResolvedType::Variant { def } => {
@@ -572,9 +575,7 @@ impl<'t> HeapEffects<'t> {
         } else if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(payload) {
             self.reach_template(*inner, args, seen, out);
         } else if tt.contains_type_param(payload) {
-            {
-                out.set_any();
-            }
+            out.set_any();
         } else {
             self.reach_into(payload, seen, out);
         }
@@ -878,7 +879,13 @@ impl HeapFrame {
                     return OperandNode::None;
                 }
                 let mut leaves = Vec::new();
-                self.value_leaves(body, v, &mut IndexSet::default(), &mut leaves);
+                for_each_value_source(body, v, &mut |source| {
+                    leaves.push(match source {
+                        Some(OpaqueSource::Local(l)) => self.local_node(l),
+                        Some(OpaqueSource::Expr(e)) => self.expr_node(e).unwrap_or(ELSEWHERE),
+                        None => ELSEWHERE,
+                    });
+                });
                 let Some((&first, rest)) = leaves.split_first() else {
                     return OperandNode::None;
                 };
@@ -887,50 +894,6 @@ impl HeapFrame {
                 }
                 OperandNode::Node(first)
             }
-        }
-    }
-
-    fn value_leaves(
-        &mut self,
-        body: &Body,
-        v: ValueId,
-        seen: &mut IndexSet<ValueId>,
-        out: &mut Vec<u32>,
-    ) {
-        if !seen.insert(v) {
-            return;
-        }
-        match body.values.kind(v) {
-            ValueKind::Opaque(oid) => match body.values.opaque_source(*oid) {
-                Some(OpaqueSource::Local(l)) => out.push(self.local_node(l)),
-                Some(OpaqueSource::Expr(e)) => out.push(self.expr_node(e).unwrap_or(ELSEWHERE)),
-                None => out.push(ELSEWHERE),
-            },
-            ValueKind::FieldAccess { receiver, .. } => {
-                self.value_leaves(body, *receiver, seen, out);
-            }
-            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
-                self.value_leaves(body, *operand, seen, out);
-            }
-            ValueKind::Binary { lhs, rhs, .. } => {
-                self.value_leaves(body, *lhs, seen, out);
-                self.value_leaves(body, *rhs, seen, out);
-            }
-            ValueKind::Select { then, else_, .. } => {
-                self.value_leaves(body, *then, seen, out);
-                self.value_leaves(body, *else_, seen, out);
-            }
-            ValueKind::LoopPhi { entry, body_iter } => {
-                self.value_leaves(body, *entry, seen, out);
-                self.value_leaves(body, *body_iter, seen, out);
-            }
-            ValueKind::Int(..)
-            | ValueKind::Float(..)
-            | ValueKind::Bool(_)
-            | ValueKind::Char(_)
-            | ValueKind::Null
-            | ValueKind::Unit
-            | ValueKind::Const(..) => {}
         }
     }
 
@@ -1311,11 +1274,7 @@ impl HeapFrame {
             }
             Target::Builtin { declaration, .. } => {
                 for r in &declaration.retains {
-                    if r.elements
-                        && args.get(r.source).is_some_and(|&a| {
-                            !effects.elements_hold_reference(body.operand_type(a))
-                        })
-                    {
+                    if !effects.retains_reference(body, r, &args) {
                         continue;
                     }
                     let source = nodes.get(r.source).copied().unwrap_or(OperandNode::None);
@@ -1325,16 +1284,9 @@ impl HeapFrame {
                     };
                     self.unify_nodes(into, source);
                 }
-                match declaration.returns {
-                    Some(ReturnConvention::Owned) => {}
-                    Some(ReturnConvention::PartOf(p)) => {
-                        let part = nodes.get(p).copied().unwrap_or(OperandNode::None);
-                        self.unify_nodes(result, part);
-                    }
-                    None => {
-                        for &n in &nodes {
-                            self.unify_nodes(result, n);
-                        }
+                for (j, &n) in nodes.iter().enumerate() {
+                    if returns_part_of(declaration, j) {
+                        self.unify_nodes(result, n);
                     }
                 }
             }
@@ -1456,48 +1408,21 @@ impl HeapFrame {
                 }
                 let mut roots = IndexSet::default();
                 let mut unknown = false;
-                let mut stack = vec![v];
-                let mut seen = IndexSet::default();
-                while let Some(v) = stack.pop() {
-                    if !seen.insert(v) {
-                        continue;
-                    }
-                    match body.values.kind(v) {
-                        ValueKind::Opaque(oid) => match body.values.opaque_source(*oid) {
-                            Some(OpaqueSource::Local(l)) => match self.local_root(l) {
-                                Some(r) => {
-                                    roots.insert(r);
-                                }
-                                None => unknown = true,
-                            },
-                            Some(OpaqueSource::Expr(e)) => match self.expr_node(e) {
-                                Some(n) => {
-                                    roots.insert(self.parent[n as usize]);
-                                }
-                                None => unknown = true,
-                            },
-                            None => {
-                                roots.insert(self.parent[ELSEWHERE as usize]);
-                            }
-                        },
-                        ValueKind::FieldAccess { receiver, .. } => stack.push(*receiver),
-                        ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
-                            stack.push(*operand);
+                for_each_value_source(body, v, &mut |source| {
+                    let root = match source {
+                        Some(OpaqueSource::Local(l)) => self.local_root(l),
+                        Some(OpaqueSource::Expr(e)) => {
+                            self.expr_node(e).map(|n| self.parent[n as usize])
                         }
-                        ValueKind::Binary { lhs, rhs, .. } => stack.extend([*lhs, *rhs]),
-                        ValueKind::Select { then, else_, .. } => stack.extend([*then, *else_]),
-                        ValueKind::LoopPhi { entry, body_iter } => {
-                            stack.extend([*entry, *body_iter]);
+                        None => Some(self.parent[ELSEWHERE as usize]),
+                    };
+                    match root {
+                        Some(r) => {
+                            roots.insert(r);
                         }
-                        ValueKind::Int(..)
-                        | ValueKind::Float(..)
-                        | ValueKind::Bool(_)
-                        | ValueKind::Char(_)
-                        | ValueKind::Null
-                        | ValueKind::Unit
-                        | ValueKind::Const(..) => {}
+                        None => unknown = true,
                     }
-                }
+                });
                 if unknown || roots.len() > 1 {
                     return OperandNode::Unknown;
                 }
@@ -1732,6 +1657,44 @@ fn builtin_touches(effects: &HeapEffects, ty: TypeId, array: bool) -> Rc<TypeSet
         }
     }
     Rc::new(one)
+}
+
+/// Visit where each opaque leaf of the promoted value `v` came from; `None` is
+/// a leaf with no recorded source.
+fn for_each_value_source(body: &Body, v: ValueId, f: &mut impl FnMut(Option<OpaqueSource>)) {
+    let mut stack = vec![v];
+    let mut seen = IndexSet::default();
+    while let Some(v) = stack.pop() {
+        if !seen.insert(v) {
+            continue;
+        }
+        match body.values.kind(v) {
+            ValueKind::Opaque(oid) => f(body.values.opaque_source(*oid)),
+            ValueKind::FieldAccess { receiver, .. } => stack.push(*receiver),
+            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                stack.push(*operand);
+            }
+            ValueKind::Binary { lhs, rhs, .. } => stack.extend([*lhs, *rhs]),
+            ValueKind::Select { then, else_, .. } => stack.extend([*then, *else_]),
+            ValueKind::LoopPhi { entry, body_iter } => stack.extend([*entry, *body_iter]),
+            ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+            | ValueKind::Const(..) => {}
+        }
+    }
+}
+
+/// Whether a builtin's result may be part of its argument `j`.
+fn returns_part_of(declaration: &BuiltinDeclaration, j: usize) -> bool {
+    match declaration.returns {
+        Some(ReturnConvention::Owned) => false,
+        Some(ReturnConvention::PartOf(p)) => p == j,
+        None => true,
+    }
 }
 
 fn block_tail(body: &Body, block: BlockId) -> Option<Operand> {

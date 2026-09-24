@@ -4,7 +4,7 @@
 //! pre-header-stable, deduped by structural identity ([`ArithKey`]). Runs as a
 //! [`Rule`] whose `apply_block` fires once and covers every loop in the body.
 
-use std::cell::Cell;
+use std::cell::{Cell, OnceCell};
 use std::ops::ControlFlow;
 
 use crate::compiler_trace;
@@ -270,8 +270,7 @@ impl Rule for LicmRule<'_> {
             return false;
         }
         let root = engine.body.root;
-        let frame = HeapFrame::new(self.effects, engine.body, self.params);
-        let mut ctx = LicmCtx::new(self.type_table, self.effects, frame, engine.locals());
+        let mut ctx = LicmCtx::new(self.type_table, self.effects, self.params, engine.locals());
         let mut outer_aliases: Vec<(u32, u32)> = Vec::new();
         licm_block(engine, root, &mut ctx, &mut outer_aliases)
     }
@@ -281,9 +280,10 @@ impl Rule for LicmRule<'_> {
 struct LicmCtx<'a> {
     type_table: &'a TypeTable,
     effects: &'a HeapEffects<'a>,
-    /// The function's heap classes, from before this session's first hoist. A
-    /// local minted since has no class and is answered for conservatively.
-    frame: HeapFrame,
+    params: &'a [u32],
+    /// The function's heap classes, from the body at the first query. A local
+    /// minted since has no class and is answered for conservatively.
+    frame: OnceCell<HeapFrame>,
     /// Locals created by a LICM hoist. Every hoist in this session inserts
     /// its fresh local; at session start the set is seeded from the
     /// [`LICM_HOIST_PREFIX`] naming convention — the only marker that
@@ -295,7 +295,7 @@ impl<'a> LicmCtx<'a> {
     fn new(
         type_table: &'a TypeTable,
         effects: &'a HeapEffects<'a>,
-        frame: HeapFrame,
+        params: &'a [u32],
         locals: &[NirLocal],
     ) -> Self {
         let hoist_locals = locals
@@ -307,7 +307,8 @@ impl<'a> LicmCtx<'a> {
         Self {
             type_table,
             effects,
-            frame,
+            params,
+            frame: OnceCell::new(),
             hoist_locals,
         }
     }
@@ -315,6 +316,7 @@ impl<'a> LicmCtx<'a> {
     /// Whether `call` may write an object of type `key` that `root` holds.
     fn call_writes(&self, body: &Body, call: ExprId, key: TypeKey, root: u32) -> bool {
         self.frame
+            .get_or_init(|| HeapFrame::new(self.effects, body, self.params))
             .call_may(self.effects, body, call, Effect::Write, key, root)
     }
 }

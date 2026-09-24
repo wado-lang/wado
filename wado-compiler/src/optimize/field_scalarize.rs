@@ -268,6 +268,10 @@ fn scalarize_function(
     // the arena body) so loop-level scalarization can refuse those
     // candidates.
     let body = func.body.as_ref().unwrap();
+    let loop_sites = loop_sites(body);
+    if loop_sites.is_empty() {
+        return false;
+    }
     let aliases = collect_function_aliases(body, type_table);
     let params: Vec<u32> = func.params.iter().map(|p| p.local_index).collect();
     let frame = HeapFrame::new(effects, body, &params);
@@ -275,7 +279,7 @@ fn scalarize_function(
         aliases: &aliases,
         effects,
         frame: &frame,
-        loop_sites: loop_sites(body),
+        loop_sites,
     };
     let mut local_count = func.local_count();
     let mut locals = func.locals.clone();

@@ -292,13 +292,8 @@ fn template_buf_escapes(
     scan.finish().contains(&buf_local_index)
 }
 
-/// Escape analysis for the template-buffer hoist. A local escapes when its value
-/// reaches a position that may store it past the iteration, at which point the
-/// whole value-result chain is marked ([`for_each_chain_local`]); the chain stops
-/// at a fresh literal and at a call result that keeps no argument. A call
-/// argument escapes where the call stores it. `let t = <chain>` records an alias
-/// edge instead, resolved in [`Self::finish`]. A `FieldAccess` base is on it
-/// only where the field may share the base's heap storage.
+/// Escape analysis for the template-buffer hoist: the locals whose value, or
+/// what shares its storage ([`for_each_chain_local`]), may outlive the iteration.
 struct EscapeScan<'a> {
     body: &'a Body,
     heap: HeapView<'a>,
@@ -525,12 +520,8 @@ impl<'a> EscapeScan<'a> {
     }
 }
 
-/// Visit every local whose value may *be* the result of `op`: the bare local,
-/// and locals reachable through the value-result chain — `&`/`&mut`/casts,
-/// block tails, `if` branch tails, `match` arm bodies, `switch` arm tails,
-/// labeled-block break values, the arguments a call keeps in its result, and a
-/// field's base where the field may share its storage. Everything else yields
-/// a new value and ends the chain.
+/// Visit every local whose storage the result of `op` may share: through a
+/// reference, a cast, a branch or block value, a kept call argument, a heap field.
 fn for_each_chain_local(body: &Body, op: Operand, heap: HeapView, f: &mut impl FnMut(u32)) {
     if let Some(e) = op.as_expr() {
         for_each_chain_local_expr(body, e, heap, f);

@@ -505,9 +505,8 @@ struct SharedElements<'e, 't> {
 }
 
 impl SharedElements<'_, '_> {
-    /// Whether a spine copy of the list `value` builds from `root`, bound to
-    /// `target`, may see an element written: through a handle other than the
-    /// two, or by the caller once the copy's contents escape.
+    /// Whether an element the spine copy `target` shares with `root` may be
+    /// written through another handle, or by the caller once the copy escapes.
     fn exposed(&self, body: &Body, value: ExprId, target: u32, root: u32) -> bool {
         let Some(keys) = self.effects.element_reach(body.exprs[value].type_id) else {
             return true;
