@@ -32,8 +32,7 @@ use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{DeclPath, is_test_function, kebab_export_name, to_kebab};
 use crate::package::{Package, test_selected};
 use crate::tir::{
-    ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirStmt, TirStmtKind, TypeId,
-    TypeTable,
+    ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::unparse::unparse_type_into;
@@ -294,16 +293,6 @@ struct CalleeCollector {
 }
 
 impl TirRefVisitor for CalleeCollector {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        // This pass runs before `task return` is stripped; descend into its
-        // value rather than tripping the default walker's guard.
-        if let TirStmtKind::TaskReturn { value } = &stmt.kind {
-            self.visit_expr(value);
-        } else {
-            self.walk_stmt(stmt);
-        }
-    }
-
     fn visit_expr(&mut self, expr: &TirExpr) {
         if let TirExprKind::Call { func, .. } = &expr.kind {
             self.callees
@@ -323,16 +312,6 @@ struct NamedPayloadFinder<'a> {
 }
 
 impl TirRefVisitor for NamedPayloadFinder<'_> {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        // This pass runs before `task return` is stripped; descend into its
-        // value rather than tripping the default walker's guard.
-        if let TirStmtKind::TaskReturn { value } = &stmt.kind {
-            self.visit_expr(value);
-        } else {
-            self.walk_stmt(stmt);
-        }
-    }
-
     fn visit_expr(&mut self, expr: &TirExpr) {
         if self.found.is_none() {
             self.found = unresolvable_future_stream_payload(
@@ -534,44 +513,46 @@ fn generate_import_adapters(project: &mut Package) {
     // participate in monomorphize / lower / DCE like normal functions.
     let mut auxiliary_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
     for qualified_name in &seen_effects {
-        if let Some(func_info) = project.cm_interface_registry.get_function(qualified_name) {
-            let func_info = func_info.clone();
-            let owner_module = lookup_effect_owner(
-                &owner_sources,
-                &func_info.interface_name,
-                &func_info.package,
-            )
-            // No declaring module: a placeholder owner in the function's own
-            // namespace. A world-level import carries none, and falls back to
-            // `Wasi` as it did when that was the only bundled namespace.
-            .unwrap_or_else(|| {
-                let namespace =
-                    CmNamespace::from_prefix(&func_info.namespace).unwrap_or(CmNamespace::Wasi);
-                project
-                    .interner
-                    .borrow_mut()
-                    .binding(namespace, &func_info.package)
-            });
-            let produced = synthesize_adapter(
-                &func_info,
-                &project.cm_interface_registry,
-                &entry_type_table,
-                &project.interner,
-                &owner_module,
-                &entry_source,
-            );
-            // A world function (Phase 9) has no interface, so it needs no
-            // capability effect. The shared synthesizer pushed its empty
-            // interface name as one; drop it so the import stays pure.
-            if project
-                .cm_interface_registry
-                .is_world_import_function(qualified_name)
-            {
-                produced.adapter.borrow_mut().effects.clear();
-            }
-            auxiliary_functions.extend(produced.auxiliary);
-            adapters.insert(qualified_name.clone(), produced.adapter);
+        let func_info = project
+            .cm_interface_registry
+            .get_function(qualified_name)
+            .expect("the collector records only a registered CM function")
+            .clone();
+        let owner_module = lookup_effect_owner(
+            &owner_sources,
+            &func_info.interface_name,
+            &func_info.package,
+        )
+        // No declaring module: a placeholder owner in the function's own
+        // namespace. A world-level import carries none, and falls back to
+        // `Wasi` as it did when that was the only bundled namespace.
+        .unwrap_or_else(|| {
+            let namespace =
+                CmNamespace::from_prefix(&func_info.namespace).unwrap_or(CmNamespace::Wasi);
+            project
+                .interner
+                .borrow_mut()
+                .binding(namespace, &func_info.package)
+        });
+        let produced = synthesize_adapter(
+            &func_info,
+            &project.cm_interface_registry,
+            &entry_type_table,
+            &project.interner,
+            &owner_module,
+            &entry_source,
+        );
+        // A world function (Phase 9) has no interface, so it needs no
+        // capability effect. The shared synthesizer pushed its empty
+        // interface name as one; drop it so the import stays pure.
+        if project
+            .cm_interface_registry
+            .is_world_import_function(qualified_name)
+        {
+            produced.adapter.borrow_mut().effects.clear();
         }
+        auxiliary_functions.extend(produced.auxiliary);
+        adapters.insert(qualified_name.clone(), produced.adapter);
     }
 
     let entry_module = project
@@ -1006,7 +987,7 @@ fn validate_exports_representable(
 ) -> Result<(), String> {
     let tt = entry_type_table.borrow();
     for (source, module) in &project.tir_modules {
-        if source.is_core() || source.is_binding() {
+        if !source.is_program() {
             continue;
         }
         for func in &module.functions {
@@ -1025,7 +1006,7 @@ fn validate_imports_representable(project: &Package) -> Result<(), String> {
     let tt = entry_type_table(project);
     let tt = tt.borrow();
     for (source, module) in &project.tir_modules {
-        if source.is_core() || source.is_binding() {
+        if !source.is_program() {
             continue;
         }
         let operations = module.effects.iter().flat_map(|e| &e.operations).chain(

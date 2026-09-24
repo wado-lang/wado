@@ -1722,9 +1722,6 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
                     *type_id = value.type_id;
                 }
             }
-            // `TaskReturn` is normally stripped before this pass; descend into
-            // its value defensively rather than tripping the walk's guard.
-            TirStmtKind::TaskReturn { value } => self.visit_expr(value),
             _ => self.walk_stmt(stmt),
         }
     }
