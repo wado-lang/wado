@@ -619,12 +619,8 @@ impl ModRef {
     }
 }
 
-/// Can `expr_mr` move past an intervening `int_mr`, while `candidate` is being
-/// eliminated by the rewrite? All must hold: the intervening transfers control
-/// linearly, does not read `candidate`, and does not `may_trap` alongside the
-/// expression (the observable trap location would move); neither side's writes
-/// clobber the other's reads, and the two write nothing in common (Bernstein's
-/// conditions).
+/// Whether `expr_mr` may move past `int_mr` while `candidate` is eliminated:
+/// Bernstein's conditions, linear control, and no trap that would move.
 pub(super) fn can_move_past(expr_mr: &ModRef, int_mr: &ModRef, candidate: u32) -> bool {
     if !matches!(int_mr.control, Control::Linear) {
         return false;

@@ -1,9 +1,5 @@
-//! Which GC-heap objects a call may read or write. Wado has no borrow checker,
-//! so an object is reached from every handle sharing it: an aliasing `&mut`
-//! parameter, a global, a closure's environment, a containing object, or a
-//! reference stored in a struct. [`HeapEffects`] summarises every function
-//! once, across the call graph; [`HeapFrame`] answers for one body whether a
-//! call may reach the object behind a given handle.
+//! Which GC-heap objects a call may read or write: [`HeapEffects`] summarises
+//! each function over the call graph, [`HeapFrame`] the objects of one body.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -104,9 +100,8 @@ impl TypeSet {
     }
 }
 
-/// Where the objects of one class may come from: the caller's arguments (a
-/// bit per parameter, the last standing for every later one) or anywhere
-/// else — a global. No origin at all means allocated during the call.
+/// Where a class's objects may come from: a bit per parameter (the last one
+/// standing for every later one) or a global. None means allocated here.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 struct Prov {
     elsewhere: bool,
@@ -723,9 +718,8 @@ struct AccessSite {
     field: Option<u32>,
 }
 
-/// Objects per class within one body: a union-find over locals and expressions
-/// where a value flowing anywhere joins the classes, and an object shares a
-/// class with everything it holds. A class carries the origins that reach it.
+/// One body's objects as a union-find over locals and expressions, where a
+/// class holds what flows together and carries the origins reaching it.
 pub(super) struct HeapFrame {
     parent: Vec<u32>,
     prov: Vec<Prov>,
@@ -1526,9 +1520,8 @@ impl HeapFrame {
         })
     }
 
-    /// Whether a store, or a call other than through the arguments `answered`
-    /// accepts, may write an object of a type in `keys` that `local` holds or
-    /// reaches.
+    /// Whether a store, or a call through an argument `answered` rejects, may
+    /// write a `keys` object that `local` holds or reaches.
     pub(super) fn written(
         &self,
         effects: &HeapEffects,
@@ -1556,9 +1549,8 @@ impl HeapFrame {
         })
     }
 
-    /// Whether objects `local` holds may still be reached from outside the
-    /// body once it returns: through its result, a global, or a parameter
-    /// other than the one they came from.
+    /// Whether objects `local` holds stay reachable after the body returns:
+    /// through its result, a global, or a parameter they did not come from.
     pub(super) fn outlives(&self, local: u32) -> bool {
         let Some(h) = self.local_root(local) else {
             return true;
@@ -1570,9 +1562,8 @@ impl HeapFrame {
                 || prov.params.count_ones() > 1)
     }
 
-    /// Whether an access at a site `at` accepts may reach field `field` of the
-    /// `key` object `local` holds, other than a field access whose receiver
-    /// `own` accepts. `writes_only` leaves out the reads.
+    /// Whether an access at a site `at` accepts, other than one through a
+    /// receiver `own` accepts, may reach `field` of the `key` object `local` holds.
     pub(super) fn accessed_besides(
         &self,
         writes_only: bool,

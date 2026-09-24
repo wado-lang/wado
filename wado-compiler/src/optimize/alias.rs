@@ -1014,9 +1014,8 @@ fn collect_mut_escaped_node(
 // Alias group analysis (union-find over reference-typed copies)
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// The heap object a local's value may share with another local of the same
-/// key: a struct handle, or any aggregate (tuple, generic instance, array)
-/// reached through a reference. `None` for scalars, whose fields nothing tracks.
+/// The key of the heap object a local's value may share: a struct handle, or
+/// an aggregate behind a reference. `None` for scalars.
 fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey> {
     fn key(type_id: TypeId, under_ref: bool, type_table: &TypeTable) -> Option<TypeKey> {
         match type_table.get(type_id) {
@@ -1054,10 +1053,8 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey>
     key(type_id, false, type_table)
 }
 
-/// Edges connecting locals (`func.locals` is indexed by local index, params
-/// included) that may share one heap object, by [`shared_object_key`]. A write
-/// through one must widen invalidation to the others. Connected as a star to
-/// each pointee's first-seen local.
+/// Edges between locals that may share one heap object by
+/// [`shared_object_key`], a star around each key's first-seen local.
 fn same_pointee_reference_edges(locals: &[NirLocal], type_table: &TypeTable) -> Vec<(u32, u32)> {
     let mut rep: IndexMap<TypeKey, u32> = IndexMap::default();
     let mut edges = Vec::new();

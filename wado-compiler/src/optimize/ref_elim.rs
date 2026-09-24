@@ -414,11 +414,8 @@ fn extended_live_end(binding: usize, last_use: usize, loops: &[(usize, usize)]) 
     end
 }
 
-/// Whether something other than a store to the referent's own place may put a
-/// new object on its path while ref `local` is live: a store through another
-/// handle, or a call. A chain through other tracked refs captures from the
-/// earliest of their bindings; an inherited one's is unknown, so there the
-/// whole body counts.
+/// Whether a store through another handle, or a call, may put a new object on
+/// the referent's path while ref `local` is live.
 fn replaced_through_heap(
     body: &Body,
     effects: &HeapEffects,

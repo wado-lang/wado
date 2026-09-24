@@ -1,9 +1,5 @@
-//! Select lowering: a post-optimization [`Rule`] turning `if cond { a } else
-//! { b }` into `builtin::select(cond, a, b)` and its branchless Wasm
-//! instruction. Both arms must be pure and trap-free, `select` evaluating them
-//! eagerly and ahead of the condition, which must not write what they read.
-//! The rewrite reuses the existing expression ids, so it is one
-//! `replace_expr_kind`, and leaf-purity makes the rule confluent.
+//! Select lowering: a post-optimization [`Rule`] turning `if c { a } else { b }`
+//! into the branchless `builtin::select(c, a, b)` where both arms are pure leaves.
 
 use crate::lower::plan::value_copy::needs_value_copy;
 use crate::module_source::ModuleSource;

@@ -349,9 +349,8 @@ fn collect_stmts(body: &Body, node: NodeRef, out: &mut Vec<StmtId>) {
     body.for_each_child(node, |c| collect_stmts(body, c, out));
 }
 
-/// Whether every `Return` under `node` has the expected shape. Every one the
-/// lowering splits, so a `return` nested in another's value, a condition or an
-/// argument is checked too.
+/// Whether every `Return` under `node`, nested ones included, has the expected
+/// shape: the lowering splits each one.
 fn all_returns_match_shape(body: &Body, node: NodeRef, expected: &ExpectedShape<'_>) -> bool {
     if let NodeRef::Stmt(s) = node
         && let StmtKind::Return { value } = body.stmts[s].kind

@@ -1204,8 +1204,7 @@ fn collect_called(body: &Body, node: NodeRef, out: &mut IndexSet<FuncId>) {
 }
 
 /// Whether every `Return` [`rewrite_returns`] reaches under `node` has a value
-/// [`rewrite_return_value`] turns into the result tuple — the same walk, so a
-/// `return` nested in another's value, a condition or an argument is checked.
+/// [`rewrite_return_value`] turns into the result tuple.
 fn returns_are_scalarizable(
     body: &Body,
     node: NodeRef,

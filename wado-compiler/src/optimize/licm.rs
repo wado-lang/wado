@@ -913,9 +913,8 @@ fn collect_child_blocks(body: &Body, node: NodeRef, out: &mut Vec<BlockId>) {
     });
 }
 
-/// True when some value-producing block under `node` ends in a non-unit value
-/// that `insert_reloads` would append a reload after, displacing that value.
-/// Only a `Block` child of an expression yields its tail.
+/// Whether a block under `node` yields a non-unit tail that [`insert_reloads`]
+/// would append a reload after, displacing the value.
 fn has_nonunit_clobber_value_tail(
     ctx: &LicmCtx,
     body: &Body,
@@ -950,10 +949,8 @@ fn has_nonunit_clobber_value_tail(
     found
 }
 
-/// The watched objects a statement may write, viewing only its own expression
-/// tree (block-stopping, mirroring [`node_contains_clobber`]) so a reload
-/// placed after this statement targets exactly the fields that may have gone
-/// stale.
+/// The watched objects a statement's own expression tree may write, stopping
+/// at nested blocks as [`node_contains_clobber`] does.
 fn node_clobbered(
     ctx: &LicmCtx,
     body: &Body,
@@ -982,10 +979,8 @@ fn collect_clobbered(
     });
 }
 
-/// True when `node`'s own expression tree — *without crossing into nested
-/// blocks* — contains a clobbering call. A statement is a direct-clobber
-/// statement (and gets a trailing reload) exactly when this holds; clobbers
-/// inside nested blocks are reloaded within those blocks instead.
+/// Whether `node`'s own expression tree, stopping at nested blocks, holds a
+/// clobbering call. A nested block reloads after its own statements.
 fn node_contains_clobber(ctx: &LicmCtx, body: &Body, node: NodeRef, clobbers: &Clobbers) -> bool {
     if let NodeRef::Expr(e) = node
         && clobbers.clobbers(ctx, body, e)

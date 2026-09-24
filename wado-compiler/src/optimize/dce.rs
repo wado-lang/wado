@@ -2354,9 +2354,8 @@ pub(super) fn remove_unreachable_globals(
     }
 }
 
-/// Strip every store to a dead global from `node`'s subtree, wherever it sits:
-/// a statement store goes with its statement, an operand one leaves its unit.
-/// A value that is not [`deletable_value`] is kept, evaluated where the store was.
+/// Strip every store to a dead global under `node`, keeping a value that is not
+/// [`deletable_value`] evaluated where the store was.
 fn remove_dead_global_sets(
     body: &mut Body,
     node: NodeRef,

@@ -1811,10 +1811,8 @@ mod tests {
         })
     }
 
-    /// The value chain follows `if` branch tails (the shape
-    /// `out.push(if c { s } else { t })` escapes through), and a call result
-    /// only where the call keeps the argument in it: `s.as_str_slice()` does,
-    /// a `$value_copy$…` does not.
+    /// The chain follows `if` tails, and a call result only where the call
+    /// keeps the argument: `s.as_str_slice()` does, a `$value_copy$…` does not.
     #[test]
     fn chain_follows_if_tails_and_kept_call_args() {
         let fresh = kept_as(Kept::default());

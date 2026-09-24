@@ -513,13 +513,8 @@ fn arms_stay_free(
     })
 }
 
-/// A Match arm body as a block the fusion can re-parent, wrapping the body in a
-/// one-statement block. Engine-routed so the new stmt/block ids are registered
-/// in the parent map.
-///
-/// Handing back the arm's own block instead would drop the expression node that
-/// held it, and the label on that node is what the arm's own breaks name.
-/// `const_branch_prune` flattens the wrapper again once nothing names it.
+/// A Match arm body wrapped in a one-statement block the fusion can re-parent.
+/// The arm's own block would drop the labeled node its breaks name.
 fn arm_body_into_block(engine: &mut Engine, arm_body: ExprId, fallback_span: Span) -> BlockId {
     let stmt = engine.alloc_stmt(StmtKind::Expr(arm_body.into()), fallback_span);
     engine.alloc_block(vec![stmt], fallback_span)
