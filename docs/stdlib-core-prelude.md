@@ -892,13 +892,13 @@ UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
 A fixed-width number that reads from little-endian bytes, as
 `List::from_le_bytes` does.
 
-#### `fn le_width() -> i32`
+#### `fn bits() -> i32`
 
-Bytes one value takes.
+The width in bits: the type's `BITS`, until a trait can declare one (#2141).
 
 #### `fn from_le_at(bytes: ByteSlice, at: i32) -> Self`
 
-The value whose `le_width()` bytes start at `at`.
+The value whose `bits() / 8` bytes start at `at`.
 
 ### `pub trait Step with ()`
 
@@ -1181,6 +1181,8 @@ An owned, fixed-length byte buffer.
 
 ### `f32`
 
+#### `pub const BITS: i32`
+
 #### `pub const PI: f32`
 
 #### `pub const TAU: f32`
@@ -1440,11 +1442,13 @@ Creates an f32 from its bit representation.
 
 #### `impl FromLeBytes for f32`
 
-##### `fn le_width() -> i32`
+##### `fn bits() -> i32`
 
 ##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f32`
 
 ### `f64`
+
+#### `pub const BITS: i32`
 
 #### `pub const PI: f64`
 
@@ -1719,11 +1723,13 @@ Creates an f64 from its bit representation.
 
 #### `impl FromLeBytes for f64`
 
-##### `fn le_width() -> i32`
+##### `fn bits() -> i32`
 
 ##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f64`
 
 ### `f16`
+
+#### `pub const BITS: i32`
 
 #### `pub fn to_bits(&self) -> u16`
 
@@ -1782,11 +1788,13 @@ True for a NaN, quiet or signaling.
 
 #### `impl FromLeBytes for f16`
 
-##### `fn le_width() -> i32`
+##### `fn bits() -> i32`
 
 ##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f16`
 
 ### `bf16`
+
+#### `pub const BITS: i32`
 
 #### `pub fn to_bits(&self) -> u16`
 
@@ -1845,11 +1853,13 @@ True for a NaN, quiet or signaling.
 
 #### `impl FromLeBytes for bf16`
 
-##### `fn le_width() -> i32`
+##### `fn bits() -> i32`
 
 ##### `fn from_le_at(bytes: ByteSlice, at: i32) -> bf16`
 
 ### `i64`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: i64`
 
@@ -1971,7 +1981,7 @@ Counts the number of set bits (population count).
 
 #### `impl FromLeBytes for i64`
 
-##### `fn le_width() -> i32`
+##### `fn bits() -> i32`
 
 ##### `fn from_le_at(bytes: ByteSlice, at: i32) -> i64`
 
@@ -1980,6 +1990,8 @@ Counts the number of set bits (population count).
 ##### `fn next_step(&self) -> Option<i64>`
 
 ### `u64`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: u64`
 
@@ -2077,7 +2089,7 @@ Counts the number of set bits (population count).
 
 #### `impl FromLeBytes for u64`
 
-##### `fn le_width() -> i32`
+##### `fn bits() -> i32`
 
 ##### `fn from_le_at(bytes: ByteSlice, at: i32) -> u64`
 
@@ -2086,6 +2098,8 @@ Counts the number of set bits (population count).
 ##### `fn next_step(&self) -> Option<u64>`
 
 ### `i8`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: i8`
 
@@ -2171,7 +2185,7 @@ Counts the number of set bits (population count).
 
 #### `impl FromLeBytes for i8`
 
-##### `fn le_width() -> i32`
+##### `fn bits() -> i32`
 
 ##### `fn from_le_at(bytes: ByteSlice, at: i32) -> i8`
 
@@ -2180,6 +2194,8 @@ Counts the number of set bits (population count).
 ##### `fn next_step(&self) -> Option<i8>`
 
 ### `i16`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: i16`
 
@@ -2269,7 +2285,7 @@ Counts the number of set bits (population count).
 
 #### `impl FromLeBytes for i16`
 
-##### `fn le_width() -> i32`
+##### `fn bits() -> i32`
 
 ##### `fn from_le_at(bytes: ByteSlice, at: i32) -> i16`
 
@@ -2278,6 +2294,8 @@ Counts the number of set bits (population count).
 ##### `fn next_step(&self) -> Option<i16>`
 
 ### `i32`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: i32`
 
@@ -2387,7 +2405,7 @@ Counts the number of set bits (population count).
 
 #### `impl FromLeBytes for i32`
 
-##### `fn le_width() -> i32`
+##### `fn bits() -> i32`
 
 ##### `fn from_le_at(bytes: ByteSlice, at: i32) -> i32`
 
@@ -2396,6 +2414,8 @@ Counts the number of set bits (population count).
 ##### `fn next_step(&self) -> Option<i32>`
 
 ### `u8`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: u8`
 
@@ -2519,7 +2539,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `impl FromLeBytes for u8`
 
-##### `fn le_width() -> i32`
+##### `fn bits() -> i32`
 
 ##### `fn from_le_at(bytes: ByteSlice, at: i32) -> u8`
 
@@ -2528,6 +2548,8 @@ Checks that two bytes are an ASCII case-insensitive match.
 ##### `fn next_step(&self) -> Option<u8>`
 
 ### `u16`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: u16`
 
@@ -2609,7 +2631,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `impl FromLeBytes for u16`
 
-##### `fn le_width() -> i32`
+##### `fn bits() -> i32`
 
 ##### `fn from_le_at(bytes: ByteSlice, at: i32) -> u16`
 
@@ -2618,6 +2640,8 @@ Checks that two bytes are an ASCII case-insensitive match.
 ##### `fn next_step(&self) -> Option<u16>`
 
 ### `u32`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: u32`
 
@@ -2711,7 +2735,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `impl FromLeBytes for u32`
 
-##### `fn le_width() -> i32`
+##### `fn bits() -> i32`
 
 ##### `fn from_le_at(bytes: ByteSlice, at: i32) -> u32`
 
@@ -3181,6 +3205,8 @@ Stored as two 64-bit parts: low (bits 0-63) and high (bits 64-127)
 
 _Fields are private._
 
+#### `pub const BITS: i32`
+
 #### `pub const MAX: u128`
 
 #### `pub const MIN: u128`
@@ -3400,6 +3426,8 @@ Signed 128-bit integer
 Stored as two 64-bit parts: low (bits 0-63, unsigned) and high (bits 64-127, signed)
 
 _Fields are private._
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: i128`
 
