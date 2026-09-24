@@ -64,6 +64,20 @@ export fn run() {
     }
     assert total == 3;
 
+    let mut lent = 0;
+    let read_lent = || lent;
+    let r = &mut lent;
+    *r = 4;
+    assert read_lent() == 4;
+
+    // A `for` header's update acts on the next iteration's binding.
+    let mut firsts: List<fn() -> i32> = [];
+    for let mut k = 0; k < 2; k += 1 {
+        firsts.push(|| k);
+    }
+    assert firsts[0]() == 0;
+    assert firsts[1]() == 1;
+
     let fixed = 5;
     let get_fixed = || fixed;
     assert get_fixed() == 5;

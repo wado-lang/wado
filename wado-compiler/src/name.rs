@@ -386,6 +386,23 @@ pub fn deref_capture_name(index: u32) -> String {
     format!("{INTERNAL_PREFIX}deref_cap_{index}")
 }
 
+/// The label on a C-style `for` loop's body, which `continue` breaks out of.
+#[must_use]
+pub fn for_body_label(serial: u32) -> String {
+    format!("{INTERNAL_PREFIX}for_{serial}_body")
+}
+
+/// Whether `label` is one [`for_body_label`] minted: what runs after it in the
+/// loop is the header's update, which acts on the next iteration's bindings.
+#[must_use]
+pub fn is_for_body_label(label: &str) -> bool {
+    label
+        .strip_prefix(INTERNAL_PREFIX)
+        .and_then(|rest| rest.strip_prefix("for_"))
+        .and_then(|rest| rest.strip_suffix("_body"))
+        .is_some_and(|serial| serial.parse::<u32>().is_ok())
+}
+
 /// The reference proxy an owning frame binds for a binding a closure captures
 /// by reference.
 #[must_use]

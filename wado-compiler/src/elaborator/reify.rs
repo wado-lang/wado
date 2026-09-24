@@ -76,7 +76,8 @@ use crate::escape::{
 use crate::format_spec::{FormatKind, TemplateFormatSpec};
 use crate::name::{
     LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
-    display_function_name, effect_default_impl_name, mangle_local_item_name, test_function_name,
+    display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
+    test_function_name,
 };
 use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
@@ -4872,7 +4873,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::{TirBlock, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable};
 
         let span = f.span;
-        let body_label = format!("$for_{}_body", ctx.fresh_serial());
+        let body_label = for_body_label(ctx.fresh_serial());
 
         let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
         ctx.enter_scope();

@@ -23,7 +23,9 @@ use crate::elaborator::synth::ArgClass;
 use crate::elaborator::types::{
     GenericNewtypeInfo, ImplMemberKind, ParamSlot, RealTypeParams, StructFieldInfo,
 };
-use crate::name::{constant_pattern_local_name, mangle_local_item_name, namespace_member_alias};
+use crate::name::{
+    constant_pattern_local_name, for_body_label, mangle_local_item_name, namespace_member_alias,
+};
 use crate::symbol_notation::render;
 use crate::tir::{StructDef, TirTypeParam};
 use crate::{IndexMap, hashmap, tir};
@@ -3216,7 +3218,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// reroutes a naked `continue` to, so control still falls through `update`.
     pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) {
         self.record_desugar(f.id, DesugarKind::CStyleFor);
-        let body_label = format!("$for_{}_body", ctx.fresh_serial());
+        let body_label = for_body_label(ctx.fresh_serial());
 
         // Mirror `resolve_loop` / `resolve_while` / `resolve_for_of`: clear the
         // continue-retarget stack at the loop boundary so the invariant
