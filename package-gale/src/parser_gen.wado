@@ -3020,6 +3020,30 @@ pub fn rule_overlap_groups(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut Gen
     return RuleOverlap { non_lr_indices, first_sets, groups, end_follow };
 }
 
+/// The rule's overlap groups, each contested one in the order its
+/// alternatives are tried. The parse and the scan both choose over these.
+fn ordered_overlap_groups(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) -> RuleOverlap {
+    let mut og = rule_overlap_groups(rule, lowered_rule, ctx);
+    for let mut g = 0; g < og.groups.len(); g += 1 {
+        if og.groups[g].len() < 2 {
+            continue;
+        }
+        sort_group_by_specificity(&mut og.groups[g], &og.first_sets);
+        let mut mapped_alts: List<Alternative> = [];
+        for let gi of &og.groups[g] {
+            mapped_alts.push(rule.alternatives[og.non_lr_indices[*gi]]);
+        }
+        let mut local_indices: List<i32> = (0..<og.groups[g].len()).collect();
+        sort_group_by_element_count(&mut local_indices, &mapped_alts);
+        let mut reordered: List<i32> = [];
+        for let li of local_indices {
+            reordered.push(og.groups[g][li]);
+        }
+        og.groups[g] = reordered;
+    }
+    return og;
+}
+
 /// What follows the rule selects its nullable alternatives too, so one whose
 /// FOLLOW meets a sibling's first set shares its group: `r : A? | B ;` on `b`.
 /// A gated one is selected by its predicate instead, as in a group.
@@ -3444,37 +3468,12 @@ fn gen_parse_fn_named<S: AsStrSlice>(
     let type_name = rule.type_name;
     gen_visibility_comment(w, &rule.visibility);
 
-    // Project the lowered rule's alt partition into surface alt
-    // indices. For LR rules, atom alts are non-LR; for `Simple` /
-    // `MultiAlt` rules every alt is non-LR.
-    let og = rule_overlap_groups(rule, lowered_rule, ctx);
+    let og = ordered_overlap_groups(rule, lowered_rule, ctx);
     let non_lr_indices = og.non_lr_indices;
     let first_sets = og.first_sets;
-    let mut groups = og.groups;
+    let groups = og.groups;
     let end_follow = og.end_follow;
     let has_overlaps = has_multi_alt_groups(&groups);
-
-    if has_overlaps {
-        for let mut g = 0; g < groups.len(); g += 1 {
-            if groups[g].len() > 1 {
-                sort_group_by_specificity(&mut groups[g], &first_sets);
-                let mut mapped_alts: List<Alternative> = [];
-                for let gi of groups[g] {
-                    mapped_alts.push(rule.alternatives[non_lr_indices[gi]]);
-                }
-                let mut local_indices: List<i32> = [];
-                for let mut i = 0; i < groups[g].len(); i += 1 {
-                    local_indices.push(i);
-                }
-                sort_group_by_element_count(&mut local_indices, &mapped_alts);
-                let mut reordered: List<i32> = [];
-                for let li of local_indices {
-                    reordered.push(groups[g][li]);
-                }
-                groups[g] = reordered;
-            }
-        }
-    }
 
     mark_gated_predicates(rule, has_overlaps, &groups, &first_sets, &non_lr_indices, &end_follow, ctx);
 
