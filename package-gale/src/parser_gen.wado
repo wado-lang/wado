@@ -94,6 +94,7 @@ use {
     LoweredGrammar,
     Rule,
     LrAlt,
+    LR_CONT_FORWARD,
     LrDispatchData,
     MultiAltDispatch,
     AltBody,
@@ -322,6 +323,19 @@ fn called_scan_chunks(chunks: &List<String>, parse_text: &String) -> List<String
 
 /// The LR loop's caller-continuation argument. Separate from `follow`
 /// because every caller sets that one; only a mid-operand call sets this.
+/// The caller's own `lr_cont`, handed to a suffix scan whose trailing operand reads it.
+fn lr_cont_forward(mid_operand_gated: bool) -> String {
+    return if mid_operand_gated { ", lr_cont" } else { "" };
+}
+
+/// The `lr_cont` argument a self-reference passes, with its leading comma.
+fn lr_cont_arg(mask: i32, ctx: &GenContext) -> String {
+    if mask == LR_CONT_FORWARD {
+        return ", lr_cont";
+    }
+    return if mask >= 0 { `, ${ctx.follow_mask_ref(mask)}` } else { "" };
+}
+
 fn add_lr_cont_param(f: &mut FnSpec) {
     f.add_param_spec(ParamSpec {
         name: "lr_cont",
@@ -814,7 +828,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     w.blank();
 
     // scan_X_lr_N for each valid LR alt (suffix helper, mirrors parse_X_lr_N).
-    gen_scan_lr_suffix_helpers(w, lr_alts, &lr_dispatch.valid_lr_alts, ctx, fn_name);
+    gen_scan_lr_suffix_helpers(w, lr_alts, &lr_dispatch.valid_lr_alts, ctx, fn_name, mid_operand_gated);
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
     let mut f2 = FnSpec::new(fn_name);
@@ -854,6 +868,7 @@ fn gen_scan_lr_suffix_helpers<S: AsStrSlice>(
     valid_lr_alts: &List<i32>,
     ctx: &mut GenContext,
     fn_name: S,
+    mid_operand_gated: bool,
 ) {
     // Emit a helper for EXACTLY the alts the dispatch references — iterate
     // `valid_lr_alts` directly rather than re-deriving the skip predicate, so
@@ -867,6 +882,9 @@ fn gen_scan_lr_suffix_helpers<S: AsStrSlice>(
 
         let mut f = FnSpec::new(&suffix_fn);
         add_scan_params(&mut f, ctx);
+        if mid_operand_gated {
+            add_lr_cont_param(&mut f);
+        }
         f.set_return_type("i32");
         f.emit_begin(w);
         w.line("let mut pos = pos;");
@@ -1131,7 +1149,7 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
     if let Some(local) = prebound {
         gen_scan_rewind(w, ctx, local);
     } else {
-        w.line(`pos = ${suffix_fn}(tokens, pos${scan_trailing_args(ctx)});`);
+        w.line(`pos = ${suffix_fn}(tokens, pos${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)});`);
         gen_scan_rewind_break(w, ctx, "lr_saved_pos", "pos < 0");
     }
     if mid_operand_gated {
@@ -1423,7 +1441,9 @@ fn emit_lr_overlap(
                         gen_scan_gate_from(w, ctx, &origin);
                     }
                     first_candidate = false;
-                    w.line(`let ${*local} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${scan_trailing_args(ctx)});`);
+                    w.line(
+                        `let ${*local} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)});`,
+                    );
                     // A position the scan branch may commit to, so it keeps the
                     // gate it was reached under — the run rolls the global back.
                     // The parse commits no scan gate.
@@ -2059,7 +2079,7 @@ fn gen_scan_op_element<S: AsStrSlice>(
             // `between`'s `'and'`), exactly as the parse side's rule-entry wrapper
             // does. Pop before the fail check so an early return never leaks the frame.
             let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
-            let cont = if rc.lr_cont_mask >= 0 { `, ${ctx.follow_mask_ref(rc.lr_cont_mask)}` } else { "" };
+            let cont = lr_cont_arg(rc.lr_cont_mask, ctx);
             assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
             let call = `pos = ${fn_name}(tokens, pos${ctx.scan_gate_arg()}${follow_arg_str}${min_prec_arg}${cont});`;
             if push_ret >= 0 {
@@ -2123,7 +2143,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
             } else {
                 String::new();
             };
-            let cont = if rc.lr_cont_mask >= 0 { `, ${ctx.follow_mask_ref(rc.lr_cont_mask)}` } else { "" };
+            let cont = lr_cont_arg(rc.lr_cont_mask, ctx);
             assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
             w.line(`pos = ${fn_name}(tokens, pos${ctx.scan_gate_arg()}${follow_arg_str}${min_prec_arg}${cont});`);
         },
@@ -4185,7 +4205,7 @@ fn gen_op_leaf(
             // reads a single source.
             gen_atn_ret_pending(w, ctx, r.atn_call_site);
             let argsfx = call_arg_suffix(&r, ctx);
-            let cont = if r.lr_cont_mask >= 0 { `, ${ctx.follow_mask_ref(r.lr_cont_mask)}` } else { "" };
+            let cont = lr_cont_arg(r.lr_cont_mask, ctx);
             let bind = leaf_binding(ctx, &r.dedup_base, &r.field);
             if let Some(min_prec) = r.min_prec_arg {
                 w.line(`${bind}${fn_name}(p${follow_arg_str}, ${min_prec}${cont}${argsfx});`);
@@ -4586,7 +4606,7 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
         // The other shape of a scan entry: the generated scan takes the tokens
         // and the position as arguments, so only the gate is left to hand it.
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
-        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)})`;
+        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)})`;
     };
     let matched = prebound matches { Some(_) };
     if mid_operand_gated {

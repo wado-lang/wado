@@ -19,7 +19,7 @@ The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that c
 
 Entries state the symptom, how to reproduce it, and anything already measured — not a diagnosis or a proposed fix. A diagnosis written here reads as an instruction later, and two have been wrong: one would have broken compatibility if implemented as written, the other described a difference that did not exist.
 
-Empty right now.
+- [ ] **A mid operand holding another mid-operand alternative fails to parse.** With `lr_mid_operand.g4`, `a between b between c and d and e` reports an error, while the jar gives `(s (e (e a) between (e (e b) between (e c) and (e d)) and (e e)))`. The inner `between`'s middle operand takes `c and d`, which leaves an `and` for the inner alternative but none for the outer one. Every single-level case in `driver_cst_lr_mid_operand_test` matches the jar, and SQLite's `expr` has this shape.
 
 ### Pipeline and tooling correctness
 

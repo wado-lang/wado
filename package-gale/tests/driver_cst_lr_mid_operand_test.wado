@@ -35,6 +35,27 @@ test "between's middle operand climbs the shared and when one is left over" {
     assert_tree("a between b and c and d", "(s (e (e a) between (e (e b) and (e c)) and (e d)))");
 }
 
+// The climb that must stop sits in a nested operand, below a looser `or`.
+test "a nested operand leaves between its and" {
+    assert_tree(
+        "a between b or c and d and e",
+        "(s (e (e a) between (e (e b) or (e (e c) and (e d))) and (e e)))",
+    );
+}
+
+test "between's trailing operand takes a looser operator" {
+    assert_tree("a between b and c or d", "(s (e (e a) between (e b) and (e (e c) or (e d))))");
+    assert_tree("a or b between c and d or e", "(s (e (e (e a) or (e b)) between (e c) and (e (e d) or (e e))))");
+    assert_tree(
+        "a between b and c and d or e",
+        "(s (e (e a) between (e (e b) and (e c)) and (e (e d) or (e e))))",
+    );
+    assert_tree(
+        "a between b and c between d and e",
+        "(s (e (e (e a) between (e b) and (e c)) between (e d) and (e e)))",
+    );
+}
+
 test "binary and chains left-associatively" {
     assert_tree("a and b and c", "(s (e (e (e a) and (e b)) and (e c)))");
 }

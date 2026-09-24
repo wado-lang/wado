@@ -347,6 +347,10 @@ pub struct LeftRecursiveRule {
 
 /// One left-recursive alternative, with the prefix self-reference
 /// stripped and replaced by precedence-climbing semantics.
+/// `lr_cont_mask` of a trailing operand: whatever the invocation it ends must
+/// leave behind, it must too.
+pub global LR_CONT_FORWARD: i32 = -2;
+
 pub struct LrAlt {
     /// Index of the alternative in the original rule body. Drives
     /// the `_lr_<idx>` suffix-helper function name.
@@ -772,7 +776,8 @@ pub struct RuleCallOp {
     /// Follow-mask id for the continuation a mid-operand self-reference must
     /// leave behind. Passed as the callee's own `lr_cont` argument, never as
     /// `follow_arg` — every caller sets that one, and the LR loop must not
-    /// read a caller's continuation as this. -1 for every other call.
+    /// read a caller's continuation as this. `LR_CONT_FORWARD` on a trailing
+    /// operand, which hands on its caller's own; -1 for every other call.
     pub lr_cont_mask: i32 = -1,
     /// Dedupped field name in the enclosing alt's struct.
     pub field: String,

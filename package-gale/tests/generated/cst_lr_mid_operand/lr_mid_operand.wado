@@ -935,7 +935,8 @@ pub global TK_WS: i32 = 1;
 pub global TK_EOF: i32 = 2;
 pub global TK_ERROR: i32 = 3;
 pub global TK_LIT_and: i32 = 4;
-pub global TK_LIT_between: i32 = 5;
+pub global TK_LIT_or: i32 = 5;
+pub global TK_LIT_between: i32 = 6;
 
 struct Lexer {
     chars: List<char>,
@@ -998,6 +999,13 @@ fn try_lit_and(chars: &List<char>, start: i32) -> i32 {
     return pos + 3;
 }
 
+fn try_lit_or(chars: &List<char>, start: i32) -> i32 {
+    let pos = start;
+    if pos + 0 >= chars.len() || chars[pos + 0] != 'o' { return -1; }
+    if pos + 1 >= chars.len() || chars[pos + 1] != 'r' { return -1; }
+    return pos + 2;
+}
+
 fn try_lit_between(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != 'b' { return -1; }
@@ -1037,7 +1045,13 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
-            'c'..='z' => {
+            'c'..='n' | 'p'..='z' => {
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            'o' => {
+                end = try_lit_or(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_or; }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
@@ -1070,6 +1084,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_EOF => "Eof",
         TK_ERROR => "Error",
         TK_LIT_and => "'and'",
+        TK_LIT_or => "'or'",
         TK_LIT_between => "'between'",
         _ => "Unknown",
     };
@@ -1331,16 +1346,25 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return pos;
 }
 
-fn scan_e_lr_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_and { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos, follow, 3);
+    pos = scan_e(tokens, pos, follow, 4, lr_cont);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_lr_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_or { return -1; }
+    pos += 1;
+    pos = scan_e(tokens, pos, follow, 3, lr_cont);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_e_lr_3(tokens: &Array<i32>, pos: i32, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_between { return -1; }
     pos += 1;
@@ -1348,7 +1372,7 @@ fn scan_e_lr_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_and { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos, follow, 3);
+    pos = scan_e(tokens, pos, follow, 2, lr_cont);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -1359,9 +1383,18 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0, lr_
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if suffix_kind == TK_LIT_and {
+            if 3 >= min_prec {
+                let lr_saved_pos = pos;
+                pos = scan_e_lr_1(tokens, pos, follow, lr_cont);
+                if pos < 0 { pos = lr_saved_pos; break; }
+                if !(lr_cont == 0 || follow_yields(tokens, pos, lr_cont, &FOLLOW_SETS, TK_EOF)) { pos = lr_saved_pos; break; }
+            } else {
+                break;
+            }
+        } else if suffix_kind == TK_LIT_or {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_1(tokens, pos, follow);
+                pos = scan_e_lr_2(tokens, pos, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
                 if !(lr_cont == 0 || follow_yields(tokens, pos, lr_cont, &FOLLOW_SETS, TK_EOF)) { pos = lr_saved_pos; break; }
             } else {
@@ -1370,7 +1403,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0, lr_
         } else if suffix_kind == TK_LIT_between {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_2(tokens, pos, follow);
+                pos = scan_e_lr_3(tokens, pos, follow, lr_cont);
                 if pos < 0 { pos = lr_saved_pos; break; }
                 if !(lr_cont == 0 || follow_yields(tokens, pos, lr_cont, &FOLLOW_SETS, TK_EOF)) { pos = lr_saved_pos; break; }
             } else {
@@ -1424,27 +1457,39 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: 
         if p.recovering { break; }
         let _sk = p.peek_kind();
         if _sk == TK_LIT_and {
-            if 2 >= min_prec {
-                let _lr_end = scan_e_lr_1(&p.kinds, p.pos, follow);
+            if 3 >= min_prec {
+                let _lr_end = scan_e_lr_1(&p.kinds, p.pos, follow, lr_cont);
                 if _lr_end < 0 { break; }
                 if !(lr_cont == 0 || follow_yields(&p.kinds, _lr_end, lr_cont, &FOLLOW_SETS, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.take();
-                _parse_e(p, follow, 3);
+                _parse_e(p, follow, 4, lr_cont);
+                p.b.finish_node(p.last_end());
+            } else {
+                break;
+            }
+        } else if _sk == TK_LIT_or {
+            if 2 >= min_prec {
+                let _lr_end = scan_e_lr_2(&p.kinds, p.pos, follow, lr_cont);
+                if _lr_end < 0 { break; }
+                if !(lr_cont == 0 || follow_yields(&p.kinds, _lr_end, lr_cont, &FOLLOW_SETS, TK_EOF)) { break; }
+                p.b.start_node_at(_cp, RK_E, _start);
+                p.take();
+                _parse_e(p, follow, 3, lr_cont);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
             }
         } else if _sk == TK_LIT_between {
             if 1 >= min_prec {
-                let _lr_end = scan_e_lr_2(&p.kinds, p.pos, follow);
+                let _lr_end = scan_e_lr_3(&p.kinds, p.pos, follow, lr_cont);
                 if _lr_end < 0 { break; }
                 if !(lr_cont == 0 || follow_yields(&p.kinds, _lr_end, lr_cont, &FOLLOW_SETS, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.take();
                 _parse_e(p, FOLLOW_MASK_1, 0, FOLLOW_MASK_1);
                 p.expect(TK_LIT_and, &EMPTY_SYNC);
-                _parse_e(p, follow, 3);
+                _parse_e(p, follow, 2, lr_cont);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -1493,8 +1538,8 @@ pub fn parse_e<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResu
 }
 
 fn _token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(6);
-    for let mut k = 0; k < 6; k += 1 {
+    let mut v: List<String> = List::with_capacity(7);
+    for let mut k = 0; k < 7; k += 1 {
         v.push(token_kind_name(k));
     }
     return v;

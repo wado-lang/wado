@@ -91,6 +91,7 @@ use {
     MultiAltRule,
     LeftRecursiveRule,
     LrAlt,
+    LR_CONT_FORWARD,
     LrDispatchData,
     RuleHeader,
     AltBody,
@@ -914,12 +915,6 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // pass `atn_class` through.
     let lr_dispatch = compute_lr_dispatch_data(&lr_alts, atn_class);
 
-    // Bake `min_prec_arg` into every self-recursive `RuleCall` op
-    // inside each LR suffix. Mirrors emit's
-    // `compute_lr_self_ref_prec` decision, but resolved once at
-    // lower time so emit consumes the suffix as a structural walk.
-    // Stamps both `suffix.ops` (parse-side `RuleCallOp.min_prec_arg`)
-    // and `scan_suffix.elements` (scan-side `ScanRuleCallElement.min_prec_arg`).
     let mid_operand_gated = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, ctx, atn_class);
     if mid_operand_gated {
         ctx.mark_caller_follow_gate();
@@ -993,23 +988,8 @@ fn fixed_token_const_name(elem: &Element) -> Option<String> {
     };
 }
 
-/// Walk every LR suffix and stamp `min_prec_arg` on self-recursive
-/// calls — both on the parse-side ops (`RuleCallOp.min_prec_arg`)
-/// and on the scan-side elements (`ScanRuleCallElement.min_prec_arg`).
-/// The trailing self-ref (at original alt position
-/// `last_self_ref_idx`) uses the alt's `conflict_min`; non-trailing
-/// self-refs use 0 unless the immediately following op is a fixed
-/// token that also appears in some LR alt's `suffix_first` set (the
-/// BETWEEN…AND-style case where a non-final self-ref must keep its
-/// precedence so the shared delimiter binds correctly). Mirrors
-/// `parser_gen::compute_lr_self_ref_prec`.
-///
-/// Parse-side `suffix.ops` and scan-side `scan_suffix.elements`
-/// walk the same `alt.elements[1..]` in lockstep — index `k` on
-/// each side corresponds to `alt.elements[k+1]`. The per-position
-/// precedence is computed once from the parse-side ops (whose
-/// neighbour tokens drive the BETWEEN…AND decision) and then
-/// stamped onto whichever side carries a self-ref at that position.
+/// Stamps each self-reference in an LR suffix, parse and scan side alike, with its
+/// precedence and continuation gate; returns whether any mid operand is gated.
 fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
     lr_alts: &mut List<LrAlt>,
     rule_name: S,
@@ -1028,6 +1008,7 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
 
         let mut new_ops: List<Op> = [];
         let mut new_scan: List<ScanElement> = [];
+        let mut alt_gated = false;
         for let mut k = 0; k < suffix_len; k += 1 {
             // suffix.ops[k] / scan_suffix.elements[k] correspond to
             // alt.elements[k+1].
@@ -1045,12 +1026,17 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
                     conflict_min,
                     &lr_suffix_first_tokens,
                 );
-                // A mid operand is ANTLR4's `e[0]`. An ATN-class loop decides
-                // its climb with full context; the static dispatch hands it the
+                // A mid operand is ANTLR4's `e[0]`, a trailing one its own
+                // precedence. An ATN-class loop decides its climb with full
+                // context; the static dispatch hands a mid operand the
                 // continuation it has to leave behind, and its loop gate stops it.
                 let mut cont_mask = -1;
-                if atn_class && k + 1 < suffix_len {
-                    prec = 0;
+                let own = lr_alts[i].own_prec;
+                let natural_trailing = if lr_alts[i].right_associative { own } else { own + 1 };
+                if atn_class {
+                    prec = if k + 1 < suffix_len { 0 } else { natural_trailing };
+                } else if alt_gated && k + 1 == suffix_len {
+                    prec = natural_trailing;
                 } else if prec == conflict_min && conflict_min > 0 && k + 1 < suffix_len {
                     let cont = lr_suffix_continuation_mask(&lr_alts[i].suffix.ops, k + 1, ctx);
                     if !cont.is_empty() {
@@ -1058,6 +1044,7 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
                             prec = 0;
                             cont_mask = id;
                             mid_operand_gated = true;
+                            alt_gated = true;
                         }
                     }
                 }
@@ -1117,7 +1104,32 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
         lr_alts[i].suffix.ops = new_ops;
         lr_alts[i].scan_suffix = ScanBody { ..lr_alts[i].scan_suffix, elements: new_scan };
     }
+    if mid_operand_gated {
+        forward_lr_cont_to_trailing_operands(lr_alts, rule_name, rule_snake);
+    }
     return mid_operand_gated;
+}
+
+/// A trailing operand ends the invocation it sits in, so the continuation that
+/// invocation must leave behind is its own: `a or b` as a mid operand stops `b`
+/// before `and`.
+fn forward_lr_cont_to_trailing_operands<S: AsStrSlice, S1: AsStrSlice>(
+    lr_alts: &mut List<LrAlt>,
+    rule_name: S,
+    rule_snake: S1,
+) {
+    for let mut i = 0; i < lr_alts.len(); i += 1 {
+        let last = lr_alts[i].suffix.ops.len() - 1;
+        if last < 0 || find_self_ref_rule_call(&lr_alts[i].suffix.ops[last], rule_name) matches { None } {
+            continue;
+        }
+        lr_alts[i].suffix.ops[last] = rebind_self_ref_lr_cont(lr_alts[i].suffix.ops[last], LR_CONT_FORWARD);
+        lr_alts[i].scan_suffix.elements[last] = rebind_scan_self_ref_lr_cont(
+            lr_alts[i].scan_suffix.elements[last],
+            rule_snake,
+            LR_CONT_FORWARD,
+        );
+    }
 }
 
 /// Per-depth first sets of the LR suffix ops from `start` — the caller-side
@@ -1164,7 +1176,7 @@ fn op_consumes_one_token(op: &Op) -> bool {
 /// Set `lr_cont_mask` on a self-ref `RuleCall`, peeling the `ListLabel`
 /// wrapper `rebind_self_ref_min_prec` also handles.
 fn rebind_self_ref_lr_cont(op: Op, lr_cont_mask: i32) -> Op {
-    if lr_cont_mask < 0 {
+    if lr_cont_mask == -1 {
         return op;
     }
     if let RuleCall(rc) = op {
@@ -1178,7 +1190,7 @@ fn rebind_self_ref_lr_cont(op: Op, lr_cont_mask: i32) -> Op {
 
 /// Scan mirror of `rebind_self_ref_lr_cont`.
 fn rebind_scan_self_ref_lr_cont<S: AsStrSlice>(se: ScanElement, rule_snake: S, lr_cont_mask: i32) -> ScanElement {
-    if lr_cont_mask < 0 {
+    if lr_cont_mask == -1 {
         return se;
     }
     if let RuleCall(rc) = se {
@@ -1824,14 +1836,8 @@ fn is_right_associative_alt(alt: &Alternative) -> bool {
     return false;
 }
 
-/// Compute the conflict-floor `min_prec` for `alt`. Left-associative
-/// alts use `own_prec + 1` as the floor (rejecting same-precedence
-/// on the right operand); right-associative use `own_prec` (so
-/// same-precedence nests rightward). Then widen the floor when a
-/// strictly higher-precedence alt's suffix claims one of our suffix's
-/// fixed tokens — see `parser_gen::compute_lr_conflict_min_prec` for
-/// the rationale (essentially: avoid the higher-prec alt grabbing a
-/// shared delimiter at the wrong precedence).
+/// The precedence floor of `alt`'s operands, raised past any higher alt whose
+/// suffix starts with one of `alt`'s own delimiters.
 fn compute_lr_conflict_min_prec(
     alt: &Alternative,
     own_prec: i32,
