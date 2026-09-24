@@ -13,6 +13,7 @@ use crate::tir::{
     TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::token::Span;
 
 pub fn capture_observed_by_ref(flat: &mut FlatPackage) {
     let type_table = flat.type_table.clone();
@@ -80,7 +81,7 @@ impl FrameLocals<'_> {
             name,
             type_id,
             is_mut: false,
-            span: Default::default(),
+            span: Span::default(),
         };
         match self {
             Self::Function {
