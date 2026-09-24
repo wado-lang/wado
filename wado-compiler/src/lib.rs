@@ -63,7 +63,9 @@ pub mod test_names;
 use crate::ast::UseDecl;
 use std::sync::Arc;
 
-use crate::component_model::{CmInterfaceRegistry, declares_cm_binding, wado_primitive_name_to_cm};
+use crate::component_model::{
+    CmInterfaceRegistry, UserCmError, declares_cm_binding, wado_primitive_name_to_cm,
+};
 use crate::name::entry_dir_of;
 use crate::wit_consume::module_host_leaf_imports;
 use crate::world_registry::WorldInfo;
@@ -264,17 +266,19 @@ fn user_cm_modules(
 fn register_user_cm_modules<H: compiler_host::CompilerHost>(
     registry: &mut Arc<CmInterfaceRegistry>,
     modules: &[(&ModuleSource, &ast::Module)],
+    resolutions: &resolve::Resolutions,
     logger: &Logger<'_, H>,
 ) -> Result<(), Bail> {
     if modules.is_empty() {
         return Ok(());
     }
     let registry = Arc::make_mut(registry);
-    for (source, module) in modules {
-        registry
-            .register_user_cm_decls(module, source)
-            .map_err(|msg| bail_with(logger, Code::DuplicateDefinition, msg))?;
-    }
+    registry
+        .register_user_cm_modules(modules, resolutions)
+        .map_err(|error| match error {
+            UserCmError::TakenInterface(msg) => bail_with(logger, Code::DuplicateDefinition, msg),
+            UserCmError::UnboundType(msg) => bail_with(logger, Code::CmBoundaryType, msg),
+        })?;
     // Only once every module is registered: an `interface` naming a resource's
     // operations may sit in a module other than the one declaring it.
     for (_, module) in modules {
@@ -1630,7 +1634,12 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
-    register_user_cm_modules(&mut tysys.cm_interface_registry, &user_cm_modules, logger)?;
+    register_user_cm_modules(
+        &mut tysys.cm_interface_registry,
+        &user_cm_modules,
+        &tysys.resolutions,
+        logger,
+    )?;
 
     debug_assert_eq!(
         Arc::strong_count(&tysys.trait_env),
@@ -2158,6 +2167,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             register_user_cm_modules(
                 &mut tysys.cm_interface_registry,
                 &user_cm_modules,
+                &tysys.resolutions,
                 &logger,
             )?;
             let builtin_registry = std::rc::Rc::try_unwrap(tysys.builtin_registry)

@@ -26,6 +26,7 @@ use crate::defs::DefId;
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{DeclName, DeclPath, IDENTITY_TEST_METHOD, NARROWING_TEST_METHOD, to_kebab};
 use crate::primitive::PrimitiveType;
+use crate::resolve::Resolutions;
 use crate::synthesis::cm_binding::types::cm_interface_module;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -1521,26 +1522,38 @@ fn collect_interface_decls(modules: &[(&'static str, ast::Module)]) -> Interface
 /// `"wasi:http/types@0.3.0"`). Effects, structs, variants,
 /// enums, flags, resources, and newtypes are all included.
 fn collect_cm_definitions(module: &ast::Module) -> IndexMap<String, String> {
-    use crate::ast::Item;
-    let mut out: IndexMap<String, String> = IndexMap::default();
-    for item in &module.items {
-        let (name, attrs) = match item {
-            Item::Newtype(a) => (a.name.clone(), a.attrs.as_slice()),
-            Item::Resource(r) => (r.name.clone(), r.attrs.as_slice()),
-            Item::Struct(s) => (s.name.clone(), s.attrs.as_slice()),
-            Item::Flags(f) => (f.name.clone(), f.attributes.as_deref().unwrap_or(&[])),
-            Item::Enum(e) => (e.name.clone(), e.attrs.as_slice()),
-            Item::Variant(v) => (v.name.clone(), v.attrs.as_slice()),
-            Item::Interface(e) => (e.name.clone(), e.attrs.as_slice()),
-            _ => continue,
-        };
-        let source = CmInterfaceRegistry::cm_source_interface(attrs);
-        if source.is_empty() {
-            continue;
-        }
-        out.insert(name, source);
-    }
-    out
+    module
+        .items
+        .iter()
+        .filter_map(cm_definition)
+        .map(|(name, source)| (name.to_string(), source))
+        .collect()
+}
+
+/// The name `item` declares and the interface its `#[cm(…)]` binds it to, or
+/// `None` for an item binding none.
+fn cm_definition(item: &Item) -> Option<(&str, String)> {
+    let (name, attrs) = match item {
+        Item::Newtype(a) => (&a.name, a.attrs.as_slice()),
+        Item::Resource(r) => (&r.name, r.attrs.as_slice()),
+        Item::Struct(s) => (&s.name, s.attrs.as_slice()),
+        Item::Flags(f) => (&f.name, f.attributes.as_deref().unwrap_or(&[])),
+        Item::Enum(e) => (&e.name, e.attrs.as_slice()),
+        Item::Variant(v) => (&v.name, v.attrs.as_slice()),
+        Item::Interface(e) => (&e.name, e.attrs.as_slice()),
+        Item::Use(_)
+        | Item::Function(_)
+        | Item::TupleTypeDecl(_)
+        | Item::BuiltinTypeDecl(_)
+        | Item::Impl(_)
+        | Item::Trait(_)
+        | Item::World(_)
+        | Item::Test(_)
+        | Item::Global(_)
+        | Item::Error(_) => return None,
+    };
+    let source = CmInterfaceRegistry::cm_source_interface(attrs);
+    (!source.is_empty()).then_some((name.as_str(), source))
 }
 
 /// Build the `name -> source_interface` map that applies inside `module_path`,
@@ -1652,6 +1665,180 @@ impl SourceInterfaces {
             table.entry(site).or_insert(interface);
         }
     }
+}
+
+/// Why the program's own `#[cm]` declarations cannot be registered.
+#[derive(Debug)]
+pub enum UserCmError {
+    /// A module declares a type in an interface another module owns.
+    TakenInterface(String),
+    /// A type crossing a binding belongs to no interface.
+    UnboundType(String),
+}
+
+/// Names each type a program binding module writes by the declaration it
+/// reaches, never by its spelling, and refuses one that binds no interface.
+struct UserCmTypeBinder<'a> {
+    resolutions: &'a Resolutions,
+    /// The interface each `#[cm]` declaration of the program binds.
+    bound: &'a IndexMap<DefId, String>,
+}
+
+impl UserCmTypeBinder<'_> {
+    fn bind_module(&self, module: &mut ast::Module) -> Result<SourceInterfaceBatch, String> {
+        let mut sources = SourceInterfaceBatch::default();
+        for item in &mut module.items {
+            self.bind_item(item, &mut sources)?;
+        }
+        Ok(sources)
+    }
+
+    fn bind_item(&self, item: &mut Item, sources: &mut SourceInterfaceBatch) -> Result<(), String> {
+        let declares_cm = cm_definition(item).is_some();
+        match item {
+            Item::Function(f) => {
+                let crosses = f.attrs.iter().any(|a| {
+                    a.cm_boundary
+                        .as_ref()
+                        .is_some_and(|b| b.as_world_import().is_some())
+                });
+                let types = f.params.iter_mut().map(|p| &mut p.ty);
+                let site = Crossing {
+                    label: &f.name,
+                    crosses,
+                };
+                self.bind_types(types.chain(f.return_type.as_mut()), &site, sources)
+            }
+            Item::Struct(s) => {
+                let site = Crossing {
+                    label: &s.name,
+                    crosses: declares_cm,
+                };
+                self.bind_types(s.fields.iter_mut().map(|f| &mut f.ty), &site, sources)
+            }
+            Item::Variant(v) => {
+                let site = Crossing {
+                    label: &v.name,
+                    crosses: declares_cm,
+                };
+                let payloads = v.cases.iter_mut().filter_map(|c| c.payload.as_mut());
+                self.bind_types(payloads, &site, sources)
+            }
+            Item::Newtype(a) => {
+                let site = Crossing {
+                    label: &a.name,
+                    crosses: declares_cm,
+                };
+                self.bind_types(std::iter::once(&mut a.ty), &site, sources)
+            }
+            Item::Interface(e) => e.methods.iter_mut().try_for_each(|m| {
+                let site = Crossing {
+                    label: &m.name,
+                    crosses: cm_import_of(&m.attrs).is_some(),
+                };
+                let types = m.params.iter_mut().map(|p| &mut p.ty);
+                self.bind_types(types.chain(m.return_type.as_mut()), &site, sources)
+            }),
+            Item::Resource(r) => r.methods.iter_mut().try_for_each(|m| {
+                let site = Crossing {
+                    label: &m.name,
+                    crosses: declares_cm && cm_import_of(&m.attrs).is_some(),
+                };
+                let types = m.params.iter_mut().map(|p| &mut p.ty);
+                self.bind_types(types.chain(m.return_type.as_mut()), &site, sources)
+            }),
+            Item::Use(_)
+            | Item::Flags(_)
+            | Item::Enum(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::Impl(_)
+            | Item::Trait(_)
+            | Item::World(_)
+            | Item::Test(_)
+            | Item::Global(_)
+            | Item::Error(_) => Ok(()),
+        }
+    }
+
+    fn bind_types<'t>(
+        &self,
+        types: impl Iterator<Item = &'t mut Type>,
+        site: &Crossing<'_>,
+        sources: &mut SourceInterfaceBatch,
+    ) -> Result<(), String> {
+        for ty in types {
+            self.bind_type(ty, site, sources)?;
+        }
+        Ok(())
+    }
+
+    fn bind_type(
+        &self,
+        ty: &mut Type,
+        site: &Crossing<'_>,
+        sources: &mut SourceInterfaceBatch,
+    ) -> Result<(), String> {
+        match ty {
+            Type::Named(named) => self.bind_named(named, site, sources),
+            Type::Generic(g) => self.bind_types(g.args.iter_mut(), site, sources),
+            Type::NamespacedGeneric(g) => self.bind_types(g.args.iter_mut(), site, sources),
+            Type::Function(f) => {
+                self.bind_types(f.params.iter_mut(), site, sources)?;
+                self.bind_type(&mut f.return_type, site, sources)
+            }
+            Type::Tuple(elems) => self.bind_types(elems.iter_mut(), site, sources),
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                self.bind_type(inner, site, sources)
+            }
+            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => Ok(()),
+        }
+    }
+
+    fn bind_named(
+        &self,
+        named: &mut NamedType,
+        site: &Crossing<'_>,
+        sources: &mut SourceInterfaceBatch,
+    ) -> Result<(), String> {
+        let Some(def) = self.resolutions.declared(named.id) else {
+            return Ok(());
+        };
+        let defs = self.resolutions.defs();
+        if !defs.kind(def).is_type() {
+            return Ok(());
+        }
+        let declared = defs.name(def);
+        if let Some(source) = self.bound.get(&def) {
+            sources.insert(named.id, source.clone());
+        } else if site.crosses && declared_by_program(defs.module(def)) {
+            let written = if named.name == declared {
+                format!("`{declared}`")
+            } else {
+                format!("`{}` (`{declared}`)", named.name)
+            };
+            return Err(format!(
+                "{written} crosses the Component Model boundary in `{}` but declares no \
+                 interface; bind it with `#[cm(\"<interface>#<name>\")]`",
+                site.label
+            ));
+        }
+        named.name = declared.to_string();
+        Ok(())
+    }
+}
+
+/// Whether `module` is the program's own rather than the stdlib, a component
+/// dependency's binding or a Wasm asset, each of which binds its types itself.
+fn declared_by_program(module: &ModuleSource) -> bool {
+    !module.is_core() && !module.is_binding() && !module.is_wasm_asset()
+}
+
+/// Where a binding writes a type, and whether the type crosses the boundary
+/// there or only sits in a signature the registry never reads.
+struct Crossing<'a> {
+    label: &'a str,
+    crosses: bool,
 }
 
 /// Collect the source interface of every named-type reference reachable from
@@ -1981,12 +2168,12 @@ impl CmInterfaceRegistry {
         // Collect resource types from this module
         for item in &module.items {
             if let Item::Resource(resource) = item {
-                // Use the #[cm] fragment as the CM name (preserves acronym casing like DNS, TLS)
-                let cm_name = cm_attr_cm_name(&resource.attrs, &resource.name);
                 let source_interface = Self::cm_source_interface(&resource.attrs);
                 if !scope.admits(&source_interface) {
                     continue;
                 }
+                // Use the #[cm] fragment as the CM name (preserves acronym casing like DNS, TLS)
+                let cm_name = cm_attr_cm_name(&resource.attrs, &resource.name);
                 // An unrestricted resource is erased at the boundary, which sees
                 // the universal handle, a copyable `u32`, so it registers as a
                 // newtype and every `own`/`borrow` path passes it by.
@@ -2015,12 +2202,12 @@ impl CmInterfaceRegistry {
         // Collect struct types from this module (e.g., DnsErrorPayload -> DNS-error-payload)
         for item in &module.items {
             if let Item::Struct(struct_def) = item {
-                // Use the #[cm] fragment as the CM name (preserves acronym casing)
-                let cm_name = cm_attr_cm_name(&struct_def.attrs, &struct_def.name);
                 let source_interface = Self::cm_source_interface(&struct_def.attrs);
                 if !scope.admits(&source_interface) {
                     continue;
                 }
+                // Use the #[cm] fragment as the CM name (preserves acronym casing)
+                let cm_name = cm_attr_cm_name(&struct_def.attrs, &struct_def.name);
                 let fields: Vec<(String, Type)> = struct_def
                     .fields
                     .iter()
@@ -2051,12 +2238,12 @@ impl CmInterfaceRegistry {
         for item in &module.items {
             if let Item::Flags(flags_def) = item {
                 let attrs = flags_def.attributes.as_deref().unwrap_or(&[]);
-                // Use the #[cm] fragment as the CM name (preserves acronym casing)
-                let cm_name = cm_attr_cm_name(attrs, &flags_def.name);
                 let source_interface = Self::cm_source_interface(attrs);
                 if !scope.admits(&source_interface) {
                     continue;
                 }
+                // Use the #[cm] fragment as the CM name (preserves acronym casing)
+                let cm_name = cm_attr_cm_name(attrs, &flags_def.name);
                 // Use per-member #[cm] attr for CM name
                 let member_names: Vec<String> = flags_def
                     .flags
@@ -2076,6 +2263,11 @@ impl CmInterfaceRegistry {
         // Collect enum types from this module
         for item in &module.items {
             if let Item::Enum(enum_def) = item {
+                // Format: #[cm("wasi:sockets/types@0.3.0-rc-2025-09-16#error-code")]
+                let source_interface = Self::cm_source_interface(&enum_def.attrs);
+                if !scope.admits(&source_interface) {
+                    continue;
+                }
                 // Use the #[cm] fragment as the CM name (preserves acronym casing)
                 let cm_name = cm_attr_cm_name(&enum_def.attrs, &enum_def.name);
                 // Use per-case #[cm] attr for CM name
@@ -2084,13 +2276,6 @@ impl CmInterfaceRegistry {
                     .iter()
                     .map(|c| cm_attr_cm_name(&c.attrs, &c.name))
                     .collect();
-
-                // Extract interface path from #[cm] attribute if present
-                // Format: #[cm("wasi:sockets/types@0.3.0-rc-2025-09-16#error-code")]
-                let source_interface = Self::cm_source_interface(&enum_def.attrs);
-                if !scope.admits(&source_interface) {
-                    continue;
-                }
                 register_unique(
                     &mut self.enums,
                     "enum",
@@ -2104,12 +2289,12 @@ impl CmInterfaceRegistry {
         // Collect variant types from this module (e.g., HeaderError)
         for item in &module.items {
             if let Item::Variant(variant_def) = item {
-                // Use the #[cm] fragment as the CM name (preserves acronym casing)
-                let cm_name = cm_attr_cm_name(&variant_def.attrs, &variant_def.name);
                 let source_interface = Self::cm_source_interface(&variant_def.attrs);
                 if !scope.admits(&source_interface) {
                     continue;
                 }
+                // Use the #[cm] fragment as the CM name (preserves acronym casing)
+                let cm_name = cm_attr_cm_name(&variant_def.attrs, &variant_def.name);
                 // Store both CM and Wado names for each case
                 let cases: Vec<CmVariantCase> = variant_def
                     .cases
@@ -2282,18 +2467,49 @@ impl CmInterfaceRegistry {
         }
     }
 
-    /// Register the `#[cm(…)]` declarations a user module makes, so a call to
-    /// one lowers to that import instead of reaching WIR unresolved. An item
-    /// without `#[cm(…)]` stays out: it is the module's own, not a binding.
-    /// `Err` names an interface another module already declares.
-    pub fn register_user_cm_decls(
+    /// Register the `#[cm(…)]` declarations the program's own modules make, so
+    /// a call to one lowers to that import instead of reaching WIR unresolved.
+    pub fn register_user_cm_modules(
+        &mut self,
+        modules: &[(&ModuleSource, &ast::Module)],
+        resolutions: &Resolutions,
+    ) -> Result<(), UserCmError> {
+        let defs = resolutions.defs();
+        let mut bound = IndexMap::default();
+        for (_, module) in modules {
+            for item in &module.items {
+                if let Some((_, source)) = cm_definition(item) {
+                    let def = defs
+                        .of_ast_id(item.id())
+                        .expect("a module-level declaration has a DefId");
+                    bound.insert(def, source);
+                }
+            }
+        }
+        let binder = UserCmTypeBinder {
+            resolutions,
+            bound: &bound,
+        };
+        for (module_source, module) in modules {
+            let mut module = (*module).clone();
+            let sources = binder
+                .bind_module(&mut module)
+                .map_err(UserCmError::UnboundType)?;
+            self.register_user_cm_decls(&module, module_source)
+                .map_err(UserCmError::TakenInterface)?;
+            self.extend_source_interfaces(sources);
+            self.register_module_decls(&module, &CmDeclScope::CmAttributed);
+        }
+        Ok(())
+    }
+
+    /// Claim the interfaces `module` declares types in for it. `Err` names an
+    /// interface another module already declares.
+    fn register_user_cm_decls(
         &mut self,
         module: &ast::Module,
         module_source: &ModuleSource,
     ) -> Result<(), String> {
-        // The resolver keys cross-module `use` by path, and a user binding
-        // module resolves its own declarations, so one placeholder key serves.
-        const SELF_PATH: &str = "";
         let definitions = collect_cm_definitions(module);
         // A CM interface has one declaring module. Registering into one another
         // module already owns would overwrite that owner, leaving every type it
@@ -2317,12 +2533,6 @@ impl CmInterfaceRegistry {
                 .entry(source.clone())
                 .or_insert_with(|| module_source.clone());
         }
-        let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
-            IndexMap::default();
-        defs_by_module.insert(SELF_PATH, definitions);
-        let local_names = build_local_name_resolver(SELF_PATH, module, &defs_by_module);
-        self.extend_source_interfaces(collect_named_type_sources(module, &local_names));
-        self.register_module_decls(module, &CmDeclScope::CmAttributed);
         Ok(())
     }
 
