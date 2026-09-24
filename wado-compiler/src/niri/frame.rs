@@ -15,6 +15,7 @@ use crate::tir::TypeTable;
 use super::callee::{CallSite, CalleeKey};
 use super::place::{borrowed_place_operand, named_local, place_aliased_by_another, place_of};
 use super::region::{block_shape, region_needs, region_shape, value_block_shape};
+use super::rewrite::is_discardable_operand;
 use super::trackability::Trackability;
 use super::{CallRun, CtfeBuiltin, FrameState, Interpreter, Lattice};
 use crate::name::diagnostic_function_name;
@@ -258,9 +259,14 @@ impl Interpreter<'_> {
             }
             StmtKind::Return { value } => match *value {
                 None => Flow::Return(Lattice::Unevaluated),
+                // An unknown result still completes the call, unless computing it
+                // is what the frame left undone: a trap, or an effect.
                 Some(op) => match self.eval_operand(body, op) {
-                    lattice @ (Lattice::Const(_) | Lattice::NonConst) => Flow::Return(lattice),
-                    Lattice::Unevaluated => Flow::Bail,
+                    lattice @ Lattice::Const(_) => Flow::Return(lattice),
+                    Lattice::NonConst if is_discardable_operand(body, op) => {
+                        Flow::Return(Lattice::NonConst)
+                    }
+                    Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
                 },
             },
             StmtKind::If {

@@ -169,21 +169,21 @@ fn "licm_reloadable_hoist_alias.wado/run"() with Stdout {
     let packed: i64;
     let rx_44: i32;
     let tx_45: i32;
-    let $sroa_$iter_0_repr: ref Array<i32>;
-    let $sroa_$iter_0_index: i32;
+    let $sroa_$iter_0_repr_54: ref Array<i32>;
+    let $sroa_$iter_0_index_55: i32;
     hh = struct.new "licm_reloadable_hoist_alias.wado//Holder" { data: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 } };
     elements_9 = array.new_fixed<i32>();
     out_1 = struct.new "core:prelude//List<i32>" { repr: elements_9, used: 0 };
     "licm_reloadable_hoist_alias.wado/probe"(hh, hh, out_1);
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     end = out_1.used;
-    $sroa_$iter_0_repr = out_1.repr;
-    $sroa_$iter_0_index = 0;
+    $sroa_$iter_0_repr_54 = out_1.repr;
+    $sroa_$iter_0_index_55 = 0;
     b5: block {
         l6: loop {
-            break_if b5 $sroa_$iter_0_index >= end;
-            ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr, $sroa_$iter_0_index);
-            $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
+            break_if b5 $sroa_$iter_0_index_55 >= end;
+            ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_54, $sroa_$iter_0_index_55);
+            $sroa_$iter_0_index_55 = $sroa_$iter_0_index_55 + 1;
             $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
             "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(ref_val, $local_5);
             new_used = $local_5.used + 1;
@@ -379,9 +379,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -389,11 +389,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l33: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b34: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b34: block {
                 l35: loop {
                     break_if b34 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l35;
                 };
@@ -411,8 +411,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -424,8 +424,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l33;

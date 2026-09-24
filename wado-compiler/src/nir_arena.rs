@@ -13,7 +13,7 @@ use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, non_nan_float, truncate_int};
 use crate::hashmap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::name::{is_template_block, plain_block_label};
+use crate::name::{is_template_block, minted_name};
 use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::builder::ValueGraphBuild;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
@@ -432,14 +432,14 @@ pub enum ExprKind {
 impl ExprKind {
     /// A block no `break` names. `what` says which construct put the block
     /// there — the caller is the only one who knows — and the block id makes
-    /// the label unique within the body; [`plain_block_label`] spells it.
+    /// the label unique within the body; [`minted_name`] spells it.
     ///
     /// A serial alone would name the block without saying anything about it,
     /// which is what an unlabeled block already did.
     #[must_use]
     pub fn plain_block(block: BlockId, result_type: TypeId, what: &str) -> Self {
         Self::LabeledBlock {
-            label: plain_block_label(what, block.index()),
+            label: minted_name(what, block.index()),
             block,
             result_type,
             role: BlockRole::Plain,
@@ -1849,12 +1849,18 @@ impl Body {
         });
         // An `Expr` tail is never a terminator, so reaching it is the same
         // question as it being there.
-        if let Some(&last) = self.blocks[*block].stmts.last()
-            && let StmtKind::Expr(v) = self.stmts[last].kind
-        {
+        if let Some(v) = self.block_tail(*block) {
             out.push(Some(v));
         }
         Some(out)
+    }
+
+    /// The operand of `block`'s last statement, where that statement is an `Expr`.
+    pub fn block_tail(&self, block: BlockId) -> Option<Operand> {
+        match self.stmts[*self.blocks[block].stmts.last()?].kind {
+            StmtKind::Expr(op) => Some(op),
+            _ => None,
+        }
     }
 
     /// The one operand `e` yields, or `None` where more than one point produces

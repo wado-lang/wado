@@ -1,0 +1,37 @@
+// An inlined `f` leaves its early `return` as `break $inline_f_N` inside the
+// argument of the call to another `f`. That call, inlined in a later round,
+// took the same label, so its block captured the break (wrong value from the
+// `Option` caller, invalid Wasm from the `Result` one).
+
+use { println, Stdout } from "core:cli";
+use u from "./sub/opt_inline_label_hygiene_u.wado";
+use r from "./sub/opt_inline_label_hygiene_r.wado";
+
+fn f(o: Option<i32>) -> i32 {
+    return u::f(match o { Some(v) => v, None => return 100 }) + 7;
+}
+
+#[inline(never)]
+fn caller(o: Option<i32>) -> i32 {
+    return f(o) * 2;
+}
+
+#[inline(never)]
+fn caller_r(o: Result<i32, String>) -> i32 {
+    return match r::f(o) {
+        Ok(v) => v,
+        Err(e) => -e.len(),
+    };
+}
+
+export fn run() with Stdout {
+    let none: Option<i32> = null;
+    let some: Option<i32> = Some(5);
+    println(`${caller(builtin::black_box(none))} ${caller(builtin::black_box(some))}`);
+    let err: Result<i32, String> = Err("four");
+    let ok: Result<i32, String> = Ok(5);
+    println(`${caller_r(builtin::black_box(err))} ${caller_r(builtin::black_box(ok))}`);
+}
+
+__DATA__
+{"stdout": "200 26\n-4 13\n"}

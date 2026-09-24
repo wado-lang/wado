@@ -1,0 +1,87 @@
+// A `mut` binding in a match-arm pattern is readable from the arm's guard, and
+// the guard and the body see one binding.
+
+variant Tag {
+    A(i32),
+    B(String),
+}
+
+fn scalar(o: Option<i32>) -> i32 {
+    return match o {
+        Some(mut v) && v > 1 => {
+            v += 100;
+            v
+        },
+        _ => -1,
+    };
+}
+
+fn tuple(t: [i32, i32]) -> i32 {
+    return match t {
+        [mut a, b] && a > 1 => {
+            a += b;
+            a
+        },
+        _ => -1,
+    };
+}
+
+fn top_level(x: i32) -> i32 {
+    return match x {
+        mut y && y > 5 => {
+            y *= 2;
+            y
+        },
+        _ => -1,
+    };
+}
+
+fn closure_in_guard(t: Tag) -> i32 {
+    return match t {
+        A(mut v) && (|| v > 1)() => {
+            v += 1;
+            v
+        },
+        _ => -1,
+    };
+}
+
+fn string_payload(o: Option<String>) -> i32 {
+    return match o {
+        Some(mut s) && s.len() > 2 => {
+            s.push_str("!");
+            s.len()
+        },
+        _ => -1,
+    };
+}
+
+fn captured_in_body(o: Option<i32>) -> i32 {
+    return match o {
+        Some(mut v) && v > 1 => {
+            let mut bump = || v += 10;
+            bump();
+            v
+        },
+        _ => -1,
+    };
+}
+
+export fn run() {
+    assert scalar(Option::Some(2)) == 102;
+    assert scalar(Option::Some(1)) == -1;
+    assert tuple([2, 3]) == 5;
+    assert tuple([1, 3]) == -1;
+    assert top_level(6) == 12;
+    assert top_level(5) == -1;
+    assert closure_in_guard(Tag::A(2)) == 3;
+    assert closure_in_guard(Tag::A(1)) == -1;
+    assert closure_in_guard(Tag::B("x")) == -1;
+    assert string_payload(Option::Some("abc")) == 4;
+    assert string_payload(Option::Some("ab")) == -1;
+    assert captured_in_body(Option::Some(2)) == 12;
+    assert captured_in_body(Option::Some(0)) == -1;
+}
+
+__DATA__
+{}

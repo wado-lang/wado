@@ -1876,7 +1876,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         symbols,
                         modules,
                         logger,
-                        Rc::clone(&state.interner),
                         // Gate dead function / method emission on the live set
                         // (globals are emitted unconditionally; see
                         // `reify_module`). The semantic diagnostics (effect

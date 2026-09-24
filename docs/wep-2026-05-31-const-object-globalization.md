@@ -111,6 +111,13 @@ The walk skips into a qualifying `let`'s own value and into a hoisted argument,
 because hoisting both would nest one global's `GlobalVarSet` inside another's
 initializer — a shape the single-assignment classifier cannot see through.
 
+#### Identity
+
+Hoisting makes every evaluation of the binding yield one object, so a `==` by
+identity on two references to it may turn from false to true. The spec permits
+this (§Reference Identity): distinct objects of identical content may compare
+equal, and one object never compares unequal to itself. No gate guards identity.
+
 #### Gate: closed constant expression
 
 `is_globalizable_const` requires a side-effect-free constant with no free

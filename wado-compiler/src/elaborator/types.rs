@@ -2948,6 +2948,24 @@ impl FunctionContext {
         index
     }
 
+    /// Reach local `index` as `name` from the current scope too, the way a
+    /// minted local stands for a binding source can spell.
+    pub(super) fn name_local(&mut self, name: String, index: u32) {
+        let TirLocal {
+            type_id, is_mut, ..
+        } = self.locals[index as usize];
+        let scope = self.scopes.last_mut().unwrap();
+        scope.insert(
+            name,
+            LocalVar {
+                type_id,
+                index,
+                is_mut,
+                defining_ast_id: None,
+            },
+        );
+    }
+
     /// Look up a variable by name (searches from innermost to outermost scope)
     pub(super) fn lookup(&self, name: &str) -> Option<&LocalVar> {
         for scope in self.scopes.iter().rev() {

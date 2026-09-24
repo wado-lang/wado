@@ -1,0 +1,24 @@
+// A call run at compile time for its effects has completed only if its
+// `return` value was computed. `h()` returns `10 / 0`, which traps, so running
+// `g` must not step past the statement `h();` as though it had finished.
+use { println, Stdout } from "core:cli";
+
+fn h() -> i32 {
+    let z = 0;
+    return 10 / z;
+}
+
+fn g() -> i32 {
+    h();
+    return 7;
+}
+
+export fn run() with Stdout {
+    println(`${g()}`);
+}
+
+__DATA__
+{
+    "stdout": "",
+    "trapped": true
+}

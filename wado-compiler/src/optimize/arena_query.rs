@@ -308,6 +308,23 @@ pub(super) fn collect_pattern_bindings(body: &Body, pattern: PatId, out: &mut Ve
     });
 }
 
+/// Whether `accepts` holds for the value of every `Return` under `node`, nested
+/// ones included.
+pub(super) fn every_return(
+    body: &Body,
+    node: NodeRef,
+    mut accepts: impl FnMut(Option<Operand>) -> bool,
+) -> bool {
+    body.find_in_nodes_under(node, |n| match n {
+        NodeRef::Stmt(s) => match body.stmts[s].kind {
+            StmtKind::Return { value } if !accepts(value) => Some(()),
+            _ => None,
+        },
+        _ => None,
+    })
+    .is_none()
+}
+
 /// Whether a value of `ty` can hold a reference into the heap. Wider than
 /// `value_copy::is_reference_type`, which answers only for `&T` / `&mut T`.
 pub(super) fn holds_reference(type_table: &TypeTable, ty: TypeId) -> bool {
@@ -386,12 +403,25 @@ pub(super) fn stmt_mentions_local(body: &Body, id: StmtId, idx: u32) -> bool {
     node_mentions_local(body, NodeRef::Stmt(id), idx)
 }
 
-/// Whether `idx` appears anywhere in what `op` reads, skeleton or promoted.
-pub(super) fn operand_mentions_local(body: &Body, op: Operand, idx: u32) -> bool {
+/// Every local `op` reads, skeleton or promoted.
+pub(super) fn operand_read_locals(body: &Body, op: Operand) -> IndexSet<u32> {
+    let mut out = IndexSet::default();
     match op {
-        Operand::Expr(e) => expr_mentions_local(body, e, idx),
-        Operand::Value(v) => body.values.value_reads_local(v, idx),
+        Operand::Value(v) => body.values.collect_opaque_locals(v, &mut out),
+        Operand::Expr(e) => body.for_each_live_node_under(NodeRef::Expr(e), |n| {
+            if let NodeRef::Expr(x) = n
+                && let ExprKind::Local { index, .. } = &body.exprs[x].kind
+            {
+                out.insert(*index);
+            }
+            body.for_each_operand(n, |o| {
+                if let Some(v) = o.as_value() {
+                    body.values.collect_opaque_locals(v, &mut out);
+                }
+            });
+        }),
     }
+    out
 }
 
 fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
@@ -734,7 +764,7 @@ struct AliasEntry {
 }
 
 /// Root of a written-through place chain (an `Assign` target's receiver).
-enum WriteRoot {
+pub(super) enum WriteRoot {
     /// Chain bottoms out at a local (derefs of ref locals resolve through
     /// [`MutRefAliases`]).
     Local(u32),
@@ -746,7 +776,7 @@ enum WriteRoot {
     Temp,
 }
 
-fn write_root(body: &Body, e: ExprId, derefed: bool) -> WriteRoot {
+pub(super) fn write_root(body: &Body, e: ExprId, derefed: bool) -> WriteRoot {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => WriteRoot::Local(*index),
         ExprKind::Unary {
@@ -756,11 +786,21 @@ fn write_root(body: &Body, e: ExprId, derefed: bool) -> WriteRoot {
             Some(ie) => write_root(body, ie, true),
             None => WriteRoot::Aliased,
         },
+        // Below a deref, a projection reads the reference out of an aggregate.
+        ExprKind::FieldAccess { .. } | ExprKind::VariantPayload { .. } | ExprKind::Index { .. }
+            if derefed =>
+        {
+            WriteRoot::Aliased
+        }
+        // `*&place` is the place itself.
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        }
-        | ExprKind::Cast { expr: inner, .. }
+        } => match inner.as_expr() {
+            Some(ie) => write_root(body, ie, false),
+            None => WriteRoot::Temp,
+        },
+        ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::Index { expr: inner, .. } => match inner.as_expr() {

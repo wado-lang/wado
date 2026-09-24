@@ -458,9 +458,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -468,11 +468,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l48: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b49: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b49: block {
                 l50: loop {
                     break_if b49 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l50;
                 };
@@ -490,8 +490,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -503,8 +503,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l48;
@@ -537,8 +537,8 @@ fn "value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     let $licm_repr_46: ref "Array<core:prelude/string.wado/String>";
     let $licm_arith_47: i32;
     let $licm_arith_48: i32;
-    let $sroa_a_used: i32;
-    let $sroa_b_used: i32;
+    let $sroa_a_used_50: i32;
+    let $sroa_b_used_52: i32;
     let $av_53: i32;
     let $av_54: i32;
     n = self.used;
@@ -577,7 +577,7 @@ fn "value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/
                                         let $array_clone_dst_2: ref Array<u8>;
                                         $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
                                         builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
-                                        $sroa_a_used = $load_3;
+                                        $sroa_a_used_50 = $load_3;
                                         v_18 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_46, j);
                                         let $array_clone_src_4: ref Array<u8>;
                                         $array_clone_src_4 = v_18.repr;
@@ -586,14 +586,14 @@ fn "value_copy_demote.wado/core:prelude/list.wado/List<core:prelude/string.wado/
                                         let $array_clone_dst_5: ref Array<u8>;
                                         $array_clone_dst_5 = builtin::array_new<u8>($array_clone_len_6);
                                         builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6);
-                                        $sroa_b_used = $load_5;
-                                        $match_13 = "core:prelude/array.wado/core/prelude/array.wado/seq_cmp<u8>"($array_clone_dst_2, $sroa_a_used, $array_clone_dst_5, $sroa_b_used);
+                                        $sroa_b_used_52 = $load_5;
+                                        $match_13 = "core:prelude/array.wado/core/prelude/array.wado/seq_cmp<u8>"($array_clone_dst_2, $sroa_a_used_50, $array_clone_dst_5, $sroa_b_used_52);
                                         if $match_13 == 2 {
-                                            value_28 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_dst_11: ref Array<u8>; $array_clone_dst_11 = builtin::array_new<u8>($sroa_b_used); builtin::array_copy<u8>($array_clone_dst_11, 0, $array_clone_dst_5, 0, $sroa_b_used); $array_clone_dst_11), used: $sroa_b_used };
+                                            value_28 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_dst_11: ref Array<u8>; $array_clone_dst_11 = builtin::array_new<u8>($sroa_b_used_52); builtin::array_copy<u8>($array_clone_dst_11, 0, $array_clone_dst_5, 0, $sroa_b_used_52); $array_clone_dst_11), used: $sroa_b_used_52 };
                                             builtin::array_set<ref "core:prelude/string.wado//String">(buf, k, value_28);
                                             j = j + 1;
                                         } else {
-                                            value_32 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_dst_8: ref Array<u8>; $array_clone_dst_8 = builtin::array_new<u8>($sroa_a_used); builtin::array_copy<u8>($array_clone_dst_8, 0, $array_clone_dst_2, 0, $sroa_a_used); $array_clone_dst_8), used: $sroa_a_used };
+                                            value_32 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_dst_8: ref Array<u8>; $array_clone_dst_8 = builtin::array_new<u8>($sroa_a_used_50); builtin::array_copy<u8>($array_clone_dst_8, 0, $array_clone_dst_2, 0, $sroa_a_used_50); $array_clone_dst_8), used: $sroa_a_used_50 };
                                             builtin::array_set<ref "core:prelude/string.wado//String">(buf, k, value_32);
                                             i = i + 1;
                                         }

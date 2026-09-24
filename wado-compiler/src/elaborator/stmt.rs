@@ -14,7 +14,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::types::{BindingSite, FunctionContext, TypeError};
 use super::util;
-use crate::ast::{RangeKind, StructPatternField, wire_numbers_of};
+use crate::ast::{BinaryOp, RangeKind, StructPatternField, wire_numbers_of};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
@@ -23,7 +23,10 @@ use crate::elaborator::synth::ArgClass;
 use crate::elaborator::types::{
     GenericNewtypeInfo, ImplMemberKind, ParamSlot, RealTypeParams, StructFieldInfo,
 };
-use crate::name::{mangle_local_item_name, namespace_member_alias};
+use crate::name::{
+    constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
+    namespace_member_alias,
+};
 use crate::symbol_notation::render;
 use crate::tir::{StructDef, TirTypeParam};
 use crate::{IndexMap, hashmap, tir};
@@ -1580,17 +1583,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// which in pattern position is a constant-value (refutable) match rather
     /// than a fresh binding.
     pub(super) fn is_immutable_global(&self, name: &str) -> bool {
-        self.sem
-            .decls
-            .current_module_globals
-            .get(name)
-            .is_some_and(|&(_ty, mutable)| !mutable)
-            || self
+        self.immutable_global_type(name).is_some()
+    }
+
+    /// The type of the immutable global `name` refers to, if it names one.
+    fn immutable_global_type(&self, name: &str) -> Option<TypeId> {
+        match self.sem.decls.current_module_globals.get(name) {
+            Some(&(ty, mutable)) => (!mutable).then_some(ty),
+            None => self
                 .sem
                 .decls
                 .imported_globals
                 .get(name)
-                .is_some_and(|(_m, _n, _ty, mutable)| !*mutable)
+                .and_then(|&(_, _, ty, mutable)| (!mutable).then_some(ty)),
+        }
+    }
+
+    /// Where a constant pattern's `scrutinee == constant` is a trait call, dispatch
+    /// it on the pattern and reserve the local reify holds the scrutinee in.
+    fn resolve_constant_pattern(
+        &mut self,
+        pattern_id: AstId,
+        scrutinee: TypeId,
+        constant: TypeId,
+        ctx: &mut FunctionContext,
+        span: Span,
+    ) {
+        {
+            let type_table = self.tysys.type_table.borrow();
+            // A scalar compares by instruction, and a wide int's constant is
+            // folded to a literal pattern.
+            if type_table.is_scalar_primitive_like(scrutinee) || type_table.is_wide_int(scrutinee) {
+                return;
+            }
+        }
+        self.resolve_binary_op(
+            scrutinee,
+            BinaryOp::Eq,
+            constant,
+            span,
+            span,
+            Some(pattern_id),
+        );
+        if self.sem.types.operator_dispatch.contains_key(&pattern_id) {
+            ctx.add_local(constant_pattern_local_name(), scrutinee, false, None);
+        }
     }
 
     /// Bind a refutable pattern's variables into `ctx`, returning them in
@@ -1668,8 +1705,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Immutable global constant: a constant-value pattern that
                 // introduces no binding but reads the global — record the
                 // use→def edge so it is not flagged dead (mirrors the expr path).
-                if !is_mut && self.is_immutable_global(name) {
+                if !is_mut && let Some(constant) = self.immutable_global_type(name) {
                     self.record_item_reference_by_name(*id, name);
+                    self.resolve_constant_pattern(*id, scrutinee_type, constant, ctx, span);
                     return Vec::new();
                 }
                 let binding_type =
@@ -1789,19 +1827,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
                             })
                         });
+                        if let Some(id) = *name_id {
+                            self.resolve_constant_pattern(id, scrutinee_type, assoc.ty, ctx, *span);
+                        }
                         return Vec::new();
                     }
 
                     // `ns::NAME` naming an immutable global the namespace exports
                     // is a constant-value pattern, as the bare `NAME` is.
-                    if let Some(alias) = self
+                    if let Some((alias, constant)) = self
                         .sem
                         .imports
                         .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
-                        .filter(|alias| self.is_immutable_global(alias))
+                        .and_then(|alias| {
+                            let constant = self.immutable_global_type(&alias)?;
+                            Some((alias, constant))
+                        })
                     {
                         if let Some(id) = *name_id {
                             self.record_item_reference_by_name(id, &alias);
+                            self.resolve_constant_pattern(id, scrutinee_type, constant, ctx, *span);
                         }
                         return Vec::new();
                     }
@@ -2665,7 +2710,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let (binding_name, binding_id, binding_name_span) = match &for_of.binding {
             Pattern::Ident { id, name, span } => (name.clone(), Some(*id), Some(*span)),
-            _ => (format!("$pattern_temp_{unique_id}"), None, None),
+            _ => (minted_name("pattern_temp", unique_id), None, None),
         };
 
         let is_mut = for_of.is_mut;
@@ -3208,7 +3253,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// reroutes a naked `continue` to, so control still falls through `update`.
     pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) {
         self.record_desugar(f.id, DesugarKind::CStyleFor);
-        let body_label = format!("$for_{}_body", ctx.fresh_serial());
+        let body_label = for_body_label(ctx.fresh_serial());
 
         // Mirror `resolve_loop` / `resolve_while` / `resolve_for_of`: clear the
         // continue-retarget stack at the loop boundary so the invariant

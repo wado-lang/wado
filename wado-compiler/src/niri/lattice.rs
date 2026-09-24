@@ -20,6 +20,7 @@ use crate::tir::{ResolvedType, TypeId};
 use super::CtfeBuiltin;
 use super::pattern::PatternMatch;
 use super::place::named_local;
+use super::rewrite::{is_discardable, is_discardable_operand};
 use super::{GlobalKey, Interpreter, Lattice, PatBindings, let_ref_global};
 use crate::nir_arena::StmtId;
 
@@ -347,6 +348,7 @@ impl Interpreter<'_> {
                         Some(eb) => self.block_lattice(body, *eb),
                         None => Lattice::Unevaluated,
                     },
+                    _ if !is_discardable_operand(body, *condition) => Lattice::NonConst,
                     _ => {
                         let then_lat =
                             arm_lattice_for_feasible_join(self.block_lattice(body, *then_branch));
@@ -460,7 +462,8 @@ impl Interpreter<'_> {
         }
         match self.expr_to_lattice(body, scrutinee).as_const() {
             Some(value) => self.chosen_arm_lattice(body, &value, arms),
-            None => self.every_arm_lattice(body, arms),
+            None if is_discardable(body, scrutinee) => self.every_arm_lattice(body, arms),
+            None => Lattice::NonConst,
         }
     }
 
@@ -475,10 +478,17 @@ impl Interpreter<'_> {
         let mut acc = Lattice::Unevaluated;
         let mut undecided = false;
         for arm in arms {
-            let pm = if arm.guard.is_some() {
-                PatternMatch::Unknown
-            } else {
-                self.pattern_matches(body, value, arm.pattern, &mut PatBindings::new())
+            let pm = match (
+                self.pattern_matches(body, value, arm.pattern, &mut PatBindings::new()),
+                arm.guard,
+            ) {
+                (pm, None) | (pm @ PatternMatch::No, Some(_)) => pm,
+                (PatternMatch::Yes | PatternMatch::Unknown, Some(guard))
+                    if is_discardable_operand(body, guard) =>
+                {
+                    PatternMatch::Unknown
+                }
+                (PatternMatch::Yes | PatternMatch::Unknown, Some(_)) => return Lattice::NonConst,
             };
             match pm {
                 PatternMatch::No => {}
@@ -499,7 +509,12 @@ impl Interpreter<'_> {
     /// Only sound where the arms cover it: otherwise the no-match trap decides
     /// the value instead.
     fn every_arm_lattice(&self, body: &Body, arms: &[ArmData]) -> Lattice {
-        if !is_provably_exhaustive(body, arms.iter().map(|a| (a.guard, a.pattern))) {
+        if !is_provably_exhaustive(body, arms.iter().map(|a| (a.guard, a.pattern)))
+            || !arms
+                .iter()
+                .filter_map(|a| a.guard)
+                .all(|g| is_discardable_operand(body, g))
+        {
             return Lattice::NonConst;
         }
         let mut acc = Lattice::Unevaluated;

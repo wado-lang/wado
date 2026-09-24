@@ -1008,6 +1008,10 @@ let kind = match token {
 };
 ```
 
+The pattern matches where `scrutinee == CONSTANT` holds, so a constant of any
+type with an `Eq` compares as `==` would: a `String`, a struct, a tuple or an
+`Option` constant matches at the top of an arm or nested in another pattern.
+
 #### Or Patterns
 
 Or patterns match if any alternative matches. All alternatives must bind the same names with the same types:
@@ -1500,6 +1504,26 @@ let r2 = &mut x;  // OK in Wado (no borrow checker)
 
 *r1 = 20;
 *r2 = 30;
+```
+
+#### Reference Identity
+
+`==` and `!=` on two references to a type whose value is a heap object (a
+struct, `List<T>`, `String`, a tuple, a variant) compare identity, not content.
+
+Identity is guaranteed in one direction only. Two references to one object
+always compare equal. Two references to distinct objects of identical content
+may also compare equal, because the optimizer may intern such objects into one.
+Whether it does can change with the optimization level and with the Wado
+version. An identity comparison that should be true is never false.
+
+```wado
+fn same(a: &List<i32>, b: &List<i32>) -> bool { return a == b; }
+
+let xs: List<i32> = [1, 2, 3];
+same(&xs, &xs);                 // always true
+let ys: List<i32> = [1, 2, 3];
+same(&xs, &ys);                 // false or true: the two may be one object
 ```
 
 #### Design Trade-offs

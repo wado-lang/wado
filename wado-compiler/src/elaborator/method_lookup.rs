@@ -19,8 +19,8 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::call::{
-    DefaultTypeBinding, SettledAs, bind_nearer, merge_turbofish_type_args, slot_type_bindings,
-    turbofish_leaves_slot,
+    DefaultTypeBinding, SettledAs, bind_nearer, merge_turbofish_type_args, omits_a_default,
+    slot_type_bindings, turbofish_leaves_slot,
 };
 use super::coercion::is_numeric_literal_arg;
 use super::infer::InferCtx;
@@ -3363,7 +3363,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             consumes_self: _,
             inherent_visibility,
             defaults_module,
-            impl_type_bindings: _,
+            impl_type_bindings,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self
@@ -3485,6 +3485,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = subst.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
         }
 
+        let defaults: Vec<(String, Option<ast::Expr>)> = method_param_names
+            .into_iter()
+            .zip(method_param_defaults)
+            .collect();
+        let defaults_module = defaults_module
+            .or_else(|| impl_module.clone())
+            .unwrap_or_else(|| self.current_module_source.clone());
+        if omits_a_default(args.len(), &defaults) {
+            let mut type_bindings = impl_type_bindings;
+            let own = self.value_default_slot_bindings(
+                &method_own_params,
+                &method_type_param_ids,
+                output_base_type_id,
+                method_trait_name.as_ref().and_then(FqTraitName::canonical),
+                type_args.clone(),
+                Some(defaults_module.clone()),
+            );
+            bind_nearer(&mut type_bindings, own);
+            self.record_default_walk(
+                method_call.id,
+                &args,
+                &param_types,
+                &defaults,
+                Some(defaults_module.clone()),
+                &type_bindings,
+                ctx,
+            );
+        }
+
         let output_fq = self
             .tysys
             .fq_receiver_of_impl(output_base_type_id, from_concrete_impl);
@@ -3520,14 +3549,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_kind,
             method_is_ref_impl,
             method_param_is_mut,
-            method_param_names
-                .into_iter()
-                .zip(method_param_defaults)
-                .collect(),
+            defaults,
             param_types.clone(),
-            defaults_module
-                .or_else(|| impl_module.clone())
-                .unwrap_or_else(|| self.current_module_source.clone()),
+            defaults_module,
             return_type,
             type_args,
             false,

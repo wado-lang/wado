@@ -1,8 +1,5 @@
-//! Select lowering: a post-optimization [`Rule`] turning `if cond { a } else
-//! { b }` into `builtin::select(cond, a, b)` and its branchless Wasm
-//! instruction. Both arms must be pure and trap-free, `select` evaluating them
-//! eagerly. The rewrite reuses the existing expression ids, so it is one
-//! `replace_expr_kind`, and leaf-purity makes the rule confluent.
+//! Select lowering: a post-optimization [`Rule`] turning `if c { a } else { b }`
+//! into the branchless `builtin::select(c, a, b)` where both arms are pure leaves.
 
 use crate::lower::plan::value_copy::needs_value_copy;
 use crate::module_source::ModuleSource;
@@ -12,6 +9,7 @@ use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::optimize::arena_query::{binary_op_may_trap, cast_truncates_a_float};
+use crate::optimize::mod_ref::ModRef;
 use crate::tir::{TypeId, TypeTable};
 
 /// Run select lowering on all functions, driven by the rewrite engine.
@@ -83,6 +81,9 @@ impl Rule for SelectLoweringRule<'_> {
         let Some(false_val) = arm_select_value(engine.body, else_branch, self.type_table) else {
             return false;
         };
+        if condition_writes_an_arm_read(engine.body, condition, [true_val, false_val]) {
+            return false;
+        }
 
         engine.replace_expr_kind(
             id,
@@ -90,6 +91,20 @@ impl Rule for SelectLoweringRule<'_> {
         );
         true
     }
+}
+
+/// Whether `condition` writes a local that an arm reads. A pooled arm reads
+/// only single-version locals, which nothing writes.
+fn condition_writes_an_arm_read(body: &Body, condition: Operand, arms: [Operand; 2]) -> bool {
+    let Some(condition) = condition.as_expr() else {
+        return false;
+    };
+    let writes = ModRef::of_expr(body, condition).local_writes;
+    !writes.is_empty()
+        && arms
+            .into_iter()
+            .filter_map(Operand::as_expr)
+            .any(|arm| !ModRef::of_expr(body, arm).local_reads.is_disjoint(&writes))
 }
 
 /// `builtin::select(cond, a, b)` over `ty`.

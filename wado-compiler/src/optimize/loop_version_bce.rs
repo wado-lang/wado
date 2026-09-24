@@ -18,6 +18,7 @@ use crate::nir_value_graph::ValueKind;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
+use super::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use super::arena_query::{block_contains_loop, has_break_to};
 use super::condition_implication::{
     Binds, BoundKey, Conjunct, InductionStep, build_copy_bindings, capture_block_binding,
@@ -101,6 +102,8 @@ pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCach
         Vec::new()
     };
     let type_table = project.type_table.borrow();
+    let first_param_types = first_param_types(project);
+    let call_immutability = CallImmutability::new(project, &type_table);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -112,14 +115,30 @@ pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCach
             continue;
         }
         let stores_aliased = func.stores_aliased_locals.clone();
-        let NirFunction { body, locals, .. } = &mut *func;
+        let NirFunction {
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            ..
+        } = &mut *func;
         let body = body.as_mut().expect("checked above");
+        let (aliased, untrackable, mut_escaped) = builder_alias_sets(
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            &type_table,
+            &first_param_types,
+            &call_immutability,
+        );
         let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
 
-        let binds = build_copy_bindings(engine.body);
+        let binds = build_copy_bindings(&engine);
         let mut loops: Vec<(BlockId, StmtId, BlockId)> = Vec::new();
         collect_loops(engine.body, engine.body.root, &mut loops);
         let plans: Vec<Plan> = loops
@@ -436,7 +455,7 @@ fn runtime_floor(
 /// Build a `Local` read expression for `index`.
 fn local_read(engine: &mut Engine, index: u32, span: Span) -> Operand {
     let ty = engine.locals()[index as usize].type_id;
-    let name = engine.locals()[index as usize].name.clone();
+    let name = engine.local_name(index);
     let e = engine.alloc_expr(ExprKind::Local { index, name }, ty, span);
     Operand::Expr(e)
 }
@@ -1088,7 +1107,7 @@ fn local_read_count(body: &Body, root: NodeRef, l: u32) -> usize {
 /// A `Let` statement re-binding local `l` to `value` (locals are
 /// function-scoped slots, so a second `let` is a plain re-definition).
 fn alloc_local_set(engine: &mut Engine, l: u32, value: Operand, span: Span) -> StmtId {
-    let name = engine.locals()[l as usize].name.clone();
+    let name = engine.local_name(l);
     let ty = engine.locals()[l as usize].type_id;
     let is_mut = engine.locals()[l as usize].is_mut;
     engine.alloc_stmt(

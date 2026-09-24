@@ -18,72 +18,47 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
 use crate::token::Span;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{reachable_blocks, strip_one_value_copy};
+use super::arena_query::{
+    is_pure_operand, operand_read_locals, reachable_blocks, strip_one_value_copy,
+};
 use super::gate::{FunctionGate, GatedPass};
+use crate::compiler_item::SeqField;
 use crate::lower::plan::value_copy;
-use crate::name::FqTraitName;
+use crate::name::{FqTraitName, minted_what};
 use crate::nir::NirField;
-use crate::nir_value_graph::ValueKind;
+use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::niri::{CtfeBuiltin, build_ctfe_builtin_map};
 
-/// Signature key for a monomorphized `List<T>` method: (`trait_name`, `method_name`).
-/// Inherent methods (`push/len/is_empty/with_capacity`) use `trait_name = None`;
-/// trait methods (`index_value/index_assign`) use `Some("IndexValue<i32>")` etc.
-///
-/// This key is the *method family* identifier — it is invariant under the element
-/// type `T` (i.e., `List<i32>::push` and `List<i64>::push` share the same
-/// `SigKey`). The catalog then uses `(TypeId, SigKey)` for per-element-type lookup.
+/// The family of a monomorphized `List<T>` method, `(trait_name, method_name)`,
+/// the same for every `T`; `(TypeId, SigKey)` names one instance.
 type SigKey = (Option<FqTraitName>, String);
 
-/// Classification of an `List<T>` method by signature shape. Determines whether
-/// the pass can safely rewrite calls on decomposed candidates, and how.
-///
-/// See the module-level table for the mapping from each kind to stdlib methods.
-/// Classification is *signature-driven*: any List method whose signature
-/// matches one of these shapes is automatically handled, regardless of name.
+/// A `List<T>` method's signature shape, whatever its name: it decides whether
+/// and how a call on a decomposed candidate is rewritten.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum ListMethodKind {
-    /// `fn(&mut List<T>, T) -> ()` — stores one element (e.g., `push`).
-    ///
-    /// Rewrite: N parallel calls, one per field, with the T argument projected
-    /// per field.
+    /// `fn(&mut List<T>, T)` storing one element (`push`), rewritten to one call
+    /// per field on that field of the element.
     ElementWriter,
-    /// `fn(&List<T>, i32) -> T` — reads one element by index (e.g., `index_value`).
-    ///
-    /// Rewrite: at each use, read each per-field array at the same index and
-    /// reconstruct a tuple/struct literal — but only when the surrounding
-    /// expression is a `FieldAccess` with a constant field index (so we can
-    /// dispatch directly to the relevant per-field read). Bare full-value reads
-    /// cause the candidate to escape.
+    /// `fn(&List<T>, i32) -> T` (`index_value`), rewritten to one field's read
+    /// under a constant-index `FieldAccess`; a whole-value read escapes.
     IndexReader,
-    /// `fn(&mut List<T>, i32, T) -> ()` — writes one element by index
-    /// (e.g., `index_assign`).
-    ///
-    /// Rewrite: N parallel calls, sharing the same (duplicable) index and
-    /// projecting the T argument per field.
+    /// `fn(&mut List<T>, i32, T)` (`index_assign`), rewritten to one call per
+    /// field on the shared index.
     IndexWriter,
-    /// `fn(i32) -> List<T>` (static, no receiver) — constructs a new container
-    /// with the given capacity (e.g., `with_capacity`).
-    ///
-    /// Rewrite: N parallel calls, one per field, each constructing an
-    /// `List<T_k>` with the same capacity.
+    /// `fn(i32) -> List<T>` that only builds an empty list ([`builds_empty`]),
+    /// rewritten to one call per field on the same capacity.
     Constructor,
-    /// `fn(Array<T>) -> List<T>` (static, no receiver) — builds the container
-    /// from the array a `[e0, …]` literal denotes (WEP 2026-08-24).
-    ///
-    /// Rewrite: only the empty literal, as N per-field `with_capacity(0)`
-    /// calls. A non-empty one carries elements this pass would have to split
-    /// per field.
+    /// `fn(Array<T>) -> List<T>` from a `[e0, …]` literal; only the empty one is
+    /// rewritten, to one `with_capacity(0)` per field.
     FromArray,
-    /// `fn(&List<T>) -> i32 | bool` — length-invariant query with no element
-    /// argument (e.g. `len`, `is_empty`, `capacity`). Rewritten to field 0's
-    /// method: every rewrite keeps the per-field arrays in lockstep. The
-    /// `i32`/`bool` return bound is what excludes a content-dependent query
-    /// such as a hypothetical `hash_code() -> u64`.
+    /// `fn(&List<T>) -> i32 | bool` reading only the length ([`reads_length_only`]),
+    /// rewritten to field 0's: the per-field arrays move in lockstep.
     Query,
 }
 
@@ -181,8 +156,7 @@ struct MethodSig {
     /// retargeting) instead of reading the call node's `FunctionRef`.
     id_sigkeys: IndexMap<FuncId, SigKey>,
     /// Element type `T` and [`ListMethodKind`] → the [`SigKey`] of a
-    /// monomorphized `List<T>` method of that kind. Direct index so
-    /// [`find_sig_key_for_kind`] is a single lookup, not a per-call catalog scan.
+    /// monomorphized `List<T>` method of that kind, for [`field_constructor`].
     kind_index: IndexMap<(TypeId, ListMethodKind), SigKey>,
 }
 
@@ -211,9 +185,6 @@ struct Candidate {
     layout: ElementLayout,
     /// Span of the original let statement
     span: Span,
-    /// Form of the initializer — currently always a `Constructor` call whose
-    /// (duplicable) capacity expression is carried forward to build the
-    /// per-field `List<T_k>::with_capacity(...)` calls during rewrite.
     init: CandidateInit,
 }
 
@@ -230,18 +201,15 @@ enum ElementLayout {
     Struct { type_id: TypeId },
 }
 
-/// How the candidate was initialized.
-///
-/// Any List method classified as `Constructor` with a single duplicable
-/// capacity argument qualifies. The capacity expression (an arena `ExprId` in
-/// the live body) is deep-cloned once per decomposed field at rewrite time, so
-/// it must be side-effect-free.
-struct CandidateInit {
-    /// Capacity operand passed to each per-field `with_capacity(...)` call —
-    /// a skeleton subtree (cloned per field) or a promoted constant
-    /// (re-materialised per field). `None` for the `[]` literal, whose
-    /// capacity is zero and is materialised at rewrite time.
-    capacity: Option<Operand>,
+/// How the candidate was initialized, and so how each field's list is built.
+#[derive(Clone)]
+enum CandidateInit {
+    /// A `Constructor` call, repeated per field. Its capacity operand is cloned
+    /// per field, so it must be side-effect-free.
+    Constructor { method: SigKey, capacity: Operand },
+    /// The `[]` literal: each field's list is built by a `Constructor` of its
+    /// own element type, handed a capacity of zero.
+    EmptyLiteral,
 }
 
 /// Apply container SROA to all functions in the project.
@@ -407,14 +375,537 @@ fn build_method_catalog(
             id_kinds.insert(func_id, kind);
         }
     }
-    (
-        catalog,
-        MethodSig {
-            id_kinds,
-            id_sigkeys,
-            kind_index,
+    let mut sig = MethodSig {
+        id_kinds,
+        id_sigkeys,
+        kind_index,
+    };
+    let ctfe_builtins = build_ctfe_builtin_map(project);
+    let builtin_ids = |wanted: CtfeBuiltin| -> IndexSet<FuncId> {
+        ctfe_builtins
+            .iter()
+            .filter_map(|(&id, &b)| (b == wanted).then_some(id))
+            .collect()
+    };
+    let array_len = builtin_ids(CtfeBuiltin::ArrayLen);
+    let array_new = builtin_ids(CtfeBuiltin::ArrayNew);
+    demote_element_reading_queries(project, type_table, &array_len, &mut sig);
+    demote_filling_constructors(project, &array_new, &mut sig);
+    let storage_builtins: IndexSet<FuncId> = ctfe_builtins
+        .iter()
+        .filter_map(|(&id, &b)| is_storage_builtin(b).then_some(id))
+        .collect();
+    demote_element_inspecting_handlers(project, type_table, &storage_builtins, &mut sig);
+    (catalog, sig)
+}
+
+/// The members of `kind` in `sig`, by id.
+fn members_of(sig: &MethodSig, kind: ListMethodKind) -> IndexSet<FuncId> {
+    sig.id_kinds
+        .iter()
+        .filter_map(|(&id, &k)| (k == kind).then_some(id))
+        .collect()
+}
+
+/// Shrink `holding` to the members whose `holds` stays true against what is
+/// left of it.
+fn greatest_fixpoint(
+    project: &NirPackage,
+    holding: &mut IndexSet<FuncId>,
+    holds: impl Fn(&NirFunction, &IndexSet<FuncId>) -> bool,
+) {
+    loop {
+        let failing: Vec<FuncId> = holding
+            .iter()
+            .copied()
+            .filter(|&id| !holds(&project.functions[id.index()].borrow(), holding))
+            .collect();
+        if failing.is_empty() {
+            return;
+        }
+        for id in failing {
+            holding.shift_remove(&id);
+        }
+    }
+}
+
+/// Unclassify each family of `candidates` with a member outside `holding`: a
+/// rewrite retargets a member to its sibling, so the whole family must qualify.
+fn demote_families(sig: &mut MethodSig, candidates: &IndexSet<FuncId>, holding: &IndexSet<FuncId>) {
+    let demoted: IndexSet<SigKey> = candidates
+        .iter()
+        .filter(|id| !holding.contains(*id))
+        .filter_map(|id| sig.id_sigkeys.get(id).cloned())
+        .collect();
+    let MethodSig {
+        id_kinds,
+        id_sigkeys,
+        kind_index,
+    } = sig;
+    id_kinds.retain(|id, _| id_sigkeys.get(id).is_none_or(|s| !demoted.contains(s)));
+    kind_index.retain(|_, s| !demoted.contains(s));
+}
+
+/// Unclassify every `Constructor`-shaped family one member of which does more
+/// than build an empty list: each field's list is built by its own call.
+fn demote_filling_constructors(
+    project: &NirPackage,
+    array_new: &IndexSet<FuncId>,
+    sig: &mut MethodSig,
+) {
+    let constructors = members_of(sig, ListMethodKind::Constructor);
+    let mut empty = constructors.clone();
+    greatest_fixpoint(project, &mut empty, |func, empty| {
+        builds_empty(func, array_new, empty)
+    });
+    demote_families(sig, &constructors, &empty);
+}
+
+/// Whether `func` only returns a fresh empty `List`: a literal whose length is
+/// `0` and whose backing array is new, or a call to another such function.
+fn builds_empty(
+    func: &NirFunction,
+    array_new: &IndexSet<FuncId>,
+    empty: &IndexSet<FuncId>,
+) -> bool {
+    let Some(body) = func.body.as_ref() else {
+        return false;
+    };
+    let [stmt] = body.blocks[body.root].stmts.as_slice() else {
+        return false;
+    };
+    let value = match &body.stmts[*stmt].kind {
+        StmtKind::Return { value: Some(value) } | StmtKind::Expr(value) => *value,
+        _ => return false,
+    };
+    let Some(e) = value.as_expr() else {
+        return false;
+    };
+    let pure_call = |func_id: &FuncId, args: &[ArenaCallArg], callees: &IndexSet<FuncId>| {
+        callees.contains(func_id) && args.iter().all(|a| is_pure_operand(body, a.expr))
+    };
+    match &body.exprs[e].kind {
+        ExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| {
+            if f.field_index == SeqField::Len.index() {
+                return body.operand_const_int(f.value) == Some(0);
+            }
+            match f.value.as_expr().map(|v| &body.exprs[v].kind) {
+                Some(ExprKind::Call { func_id, args, .. }) => pure_call(func_id, args, array_new),
+                _ => is_pure_operand(body, f.value),
+            }
+        }),
+        ExprKind::Call { func_id, args, .. } => pure_call(func_id, args, empty),
+        _ => false,
+    }
+}
+
+/// Whether `builtin` touches an array's elements only by moving them.
+fn is_storage_builtin(builtin: CtfeBuiltin) -> bool {
+    match builtin {
+        CtfeBuiltin::ArrayGet
+        | CtfeBuiltin::ArrayLen
+        | CtfeBuiltin::ArrayNew
+        | CtfeBuiltin::ArraySet
+        | CtfeBuiltin::ArrayCopy
+        | CtfeBuiltin::ArrayClonePrefix
+        | CtfeBuiltin::ColdPath
+        | CtfeBuiltin::Select => true,
+        CtfeBuiltin::I32AsChar => false,
+    }
+}
+
+/// Unclassify every element-handling family (`ElementWriter`, `IndexReader`,
+/// `IndexWriter`) one member of which does more with an element than move it.
+// Types single out only an aggregate element (a scalar one is also an index),
+// so a scalar member is vouched for by siblings sharing its generic body.
+fn demote_element_inspecting_handlers(
+    project: &NirPackage,
+    type_table: &TypeTable,
+    storage_builtins: &IndexSet<FuncId>,
+    sig: &mut MethodSig,
+) {
+    let value_copy_ids = project.value_copy_func_ids();
+    let handlers: IndexSet<FuncId> = [
+        ListMethodKind::ElementWriter,
+        ListMethodKind::IndexReader,
+        ListMethodKind::IndexWriter,
+    ]
+    .into_iter()
+    .flat_map(|kind| members_of(sig, kind))
+    .collect();
+    let mut families: IndexMap<SigKey, Vec<FuncId>> = IndexMap::default();
+    for id in &handlers {
+        families
+            .entry(sig.id_sigkeys[id].clone())
+            .or_default()
+            .push(*id);
+    }
+    let generic_origin = |id: FuncId| {
+        project.functions[id.index()]
+            .borrow()
+            .monomorph_info
+            .as_ref()
+            .map(|m| m.generic_name.clone())
+    };
+    let mut movers_by_element: IndexMap<TypeKey, IndexSet<FuncId>> = IndexMap::default();
+    let mut holding: IndexSet<FuncId> = IndexSet::default();
+    for members in families.values() {
+        let origin = generic_origin(members[0]);
+        let one_body = members.iter().all(|&id| generic_origin(id) == origin);
+        let moves_only = members.iter().all(|&id| {
+            let element = element_type_of(project, id);
+            if !value_copy::needs_value_copy(element, type_table) {
+                return true;
+            }
+            movers_by_element
+                .entry(type_table.type_key(element))
+                .or_insert_with(|| {
+                    movers_of(
+                        project,
+                        type_table,
+                        element,
+                        storage_builtins,
+                        &value_copy_ids,
+                    )
+                })
+                .contains(&id)
+        });
+        if one_body && moves_only {
+            holding.extend(members.iter().copied());
+        }
+    }
+    demote_families(sig, &handlers, &holding);
+}
+
+/// The element type `T` of a catalogued `List<T>` method.
+fn element_type_of(project: &NirPackage, id: FuncId) -> TypeId {
+    project.functions[id.index()]
+        .borrow()
+        .monomorph_info
+        .as_ref()
+        .expect("a catalogued method is monomorphized")
+        .impl_type_args[0]
+}
+
+/// The bodied functions that touch values of `element` only by moving them,
+/// handing one, or anything holding one, to no function but another such.
+fn movers_of(
+    project: &NirPackage,
+    type_table: &TypeTable,
+    element: TypeId,
+    storage_builtins: &IndexSet<FuncId>,
+    value_copy_ids: &IndexSet<FuncId>,
+) -> IndexSet<FuncId> {
+    let key = type_table.type_key(element);
+    let mut movers: IndexSet<FuncId> = project
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            // A bodyless function's signature types may already be gone.
+            f.body.as_ref()?;
+            let touches = f
+                .params
+                .iter()
+                .map(|p| p.type_id)
+                .chain(std::iter::once(f.return_type))
+                .any(|t| holds_element(type_table, t, key));
+            touches.then_some(f.id).flatten()
+        })
+        .filter(|id| !value_copy_ids.contains(id))
+        .collect();
+    greatest_fixpoint(project, &mut movers, |func, movers| {
+        let passes = |callee: &FuncId| {
+            movers.contains(callee)
+                || storage_builtins.contains(callee)
+                || value_copy_ids.contains(callee)
+        };
+        moves_elements_only(func, type_table, key, &passes)
+    });
+    movers
+}
+
+/// Whether a value of type `ty` is, or holds, a value of the type `element`.
+fn holds_element(type_table: &TypeTable, ty: TypeId, element: TypeKey) -> bool {
+    if type_table.type_key(ty) == element {
+        return true;
+    }
+    match type_table.get(ty) {
+        ResolvedType::Ref(inner)
+        | ResolvedType::MutRef(inner)
+        | ResolvedType::Reactive(inner)
+        | ResolvedType::BuiltinArray(inner) => holds_element(type_table, *inner, element),
+        ResolvedType::Struct { type_args, .. }
+        | ResolvedType::GenericInstance { type_args, .. }
+        | ResolvedType::GenericResource { type_args, .. } => type_args
+            .iter()
+            .any(|t| holds_element(type_table, *t, element)),
+        ResolvedType::Newtype {
+            type_args,
+            base_type,
+            ..
+        } => {
+            holds_element(type_table, *base_type, element)
+                || type_args
+                    .iter()
+                    .any(|t| holds_element(type_table, *t, element))
+        }
+        ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } => {
+            holds_element(type_table, *return_type, element)
+                || params
+                    .iter()
+                    .any(|t| holds_element(type_table, *t, element))
+        }
+        ResolvedType::Primitive(_)
+        | ResolvedType::Unit
+        | ResolvedType::Never
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Resource { .. }
+        | ResolvedType::Variant { .. }
+        | ResolvedType::TypeParam { .. }
+        | ResolvedType::InferVar(_)
+        | ResolvedType::TypePack { .. }
+        | ResolvedType::AssocTypeProjection { .. }
+        | ResolvedType::Flags { .. }
+        | ResolvedType::Unknown
+        | ResolvedType::Error => false,
+    }
+}
+
+/// Whether `func` only moves the values of `element` it meets, and hands what
+/// holds one to no callee but those `passes` admits.
+fn moves_elements_only(
+    func: &NirFunction,
+    type_table: &TypeTable,
+    element: TypeKey,
+    passes: &dyn Fn(&FuncId) -> bool,
+) -> bool {
+    let Some(body) = func.body.as_ref() else {
+        return false;
+    };
+    let mut ok = true;
+    body.for_each_reachable_node(|node| {
+        body.for_each_operand(node, |op| {
+            let ty = body.operand_type(op);
+            let is_element = type_table.type_key(ty) == element;
+            if ok && (is_element || holds_element(type_table, ty, element)) {
+                ok = accepts_element_operand(body, node, op, is_element, passes);
+            }
+        });
+    });
+    ok
+}
+
+/// Whether `node` may be handed `op`, which is an element (`is_element`) or
+/// holds one. An element may only be moved; a holder may also be taken apart.
+fn accepts_element_operand(
+    body: &Body,
+    node: NodeRef,
+    op: Operand,
+    is_element: bool,
+    passes: &dyn Fn(&FuncId) -> bool,
+) -> bool {
+    match node {
+        NodeRef::Stmt(s) => match &body.stmts[s].kind {
+            StmtKind::Let { .. }
+            | StmtKind::Expr(_)
+            | StmtKind::Return { .. }
+            | StmtKind::Break { .. } => true,
+            StmtKind::If { .. }
+            | StmtKind::Loop { .. }
+            | StmtKind::Continue
+            | StmtKind::LabeledBlock { .. }
+            | StmtKind::LetDestructure { .. } => false,
         },
-    )
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Call { func_id, .. } => passes(func_id),
+            ExprKind::Assign { target, .. } => {
+                !is_element || matches!(body.exprs[*target].kind, ExprKind::Local { .. })
+            }
+            ExprKind::Match { expr, .. } => op != *expr,
+            ExprKind::FieldAccess { .. } | ExprKind::Index { .. } | ExprKind::Unary { .. } => {
+                !is_element
+            }
+            ExprKind::Dead
+            | ExprKind::PackedArray(_)
+            | ExprKind::Local { .. }
+            | ExprKind::GlobalVarGet { .. }
+            | ExprKind::GlobalVarSet { .. }
+            | ExprKind::Binary { .. }
+            | ExprKind::Cast { .. }
+            | ExprKind::CmRawCall { .. }
+            | ExprKind::If { .. }
+            | ExprKind::StructLiteral { .. }
+            | ExprKind::TupleLiteral { .. }
+            | ExprKind::ArrayLiteral { .. }
+            | ExprKind::IndirectCall { .. }
+            | ExprKind::ClosureToCanonical { .. }
+            | ExprKind::VariantConstruct { .. }
+            | ExprKind::EnumConstruct { .. }
+            | ExprKind::LabeledBlock { .. }
+            | ExprKind::VariantTag { .. }
+            | ExprKind::VariantTest { .. }
+            | ExprKind::VariantPayload { .. }
+            | ExprKind::Switch { .. } => false,
+        },
+        NodeRef::Pat(_) | NodeRef::Block(_) => false,
+    }
+}
+
+/// Unclassify every `Query`-shaped family one member of which reads more than
+/// the length: field 0's list answers a query only when the length decides it.
+fn demote_element_reading_queries(
+    project: &NirPackage,
+    type_table: &TypeTable,
+    array_len: &IndexSet<FuncId>,
+    sig: &mut MethodSig,
+) {
+    let queries = members_of(sig, ListMethodKind::Query);
+    let array_subjects = project.functions.iter().filter_map(|f| {
+        let f = f.borrow();
+        // A bodyless function's signature types may already be gone.
+        f.body.as_ref()?;
+        let first = f.params.first()?;
+        let ty = type_table.peel_refs(first.type_id);
+        matches!(type_table.get(ty), ResolvedType::BuiltinArray(_))
+            .then_some(f.id)
+            .flatten()
+    });
+    let mut length_only: IndexSet<FuncId> = queries.iter().copied().chain(array_subjects).collect();
+    greatest_fixpoint(project, &mut length_only, |func, length_only| {
+        reads_length_only(func, array_len, length_only)
+    });
+    demote_families(sig, &queries, &length_only);
+}
+
+/// Whether `func` reads its first parameter only for a length: a `used` field,
+/// the length of an array, or through a call to another such function.
+fn reads_length_only(
+    func: &NirFunction,
+    array_len: &IndexSet<FuncId>,
+    length_only: &IndexSet<FuncId>,
+) -> bool {
+    let (Some(body), Some(subject)) = (func.body.as_ref(), func.params.first()) else {
+        return false;
+    };
+    LengthOnly {
+        body,
+        subject: subject.local_index,
+        array_len,
+        length_only,
+    }
+    .node(NodeRef::Block(body.root))
+}
+
+/// The walk behind [`reads_length_only`].
+struct LengthOnly<'a> {
+    body: &'a Body,
+    subject: u32,
+    array_len: &'a IndexSet<FuncId>,
+    length_only: &'a IndexSet<FuncId>,
+}
+
+impl LengthOnly<'_> {
+    fn node(&self, n: NodeRef) -> bool {
+        if let NodeRef::Expr(e) = n {
+            match &self.body.exprs[e].kind {
+                ExprKind::Local { index, .. } if *index == self.subject => return false,
+                ExprKind::FieldAccess {
+                    expr, field_index, ..
+                } if self.is_subject(*expr) => return *field_index == SeqField::Len.index(),
+                ExprKind::Call { func_id, args, .. }
+                    if (self.array_len.contains(func_id) || self.length_only.contains(func_id))
+                        && args
+                            .first()
+                            .is_some_and(|a| self.is_subject_or_backing(a.expr)) =>
+                {
+                    return args[1..].iter().all(|a| self.operand(a.expr));
+                }
+                _ => {}
+            }
+        }
+        let mut ok = true;
+        self.body.for_each_operand(n, |op| {
+            if let Operand::Value(v) = op {
+                ok &= self.value(v);
+            }
+        });
+        self.body.for_each_child(n, |c| {
+            if ok {
+                ok = self.node(c);
+            }
+        });
+        ok
+    }
+
+    fn operand(&self, op: Operand) -> bool {
+        match op {
+            Operand::Expr(e) => self.node(NodeRef::Expr(e)),
+            Operand::Value(v) => self.value(v),
+        }
+    }
+
+    fn value(&self, v: ValueId) -> bool {
+        let values = &self.body.values;
+        if !values.value_reads_local(v, self.subject) {
+            return true;
+        }
+        match values.kind(v) {
+            ValueKind::FieldAccess {
+                receiver,
+                field_index,
+                ..
+            } => {
+                *field_index == SeqField::Len.index()
+                    && matches!(values.kind(*receiver), ValueKind::Opaque(_))
+            }
+            ValueKind::Binary { lhs, rhs, .. } => self.value(*lhs) && self.value(*rhs),
+            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                self.value(*operand)
+            }
+            ValueKind::Select { cond, then, else_ } => {
+                self.value(*cond) && self.value(*then) && self.value(*else_)
+            }
+            ValueKind::Opaque(_)
+            | ValueKind::LoopPhi { .. }
+            | ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+            | ValueKind::Const(..) => false,
+        }
+    }
+
+    fn is_subject(&self, op: Operand) -> bool {
+        let Some(e) = op.as_expr() else {
+            return false;
+        };
+        match &self.body.exprs[e].kind {
+            ExprKind::Local { index, .. } => *index == self.subject,
+            ExprKind::Unary { expr, .. } => self.is_subject(*expr),
+            _ => false,
+        }
+    }
+
+    /// The subject, or a `List`'s backing array reached through it.
+    fn is_subject_or_backing(&self, op: Operand) -> bool {
+        let Some(e) = op.as_expr() else {
+            return false;
+        };
+        match &self.body.exprs[e].kind {
+            ExprKind::FieldAccess {
+                expr, field_index, ..
+            } => *field_index == SeqField::Backing.index() && self.is_subject(*expr),
+            ExprKind::Unary { expr, .. } => self.is_subject_or_backing(*expr),
+            _ => self.is_subject(op),
+        }
+    }
 }
 
 /// Whole-function container SROA driven from the engine session root.
@@ -447,13 +938,13 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
     // Step 3: verify that every required (element_ty, sig) is present in the catalog.
     // Required kinds = `Constructor` (always, for the initializer) ∪ observed
     // kinds. If any candidate has missing monomorphizations, drop it.
-    let empty_used: IndexSet<ListMethodKind> = IndexSet::default();
+    let empty_used: IndexSet<(ListMethodKind, FuncId)> = IndexSet::default();
     let safe_candidates: Vec<&Candidate> = candidates
         .iter()
         .filter(|c| safe_indices.contains(&c.local_index))
         .filter(|c| {
             let used = used_kinds_map.get(&c.local_index).unwrap_or(&empty_used);
-            required_methods_available(c, used, rule.sig)
+            required_methods_available(c, used, rule.sig, rule.catalog)
         })
         .collect();
     if safe_candidates.is_empty() {
@@ -462,14 +953,15 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
 
     // Step 4: allocate parallel `List<T_k>` locals through the engine. The
     // type-table borrow is scoped so it does not overlap the engine's locals
-    // mutation (`alloc_local` takes `&mut self`).
+    // mutation (`alloc_minted_local` takes `&mut self`).
     let mut field_map: IndexMap<(u32, u32), FieldList> = IndexMap::default();
     let mut decomposed: IndexSet<u32> = IndexSet::default();
     for c in &safe_candidates {
         for (k, &elem_ty) in c.element_types.iter().enumerate() {
             let list_type = rule.type_table_rc.borrow_mut().make_list(elem_ty);
-            let name = format!("$csroa_{}_{}", c.local_name, k);
-            let local_index = engine.alloc_local(name.clone(), list_type, /* is_mut */ false);
+            let what = minted_what("csroa", &c.local_name);
+            let local_index = engine.alloc_minted_local(&what, list_type, /* is_mut */ false);
+            let name = engine.local_name(local_index);
             field_map.insert(
                 (c.local_index, k as u32),
                 FieldList {
@@ -494,9 +986,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
                     all_scalar: c.all_scalar,
                     layout: c.layout.clone(),
                     span: c.span,
-                    init: CandidateInit {
-                        capacity: c.init.capacity,
-                    },
+                    init: c.init.clone(),
                 },
             )
         })
@@ -546,29 +1036,26 @@ struct RewriteCtx<'a> {
     value_copy_ids: &'a IndexSet<FuncId>,
 }
 
-/// Whether the catalog holds, for every per-field element type, each
-/// [`ListMethodKind`] the rewrite will emit.
-///
-/// `Constructor` is always needed; the rest only where escape analysis observed
-/// a use. `Query` dispatches to field 0, so only field 0 needs it.
+/// Whether the catalog holds, for every per-field element type, the method each
+/// observed use and the initializer retarget to; a `Query` needs field 0's only.
 fn required_methods_available(
     c: &Candidate,
-    used_kinds: &IndexSet<ListMethodKind>,
+    used: &IndexSet<(ListMethodKind, FuncId)>,
     sig: &MethodSig,
+    catalog: &MethodCatalog,
 ) -> bool {
     for (fi, &t) in c.element_types.iter().enumerate() {
-        // Constructor is always needed for every field's initializer.
-        if find_sig_key_for_kind(sig, t, ListMethodKind::Constructor).is_none() {
+        if field_constructor(&c.init, t, sig).is_none_or(|key| !catalog.contains_key(&(t, key))) {
             return false;
         }
-        for &kind in used_kinds {
-            // `Query` (len / is_empty / capacity) dispatches to field 0 only, so
-            // only field 0 needs its monomorphization. Element writers/readers
-            // operate per field and are required for every field.
+        for &(kind, callee) in used {
             if kind == ListMethodKind::Query && fi != 0 {
                 continue;
             }
-            if find_sig_key_for_kind(sig, t, kind).is_none() {
+            let Some(key) = sig_key_of_id(sig, callee) else {
+                return false;
+            };
+            if !catalog.contains_key(&(t, key)) {
                 return false;
             }
         }
@@ -576,11 +1063,15 @@ fn required_methods_available(
     true
 }
 
-/// The `SigKey` of a monomorphized `List<elem_ty>` method classified as `kind`,
-/// or `None` if no such method is monomorphized in this project. O(1) via the
-/// pre-built `(TypeId, ListMethodKind)` index.
-fn find_sig_key_for_kind(sig: &MethodSig, elem_ty: TypeId, kind: ListMethodKind) -> Option<SigKey> {
-    sig.kind_index.get(&(elem_ty, kind)).cloned()
+/// The `Constructor` family that builds the `List<elem_ty>` of one field.
+fn field_constructor(init: &CandidateInit, elem_ty: TypeId, sig: &MethodSig) -> Option<SigKey> {
+    match init {
+        CandidateInit::Constructor { method, .. } => Some(method.clone()),
+        CandidateInit::EmptyLiteral => sig
+            .kind_index
+            .get(&(elem_ty, ListMethodKind::Constructor))
+            .cloned(),
+    }
 }
 
 /// Collect candidate `let` bindings across the whole function body. The escape
@@ -729,19 +1220,18 @@ fn recognize_init(
             cap.as_expr().map(|e| &body.exprs[e].kind),
             Some(ExprKind::ArrayLiteral { elements }) if elements.is_empty()
         );
-        return empty_literal.then_some(CandidateInit { capacity: None });
+        return empty_literal.then_some(CandidateInit::EmptyLiteral);
     }
     if kind != ListMethodKind::Constructor {
         return None;
     }
-    // The capacity expression is cloned once per per-field constructor
-    // call during rewrite, so it must be side-effect-free. A promoted constant
-    // is trivially duplicable.
+    // A promoted constant is trivially duplicable.
     if !cap.as_expr().is_none_or(|e| is_duplicable_expr(body, e)) {
         return None;
     }
-    Some(CandidateInit {
-        capacity: Some(cap),
+    Some(CandidateInit::Constructor {
+        method: sig_key_of_id(sig, *func_id)?,
+        capacity: cap,
     })
 }
 
@@ -765,7 +1255,10 @@ fn compute_safe_set(
     candidates: &[Candidate],
     sig: &MethodSig,
     value_copy_ids: &IndexSet<FuncId>,
-) -> (IndexSet<u32>, IndexMap<u32, IndexSet<ListMethodKind>>) {
+) -> (
+    IndexSet<u32>,
+    IndexMap<u32, IndexSet<(ListMethodKind, FuncId)>>,
+) {
     let shape_of: IndexMap<u32, CandidateShape> = candidates
         .iter()
         .map(|c| {
@@ -820,8 +1313,8 @@ struct WhitelistChecker<'a> {
     value_copy_ids: &'a IndexSet<FuncId>,
     sig: &'a MethodSig,
     escaped: IndexSet<u32>,
-    /// Per-candidate set of `ListMethodKind`s observed on whitelisted uses.
-    used_kinds: IndexMap<u32, IndexSet<ListMethodKind>>,
+    /// Per-candidate `(kind, callee)` of every whitelisted use.
+    used_kinds: IndexMap<u32, IndexSet<(ListMethodKind, FuncId)>>,
 }
 
 impl WhitelistChecker<'_> {
@@ -839,9 +1332,13 @@ impl WhitelistChecker<'_> {
         }
     }
 
-    /// Record that a whitelisted call of `kind` was observed on candidate `idx`.
-    fn record_use(&mut self, idx: u32, kind: ListMethodKind) {
-        self.used_kinds.entry(idx).or_default().insert(kind);
+    /// Record that a whitelisted call of `kind` to `callee` was observed on
+    /// candidate `idx`.
+    fn record_use(&mut self, idx: u32, kind: ListMethodKind, callee: FuncId) {
+        self.used_kinds
+            .entry(idx)
+            .or_default()
+            .insert((kind, callee));
     }
 
     /// Default walk: recurse into every id-bearing child. The checker only
@@ -961,7 +1458,7 @@ impl WhitelistChecker<'_> {
                 list_method_kind(f, self.sig) == Some(ListMethodKind::IndexReader)
             }) =>
             {
-                let Some((receiver, _, args)) = kind.as_method_call() else {
+                let Some((receiver, reader, args)) = kind.as_method_call() else {
                     return false;
                 };
                 if args.len() != 1 {
@@ -999,7 +1496,7 @@ impl WhitelistChecker<'_> {
                 }
                 // Record that `other` is being read via IndexReader so it
                 // needs that method monomorphization during rewrite.
-                self.record_use(other, ListMethodKind::IndexReader);
+                self.record_use(other, ListMethodKind::IndexReader, reader);
                 true
             }
             _ => false,
@@ -1032,7 +1529,7 @@ impl WhitelistChecker<'_> {
                     let (arity, layout, all_scalar) =
                         (shape.arity, shape.layout.clone(), shape.all_scalar);
                     if self.check_source_operand(body, arg_ops[0], arity, &layout, all_scalar) {
-                        self.record_use(rec_local, ListMethodKind::ElementWriter);
+                        self.record_use(rec_local, ListMethodKind::ElementWriter, func_id);
                     } else {
                         self.mark(rec_local);
                     }
@@ -1040,7 +1537,7 @@ impl WhitelistChecker<'_> {
                 }
                 // v.len() / v.is_empty() / v.capacity() — Query, no arg
                 (Some(ListMethodKind::Query), 0) => {
-                    self.record_use(rec_local, ListMethodKind::Query);
+                    self.record_use(rec_local, ListMethodKind::Query, func_id);
                     return;
                 }
                 // v.index_assign-shaped(i, source)
@@ -1058,7 +1555,7 @@ impl WhitelistChecker<'_> {
                     // index argument visited normally
                     self.visit_operand(body, arg_ops[0]);
                     if self.check_source_operand(body, arg_ops[1], arity, &layout, all_scalar) {
-                        self.record_use(rec_local, ListMethodKind::IndexWriter);
+                        self.record_use(rec_local, ListMethodKind::IndexWriter, func_id);
                     } else {
                         self.mark(rec_local);
                     }
@@ -1103,13 +1600,13 @@ impl WhitelistChecker<'_> {
                     && let Some(rec_local) = receiver_local(body, receiver)
                     && self.safe.contains(&rec_local)
                 {
-                    Some((rec_local, args[0].expr))
+                    Some((rec_local, args[0].expr, func_id))
                 } else {
                     None
                 };
-                if let Some((rec_local, idx_arg)) = safe_read {
+                if let Some((rec_local, idx_arg, reader)) = safe_read {
                     // Safe — just visit the index expression.
-                    self.record_use(rec_local, ListMethodKind::IndexReader);
+                    self.record_use(rec_local, ListMethodKind::IndexReader, reader);
                     if let Some(e) = idx_arg.as_expr() {
                         self.visit_expr(body, e);
                     }
@@ -1234,14 +1731,15 @@ impl Rewriter<'_, '_> {
             .expect("candidate data must exist for decomposed local");
         let arity = info.element_types.len();
         let span = info.span;
-        let capacity = info.init.capacity;
         for k in 0..arity {
             let field = ctx.field_map[&(local_index, k as u32)].clone();
-            let cap = match capacity {
-                Some(capacity) => clone_or_dup(engine, capacity),
-                None => engine.const_operand(ValueKind::Int(0, TypeTable::I32), TypeTable::I32),
+            let cap = match &info.init {
+                CandidateInit::Constructor { capacity, .. } => clone_or_dup(engine, *capacity),
+                CandidateInit::EmptyLiteral => {
+                    engine.const_operand(ValueKind::Int(0, TypeTable::I32), TypeTable::I32)
+                }
             };
-            let init = build_with_capacity_call(engine, &field, cap, span, ctx);
+            let init = build_constructor_call(engine, &field, &info.init, cap, span, ctx);
             let let_stmt = engine.alloc_stmt(
                 StmtKind::Let {
                     name: field.name,
@@ -1313,6 +1811,11 @@ impl Rewriter<'_, '_> {
                 )?;
                 let sig = sig_key_of_id(ctx.sig, func_id)?;
                 let mut out = Vec::with_capacity(arity);
+                let per_field = if self.elements_observe_writes(engine, rec_local, &per_field) {
+                    self.spill_elements(engine, rec_local, per_field, span, &mut out)
+                } else {
+                    per_field
+                };
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
                     let field = ctx.field_map[&(rec_local, k as u32)].clone();
                     let call =
@@ -1333,6 +1836,17 @@ impl Rewriter<'_, '_> {
                     self.decompose_source(engine, src.as_expr()?, arity, &layout, all_scalar)?;
                 let sig = sig_key_of_id(ctx.sig, func_id)?;
                 let mut out = Vec::with_capacity(arity);
+                let (idx, per_field) =
+                    if self.elements_observe_writes(engine, rec_local, &per_field) {
+                        let idx_type = engine.body.operand_type(idx);
+                        let idx = clone_or_dup(engine, idx);
+                        let idx = spill(engine, idx, idx_type, span, &mut out);
+                        let per_field =
+                            self.spill_elements(engine, rec_local, per_field, span, &mut out);
+                        (idx, per_field)
+                    } else {
+                        (idx, per_field)
+                    };
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
                     let field = ctx.field_map[&(rec_local, k as u32)].clone();
                     let idx_clone = clone_or_dup(engine, idx);
@@ -1346,6 +1860,39 @@ impl Rewriter<'_, '_> {
             }
             _ => None,
         }
+    }
+
+    /// Whether a per-field write could land before an element that sees it, by
+    /// reading the container or by an effect the split reorders past the write.
+    fn elements_observe_writes(&self, engine: &Engine, rec_local: u32, elems: &[Operand]) -> bool {
+        let fields: IndexSet<u32> = (0..elems.len())
+            .map(|k| self.ctx.field_map[&(rec_local, k as u32)].local_index)
+            .collect();
+        elems.iter().any(|&op| {
+            !is_pure_operand(engine.body, op)
+                || operand_read_locals(engine.body, op)
+                    .iter()
+                    .any(|l| fields.contains(l))
+        })
+    }
+
+    /// Evaluate every element into a temporary, in order, ahead of the writes.
+    fn spill_elements(
+        &self,
+        engine: &mut Engine,
+        rec_local: u32,
+        elems: Vec<Operand>,
+        span: Span,
+        out: &mut Vec<StmtId>,
+    ) -> Vec<Operand> {
+        elems
+            .into_iter()
+            .enumerate()
+            .map(|(k, op)| {
+                let ty = self.ctx.field_map[&(rec_local, k as u32)].elem_type;
+                spill(engine, op, ty, span, out)
+            })
+            .collect()
     }
 
     /// Decompose a source expression into N per-field value operands.
@@ -1630,6 +2177,46 @@ fn clone_or_dup(engine: &mut Engine, op: Operand) -> Operand {
     }
 }
 
+/// Bind `op` to a fresh temporary in `out` and read it back, unless it is a
+/// constant, which reads the same wherever it lands.
+fn spill(
+    engine: &mut Engine,
+    op: Operand,
+    type_id: TypeId,
+    span: Span,
+    out: &mut Vec<StmtId>,
+) -> Operand {
+    if let Operand::Value(v) = op
+        && engine.body.values.kind(v).is_constant()
+    {
+        return op;
+    }
+    let local_index = engine.alloc_minted_local("csroa_elem", type_id, false);
+    let name = engine.local_name(local_index);
+    out.push(engine.alloc_stmt(
+        StmtKind::Let {
+            name: name.clone(),
+            local_index,
+            is_mut: false,
+            is_reactive: false,
+            type_id,
+            value: op,
+            // The temporary carries the element to its one use, as the
+            // argument it replaces did.
+            skip_value_copy: true,
+        },
+        span,
+    ));
+    Operand::Expr(engine.alloc_expr(
+        ExprKind::Local {
+            index: local_index,
+            name,
+        },
+        type_id,
+        span,
+    ))
+}
+
 /// The `&v_field` / `&mut v_field` receiver of a per-field call.
 fn build_receiver(engine: &mut Engine, field: &FieldList, mut_ref: bool, span: Span) -> ExprId {
     let local = engine.alloc_expr(
@@ -1664,14 +2251,15 @@ fn field_method(field: &FieldList, sig: &SigKey, ctx: &RewriteCtx) -> FuncId {
 }
 
 /// Build a `List<T_k>::Constructor(cap)` NIR call — e.g. `with_capacity(cap)`.
-fn build_with_capacity_call(
+fn build_constructor_call(
     engine: &mut Engine,
     field: &FieldList,
+    init: &CandidateInit,
     cap: Operand,
     span: Span,
     ctx: &RewriteCtx,
 ) -> ExprId {
-    let sig = find_sig_key_for_kind(ctx.sig, field.elem_type, ListMethodKind::Constructor)
+    let sig = field_constructor(init, field.elem_type, ctx.sig)
         .expect("Constructor checked by required_methods_available");
     let func_id = field_method(field, &sig, ctx);
     engine.alloc_expr(

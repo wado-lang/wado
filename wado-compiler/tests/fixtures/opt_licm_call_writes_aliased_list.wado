@@ -1,0 +1,31 @@
+// `r` and `m` name one list, so the push inside `add` changes `r.len()`: the
+// loop guard reads it afresh after every call.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn add(m: &mut List<i32>) {
+    m.push(7);
+}
+
+#[inline(never)]
+fn count(r: &List<i32>, m: &mut List<i32>) -> i32 {
+    let mut n = 0;
+    for let mut i = 0; i < r.len(); i += 1 {
+        if i == 0 {
+            add(m);
+        }
+        n += 1;
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    let mut l: List<i32> = [1, 2];
+    println(`${count(&l, &mut l)}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n"
+}

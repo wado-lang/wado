@@ -1,0 +1,62 @@
+// A static `fn(i32) -> List<T>` looks like `with_capacity`, but this one fills
+// the list with `T::default()`. Splitting `List<P>` per field must neither build
+// each field with it (a field's default is not `P::default()`'s field) nor build
+// the fields of a `with_capacity` list with it.
+
+use { println, Stdout } from "core:cli";
+
+trait Make {
+    fn make(n: i32) -> Self;
+}
+
+impl<T: Default> Make for List<T> {
+    fn make(n: i32) -> List<T> {
+        let mut l = List::<T>::with_capacity(n);
+        let mut i = 0;
+        while i < n {
+            l.push(T::default());
+            i += 1;
+        }
+        return l;
+    }
+}
+
+struct P { x: i32, y: i32 }
+
+impl Default for P {
+    fn default() -> P {
+        return P { x: 1, y: 2 };
+    }
+}
+
+fn touch() with Stdout {
+    let mut w: List<i32> = List::<i32>::make(builtin::black_box(1));
+    w.push(builtin::black_box(5));
+    w[0] = builtin::black_box(6);
+    let mut u: List<i32> = List::with_capacity(builtin::black_box(2));
+    u.push(builtin::black_box(5));
+    println(`${w[0]} ${w.len()} ${u[0]}`);
+}
+
+fn with_capacity() with Stdout {
+    let mut w: List<P> = List::<P>::with_capacity(2);
+    w.push(P { x: 7, y: 8 });
+    println(`with_capacity: len ${w.len()} w[0].x ${w[0].x} w[0].y ${w[0].y}`);
+}
+
+fn made() with Stdout {
+    let mut v: List<P> = List::<P>::make(2);
+    v.push(P { x: 5, y: 6 });
+    println(`made: len ${v.len()} v[0].x ${v[0].x} v[1].y ${v[1].y} v[2].x ${v[2].x}`);
+}
+
+export fn run() with Stdout {
+    touch();
+    with_capacity();
+    made();
+}
+
+__DATA__
+{
+    "stdout": "6 2 5\nwith_capacity: len 1 w[0].x 7 w[0].y 8\nmade: len 3 v[0].x 1 v[1].y 2 v[2].x 5\n"
+}

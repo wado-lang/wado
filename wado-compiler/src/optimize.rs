@@ -27,6 +27,7 @@ mod elide_local;
 mod extract;
 mod field_scalarize;
 mod gate;
+mod heap_effect;
 mod identity_cast;
 mod if_chain_to_match;
 mod inline;
@@ -91,6 +92,7 @@ use value_copy_demote::demote_value_copies;
 
 use extract::FreezePhase;
 use gate::{FunctionGate, GatedPass};
+use heap_effect::HeapEffectsCache;
 
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
@@ -618,6 +620,9 @@ fn run_optimization_passes(
     // an interprocedural pass scans all functions but reports exactly the ones
     // it touched. Both go through `&mut gate`.
     let mut gate = gate::FunctionGate::new(project);
+    // Keyed by `gate`'s edit counts, so each pass that reads heap effects
+    // re-solves only what the passes before it rewrote.
+    let mut heap_effects = HeapEffectsCache::default();
     let mut param_spec_state = param_spec::ParamSpecState::default();
     // Held across the loop: the budget anchors on the unit as the loop found it,
     // so what the rounds add together stays bounded. See `InlineBudget`.
@@ -702,7 +707,7 @@ fn run_optimization_passes(
         // Hosts `MatchToSwitchRule` (`include_match = true`), so `inline` copies
         // `Switch`-shaped bodies, and `const_branch_prune`.
         gated!("nir/peephole", GatedPass::PeepholePre, |p, g| {
-            peephole::run_peephole(p, g, true)
+            peephole::run_peephole(p, g, true, &mut heap_effects)
         });
         // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
         // copies when the binding's elements are provably never mutated through
@@ -712,7 +717,7 @@ fn run_optimization_passes(
         gate_only!(
             "nir/value_copy_demote",
             GatedPass::ValueCopyDemote,
-            |p, g| demote_value_copies(p, g, descriptor_cache)
+            |p, g| demote_value_copies(p, g, descriptor_cache, &mut heap_effects)
         );
         // Single-field parameter SROA: rewrite functions whose parameter type
         // is `&S` for a single-field struct (`Box<T>` being the canonical
@@ -751,7 +756,7 @@ fn run_optimization_passes(
         // inline's freshly dead bindings. No `MatchToSwitchRule` — the
         // pre-inline run lowered every reachable `Match` already.
         gated!("nir/peephole", GatedPass::PeepholePost, |p, g| {
-            peephole::run_peephole(p, g, false)
+            peephole::run_peephole(p, g, false, &mut heap_effects)
         });
         // `labeled_block_fusion` moved into the post-inline `nir/peephole`
         // session as `LabeledBlockFusionRule`; see `optimize/peephole.rs`.
@@ -761,7 +766,9 @@ fn run_optimization_passes(
             let_block_flatten::flatten_let_blocks
         );
         gated!("nir/sroa", GatedPass::Sroa, scalar_replace_aggregates);
-        gated!("nir/copy_prop", GatedPass::CopyProp, propagate_copies);
+        gated!("nir/copy_prop", GatedPass::CopyProp, |p, g| {
+            propagate_copies(p, g, &mut heap_effects)
+        });
         // DAE / DRVE after `copy_prop` shrinks signatures and discards unused
         // let-bindings before `const_fold` revisits the simplified body.
         // Running here (rather than at WIR level) lets `inline` see the slimmer
@@ -796,12 +803,12 @@ fn run_optimization_passes(
                 )
             })
         );
-        gated!("nir/licm", GatedPass::Licm, apply_licm);
-        gated!(
-            "nir/tmpl_hoist",
-            GatedPass::TmplHoist,
-            hoist_template_buffers
-        );
+        gated!("nir/licm", GatedPass::Licm, |p, g| {
+            apply_licm(p, g, &mut heap_effects)
+        });
+        gated!("nir/tmpl_hoist", GatedPass::TmplHoist, |p, g| {
+            hoist_template_buffers(p, g, &mut heap_effects)
+        });
         profiler.span_end(&format!("nir/iteration {i}"));
         compiler_trace!(
             "opt_loop",
@@ -842,12 +849,9 @@ fn run_optimization_passes(
     // Running inside the loop would cause the write-back/re-read stmts it
     // inserts to be counted as new field accesses on the next iteration,
     // triggering spurious re-scalarization of the same fields.
-    run_pass(
-        "nir/field_scalarize",
-        project,
-        profiler,
-        scalarize_hot_fields,
-    );
+    run_pass("nir/field_scalarize", project, profiler, |p| {
+        scalarize_hot_fields(p, &mut gate, &mut heap_effects)
+    });
     // Forward the scalarization shadow inits (`$hfs_x = obj.f`) to constants.
     // `field_scalarize` runs after the fixed-point loop, so no in-loop
     // `store_load_forward` sees its shadow reads; this once-over folds an
