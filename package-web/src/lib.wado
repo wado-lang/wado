@@ -1,0 +1,16 @@
+//! Web platform bindings, and a DOM held in memory for where no browser runs.
+
+pub use { Document, Dom, Element, Event, EventTarget, HtmlElement, HtmlInputElement, Node, Window } from "./dom.wado";
+pub use { FakeDom } from "./fake_dom.wado";
+
+#[synopsis]
+test {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let greeting = doc.create_element("p", null);
+        greeting.set_text_content(Option::Some("Hello, Wado!"));
+        doc.body().unwrap().append_child(greeting);
+        assert doc.body().unwrap().text_content() == Option::Some("Hello, Wado!");
+    };
+}

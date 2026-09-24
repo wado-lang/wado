@@ -23,7 +23,7 @@ use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::trait_query::SelfBinding;
-use super::types::{FunctionContext, TypeError};
+use super::types::{FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
 use super::util::parse_i128_literal;
 use crate::ast::{AstId, GenericParam};
@@ -33,7 +33,20 @@ use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::DesugarKind;
 use crate::elaborator::trait_env::ImplMethodEntry;
 use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, VariantInfo};
+use crate::escape::unescape_bytes;
+use crate::primitive::PrimitiveType;
 use crate::{Span, token};
+
+/// The builtin that reads an `Array<T>` out of a byte literal.
+pub(crate) const ARRAY_NEW_DATA: &str = "array_new_data";
+
+/// An expression as a byte literal.
+enum ByteLiteral {
+    Not,
+    /// A literal whose bytes are unknown, which its own error reports.
+    Unknown,
+    Len(usize),
+}
 
 /// The parameter an associated-type equality binds: a bare parameter
 /// (`Builder<Output = T>`) or a pack spelt as the whole tuple
@@ -58,11 +71,26 @@ pub(super) struct StaticCallee<'a> {
     pub receiver_key: Option<&'a ImplTargetKey>,
 }
 
-/// One span per resolved argument. An argument the source does not spell — a
-/// tagged template's, which is the template itself — reports at the call.
-pub(super) fn arg_spans_of(raw_args: &[Expr], resolved: usize, call_span: Span) -> Vec<Span> {
+/// Where a resolved argument came from, for its diagnostics. A tagged
+/// template's argument is the template itself, which no source spells.
+#[derive(Clone, Copy)]
+pub(super) enum ArgSite {
+    Written(Span),
+    Template(Span),
+}
+
+impl ArgSite {
+    /// Argument `i` of a call over `raw_args`, at `call_span` if unwritten.
+    pub(super) fn of(raw_args: &[Expr], i: usize, call_span: Span) -> Self {
+        raw_args
+            .get(i)
+            .map_or(Self::Template(call_span), |arg| Self::Written(arg.span()))
+    }
+}
+
+pub(super) fn arg_sites_of(raw_args: &[Expr], resolved: usize, call_span: Span) -> Vec<ArgSite> {
     (0..resolved)
-        .map(|i| raw_args.get(i).map_or(call_span, Expr::span))
+        .map(|i| ArgSite::of(raw_args, i, call_span))
         .collect()
 }
 
@@ -322,6 +350,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// not-callable diagnostic instead of "unknown function").
     fn global_var_type(&self, site: ast::AstId, name: &str) -> Option<TypeId> {
         self.global_type_in(name, &self.home_module(site))
+    }
+
+    /// Resolves the arguments of a call no callee will check, so a fault inside
+    /// one is still reported, and answers the call's type: `ERROR`.
+    pub(super) fn resolve_args_without_callee(
+        &mut self,
+        args: &[ast::Expr],
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        for arg in args {
+            self.resolve_expr(arg, ctx, None);
+        }
+        TypeTable::ERROR
+    }
+
+    /// The value a bare callee names, a binding before a global, with the
+    /// binding it came from and its use→def edge recorded; `None` if none.
+    pub(super) fn callee_value(
+        &mut self,
+        ident: &ast::IdentExpr,
+        ctx: &mut FunctionContext,
+    ) -> Option<(TypeId, Option<VarRef>)> {
+        if ident.name.contains("::") {
+            return None;
+        }
+        if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
+            self.record_reference_opt(ident.id, var_ref.defining_ast_id());
+            return Some((var_ref.value_type(), Some(var_ref)));
+        }
+        let ty = self.global_var_type(ident.id, &ident.name)?;
+        self.record_item_reference_by_name(ident.id, &ident.name);
+        Some((ty, None))
     }
 
     /// Walk a callee expression down to its *root place* identifier so
@@ -595,6 +655,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Check a `builtin::array_new_data` call. Its bytes become a constant read
+    /// as whole elements, so they must be known at compile time.
+    fn check_array_new_data(&mut self, args: &[Expr], result: TypeId, span: Span) {
+        let width = self
+            .tysys
+            .type_table
+            .borrow()
+            .packed_element(result)
+            .and_then(PrimitiveType::data_width);
+        let message = match (args, width) {
+            (_, None) => format!(
+                "`builtin::{ARRAY_NEW_DATA}` needs a numeric primitive element type, written as `builtin::{ARRAY_NEW_DATA}::<T>`"
+            ),
+            ([arg], Some(width)) => match self.byte_literal(arg) {
+                ByteLiteral::Not => format!(
+                    "`builtin::{ARRAY_NEW_DATA}` needs a byte string literal or `#include_bytes`"
+                ),
+                ByteLiteral::Len(len) if len % width != 0 => format!(
+                    "`builtin::{ARRAY_NEW_DATA}` reads {width}-byte elements, but has {len} bytes"
+                ),
+                ByteLiteral::Len(_) | ByteLiteral::Unknown => return,
+            },
+            // A miscounted call is the arity error's to report.
+            _ => return,
+        };
+        let _ = self.emit(TypeError::InvalidLiteral { message, span });
+    }
+
+    /// What `expr` is as a byte literal.
+    fn byte_literal(&self, expr: &Expr) -> ByteLiteral {
+        let Expr::Literal(lit) = expr else {
+            return ByteLiteral::Not;
+        };
+        let len = match &lit.value {
+            ast::Literal::Bytes(raw) => unescape_bytes(raw).ok().map(|b| b.len()),
+            ast::Literal::IncludeBytes(raw_path) => {
+                let key = [self.home_module(lit.id).to_string(), raw_path.clone()];
+                self.tysys.included_files.get(&key).map(Vec::len)
+            }
+            _ => return ByteLiteral::Not,
+        };
+        len.map_or(ByteLiteral::Unknown, ByteLiteral::Len)
+    }
+
     pub(super) fn resolve_call(
         &mut self,
         call: &ast::CallExpr,
@@ -620,76 +724,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             given_args.is_none() || call.args.is_empty(),
             "typed arguments replace the call's AST arguments, never join them"
         );
-        // Closure call: a bare identifier naming a value — a binding first, so
-        // shadowing wins, else a global — is called on its value.
+        // Closure call: a bare identifier naming a value is called on its value.
         if let Expr::Ident(ident) = &call.callee
-            && !ident.name.contains("::")
+            && let Some((value_ty, binding)) = self.callee_value(ident, ctx)
         {
-            let binding = ctx
-                .lookup_or_capture(&ident.name)
-                .map(|var_ref| (var_ref.value_type(), var_ref.defining_ast_id()));
-            let value_ty = binding
-                .map(|(ty, _)| ty)
-                .or_else(|| self.global_var_type(ident.id, &ident.name));
-            if let Some(value_ty) = value_ty {
-                // Record the use→def edge the same way `resolve_ident` would,
-                // so navigation on a value-binding callee (local or global)
-                // still resolves — the fast path bypasses `resolve_ident`.
-                match binding {
-                    Some((_, defining_ast_id)) => {
-                        self.record_reference_opt(ident.id, defining_ast_id);
-                    }
-                    None => self.record_item_reference_by_name(ident.id, &ident.name),
-                }
+            if let Some(sig) = self.as_fn_signature(value_ty) {
+                self.record_indirect_callee(
+                    call.id,
+                    match binding {
+                        Some(_) => IndirectCallee::Binding,
+                        None => IndirectCallee::Global,
+                    },
+                );
+                // A `fn mut` needs a `mut` root binding, Rust's FnMut rule.
+                // The non-identifier callee path below asks the same helper.
+                self.check_fn_mut_root_mutability(&call.callee, ctx, sig.is_mut);
 
-                if let Some(sig) = self.as_fn_signature(value_ty) {
-                    self.record_indirect_callee(
-                        call.id,
-                        match binding {
-                            Some(_) => IndirectCallee::Binding,
-                            None => IndirectCallee::Global,
-                        },
-                    );
-                    // A `fn mut` needs a `mut` root binding, Rust's FnMut rule.
-                    // The non-identifier callee path below asks the same helper.
-                    self.check_fn_mut_root_mutability(&call.callee, ctx, sig.is_mut);
+                // Closure `let`-site defaults can pad missing trailing args
+                // only for a callee that names a binding.
+                return self.build_indirect_call(
+                    call,
+                    ctx,
+                    &sig.params,
+                    sig.return_type,
+                    /* pad_with_defaults */ binding.is_some(),
+                    given_args.as_deref(),
+                );
+            }
 
-                    // Closure `let`-site defaults can pad missing trailing args
-                    // only for a callee that names a binding.
-                    return self.build_indirect_call(
-                        call,
-                        ctx,
-                        &sig.params,
-                        sig.return_type,
-                        /* pad_with_defaults */ binding.is_some(),
-                        given_args.as_deref(),
-                    );
-                }
-
-                // A binding whose initializer already reported keeps the one
-                // diagnostic its fault earned; calling it says nothing new.
-                if value_ty == TypeTable::ERROR {
-                    for arg in &call.args {
-                        self.resolve_expr(arg, ctx, None);
-                    }
-                    return TypeTable::ERROR;
-                }
-
-                // Names a binding that is not a function — a clear
-                // not-callable diagnostic, not the misleading "unknown
-                // function 'x'" from the named-function lookup below.
+            // Not "unknown function": the name is a value. A binding whose
+            // initializer already reported keeps the one diagnostic it earned.
+            if value_ty != TypeTable::ERROR {
                 let type_name = self.tysys.type_table.borrow().type_name(value_ty);
                 let _ = self.emit(TypeError::CalleeNotCallable {
                     type_name,
                     span: call.callee.span(),
                 });
-                // Still resolve the arguments so errors inside them are
-                // reported rather than masked by the callee error.
-                for arg in &call.args {
-                    self.resolve_expr(arg, ctx, None);
-                }
-                return TypeTable::ERROR;
             }
+            return self.resolve_args_without_callee(&call.args, ctx);
         }
 
         // Indirect call on a non-identifier callee. Any expression whose
@@ -1261,11 +1333,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(&expected) = substituted.get(i)
                         && !self.is_unbound_type_param(expected)
                     {
-                        self.typecheck(
-                            *arg,
-                            expected,
-                            call.args.get(i).map_or(call.span, ast::Expr::span),
-                        );
+                        self.typecheck_arg(*arg, expected, ArgSite::of(&call.args, i, call.span));
                     }
                 }
 
@@ -1725,12 +1793,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
                     // The same check the bare `Type::method` spelling gets: a
                     // count is only skipped where no signature answered.
-                    let arg_spans = arg_spans_of(&call.args, args.len(), call.span);
+                    let arg_sites = arg_sites_of(&call.args, args.len(), call.span);
                     if declares_params
                         && !self.check_static_call_args(
                             &checked,
                             &args,
-                            &arg_spans,
+                            &arg_sites,
                             &param_defaults,
                             call.span,
                         )
@@ -1834,17 +1902,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (None, effective_name.to_string())
         };
 
-        // Resolve the callee down to a single `CalleeRef`. For unknown
-        // callees we emit `UnknownFunction` and fall back to a sentinel in
-        // the current module so downstream lookups return empty safely.
-        let callee = if let Some(c) = callee_opt {
-            c
-        } else {
+        let Some(callee) = callee_opt else {
             let _ = self.emit(TypeError::UnknownFunction {
-                name: display_name.clone(),
+                name: display_name,
                 span: call.span,
             });
-            CalleeRef::rendered(self.current_module_source.clone(), display_name)
+            return TypeTable::ERROR;
         };
 
         // Every shape above narrows to this one callee, so asking here asks for
@@ -1927,6 +1990,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (it pins the per-call monomorphic shape reify needs to seed
         // mangled-name construction).
         self.record_generic_instantiation(call.id, type_args.clone(), return_type);
+        if callee.module().is_builtin() && callee.name() == ARRAY_NEW_DATA {
+            self.check_array_new_data(&call.args, return_type, call.span);
+        }
 
         // Check each argument: reject &T/&mut T passed where non-ref is expected.
         // For generic functions with explicit type args, rebuild param types with
@@ -1972,11 +2038,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (i, arg) in args.iter_mut().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
                 self.pin_arg_hole_against(arg, expected);
-                self.typecheck(
-                    *arg,
-                    expected,
-                    call.args.get(i).map_or(call.span, ast::Expr::span),
-                );
+                self.typecheck_arg(*arg, expected, ArgSite::of(&call.args, i, call.span));
             }
         }
         if !check_param_types.is_empty() {
@@ -2066,11 +2128,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = fn_params.get(i) {
-                self.typecheck(
-                    *arg,
-                    expected,
-                    call.args.get(i).map_or(call.span, ast::Expr::span),
-                );
+                self.typecheck_arg(*arg, expected, ArgSite::of(&call.args, i, call.span));
             }
         }
 
@@ -3699,15 +3757,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(TypeTable::ERROR);
         }
         // Built here rather than on the caller's hot path: only a call that
-        // actually reaches a blanket static needs the per-argument spans.
-        let arg_spans = arg_spans_of(raw_args, args.len(), span);
+        // actually reaches a blanket static needs the per-argument sites.
+        let arg_sites = arg_sites_of(raw_args, args.len(), span);
         self.resolve_blanket_static_method(
             receiver_ty,
             method,
             call_id,
             &[],
             args,
-            &arg_spans,
+            &arg_sites,
             span,
             ctx,
         )

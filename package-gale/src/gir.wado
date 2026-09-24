@@ -431,9 +431,7 @@ pub struct LrDispatchData {
 ///   unscannable alt sets are rejected at codegen time as a hard
 ///   `panic!`.
 /// * `SaveRewindDispatch` (per-alt save-and-rewind) — last-ditch
-///   backtracking fallback; removed when the bt → scan-dispatch
-///   migration completed (see `package-gale/CLAUDE.md`
-///   "Migration status (2026-04)").
+///   backtracking fallback.
 ///
 /// Re-introducing any of the three is a deliberate act: extend this
 /// variant, extend lower's classifier, and add the emit translator
@@ -626,13 +624,8 @@ pub struct AltBody {
     /// CST struct field declarations in struct order. Includes the
     /// `span: Span` field as the first entry.
     pub fields: List<FieldDecl>,
-    /// `min_prec` to pass to a self-recursive `RuleCall` inside this
-    /// body. 0 when the alt is not a prefix-LR alt; positive value
-    /// when ANTLR4's left-recursion rewrite assigns a precedence to
-    /// the prefix self-ref. Surfaced as a per-alt field rather than
-    /// per-element so prefix alts in non-LR contexts (which today
-    /// pass through `compute_prefix_self_ref_min_prec`) are decided
-    /// once at lower time.
+    /// The precedence a prefix-LR alt's trailing operand climbs from, or 0.
+    /// The one source for the parse call, its scan twin, and the ATN edge.
     pub prefix_self_ref_min_prec: i32,
 }
 
@@ -1251,14 +1244,7 @@ pub struct ScanRuleCallElement {
     /// Scan-side mirror of `RuleCallOp.lr_cont_mask`, so the scan's LR loop
     /// climbs exactly as far as the parse's does.
     pub lr_cont_mask: i32 = -1,
-    /// Scan-side mirror of `RuleCallOp.min_prec_arg`. `Some(p)` when
-    /// the call should pass `p` as the `min_prec` argument — set by
-    /// `stamp_lr_self_ref_min_prec` for self-recursive RuleCalls
-    /// inside an LR suffix. `None` means "use the caller-supplied
-    /// override" — `gen_scan_op_element` reads its `min_prec_override`
-    /// parameter, which `gen_alt_scan_op_elements` raises to `i32::MAX`
-    /// for the trailing self-ref and every other call site leaves at
-    /// the default `0`.
+    /// Scan-side mirror of `RuleCallOp.min_prec_arg`; `None` passes 0.
     pub min_prec_arg: Option<i32>,
     /// Scan-side mirror of `RuleCallOp.atn_call_site`: the originating surface
     /// `RuleRefElement.atn_call_site` id, so the scan emit can push this call's

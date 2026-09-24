@@ -570,10 +570,10 @@ fn const_str_len(body: &Body, arg: ExprId) -> Option<i32> {
             .map(|f| f.value)
     };
     let repr = field(SeqField::Backing)?;
-    let ExprKind::PackedArray(bytes) = &body.exprs[repr.as_expr()?].kind else {
+    let ExprKind::PackedArray(data) = &body.exprs[repr.as_expr()?].kind else {
         return None;
     };
-    let backing = i32::try_from(bytes.len()).ok()?;
+    let backing = i32::try_from(data.as_bytes()?.len()).ok()?;
     let len = field(SeqField::Len)
         .and_then(|op| body.operand_const_int(op))
         .and_then(|v| i32::try_from(v).ok())

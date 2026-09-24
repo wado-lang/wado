@@ -106,13 +106,13 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(36)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(37)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(37)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(38)
+type "functype//display_enum_bare.wado/display_enum_bare.wado/Color^core:prelude/traits.wado/Display::fmt$scalar" = fn(ref "core:prelude/types.wado//Box<display_enum_bare.wado/Color>", ref "core:prelude/string.wado//String");  // TypeId(38)
 
-type "functype//display_enum_bare.wado/display_enum_bare.wado/Color^core:prelude/traits.wado/Display::fmt$scalar" = fn(ref "core:prelude/types.wado//Box<display_enum_bare.wado/Color>", ref "core:prelude/string.wado//String");  // TypeId(39)
+type "functype//core:prelude/traits.wado/display_enum_bare.wado/Color^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(ref "core:prelude/types.wado//Box<display_enum_bare.wado/Color>", ref "core:prelude/string.wado//String");  // TypeId(39)
 
-type "functype//core:prelude/traits.wado/display_enum_bare.wado/Color^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(ref "core:prelude/types.wado//Box<display_enum_bare.wado/Color>", ref "core:prelude/string.wado//String");  // TypeId(40)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(40)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(41)
 
@@ -1382,10 +1382,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
     };
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
-    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
@@ -1576,6 +1572,10 @@ fn "core:prelude/traits.wado/display_enum_bare.wado/Color^core:prelude/traits.wa
         f.used = new_used_160;
         builtin::array_copy<u8>(f.repr, start_161, case_6.case_name.repr, 0, 4);
     }
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
+    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 
 export fn "display_enum_bare.wado/$cm_export__$test_0_enum_display_is_the_bare_case_name" as "$test_0_enum_display_is_the_bare_case_name"

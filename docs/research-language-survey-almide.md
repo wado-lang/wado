@@ -300,7 +300,7 @@ Refuse:
 
 Hold:
 
-- Keeping superseded alternatives in a WEP. `docs/CLAUDE.md` currently sends
+- Keeping superseded alternatives in a WEP. `docs/AGENTS.md` currently sends
   them to git history as the single source of truth. That works for a human
   reader and does not work for an agent, because an agent will not go looking.
   Changing the rule is cheap for new WEPs and expensive to apply to old ones.

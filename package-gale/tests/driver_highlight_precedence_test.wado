@@ -1,0 +1,30 @@
+// A rule capture and a rule-context override can both claim one token, as
+// `from` does under `tagName` and under `identifier`. The one written first in
+// the query wins, whichever tier it sits in.
+use hl from "./grammars/HighlightPrecedence.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            inputs: ["./grammars/HighlightPrecedence.highlights.scm"],
+        },
+    };
+
+test "a rule capture written before an override wins" {
+    assert hl::highlight("tag from") == "tag <span class=\"function\">from</span>";
+}
+
+test "an override written before a rule capture wins" {
+    assert hl::highlight("fld from") == "fld <span class=\"variable\">from</span>";
+}
+
+test "a rule capture covers a token no override names" {
+    assert hl::highlight("tag x fld y") == "tag <span class=\"function\">x</span> fld <span class=\"property\">y</span>";
+}
+
+test "an override applies outside any rule capture" {
+    assert hl::highlight("id from id x") == "id <span class=\"variable\">from</span> id x";
+}
+
+test "a rule capture leaves the trivia inside it alone" {
+    assert hl::highlight("tag /*c*/ x") == "tag <span class=\"comment\">/*c*/</span> <span class=\"function\">x</span>";
+}

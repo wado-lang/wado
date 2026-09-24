@@ -19,8 +19,9 @@ use crate::tir::{
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cm_raw_call, expr_stmt,
-    generic_method_call, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref,
-    loop_stmt, null_expr, return_stmt, split_packed_ptr_len, synth_span,
+    generic_method_call, handle_from_f64, handle_to_f64, i32_const, if_stmt, internal_call,
+    let_mut_stmt, let_stmt, local_ref, loop_stmt, null_expr, return_stmt, split_packed_ptr_len,
+    synth_span,
 };
 
 use super::lift::{
@@ -846,13 +847,11 @@ impl<'a> AdapterBuilder<'a> {
                     self.push_param(param_name.clone(), type_id);
                 }
                 ParamLowering::Direct => {
-                    for (j, flat_ty) in flat_tys.iter().enumerate() {
-                        let name = if flat_tys.len() == 1 {
-                            param_name.clone()
-                        } else {
-                            format!("{param_name}_flat{j}")
-                        };
-                        self.push_param(name, *flat_ty);
+                    if let Some(handle) = self.registry().extern_handle(param_type) {
+                        let type_id = self.cm_type_id(&handle);
+                        self.push_param(param_name.clone(), type_id);
+                    } else {
+                        self.push_flat_params(param_name, &flat_tys);
                     }
                 }
             }
@@ -865,6 +864,17 @@ impl<'a> AdapterBuilder<'a> {
             });
         }
         plans
+    }
+
+    fn push_flat_params(&mut self, param_name: &str, flat_tys: &[TypeId]) {
+        for (j, flat_ty) in flat_tys.iter().enumerate() {
+            let name = if flat_tys.len() == 1 {
+                param_name.to_string()
+            } else {
+                format!("{param_name}_flat{j}")
+            };
+            self.push_param(name, *flat_ty);
+        }
     }
 
     /// Emit the per-parameter lowering code that turns adapter params into
@@ -901,9 +911,13 @@ impl<'a> AdapterBuilder<'a> {
                 }
                 ParamLowering::Direct => {
                     let range = plan.first_param..plan.first_param + plan.param_count;
+                    // The buffer stores a handle as its guest bits (`scalar_store_op`).
+                    let flat_handle =
+                        !self.params_in_buffer && self.registry().extern_handle(plan.ty).is_some();
                     for param in &self.params[range] {
                         let arg = local_ref(param.local_index, &param.name, param.type_id);
-                        self.flat_args.push(arg);
+                        self.flat_args
+                            .push(if flat_handle { handle_to_f64(arg) } else { arg });
                     }
                 }
             }
@@ -1506,6 +1520,11 @@ impl<'a> AdapterBuilder<'a> {
             let lifted_type_id = lifted.type_id;
             self.body_stmts.push(return_stmt(Some(lifted)));
             lifted_type_id
+        } else if let Some(handle) = registry.extern_handle(&resolved) {
+            let handle_type = self.cm_type_id(&handle);
+            self.body_stmts
+                .push(return_stmt(Some(handle_from_f64(raw_call, handle_type))));
+            handle_type
         } else {
             self.body_stmts.push(return_stmt(Some(raw_call)));
             raw_call_type

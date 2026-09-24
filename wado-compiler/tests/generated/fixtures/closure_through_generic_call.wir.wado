@@ -97,12 +97,14 @@ global global:closure_through_generic_call.wado::$const_obj_7: ref null Array<u8
 global global:closure_through_generic_call.wado::$const_obj_8: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 
 fn "closure_through_generic_call.wado/$cm_export__$test_0_a_closure_survives_a_round_trip_through_a_generic"() {
+    let f: ref struct;
     let $v0: i32;
-    let v: ref struct;
-    v = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_through_generic_call.wado//$Closure_0" {  }, func: ref.func "closure/closure_through_generic_call.wado/$closure_wrapper_0" };
+    let v: ref "closure_through_generic_call.wado//$Closure_0";
+    v = struct.new "closure_through_generic_call.wado//$Closure_0" {  };
+    f = struct.new "canonical//CanonicalClosure_0" { env: v, func: ref.func "closure/closure_through_generic_call.wado/$closure_wrapper_0" };
     $v0 = block -> i32 {
         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        $indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"(v);
+        $indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"(f);
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, $indirect_call_1.env, 1);
     };
     if @unlikely($v0 != 2) {

@@ -298,6 +298,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A template passed to a tag whose parameter it cannot satisfy.
+    TagParamNotTemplate {
+        param: String,
+        span: Span,
+    },
+
     /// Unknown type name
     UnknownType {
         name: String,
@@ -710,6 +716,16 @@ pub enum TypeError {
         assoc_name: String,
         expected: String,
         actual: String,
+        span: Span,
+    },
+
+    /// A reflect member called on a type parameter whose bound binds no pack
+    /// (`T: ReflectTemplate` without `Holes = [..V]`): the member reads one.
+    MissingReflectPackBound {
+        trait_name: String,
+        type_param: String,
+        method: String,
+        pack_bound: String,
         span: Span,
     },
 
@@ -1186,6 +1202,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `#[cm(..., classes = ...)]` numbers an `extends` tree in a way a handle
+    /// cannot be tested against, or a type pattern narrows to an unnumbered resource.
+    ResourceClasses {
+        message: String,
+        span: Span,
+    },
+
     /// A bare generic function name was used as a value with no expected
     /// `fn(...)` type to drive inference. The function type depends on
     /// type arguments that have not been supplied. The fix is to either
@@ -1283,6 +1306,11 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!("type mismatch: expected '{expected}', found '{found}'"),
+                *span,
+            ),
+            TypeError::TagParamNotTemplate { param, span } => (
+                Code::TypeMismatch,
+                format!("a template tag's parameter must be bound by `ReflectTemplate`, not `{param}`"),
                 *span,
             ),
             TypeError::UnknownType { name, span } => {
@@ -1798,6 +1826,20 @@ impl TypeError {
                 Code::TraitBoundNotSatisfied,
                 format!(
                     "type '{type_name}' does not satisfy the associated type '{trait_name}::{assoc_name} = {expected}': it is '{actual}'"
+                ),
+                *span,
+            ),
+            TypeError::MissingReflectPackBound {
+                trait_name,
+                type_param,
+                method,
+                pack_bound,
+                span,
+            } => (
+                Code::TraitBoundNotSatisfied,
+                format!(
+                    "`{trait_name}::<{type_param}>::{method}()` needs `{type_param}` bound as \
+                     `{trait_name}<{pack_bound}>`"
                 ),
                 *span,
             ),
@@ -2346,6 +2388,9 @@ impl TypeError {
             }
             TypeError::ResourceExtends { message, span } => {
                 (Code::ResourceExtends, message.clone(), *span)
+            }
+            TypeError::ResourceClasses { message, span } => {
+                (Code::ResourceClasses, message.clone(), *span)
             }
             TypeError::AmbiguousResourceMethod {
                 method,

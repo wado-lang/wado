@@ -1,6 +1,6 @@
 // A narrowing nested in a variant payload or a tuple is tested like any
 // other refutable sub-pattern.
-use { Element, HtmlInputElement } from "web:dom";
+use { Element, HtmlInputElement } from "wado-lang:web";
 
 fn in_payload(o: Option<Option<Element>>) -> i32 {
     return match o {
@@ -22,4 +22,9 @@ export fn run() {
 }
 
 __DATA__
-{"compile_only": true}
+{
+  "compile_only": true,
+  "dependencies": {
+    "wado-lang:web": "../../../package-web/src/lib.wado"
+  }
+}

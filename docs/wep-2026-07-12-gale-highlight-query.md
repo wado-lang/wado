@@ -28,13 +28,14 @@ Gale already emits.
 ## Decision
 
 Replace the heuristic with a **declarative highlight query** supplied alongside
-the grammar and compiled at generation time into the existing `defaults` /
-`overrides` tables.
+the grammar. The generator resolves it into the `HIGHLIGHT_MAPPING` global:
+capture ids by token kind, overrides by token kind, and rule captures. The
+runtime only reads that table.
 
 ### Query format: a `highlights.scm` subset
 
-The query is a strict subset of tree-sitter query syntax, shaped to exactly the
-runtime's two-tier expressiveness — no more, no less:
+The query is a strict subset of tree-sitter query syntax, shaped to exactly
+what the runtime can express — no more, no less:
 
 ```scheme
 ; line comment
@@ -42,18 +43,24 @@ runtime's two-tier expressiveness — no more, no less:
 "select" @keyword               ; default: a literal token → capture
 (functionCall (IDENTIFIER) @function)  ; override: within parser rule, token → capture
 (functionCall "(" @punctuation.bracket)
+(keyword) @keyword              ; rule capture: every token under the rule
 ```
 
 - **Default** `(TOKEN) @cap` / `"lit" @cap` — maps a token kind (by lexer rule
-  name, or by literal text) to a capture, filling `defaults[kind]`.
+  name, or by literal text) to a capture.
 - **Override** `(rule (TOKEN) @cap)` / `(rule "lit" @cap)` — one level of
   nesting: while the parse is inside parser rule `rule` (i.e. `rule` is on the
-  rule stack), `TOKEN` maps to `cap`, populating `overrides`. This matches
-  Lezer's `CallExpression/VariableName`. Nesting semantics follow the runtime:
-  the override fires anywhere within the rule's subtree, not only for a direct
-  child.
+  rule stack), `TOKEN` maps to `cap`. This matches Lezer's
+  `CallExpression/VariableName`. The override fires anywhere within the rule's
+  subtree, not only for a direct child.
+- **Rule capture** `(rule) @cap` — every token under parser rule `rule` maps to
+  `cap`. Each alternative of `rule` must be one token, or a delegation to a
+  rule that is. Any other rule is a diagnostic.
 - **Captures** use the tree-sitter standard dot-separated vocabulary; they
   become HTML classes (`foo.bar` → `class="foo bar"`).
+
+An override or a rule capture beats a default. For one rule and one token, the
+capture written last wins. Across rules, the capture written first wins.
 
 Anything the runtime cannot express — nesting deeper than one rule context,
 predicates, field selectors, anchors, wildcards — is a loud generation
@@ -78,7 +85,7 @@ same channel as supplementary `.g4` grammars:
 ```wado
 use hl from "./JSON.g4" with {
     generator: {
-        module: "wado:gale",
+        module: "wado-lang:gale",
         inputs: ["./JSON.highlights.scm"],
     },
 };
@@ -107,7 +114,7 @@ brackets, delimiters), for authors to adapt to their grammar's real token names.
 
 - The dead `overrides` tier becomes the primary customization surface;
   context-sensitive highlighting is now expressible.
-- Classification is static (compiled into `defaults`/`overrides` at generation
+- Classification is static (compiled into `HIGHLIGHT_MAPPING` at generation
   time) — no runtime query interpreter, preserving Gale's "inline, minimal,
   byte-identical-when-off" codegen and its wasm-size budget. Re-theming stays
   dynamic where it belongs: capture names are CSS classes, styled without

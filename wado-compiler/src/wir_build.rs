@@ -4,23 +4,42 @@
 //!
 //! Emission (`WirPackage` → Wasm bytes) is handled by `codegen`.
 
+use crate::const_eval::truncate_int;
 use crate::name::INLINE_REF_EAGER_MAX_BYTES;
+use crate::nir_arena::PackedData;
 use crate::nir_package::NirPackage;
-use crate::wir::WirPackage;
+use crate::primitive::PrimitiveType;
+use crate::wir::{WirInstr, WirPackage};
+use crate::wir_optimize::array::{ConstOperand, data_promotion_pays};
 
-/// Whether a `PackedArray` of `len` bytes gets the constant
-/// `array.new_fixed<u8>` repr — the choice `translate_packed_array` makes,
-/// shared so `const_object_globalization` predicts the same verdict when it
-/// decides whether a hoist needs the lazy-init guard.
+/// Whether a `PackedArray` is built by `array.new_fixed` rather than from a data
+/// segment, which `const_object_globalization` must predict alike.
 #[must_use]
 pub(crate) fn packed_array_is_eager(
-    len: usize,
+    data: &PackedData,
     string_inline_max_bytes: usize,
     prefer_fixed: bool,
 ) -> bool {
-    len == 0
-        || len <= string_inline_max_bytes
-        || (prefer_fixed && len <= INLINE_REF_EAGER_MAX_BYTES)
+    let len = data.bytes.len();
+    if data.as_bytes().is_some() {
+        return len == 0
+            || len <= string_inline_max_bytes
+            || (prefer_fixed && len <= INLINE_REF_EAGER_MAX_BYTES);
+    }
+    let operand_bytes = packed_element_consts(data)
+        .map(|c| ConstOperand::of(&c).encoded_bytes())
+        .sum();
+    !data_promotion_pays(data.len(), data.width(), operand_bytes)
+}
+
+/// Each element of `data` as the constant `array.new_fixed` takes for it.
+pub(crate) fn packed_element_consts(data: &PackedData) -> impl Iterator<Item = WirInstr> + '_ {
+    data.element_bits().map(|bits| match data.elem {
+        PrimitiveType::F32 => WirInstr::F32Const(f32::from_bits(bits as u32)),
+        PrimitiveType::F64 => WirInstr::F64Const(f64::from_bits(bits)),
+        PrimitiveType::I64 | PrimitiveType::U64 => WirInstr::I64Const(bits.cast_signed()),
+        prim => WirInstr::I32Const(truncate_int(bits, prim) as i32),
+    })
 }
 
 mod calls;

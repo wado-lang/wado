@@ -45,7 +45,7 @@ The first rule is enforced: `permissions.deny` covers the Read tool, `.claude/ho
 
 - No backtracking on the accept path — parser or lexer. Disambiguate with static k-token lookahead; a decision static prediction cannot resolve in depth 5 routes to the runtime ATN simulator, never a try-fail-retry loop. The one exception decides nothing: the repeat-exit probe re-parses a failed element under `speculating` to record where the error is, and rolls back all but the message. Mechanics, soundness invariants, and ATN escalation: [`antlr4-compatibility.md`](./antlr4-compatibility.md) (Prediction & codegen design).
 - Keep generated code byte-identical for grammars that do not use a feature (actions, FOLLOW gates, ATN) — gate every emit site on the feature.
-- A compiler bug is P0 (top-level `CLAUDE.md`): write a minimal `wado-compiler/tests/fixtures/` repro first, then fix.
+- A compiler bug is P0 (top-level `AGENTS.md`): write a minimal `wado-compiler/tests/fixtures/` repro first, then fix.
 
 ## Debugging tools
 
@@ -55,13 +55,13 @@ The first rule is enforced: `permissions.deny` covers the Read tool, `.claude/ho
 wado run package-gale dump path/to/Grammar.g4
 ```
 
-`gale dump --lexer` is the same for the lexer: per rule, the matcher covering its text (own `try_`, the keyword classifier and its carrier, the shared literal matcher, an inlined fragment, `latn_match`), then each emit decision inside it with the reason a cheaper strategy was not available — plain vs lookahead-aware repeat, first-match vs arm scoring, first-match vs maximal munch. A trailing summary tallies them, so "did my change flip a strategy" is a diff rather than a regenerate-and-grep loop.
+`gale dump --lexer` is the same for the lexer: per rule, the matcher covering its text (own `try_`, the keyword classifier and its carrier, the shared literal matcher, the earlier rules that subsume it, an inlined fragment, `latn_match`), then each emit decision inside it with the reason a cheaper strategy was not available — plain vs lookahead-aware repeat, first-match vs arm scoring, first-match vs maximal munch. A trailing summary tallies them, so "did my change flip a strategy" is a diff rather than a regenerate-and-grep loop.
 
 ```sh
 wado run package-gale dump --lexer path/to/Grammar.g4
 ```
 
-Which matcher covers a rule is `lexer_rule_route`, and the emit reads it rather than re-deciding: both "does this rule get its own `try_`" and "does the dispatch call it" are derived from that one answer, so a shortcut added to the route is one every emit site already knows about. Asking the shortcuts separately is what let a rule keep its actions past the keyword classifier and still lose them to the shared literal matcher.
+Which matcher covers a rule is its `lexer_rule_routes` entry, derived once per grammar, and the emit reads it rather than re-deciding: both "does this rule get its own `try_`" and "does the dispatch call it" are derived from that one answer, so a shortcut added to the route is one every emit site already knows about. Asking the shortcuts separately is what let a rule keep its actions past the keyword classifier and still lose them to the shared literal matcher.
 
 The emit _decisions_ below the route — plain vs lookahead-aware repeat, first-match vs arm scoring, maximal munch, suffix cutting, fragment inlining — are `lexer_rule_plan`: one tree per rule that `gen_lexer` emits from and the dump renders. Neither decides for itself, so neither can reach a construct the other does not, and tail position is a property of the plan rather than a parameter each function re-derives. A new strategy is a new plan node with two consumers; adding a branch to only one does not compile.
 
@@ -123,7 +123,7 @@ A grammar taken from elsewhere carries `// Source:` (the URL it came from) and `
 
 ## Inlined runtime
 
-The generated parser inlines the runtime fragments in `src/runtime/*.wado` (`lex`, `diag`, `tree`, `tools` always; `follow` / `highlight` / `atn` / `latn` gated per-feature). Each fragment is also a real module for dev / test.
+The generated parser inlines the runtime fragments in `src/runtime/*.wado` (`lex`, `diag`, `tree`, `tools` always; `follow` / `highlight` / `atn` / `atn_predict` / `atn_lr` / `latn` gated per-feature). Each fragment is also a real module for dev / test. A standard-library `use` in one is hoisted to the top of the generated file. A type only the generator needs lives outside `src/runtime/`, as the `.g4` lexer's `Token` does.
 
 Two rules follow from every byte of these files landing in every generated parser:
 

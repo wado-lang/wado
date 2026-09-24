@@ -263,6 +263,10 @@ _Fields are private._
 
 ##### `fn deserialize_f64(&mut self) -> Result<f64, DeserializeError>`
 
+##### `fn deserialize_f16(&mut self) -> Result<f16, DeserializeError>`
+
+##### `fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError>`
+
 ##### `fn deserialize_bool(&mut self) -> Result<bool, DeserializeError>`
 
 ##### `fn deserialize_char(&mut self) -> Result<char, DeserializeError>`

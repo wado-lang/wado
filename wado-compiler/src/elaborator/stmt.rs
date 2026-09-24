@@ -1107,9 +1107,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a let pattern (for tuple/struct destructuring).
-    /// Applies match ergonomics: if `type_id` is `&T` or `&mut T` and the pattern is
-    /// a compound pattern (tuple/struct), peels the reference and wraps bindings.
+    /// `type_id` with its reference layers peeled, and the reference kind a
+    /// binding beneath takes under match ergonomics: any `&` downgrades `&mut`.
+    fn peel_scrutinee_refs(
+        &self,
+        type_id: TypeId,
+        ref_binding: RefBinding,
+    ) -> (TypeId, RefBinding) {
+        let tt = self.tysys.type_table.borrow();
+        let mut current = type_id;
+        let mut ref_binding = ref_binding;
+        loop {
+            match tt.get(current) {
+                ResolvedType::Ref(inner) => {
+                    current = *inner;
+                    ref_binding = RefBinding::Ref;
+                }
+                ResolvedType::MutRef(inner) => {
+                    current = *inner;
+                    if ref_binding == RefBinding::None {
+                        ref_binding = RefBinding::MutRef;
+                    }
+                }
+                _ => return (current, ref_binding),
+            }
+        }
+    }
+
+    /// Resolve an irrefutable destructuring pattern (`let`, the `for` of a tuple).
     pub(super) fn resolve_let_pattern(
         &mut self,
         pattern: &ast::Pattern,
@@ -1120,34 +1145,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) {
         self.check_irrefutable_pattern(pattern, span, site);
-        // Match ergonomics for let patterns: peel references from the type
-        // when the pattern is a compound (tuple/struct) pattern.
-        let (peeled_type, ref_binding) = match pattern {
-            ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
-                let mut current = type_id;
-                let mut rb = RefBinding::None;
-                while let resolved @ (ResolvedType::Ref(_) | ResolvedType::MutRef(_)) =
-                    self.tysys.type_table.borrow().get(current).clone()
-                {
-                    match resolved {
-                        ResolvedType::Ref(inner) => {
-                            current = inner;
-                            rb = RefBinding::Ref;
-                        }
-                        ResolvedType::MutRef(inner) => {
-                            current = inner;
-                            if rb == RefBinding::None {
-                                rb = RefBinding::MutRef;
-                            }
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-                (current, rb)
-            }
-            _ => (type_id, RefBinding::None),
-        };
-        self.resolve_let_pattern_inner(pattern, peeled_type, is_mut, span, site, ctx, ref_binding);
+        self.resolve_let_pattern_inner(pattern, type_id, is_mut, span, site, ctx, RefBinding::None);
     }
 
     /// Whether a struct pattern's qualifier names the scrutinee's own head.
@@ -1208,6 +1206,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         ref_binding: RefBinding,
     ) {
+        if type_id == TypeTable::ERROR
+            && let Some(subpatterns) = shape_checked_subpatterns(pattern)
+        {
+            for p in subpatterns {
+                let error = TypeTable::ERROR;
+                self.resolve_let_pattern_inner(p, error, is_mut, span, site, ctx, ref_binding);
+            }
+            return;
+        }
         match pattern {
             ast::Pattern::Ident {
                 id,
@@ -1226,7 +1233,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_local_symbol(*id, name, *name_span, pat_mut, binding_type);
             }
             ast::Pattern::Tuple(patterns, has_rest) => {
-                // Get element types from the tuple type
+                let (type_id, ref_binding) = self.peel_scrutinee_refs(type_id, ref_binding);
                 let elem_types = {
                     let type_table = self.tysys.type_table.borrow();
                     if let Some(elem_types) = type_table.as_tuple(type_id) {
@@ -1283,6 +1290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 has_rest,
                 span: pat_span,
             } => {
+                let (type_id, ref_binding) = self.peel_scrutinee_refs(type_id, ref_binding);
                 // Every lookup below asks the scrutinee's head, which an
                 // anonymous shape and a function-local `struct` both have and
                 // neither of them can be reached by spelling. A newtype's head
@@ -1622,14 +1630,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a pattern in an if-pattern context with type information from the scrutinee.
-    /// Match ergonomics: if the scrutinee is `&T`, peels the reference and propagates
-    /// `ref_binding` so that identifier bindings get `&InnerType` instead of `InnerType`.
-    /// Bind a refutable pattern's variables into `ctx` and run the same
-    /// disambiguation / diagnostics as reify's pattern builder, returning the
-    /// bindings it introduced in declaration (pre-order). The body walk
-    /// only needs the binding side effects and facts — reify rebuilds the real
-    /// `TirPattern` independently — so no `TirPattern` node is assembled here.
+    /// Bind a refutable pattern's variables into `ctx`, returning them in
+    /// declaration order; reify builds the `TirPattern` from the same AST.
     pub(super) fn resolve_if_pattern(
         &mut self,
         pattern: &Pattern,
@@ -1637,27 +1639,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         span: Span,
     ) -> PatBindings {
-        let mut peeled_type = scrutinee_type;
-        let mut ref_binding = RefBinding::None;
-        while let resolved @ (ResolvedType::Ref(_) | ResolvedType::MutRef(_)) =
-            self.tysys.type_table.borrow().get(peeled_type).clone()
-        {
-            match resolved {
-                ResolvedType::Ref(inner) => {
-                    peeled_type = inner;
-                    // &T always downgrades to Ref (most restrictive wins)
-                    ref_binding = RefBinding::Ref;
-                }
-                ResolvedType::MutRef(inner) => {
-                    peeled_type = inner;
-                    // &mut T only sets MutRef if not already downgraded to Ref
-                    if ref_binding == RefBinding::None {
-                        ref_binding = RefBinding::MutRef;
-                    }
-                }
-                _ => unreachable!(),
-            }
-        }
+        let (peeled_type, ref_binding) = self.peel_scrutinee_refs(scrutinee_type, RefBinding::None);
         self.resolve_if_pattern_inner(pattern, peeled_type, ctx, span, ref_binding)
     }
 
@@ -1669,6 +1651,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         ref_binding: RefBinding,
     ) -> PatBindings {
+        if scrutinee_type == TypeTable::ERROR
+            && let Some(subpatterns) = shape_checked_subpatterns(pattern)
+        {
+            return subpatterns
+                .into_iter()
+                .flat_map(|p| {
+                    self.resolve_if_pattern_inner(p, TypeTable::ERROR, ctx, span, ref_binding)
+                })
+                .collect();
+        }
         if let Some(site) = ctx.irrefutable_site
             && let Some(reason) = self.refutation(pattern, scrutinee_type)
         {
@@ -1754,7 +1746,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Vec::new()
             }
             Pattern::Tuple(patterns, has_rest) => {
-                // For tuple patterns, extract element types
+                let (scrutinee_type, ref_binding) =
+                    self.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 let element_types =
                     if let Some(types) = self.tysys.type_table.borrow().as_tuple(scrutinee_type) {
                         types
@@ -1786,6 +1779,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 bindings,
                 span,
             } => {
+                let (scrutinee_type, ref_binding) =
+                    self.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 // `<ns>::<Case>` (single `::`, prefix is a namespace import
                 // alias) canonicalizes to the bare `<Case>`; the registries
                 // below are keyed by canonical names. Multi-segment forms
@@ -1994,7 +1989,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => {
                         let _ = self.emit(TypeError::PatternTypeMismatch {
                             expected: "variant or enum type".to_string(),
-                            found: format!("{resolved_type:?}"),
+                            found: self.tysys.type_table.borrow().type_name(scrutinee_type),
                             span: *span,
                         });
                         TypeTable::UNKNOWN
@@ -2037,6 +2032,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 has_rest,
                 span: pat_span,
             } => {
+                let (scrutinee_type, ref_binding) =
+                    self.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 let mut type_name_matches = true;
                 if let Some(expected_name) = type_name {
                     let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
@@ -2155,14 +2152,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .map(|(n, _, t)| (n.as_str(), *t))
                         .collect();
 
-                    if first_names != alt_names {
-                        let fn_: Vec<&str> = first_names.iter().map(|(n, _)| *n).collect();
-                        let an: Vec<&str> = alt_names.iter().map(|(n, _)| *n).collect();
+                    // Over an ERROR scrutinee a bare case name reads as a
+                    // binding, so the names compare nothing.
+                    if scrutinee_type != TypeTable::ERROR && first_names != alt_names {
+                        let shown = |names: &[(&str, tir::TypeId)]| {
+                            if names.is_empty() {
+                                return "nothing".to_string();
+                            }
+                            let tt = self.tysys.type_table.borrow();
+                            names
+                                .iter()
+                                .map(|(n, ty)| format!("`{n}: {}`", tt.type_name(*ty)))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        };
                         let _ = self.emit(TypeError::InvalidPattern {
                             message: format!(
                                 "or-pattern alternatives must bind the same names with the same types: \
-                                 alternative 1 binds {:?}, but alternative {} binds {:?}",
-                                fn_, i + 1, an,
+                                 alternative 1 binds {}, but alternative {} binds {}",
+                                shown(&first_names),
+                                i + 1,
+                                shown(&alt_names),
                             ),
                             span,
                         });
@@ -2219,6 +2229,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .is_resource_narrowing(scrutinee_type, target)
                 {
+                    self.require_handle_classes(target, *typed_span);
                     match ctx.irrefutable_site {
                         Some(site) => self.reject_refutable_narrowing(
                             scrutinee_type,
@@ -2235,6 +2246,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Parser error-recovery placeholder; inert.
             Pattern::Error(_) => Vec::new(),
+        }
+    }
+
+    /// A narrowing tests the class a handle carries, so its target must number one.
+    fn require_handle_classes(&mut self, target: TypeId, span: Span) {
+        let unnumbered = {
+            let tt = self.tysys.type_table.borrow();
+            tt.narrowing_classes(target)
+                .is_none()
+                .then(|| tt.type_name(target))
+        };
+        if let Some(name) = unnumbered {
+            let _ = self.emit(TypeError::ResourceClasses {
+                message: format!(
+                    "a type pattern cannot narrow to `{name}`: it declares no `#[cm(..., classes = \"lo..=hi\")]`"
+                ),
+                span,
+            });
         }
     }
 
@@ -2573,21 +2602,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.type_table.borrow().get(iterable_type_id),
                 ResolvedType::Unknown | ResolvedType::TypeParam { .. }
             );
-            if !implements_into_iter {
-                let type_name = self.tysys.type_table.borrow().type_name(iterable_type_id);
-                let _ = self.emit(TypeError::MissingTraitImpl {
-                    type_name,
-                    trait_name: "IntoIterator".to_string(),
-                    span: for_of.span,
-                });
-            }
-            // Only record the desugar tag when the iterable actually
-            // supports iteration; tagging an error-path node would lead
-            // reify to expand a TIR shape the elaborator never produced.
-            if implements_into_iter {
+            let into_iter_receiver = if implements_into_iter {
+                // Reify expands the tag, so only an iterable that supports
+                // iteration carries one.
                 self.record_desugar(for_of.id, DesugarKind::ForOfIterator);
-            }
-            self.resolve_iterator_for_of(for_of, ctx);
+                if is_enumerate {
+                    self.resolve_expr(&for_of.iterable, ctx, None)
+                } else {
+                    iterable_type_id
+                }
+            } else {
+                if iterable_type_id != TypeTable::ERROR {
+                    let type_name = self.tysys.type_table.borrow().type_name(iterable_type_id);
+                    let _ = self.emit(TypeError::MissingTraitImpl {
+                        type_name,
+                        trait_name: "IntoIterator".to_string(),
+                        span: for_of.span,
+                    });
+                }
+                TypeTable::ERROR
+            };
+            self.resolve_iterator_for_of(for_of, into_iter_receiver, ctx);
         }
 
         ctx.for_continue_labels = saved_continue;
@@ -2887,19 +2922,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// binding `$iter_N = iterable.into_iter()` around a `loop` that matches
     /// `$iter_N.next()`, breaking on `None`. The synthetic local and both
     /// dispatches carry no defining `AstId`, so clicking `for` does not drag the
-    /// user into `Iterator::next`. `for_of.iterable` is resolved as written.
-    fn resolve_iterator_for_of(&mut self, for_of: &ForOfStmt, ctx: &mut FunctionContext) {
+    /// user into `Iterator::next`. `into_iter_receiver_type` is the type of
+    /// `for_of.iterable` as written, or `ERROR` where it cannot be iterated.
+    fn resolve_iterator_for_of(
+        &mut self,
+        for_of: &ForOfStmt,
+        into_iter_receiver_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) {
         use super::method_call::MethodCallInput;
 
         let span = for_of.span;
         let unique_id = ctx.fresh_serial();
         let iter_var = format!("$iter_{unique_id}");
         let label = format!("$for_of_{unique_id}");
-
-        // Resolve the iterable receiver verbatim, then dispatch `.into_iter()`
-        // on it. Whatever adapter chain the user wrote (e.g. `.enumerate()`,
-        // `.filter(…)`, `.map(…)`) is already part of `for_of.iterable`.
-        let into_iter_receiver_type = self.resolve_expr(&for_of.iterable, ctx, None);
 
         // `<receiver>.into_iter()` — the synthetic call passes
         // `call_id == None` so `record_method_dispatch` skips it; the
@@ -2937,7 +2973,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         }) && !matches!(
             self.tysys.type_table.borrow().get(iter_type),
-            ResolvedType::Unknown | ResolvedType::TypeParam { .. }
+            ResolvedType::Unknown | ResolvedType::Error | ResolvedType::TypeParam { .. }
         ) {
             let type_name = self.tysys.type_table.borrow().type_name(iter_type);
             let _ = self.emit(TypeError::MissingTraitImpl {
@@ -3014,10 +3050,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some((def, type_args)) => {
                 self.get_variant_case_payload_type(def, &some_case_name, &type_args, span)
             }
-            // `.next()` returned an unexpected non-Option type. The iterator-
-            // trait check above (or method dispatch downstream) has already
-            // diagnosed it; degrade to `UNKNOWN` to keep resolution going.
-            None => TypeTable::UNKNOWN,
+            // A non-Option `.next()` was diagnosed above, so the binding
+            // carries the error.
+            None => TypeTable::ERROR,
         };
 
         if let ResolvedType::MutRef(elem) = self.tysys.type_table.borrow().get(item_type).clone() {
@@ -3453,6 +3488,24 @@ fn mut_bindings_of(pattern: &Pattern) -> Pattern {
             span: *span,
         },
         other => other.clone(),
+    }
+}
+
+/// The subpatterns a pattern reaches through the scrutinee's shape; `None` for
+/// one whose own checks stay sound over an ERROR scrutinee.
+fn shape_checked_subpatterns(pattern: &Pattern) -> Option<Vec<&Pattern>> {
+    match pattern {
+        Pattern::Tuple(patterns, _) => Some(patterns.iter().collect()),
+        Pattern::Struct { fields, .. } => Some(fields.iter().map(|f| &f.pattern).collect()),
+        Pattern::Variant { bindings, .. } => Some(bindings.iter().collect()),
+        Pattern::Ident { .. }
+        | Pattern::MutIdent { .. }
+        | Pattern::Wildcard
+        | Pattern::Literal(_)
+        | Pattern::Range { .. }
+        | Pattern::Or(_)
+        | Pattern::Typed { .. }
+        | Pattern::Error(_) => None,
     }
 }
 

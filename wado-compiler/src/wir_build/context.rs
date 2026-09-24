@@ -718,11 +718,8 @@ impl<'a> WirContext<'a> {
             .unwrap_or_else(|pending| pending.placeholder)
     }
 
-    /// The `WirType` of `type_id`, or `None` when it has no WIR registration.
-    ///
-    /// For the one caller with a real recovery: a tuple interned by CM binding
-    /// synthesis can carry `TypeId`s the registrar never saw, and
-    /// `tuple_constructor_args` then searches for or defines a matching struct.
+    /// The `WirType` of `type_id`, or `None` when it has no WIR registration,
+    /// for a caller that recovers from the miss.
     pub fn try_type_id_to_wir_type(
         &self,
         type_table: &TypeTable,
@@ -893,10 +890,12 @@ impl<'a> WirContext<'a> {
                 // Newtypes resolve to their base type
                 self.lookup_wir_type(type_table, *base_type)?
             }
-            // Generic resource types (Future<T>, Stream<T>, etc.) are opaque i32 handles
-            ResolvedType::GenericResource { .. } => WirType::I32,
-            // Non-generic resources are opaque i32 handles
-            ResolvedType::Resource { .. } => WirType::I32,
+            ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+                let scalar = type_table
+                    .handle_scalar(type_id)
+                    .expect("a resource is a handle");
+                self.lookup_wir_type(type_table, scalar)?
+            }
             // Flags are bitmasks stored as i32
             ResolvedType::Flags { .. } => WirType::I32,
             // These should never reach codegen — must be resolved by monomorphization

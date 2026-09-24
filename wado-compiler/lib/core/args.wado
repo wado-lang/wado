@@ -275,6 +275,15 @@ impl ArgvDeserializer {
         });
         return DeserializeError::invalid_value(msg, -1);
     }
+
+    /// The next value token, converted with `LenientFromStr`.
+    fn lenient<T: LenientFromStr>(&mut self) -> Result<T, DeserializeError> {
+        let tok = self.take_value()?;
+        if let Ok(v) = T::from_str_lenient(&tok) {
+            return Result::Ok(v);
+        }
+        return Result::Err(self.invalid_value(&tok));
+    }
 }
 
 pub struct ArgvStructAccess {
@@ -482,67 +491,43 @@ impl Deserializer for ArgvDeserializer {
     }
 
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = i32::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<i32>();
     }
 
     fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = i64::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<i64>();
     }
 
     fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = u32::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<u32>();
     }
 
     fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = u64::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<u64>();
     }
 
     fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = i128::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<i128>();
     }
 
     fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = u128::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<u128>();
     }
 
     fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = f32::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<f32>();
     }
 
     fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = f64::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<f64>();
+    }
+
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        return self.lenient::<f16>();
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        return self.lenient::<bf16>();
     }
 
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
@@ -552,19 +537,11 @@ impl Deserializer for ArgvDeserializer {
         if bare_flag {
             return Result::Ok(true);
         }
-        let tok = self.take_value()?;
-        if let Ok(v) = bool::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<bool>();
     }
 
     fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = char::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<char>();
     }
 
     fn deserialize_string(&mut self) -> Result<String, DeserializeError> {

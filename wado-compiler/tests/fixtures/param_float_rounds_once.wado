@@ -1,0 +1,17 @@
+// A `-D` value for an `f32` parameter rounds once into `f32`, as the same text
+// written as a literal does. Parsing it as an `f64` first lands on the midpoint
+// above 1, and narrowing that ties to even, down to 1.
+
+#[param]
+global ABOVE_TIE: f32 = 0.0;
+
+export fn run() {
+    let literal: f32 = 1.00000005960464477539062500000000001;
+    assert ABOVE_TIE.to_bits() == literal.to_bits();
+    assert ABOVE_TIE.to_bits() == 0x3F80_0001;
+}
+
+__DATA__
+{
+    "params": { "ABOVE_TIE": "1.00000005960464477539062500000000001" }
+}

@@ -4,6 +4,7 @@
 //! Runs before monomorphize.
 
 use std::cell::RefCell;
+use std::convert::identity;
 use std::rc::Rc;
 
 use crate::compiler_item::CompilerItem;
@@ -25,7 +26,7 @@ use super::common::{
     deref_expr, make_synthetic_free_function, make_synthetic_method, param_local, ref_expr,
     synth_span, write_str_stmt,
 };
-use crate::ast::Visibility;
+use crate::ast::{HandleClasses, Visibility};
 use crate::defs::DefId;
 use crate::escape::unescape_template_segment;
 use crate::name::{
@@ -336,6 +337,7 @@ pub fn synthesize_traits(project: Package) -> Package {
         };
         generate_enum_trait_impls(module, &mut ctx);
         generate_flags_trait_impls(module, &mut ctx);
+        generate_handle_eq_impls(module, &mut ctx);
         generate_struct_eq_ord_impls(module, &mut ctx);
         generate_variant_eq_impls(module, &mut ctx);
         generate_inspect_impls(module, &mut ctx);
@@ -1670,7 +1672,7 @@ fn generate_template_reflect_impls(
     module.functions.extend(generated);
 }
 
-/// Build `Shape^ReflectTemplate::members()` as one `Hole` literal per hole —
+/// Build `Shape^ReflectTemplate::members()` as one `TemplateHole` literal per hole —
 /// `{ index, lit, raw, source, has_spec }` in the handle's declaration order.
 fn generate_template_members_fn(
     shape: &TemplateShape,
@@ -3619,8 +3621,14 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         let ref_enum_type = type_table.make_ref(enum_type);
 
         if ctx.should_synthesize(receiver, &eq_trait_name.canonical().expect(KEYED)) {
-            let func =
-                generate_enum_eq_fn(receiver, enum_type, ref_enum_type, &eq_trait_name, *span);
+            let func = generate_scalar_eq_fn(
+                receiver,
+                enum_type,
+                ref_enum_type,
+                &eq_trait_name,
+                *span,
+                identity,
+            );
             generated_functions.push(Rc::new(RefCell::new(func)));
             ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
         }
@@ -3676,8 +3684,14 @@ fn generate_flags_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         let ref_flags_type = type_table.make_ref(flags_type);
 
         if ctx.should_synthesize(receiver, &eq_trait_name.canonical().expect(KEYED)) {
-            let func =
-                generate_enum_eq_fn(receiver, flags_type, ref_flags_type, &eq_trait_name, *span);
+            let func = generate_scalar_eq_fn(
+                receiver,
+                flags_type,
+                ref_flags_type,
+                &eq_trait_name,
+                *span,
+                identity,
+            );
             generated_functions.push(Rc::new(RefCell::new(func)));
             ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
         }
@@ -3698,6 +3712,41 @@ fn generate_flags_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         }
     }
 
+    module.functions.extend(generated_functions);
+}
+
+/// Generate auto-derived `Eq` for the unrestricted resources in a module: the
+/// host interns handles, so their bits compare.
+fn generate_handle_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
+    let eq_trait_name = module
+        .type_table
+        .borrow()
+        .compiler_items()
+        .trait_fq(CompilerItem::Eq);
+    let eq_key = eq_trait_name.canonical().expect(KEYED);
+    let mut generated_functions = Vec::new();
+    for resource in &module.resources {
+        let mut type_table = module.type_table.borrow_mut();
+        if !type_table.is_unrestricted_resource(resource.def) {
+            continue;
+        }
+        let receiver = &FqTypeName::declared(type_table.defs(), resource.def);
+        if !ctx.should_synthesize(receiver, &eq_key) {
+            continue;
+        }
+        let handle_type = type_table.make_resource(resource.def);
+        let ref_handle_type = type_table.make_ref(handle_type);
+        let func = generate_scalar_eq_fn(
+            receiver,
+            handle_type,
+            ref_handle_type,
+            &eq_trait_name,
+            resource.span,
+            common::handle_bits,
+        );
+        generated_functions.push(Rc::new(RefCell::new(func)));
+        ctx.record_impl(receiver, &eq_key);
+    }
     module.functions.extend(generated_functions);
 }
 
@@ -4291,9 +4340,8 @@ fn generate_fn_inspect_fn(
     func
 }
 
-/// Generate Inspect for opaque/resource types (Future, Stream, etc.).
-///
-/// Generate `Inspect` for an opaque resource handle, rendered as `Name#0x<hex>`.
+/// Generate `Inspect` for an opaque handle (a resource, Future, Stream), rendered as `Name#0x<hex>`,
+/// or as `Name { type_id, object_id }` for an unrestricted one.
 #[allow(clippy::too_many_arguments)]
 fn generate_opaque_inspect_fn(
     receiver: &FqTypeName,
@@ -4319,38 +4367,45 @@ fn generate_opaque_inspect_fn(
 
     let fmt = || local_expr(1, "f", fmt_type, span);
     let deref_self = deref_local(0, "self", ref_type, resource_type, span);
-    let handle = TirExpr::new(
-        TirExprKind::Cast {
-            expr: Box::new(deref_self),
-            target_type: TypeTable::I32,
-        },
-        TypeTable::I32,
-        span,
-    );
-    let hex_stmt = inspect_call(
-        handle,
-        TypeTable::I32,
-        fmt(),
-        trait_env,
-        module_source,
-        tt,
-        span,
-        lower_hex_trait,
-        lower_hex_method,
-    );
-    let body = TirBlock::new(
-        vec![
-            write_str_stmt(
-                format!("{type_name}#0x"),
-                fmt(),
-                string_type,
-                span,
-                formatter_fq,
-            ),
-            hex_stmt,
-        ],
-        span,
-    );
+    let mut locals = inspect_locals(ref_type, fmt_type);
+    let body = if let ResolvedType::Resource { def } = *tt.get(resource_type)
+        && tt.is_unrestricted_resource(def)
+    {
+        unrestricted_inspect_body(
+            def,
+            type_name,
+            deref_self,
+            fmt(),
+            string_type,
+            &mut locals,
+            tt,
+        )
+    } else {
+        let handle_stmt = inspect_call(
+            common::cast(deref_self, TypeTable::I32),
+            TypeTable::I32,
+            fmt(),
+            trait_env,
+            module_source,
+            tt,
+            span,
+            lower_hex_trait,
+            lower_hex_method,
+        );
+        TirBlock::new(
+            vec![
+                write_str_stmt(
+                    format!("{type_name}#0x"),
+                    fmt(),
+                    string_type,
+                    span,
+                    formatter_fq,
+                ),
+                handle_stmt,
+            ],
+            span,
+        )
+    };
 
     make_synthetic_method(
         qualified_name,
@@ -4358,8 +4413,76 @@ fn generate_opaque_inspect_fn(
         inspect_params(ref_type, fmt_type, span),
         TypeTable::UNIT,
         body,
-        inspect_locals(ref_type, fmt_type),
+        locals,
     )
+}
+
+/// `inspect_handle(f, name, h, class)`, where `name` is the resource the
+/// handle's class names: its dynamic type, or `type_name` where no resource does.
+fn unrestricted_inspect_body(
+    def: DefId,
+    type_name: &str,
+    handle: TirExpr,
+    fmt: TirExpr,
+    string_type: TypeId,
+    locals: &mut Vec<TirLocal>,
+    tt: &TypeTable,
+) -> TirBlock {
+    let mut next_local = u32::try_from(locals.len()).expect("a local index is a u32");
+    let handle_local = common::alloc_local(&mut next_local, locals, TypeTable::F64);
+    let class_local = common::alloc_local(&mut next_local, locals, TypeTable::I32);
+    let h = || common::local_ref(handle_local, "$h", TypeTable::F64);
+    let class = || common::local_ref(class_local, "$class", TypeTable::I32);
+    let class_value = if tt.handle_classes(def).is_some() {
+        common::internal_call(
+            CompilerItem::HandleClass.attr_name(),
+            vec![h(), common::f64_const(HandleClasses::STRIDE)],
+            TypeTable::I32,
+        )
+    } else {
+        common::i32_const(-1)
+    };
+    let name = tt.handle_class_owners(def).fold(
+        common::string_lit(type_name, string_type, synth_span()),
+        |otherwise, (lo, owner)| {
+            let is_owner = common::binary(
+                TirBinaryOp::Eq,
+                class(),
+                common::i32_const(i32::from(lo)),
+                TypeTable::BOOL,
+            );
+            let owner_name = common::string_lit(tt.def_name(owner), string_type, synth_span());
+            TirExpr::new(
+                TirExprKind::If {
+                    condition: Box::new(is_owner),
+                    then_branch: common::block(vec![common::expr_stmt(owner_name)]),
+                    else_branch: Some(common::block(vec![common::expr_stmt(otherwise)])),
+                },
+                string_type,
+                synth_span(),
+            )
+        },
+    );
+    common::block(vec![
+        common::let_stmt(
+            "$h",
+            handle_local,
+            TypeTable::F64,
+            common::handle_to_f64(handle),
+        ),
+        common::let_stmt("$class", class_local, TypeTable::I32, class_value),
+        common::expr_stmt(common::internal_call(
+            CompilerItem::InspectHandle.attr_name(),
+            vec![
+                fmt,
+                name,
+                h(),
+                class(),
+                common::f64_const(HandleClasses::STRIDE),
+            ],
+            TypeTable::UNIT,
+        )),
+    ])
 }
 
 /// Build a `value.inspect(f)` method call statement.
@@ -4560,24 +4683,25 @@ fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
     result
 }
 
-/// Generate `EnumName^Eq::eq(&self, &Self) -> bool`
-///
-/// Body: `return *self == *other;` (i32 comparison via enum discriminant)
-fn generate_enum_eq_fn(
+/// Generate `Name^Eq::eq(&self, &Self) -> bool` for a type that compares as
+/// the scalar `scalar` maps each dereferenced operand to.
+fn generate_scalar_eq_fn(
     receiver: &FqTypeName,
-    enum_type: TypeId,
-    ref_enum_type: TypeId,
+    ty: TypeId,
+    ref_type: TypeId,
     eq_trait_name: &FqTraitName,
     span: Span,
+    scalar: fn(TirExpr) -> TirExpr,
 ) -> TirFunction {
     let method_info = trait_method_info(receiver, eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
+    let operand = |index, name| scalar(deref_local(index, name, ref_type, ty, span));
     let comparison = TirExpr::new(
         TirExprKind::Binary {
-            left: Box::new(deref_local(0, "self", ref_enum_type, enum_type, span)),
+            left: Box::new(operand(0, "self")),
             op: TirBinaryOp::Eq,
-            right: Box::new(deref_local(1, "other", ref_enum_type, enum_type, span)),
+            right: Box::new(operand(1, "other")),
         },
         TypeTable::BOOL,
         span,
@@ -4595,10 +4719,10 @@ fn generate_enum_eq_fn(
     make_synthetic_method(
         qualified_name,
         method_info,
-        binary_method_params(ref_enum_type, span),
+        binary_method_params(ref_type, span),
         TypeTable::BOOL,
         body,
-        binary_method_locals(ref_enum_type),
+        binary_method_locals(ref_type),
     )
 }
 

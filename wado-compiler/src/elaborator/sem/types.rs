@@ -1108,8 +1108,8 @@ pub(crate) enum IndirectCallee {
 
 /// Which TIR-direct desugar path the body walk took at a source-level
 /// rewrite site. The variants enumerate every surface form whose
-/// lowering bypasses synthetic AST construction (see the LSP-friendly
-/// compiler architecture note in `wado-compiler/CLAUDE.md`); reify reads
+/// lowering bypasses synthetic AST construction (see
+/// `docs/compiler.md`); reify reads
 /// this tag to pick the same expansion without re-deciding the shape.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DesugarKind {

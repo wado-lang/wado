@@ -79,11 +79,10 @@ is an established pattern here, not a new risk.
 | `dce` / `drve`             | drops a slot no caller reads — shrinking the ABI further                                            |
 | `match_to_switch`          | the tag test is a dense integer match, so it lowers to `br_table`                                   |
 
-The `docs/optimizer.md` item directly below this one — folding a `match` whose
-scrutinee is a known `VariantConstruct`, blocked because "case known, payload
-opaque" is inexpressible in `const_eval::Value` — becomes reachable for the
-cross-call case for free: after the rewrite the case _is_ an `i32` the constant
-machinery already handles, and the payload is an ordinary opaque local.
+`known_case` folds a `match` whose scrutinee is a known `VariantConstruct`
+within one function. The rewrite extends that to the cross-call case for free:
+the case _is_ an `i32` the constant machinery already handles, and the payload
+is an ordinary opaque local.
 
 None of these are available to a marker-only design at any effort.
 
@@ -411,7 +410,7 @@ fix-points, the return rewriting, the call-site rewriting — is subsumed.
 `return_temp.rs` normalized temps `field_scalarize` left and `wir_build`
 materialized; those temps are gone at their source rather than recognised
 afterwards — see
-[the return temp](#the-return-temp--resolved-in-field_scalarize).
+[the return temp](#the-return-temp-belongs-to-field_scalarize).
 
 | file                     | lines | now                                                 |
 | ------------------------ | ----- | --------------------------------------------------- |

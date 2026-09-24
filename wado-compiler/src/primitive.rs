@@ -94,6 +94,19 @@ impl PrimitiveType {
         })
     }
 
+    /// Bytes one element takes in little-endian data, for the numeric
+    /// primitives a constant array can be read from; `None` for the rest.
+    #[must_use]
+    pub fn data_width(self) -> Option<usize> {
+        Some(match self {
+            Self::I8 | Self::U8 => 1,
+            Self::I16 | Self::U16 | Self::F16 | Self::Bf16 => 2,
+            Self::I32 | Self::U32 | Self::F32 => 4,
+            Self::I64 | Self::U64 | Self::F64 => 8,
+            Self::Bool | Self::Char | Self::V128 => return None,
+        })
+    }
+
     /// The largest value a scalar integer holds; `None` for every other
     /// primitive.
     #[must_use]

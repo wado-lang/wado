@@ -792,7 +792,7 @@ Verified against the tree.
 - [ ] Read a call through `projection_param`, and `&fresh` through
       `is_owned_value`. Together, not separately.
       `projection_param` matches a syntactic chain, so a wrapper that returns a
-      call gets no verdict: `VariantCase::extract`, `Hole::get` and
+      call gets no verdict: `VariantCase::extract`, `TemplateHole::get` and
       `StructField::get` each `return builtin::<part_of builtin>(v, …)`.
       Resolving the callee through `self_projection_param` is sound and gives
       `extract` the verdict "projects `v`".

@@ -1,5 +1,7 @@
 // Token definitions for Wado lexer
 
+use std::fmt;
+
 use crate::ast::AstIdSpace;
 #[derive(Debug, Clone, PartialEq)]
 pub enum TemplateTokenPart {
@@ -246,6 +248,123 @@ impl TokenKind {
     // and `operator_category` are generated from the canonical registries in
     // `crate::syntax`, so the keyword/operator sets cannot drift from the
     // lexer or the editor grammar.
+}
+
+/// A token as a diagnostic names it: as written, or by its kind where the text
+/// can run to any length.
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let spelling = match self {
+            Self::Ident(name) => return write!(f, "identifier `{name}`"),
+            Self::NumberLit(text) => return write!(f, "number `{text}`"),
+            Self::Error(text) => return write!(f, "`{text}`"),
+            Self::StringLit(_) => return f.write_str("a string literal"),
+            Self::ByteStringLit(_) => return f.write_str("a byte string literal"),
+            Self::ByteCharLit(_) => return f.write_str("a byte literal"),
+            Self::CharLit(_) => return f.write_str("a character literal"),
+            Self::TemplateStringLit(_) => return f.write_str("a template literal"),
+            Self::Eof => return f.write_str("end of file"),
+            Self::LParen => "(",
+            Self::RParen => ")",
+            Self::LBrace => "{",
+            Self::RBrace => "}",
+            Self::LBracket => "[",
+            Self::RBracket => "]",
+            Self::Comma => ",",
+            Self::Colon => ":",
+            Self::Semicolon => ";",
+            Self::Dot => ".",
+            Self::Hash => "#",
+            Self::Use
+            | Self::From
+            | Self::As
+            | Self::Fn
+            | Self::With
+            | Self::Let
+            | Self::Mut
+            | Self::Return
+            | Self::If
+            | Self::Else
+            | Self::Match
+            | Self::For
+            | Self::While
+            | Self::Loop
+            | Self::Break
+            | Self::Continue
+            | Self::In
+            | Self::Of
+            | Self::Pub
+            | Self::Internal
+            | Self::Effect
+            | Self::Interface
+            | Self::Reactive
+            | Self::Unique
+            | Self::Struct
+            | Self::Enum
+            | Self::Variant
+            | Self::Flags
+            | Self::Type
+            | Self::Impl
+            | Self::Trait
+            | Self::Resource
+            | Self::Extends
+            | Self::World
+            | Self::Async
+            | Self::Import
+            | Self::Export
+            | Self::Assert
+            | Self::Global
+            | Self::Const
+            | Self::Matches
+            | Self::True
+            | Self::False
+            | Self::Null => self
+                .as_keyword_str()
+                .expect("a keyword token has a spelling"),
+            Self::ColonColon
+            | Self::DotDot
+            | Self::DotDotLt
+            | Self::DotDotEq
+            | Self::DotDotDot
+            | Self::Arrow
+            | Self::FatArrow
+            | Self::Pipe
+            | Self::Ampersand
+            | Self::Eq
+            | Self::EqEq
+            | Self::NotEq
+            | Self::Lt
+            | Self::LtEq
+            | Self::Gt
+            | Self::GtEq
+            | Self::LtLt
+            | Self::GtGt
+            | Self::Plus
+            | Self::Minus
+            | Self::Star
+            | Self::Slash
+            | Self::Percent
+            | Self::Not
+            | Self::And
+            | Self::Or
+            | Self::Caret
+            | Self::Tilde
+            | Self::PlusEq
+            | Self::MinusEq
+            | Self::StarEq
+            | Self::SlashEq
+            | Self::PercentEq
+            | Self::AmpEq
+            | Self::PipeEq
+            | Self::CaretEq
+            | Self::ShlEq
+            | Self::ShrEq
+            | Self::Question => self
+                .operator_str()
+                .expect("an operator token has a spelling"),
+        };
+        write!(f, "`{spelling}`")
+    }
 }
 
 #[derive(Debug, Clone)]

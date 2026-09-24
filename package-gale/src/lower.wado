@@ -1611,8 +1611,18 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
     // An atom alt ends where the LR suffix loop begins, not at the rule's
     // tail, so no probe here may ask the caller's FOLLOW.
     for let idx of non_lr_indices {
-        alts.push(lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx, &case_names, &alt_gc_starts, false));
-        scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx, &rule.name, false));
+        let body = lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx, &case_names, &alt_gc_starts, false);
+        let mut scan = lower_scan_body(&rule.alternatives[*idx], ctx, &rule.name, false);
+        if body.prefix_self_ref_min_prec > 0 {
+            let last = scan.elements.len() - 1;
+            let RuleCall(mut operand) = scan.elements[last] else {
+                panic(`lower_lr_atom: prefix alt ${*idx} of '${rule.name}' does not scan its operand last`);
+            };
+            operand.min_prec_arg = Option::Some(body.prefix_self_ref_min_prec);
+            scan.elements[last] = ScanElement::RuleCall(operand);
+        }
+        alts.push(body);
+        scan_alts.push(scan);
     }
 
     let owner = DiagnosticOwner { rule: rule.name, site: DiagnosticSite::LrAtomDispatch };

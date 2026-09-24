@@ -53,9 +53,9 @@ type "functype//opt_sroa_variant_tail_call.wado/run" = fn();  // TypeId(14)
 
 type "functype//opt_sroa_variant_tail_call.wado/$cm_export__run" = fn();  // TypeId(15)
 
-type "functype//opt_sroa_variant_tail_call.wado/parse_leaf$scalar" = fn(i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(16)
+type "functype//opt_sroa_variant_tail_call.wado/try_parse$scalar" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//opt_sroa_variant_tail_call.wado/try_parse$scalar" = fn(i32) -> i32;  // TypeId(17)
+type "functype//opt_sroa_variant_tail_call.wado/parse_leaf$scalar" = fn(i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(17)
 
 type "functype//opt_sroa_variant_tail_call.wado/parse_via_leaf$scalar" = fn(i32) -> [i32, i32, ref null "core:prelude/string.wado//String"];  // TypeId(18)
 
@@ -200,13 +200,6 @@ fn "opt_sroa_variant_tail_call.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "opt_sroa_variant_tail_call.wado/parse_leaf$scalar"(s) {
-    if s == 0 {
-        return 1, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("empty"), used: 5 };
-    }
-    return 0, s, ref.null none;
-}
-
 fn "opt_sroa_variant_tail_call.wado/try_parse$scalar"(s) {
     let $mv$result$0: i32;
     let $mv$result$1: i32;
@@ -217,6 +210,13 @@ fn "opt_sroa_variant_tail_call.wado/try_parse$scalar"(s) {
     } else {
     }
     return -1;
+}
+
+fn "opt_sroa_variant_tail_call.wado/parse_leaf$scalar"(s) {
+    if s == 0 {
+        return 1, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("empty"), used: 5 };
+    }
+    return 0, s, ref.null none;
 }
 
 fn "opt_sroa_variant_tail_call.wado/parse_via_leaf$scalar"(s) {

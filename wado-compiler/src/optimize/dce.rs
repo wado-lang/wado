@@ -598,9 +598,9 @@ fn collect_bytes_literals_block(body: &Body, root: BlockId, used: &mut IndexSet<
             return ControlFlow::Continue(false);
         }
         if let NodeRef::Expr(e) = node
-            && let ExprKind::PackedArray(b) = &body.exprs[e].kind
+            && let ExprKind::PackedArray(data) = &body.exprs[e].kind
         {
-            used.insert(b.clone());
+            used.insert(data.bytes.clone());
         }
         ControlFlow::Continue(true)
     });

@@ -1,0 +1,49 @@
+// A reference to an unrestricted handle crosses as the handle's `f64` at any
+// depth, inside an `Option` or a record field too.
+
+#[cm("web:demo/node", linearity = "unrestricted", classes = "0..=0")]
+resource Node {}
+
+#[cm("web:demo/global#pair")]
+struct Pair {
+    #[cm("a")]
+    a: &Node,
+    #[cm("b")]
+    b: Option<&Node>,
+}
+
+#[cm("web:demo/global")]
+interface Dom {
+    #[cm("web:demo/global#touch")]
+    fn touch(n: Option<&Node>) -> i32;
+
+    #[cm("web:demo/global#touch-pair")]
+    fn touch_pair(p: Pair) -> i32;
+
+    #[cm("web:demo/global#make-pair")]
+    fn make_pair() -> Pair;
+
+    #[cm("web:demo/global#maybe")]
+    fn maybe() -> Option<&Node>;
+
+    #[cm("web:demo/global#root")]
+    fn root() -> Node;
+}
+
+export fn run() with Dom {
+    let n = Dom::root();
+    let _ = Dom::touch(Some(&n));
+    let _ = Dom::touch_pair(Pair { a: &n, b: Some(&n) });
+    let p = Dom::make_pair();
+    assert *p.a == *Dom::maybe().unwrap();
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "skip_os": true,
+  "wat_lines": [
+    { "contains": ["(record (field \"a\" f64)"], "count": 1 },
+    { "contains": ["borrow"], "count": 0 }
+  ]
+}

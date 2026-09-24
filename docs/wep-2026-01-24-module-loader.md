@@ -15,7 +15,7 @@ Currently, unknown namespaces (e.g., `unknown:foo`) are silently treated as loca
 
 > The namespace grammar and the "unknown namespace = error" rule below are
 > superseded by [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md):
-> a namespace is reserved iff the compiler bundles it (`core`, `wasi`, `web`), every
+> a namespace is reserved iff the compiler bundles it (`core`, `wasi`), every
 > other coordinate namespace is open, and `lib:` is the single indirection
 > namespace. The local / remote / I/O-delegation rules below still hold.
 
@@ -42,7 +42,6 @@ RemotePath := ("http://" | "https://") Url
 1. **Reserved namespace ⇔ bundled namespace**
    - `core:` — Wado standard library (`core:prelude`, `core:cli`, etc.)
    - `wasi:` — WASI interface modules (`wasi:cli`, `wasi:filesystem`, etc.)
-   - `web:` — web platform interface modules (`web:dom`, etc.)
    - Every other coordinate namespace is **open** and resolves from outside
      (default registry, or `with`/manifest source override).
    - `lib:` is the single indirection namespace (alias / rename / private dep).
@@ -81,7 +80,7 @@ pub enum ModuleSource {
     /// Core library module (core:prelude, core:cli, etc.)
     Core { name: String },
 
-    /// Bundled CM binding module (wasi:cli, web:dom, etc.)
+    /// Bundled CM binding module (wasi:cli, wasi:http, etc.)
     Binding { namespace: CmNamespace, interface: String },
 
     /// Local module relative to project (./module.wado, ../lib.wado)
@@ -125,7 +124,7 @@ pub trait CompilerHost {
 }
 ```
 
-- Standard library modules (`core:*`, `wasi:*`, `web:*`) are NOT passed to CompilerHost
+- Standard library modules (`core:*`, `wasi:*`) are NOT passed to CompilerHost
 - They are resolved from embedded sources within the compiler
 
 ### Resolution Flow
@@ -135,7 +134,6 @@ use {foo} from "xxx:yyy"
     │
     ├─ "core:*"   → ModuleSource::Core    → embedded stdlib
     ├─ "wasi:*"   → ModuleSource::Binding → embedded stdlib
-    ├─ "web:*"    → ModuleSource::Binding → embedded stdlib
     ├─ "http://*" → ModuleSource::Remote  → host.load_remote()
     ├─ "https://*"→ ModuleSource::Remote  → host.load_remote()
     ├─ "./*"      → ModuleSource::Local   → host.load_source()

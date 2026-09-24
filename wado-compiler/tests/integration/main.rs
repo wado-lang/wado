@@ -44,6 +44,7 @@ mod lib_async_task_return_free;
 mod lib_async_void_export;
 mod lib_future_payload_name_collides_with_cli;
 mod lib_sync_lift_post_return;
+mod lib_unrestricted_handle_export;
 mod literals;
 mod loader_canonical_identity;
 mod match_place_scrutinee;

@@ -1,0 +1,40 @@
+// A class range numbers a resource and everything that extends it, so a child's
+// range sits past its parent's own class and inside the parent's range, and no
+// two siblings share a class. An `extends` tree is numbered whole or not at all.
+#[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted", classes = "0..=3")]
+resource EventTarget {}
+
+#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted", classes = "1..=2")]
+resource Node extends EventTarget {}
+
+#[cm("wasi:demo/events@0.1.0#window", linearity = "unrestricted", classes = "2..=3")]
+resource Window extends EventTarget {}
+
+#[cm("wasi:demo/events@0.1.0#element", linearity = "unrestricted", classes = "1..=1")]
+resource Element extends Node {}
+
+#[cm("wasi:demo/events@0.1.0#text", linearity = "unrestricted")]
+resource Text extends Node {}
+
+#[cm("wasi:demo/events@0.1.0#other", linearity = "unrestricted", classes = "0..=1")]
+resource Other {}
+
+#[cm("wasi:demo/events@0.1.0#below", linearity = "unrestricted", classes = "1..=1")]
+resource Below extends Other {}
+
+#[cm("wasi:demo/events@0.1.0#past", linearity = "unrestricted", classes = "5..=5")]
+resource Past extends Other {}
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": "`Window` numbers classes 2..=3, which overlap `Node`'s 1..=2 under `EventTarget`",
+    "compile_errors_contains": [
+        "`Element` numbers classes 1..=1, which do not lie past `Node`'s own class 1 inside its 1..=2",
+        "`Text` declares no `classes`, but `Node`, which it extends, does",
+        "`Past` numbers classes 5..=5, which do not lie past `Other`'s own class 0 inside its 0..=1"
+    ],
+    "compile_errors_not_contains": ["`Below`"],
+    "compile_error_codes": ["RESOURCE_CLASSES"]
+}

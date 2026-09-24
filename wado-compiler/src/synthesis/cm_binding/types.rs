@@ -22,7 +22,9 @@ use crate::component_model::map_key_rejection;
 use crate::component_model::{future_payload_rejection, stream_payload_rejection};
 use crate::defs::DefId;
 use crate::name::{FqTraitName, FqTypeName};
-use crate::synthesis::common::{binary, builtin_call, cast, i32_const, i64_const, synth_span};
+use crate::synthesis::common::{
+    binary, builtin_call, cast, f64_const, i32_const, i64_const, synth_span,
+};
 use crate::tir::StructDef;
 
 /// Snapshot of the stdlib type / variant names CM binding matches against,
@@ -425,6 +427,11 @@ pub fn cm_type_to_type_id(
                 .map(|t| cm_held_type_to_type_id(t, type_table, registry, wasi_package))
                 .collect();
             type_table.make_tuple(resolved)
+        }
+        Type::Reference(inner) | Type::MutReference(inner)
+            if registry.extern_handle(ty).is_some() =>
+        {
+            cm_type_to_type_id(inner, type_table, registry, wasi_package)
         }
         // Borrowed resource handles are i32 at the CM boundary.
         Type::Reference(_) | Type::MutReference(_) => TypeTable::I32,
@@ -925,22 +932,48 @@ pub(super) fn cm_layout_i32(ty: &Type, registry: &CmInterfaceRegistry) -> (i32, 
 }
 
 /// The integer store for one flat value of `ty`, at the width its CM layout
-/// gives it. A type arriving as several values is not one store.
+/// gives it. An unrestricted handle stores its `f64` bits as the `u64` it is.
 pub(super) fn scalar_store_op(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
     names: &CmStdlibNames,
 ) -> &'static str {
-    if flatten_param_type(ty, cm_interface_registry, names).len() != 1 {
-        return "i32_store";
+    if cm_interface_registry.extern_handle(ty).is_some() {
+        return "i64_store";
     }
-    match cm_layout_with_registry(ty, cm_interface_registry).0 {
-        1 => "i32_store8",
-        2 => "i32_store16",
-        4 => "i32_store",
-        8 => "i64_store",
-        other => panic!("a one-value CM type cannot be {other} bytes wide: {ty:?}"),
+    match flatten_param_type(ty, cm_interface_registry, names)[..] {
+        [TypeTable::F64] => "f64_store",
+        [TypeTable::F32] => "f32_store",
+        [TypeTable::I64] => "i64_store",
+        [TypeTable::I32] => match cm_layout_with_registry(ty, cm_interface_registry).0 {
+            1 => "i32_store8",
+            2 => "i32_store16",
+            4 => "i32_store",
+            other => panic!("a one-`i32` CM type cannot be {other} bytes wide: {ty:?}"),
+        },
+        ref flat => panic!("`{ty:?}` flattens to {flat:?}, not one scalar"),
     }
+}
+
+/// The load that reads back a one-value CM type with no sized declaration, and
+/// the type it yields. The inverse of [`scalar_store_op`].
+pub(super) fn handle_load_op(
+    ty: &Type,
+    cm_interface_registry: &CmInterfaceRegistry,
+) -> (&'static str, TypeId) {
+    if cm_interface_registry.extern_handle(ty).is_some() {
+        return ("i64_load", TypeTable::U64);
+    }
+    let [flat] = cm_interface_registry.cm_flatten(ty)[..] else {
+        panic!("a handle is one flat value: {ty:?}");
+    };
+    let load = match flat {
+        cm_abi::CmValType::I32 => "i32_load",
+        cm_abi::CmValType::I64 => "i64_load",
+        cm_abi::CmValType::F32 => "f32_load",
+        cm_abi::CmValType::F64 => "f64_load",
+    };
+    (load, cm_val_type_to_type_id(flat))
 }
 
 /// Check whether a return type needs lifting from a flat i32 discriminant to a GC struct.
@@ -1003,12 +1036,12 @@ fn flatten_export_type_inner(
                     flatten_variant_type(&variant_decl, out, tir_modules, type_table, names);
                 } else if let Some(struct_decl) = find_struct_decl(&named.name, tir_modules) {
                     flatten_struct_type(&struct_decl, out, tir_modules, type_table, names);
-                } else if let Some(nt_type_id) = find_newtype_type_id(&named.name, tir_modules) {
-                    // A newtype flattens as its base, not the i32 fallback below,
-                    // so the flat signature matches the canonical ABI.
-                    flat_types_from_type_id_inner(nt_type_id, out, tir_modules, type_table, names);
+                } else if let Some(type_id) = find_newtype_type_id(&named.name, tir_modules)
+                    .or_else(|| find_resource_type_id(&named.name, tir_modules, type_table))
+                {
+                    flat_types_from_type_id_inner(type_id, out, tir_modules, type_table, names);
                 } else {
-                    // Resource handles, enums, unknown → i32
+                    // Enums, unknown → i32
                     out.push(cm_abi::CmValType::I32);
                 }
             }
@@ -1151,7 +1184,13 @@ fn flat_types_from_type_id_inner(
                 panic!("struct `{name}` has no TIR declaration; cannot compute its flat CM types");
             }
         }
-        ResolvedType::Resource { .. } => out.push(cm_abi::CmValType::I32),
+        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+            out.push(if type_table.is_unrestricted_handle(type_id) {
+                cm_abi::CmValType::F64
+            } else {
+                cm_abi::CmValType::I32
+            });
+        }
         ResolvedType::Enum { .. } => out.push(cm_abi::CmValType::I32),
         ResolvedType::Variant { def } => {
             if let Some(variant_decl) = variant_decl_of(*def, tir_modules) {
@@ -1202,9 +1241,6 @@ fn flat_types_from_type_id_inner(
         }
         ResolvedType::Flags { .. } => {
             // Flags are u32 at the CM ABI level
-            out.push(cm_abi::CmValType::I32);
-        }
-        ResolvedType::GenericResource { .. } => {
             out.push(cm_abi::CmValType::I32);
         }
         _ => {} // Never, Error, Unknown, etc.
@@ -1290,6 +1326,19 @@ pub(super) fn find_newtype_type_id(
         .find_map(|nt| nt.type_id)
 }
 
+/// Find the `TypeId` of a resource declaration by name across all TIR modules.
+pub(super) fn find_resource_type_id(
+    name: &str,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &TypeTable,
+) -> Option<TypeId> {
+    tir_modules
+        .values()
+        .flat_map(|module| &module.resources)
+        .filter(|resource| resource.name == name)
+        .find_map(|resource| type_table.find_resource_type(resource.def))
+}
+
 /// Create a `VariantTag` TIR expression (extracts i32 discriminant).
 pub(super) fn variant_tag(expr: TirExpr) -> TirExpr {
     let _ = expr.type_id;
@@ -1368,14 +1417,7 @@ pub(super) fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
             TypeTable::F32,
             synth_span(),
         ),
-        cm_abi::CmValType::F64 => TirExpr::new(
-            TirExprKind::FloatLiteral {
-                value: 0.0,
-                repr: "0.0".to_string(),
-            },
-            TypeTable::F64,
-            synth_span(),
-        ),
+        cm_abi::CmValType::F64 => f64_const(0.0),
     }
 }
 
@@ -1518,11 +1560,11 @@ pub(super) fn param_needs_lifting(type_id: TypeId, tt: &TypeTable) -> bool {
     match tt.get(type_id) {
         ResolvedType::Primitive(prim) => matches!(prim, PrimitiveType::Bool),
         ResolvedType::Unit => true,
-        // Single-i32 handle-shaped types flow through.
-        ResolvedType::Resource { .. }
-        | ResolvedType::Enum { .. }
-        | ResolvedType::Flags { .. }
-        | ResolvedType::GenericResource { .. } => false,
+        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+            tt.is_unrestricted_handle(type_id)
+        }
+        // One-scalar handle-shaped types flow through.
+        ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => false,
         // `ResolvedType::Newtype` unwraps at the CM boundary, so recurse on
         // the base type rather than treating the newtype itself as
         // opaque.
@@ -1556,16 +1598,11 @@ mod tests {
             cm_package_from_source("wasi:filesystem/types@0.3.0"),
             Some((CmNamespace::Wasi, "filesystem"))
         );
-        assert_eq!(
-            cm_package_from_source("web:dom/types"),
-            Some((CmNamespace::Web, "dom"))
-        );
         // `core:` is not a `CmNamespace`; the kiln lookups own those.
         assert_eq!(cm_package_from_source("core:kiln/types@0.1.0"), None);
         assert_eq!(cm_package_from_source("my:pkg/iface"), None);
     }
 
-    /// A module name alone cannot tell `wasi:dom/node` from `web:dom/node`.
     #[test]
     fn a_cm_interface_module_carries_the_namespace_that_owns_it() {
         assert_eq!(
@@ -1574,10 +1611,6 @@ mod tests {
                 Some(CmNamespace::Wasi),
                 "sockets/ip_name_lookup.wado".into()
             ))
-        );
-        assert_eq!(
-            cm_interface_module("web:dom/node"),
-            Some((Some(CmNamespace::Web), "dom/node.wado".into()))
         );
         // A `core:` module carries no `CmNamespace`, and must not pair with one.
         assert_eq!(

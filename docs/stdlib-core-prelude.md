@@ -891,6 +891,19 @@ UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
 
 #### `fn as_byte_slice(&self) -> ByteSlice`
 
+### `pub trait FromLeBytes with ()`
+
+A fixed-width number that reads from little-endian bytes, as
+`List::from_le_bytes` does.
+
+#### `fn bits() -> i32`
+
+The width in bits: the type's `BITS`, until a trait can declare one (#2141).
+
+#### `fn from_le_at(bytes: ByteSlice, at: i32) -> Self`
+
+The value whose `bits() / 8` bytes start at `at`.
+
 ### `pub trait Step with ()`
 
 Types that can be incremented by one step (for range iteration).
@@ -1180,6 +1193,8 @@ An owned, fixed-length byte buffer.
 
 ### `f32`
 
+#### `pub const BITS: i32`
+
 #### `pub const PI: f32`
 
 #### `pub const TAU: f32`
@@ -1207,6 +1222,36 @@ An owned, fixed-length byte buffer.
 #### `pub const NEG_INFINITY: f32`
 
 #### `pub const NAN: f32`
+
+#### `pub const MAX: f32`
+
+#### `pub const MIN: f32`
+
+#### `pub const MIN_POSITIVE: f32`
+
+The smallest positive normal value.
+
+#### `pub const EPSILON: f32`
+
+The gap between 1.0 and the next larger value.
+
+#### `pub const RADIX: i32`
+
+#### `pub const MANTISSA_DIGITS: i32`
+
+Significand bits, the implicit leading one included.
+
+#### `pub const DIGITS: i32`
+
+Decimal digits that survive a round trip through the type.
+
+#### `pub const MIN_EXP: i32`
+
+#### `pub const MAX_EXP: i32`
+
+#### `pub const MIN_10_EXP: i32`
+
+#### `pub const MAX_10_EXP: i32`
 
 #### `pub fn to_string(&self) -> String`
 
@@ -1437,7 +1482,15 @@ Creates an f32 from its bit representation.
 
 ##### `pub fn try_from(value: u64) -> Result<f32, ConvertError>`
 
+#### `impl FromLeBytes for f32`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f32`
+
 ### `f64`
+
+#### `pub const BITS: i32`
 
 #### `pub const PI: f64`
 
@@ -1466,6 +1519,36 @@ Creates an f32 from its bit representation.
 #### `pub const NEG_INFINITY: f64`
 
 #### `pub const NAN: f64`
+
+#### `pub const MAX: f64`
+
+#### `pub const MIN: f64`
+
+#### `pub const MIN_POSITIVE: f64`
+
+The smallest positive normal value.
+
+#### `pub const EPSILON: f64`
+
+The gap between 1.0 and the next larger value.
+
+#### `pub const RADIX: i32`
+
+#### `pub const MANTISSA_DIGITS: i32`
+
+Significand bits, the implicit leading one included.
+
+#### `pub const DIGITS: i32`
+
+Decimal digits that survive a round trip through the type.
+
+#### `pub const MIN_EXP: i32`
+
+#### `pub const MAX_EXP: i32`
+
+#### `pub const MIN_10_EXP: i32`
+
+#### `pub const MAX_10_EXP: i32`
 
 #### `pub const MAX_SAFE_INTEGER: f64`
 
@@ -1710,7 +1793,51 @@ Creates an f64 from its bit representation.
 
 ##### `pub fn try_from(value: u64) -> Result<f64, ConvertError>`
 
+#### `impl FromLeBytes for f64`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f64`
+
 ### `f16`
+
+#### `pub const BITS: i32`
+
+#### `pub const MAX: f16`
+
+#### `pub const MIN: f16`
+
+#### `pub const MIN_POSITIVE: f16`
+
+The smallest positive normal value.
+
+#### `pub const EPSILON: f16`
+
+The gap between 1.0 and the next larger value.
+
+#### `pub const INFINITY: f16`
+
+#### `pub const NEG_INFINITY: f16`
+
+#### `pub const NAN: f16`
+
+#### `pub const RADIX: i32`
+
+#### `pub const MANTISSA_DIGITS: i32`
+
+Significand bits, the implicit leading one included.
+
+#### `pub const DIGITS: i32`
+
+Decimal digits that survive a round trip through the type.
+
+#### `pub const MIN_EXP: i32`
+
+#### `pub const MAX_EXP: i32`
+
+#### `pub const MIN_10_EXP: i32`
+
+#### `pub const MAX_10_EXP: i32`
 
 #### `pub fn to_bits(&self) -> u16`
 
@@ -1725,9 +1852,21 @@ Creates an f16 from its bit representation.
 Rounds `v` to the nearest f16, ties to even, saturating to an infinity.
 Use `f16::try_from` where an inexact value should be refused instead.
 
+#### `pub fn from_f64(v: f64) -> f16`
+
+Rounds `v` once to the nearest f16, ties to even, saturating to an infinity.
+
 #### `pub fn is_nan(&self) -> bool`
 
 True for a NaN, quiet or signaling.
+
+#### `impl FromStr for f16`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<f16, ParseFloatError>`
+
+#### `impl LenientFromStr for f16`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f16, LenientParseError>`
 
 #### `impl TryFrom<f32> for f16`
 
@@ -1767,7 +1906,51 @@ True for a NaN, quiet or signaling.
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
 
+#### `impl FromLeBytes for f16`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f16`
+
 ### `bf16`
+
+#### `pub const BITS: i32`
+
+#### `pub const MAX: bf16`
+
+#### `pub const MIN: bf16`
+
+#### `pub const MIN_POSITIVE: bf16`
+
+The smallest positive normal value.
+
+#### `pub const EPSILON: bf16`
+
+The gap between 1.0 and the next larger value.
+
+#### `pub const INFINITY: bf16`
+
+#### `pub const NEG_INFINITY: bf16`
+
+#### `pub const NAN: bf16`
+
+#### `pub const RADIX: i32`
+
+#### `pub const MANTISSA_DIGITS: i32`
+
+Significand bits, the implicit leading one included.
+
+#### `pub const DIGITS: i32`
+
+Decimal digits that survive a round trip through the type.
+
+#### `pub const MIN_EXP: i32`
+
+#### `pub const MAX_EXP: i32`
+
+#### `pub const MIN_10_EXP: i32`
+
+#### `pub const MAX_10_EXP: i32`
 
 #### `pub fn to_bits(&self) -> u16`
 
@@ -1782,9 +1965,21 @@ Creates a bf16 from its bit representation.
 Rounds `v` to the nearest bf16, ties to even. bf16 takes f32's exponent
 field as is, so the top 16 bits are the result and only the mantissa rounds.
 
+#### `pub fn from_f64(v: f64) -> bf16`
+
+Rounds `v` once to the nearest bf16, ties to even.
+
 #### `pub fn is_nan(&self) -> bool`
 
 True for a NaN, quiet or signaling.
+
+#### `impl FromStr for bf16`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<bf16, ParseFloatError>`
+
+#### `impl LenientFromStr for bf16`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<bf16, LenientParseError>`
 
 #### `impl TryFrom<f32> for bf16`
 
@@ -1824,7 +2019,15 @@ True for a NaN, quiet or signaling.
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
 
+#### `impl FromLeBytes for bf16`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> bf16`
+
 ### `i64`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: i64`
 
@@ -1944,11 +2147,19 @@ Counts the number of set bits (population count).
 
 ##### `pub fn try_from(value: u64) -> Result<i64, ConvertError>`
 
+#### `impl FromLeBytes for i64`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> i64`
+
 #### `impl Step for i64`
 
 ##### `fn next_step(&self) -> Option<i64>`
 
 ### `u64`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: u64`
 
@@ -2044,11 +2255,19 @@ Counts the number of set bits (population count).
 
 ##### `pub fn try_from(value: i64) -> Result<u64, ConvertError>`
 
+#### `impl FromLeBytes for u64`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> u64`
+
 #### `impl Step for u64`
 
 ##### `fn next_step(&self) -> Option<u64>`
 
 ### `i8`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: i8`
 
@@ -2132,11 +2351,19 @@ Counts the number of set bits (population count).
 
 ##### `pub fn try_from(value: i16) -> Result<i8, ConvertError>`
 
+#### `impl FromLeBytes for i8`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> i8`
+
 #### `impl Step for i8`
 
 ##### `fn next_step(&self) -> Option<i8>`
 
 ### `i16`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: i16`
 
@@ -2224,11 +2451,19 @@ Counts the number of set bits (population count).
 
 ##### `pub fn try_from(value: i32) -> Result<i16, ConvertError>`
 
+#### `impl FromLeBytes for i16`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> i16`
+
 #### `impl Step for i16`
 
 ##### `fn next_step(&self) -> Option<i16>`
 
 ### `i32`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: i32`
 
@@ -2336,11 +2571,19 @@ Counts the number of set bits (population count).
 
 ##### `pub fn try_from(value: i64) -> Result<i32, ConvertError>`
 
+#### `impl FromLeBytes for i32`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> i32`
+
 #### `impl Step for i32`
 
 ##### `fn next_step(&self) -> Option<i32>`
 
 ### `u8`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: u8`
 
@@ -2462,11 +2705,19 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 ##### `pub fn try_from(value: u16) -> Result<u8, ConvertError>`
 
+#### `impl FromLeBytes for u8`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> u8`
+
 #### `impl Step for u8`
 
 ##### `fn next_step(&self) -> Option<u8>`
 
 ### `u16`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: u16`
 
@@ -2546,11 +2797,19 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 ##### `pub fn try_from(value: u32) -> Result<u16, ConvertError>`
 
+#### `impl FromLeBytes for u16`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> u16`
+
 #### `impl Step for u16`
 
 ##### `fn next_step(&self) -> Option<u16>`
 
 ### `u32`
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: u32`
 
@@ -2641,6 +2900,12 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `impl TryFrom<u64> for u32`
 
 ##### `pub fn try_from(value: u64) -> Result<u32, ConvertError>`
+
+#### `impl FromLeBytes for u32`
+
+##### `fn bits() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> u32`
 
 #### `impl Step for u32`
 
@@ -2809,6 +3074,187 @@ Encodes this character as UTF-8, returning the bytes.
 ##### `pub fn inspect(&self, f: &mut Formatter)`
 
 ## Structs
+
+### `pub struct VariantCase<T, P>`
+
+A case handle minted by `ReflectVariant::members()`: the payload type `P`
+is static, the case index is a value. `extract` / `construct` bridge a
+variant value and its payload in both directions.
+See WEP 2026-06-13 §3e.
+
+_Fields are private._
+
+#### `pub fn discriminant(&self) -> i32`
+
+The case's tag.
+
+#### `pub fn is_unit(&self) -> bool`
+
+Whether the case carries no payload.
+
+#### `pub fn holds(&self, v: &T) -> bool`
+
+Whether `v`'s live case is this case.
+
+#### `pub fn extract(&self, v: &T) -> P`
+
+The payload of this case in `v`. Traps unless `holds(v)`.
+
+#### `pub fn construct(&self, payload: P) -> T`
+
+Builds this case around `payload`.
+
+#### `pub fn make(&self) -> T`
+
+Builds this case with no payload. Traps unless `is_unit()`.
+
+#### `impl Member for VariantCase<T, P>`
+
+##### `fn name(&self) -> String`
+
+##### `fn wire_name_override(&self) -> Option<String>`
+
+#### `impl Inspect for VariantCase<T, P>`
+
+##### `fn inspect(&self, f: &mut Formatter)`
+
+### `pub struct EnumCase<T>`
+
+A case handle minted by `ReflectEnum::members()`: an enum case carries
+no payload, so the member holds the case value itself. `make` mints it and
+`holds` tests a value's live case. See WEP 2026-06-13 §3b.
+
+_Fields are private._
+
+#### `pub fn discriminant(&self) -> i32`
+
+The case's discriminant.
+
+#### `pub fn holds(&self, v: &T) -> bool`
+
+Whether `v` is this case.
+
+#### `pub fn make(&self) -> T`
+
+The enum value for this case.
+
+#### `impl Member for EnumCase<T>`
+
+##### `fn name(&self) -> String`
+
+##### `fn wire_name_override(&self) -> Option<String>`
+
+#### `impl Inspect for EnumCase<T>`
+
+##### `fn inspect(&self, f: &mut Formatter)`
+
+### `pub struct FlagsBit<T>`
+
+A bit handle minted by `ReflectFlags::members()`: the member holds the
+single-bit flags value. `set` mints it and `is_set` tests a value for the
+bit. See WEP 2026-06-13 §3c.
+
+_Fields are private._
+
+#### `pub fn bit(&self) -> u64`
+
+The member's bitmask, u64-normalized.
+
+#### `pub fn is_set(&self, v: &T) -> bool`
+
+Whether `v` has this bit set.
+
+#### `pub fn set(&self) -> T`
+
+The flags value with only this bit set.
+
+#### `impl Member for FlagsBit<T>`
+
+##### `fn name(&self) -> String`
+
+##### `fn wire_name_override(&self) -> Option<String>`
+
+#### `impl Inspect for FlagsBit<T>`
+
+##### `fn inspect(&self, f: &mut Formatter)`
+
+### `pub struct TemplateHole<T, V>`
+
+A hole handle minted by `ReflectTemplate::members()`: the literal text
+before the hole, the hole's source text and specifier presence are
+constants, and `get` / `fmt` reach the hole's value in a template.
+See WEP 2026-01-10.
+
+_Fields are private._
+
+#### `pub fn index(&self) -> i32`
+
+The hole's position in the template.
+
+#### `pub fn lit(&self) -> String`
+
+The literal text between the previous hole (or the start) and this
+one, escapes processed.
+
+#### `pub fn raw(&self) -> String`
+
+`lit()` with escapes preserved: `\n` is a backslash and an `n`.
+
+#### `pub fn source(&self) -> String`
+
+The hole's expression as written: `"user.name"`.
+
+#### `pub fn has_spec(&self) -> bool`
+
+Whether the hole wrote a `:spec`.
+
+#### `pub fn get(&self, t: &T) -> V`
+
+The hole's value in `t`.
+
+#### `pub fn fmt(&self, t: &T, f: &mut Formatter)`
+
+Renders the value as the untagged template would: the trait method
+the specifier's type selects (`Display::fmt` when it names none), on a
+`Formatter` carrying the specifier's settings over `f`'s buffer.
+
+### `pub struct StructField<T, F>`
+
+A field handle minted by `ReflectStruct::members()`: the field type `F` is
+static, and `get` reads the field's value out of a struct. See WEP 2026-06-13.
+
+_Fields are private._
+
+#### `pub fn index(&self) -> i32`
+
+The field's declaration index.
+
+#### `pub fn has_default(&self) -> bool`
+
+Whether the field declares a default value.
+
+#### `pub fn is_secret(&self) -> bool`
+
+Whether the field is marked `#[secret]`.
+
+#### `pub fn wire_number(&self) -> i32`
+
+The field's `#[wire(number = N)]`, or `0` where it carries none: a
+field number starts at 1, so zero is the format's own non-number.
+
+#### `pub fn get(&self, v: &T) -> F`
+
+The value of this field in `v`.
+
+#### `impl Member for StructField<T, F>`
+
+##### `fn name(&self) -> String`
+
+##### `fn wire_name_override(&self) -> Option<String>`
+
+#### `impl Inspect for StructField<T, F>`
+
+##### `fn inspect(&self, f: &mut Formatter)`
 
 ### `pub struct IterMap<I: Iterator, U>`
 
@@ -3108,6 +3554,8 @@ Stored as two 64-bit parts: low (bits 0-63) and high (bits 64-127)
 
 _Fields are private._
 
+#### `pub const BITS: i32`
+
 #### `pub const MAX: u128`
 
 #### `pub const MIN: u128`
@@ -3327,6 +3775,8 @@ Signed 128-bit integer
 Stored as two 64-bit parts: low (bits 0-63, unsigned) and high (bits 64-127, signed)
 
 _Fields are private._
+
+#### `pub const BITS: i32`
 
 #### `pub const MAX: i128`
 
@@ -4699,6 +5149,13 @@ Returns a new list containing this list's elements repeated `n` times.
 Copies `count` elements from `self[src_start..]` and appends them.
 Handles overlapping regions correctly for both non-overlapping and DEFLATE-style
 run-length expansion (where src < dst). Forward order is correct in both cases.
+
+#### `pub fn from_le_bytes<B: AsByteSlice>(bytes: B) -> List<T>`
+
+`#[compiler_item("list_from_le_bytes")]`
+
+The `T`s `bytes` holds, little-endian and back to back; panics on a partial
+`T`. A literal argument folds to a constant, with no decode loop.
 
 #### `pub fn contains(&self, value: &T) -> bool`
 

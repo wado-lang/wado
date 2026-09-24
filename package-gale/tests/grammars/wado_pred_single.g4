@@ -12,6 +12,11 @@ item : {false}? A { p.emit("alt0"); }
      | B { p.emit("alt2"); }
      ;
 
+// Reached through a scan: its predicate must reject `A` there too.
+pick : gated X | A X ;
+gated : {false}? A | B ;
+
 A : 'a' ;
 B : 'b' ;
+X : 'x' ;
 WS : ' ' -> skip ;

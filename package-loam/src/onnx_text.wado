@@ -5,7 +5,20 @@ use onnx from "../grammar/Onnx.g4"
         generator: { module: "../../package-gale/src/generator.wado" },
     };
 
-use { Attr, Dim, Graph, Node, Rank, ValueInfo, parameters } from "./graph.wado";
+use {
+    Attr,
+    Dim,
+    Graph,
+    Node,
+    Rank,
+    ValueInfo,
+    bit_pattern,
+    check_element_count,
+    element_of,
+    parameters,
+    push_element,
+    static_extents,
+} from "./graph.wado";
 
 /// Read a graph out of the ONNX textual format. A syntax error comes back as
 /// the first diagnostic; anything the reader does not cover names itself.
@@ -75,24 +88,87 @@ fn read_value_info(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32) -> Res
     let Some(tensor) = first_child_of_kind(s, type_node, onnx::RK_TENSOR_TYPE) else {
         return Result::Err(`${name}: only a tensor type is read, not a sequence or a map`);
     };
-    // Loam takes its weights from the checkpoint the invocation names, so
-    // dropping this would leave a tensor whose data came from nowhere.
-    if has_external_data(s, vi) {
-        return Result::Err(
-            `${name}: an initializer whose data lives in another file is not read`,
-        );
-    }
     let [dtype, rank] = read_tensor_type(s, toks, tensor);
-    return Result::Ok(ValueInfo { name, dtype, rank });
+    let data = read_constant_data(s, toks, vi, &name, &dtype, &rank)?;
+    return Result::Ok(ValueInfo { name, dtype, rank, data });
 }
 
-/// Whether an initializer's data is a `["location": ...]` list naming a file,
-/// rather than inline values or the checkpoint.
-fn has_external_data(s: &onnx::CstStore, vi: i32) -> bool {
+/// A value's inline elements as the little-endian bytes the protobuf form
+/// carries, each read as ONNX's parser reads it (`onnx/defs/parser.cc`).
+fn read_constant_data(
+    s: &onnx::CstStore,
+    toks: &onnx::TokenStream,
+    vi: i32,
+    name: &String,
+    dtype: &String,
+    rank: &Rank,
+) -> Result<Option<ByteList>, String> {
     let Some(data) = first_child_of_kind(s, vi, onnx::RK_CONSTANT_DATA) else {
-        return false;
+        return Result::Ok(null);
     };
-    return first_child_of_kind(s, data, onnx::RK_EXTERNAL_DATA) matches { Some(_) };
+    // Loam takes its weights from the graph or the checkpoint the invocation
+    // names, so dropping this would leave a tensor whose data came from nowhere.
+    let Some(values) = first_child_of_kind(s, data, onnx::RK_TENSOR_VALUES) else {
+        return Result::Err(`${name}: an initializer whose data lives in another file is not read`);
+    };
+    let Some(element) = element_of(dtype) else {
+        return Result::Ok(null);
+    };
+    let width = element.width;
+    let Some(extents) = static_extents(rank) else {
+        return Result::Err(`${name}: inline values need every extent stated`);
+    };
+    let elements = children_of_kind(s, values, onnx::RK_TENSOR_ELEM);
+    check_element_count(name, elements.len(), &extents)?;
+    let mut bytes = ByteList::with_capacity(elements.len() * width);
+    for let e of elements {
+        let text = literal_text(toks, first_token(s, e));
+        push_element(&mut bytes, element_bits(name, &text, dtype, width)?, width);
+    }
+    return Result::Ok(Option::Some(bytes));
+}
+
+/// An element's bits in `dtype`, `width` bytes wide. ONNX writes a half as the
+/// integer its `int32_data` holds, not as a decimal.
+fn element_bits(name: &String, text: &String, dtype: &String, width: i32) -> Result<u32, String> {
+    if *dtype == "float" {
+        let Ok(v) = f32::from_str(text) else {
+            return Result::Err(`${name}: ${text} is not a float`);
+        };
+        return Result::Ok(v.to_bits());
+    }
+    let Ok(v) = i32::from_str(text) else {
+        return Result::Err(`${name}: ${text} is not a ${dtype} bit pattern`);
+    };
+    return bit_pattern(name, dtype, v, width);
+}
+
+/// A literal token's value as text `FromStr` reads: a string without its
+/// quotes, and a float with a digit after its point.
+fn literal_text(toks: &onnx::TokenStream, token: i32) -> String {
+    let text = toks.token_text(token);
+    if toks.kind_at(token) == onnx::TK_FLOAT {
+        return digit_after_point(&text);
+    }
+    return unquote(text);
+}
+
+/// ONNX's float literal may end its fraction at the point (`1.`, `1.e5`), which
+/// `f32::from_str` refuses.
+fn digit_after_point(text: &String) -> String {
+    let mut spelled = String::with_capacity(text.len() + 1);
+    let mut after_point = false;
+    for let c of text.chars() {
+        if after_point && !c.is_ascii_digit() {
+            spelled.push('0');
+        }
+        spelled.push(c);
+        after_point = c == '.';
+    }
+    if after_point {
+        spelled.push('0');
+    }
+    return spelled;
 }
 
 fn read_tensor_type(s: &onnx::CstStore, toks: &onnx::TokenStream, tensor: i32) -> [String, Rank] {
@@ -222,7 +298,7 @@ fn single_attr_text(
 ) -> Result<String, String> {
     for let c of children(s, single) {
         if s.is_token(c) {
-            return Result::Ok(unquote(toks.token_text(s.token_index(c))));
+            return Result::Ok(literal_text(toks, s.token_index(c)));
         }
         if s.is_node(c) {
             return Result::Err(`${attr_name}: an inline tensor or subgraph attribute is not read`);
@@ -241,9 +317,13 @@ fn quotable_text(s: &onnx::CstStore, toks: &onnx::TokenStream, node: i32) -> Str
 /// element is one, so a node with none is a grammar that moved under the
 /// reader.
 fn first_token_text(s: &onnx::CstStore, toks: &onnx::TokenStream, node: i32) -> String {
+    return toks.token_text(first_token(s, node));
+}
+
+fn first_token(s: &onnx::CstStore, node: i32) -> i32 {
     for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
         if s.is_token(c) {
-            return toks.token_text(s.token_index(c));
+            return s.token_index(c);
         }
     }
     panic(`${s.kind(node)}: expected a terminal`);
