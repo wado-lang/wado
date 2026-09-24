@@ -2180,6 +2180,17 @@ impl CompilerItems {
         }
     }
 
+    /// Module + name of a [`CompilerItemKind::Function`] item.
+    pub fn require_function(&self, item: CompilerItem) -> (&ModuleSource, &str) {
+        match self.require(item) {
+            Resolved::Function {
+                module_source,
+                name,
+            } => (module_source, name.as_str()),
+            other => kind_mismatch_ice(item, "Function", other),
+        }
+    }
+
     /// Module + owner-type name + method name of a
     /// [`CompilerItemKind::Method`] item.
     pub fn require_method(&self, item: CompilerItem) -> (&ModuleSource, &str, &str) {

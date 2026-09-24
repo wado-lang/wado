@@ -5,7 +5,6 @@
 //! `FunctionContext` must land the same locals, at the same indices, annotate did.
 
 use super::sig::AssocConstSig;
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
@@ -17,7 +16,7 @@ use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Sever
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::module_source::ModuleSource;
 use crate::name::{
     FqTypeName, IDENTITY_TEST_METHOD, INTERNAL_PREFIX, NARROWING_TEST_METHOD, Receiver,
     global_init_function, global_name,
@@ -375,9 +374,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     pub(crate) current_module_source: ModuleSource,
     /// Items of the current module, set before per-Item dispatch.
     pub(crate) current_module_items: &'a [Item],
-    /// `ModuleSource` interner. Shared with annotate so cross-pass
-    /// references resolve to the same `ModuleSource` identity.
-    pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
     /// Names of the effect parameters (`<effect E>`) in scope for the
     /// function / method currently being reified. `reify_effects` and
     /// `apply_function_type_effects` consult this so an effect name that is a
@@ -539,7 +535,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         symbols: &'a SymbolTable,
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
         logger: &'a Logger<'a, H>,
-        interner: Rc<RefCell<ModuleSourceInterner>>,
         emit_live: Option<&'a IndexSet<AstId>>,
     ) -> Self {
         Self {
@@ -551,7 +546,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             logger,
             current_module_source: ModuleSource::entry_point_uninitialized(),
             current_module_items: &[],
-            interner,
             current_effect_param_names: Vec::new(),
             tuple_overlay_stack: Vec::new(),
             tuple_overlay_visits: IndexMap::default(),
@@ -4089,12 +4083,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // lets `-f bare-asserts` (see `lower::bare_asserts`) replace assertion
         // failures with a bare trap, dropping this diagnostic without touching
         // explicit `panic(...)` calls. It behaves identically to `panic`.
-        let assert_failed_module_source = self.interner.borrow_mut().core("rt");
+        let (module_source, name) = {
+            let type_table = self.tysys.type_table.borrow();
+            let (module, name) = type_table
+                .compiler_items()
+                .require_function(CompilerItem::AssertFailed);
+            (module.clone(), name.to_string())
+        };
         let panic_call = TirExpr::new(
             TirExprKind::Call {
                 func: Box::new(FunctionRef {
-                    module_source: assert_failed_module_source,
-                    name: "assert_failed".to_string(),
+                    module_source,
+                    name,
                     monomorph_info: None,
                     method_info: None,
                 }),
