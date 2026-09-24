@@ -10,7 +10,10 @@ use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, Item, Module, Type, declares_unrestricted, wire_numbers_of};
+use crate::ast::{
+    self, HandleClasses, Item, Module, Type, declared_handle_classes, declares_unrestricted,
+    wire_numbers_of,
+};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
@@ -242,6 +245,70 @@ fn resolve_resource_extends<H: CompilerHost>(
                 logger,
             );
         }
+    }
+    reject_misnumbered_classes(
+        pending,
+        &committed,
+        resolutions,
+        &type_table.borrow(),
+        logger,
+    );
+}
+
+/// A narrowing tests a handle's class against a range, so each child's range
+/// lies past its parent's own class inside the parent's, apart from its siblings'.
+fn reject_misnumbered_classes<H: CompilerHost>(
+    pending: &[PendingExtends],
+    committed: &IndexMap<DefId, DefId>,
+    resolutions: &Resolutions,
+    type_table: &TypeTable,
+    logger: &Logger<'_, H>,
+) {
+    let defs = resolutions.defs();
+    let mut numbered_children: IndexMap<DefId, Vec<(DefId, HandleClasses)>> = IndexMap::default();
+    for clause in pending {
+        let Some(&parent) = committed.get(&clause.child) else {
+            continue;
+        };
+        let (child_name, parent_name) = (&clause.child_name, defs.name(parent));
+        let message = match (
+            type_table.handle_classes(clause.child),
+            type_table.handle_classes(parent),
+        ) {
+            (None, None) => continue,
+            (None, Some(_)) => format!(
+                "`{child_name}` declares no `classes`, but `{parent_name}`, which it extends, does"
+            ),
+            (Some(_), None) => format!(
+                "`{child_name}` declares `classes`, but `{parent_name}`, which it extends, does not"
+            ),
+            (Some(own), Some(outer)) if !outer.encloses(own) => format!(
+                "`{child_name}` numbers classes {own}, which do not lie past `{parent_name}`'s own class {} inside its {outer}",
+                outer.lo
+            ),
+            (Some(own), Some(_)) => {
+                let siblings = numbered_children.entry(parent).or_default();
+                let overlapped = siblings
+                    .iter()
+                    .find(|(_, theirs)| theirs.overlaps(own))
+                    .copied();
+                siblings.push((clause.child, own));
+                let Some((sibling, theirs)) = overlapped else {
+                    continue;
+                };
+                format!(
+                    "`{child_name}` numbers classes {own}, which overlap `{}`'s {theirs} under `{parent_name}`",
+                    defs.name(sibling)
+                )
+            }
+        };
+        let _ = logger.error_in(
+            &clause.module,
+            TypeError::ResourceClasses {
+                message,
+                span: clause.span,
+            },
+        );
     }
 }
 
@@ -550,7 +617,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 },
                             );
                             if declares_unrestricted(&resource_decl.attrs) {
-                                type_table.borrow_mut().mark_unrestricted_resource(def);
+                                type_table.borrow_mut().mark_unrestricted_resource(
+                                    def,
+                                    declared_handle_classes(&resource_decl.attrs),
+                                );
                             }
                             let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);
                             if is_generic {

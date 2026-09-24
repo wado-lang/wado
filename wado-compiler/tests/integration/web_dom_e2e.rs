@@ -61,7 +61,7 @@ export fn run() with (Dom, Event, EventTarget) {
 }
 "#;
 
-/// Type patterns narrow a handle to whatever the host's `is-T` says it is.
+/// Type patterns narrow a handle by the class the host tagged it with.
 const NARROWING_PROGRAM: &str = r#"
 use { Dom, Element, HtmlInputElement, Node } from "web:dom";
 
@@ -102,7 +102,7 @@ export fn run() with Dom {
 }
 "#;
 
-/// `==` on handles asks the host's `is-same`, across an upcast and on two roots.
+/// `==` on handles compares what the host interned, across an upcast and on two roots.
 const IDENTITY_PROGRAM: &str = r#"
 use { Dom, Event, Node } from "web:dom";
 
@@ -125,39 +125,60 @@ export fn run() with (Dom, Event) {
 "#;
 
 /// One host object per handle. The table is the whole host model: a handle is
-/// an index into it, so the guest passing the same index twice reaches the
-/// same object — which is what an upcast has to preserve.
+/// the object's class and its index, `class * 2^37 + index`, so the guest
+/// passing the same handle twice reaches the same object — which is what an
+/// upcast has to preserve — and `==` on two handles is identity.
 #[derive(Default)]
 struct DomObjects {
     objects: Vec<Object>,
-    dispatched: Vec<(u32, String)>,
+    dispatched: Vec<(f64, String)>,
 }
+
+/// The `classes` numbers `web:dom` declares for the classes the stub mints.
+const HTML_ELEMENT: u16 = 3;
+const HTML_INPUT_ELEMENT: u16 = 4;
+const DOCUMENT: u16 = 5;
+const EVENT: u16 = 7;
+const CLASS_STRIDE: f64 = 137_438_953_472.0;
 
 /// Every field a `web:dom` method reads, on whichever object carries it.
 #[derive(Default)]
 struct Object {
+    class: u16,
     tag: String,
     id: String,
     text: String,
     event_type: String,
 }
 
+fn handle(class: u16, index: usize) -> f64 {
+    let index = u32::try_from(index).expect("the stub never grows past u32");
+    f64::from(class) * CLASS_STRIDE + f64::from(index)
+}
+
 impl DomObjects {
-    fn insert(&mut self, object: Object) -> u32 {
+    fn insert(&mut self, object: Object) -> f64 {
+        let class = object.class;
         self.objects.push(object);
-        u32::try_from(self.objects.len() - 1).expect("the stub never grows past u32")
+        handle(class, self.objects.len() - 1)
     }
 
-    fn at(&mut self, handle: u32) -> &mut Object {
-        let index = usize::try_from(handle).expect("a handle indexes the table");
-        self.objects
-            .get_mut(index)
-            .unwrap_or_else(|| panic!("the guest passed handle {handle}, which names no object"))
+    fn handle_of(&self, index: usize) -> f64 {
+        handle(self.objects[index].class, index)
+    }
+
+    fn at(&mut self, handle: f64) -> &mut Object {
+        let index = (handle % CLASS_STRIDE) as usize;
+        assert!(
+            index < self.objects.len() && self.handle_of(index) == handle,
+            "the guest passed handle {handle}, which the stub never minted"
+        );
+        &mut self.objects[index]
     }
 }
 
 /// A host binding over the object table, so each body below is only its own
-/// work. `Params` starts with the handle as a plain `u32` — the shape the
+/// work. `Params` starts with the handle as a plain `f64` — the shape the
 /// universal-handle lowering produces, with no CM resource anywhere in it.
 fn over_dom<Params, Return>(
     dom: &Arc<Mutex<DomObjects>>,
@@ -175,16 +196,29 @@ fn add_dom_to_linker(
 ) -> anyhow::Result<()> {
     linker.instance("web:dom/global")?.func_wrap(
         "document",
-        over_dom(dom, |dom, ()| (dom.insert(Object::default()),)),
+        over_dom(dom, |dom, ()| {
+            (dom.insert(Object {
+                class: DOCUMENT,
+                ..Object::default()
+            }),)
+        }),
     )?;
 
+    // A `div` is an `HTMLDivElement`, which the slice leaves out, so the host
+    // tags it with its nearest ancestor the slice holds.
     let mut document = linker.instance("web:dom/document")?;
     document.func_wrap(
         "create-element",
         over_dom(
             dom,
-            |dom, (_self, local_name, _options): (u32, String, Option<String>)| {
+            |dom, (_self, local_name, _options): (f64, String, Option<String>)| {
+                let class = if local_name == "input" {
+                    HTML_INPUT_ELEMENT
+                } else {
+                    HTML_ELEMENT
+                };
                 (dom.insert(Object {
+                    class,
                     tag: local_name,
                     ..Object::default()
                 }),)
@@ -193,24 +227,24 @@ fn add_dom_to_linker(
     )?;
     document.func_wrap(
         "get-element-by-id",
-        over_dom(dom, |dom, (_self, id): (u32, String)| {
+        over_dom(dom, |dom, (_self, id): (f64, String)| {
             let found = dom.objects.iter().position(|o| o.id == id);
-            (found.map(|index| u32::try_from(index).expect("a table index")),)
+            (found.map(|index| dom.handle_of(index)),)
         }),
     )?;
 
     let mut element = linker.instance("web:dom/element")?;
     element.func_wrap(
         "tag-name",
-        over_dom(dom, |dom, (handle,): (u32,)| (dom.at(handle).tag.clone(),)),
+        over_dom(dom, |dom, (handle,): (f64,)| (dom.at(handle).tag.clone(),)),
     )?;
     element.func_wrap(
         "id",
-        over_dom(dom, |dom, (handle,): (u32,)| (dom.at(handle).id.clone(),)),
+        over_dom(dom, |dom, (handle,): (f64,)| (dom.at(handle).id.clone(),)),
     )?;
     element.func_wrap(
         "set-id",
-        over_dom(dom, |dom, (handle, value): (u32, String)| {
+        over_dom(dom, |dom, (handle, value): (f64, String)| {
             dom.at(handle).id = value;
         }),
     )?;
@@ -218,20 +252,20 @@ fn add_dom_to_linker(
     let mut node = linker.instance("web:dom/node")?;
     node.func_wrap(
         "text-content",
-        over_dom(dom, |dom, (handle,): (u32,)| {
+        over_dom(dom, |dom, (handle,): (f64,)| {
             (Some(dom.at(handle).text.clone()),)
         }),
     )?;
     node.func_wrap(
         "set-text-content",
-        over_dom(dom, |dom, (handle, value): (u32, Option<String>)| {
+        over_dom(dom, |dom, (handle, value): (f64, Option<String>)| {
             dom.at(handle).text = value.unwrap_or_default();
         }),
     )?;
-    node.func_wrap("append-child", |_, (_parent, child): (u32, u32)| {
+    node.func_wrap("append-child", |_, (_parent, child): (f64, f64)| {
         Ok((child,))
     })?;
-    node.func_wrap("contains", |_, (_parent, other): (u32, Option<u32>)| {
+    node.func_wrap("contains", |_, (_parent, other): (f64, Option<f64>)| {
         Ok((other.is_some(),))
     })?;
 
@@ -239,6 +273,7 @@ fn add_dom_to_linker(
         "new",
         over_dom(dom, |dom, (event_type,): (String,)| {
             (dom.insert(Object {
+                class: EVENT,
                 event_type,
                 ..Object::default()
             }),)
@@ -247,7 +282,7 @@ fn add_dom_to_linker(
 
     linker.instance("web:dom/event-target")?.func_wrap(
         "dispatch-event",
-        over_dom(dom, |dom, (target, event): (u32, u32)| {
+        over_dom(dom, |dom, (target, event): (f64, f64)| {
             let event_type = dom.at(event).event_type.clone();
             dom.dispatched.push((target, event_type));
             (true,)
@@ -256,23 +291,7 @@ fn add_dom_to_linker(
 
     linker
         .instance("web:dom/html-input-element")?
-        .func_wrap("value", |_, (_handle,): (u32,)| Ok(("typed".to_string(),)))?;
-
-    // The document is the one object with no tag, so it is no element.
-    let mut lang = linker.instance("web:dom/lang")?;
-    lang.func_wrap(
-        "is-element",
-        over_dom(dom, |dom, (handle,): (u32,)| {
-            (!dom.at(handle).tag.is_empty(),)
-        }),
-    )?;
-    lang.func_wrap(
-        "is-html-input-element",
-        over_dom(dom, |dom, (handle,): (u32,)| {
-            (dom.at(handle).tag == "input",)
-        }),
-    )?;
-    lang.func_wrap("is-same", |_, (a, b): (u32, u32)| Ok((a == b,)))?;
+        .func_wrap("value", |_, (_handle,): (f64,)| Ok(("typed".to_string(),)))?;
     Ok(())
 }
 
@@ -337,15 +356,18 @@ fn a_two_level_extends_program_runs_against_a_host_stub() {
     assert_eq!(dom.objects[1].id, "app");
     assert_eq!(dom.objects[1].text, "hello");
     // The event reached the element's own handle, not a re-minted one.
-    assert_eq!(dom.dispatched, vec![(1, "click".to_string())]);
+    assert_eq!(
+        dom.dispatched,
+        vec![(handle(HTML_ELEMENT, 1), "click".to_string())]
+    );
 }
 
 #[test]
-fn type_patterns_narrow_through_the_hosts_is_t() {
+fn type_patterns_narrow_by_the_class_the_host_tagged() {
     run_against_stub(NARROWING_PROGRAM);
 }
 
 #[test]
-fn handles_compare_through_the_hosts_is_same() {
+fn handles_compare_as_the_host_interned_them() {
     run_against_stub(IDENTITY_PROGRAM);
 }

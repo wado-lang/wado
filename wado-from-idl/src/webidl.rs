@@ -1,7 +1,9 @@
 //! WebIDL-to-IR transformation, over the webidl2 AST `scripts/webidl/snapshot.mjs`
 //! writes: one unrestricted resource per interface. See `docs/wep-2026-04-01-tide.md`.
 
-use anyhow::{Result, bail};
+use std::ops::RangeInclusive;
+
+use anyhow::{Result, anyhow, bail};
 use indexmap::{IndexMap, IndexSet};
 use serde::Deserialize;
 
@@ -176,6 +178,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
             .collect(),
     };
 
+    let mut classes = number_classes(&merged)?;
     let mut skipped = Vec::new();
     let mut resources: IndexMap<&str, WadoResource> = IndexMap::new();
     for (name, iface) in &merged {
@@ -188,6 +191,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
                 doc_comment: None,
                 cm_attr: path,
                 unrestricted: true,
+                classes: classes.shift_remove(name),
                 extends: iface.inheritance.as_deref().map(to_upper_camel_case),
                 methods,
             },
@@ -201,6 +205,49 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         .extend(lowering.global_effect(&merged, &resources)?);
     module.resources = resources.into_values().collect();
     Ok(WebIdlOutput { module, skipped })
+}
+
+/// Number every interface by a pre-order walk of the inheritance forest in
+/// slice order, so each one's descendants take the classes right after its own.
+fn number_classes<'a>(
+    merged: &IndexMap<&'a str, Merged<'_>>,
+) -> Result<IndexMap<&'a str, RangeInclusive<u16>>> {
+    fn visit<'a>(
+        name: &'a str,
+        children: &IndexMap<&'a str, Vec<&'a str>>,
+        next: &mut u16,
+        out: &mut IndexMap<&'a str, RangeInclusive<u16>>,
+    ) -> Result<()> {
+        let own = *next;
+        *next = next
+            .checked_add(1)
+            .ok_or_else(|| anyhow!("the slice holds more interfaces than a class number counts"))?;
+        for child in children.get(name).into_iter().flatten() {
+            visit(child, children, next, out)?;
+        }
+        out.insert(name, own..=*next - 1);
+        Ok(())
+    }
+
+    let mut children: IndexMap<&str, Vec<&str>> = IndexMap::new();
+    let mut roots = Vec::new();
+    for (&name, iface) in merged {
+        match &iface.inheritance {
+            Some(parent) => {
+                let (&parent, _) = merged
+                    .get_key_value(parent.as_str())
+                    .expect("`merge` admits only a parent in the slice");
+                children.entry(parent).or_default().push(name);
+            }
+            None => roots.push(name),
+        }
+    }
+    let mut next = 0;
+    let mut out = IndexMap::new();
+    for root in roots {
+        visit(root, &children, &mut next, &mut out)?;
+    }
+    Ok(out)
 }
 
 /// Fold partials and mixins into their interface, in slice order.

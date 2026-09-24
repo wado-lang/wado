@@ -23,14 +23,18 @@ const INHERITED: &str = "el.set_text_content(Option::Some(\"Hello, Wado!\"));";
 const UPCAST: &str =
     "let parent: Node = el;\nparent.set_text_content(Option::Some(\"Hello, Wado!\"));";
 
-/// An unrestricted resource is an opaque `u32` at the CM boundary, not a CM
+/// An unrestricted resource is an opaque `f64` at the CM boundary, not a CM
 /// `resource`, so the component's imports carry no handle type.
 #[test]
-fn an_unrestricted_resource_crosses_as_a_bare_u32() {
+fn an_unrestricted_resource_crosses_as_a_bare_f64() {
     let wat = compile_to_wat(&on_an_element("el.set_id(\"app\");"));
     assert!(
         wat.contains("web:dom/element"),
         "the element interface should be imported: {wat}"
+    );
+    assert!(
+        wat.contains("(param \"self\" f64)"),
+        "the receiver should cross as an `f64`: {wat}"
     );
     assert!(
         !wat.contains("(resource"),
@@ -60,7 +64,7 @@ fn an_upcast_is_a_no_op() {
 }
 
 /// An `option<extern-handle>` result lifts into the declared `Option<Element>`,
-/// not the `Option<u32>` the boundary sees.
+/// not the `Option<f64>` the boundary sees.
 #[test]
 fn an_optional_extern_handle_result_lifts_to_the_declared_option() {
     let wat = compile_to_wat(&on_an_element(

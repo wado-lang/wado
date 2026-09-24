@@ -801,6 +801,29 @@ impl WirType {
         matches!(self, Self::Ref { .. } | Self::AbstractRef { .. })
     }
 
+    /// The Wasm value a scalar is, which signedness and a nominal type leave
+    /// unchanged; `None` for a reference.
+    pub fn scalar_kind(&self) -> Option<WirScalarKind> {
+        Some(match self {
+            Self::I8
+            | Self::I16
+            | Self::I32
+            | Self::U8
+            | Self::U16
+            | Self::U32
+            | Self::Bool
+            | Self::Char
+            | Self::Enum { .. }
+            | Self::Flags { .. } => WirScalarKind::I32,
+            Self::I64 | Self::U64 => WirScalarKind::I64,
+            Self::F32 => WirScalarKind::F32,
+            Self::F64 => WirScalarKind::F64,
+            Self::V128 => WirScalarKind::V128,
+            Self::Unit => WirScalarKind::Unit,
+            Self::Ref { .. } | Self::AbstractRef { .. } => return None,
+        })
+    }
+
     /// Returns a nullable version of this type.
     /// Only affects `Ref` and `AbstractRef` variants; other types are returned unchanged.
     pub fn as_nullable(self) -> Self {
@@ -822,6 +845,17 @@ impl WirType {
             other => other,
         }
     }
+}
+
+/// The Wasm value a [`WirType::scalar_kind`] answers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WirScalarKind {
+    I32,
+    I64,
+    F32,
+    F64,
+    V128,
+    Unit,
 }
 
 /// Abstract heap types for Wasm GC.

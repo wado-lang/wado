@@ -195,7 +195,15 @@ impl WadoCodeGenerator {
         } else {
             ""
         };
-        self.writeln(&format!("#[cm(\"{}\"{linearity})]", resource.cm_attr));
+        let classes = resource
+            .classes
+            .as_ref()
+            .map(|classes| format!(", classes = \"{}..={}\"", classes.start(), classes.end()))
+            .unwrap_or_default();
+        self.writeln(&format!(
+            "#[cm(\"{}\"{linearity}{classes})]",
+            resource.cm_attr
+        ));
         let extends = resource
             .extends
             .as_ref()

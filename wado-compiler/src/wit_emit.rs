@@ -778,7 +778,7 @@ impl<'a> Emitter<'a> {
         let source = registry.source_interface(named)?;
         registry
             .is_unrestricted_resource(&source, &named.name)
-            .then_some(Type::U32)
+            .then_some(Type::F64)
     }
 
     /// Render an AST leaf: primitive, named CM type, or `&Resource` borrow.
@@ -973,14 +973,14 @@ impl<'a> Emitter<'a> {
                 Ok(self.named(&name, id))
             }
             ResolvedType::Resource { def } if self.types.is_unrestricted_resource(*def) => {
-                Ok(Type::U32)
+                Ok(Type::F64)
             }
             ResolvedType::Resource { def } => Ok(Type::named(to_kebab(self.types.def_name(*def)))),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let inner = *inner;
                 if let ResolvedType::Resource { def } = self.types.get(inner) {
                     if self.types.is_unrestricted_resource(*def) {
-                        return Ok(Type::U32);
+                        return Ok(Type::F64);
                     }
                     Ok(Type::borrow(to_kebab(self.types.def_name(*def))))
                 } else {

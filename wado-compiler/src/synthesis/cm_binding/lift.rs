@@ -24,7 +24,7 @@ use crate::synthesis::common::{
 
 use super::types::{
     LiftContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size, cm_flags_byte_size,
-    cm_held_type_to_type_id, disc_load_op, kebab_to_pascal,
+    cm_held_type_to_type_id, disc_load_op, handle_load_op, kebab_to_pascal,
 };
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
@@ -211,8 +211,8 @@ fn synthesize_lift_inner(
                             return builtin_call(load_name, vec![addr], TypeTable::I32);
                         }
                     }
-                    // Default: treat as i32 handles (resources, unknown types)
-                    builtin_call("i32_load", vec![addr], TypeTable::I32)
+                    let (load, loaded) = handle_load_op(ty, ctx.cm_interface_registry);
+                    builtin_call(load, vec![addr], loaded)
                 }
             }
         }

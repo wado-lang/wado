@@ -931,15 +931,30 @@ pub(super) fn scalar_store_op(
     cm_interface_registry: &CmInterfaceRegistry,
     names: &CmStdlibNames,
 ) -> &'static str {
-    if flatten_param_type(ty, cm_interface_registry, names).len() != 1 {
-        return "i32_store";
+    match flatten_param_type(ty, cm_interface_registry, names)[..] {
+        [TypeTable::F64] => "f64_store",
+        [TypeTable::F32] => "f32_store",
+        [TypeTable::I64] => "i64_store",
+        [TypeTable::I32] => match cm_layout_with_registry(ty, cm_interface_registry).0 {
+            1 => "i32_store8",
+            2 => "i32_store16",
+            4 => "i32_store",
+            other => panic!("a one-`i32` CM type cannot be {other} bytes wide: {ty:?}"),
+        },
+        _ => "i32_store",
     }
-    match cm_layout_with_registry(ty, cm_interface_registry).0 {
-        1 => "i32_store8",
-        2 => "i32_store16",
-        4 => "i32_store",
-        8 => "i64_store",
-        other => panic!("a one-value CM type cannot be {other} bytes wide: {ty:?}"),
+}
+
+/// The load a one-value CM type that is none of the sized declarations reads
+/// back with, and the type it yields: a resource handle, or an unrestricted one.
+pub(super) fn handle_load_op(
+    ty: &Type,
+    cm_interface_registry: &CmInterfaceRegistry,
+) -> (&'static str, TypeId) {
+    let resolved = cm_interface_registry.resolve_type(ty);
+    match cm_interface_registry.cm_flatten(&resolved)[..] {
+        [cm_abi::CmValType::F64] => ("f64_load", TypeTable::F64),
+        _ => ("i32_load", TypeTable::I32),
     }
 }
 
@@ -1150,6 +1165,9 @@ fn flat_types_from_type_id_inner(
                 // component (the memory lowerer panics on the same condition).
                 panic!("struct `{name}` has no TIR declaration; cannot compute its flat CM types");
             }
+        }
+        ResolvedType::Resource { def } if type_table.is_unrestricted_resource(*def) => {
+            out.push(cm_abi::CmValType::F64);
         }
         ResolvedType::Resource { .. } => out.push(cm_abi::CmValType::I32),
         ResolvedType::Enum { .. } => out.push(cm_abi::CmValType::I32),

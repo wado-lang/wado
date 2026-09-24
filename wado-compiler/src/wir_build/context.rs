@@ -895,6 +895,9 @@ impl<'a> WirContext<'a> {
             }
             // Generic resource types (Future<T>, Stream<T>, etc.) are opaque i32 handles
             ResolvedType::GenericResource { .. } => WirType::I32,
+            ResolvedType::Resource { def } if type_table.is_unrestricted_resource(*def) => {
+                WirType::F64
+            }
             // Non-generic resources are opaque i32 handles
             ResolvedType::Resource { .. } => WirType::I32,
             // Flags are bitmasks stored as i32

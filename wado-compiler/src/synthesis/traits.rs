@@ -4318,18 +4318,27 @@ fn generate_opaque_inspect_fn(
     let qualified_name = method_info.to_mangled_name();
 
     let fmt = || local_expr(1, "f", fmt_type, span);
+    let cast_to = |expr: TirExpr, target_type: TypeId| {
+        TirExpr::new(
+            TirExprKind::Cast {
+                expr: Box::new(expr),
+                target_type,
+            },
+            target_type,
+            span,
+        )
+    };
     let deref_self = deref_local(0, "self", ref_type, resource_type, span);
-    let handle = TirExpr::new(
-        TirExprKind::Cast {
-            expr: Box::new(deref_self),
-            target_type: TypeTable::I32,
-        },
-        TypeTable::I32,
-        span,
-    );
+    // An unrestricted handle is an integer-valued `f64`, so `i64` holds it exactly.
+    let (handle, handle_type) = if tt.is_unrestricted_handle(resource_type) {
+        let bits = cast_to(deref_self, TypeTable::F64);
+        (cast_to(bits, TypeTable::I64), TypeTable::I64)
+    } else {
+        (cast_to(deref_self, TypeTable::I32), TypeTable::I32)
+    };
     let hex_stmt = inspect_call(
         handle,
-        TypeTable::I32,
+        handle_type,
         fmt(),
         trait_env,
         module_source,

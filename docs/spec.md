@@ -5755,21 +5755,21 @@ A `#[cm(...)]` resource may declare what may be done with its handle: `linearity
 
 An affine resource is move-only and carries a drop obligation, per [Resource Ownership](./wep-2026-05-21-resource-ownership.md). An unrestricted one owns nothing, so it is an ordinary copyable value. Assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope.
 
-The representation follows from the linearity. An affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain integer the host interprets.
+The representation follows from the linearity. An affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain `f64` the host interprets. `as` relates an unrestricted handle to `f64`, and to nothing else but the handle types it upcasts to.
 
 ### Resource Inheritance
 
 `resource Child extends Parent` declares that a child handle is usable wherever the parent is. Both resources must declare `linearity = "unrestricted"`, because an upcast copies the handle and an affine one may not be copied. Single inheritance only, and a cycle is an error.
 
 ```wado
-#[cm("web:dom/event-target", linearity = "unrestricted")]
+#[cm("web:dom/event-target", linearity = "unrestricted", classes = "0..=1")]
 resource EventTarget {
     #[cm("web:dom/event-target#add-event-listener")]
     #[cm_params("self", "kind")]
     fn add_event_listener(&self, kind: String);
 }
 
-#[cm("web:dom/node", linearity = "unrestricted")]
+#[cm("web:dom/node", linearity = "unrestricted", classes = "1..=1")]
 resource Node extends EventTarget {
     #[cm("web:dom/node#text-content")]
     #[cm_params("self")]
@@ -5785,8 +5785,9 @@ fn use_it(n: Node) {
 Rules:
 
 - The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet. `&mut T`, container elements (`List<T>`, `Option<T>`, …) and function types are invariant.
-- Narrowing back to a child is never implicit. It is written as a type pattern (below), which asks the host whether the handle really is one.
-- `==` and `!=` compare two handles when one type extends the other, and ask the host whether both name one object. There is no ordering.
+- Narrowing back to a child is never implicit. It is written as a type pattern (below), which tests the class the host tagged the handle with.
+- `classes = "lo..=hi"` numbers those classes: a resource's own is `lo`, and the resources extending it hold the rest. A child's range lies past its parent's own class inside the parent's, siblings share none, and an `extends` tree declares `classes` on every resource or on none. A type pattern narrows only to a resource that declares them.
+- `==` and `!=` compare two handles when one type extends the other. The host hands out one handle per object, so equal handles name one object. There is no ordering.
 - A child may not redeclare a method it inherits, and a name reachable through both the chain and a trait impl is ambiguous — write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
 - Static methods (no `&self`) are not inherited, and `Self` in an inherited method names the resource that declares it.
 - Generic resources take no part in `extends` yet.

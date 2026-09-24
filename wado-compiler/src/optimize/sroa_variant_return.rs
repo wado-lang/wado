@@ -869,6 +869,9 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
             PrimitiveType::Char => Some(SlotShape::Direct(Pad::Char)),
             PrimitiveType::V128 => None,
         },
+        ResolvedType::Resource { def } if type_table.is_unrestricted_resource(*def) => {
+            Some(SlotShape::Direct(Pad::Float(payload)))
+        }
         ResolvedType::Enum { .. }
         | ResolvedType::Flags { .. }
         | ResolvedType::Resource { .. }

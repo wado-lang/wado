@@ -60,7 +60,7 @@ This makes Tide the right pilot for unrestricted resources. The blast radius is 
 
 In v1, `resource X extends Y { ... }` is permitted **only when `X` and `Y` are both unrestricted**.
 
-The reason is mechanical, not philosophical: an upcast hands out a second name for one handle, which is a copy. An unrestricted handle may be copied, so `HTMLInputElement` and the same value typed as `Element` are the identical wasm value, differing only in Wado's static type witness; upcast is a no-op and narrowing is a host-side `instanceof` on that one value. An affine handle may not be copied at all — with CM `resource` handles the two are distinct entries in distinct tables, so every cast becomes a host call that mints a handle the caller then owes a drop on.
+The reason is mechanical, not philosophical: an upcast hands out a second name for one handle, which is a copy. An unrestricted handle may be copied, so `HTMLInputElement` and the same value typed as `Element` are the identical wasm value, differing only in Wado's static type witness; upcast is a no-op and narrowing reads the class the host tagged that one value with. An affine handle may not be copied at all — with CM `resource` handles the two are distinct entries in distinct tables, so every cast becomes a host call that mints a handle the caller then owes a drop on.
 
 A future WEP can extend `extends` to affine resources if we find a lowering we are happy with (e.g., shared handle tables across an `extends` family). This WEP does not preclude that.
 
@@ -119,15 +119,18 @@ pub resource Child extends Parent { ... }
 The `extends Parent` clause slots between the resource name (and any generic parameter list) and the body. It is optional; resources without `extends` behave as today.
 
 ```wado
-#[cm("web:dom/event-target", linearity = "unrestricted")]
+#[cm("web:dom/event-target", linearity = "unrestricted", classes = "0..=2")]
 pub resource EventTarget { ... }
 
-#[cm("web:dom/node", linearity = "unrestricted")]
+#[cm("web:dom/node", linearity = "unrestricted", classes = "1..=2")]
 pub resource Node extends EventTarget { ... }
 
-#[cm("web:dom/element", linearity = "unrestricted")]
+#[cm("web:dom/element", linearity = "unrestricted", classes = "2..=2")]
 pub resource Element extends Node { ... }
 ```
+
+`classes` numbers the tree for narrowing; §"Host runtime contract" says what the
+numbers mean and which ones the compiler accepts.
 
 Rules:
 
@@ -375,7 +378,7 @@ and the ascribed `T`:
 | Relation          | Meaning                                                           |
 | ----------------- | ----------------------------------------------------------------- |
 | `S <: T`          | irrefutable — the implicit upcast, or an ordinary type annotation |
-| `T <: S`, `T ≠ S` | refutable — one host call, answered at runtime                    |
+| `T <: S`, `T ≠ S` | refutable — a test of the handle's class, at runtime              |
 | otherwise         | a type error, as a mismatched annotation is today                 |
 
 The refutable case exists only where `extends` relates the two, so no other
@@ -498,33 +501,44 @@ exception.
 
 #### Host runtime contract
 
-For each type named as a narrowing target, the compiler emits a CM-imported
-predicate:
+A handle is a number the host mints, `class * 2^37 + index`: an integer-valued
+`f64` below 2^53, holding a 16-bit class and a 37-bit index into the host's
+object table. It is never a NaN and never takes part in arithmetic; the guest
+reads it only as those two fields.
 
-```wit
-is-T: func(r: extern-handle) -> bool
-```
+The classes are numbered by the declarations. Each resource in an `extends` tree
+declares `#[cm(..., classes = "lo..=hi")]`: its own class is `lo`, and the
+resources extending it hold the rest of the range. A pre-order walk of the tree
+assigns them, which is what `wado-from-idl` does in slice order. The compiler
+accepts a numbering only where a range test is sound:
 
-This is a per-type import rather than a generic `is-instance(extern-handle,
-type-id)`. `is-T` is a subtype test: `is-element` must answer `true` for an
-`HTMLInputElement`. A single `type-of(r) -> u32` could only answer that with a
-hierarchy encoding on the guest side, and no id exists for a class outside the
-compiled slice, which is exactly what an open world produces. `instanceof`
-answers the question; a tag does not.
+- a child's range lies past its parent's own class and inside the parent's range;
+- no two siblings share a class;
+- a tree is numbered whole or not at all;
+- a narrowing target declares `classes`.
 
-The host (the jco-style JS glue Tide ships with the bindings) implements `is-T`
-with that natural check. A narrowing pattern lowers to a call to the target's
-predicate and a branch; the handle itself flows through unchanged in the matching
-arm, because the two Wado types are one wasm value.
+A gap in a range is allowed. It stands for classes the slice leaves out.
 
-Imports are synthesized per target named in the program, not per
-`extends`-participating type: a hierarchy of hundreds costs imports only for the
-types some pattern actually narrows to.
+The host tags each object with the class of the nearest ancestor of its runtime
+type that the slice declares. An `HTMLDivElement` in a slice that stops at
+`HTMLElement` carries `HtmlElement`'s class. The host answers this
+`instanceof`-shaped question once, when it first hands the object out, and a type
+wider than the slice degrades to its nearest named ancestor, which is what an open
+world needs.
 
-A `match` with `k` type-pattern arms costs up to `k` boundary crossings, one per
-arm tried. For event dispatch that is the shape wasm-bindgen already lives with.
-A hot dispatch that wants better is a lowering question, not a change to this
-surface.
+A narrowing to `T` with classes `lo..=hi` lowers to
+`lo * 2^37 <= h && h < (hi + 1) * 2^37` and a branch. It is two float compares
+with no boundary crossing, so a `match` with `k` type-pattern arms costs no host
+call at all. The handle flows through unchanged in the matching arm, because the
+two Wado types are one wasm value.
+
+The host hands out one handle per object, so the same object always crosses as
+the same number. That interning is what makes `==` a plain compare (below).
+
+`f64` rather than an integer: a `u32` has no room for a class beside an index,
+and jco lifts a `u64` into a JavaScript `BigInt`, which the glue would pay for on
+every call. An `f64` is a plain JavaScript number, and its 53 integer bits hold
+both fields.
 
 #### Sidebar: unrestricted resource handles are immutable
 
@@ -549,13 +563,9 @@ Four interactions need explicit rules. Everything else (`Default`, `Ord`, `Drop`
 
 Every unrestricted resource auto-derives `Eq`. Two handles compare equal iff they reference the same host object — JavaScript's `===` semantics for the browser case.
 
-`Eq` lowers to a host import:
+`Eq` lowers to `f64` equality on the two handles. The host interns handles, and an object's class never changes, so two handles are equal exactly when they name one object. No host call is made.
 
-```wit
-is-same: func(a: extern-handle, b: extern-handle) -> bool
-```
-
-Cross-type comparison falls out of subtyping. `el == html_input` is well-typed when one operand is upcast to the other's static type; the host predicate compares the underlying refs and returns the right answer.
+Cross-type comparison falls out of subtyping. `el == html_input` is well-typed when one operand is upcast to the other's static type, and the upcast leaves the number as it was.
 
 `Ord` is **not** auto-derived. Resources have no natural ordering and the host has no obligation to define one.
 
@@ -609,7 +619,7 @@ How `extends` and the operations on it lower from Wado to WIT/CM, and from WIT/C
 | ------ | --------------------------------------------------------------- |
 | Wado   | each type in the `extends` chain is distinct (`Element ≠ Node`) |
 | WIT/CM | one type, `extern-handle`                                       |
-| Wasm   | an opaque `u32` host-table index                                |
+| Wasm   | an `f64`: a class and a host-table index                        |
 
 This is the same erasure pattern as [Newtype Semantics](./wep-2026-01-29-newtype-semantics.md): the Wado type system holds the structure, the wasm output knows nothing about it. extends differs from newtype only in that **method namespacing is preserved at the WIT layer** — methods are imported under per-Wado-type WIT interfaces, even though the receiver type is universal.
 
@@ -618,10 +628,10 @@ This is the same erasure pattern as [Newtype Semantics](./wep-2026-01-29-newtype
 A single CM type:
 
 ```wit
-type extern-handle = u32;   // v1; becomes the CM extern-handle type under CM-GC
+type extern-handle = f64;   // v1; becomes the CM extern-handle type under CM-GC
 ```
 
-v1 does not wait for CM-GC. The universal handle is an opaque `u32` index into a host-side table owned by the host glue, copyable and exempt from the affine analysis of [Resource Ownership](./wep-2026-05-21-resource-ownership.md) — which is what gives unrestricted handles their value semantics. It is deliberately not a CM `resource`: CM resource handles are affine, and an affine handle cannot have the value semantics this WEP specifies. Every signature below is written against the `extern-handle` name, so the CM-GC switch changes the alias and the lowering, not the shapes.
+v1 does not wait for CM-GC. The universal handle is the `f64` §"Host runtime contract" describes, naming an entry in a host-side table owned by the host glue, copyable and exempt from the affine analysis of [Resource Ownership](./wep-2026-05-21-resource-ownership.md) — which is what gives unrestricted handles their value semantics. It is deliberately not a CM `resource`: CM resource handles are affine, and an affine handle cannot have the value semantics this WEP specifies. Every signature below is written against the `extern-handle` name, so the CM-GC switch changes the alias and the lowering, not the shapes.
 
 Every extends-related Wado type is the same `extern-handle` once it crosses the boundary. There is no `event-target` resource, no `node` resource, no `element` resource at the CM level — only the methods are split.
 
@@ -655,40 +665,37 @@ interface html-button-element {
 
 Same-named methods on unrelated Wado types (e.g., a hypothetical `mouse-event.button` vs `html-button-element.button`) do not collide because the WIT interface namespace separates them.
 
-#### Built-in predicates and formatters
+#### Built-in formatters
 
-Narrowing, `Eq`, `Inspect`, and `Display` lower to flat CM imports over `extern-handle`:
+`Inspect` and `Display` lower to flat CM imports over `extern-handle`, one each
+whatever the size of the hierarchy:
 
 ```wit
 interface lang {
-    // one per extends-participating Wado type
-    is-event-target: func(r: extern-handle) -> bool;
-    is-node:         func(r: extern-handle) -> bool;
-    is-element:      func(r: extern-handle) -> bool;
-    // ...
-
-    // universal
-    is-same:     func(a: extern-handle, b: extern-handle) -> bool;
     inspect:     func(r: extern-handle) -> string;
     inspect-alt: func(r: extern-handle) -> string;
     display:     func(r: extern-handle) -> string;
 }
 ```
 
-The `is-T` predicates scale with the number of types some pattern narrows to, not with the size of the hierarchy. `is-same`, `inspect`, `inspect-alt`, `display` are universal — one each.
+Narrowing and `Eq` import nothing: the handle already carries what they read.
 
 #### Operation lowering at a glance
 
-| Wado operation                           | WIT/CM lowering                                                              |
-| ---------------------------------------- | ---------------------------------------------------------------------------- |
-| `let n: Node = el;` (implicit upcast)    | identity                                                                     |
-| `el.foo()` resolving to `Node::foo`      | call `node.foo(el, ...)`                                                     |
-| `input: HtmlInputElement` (type pattern) | call `is-html-input-element(el)`, branch; the handle is unchanged in the arm |
-| `a == b` for unrestricted `a`, `b`       | call `is-same(a, b)`                                                         |
-| `` `${x:?}` ``                           | call `inspect(x)`                                                            |
-| `` `${x}` ``                             | call `display(x)`                                                            |
+| Wado operation                           | Lowering                                                              |
+| ---------------------------------------- | --------------------------------------------------------------------- |
+| `let n: Node = el;` (implicit upcast)    | identity                                                              |
+| `el.foo()` resolving to `Node::foo`      | call `node.foo(el, ...)`                                              |
+| `input: HtmlInputElement` (type pattern) | compare `el` against the target's class range, branch; `el` unchanged |
+| `a == b` for unrestricted `a`, `b`       | `f64.eq` on the two handles                                           |
+| `` `${x:?}` ``                           | call `inspect(x)`                                                     |
+| `` `${x}` ``                             | call `display(x)`                                                     |
 
 Upcast and the receiver argument of inherited methods are wasm-level no-ops; the same handle value flows through unchanged.
+
+`as` relates a handle to `f64` and to the handle types it upcasts to, and to
+nothing else. A cast to an integer would round away the class, and a downcast by
+`as` would skip the class test a type pattern makes.
 
 #### Interaction with WIT bundling
 
@@ -696,7 +703,7 @@ Upcast and the receiver argument of inherited methods are wasm-level no-ops; the
 
 #### Lifecycle
 
-`extends` introduces no drop protocol: however many Wado static types name a handle, it is one value, copied like any integer.
+`extends` introduces no drop protocol: however many Wado static types name a handle, it is one value, copied like any number.
 
 There is no release path. A handle the host hands out is never reclaimed, and each one costs a table slot for the lifetime of the instance. That counts every handle the program receives, not only the ones it keeps: a loop calling `query_selector` once a frame leaks one slot a frame. The CM knows nothing about the handle, so it cannot reclaim it, and Wasm GC offers no finalization to hang a release on. See the known gap below for the only representation that closes this.
 
@@ -710,17 +717,19 @@ This WEP is the full feature. The order it lands in is [Tide § Minimum Implemen
 
 Implemented, with tests in `wado-compiler/tests/integration/unrestricted_resource.rs`:
 
-- `#[cm(..., linearity = "affine" | "unrestricted")]` — parsed, value and placement validated (`parser.rs`); an unrestricted resource is copyable and exempt from the affine analysis and the cleanup pass (`resource_move_check.rs`, `synthesis/resource_cleanup.rs`, both reading `TypeTable::is_unrestricted_resource`).
+- `#[cm(..., linearity = "affine" | "unrestricted", classes = "lo..=hi")]` — parsed, value and placement validated (`parser.rs`), `classes` only beside `"unrestricted"`; an unrestricted resource is copyable and exempt from the affine analysis and the cleanup pass (`resource_move_check.rs`, `synthesis/resource_cleanup.rs`, both reading `TypeTable::is_unrestricted_resource`).
 - `extends` — keyword, AST, parser; the parent is resolved and validated in `elaborator/orchestration.rs::resolve_resource_extends` (parent is a resource, both sides unrestricted, no cycle, neither side generic), and the relation lives in `TypeTable::resource_parent` / `is_resource_subtype`.
 - Subtyping and implicit upcast — one rule in `elaborator/typecheck.rs::check_at`, gated by `Position`: value, `return` and a `&T` referent admit a subtype; `&mut T`, containers and function types do not. Branch agreement is `elaborator/expr.rs::agreed_branch_type`, which `if`, `if let` and `match` all route through.
 - Method resolution over the chain, and the corner cases: override forbidden, trait-vs-inherited ambiguity, statics do not inherit, `Self` fixed at the declaring resource.
 
-- Lowering. An unrestricted resource is not a CM `resource`: it registers as a `u32` newtype (`component_model.rs`), so every `own` / `borrow` path passes it by, a `&self` receiver loses its reference, and the WIT renders the same opaque `u32` in every position (`wit_emit.rs::extern_handle`). Upcast and an inherited method's receiver are wasm-level no-ops — the call resolves to the declaring resource through `MethodOwner::Ancestor`.
+- Class numbering — `resolve_resource_extends` checks each committed link against the rules in §"Host runtime contract", and `wado-from-idl` numbers `web:dom` in pre-order (`tests/fixtures/error_resource_classes.wado`).
+- Lowering. An unrestricted resource is not a CM `resource`: it registers as an `f64` newtype (`component_model.rs`), so every `own` / `borrow` path passes it by, a `&self` receiver loses its reference, and the WIT renders the same `f64` in every position (`wit_emit.rs::extern_handle`). The guest holds it as an `f64` too. Upcast and an inherited method's receiver are wasm-level no-ops — the call resolves to the declaring resource through `MethodOwner::Ancestor`.
 
-- The registry reads that newtype two ways. `resolve_type` peels the handle to its `u32`, the view the boundary decides with: the flat ABI, the canonical options, the emitted WIT. `value_type` keeps the resource's own type, the view the guest holds. A binding's signature takes the second, because `Option<Element>` and `Option<u32>` are distinct GC types (`tests/integration/web_dom.rs`). `cm_type_to_type_id` finds the resource's `TypeId` under its package, a `web:` package being one flat file.
+- The registry reads that newtype two ways. `resolve_type` peels the handle to its `f64`, the view the boundary decides with: the flat ABI, the canonical options, the emitted WIT. `value_type` keeps the resource's own type, the view the guest holds. A binding's signature takes the second, because `Option<Element>` and `Option<f64>` are distinct GC types (`tests/integration/web_dom.rs`). `cm_type_to_type_id` finds the resource's `TypeId` under its package, a `web:` package being one flat file.
 
-- Type patterns. `p: T` is a pattern wherever one stands, and a `let` annotation is that pattern. An ascription `T` strictly extending the subject's type narrows: a plain `let` rejects it as refutable, and a `match` over one needs a final `_` and reports an arm an earlier ancestor arm shadows. Each narrowing target `R` imports `lang#is-r`, called on the handle before the arm is taken.
-- `Eq`. `==` / `!=` on two handles one of whose types extends the other calls `lang#is-same`. Every chain root binds it, and the registry keeps the one import they share.
+- Type patterns. `p: T` is a pattern wherever one stands, and a `let` annotation is that pattern. An ascription `T` strictly extending the subject's type narrows: a plain `let` rejects it as refutable, and a `match` over one needs a final `_` and reports an arm an earlier ancestor arm shadows. The test compares the handle against `T`'s class range, and a target without `classes` is rejected.
+- `Eq`. `==` / `!=` on two handles one of whose types extends the other compares the two `f64`s.
+- `as` between a handle and anything but `f64` or a handle type it upcasts to is rejected (`tests/fixtures/error_unrestricted_resource_cast.wado`).
 
 Not built:
 
@@ -732,7 +741,7 @@ Not built:
 
 ### Known gap: the handle is an index, not a reference
 
-An extern-handle would rather be a Wasm GC `externref`: the collector would reclaim it, `is-same` would be `ref.eq`, and the host table would disappear along with the leak above. The WIR already carries the type (`WirAbstractHeapType::Extern`), so the guest side is not what blocks it.
+An extern-handle would rather be a Wasm GC `externref`: the collector would reclaim it, and the host table would disappear along with the leak above. The WIR already carries the type (`WirAbstractHeapType::Extern`), so the guest side is not what blocks it.
 
 The Component Model is. Its value types include no reference type; `own` and `borrow` are the only handle types and both carry the obligations §"Why this is hard" describes; and a resource's representation is validated to `i32` or `i64`. Nor is there a side door: `externtype` admits a `core module` import but no `core func`, and a component satisfies an imported module's own imports from its core index spaces, which bottom out at `canon lower` — so host code is reachable only through the canonical ABI. CM-GC changes the representation of `own` / `borrow`, not their semantics.
 

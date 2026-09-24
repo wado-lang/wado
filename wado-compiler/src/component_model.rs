@@ -24,7 +24,7 @@ use crate::cm_abi::{
 };
 use crate::defs::DefId;
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::{DeclName, DeclPath, IDENTITY_TEST_METHOD, NARROWING_TEST_METHOD, to_kebab};
+use crate::name::{DeclName, DeclPath, to_kebab};
 use crate::primitive::PrimitiveType;
 use crate::synthesis::cm_binding::types::cm_interface_module;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -643,9 +643,10 @@ fn cm_attr_cm_name(attrs: &[Attribute], wado_name: &str) -> String {
 }
 
 /// The CM type an unrestricted resource crosses the boundary as. No CM value
-/// type is a reference, so a copyable handle is an integer.
+/// type is a reference, so a copyable handle is a number: an `f64`, which jco
+/// hands JavaScript as a plain number where a `u64` would be a `BigInt`.
 fn extern_handle_type(span: Span) -> Type {
-    Type::Named(NamedType::new(AstId::fresh(), "u32".to_string(), span))
+    Type::Named(NamedType::new(AstId::fresh(), "f64".to_string(), span))
 }
 
 /// Extract CM parameter names from a `#[cm_params("param-a", "param-b")]` attribute.
@@ -2224,63 +2225,7 @@ impl CmInterfaceRegistry {
                         );
                     }
                 }
-                if declares_unrestricted(&resource.attrs) {
-                    self.register_lang_predicates(resource, &resource_source);
-                }
             }
-        }
-    }
-
-    /// Register the `lang` predicates over `resource`'s handles: `R::$is`
-    /// (`is-r`) for a type pattern, and on a chain root `R::$same` (`is-same`)
-    /// for `==`. Only a called one is imported.
-    fn register_lang_predicates(&mut self, resource: &ast::ResourceDecl, resource_source: &str) {
-        let own = cm_import_of(&resource.attrs)
-            .expect("an unrestricted resource names its interface in `#[cm]`");
-        let cm_name = own.function.as_deref().unwrap_or(&own.interface);
-        let lang = |function: String| CmImport {
-            interface: "lang".to_string(),
-            function: Some(function),
-            ..own.clone()
-        };
-        let self_type = substitute_self_in_type(
-            &self.source_interfaces,
-            &Type::Named(NamedType::new(
-                AstId::fresh(),
-                "Self".to_string(),
-                resource.span,
-            )),
-            &resource.name,
-            resource_source,
-        );
-        let handle = self.cm_param_type(&self_type);
-        let bool_type = || {
-            Type::Named(NamedType::new(
-                AstId::fresh(),
-                "bool".to_string(),
-                resource.span,
-            ))
-        };
-        self.register(
-            &resource.name,
-            NARROWING_TEST_METHOD,
-            &lang(format!("is-{cm_name}")),
-            false,
-            vec![("self".to_string(), "r".to_string(), handle.clone())],
-            Some(bool_type()),
-        );
-        if resource.parent.is_none() {
-            self.register(
-                &resource.name,
-                IDENTITY_TEST_METHOD,
-                &lang("is-same".to_string()),
-                false,
-                vec![
-                    ("self".to_string(), "a".to_string(), handle.clone()),
-                    ("other".to_string(), "b".to_string(), handle),
-                ],
-                Some(bool_type()),
-            );
         }
     }
 
