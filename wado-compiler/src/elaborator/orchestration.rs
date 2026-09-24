@@ -678,10 +678,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // was made. Reading it per branch let the generic arm claim
                     // progress it had not recorded, which is a loop that never
                     // converges rather than a missing entry.
-                    let def = resolutions
-                        .defs()
-                        .of_ast_id(newtype_decl.id)
-                        .expect("a newtype declaration has an identity");
+                    let def = resolutions.defs().def_at(newtype_decl.id);
                     if newtype_decl.type_params.is_empty() {
                         // Skip if already resolved (fixpoint convergence).
                         if all_newtypes.contains_key(&def) {
@@ -3016,15 +3013,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         lookup,
                     );
                 }
-                // A generic newtype (`type MyArray<T> = List<T>`)
-                // resolves to a `Newtype` over the instantiated base,
-                // mirroring `type_resolution`. Without this it
-                // falls through to `UNKNOWN`, the newtype's inherited
-                // base methods (`MyArray<i32>::len` → `List<i32>::len`)
-                // never resolve, and monomorphization can't reach them.
                 let Some(head) = head else {
                     return TypeTable::UNKNOWN;
                 };
+                // A `Newtype` over the instantiated base, as in `type_resolution`: `UNKNOWN`
+                // here would hide the inherited base methods from monomorphization.
                 if let Some(gn_info) = lookup.generic_newtype_of(head).cloned() {
                     // Resolved against the newtype's own parameters, then
                     // the site's arguments substituted into it: a base
@@ -3044,26 +3037,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // display spelling shows; the arguments sit beside it.
                     return type_table.make_newtype_instance(head, type_args, base_type_id);
                 }
-                // A generic resource (`Stream<u8>`, `Future<T>`) must
-                // resolve to a `GenericResource`, not a
-                // `GenericInstance` — otherwise the resource-store
-                // inference (effect_check `signature_resources`) does
-                // not see the resource a signature implies, and
-                // `consume(rx: Stream<u8>)` fails with
-                // `missing resource 'Stream'`.
+                // Not a `GenericInstance`: effect_check's `signature_resources` must see
+                // the resource a signature like `rx: Stream<u8>` implies.
                 if lookup.resource_type_of(head).is_some() {
                     return type_table.intern(ResolvedType::GenericResource {
                         def: head,
                         type_args,
                     });
                 }
-                // A generic application `Name<args...>` may name a
-                // struct, a variant (`Result<T, E>`), or an enum. The
-                // `Type::Named` arm above already checks all three; the
-                // generic arm must too, otherwise generic variants /
-                // enums resolve to `UNKNOWN`. `make_generic_instance`
-                // is name-based, so the same call shape works for every
-                // kind.
                 if lookup.struct_fields_of(head).is_some()
                     || lookup.variant_cases_of(head).is_some()
                     || lookup.enum_cases_of(head).is_some()

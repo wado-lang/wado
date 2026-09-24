@@ -787,39 +787,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return TypeTable::ERROR;
         }
-        if struct_info
-            .as_ref()
-            .is_some_and(|info| !info.type_params.is_empty())
-        {
-            let type_args = self.type_args_of_application(def, args);
-            self.check_type_decl_arg_bounds(def, &type_args, span);
-
-            // The instantiation is named by the declaration its head
-            // resolved to, and keeps its arguments beside it rather
-            // than fused into a rendered `Box<i32>` head no `impl`
-            // header writes.
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_generic_instance(def, type_args)
-        } else if let Some(variant_info) = self.lookup_variant_case_of_decl(def).cloned() {
-            // Check if it's a generic variant (like Result<T, E>)
-            if variant_info.type_params.is_empty() {
+        let instance_params = match struct_info {
+            Some(info) if !info.type_params.is_empty() => Some(info.type_params),
+            _ => self
+                .lookup_variant_case_of_decl(def)
+                .map(|info| info.type_params.clone()),
+        };
+        if let Some(params) = instance_params {
+            if params.is_empty() {
                 TypeTable::UNKNOWN
             } else {
                 let type_args = self.type_args_of_application(def, args);
                 self.check_type_decl_arg_bounds(def, &type_args, span);
+                // Named by the declaration its head resolved to, the arguments beside
+                // it rather than fused into a rendered `Box<i32>` no `impl` header writes.
                 self.tysys
                     .type_table
                     .borrow_mut()
                     .make_generic_instance(def, type_args)
             }
         } else if let Some(gn_info) = self.lookup_generic_newtype_of_decl(def).cloned() {
-            // Generic newtype instantiation: `type MyArray<T> = List<T>`.
-            // Its base is a type the declaration wrote, so it resolves
-            // against the arguments rather than at the use site — the
-            // same rule its defaults follow, so no kind is the odd one
-            // out.
+            // The base resolves against the arguments rather than at the use site,
+            // the same rule the declaration's defaults follow.
             let type_args = self.type_args_of_application(def, args);
             let names: Vec<String> = gn_info.type_params.iter().map(|p| p.name.clone()).collect();
             let base_type_id = self.with_type_param_args(&names, &type_args, |e| {

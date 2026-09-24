@@ -3685,16 +3685,11 @@ impl TypeSystem {
         expected_type: Option<TypeId>,
         explicit_args: &[TypeId],
     ) -> TypeId {
-        // An expected type pins the declaration the instance is interned
-        // against: a `Result` annotation and the variant reached through the
-        // prelude are one declaration, and the annotation is the one the
-        // caller's frame resolved.
-        let mut canonical_def = None;
         let variant_def = self
             .type_table
             .borrow()
             .defs()
-            .of_ast_id(variant_info.defined_at);
+            .def_at(variant_info.defined_at);
 
         let mut infer = InferCtx::new(&self.type_table, variant_info.type_param_type_ids.clone());
 
@@ -3724,10 +3719,9 @@ impl TypeSystem {
                 def,
                 type_args: expected_args,
             } = expected_resolved
-                && Some(def) == variant_def
+                && def == variant_def
                 && expected_args.len() == variant_info.type_param_type_ids.len()
             {
-                canonical_def = Some(def);
                 for (&param_id, &expected_arg) in variant_info
                     .type_param_type_ids
                     .iter()
@@ -3752,16 +3746,9 @@ impl TypeSystem {
                 .type_id_of_decl(variant_info.defined_at);
         }
 
-        let def = canonical_def.unwrap_or_else(|| {
-            self.type_table
-                .borrow()
-                .defs()
-                .of_ast_id(variant_info.defined_at)
-                .expect("the variant being instantiated is declared")
-        });
         self.type_table
             .borrow_mut()
-            .make_generic_instance(def, type_args)
+            .make_generic_instance(variant_def, type_args)
     }
 }
 

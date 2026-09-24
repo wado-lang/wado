@@ -857,12 +857,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// AST shape; cases keep their declared index.
     fn reify_enum(&self, enum_decl: &ast::EnumDecl) -> TirEnum {
         TirEnum {
-            def: self
-                .tysys
-                .resolutions
-                .defs()
-                .of_ast_id(enum_decl.id)
-                .expect("an `enum` declaration is declared"),
+            def: self.tysys.resolutions.defs().def_at(enum_decl.id),
             name: enum_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: enum_decl.visibility,
@@ -1027,13 +1022,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let wire_name_policy = wire_name_policy_of(&struct_decl.attrs);
 
         TirStruct {
-            def: StructDef::Decl(
-                self.tysys
-                    .resolutions
-                    .defs()
-                    .of_ast_id(struct_decl.id)
-                    .expect("a `struct` declaration is declared"),
-            ),
+            def: StructDef::Decl(self.tysys.resolutions.defs().def_at(struct_decl.id)),
             type_args: Vec::new(),
             name: struct_decl.name.clone(),
             module_source: self.current_module_source.clone(),
@@ -1121,13 +1110,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             "resolve_local_struct records the type params for every local struct reify emits",
         );
         self.pending_local_structs.push(TirStruct {
-            def: StructDef::Decl(
-                self.tysys
-                    .resolutions
-                    .defs()
-                    .of_ast_id(struct_decl.id)
-                    .expect("a function-local `struct` is declared"),
-            ),
+            def: StructDef::Decl(self.tysys.resolutions.defs().def_at(struct_decl.id)),
             type_args: Vec::new(),
             name: info.name,
             module_source: self.current_module_source.clone(),
@@ -1168,12 +1151,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// come from `tysys.all_variant_cases`; the type-param table is
     /// projected from the AST.
     fn reify_variant_decl(&mut self, variant_decl: &ast::VariantDecl) -> TirVariantDecl {
-        let def = self
-            .tysys
-            .resolutions
-            .defs()
-            .of_ast_id(variant_decl.id)
-            .expect("a `variant` declaration is declared");
+        let def = self.tysys.resolutions.defs().def_at(variant_decl.id);
         let case_info = self.tysys.all_variant_cases.get(&def);
 
         let cases: Vec<tir::TirVariantCase> = variant_decl
@@ -1248,12 +1226,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_effect_ops(decl.id)
             .expect("resolve_resource_decl records op signatures for every resource reify emits");
         tir::TirResource {
-            def: self
-                .tysys
-                .resolutions
-                .defs()
-                .of_ast_id(decl.id)
-                .expect("a `resource` declaration is declared"),
+            def: self.tysys.resolutions.defs().def_at(decl.id),
             name: decl.name.clone(),
             visibility: decl.visibility,
             operations,

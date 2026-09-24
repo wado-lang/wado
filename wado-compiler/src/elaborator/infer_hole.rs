@@ -244,8 +244,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .resolutions
                 .defs()
-                .of_ast_id(variant_info.defined_at)
-                .expect("the declaration this type names exists");
+                .def_at(variant_info.defined_at);
             self.tysys
                 .type_table
                 .borrow_mut()

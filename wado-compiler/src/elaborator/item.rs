@@ -1508,13 +1508,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .insert(struct_decl.id, struct_field_types);
 
         TirStruct {
-            def: StructDef::Decl(
-                self.tysys
-                    .resolutions
-                    .defs()
-                    .of_ast_id(struct_decl.id)
-                    .expect("a `struct` declaration is declared"),
-            ),
+            def: StructDef::Decl(self.tysys.resolutions.defs().def_at(struct_decl.id)),
             type_args: Vec::new(),
             name: struct_decl.name.clone(),
             module_source: self.current_module_source.clone(),
@@ -2088,12 +2082,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .effect_ops
             .insert(decl.id, operations.clone());
         TirResource {
-            def: self
-                .tysys
-                .resolutions
-                .defs()
-                .of_ast_id(decl.id)
-                .expect("a `resource` declaration is declared"),
+            def: self.tysys.resolutions.defs().def_at(decl.id),
             name: decl.name.clone(),
             visibility: decl.visibility,
             operations,
@@ -2165,12 +2154,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         );
 
         TirVariantDecl {
-            def: self
-                .tysys
-                .resolutions
-                .defs()
-                .of_ast_id(variant_decl.id)
-                .expect("a `variant` declaration is declared"),
+            def: self.tysys.resolutions.defs().def_at(variant_decl.id),
             name: variant_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: variant_decl.visibility,
