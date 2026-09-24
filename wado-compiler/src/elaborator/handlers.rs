@@ -100,11 +100,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         let interface_name = self.get_type_name(effect_ty);
         let site = effect_ty.id();
+        let effect = self.effect_named_at(site, effect_ty.span(), &interface_name);
         let effect_decl = site.and_then(|id| self.tysys.resolutions.declared(id));
-        if let (Some(site), Some(def)) = (site, effect_decl) {
-            self.record_reference_to_decl(site, def, effect_ty.span());
-        }
-        let effect = site.and_then(|id| self.tysys.resolutions.effect_at(id, &interface_name));
         // An effect declares its own parameter defaults, and a `with` clause
         // writes no argument for them.
         let effect_trait =
@@ -112,20 +109,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Both an effect and a resource are installable as handlers (see WEP
         // 2026-04-11); a polymorphic effect parameter is not.
-        match &effect {
-            None => {
-                let _ = self.emit(TypeError::NotAnEffect {
-                    name: interface_name,
-                    span: effect_ty.span(),
-                });
-            }
-            Some(EffectRef::Param { name }) => {
-                let _ = self.emit(TypeError::GenericEffectParamNotInstallable {
-                    name: name.clone(),
-                    span: effect_ty.span(),
-                });
-            }
-            Some(EffectRef::Concrete { .. }) => {}
+        if let Some(EffectRef::Param { name }) = &effect {
+            let _ = self.emit(TypeError::GenericEffectParamNotInstallable {
+                name: name.clone(),
+                span: effect_ty.span(),
+            });
         }
 
         // Resolve the handler value expression in the outer scope.

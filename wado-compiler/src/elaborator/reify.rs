@@ -623,18 +623,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// A function type's effects, read off the sites the resolve walk answered.
     /// Annotate already reported a name that reaches no effect.
     fn reify_effects(&self, ft: &ast::FunctionType) -> Vec<EffectRef> {
-        assert_eq!(ft.effects.len(), ft.effect_ids.len());
         ft.effects
             .iter()
-            .zip(&ft.effect_ids)
-            .map(|(name, &(site, _))| {
+            .map(|effect| {
                 self.tysys
                     .resolutions
-                    .effect_at(site, name)
-                    .unwrap_or_else(|| EffectRef::Concrete {
-                        name: name.clone(),
-                        module_source: self.current_module_source.clone(),
-                    })
+                    .effect_named(effect, &self.current_module_source)
             })
             .collect()
     }

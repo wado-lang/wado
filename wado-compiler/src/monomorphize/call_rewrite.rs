@@ -95,9 +95,8 @@ impl Monomorphizer {
                     }
                 }
             }
-            // Blanket impl fallback: dispatch through `impl<I: Bound> Trait for I`
-            // isn't keyed by struct name. The queued instantiation lives in the
-            // blanket's home module, looked up by trait only.
+            // A blanket impl is keyed by no receiver, so its instantiation is
+            // found in the blanket's home module, by trait alone.
             if let Some(impl_module) = self
                 .functions
                 .trait_env

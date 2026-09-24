@@ -40,8 +40,8 @@ use crate::elaborator::trait_env::{
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
 use crate::name::{DeclName, FqTraitName, unalias_namespace_member};
 use crate::resolve::Resolution;
+use crate::tir;
 use crate::unparse::unparse_type_into;
-use crate::{hashmap, tir};
 
 /// A static call named the way [symbol notation] writes it — the receiver's
 /// type arguments included (`List<i32>::with_capacity`). Rendering only the
@@ -494,43 +494,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if let Some(bounds) = assoc_bounds
                 && let Some((found_trait, info)) = {
-                    // A projection carries its bounds as identities, answered
-                    // where the trait declaration wrote them. The `ast` bounds
-                    // rebuilt here are spellings for the by-name lookups only;
-                    // which trait each means comes from `resolved`.
-                    let named: Vec<FqTraitName> = bounds.into_iter().collect();
-                    // Each rebuilt bound is paired with the identity it stands
-                    // for by its own id, not by its name: two same-named traits
-                    // from different modules are two bounds, and a by-name map
-                    // would collapse them back into one.
-                    let mut resolved: hashmap::IndexMap<AstId, FqTraitName> =
-                        hashmap::IndexMap::default();
-                    // Each carries no written argument, so no frame answers for
-                    // one: `None` is the whole truth here, not a default.
-                    let bounds: Vec<ScopedBound> = named
+                    // A projection carries its bounds as identities, so each
+                    // rebuilt bound carries its own in `resolved`.
+                    let bounds: Vec<ScopedBound> = bounds
                         .iter()
                         .map(|b| {
-                            let id = AstId::fresh();
-                            resolved.insert(id, b.clone());
                             ScopedBound::new(
                                 ast::TraitBound {
-                                    id,
+                                    id: AstId::fresh(),
                                     name: b.base_name().to_string(),
                                     type_args: Vec::new(),
                                     assoc_types: Vec::new(),
                                     span,
                                     fn_signature: None,
-                                    // Recorded on the bound, so nothing has to
-                                    // resolve `name` at an id the walk never saw.
                                     resolved: b.canonical(),
                                 },
                                 None,
                             )
                         })
                         .collect();
-                    self.find_method_in_trait_bounds_with(
+                    self.find_method_in_trait_bounds(
                         &bounds,
-                        &resolved,
                         method_name,
                         base_type_id,
                         span,

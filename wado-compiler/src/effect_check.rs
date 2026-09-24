@@ -522,12 +522,13 @@ impl OwnedEffectData {
             IndexMap::default();
         let mut trait_by_def: IndexMap<DefId, TraitKey> = IndexMap::default();
         let mut open_traits: IndexSet<TraitKey> = IndexSet::default();
+        let resolutions = &*state.tysys.resolutions;
         for (src, module) in &sem.modules {
             for item in &module.items {
                 let Item::Trait(trait_decl) = item else {
                     continue;
                 };
-                if let Some(def) = sem.resolutions().and_then(|r| r.declared(trait_decl.id)) {
+                if let Some(def) = resolutions.declared(trait_decl.id) {
                     trait_by_def.insert(def, (src.clone(), trait_decl.name.clone()));
                 }
                 if trait_decl.head.is_open() {
@@ -537,14 +538,7 @@ impl OwnedEffectData {
                     let effects = method
                         .effects
                         .iter()
-                        .zip(&method.effect_ids)
-                        .map(|(name, &(site, _))| {
-                            // One reaching no effect was reported in elaboration.
-                            effect_at(sem, site, name).unwrap_or_else(|| EffectRef::Concrete {
-                                name: name.clone(),
-                                module_source: src.clone(),
-                            })
-                        })
+                        .map(|effect| resolutions.effect_named(effect, src))
                         .collect();
                     trait_method_effects.insert(
                         (src.clone(), trait_decl.name.clone(), method.name.clone()),

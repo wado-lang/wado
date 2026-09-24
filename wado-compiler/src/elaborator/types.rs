@@ -1147,15 +1147,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// `with E => h do` clause where `E` is not a known effect or resource
-    /// declaration (it might be a regular trait, an unrelated type, or an
-    /// unknown name). Both kinds are installable as handlers; see WEP
-    /// 2026-04-11.
-    NotAnEffect {
-        name: String,
-        span: Span,
-    },
-
     /// `with E => h do` where `E` is a generic effect parameter
     /// (`<effect E>`). Generic effect parameters are propagation-only:
     /// the compiler does not know `E`'s operation list at effect-check
@@ -2338,13 +2329,6 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::NotAnEffect { name, span } => (
-                Code::UnknownType,
-                format!(
-                    "'{name}' is not an effect; only effect names are valid in `with E => h do` clauses"
-                ),
-                *span,
-            ),
             TypeError::GenericEffectParamNotInstallable { name, span } => (
                 Code::UnsupportedFeature,
                 format!(
@@ -3523,12 +3507,9 @@ impl<'a> TypeLookup<'a> {
             .bound_declaring_assoc_type(bounds, assoc_name, |bound| self.bound_decl(bound))
     }
 
-    /// The declaration `bound` names: the referent a synthesised bound carries,
-    /// else what the walk recorded at its site.
+    /// The declaration `bound` names.
     pub(super) fn bound_decl(&self, bound: &ast::TraitBound) -> Option<DefId> {
-        bound
-            .resolved
-            .or_else(|| self.declaration_at(Some(bound.id), &bound.name))
+        self.resolutions.bound_decl(bound)
     }
 
     /// The declaration a type reference names.

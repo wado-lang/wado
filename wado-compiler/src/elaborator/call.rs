@@ -280,16 +280,12 @@ impl CalleeIdentKind<'_> {
             _ => None,
         }
     }
+}
 
-    /// The reference site of the interface a dispatch path `[ns::]E::op` names.
-    /// Its consumers read the operation off the path's *last* `::`, which is
-    /// the other half of the same split.
-    fn interface_site(&self) -> Option<ast::AstId> {
-        match self {
-            Self::AsIs(ident) => Some(ident.owner_segment()?.id),
-            _ => None,
-        }
-    }
+/// An operation of an `interface` or resource, as a callee names it.
+pub(super) struct EffectOperation {
+    decl: DefId,
+    name: String,
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -529,20 +525,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// effect or resource declaring `op`. `None` leaves the caller to report an
     /// unknown function rather than defer an unvalidated call to codegen.
     ///
+    /// The operation a callee names: `[ns::]E::op` through `E`'s site, or an
+    /// imported bare `op` through its own.
+    fn effect_operation_of(&self, callee_kind: &CalleeIdentKind<'_>) -> Option<EffectOperation> {
+        let CalleeIdentKind::AsIs(ident) = callee_kind else {
+            return None;
+        };
+        let op = match ident.owner_segment() {
+            Some(owner) => EffectOperation {
+                decl: self.effect_or_resource_decl_at(Some(owner.id))?,
+                name: ident.segments.last()?.name.clone(),
+            },
+            None => {
+                let defs = self.tysys.resolutions.defs();
+                let def = self.tysys.resolutions.declared_if_walked(ident.id)?;
+                let decl = defs.parent(def).filter(|p| defs.kind(*p).is_effect())?;
+                let declared = defs.name(def);
+                let name = declared.rsplit_once("::").map_or(declared, |(_, op)| op);
+                EffectOperation {
+                    decl,
+                    name: name.to_string(),
+                }
+            }
+        };
+        self.tysys
+            .signatures
+            .resource_method_sig(op.decl, &op.name)
+            .is_some()
+            .then_some(op)
+    }
+
     /// Signature resolution, the effect check, dispatch and WIR all key on the
     /// declaration's own name and the bare operation, so neither an import
     /// alias nor a namespace qualifier may reach them.
-    fn effect_operation_callee(&self, ident: &ast::IdentExpr, path: &str) -> Option<CalleeRef> {
-        let (_, operation) = path.rsplit_once("::")?;
-        let decl = self.effect_or_resource_decl_at(Some(ident.owner_segment()?.id))?;
-        self.tysys
-            .signatures
-            .resource_method_sig(decl, operation)
-            .is_some()
-            .then(|| {
-                let declared = self.tysys.resolutions.defs().name(decl).to_string();
-                CalleeRef::local_namespace(&mut self.interner.borrow_mut(), &declared, operation)
-            })
+    fn effect_operation_callee(&self, op: &EffectOperation) -> CalleeRef {
+        let declared = self.tysys.resolutions.defs().name(op.decl).to_string();
+        CalleeRef::local_namespace(&mut self.interner.borrow_mut(), &declared, &op.name)
     }
 
     /// The variant a `Variant::Case(...)` callee constructs: the one the walk
@@ -822,10 +840,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_static_call_visibility(&receiver, effective_name, Some(call.id), call.span);
         }
 
+        let effect_op = self.effect_operation_of(&callee_kind);
         // First, determine expected parameter types to handle coercion.
         let signature = self.lookup_function_signature(
             effective_name,
-            callee_kind.interface_site(),
+            effect_op.as_ref(),
             callee_kind.callee_site(),
         );
         let signature_known = signature.is_some();
@@ -1421,11 +1440,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // alike. Ahead of the namespace arm below, which reads the
             // operation as a static method on the interface and mangles a body
             // nothing declares.
-            else if let Some(callee) = self.effect_operation_callee(ident, effective_name) {
-                (Some(callee), effective_name.to_string())
+            else if let Some(op) = &effect_op {
+                (
+                    Some(self.effect_operation_callee(op)),
+                    effective_name.to_string(),
+                )
             }
-            // If prefix is a known type (struct/enum/newtype/flags) with no matching
-            // static method, emit a compile error.
+            // A type, resource included, with no such static method.
             else if self.names_type_at(receiver_site, prefix) {
                 return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
             }
@@ -1803,6 +1824,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 (None, effective_name.to_string())
             }
+        } else if let Some(op) = &effect_op {
+            if let Some(def) = self.tysys.resolutions.declared_if_walked(ident.id)
+                && self.record_reference_to_decl(ident.id, def, ident.span)
+            {
+                return TypeTable::ERROR;
+            }
+            (
+                Some(self.effect_operation_callee(op)),
+                effective_name.to_string(),
+            )
         }
         // The call's own reference site, answered by the module that wrote it
         // (WEP 2026-08-12) — not by the module the walk is standing in, which
@@ -1907,8 +1938,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         // Look up function return type
-        let mut return_type =
-            self.lookup_function_return_type(&callee, callee_kind.interface_site());
+        let mut return_type = self.lookup_function_return_type(&callee, effect_op.as_ref());
 
         // If we have explicit type args, substitute type parameters in the return type
         if !type_args.is_empty() {
@@ -2078,11 +2108,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         return_type
     }
 
-    /// Look up the return type of a function
     pub(super) fn lookup_function_return_type(
         &mut self,
         callee: &CalleeRef,
-        interface_site: Option<ast::AstId>,
+        effect_op: Option<&EffectOperation>,
     ) -> TypeId {
         let callee_module = callee.module();
         let func_name = callee.name();
@@ -2098,21 +2127,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Effect operations are routed here as `CalleeRef::local_namespace`, so
         // `ModuleSource::Local { path }` matches `is_effect_like()`.
         if callee_module.is_effect_like()
-            && let Some(decl) = self.effect_or_resource_decl_at(interface_site)
-            && let Some((_, Some(return_type))) = self.resolve_effect_op_signature(decl, func_name)
+            && let Some(op) = effect_op
+            && let Some((_, return_type)) = self.resolve_effect_op_signature(op.decl, &op.name)
         {
-            return return_type;
+            return return_type.unwrap_or(TypeTable::UNIT);
         }
 
         if let Some(def) = callee.def()
             && let Some(sig) = self.tysys.signatures.function_sig(def)
-            && let Some(return_type) = sig.decl.return_type
         {
-            return return_type;
+            return sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         }
 
-        // Default to UNIT for unknown functions (they might be external/builtin)
-        TypeTable::UNIT
+        // An unresolved callee, already reported where the call was resolved.
+        TypeTable::ERROR
     }
 
     /// Resolve an effect operation's `(param types, return type)` — the single
@@ -2121,6 +2149,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// an `interface` (WASI/user effect) or a `resource` (WASI handle); both
     /// store methods as `InterfaceMethod`s, and the decl pass recorded both
     /// kinds as a [`MethodSig`] in the declaration's own frame.
+    fn effect_op_params(&self, op: Option<&EffectOperation>) -> Option<Vec<TypeId>> {
+        let op = op?;
+        Some(self.resolve_effect_op_signature(op.decl, &op.name)?.0)
+    }
+
     fn resolve_effect_op_signature(
         &self,
         effect: DefId,
@@ -2167,7 +2200,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn lookup_function_signature(
         &mut self,
         name: &str,
-        interface_site: Option<ast::AstId>,
+        effect_op: Option<&EffectOperation>,
         callee_site: Option<ast::AstId>,
     ) -> Option<(Vec<TypeId>, Vec<TypeId>)> {
         // Check for qualified name (Type::method or Effect::operation)
@@ -2203,12 +2236,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ));
             }
 
-            // The operation is the path's last segment: a namespace ahead of
-            // the interface stays on `suffix`, which `interface_site` skips.
-            if let Some((_, operation)) = name.rsplit_once("::")
-                && let Some(decl) = self.effect_or_resource_decl_at(interface_site)
-                && let Some((params, _)) = self.resolve_effect_op_signature(decl, operation)
-            {
+            if let Some(params) = self.effect_op_params(effect_op) {
                 return Some((params, Vec::new()));
             }
 
@@ -2245,6 +2273,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             return None;
+        }
+        if let Some(params) = self.effect_op_params(effect_op) {
+            return Some((params, Vec::new()));
         }
 
         // One read for this module's functions, its imports under either

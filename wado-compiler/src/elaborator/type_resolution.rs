@@ -49,7 +49,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect();
                 let return_type = self.resolve_type(&func_ty.return_type);
                 // Resolve effect names in function type position
-                let effects = self.resolve_effects(&func_ty.effects, &func_ty.effect_ids);
+                let effects = self.resolve_effects(&func_ty.effects);
                 self.tysys.type_table.borrow_mut().make_function_with_mut(
                     func_ty.is_mut,
                     params,
@@ -114,7 +114,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // materialized for an impl in another module does not share.
         self.tysys
             .trait_env
-            .bound_declaring_assoc_type(bounds, assoc_name, |bound| self.trait_decl_at(bound.id))
+            .bound_declaring_assoc_type(bounds, assoc_name, |bound| self.trait_decl_of(bound))
     }
 
     /// The identity an impl header names: the trait, plus the arguments it
@@ -164,7 +164,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let declaring: Vec<&ScopedBound> = bounds
             .iter()
             .filter(|bound| {
-                self.trait_decl_at(bound.id)
+                self.trait_decl_of(bound)
                     .is_some_and(|decl| self.tysys.trait_env.declares_assoc_type(&decl, assoc_name))
             })
             .collect();
@@ -1014,7 +1014,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             |e| {
                 let mut out: Vec<FrameBound> = Vec::new();
                 for bound in bounds {
-                    let Some(decl) = e.trait_decl_at(bound.id) else {
+                    let Some(decl) = e.trait_decl_of(&bound) else {
                         out.push((bound, Vec::new()));
                         continue;
                     };
@@ -1186,7 +1186,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map_or_else(Vec::new, |decl| decl.bounds.clone());
         let bound_names: Vec<FqTraitName> = assoc_bounds
             .iter()
-            .map(|b| self.fq_trait_name_at(b.id, &b.name))
+            .map(|b| self.fq_trait_name_of(b))
             .collect();
         let assoc_type_bindings = self.frame_assoc_bindings(base, base_name, &assoc_bounds);
         self.tysys
@@ -1214,8 +1214,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.bound_closure_of(base_name)?
                 .into_iter()
                 .find_map(|(bound, space)| {
-                    let fq = self.fq_trait_name_at(bound.id, &bound.name);
-                    (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
+                    (self.trait_decl_of(&bound) == Some(trait_))
                         .then(|| bound.assoc_types.iter().find(|b| b.name == assoc).cloned())
                         .flatten()
                         .map(|binding| (binding.ty, space, bound))

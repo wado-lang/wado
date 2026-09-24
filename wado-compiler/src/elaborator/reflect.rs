@@ -96,8 +96,7 @@ impl ScalarReflectSpec {
 }
 
 /// `ReflectStruct`'s member names, resolved once through the compiler-item
-/// registry so a stdlib rename flows through both `reflect_dispatch_of`
-/// and the resolver that dispatches on them.
+/// registry.
 struct StructMethods {
     members: String,
     from_fields: String,

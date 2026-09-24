@@ -455,7 +455,9 @@ impl DefTable {
                     members: Vec::new(),
                 })
             });
-            self.defs[id.0 as usize].parent = Some(owner);
+            let def = &mut self.defs[id.0 as usize];
+            def.parent = Some(owner);
+            def.kind = member.kind;
             self.defs[owner.0 as usize].members.push(id);
         }
     }

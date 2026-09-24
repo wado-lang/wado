@@ -649,18 +649,13 @@ impl ImplMethodEntry {
 /// right one.
 pub(super) type ImplMethodIndex = IndexMap<ImplTargetKey, Vec<ImplMethodEntry>>;
 
-/// Pre-built index of static methods from resource declarations.
-/// Key: canonical receiver [`DefId`] → `[(method_name, ModuleSource, owning
-/// resource declaration, method_index)]` — the resource, not the method, unlike
-/// [`ImplMethodEntry::method_id`]. Same disambiguation rationale as
-/// [`ImplMethodIndex`].
+/// The static methods a resource declares: `(method_name, module, the owning
+/// resource, method_index)` per receiver.
 pub(super) type ResourceStaticMethodIndex =
     IndexMap<ImplTargetKey, Vec<(String, ModuleSource, DefId, usize)>>;
 
-/// `(receiver spelling, trait)` → modules holding that `impl` block. The
-/// multi-value `Vec` plus the caller's `type_module` hint routes two modules'
-/// same-named receivers apart. Value blanket impls apply structurally, with no
-/// concrete receiver name, and live in `blanket_impls` instead.
+/// `(receiver spelling, trait)` → the modules holding that `impl` block, one
+/// per module declaring a receiver under that spelling.
 pub(crate) type TraitImplModuleIndex = IndexMap<(String, DefId), Vec<ModuleSource>>;
 
 /// Where each `impl <trait> for <type>` lives, reachable from both receiver
@@ -1530,15 +1525,8 @@ impl TraitEnv {
         })
     }
 
-    /// The module defining `impl <trait_> for <receiver>`, or `None` for a
-    /// blanket impl and for a receiver no concrete impl represents (an
-    /// anonymous function type whose `Inspect` synthesis auto-derives
-    /// per-module).
-    ///
-    /// The AST layer answers first: it holds the impls a module wrote, and the
-    /// synthesis layer records both receiver namespaces, so preferring it would
-    /// return a different module. When several modules implement the trait for
-    /// same-named receivers, `type_module` picks the entry whose module matches.
+    /// The module defining `impl <trait_> for <receiver>`; `None` for a blanket
+    /// impl and a receiver no concrete impl represents.
     pub(crate) fn impl_module_for(
         &self,
         receiver: ImplReceiver<'_>,
@@ -2894,10 +2882,15 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
                 .iter()
                 .map(|param| written_type_arg(param, resolutions).to_mangled())
                 .collect();
-            // The written spelling: an effect has no reference site, so there
-            // is no identity to ask for. The resolved side qualifies a concrete
-            // effect by module, so the two agree on a binder and not on one.
-            let with_clause: Vec<String> = ft.effects.clone();
+            let with_clause: Vec<String> = ft
+                .effects
+                .iter()
+                .map(|effect| {
+                    resolutions
+                        .effect_at(effect.id, &effect.name)
+                        .map_or_else(|| effect.name.clone(), |e| name::mangle_effect_ref(&e))
+                })
+                .collect();
             name::FqTypeName::builtin(&name::mangle_fn_type(
                 ft.is_mut,
                 &params,

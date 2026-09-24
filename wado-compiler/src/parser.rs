@@ -7,8 +7,8 @@ use crate::ast::{
     BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison,
     ClosureExpr, ClosureParam, CmBoundary, CmImport, CmResourceLinearity, ComparisonChainExpr,
     CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, EFFECT_HOLE,
-    EffectHandlerBinding, EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, Expr, ExprStmt,
-    FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
+    EffectHandlerBinding, EffectName, EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, Expr,
+    ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
     FunctionType, GenericParam, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock,
     ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
     LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
@@ -1864,7 +1864,7 @@ impl Parser {
 
         let return_type = self.parse_optional_return_type()?;
 
-        let (effects, effect_ids) = self.parse_with_clause()?;
+        let effects = self.parse_with_clause()?;
 
         // `with _` is sugar for `<effect E> with E`, so the signature carries
         // the parameter it stands for. One per function, as for a written one.
@@ -1918,7 +1918,6 @@ impl Parser {
             params_span,
             return_type,
             effects,
-            effect_ids,
             effects_inherited: false,
             body,
             span,
@@ -2109,18 +2108,16 @@ impl Parser {
     }
 
     /// Take one effect name of a `with` row, noting it if it is the hole.
-    fn consume_effect_name(
-        &mut self,
-        effects: &mut Vec<String>,
-        effect_ids: &mut Vec<(AstId, Span)>,
-    ) -> ParseResult<()> {
+    fn consume_effect_name(&mut self) -> ParseResult<EffectName> {
         let (name, span) = self.consume_ident_with_span()?;
         if name == EFFECT_HOLE {
             self.note_effect_hole(span)?;
         }
-        effects.push(name);
-        effect_ids.push((self.alloc_ast_id(), span));
-        Ok(())
+        Ok(EffectName {
+            name,
+            id: self.alloc_ast_id(),
+            span,
+        })
     }
 
     /// The effect parameter a signature's `with _` minted, if it carries one.
@@ -2135,13 +2132,12 @@ impl Parser {
     /// Parse a `with (Effect1, Effect2)` row. Every member is an effect. The
     /// third result says the row was written bare, with no parentheses closing
     /// it.
-    fn parse_effect_row(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, bool)> {
+    fn parse_effect_row(&mut self) -> ParseResult<(Vec<EffectName>, bool)> {
         let Some(parenthesized) = self.open_with_row() else {
-            return Ok((Vec::new(), Vec::new(), false));
+            return Ok((Vec::new(), false));
         };
 
         let mut effects = Vec::new();
-        let mut effect_ids = Vec::new();
         if parenthesized && self.check(&TokenKind::RParen) {
             return Err(self.error_at_span(self.peek().span, Self::EMPTY_EFFECT_ROW));
         }
@@ -2149,7 +2145,7 @@ impl Parser {
             if parenthesized && self.check(&TokenKind::RParen) {
                 break;
             }
-            self.consume_effect_name(&mut effects, &mut effect_ids)?;
+            effects.push(self.consume_effect_name()?);
             if !parenthesized || !self.check(&TokenKind::Comma) {
                 break;
             }
@@ -2159,18 +2155,18 @@ impl Parser {
         if parenthesized {
             self.expect(&TokenKind::RParen)?;
         }
-        Ok((effects, effect_ids, !parenthesized))
+        Ok((effects, !parenthesized))
     }
 
     /// Parse a declaration's `with` clause. Nothing follows the row but the
     /// body or `;`, so a comma after a bare effect is a missing paren; in type
     /// position that comma belongs to the enclosing list.
-    fn parse_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>)> {
-        let (effects, effect_ids, bare) = self.parse_effect_row()?;
+    fn parse_with_clause(&mut self) -> ParseResult<Vec<EffectName>> {
+        let (effects, bare) = self.parse_effect_row()?;
         if bare && self.check(&TokenKind::Comma) {
             return Err(self.error_at_span(self.peek().span, Self::MULTI_EFFECT_NEEDS_PARENS));
         }
-        Ok((effects, effect_ids))
+        Ok(effects)
     }
 
     /// Point a `type F = fn() with A, B;` at the parentheses it is missing.
@@ -5021,14 +5017,13 @@ impl Parser {
                 })
             };
 
-            let (effects, effect_ids, _) = self.parse_effect_row()?;
+            let (effects, _) = self.parse_effect_row()?;
 
             return Ok(Type::Function(Box::new(FunctionType {
                 is_mut,
                 params,
                 return_type,
                 effects,
-                effect_ids,
             })));
         }
 
@@ -5393,14 +5388,13 @@ impl Parser {
             })
         };
 
-        let (effects, effect_ids, _) = self.parse_effect_row()?;
+        let (effects, _) = self.parse_effect_row()?;
 
         Ok(Box::new(FunctionType {
             is_mut,
             params,
             return_type,
             effects,
-            effect_ids,
         }))
     }
 
@@ -6088,9 +6082,9 @@ impl Parser {
                 if method.effects.is_empty() {
                     let inherited = head.inherited_effects(name_span);
                     method.effects_inherited = !inherited.is_empty();
-                    for (effect, span) in inherited {
-                        method.effects.push(effect);
-                        method.effect_ids.push((self.alloc_ast_id(), span));
+                    for (name, span) in inherited {
+                        let id = self.alloc_ast_id();
+                        method.effects.push(EffectName { name, id, span });
                     }
                 }
                 methods.push(method);
@@ -6126,12 +6120,11 @@ impl Parser {
             return Ok(TraitHead::Pure { span });
         }
 
-        let mut effects = Vec::new();
-        let mut effect_ids = Vec::new();
+        let mut effects: Vec<EffectName> = Vec::new();
         loop {
             let (name, span) = self.consume_ident_with_span()?;
-            effects.push(name);
-            effect_ids.push((self.alloc_ast_id(), span));
+            let id = self.alloc_ast_id();
+            effects.push(EffectName { name, id, span });
             if !parenthesized || !self.check(&TokenKind::Comma) {
                 break;
             }
@@ -6142,11 +6135,11 @@ impl Parser {
         } else if self.check(&TokenKind::Comma) {
             return Err(self.error_at_span(self.peek().span, Self::MULTI_EFFECT_NEEDS_PARENS));
         } else {
-            effect_ids.last().map_or(start, |(_, s)| *s)
+            effects.last().map_or(start, |e| e.span)
         };
         let span = start.merge(&end);
 
-        if effects.iter().any(|e| e == EFFECT_HOLE) {
+        if effects.iter().any(|e| e.name == EFFECT_HOLE) {
             if effects.len() > 1 {
                 return Err(self.error_at_span(
                     span,
@@ -6155,11 +6148,7 @@ impl Parser {
             }
             return Ok(TraitHead::Open { span });
         }
-        Ok(TraitHead::Fixed {
-            effects,
-            effect_ids,
-            span,
-        })
+        Ok(TraitHead::Fixed { effects, span })
     }
 
     /// The effect parameter a `with _` stands for, named `_` so the clause that
@@ -6804,6 +6793,10 @@ mod tests {
         parser.parse_strict()
     }
 
+    fn effect_names(effects: &[EffectName]) -> Vec<&str> {
+        effects.iter().map(|e| e.name.as_str()).collect()
+    }
+
     /// Parse helper that exposes the full recovery result: the (always
     /// produced) module plus every recovered syntax error.
     fn parse_recovering(source: &str) -> (Module, Vec<ParseError>) {
@@ -7020,7 +7013,7 @@ mod tests {
         let module = parse("fn run() with Stdout { }").unwrap();
 
         if let Item::Function(func) = &module.items[0] {
-            assert_eq!(func.effects, vec!["Stdout"]);
+            assert_eq!(effect_names(&func.effects), ["Stdout"]);
         } else {
             panic!("expected function");
         }
@@ -7045,7 +7038,7 @@ mod tests {
             assert_eq!(func.params[0].name, "f");
             assert_eq!(func.params[1].name, "x");
             if let Type::Function(ft) = &func.params[0].ty {
-                assert_eq!(ft.effects, vec!["Stdout"]);
+                assert_eq!(effect_names(&ft.effects), ["Stdout"]);
             } else {
                 panic!("expected function type for param f");
             }
@@ -8756,7 +8749,7 @@ line 2
         let Item::Function(f) = &module.items[0] else {
             panic!("expected function");
         };
-        assert_eq!(f.effects, vec!["E".to_string()]);
+        assert_eq!(effect_names(&f.effects), ["E"]);
     }
 
     #[test]
@@ -8765,7 +8758,7 @@ line 2
         let Item::Function(f) = &module.items[0] else {
             panic!("expected function");
         };
-        assert_eq!(f.effects, vec!["E".to_string()]);
+        assert_eq!(effect_names(&f.effects), ["E"]);
     }
 
     #[test]
@@ -8774,7 +8767,7 @@ line 2
         let Item::Function(f) = &module.items[0] else {
             panic!("expected function");
         };
-        assert_eq!(f.effects, vec!["E".to_string(), "Stdout".to_string()]);
+        assert_eq!(effect_names(&f.effects), ["E", "Stdout"]);
     }
 
     #[test]
@@ -8849,7 +8842,7 @@ line 2
         let Type::Function(ft) = &f.params[0].ty else {
             panic!("expected a fn type");
         };
-        assert_eq!(ft.effects, vec!["E".to_string(), "Stdout".to_string()]);
+        assert_eq!(effect_names(&ft.effects), ["E", "Stdout"]);
     }
 
     #[test]
@@ -9871,6 +9864,6 @@ line 2
         let decl = parse_interface("interface Run { fn go<T>(v: T) -> T with Stdout; }");
         let method = &decl.methods[0];
         assert_eq!(method.type_params.len(), 1);
-        assert_eq!(method.effects, ["Stdout"]);
+        assert_eq!(effect_names(&method.effects), ["Stdout"]);
     }
 }

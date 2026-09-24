@@ -1933,8 +1933,7 @@ impl TypeSystem {
     }
 
     /// Whether `bound` is a synthesized reflection trait the subject is eligible
-    /// for by kind. These have no impl blocks, so the impl search misses them; a
-    /// hit records the bound-driven synth request.
+    /// for by kind. A hit records the bound-driven synth request.
     fn synthesized_reflect_bound_holds(
         &self,
         scope: &TypeLookup,
@@ -2029,12 +2028,18 @@ fn declaring_module_of_kind(
 type DeclaredAssocType = (DefId, ast::AssociatedTypeDecl);
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The trait, interface or resource a bound's reference site names.
-    pub(super) fn trait_decl_at(&self, site: AstId) -> Option<DefId> {
-        self.tysys.resolutions.declared(site).filter(|def| {
-            self.tysys.trait_env.declares_trait(def)
-                || self.tysys.resolutions.defs().kind(*def).is_effect()
-        })
+    /// The trait, interface or resource `bound` names.
+    pub(super) fn trait_decl_of(&self, bound: &ast::TraitBound) -> Option<DefId> {
+        self.tysys
+            .resolutions
+            .bound_decl(bound)
+            .filter(|def| self.is_trait_like(*def))
+    }
+
+    /// Whether `def` is what a bound can name: a trait, interface or resource.
+    pub(super) fn is_trait_like(&self, def: DefId) -> bool {
+        self.tysys.trait_env.declares_trait(&def)
+            || self.tysys.resolutions.defs().kind(def).is_effect()
     }
 
     /// The header of `method_name` on the trait `key` names. The cheap form of
@@ -2139,34 +2144,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             answers.push((decl.name.clone(), answer));
         }
         answers
-    }
-
-    /// Find a method in the trait declarations the bound names give, read in
-    /// elaborated form: `T: Ord` searches `Ord` and its supertraits. `Self` is
-    /// substituted by the `TypeParam`'s type. More than one bound declaring the
-    /// name is ambiguous — reported, then resolved to the first.
-    ///
-    /// `required_trait`: the trait a qualified call named, which alone may
-    /// answer. Matched against the *elaborated* bounds, so a supertrait of a
-    /// written bound qualifies.
-    pub(super) fn find_method_in_trait_bounds(
-        &mut self,
-        bounds: &[ScopedBound],
-        method_name: &str,
-        self_type_id: TypeId,
-        span: Span,
-        required_trait: Option<&RequiredTrait>,
-        args: ArgSource<'_, '_>,
-    ) -> Option<(FqTraitName, MethodInfo)> {
-        self.find_method_in_trait_bounds_with(
-            bounds,
-            &IndexMap::default(),
-            method_name,
-            self_type_id,
-            span,
-            required_trait,
-            args,
-        )
     }
 
     /// The space `elaborated`'s written types are read in: empty for a bound the
@@ -2322,25 +2299,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(instantiated.param_types[first_value_param..].to_vec())
     }
 
-    /// [`Self::find_method_in_trait_bounds`] for bounds that carry no reference
-    /// site of their own.
-    ///
-    /// `known` maps a bound's own id to the declaration it means, answered
-    /// where the bound was first read. An associated-type projection is the
-    /// case: it outlives the trait declaration's frame, so it records the
-    /// identities and hands them back here. Keyed by id rather than by name so
-    /// two same-named traits stay two bounds.
-    pub(super) fn find_method_in_trait_bounds_with(
+    /// Find a method in the trait declarations the bound names give, read in
+    /// elaborated form: `T: Ord` searches `Ord` and its supertraits.
+    pub(super) fn find_method_in_trait_bounds(
         &mut self,
         bounds: &[ScopedBound],
-        known: &IndexMap<AstId, FqTraitName>,
         method_name: &str,
         self_type_id: TypeId,
         span: Span,
         required_trait: Option<&RequiredTrait>,
         args: ArgSource<'_, '_>,
     ) -> Option<(FqTraitName, MethodInfo)> {
-        let elaborated = self.elaborate_bounds_with(bounds, known);
+        let elaborated = self.elaborate_bounds(bounds);
         // Which trait each bound means is settled once, here: a bound reached
         // through a supertrait was written in the *declaring* module, so
         // resolving its spelling in this frame would miss an aliased one.
@@ -2349,12 +2319,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter_map(|b| {
                 // A synthesised bound carries its referent, so it is read off
                 // the bound rather than looked up by an id the walk never saw.
-                let key = b
-                    .bound
-                    .resolved
-                    .or_else(|| known.get(&b.bound.id).and_then(FqTraitName::canonical))
-                    .or_else(|| self.trait_decl_at(b.bound.id));
-                key.map(|key| (b.clone(), key))
+                self.trait_decl_of(&b.bound).map(|key| (b.clone(), key))
             })
             .collect();
         // Stopping at the first hit would hide the ambiguity, so every bound is
@@ -2444,10 +2409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The bound answers with the trait its own reference site resolves to,
         // not the spelling it wrote: an aliased bound (`T: G` for
         // `use { Greet as G }`) must reach the impl that defines the method.
-        let fq_trait_name = known
-            .get(&bound.id)
-            .cloned()
-            .unwrap_or_else(|| FqTraitName::declared(self.tysys.resolutions.defs(), decl));
+        let fq_trait_name = FqTraitName::declared(self.tysys.resolutions.defs(), decl);
         // The arguments the bound writes name the trait the way the impl that
         // answers it is named, so `T: Eq<String>` reaches `impl Eq<String>`.
         let fq_trait_name = self.tysys.trait_env.fq_trait_named_by_bound(
@@ -2699,9 +2661,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Which trait a direct bound names, not how it spells it: two
                 // modules may call one name two traits. One that names no
                 // declaration falls back to its spelling, as `merge_bound` does.
-                let declared = bound.resolved.or_else(|| self.trait_decl_at(bound.id));
+                let declared = self.trait_decl_of(&bound);
                 let already_direct = |b: &ast::TraitBound| match declared {
-                    Some(decl) => self.trait_decl_at(b.id) == Some(decl),
+                    Some(decl) => self.trait_decl_of(b) == Some(decl),
                     None => b.name == bound.name,
                 };
                 if param.bounds.iter().any(already_direct) {
@@ -2744,7 +2706,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn trait_args_of_bound(&mut self, bounds: &[ScopedBound], root: DefId) -> Vec<TypeId> {
         let Some(found) = bounds
             .iter()
-            .find(|bound| self.trait_decl_at(bound.id) == Some(root))
+            .find(|bound| self.trait_decl_of(bound) == Some(root))
             .cloned()
         else {
             return Vec::new();
@@ -2914,8 +2876,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if (binding.is_none() && mentions_self) || mentions_type_pack(&constraint.ty) {
                 continue;
             }
-            // The bound's own site says which trait declares the constraint.
-            let trait_key = self.fq_trait_name_at(bound.id, &bound.name).canonical();
+            let trait_key = self.tysys.resolutions.bound_decl(bound);
             let Some(actual) = trait_key.and_then(|key| {
                 self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
                     type_arg,

@@ -465,7 +465,7 @@ pub(super) fn lower_impls<'a>(
             .map(|p| {
                 let mut def = ParamDef::default();
                 for b in &p.bounds {
-                    let Some(bound) = b.resolved.or_else(|| resolutions.declared(b.id)) else {
+                    let Some(bound) = resolutions.bound_decl(b) else {
                         continue;
                     };
                     let bound = lowering.trait_decl(bound);
@@ -930,7 +930,7 @@ impl SolverBridge {
                     let bounds = assoc
                         .bounds
                         .iter()
-                        .filter_map(|b| b.resolved.or_else(|| tysys.resolutions.declared(b.id)))
+                        .filter_map(|b| tysys.resolutions.bound_decl(b))
                         .map(|def| lowering.trait_decl(def))
                         .collect();
                     (lowering.assoc(id, &assoc.name), bounds)
@@ -1282,21 +1282,18 @@ impl SolverBridge {
                 .into_iter()
                 .flatten()
             {
-                let stated = bound
-                    .resolved
-                    .or_else(|| tysys.resolutions.declared(bound.id))
-                    .and_then(|def| {
-                        let args = tysys
-                            .bound_written(bound)?
-                            .args()
-                            .iter()
-                            .map(|arg| self.lowering.named_arg(arg))
-                            .collect::<Option<Vec<_>>>()?;
-                        Some(ParamBound {
-                            trait_: self.lowering.known_trait(def)?,
-                            args,
-                        })
-                    });
+                let stated = tysys.resolutions.bound_decl(bound).and_then(|def| {
+                    let args = tysys
+                        .bound_written(bound)?
+                        .args()
+                        .iter()
+                        .map(|arg| self.lowering.named_arg(arg))
+                        .collect::<Option<Vec<_>>>()?;
+                    Some(ParamBound {
+                        trait_: self.lowering.known_trait(def)?,
+                        args,
+                    })
+                });
                 match stated {
                     Some(bound) => ids.push(bound),
                     None => unstated.push(position as u32),

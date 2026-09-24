@@ -1280,23 +1280,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .or_else(|| self.tysys.resolutions.prelude_decl(name))
     }
 
-    /// The trait a bound's reference site names; `written` supplies the type
-    /// arguments and the diagnostic spelling.
-    ///
-    /// A site naming no declaration gets no invented identity — `use` and the
-    /// prelude are the only ways to name a trait, so a name reaching nothing here
-    /// reaches nothing at all, and the mangle falls back to the spelling.
-    pub(super) fn fq_trait_name_at(&self, site: AstId, written: &str) -> FqTraitName {
+    /// The trait `bound` names; one naming no declaration keeps its spelling,
+    /// which the mangle falls back to.
+    pub(super) fn fq_trait_name_of(&self, bound: &ast::TraitBound) -> FqTraitName {
         let resolutions = &self.tysys.resolutions;
-        let answer = resolutions.get(site);
-        if let Resolution::Binder(_) = answer {
-            return FqTraitName::binder(written);
-        }
-        // `written` is a bound's spelling, and a bound is a bare name: the
-        // parser reads `<...>` after one as associated-type bindings, so no
-        // type argument ever reaches here to be split back out.
-        resolutions.declared(site).map_or_else(
-            || FqTraitName::binder(written),
+        resolutions.bound_decl(bound).map_or_else(
+            || FqTraitName::binder(&bound.name),
             |def| FqTraitName::declared(resolutions.defs(), def),
         )
     }
@@ -1308,7 +1297,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The answer comes from [`crate::resolve::Resolutions`] — resolved once,
     /// in the module that wrote the reference — so an alias and a second
     /// module's same-named trait cannot reach the mangle. A site that names no
-    /// declaration carries no identity — see [`Self::fq_trait_name_at`].
+    /// declaration carries no identity — see [`Self::fq_trait_name_of`].
     pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> FqTraitName {
         let written = self.get_type_name(ty);
         let args = trait_env::written_type_args(ty, &self.tysys.resolutions);
@@ -1665,22 +1654,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Canonical impl-target key for a type named at a use site, for the impl
     /// indexes.
     ///
-    /// Through [`Self::decl_key_or_local`], so an impl target and every other
-    /// name-only lookup answer from one chain. The table alone leaves out the
-    /// declaration indexes, and a receiver the module never imported — reached
-    /// only through a return type — would then key to the call site instead of
-    /// where it is declared.
+    /// The impl target a receiver spelling names in the current frame.
     pub(crate) fn impl_target(&self, type_name: &str) -> trait_env::ImplTargetKey {
         self.impl_target_at(None, type_name)
     }
 
-    /// [`Self::impl_target`] for a receiver written at a reference site, so
-    /// `Type::method` keys to what `Type` names *in the module that wrote it*.
-    /// A default taken in a module declaring the same name is where the two
-    /// come apart.
-    ///
-    /// `Self::` / `T::` carries no site, so it answers from the spelling, by
-    /// then the concrete name the rewrite produced.
+    /// [`Self::impl_target`] for a receiver written at `site`, keyed to what it
+    /// names in the module that wrote it.
     pub(crate) fn impl_target_at(
         &self,
         site: Option<AstId>,
@@ -1774,42 +1754,45 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Resolve a `with` clause's effect names, `effect_ids` being each one's
-    /// site, to TIR `EffectRef`s.
-    pub(crate) fn resolve_effects(
-        &mut self,
-        effects: &[String],
-        effect_ids: &[(AstId, Span)],
-    ) -> Vec<tir::EffectRef> {
-        assert_eq!(effects.len(), effect_ids.len());
+    /// Resolve a `with` clause's effect names to TIR `EffectRef`s.
+    pub(crate) fn resolve_effects(&mut self, effects: &[ast::EffectName]) -> Vec<tir::EffectRef> {
         effects
             .iter()
-            .zip(effect_ids)
-            .map(|(name, &(site, span))| self.resolve_effect_at(site, span, name))
+            .map(|effect| {
+                self.effect_named_at(Some(effect.id), effect.span, &effect.name)
+                    .unwrap_or_else(|| tir::EffectRef::Concrete {
+                        name: effect.name.clone(),
+                        module_source: self.current_module_source.clone(),
+                    })
+            })
             .collect()
     }
 
-    fn resolve_effect_at(&mut self, site: AstId, span: Span, name: &str) -> tir::EffectRef {
-        match self.tysys.resolutions.get(site) {
-            Resolution::Binder(binder) => self.record_reference(site, binder),
-            Resolution::Def(def) => {
-                self.record_reference_to_decl(site, def, span);
-            }
-            Resolution::Projection(_) | Resolution::Unresolved => {}
-        }
-        self.tysys
-            .resolutions
-            .effect_at(site, name)
-            .unwrap_or_else(|| {
-                let _ = self.emit(TypeError::UnknownEffect {
-                    name: name.to_string(),
-                    span,
-                });
-                tir::EffectRef::Concrete {
-                    name: name.to_string(),
-                    module_source: self.current_module_source.clone(),
+    /// The effect `name` names at `site`, its use recorded; one naming no
+    /// effect is reported.
+    pub(crate) fn effect_named_at(
+        &mut self,
+        site: Option<AstId>,
+        span: Span,
+        name: &str,
+    ) -> Option<tir::EffectRef> {
+        let effect = site.and_then(|site| {
+            match self.tysys.resolutions.get(site) {
+                Resolution::Binder(binder) => self.record_reference(site, binder),
+                Resolution::Def(def) => {
+                    self.record_reference_to_decl(site, def, span);
                 }
-            })
+                Resolution::Projection(_) | Resolution::Unresolved => {}
+            }
+            self.tysys.resolutions.effect_at(site, name)
+        });
+        if effect.is_none() {
+            let _ = self.emit(TypeError::UnknownEffect {
+                name: name.to_string(),
+                span,
+            });
+        }
+        effect
     }
 
     /// Record use→def edges for each imported name in `use { a, b as c } from "..."`
@@ -1840,12 +1823,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Per-module declaration pass (`annotate_decls`): effect sources,
-    /// use-specifier use→def edges, type / signature collection, globals,
-    /// associated constants, and the generic-function inference caches.
-    /// Populates `ModuleSemantics.imports` / `.decls`; walks no bodies.
-    /// The driver runs this for every module before any body walk
-    /// ([`Self::annotate_module_bodies`]).
+    /// Per-module declaration pass: types, signatures, globals and associated
+    /// constants. Runs for every module before any [`Self::annotate_module_bodies`].
     pub fn annotate_module_decls(&mut self, module: &'a Module, module_source: ModuleSource) {
         self.current_module_source = module_source.clone();
 

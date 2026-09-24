@@ -18,9 +18,8 @@ use super::Elaborator;
 use super::trait_env::{InheritedBound, ViaClause};
 use super::trait_query::SelfBinding;
 use super::types::TypeError;
-use crate::ast::AstId;
 use crate::defs::DefId;
-use crate::name::{FqTraitName, FqTypeName};
+use crate::name::FqTypeName;
 use crate::token::Span;
 
 /// A name bound in a type-parameter scope: its slot, the type it stands for,
@@ -528,13 +527,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         bounds: &[ast::TraitBound],
     ) -> Vec<(ast::TraitBound, DefId, Vec<ViaClause>)> {
-        let known = IndexMap::default();
         bounds
             .iter()
             .filter(|bound| bound.names_a_trait())
-            .filter_map(|bound| Some((bound, self.bound_decl(bound, &known)?)))
+            .filter_map(|bound| Some((bound, self.trait_decl_of(bound)?)))
             .flat_map(|(bound, root)| {
-                self.supertraits_of_bound(bound, &known)
+                self.supertraits_of_bound(bound)
                     .into_iter()
                     .map(move |inherited| (inherited.bound, root, inherited.via))
             })
@@ -544,29 +542,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `bounds` expanded to include every bound's supertraits, so a declared
     /// `T: Ord` also demands `Eq`. One declaration stays one bound however
     /// spelled, so an alias never competes with its original.
-    ///
-    /// `known` maps a bound's id to the declaration it means, answered where the
-    /// bound was first read: a projection's bounds are rebuilt here with fresh
-    /// ids the table cannot answer for, and without `known` the dedup would fall
-    /// back to the spelling and collapse two same-named traits.
-    pub(super) fn elaborate_bounds_with(
-        &self,
-        bounds: &[ScopedBound],
-        known: &IndexMap<AstId, FqTraitName>,
-    ) -> Vec<ElaboratedBound> {
+    pub(super) fn elaborate_bounds(&self, bounds: &[ScopedBound]) -> Vec<ElaboratedBound> {
         // Each entry carries the declaration it merged on, so a bound that has
         // none — a `fn(..)` bound — cannot shift the ones after it.
         let mut out: Vec<(ElaboratedBound, Option<DefId>)> = Vec::with_capacity(bounds.len());
         for scoped in bounds {
             let bound = &scoped.bound;
-            self.merge_bound(&mut out, bound, None, scoped.scope(), known);
+            self.merge_bound(&mut out, bound, None, scoped.scope());
             if !bound.names_a_trait() {
                 continue;
             }
-            let Some(root) = self.bound_decl(bound, known) else {
+            let Some(root) = self.trait_decl_of(bound) else {
                 continue;
             };
-            for inherited in self.supertraits_of_bound(bound, known) {
+            for inherited in self.supertraits_of_bound(bound) {
                 // A supertrait clause is written in the declaring trait's own
                 // space, not in the frame that wrote the bound reaching it.
                 self.merge_bound(
@@ -574,7 +563,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     &inherited.bound,
                     Some((root, inherited.via)),
                     BoundSelf::Bounded,
-                    known,
                 );
             }
         }
@@ -594,7 +582,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         bound: &ast::TraitBound,
         inherited: Option<(DefId, Vec<ViaClause>)>,
         self_type: BoundSelf,
-        known: &IndexMap<AstId, FqTraitName>,
     ) {
         let entry = || ElaboratedBound {
             bound: bound.clone(),
@@ -610,7 +597,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             return;
         }
-        let decl = self.bound_decl(bound, known);
+        let decl = self.trait_decl_of(bound);
         // A bound that names no declaration falls back to its spelling, so an
         // erroring program still reports one bound rather than one per mention.
         // Only bounds that both write nothing are one bound. A written argument
@@ -635,34 +622,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         out.push((entry(), decl));
     }
 
-    /// The declaration a bound names: `known` first, then the bound's own site.
-    fn bound_decl(
-        &self,
-        bound: &ast::TraitBound,
-        known: &IndexMap<AstId, FqTraitName>,
-    ) -> Option<DefId> {
-        known
-            .get(&bound.id)
-            .and_then(FqTraitName::canonical)
-            .or_else(|| self.trait_decl_at(bound.id))
-    }
-
-    /// The transitive supertraits of the trait `bound` names, as declared.
-    ///
-    /// Answered from the bound's own reference site: two modules may declare
-    /// the same name, and expanding by spelling picks whichever the by-name
-    /// index holds — for the loser, an empty closure, so a supertrait's methods
-    /// silently vanish.
-    ///
-    /// Each carries the declaration it names, since its spelling belongs to the
-    /// declaring module and its arguments to that trait's parameter space. A
-    /// caller reading those arguments walks `via` from what `bound` writes.
-    fn supertraits_of_bound(
-        &self,
-        bound: &ast::TraitBound,
-        known: &IndexMap<AstId, FqTraitName>,
-    ) -> Vec<InheritedBound> {
-        let Some(decl) = self.bound_decl(bound, known) else {
+    /// The transitive supertraits of the trait `bound` names, each carrying the
+    /// declaration it names.
+    fn supertraits_of_bound(&self, bound: &ast::TraitBound) -> Vec<InheritedBound> {
+        let Some(decl) = self.trait_decl_of(bound) else {
             return Vec::new();
         };
         self.tysys
@@ -771,7 +734,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> SelfBinding {
         SelfBinding {
             type_id: self.resolve_type(impl_type),
-            declaring_trait: trait_type.and_then(|t| self.trait_decl_at(t.id()?)),
+            declaring_trait: trait_type
+                .and_then(|t| self.tysys.resolutions.declared(t.id()?))
+                .filter(|def| self.is_trait_like(*def)),
         }
     }
 

@@ -1,0 +1,13 @@
+// A handler binding names its effect as a `with` clause does, and a name
+// reaching no effect is rejected the same way.
+
+struct H {}
+
+export fn run() {
+    let mut h = H {};
+    with Nope => &mut h do {
+    }
+}
+
+__DATA__
+{"compile_error": "'Nope' is not a declared effect"}

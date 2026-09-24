@@ -17,10 +17,8 @@ use crate::symbol::SymbolTable;
 use crate::tir::EffectRef;
 use crate::token::Span;
 
-/// What a reference site refers to.
-///
-/// The cases stay distinct on purpose: reading [`Self::Unresolved`] as a
-/// binder loses the diagnostic a name that reaches nothing deserves.
+/// What a reference site refers to. [`Self::Unresolved`] is never read as a
+/// binder: that loses the diagnostic a name reaching nothing deserves.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Resolution {
     /// A declaration.
@@ -364,6 +362,17 @@ impl Resolutions {
         }
     }
 
+    /// The effect a `with`-clause name written in `module` refers to. Elaboration
+    /// reported one reaching none, which stands as a concrete effect of its name.
+    #[must_use]
+    pub fn effect_named(&self, effect: &ast::EffectName, module: &ModuleSource) -> EffectRef {
+        self.effect_at(effect.id, &effect.name)
+            .unwrap_or_else(|| EffectRef::Concrete {
+                name: effect.name.clone(),
+                module_source: module.clone(),
+            })
+    }
+
     /// `def` as an effect, when it declares an `interface` or a resource.
     #[must_use]
     pub fn effect_decl(&self, def: DefId) -> Option<EffectRef> {
@@ -414,6 +423,13 @@ impl Resolutions {
             Resolution::Def(def) => Some(def),
             Resolution::Binder(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
         }
+    }
+
+    /// The declaration a bound names: the referent a synthesised bound carries,
+    /// else what its site names.
+    #[must_use]
+    pub fn bound_decl(&self, bound: &ast::TraitBound) -> Option<DefId> {
+        bound.resolved.or_else(|| self.declared(bound.id))
     }
 
     /// The declaration `site` names, or `unwalked`'s answer where no walk
@@ -1047,24 +1063,16 @@ impl AstVisitor for Resolver<'_> {
                 }
             }
             Type::Reference(inner) | Type::MutReference(inner) => self.visit_type(inner),
-            Type::Function(ft) => {
-                for p in &ft.params {
-                    self.visit_type(p);
-                }
-                self.visit_type(&ft.return_type);
-                for (name, (id, span)) in ft.effects.iter().zip(&ft.effect_ids) {
-                    self.visit_effect_name(name, *id, *span);
-                }
-            }
+            Type::Function(ft) => ast::walk_function_type(self, ft),
             Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => {}
         }
     }
 
     /// An effect parameter, the `_` a signature's hole mints included, is a
     /// binder; any other effect name resolves like a type name.
-    fn visit_effect_name(&mut self, name: &str, id: AstId, _span: Span) {
-        let answer = self.resolve_name(name);
-        self.record(id, answer);
+    fn visit_effect_name(&mut self, effect: &ast::EffectName) {
+        let answer = self.resolve_name(&effect.name);
+        self.record(effect.id, answer);
     }
 }
 

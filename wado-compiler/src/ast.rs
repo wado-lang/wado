@@ -408,8 +408,8 @@ pub trait AstVisitor: Sized {
 
     /// A `with` clause's reference site, kept apart from [`Self::visit_id`]
     /// because it carries the effect name the site spells.
-    fn visit_effect_name(&mut self, _name: &str, id: AstId, span: Span) {
-        self.visit_id(id, span);
+    fn visit_effect_name(&mut self, effect: &EffectName) {
+        self.visit_id(effect.id, effect.span);
     }
 
     fn visit_item(&mut self, item: &Item) {
@@ -658,15 +658,8 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             v.visit_id(t.id, t.span);
             v.visit_generic_params(&t.type_params);
             v.visit_trait_bounds(&t.supertraits);
-            if let TraitHead::Fixed {
-                effects,
-                effect_ids,
-                ..
-            } = &t.head
-            {
-                for (name, (id, span)) in effects.iter().zip(effect_ids) {
-                    v.visit_effect_name(name, *id, *span);
-                }
+            if let TraitHead::Fixed { effects, .. } = &t.head {
+                walk_effect_names(v, effects);
             }
             for assoc in &t.associated_types {
                 v.visit_id(assoc.id, assoc.span);
@@ -732,9 +725,7 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
     if let Some(ret) = &func.return_type {
         v.visit_type(ret);
     }
-    for (name, (id, span)) in func.effects.iter().zip(&func.effect_ids) {
-        v.visit_effect_name(name, *id, *span);
-    }
+    walk_effect_names(v, &func.effects);
     if let Some(body) = &func.body {
         v.visit_block(body);
     }
@@ -1126,13 +1117,17 @@ pub fn walk_trait_bounds<V: AstVisitor>(v: &mut V, bounds: &[TraitBound]) {
 
 /// The types and effect names a function signature carries, whether it stands
 /// as a [`Type::Function`] or as a trait bound's `fn_signature`.
-fn walk_function_type<V: AstVisitor>(v: &mut V, ft: &FunctionType) {
+pub fn walk_function_type<V: AstVisitor>(v: &mut V, ft: &FunctionType) {
     for p in &ft.params {
         v.visit_type(p);
     }
     v.visit_type(&ft.return_type);
-    for (name, (id, span)) in ft.effects.iter().zip(&ft.effect_ids) {
-        v.visit_effect_name(name, *id, *span);
+    walk_effect_names(v, &ft.effects);
+}
+
+fn walk_effect_names<V: AstVisitor>(v: &mut V, effects: &[EffectName]) {
+    for effect in effects {
+        v.visit_effect_name(effect);
     }
 }
 
@@ -2245,11 +2240,7 @@ pub struct Function {
     /// delimiters, not just the parameters, to know what a comment sits inside.
     pub params_span: Span,
     pub return_type: Option<Type>,
-    pub effects: Vec<String>,
-    /// Parallel to `effects`: `(AstId, Span)` of each effect-name identifier as
-    /// it appeared in the `with` clause. Used by the elaborator to record
-    /// use->def references for LSP jump-to-def.
-    pub effect_ids: Vec<(AstId, Span)>,
+    pub effects: Vec<EffectName>,
     /// Whether `effects` came from the enclosing trait's head rather than from
     /// a `with` clause here. The formatter prints what the source wrote.
     pub effects_inherited: bool,
@@ -2261,7 +2252,7 @@ pub struct Function {
 impl Function {
     /// The effects the source wrote here. Empty when the enclosing trait's
     /// head supplied them.
-    pub fn written_effects(&self) -> &[String] {
+    pub fn written_effects(&self) -> &[EffectName] {
         if self.effects_inherited {
             return &[];
         }
@@ -3767,12 +3758,21 @@ pub struct FunctionType {
     pub is_mut: bool,
     pub params: Vec<Type>,
     pub return_type: Type,
-    pub effects: Vec<String>,
-    /// Parallel to `effects`: `(AstId, Span)` of each effect-name identifier as
-    /// it appeared in source. Used by the elaborator to record use->def
-    /// references for LSP jump-to-def. Empty when constructed by the compiler
-    /// (synthesized function types from monomorphization, etc.).
-    pub effect_ids: Vec<(AstId, Span)>,
+    pub effects: Vec<EffectName>,
+}
+
+/// One effect name in a `with` clause, at the site that writes it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectName {
+    pub name: String,
+    pub id: AstId,
+    pub span: Span,
+}
+
+impl AsRef<str> for EffectName {
+    fn as_ref(&self) -> &str {
+        &self.name
+    }
 }
 
 /// An effect declaration: an interface whose operations handlers implement.
@@ -4143,9 +4143,7 @@ pub enum TraitHead {
     Pure { span: Span },
     /// `with A` / `with (A, B)`: every impl gets exactly these.
     Fixed {
-        effects: Vec<String>,
-        /// Parallel to `effects`, for use->def references.
-        effect_ids: Vec<(AstId, Span)>,
+        effects: Vec<EffectName>,
         span: Span,
     },
     /// `with _`: the impl brings its own effects.
@@ -4163,14 +4161,9 @@ impl TraitHead {
     pub fn inherited_effects(&self, unwritten: Span) -> Vec<(String, Span)> {
         match self {
             TraitHead::Pure { .. } => Vec::new(),
-            TraitHead::Fixed {
-                effects,
-                effect_ids,
-                ..
-            } => effects
+            TraitHead::Fixed { effects, .. } => effects
                 .iter()
-                .cloned()
-                .zip(effect_ids.iter().map(|(_, span)| *span))
+                .map(|effect| (effect.name.clone(), effect.span))
                 .collect(),
             TraitHead::Open { span } => vec![(EFFECT_HOLE.to_string(), *span)],
             TraitHead::Undecided => vec![(EFFECT_HOLE.to_string(), unwritten)],

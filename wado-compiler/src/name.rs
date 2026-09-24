@@ -1952,6 +1952,19 @@ pub fn mangle_fn_type(
     out
 }
 
+/// An effect as a [`mangle_fn_type`] `with` member. A concrete one carries its
+/// declaring module, since two modules may declare one name.
+#[must_use]
+pub fn mangle_effect_ref(effect: &tir::EffectRef) -> String {
+    match effect {
+        tir::EffectRef::Concrete {
+            name,
+            module_source,
+        } => format!("{module_source}/{name}"),
+        tir::EffectRef::Param { name } => name.clone(),
+    }
+}
+
 /// Whether `name` is a `fn(..)` type's spelling, as [`mangle_fn_type`] writes
 /// it — the receiver a closure value dispatches through.
 #[must_use]

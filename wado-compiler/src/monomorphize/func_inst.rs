@@ -365,10 +365,8 @@ fn lookup_template_with_trait_fallback<'a, V>(
                 return Some(v);
             }
         }
-        // Blanket impls (`impl<I: Bound> Trait for I`) aren't keyed by struct
-        // name — the receiver-type candidates above can't find them. Consult
-        // the blanket index by trait so `bytes.into_iter()` resolves to the
-        // `IntoIterator` blanket in `core:prelude/traits`.
+        // A blanket impl is keyed by no receiver, so the candidates above miss
+        // it: `bytes.into_iter()` reaches the prelude's blanket by trait.
         if let Some(impl_module) = trait_env.blanket_impl_module_for_trait(trait_, type_module_hint)
             && blanket_receiver_satisfies(trait_env, trait_, impl_module, blanket_receiver)
             && let Some(v) = generic_functions.get(&(impl_module.clone(), name.to_string()))

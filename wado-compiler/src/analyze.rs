@@ -460,7 +460,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     let kind = SymbolKind::Function(FunctionSymbol {
                         params: func.params.iter().map(|p| p.name.clone()).collect(),
                         return_type: func.return_type.as_ref().map(|_| "unknown".to_string()),
-                        effects: func.effects.clone(),
+                        effects: func.effects.iter().map(|e| e.name.clone()).collect(),
                         is_builtin,
                         cm_import: cm_import_of(&func.attrs).cloned(),
                     });

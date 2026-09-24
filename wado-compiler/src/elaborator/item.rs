@@ -1651,13 +1651,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // The effect check reads a requirement's `with` off its sites; these
         // calls report and link them.
-        if let ast::TraitHead::Fixed {
-            effects,
-            effect_ids,
-            ..
-        } = &trait_decl.head
-        {
-            scope.resolve_effects(effects, effect_ids);
+        if let ast::TraitHead::Fixed { effects, .. } = &trait_decl.head {
+            scope.resolve_effects(effects);
         }
         let mut methods: hashmap::IndexMap<String, TraitMethod> = hashmap::IndexMap::default();
         for method in &trait_decl.methods {
@@ -1665,7 +1660,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let mut method_scope = scope.enter_inherited_type_param_scope();
             // The head's names were resolved above, once for every method.
             if !method.effects_inherited {
-                method_scope.resolve_effects(&method.effects, &method.effect_ids);
+                method_scope.resolve_effects(&method.effects);
             }
             method_scope.register_generic_params(&method.type_params, next_slot);
             // Only slot-consuming parameters. A `fn`-bound one registers as
@@ -2265,7 +2260,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // The frame still holds this function's type parameters, so they are
         // not mistaken for unknown names.
         scope.reject_signature_annotations(&func.params, func.return_type.as_ref());
-        let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
+        let effects = scope.resolve_effects(&func.effects);
         drop(scope);
         self.sem
             .decls
@@ -2483,7 +2478,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             })
             .collect();
 
-        let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
+        let effects = scope.resolve_effects(&func.effects);
 
         let func_key = func.id;
         scope.sem.types.function_effects.insert(func_key, effects);
@@ -2804,7 +2799,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .collect()
         };
 
-        let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
+        let effects = scope.resolve_effects(&func.effects);
 
         let method_key = func.id;
         scope.sem.types.function_effects.insert(method_key, effects);

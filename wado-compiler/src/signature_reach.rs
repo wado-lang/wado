@@ -3,8 +3,8 @@
 //! See `docs/spec.md`, "Signature reach".
 
 use crate::ast::{
-    AstId, AstVisitor, Block, Function, GenericParam, ImplBlock, Item, Module, SelfKind,
-    TraitBound, Type, Visibility,
+    AstId, AstVisitor, Block, EffectName, Function, GenericParam, ImplBlock, Item, Module,
+    SelfKind, TraitBound, Type, Visibility,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
@@ -255,7 +255,7 @@ impl AstVisitor for Sites {
         self.0.push((id, span));
     }
 
-    fn visit_effect_name(&mut self, _name: &str, _id: AstId, _span: Span) {}
+    fn visit_effect_name(&mut self, _effect: &EffectName) {}
 
     fn visit_block(&mut self, _block: &Block) {}
 

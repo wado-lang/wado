@@ -1575,12 +1575,10 @@ fn build_local_name_resolver(
                         let bind = alias.clone().unwrap_or_else(|| name.clone());
                         local.insert(bind, source.clone());
                     }
-                    UseItem::InterfaceFunctions { interface_name, .. } => {
-                        if let Some(source) = other_defs.get(interface_name) {
-                            local.insert(interface_name.clone(), source.clone());
-                        }
-                    }
-                    UseItem::Namespace { .. } | UseItem::Wildcard => {}
+                    // `E::{op}` binds the operations, never `E`.
+                    UseItem::InterfaceFunctions { .. }
+                    | UseItem::Namespace { .. }
+                    | UseItem::Wildcard => {}
                 }
             }
         }
@@ -3868,7 +3866,6 @@ impl CmInterfaceRegistry {
                     params: resolved_params,
                     return_type: resolved_return,
                     effects: func_ty.effects.clone(),
-                    effect_ids: func_ty.effect_ids.clone(),
                 }))
             }
             // NamespacedGeneric types (like `ns::Type<T>`) are passed through

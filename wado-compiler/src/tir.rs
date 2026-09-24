@@ -3562,11 +3562,8 @@ impl TypeTable {
                     return *answer;
                 }
                 if !self.contains_type_param(substituted_base) {
-                    // Associated types are inherited through references (mirrors
-                    // method-call auto-deref), so peel `&`/`&mut` before
-                    // projecting: a `D` inferred as `&mut MyDe` still projects
-                    // `D::Acc` to `MyDe`'s associated type. An impl on the
-                    // reference itself answers first.
+                    // An impl on the reference answers first, then the referent's,
+                    // as method-call auto-deref does: `&mut MyDe` projects `MyDe`'s.
                     let concrete = self.peel_refs(substituted_base);
                     if concrete != substituted_base
                         && let Some(resolved) = self.resolve_assoc_type_of_trait(
@@ -4733,7 +4730,7 @@ impl TypeTable {
         return_type: TypeId,
         effects: &[EffectRef],
     ) -> TypeNameInfo {
-        let with_clause: Vec<String> = effects.iter().map(|e| self.mangle_effect_ref(e)).collect();
+        let with_clause: Vec<String> = effects.iter().map(name::mangle_effect_ref).collect();
         TypeNameInfo::Function {
             is_mut,
             params: params.iter().map(|p| self.mangle_type_name(*p)).collect(),
@@ -4895,20 +4892,6 @@ impl TypeTable {
             // Shapes that name no declaration — packs, `Unknown`. They carry no
             // module, so the rendered spelling is already their whole identity.
             _ => FqTypeName::builtin(&self.mangle_type_name(id)),
-        }
-    }
-
-    /// An effect as a `with` clause member.
-    ///
-    /// A concrete effect carries its declaring module: two modules may declare
-    /// one name, and dropping it would collapse two function types onto one.
-    fn mangle_effect_ref(&self, effect: &EffectRef) -> String {
-        match effect {
-            EffectRef::Concrete {
-                name,
-                module_source,
-            } => format!("{module_source}/{name}"),
-            EffectRef::Param { name } => name.clone(),
         }
     }
 

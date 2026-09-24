@@ -631,7 +631,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(param_name)?
             .clone();
         let (bound, declared) = bounds.iter().find_map(|bound| {
-            let decl = self.trait_decl_at(bound.id)?;
+            let decl = self.trait_decl_of(bound)?;
             if decl != trait_ {
                 return None;
             }

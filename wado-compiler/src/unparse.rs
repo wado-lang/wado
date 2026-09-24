@@ -4407,16 +4407,21 @@ pub fn unparse_trait_head_into(head: &TraitHead, output: &mut String) {
 
 /// Emit a `with` row: one item goes bare, more than one is parenthesized.
 /// An empty row emits nothing.
-pub(crate) fn unparse_with_row_into(items: &[String], output: &mut String) {
+pub(crate) fn unparse_with_row_into<S: AsRef<str>>(items: &[S], output: &mut String) {
     match items {
         [] => {}
         [only] => {
             output.push_str(" with ");
-            output.push_str(only);
+            output.push_str(only.as_ref());
         }
         many => {
             output.push_str(" with (");
-            output.push_str(&many.join(", "));
+            for (i, item) in many.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(", ");
+                }
+                output.push_str(item.as_ref());
+            }
             output.push(')');
         }
     }
