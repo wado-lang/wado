@@ -1,5 +1,5 @@
-//! A DOM held in memory, which answers the `web:dom` calls a program makes where
-//! no browser does: `with &mut dom do { app(); }`.
+//! The `web:dom` API surface without a browser engine behind it, answering the
+//! calls where no browser runs: `with &mut dom do { app(); }`.
 
 use { TreeMap } from "core:collections";
 use {
@@ -30,7 +30,7 @@ variant Content {
 }
 
 // Linked as the DOM standard models the tree.
-struct FakeNode {
+struct SurfaceNode {
     class: f64,
     content: Content,
     attributes: TreeMap<String, String>,
@@ -44,13 +44,13 @@ struct FakeNode {
 
 /// A document of `<html><head></head><body></body></html>`, and the window
 /// holding it.
-pub struct FakeDom {
-    nodes: List<FakeNode>,
+pub struct SurfaceDom {
+    nodes: List<SurfaceNode>,
 }
 
-impl FakeDom {
-    pub fn new() -> FakeDom {
-        let mut dom = FakeDom { nodes: [] };
+impl SurfaceDom {
+    pub fn new() -> SurfaceDom {
+        let mut dom = SurfaceDom { nodes: [] };
         dom.push(DOCUMENT_CLASS, Content::Document);
         dom.push(WINDOW_CLASS, Content::Window);
         let html = dom.create("html");
@@ -61,7 +61,7 @@ impl FakeDom {
     }
 
     fn push(&mut self, class: f64, content: Content) -> i32 {
-        self.nodes.push(FakeNode {
+        self.nodes.push(SurfaceNode {
             class,
             content,
             attributes: TreeMap::new(),
@@ -235,7 +235,7 @@ impl FakeDom {
     }
 }
 
-impl Dom for FakeDom {
+impl Dom for SurfaceDom {
     fn window(&mut self) -> Window {
         resume self.handle(WINDOW_INDEX) as Window;
     }
@@ -245,7 +245,7 @@ impl Dom for FakeDom {
     }
 }
 
-impl Window for FakeDom {
+impl Window for SurfaceDom {
     fn document(&mut self, this: &Window) -> Document {
         resume self.handle(DOCUMENT_INDEX) as Document;
     }
@@ -253,7 +253,7 @@ impl Window for FakeDom {
     ..trap
 }
 
-impl Document for FakeDom {
+impl Document for SurfaceDom {
     fn create_element(&mut self, this: &Document, local_name: String, options: Option<String>) -> Element {
         resume self.handle(self.create(local_name.to_ascii_lowercase())) as Element;
     }
@@ -278,7 +278,7 @@ impl Document for FakeDom {
     ..trap
 }
 
-impl Node for FakeDom {
+impl Node for SurfaceDom {
     fn node_type(&mut self, this: &Node) -> u16 {
         resume match self.nodes[self.index(*this)].content {
             Element(_) => 1,
@@ -380,7 +380,7 @@ impl Node for FakeDom {
     ..trap
 }
 
-impl Element for FakeDom {
+impl Element for SurfaceDom {
     fn local_name(&mut self, this: &Element) -> String {
         resume self.local_name_of(*this);
     }
@@ -422,7 +422,7 @@ impl Element for FakeDom {
     ..trap
 }
 
-impl HtmlInputElement for FakeDom {
+impl HtmlInputElement for SurfaceDom {
     fn value(&mut self, this: &HtmlInputElement) -> String {
         resume self.nodes[self.index(*this)].value;
     }

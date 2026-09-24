@@ -1,8 +1,8 @@
 use { Document, Dom, Element, HtmlElement, HtmlInputElement, Node } from "./dom.wado";
-use { FakeDom } from "./fake_dom.wado";
+use { SurfaceDom } from "./surface_dom.wado";
 
 test "a fresh document has a body" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
         let body = doc.body().unwrap();
@@ -15,7 +15,7 @@ test "a fresh document has a body" {
 }
 
 test "the handles carry the classes dom.wado numbers" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
         let input = doc.create_element("input", null);
@@ -34,7 +34,7 @@ test "the handles carry the classes dom.wado numbers" {
 }
 
 test "a handle inspects as the type its class names" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let node: Node = Dom::document().create_element("div", null);
         assert `${node:?}` == "HtmlElement { type_id: 3, object_id: 5 }";
@@ -42,7 +42,7 @@ test "a handle inspects as the type its class names" {
 }
 
 test "handles compare equal when they name one object" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
         let div = doc.create_element("div", null);
@@ -54,7 +54,7 @@ test "handles compare equal when they name one object" {
 }
 
 test "a tree is built by appending" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
         let body = doc.body().unwrap();
@@ -83,7 +83,7 @@ test "a tree is built by appending" {
 }
 
 test "text content concatenates the descendants' text" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
         let p = doc.create_element("p", null);
@@ -101,7 +101,7 @@ test "text content concatenates the descendants' text" {
 }
 
 test "setting a document's text content changes nothing" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
         doc.set_text_content(Option::Some("x"));
@@ -112,7 +112,7 @@ test "setting a document's text content changes nothing" {
 
 #[expect_trap]
 test "a node appended into itself is a hierarchy error" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let div = Dom::document().create_element("div", null);
         div.append_child(div);
@@ -121,7 +121,7 @@ test "a node appended into itself is a hierarchy error" {
 
 #[expect_trap]
 test "an ancestor appended into its descendant is a hierarchy error" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
         let outer = doc.create_element("div", null);
@@ -133,7 +133,7 @@ test "an ancestor appended into its descendant is a hierarchy error" {
 
 #[expect_trap]
 test "the document is never a child" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
         doc.create_element("div", null).append_child(doc);
@@ -142,7 +142,7 @@ test "the document is never a child" {
 
 #[expect_trap]
 test "the document holds one element" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
         doc.append_child(doc.create_element("html", null));
@@ -151,7 +151,7 @@ test "the document holds one element" {
 
 #[expect_trap]
 test "a text node holds no children" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
         let p = doc.create_element("p", null);
@@ -161,7 +161,7 @@ test "a text node holds no children" {
 }
 
 test "an element is found by id once it is in the document" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
         let el = doc.create_element("div", null);
@@ -175,7 +175,7 @@ test "an element is found by id once it is in the document" {
 }
 
 test "attributes are set, read and removed" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let el = Dom::document().create_element("a", null);
         assert !el.has_attribute("href");
@@ -187,7 +187,7 @@ test "attributes are set, read and removed" {
 }
 
 test "an input holds its value" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         let input = Dom::document().create_element("input", null);
         let input: HtmlInputElement = input else {

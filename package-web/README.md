@@ -15,14 +15,14 @@ export fn run() with Dom {
 
 The imports are the `web:dom/*` Component Model interfaces. A browser host
 provides them. `wado run`, `wado test` and `wado serve` define each one as a
-trap, so the program instantiates anywhere, and `FakeDom` answers the calls
+trap, so the program instantiates anywhere, and `SurfaceDom` answers the calls
 instead:
 
 ```wado
-use { Dom, FakeDom } from "wado-lang:web";
+use { Dom, SurfaceDom } from "wado-lang:web";
 
 test "the app renders a heading" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         app();
         let h1 = Dom::document().get_element_by_id("title").unwrap();
@@ -31,8 +31,9 @@ test "the app renders a heading" {
 }
 ```
 
-`FakeDom` holds a tree, text, attributes and an input's value. A call it does
-not answer traps, and so does an insertion the DOM standard rejects with a
+`SurfaceDom` is the DOM's API surface with no browser engine behind it: no
+layout, style or scripting. It holds a tree, text, attributes and an input's
+value. A call it does not answer traps, and so does an insertion the DOM standard rejects with a
 `HierarchyRequestError`.
 
 ## Layout
@@ -41,7 +42,7 @@ not answer traps, and so does an insertion the DOM standard rejects with a
   (`mise run update-webidl-snapshot`).
 - `src/dom.wado` — the bindings generated from it
   (`mise run update-package-web`). Do not edit by hand.
-- `src/fake_dom.wado` — `FakeDom`, written by hand. It mints handles from the
+- `src/surface_dom.wado` — `SurfaceDom`, written by hand. It mints handles from the
   class numbers `dom.wado` generates.
 - `src/lib.wado` — the facade `wado-lang:web` names. A name a wider slice
   generates must be added here; a test fails until it is.
