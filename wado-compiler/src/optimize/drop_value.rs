@@ -1,5 +1,5 @@
-//! Dropped-value elimination: a value in discarded position keeps only its
-//! effects. `docs/optimizer.md` states the rewrite and what counts as discarded.
+//! Dropped-value elimination: a discarded value-producing labeled block keeps
+//! only its effects, and every `break` to it gives up its operand (`let _ = xs.pop()`).
 //!
 //! Deliberately not extended to a discarded `Expr(aggregate)` statement:
 //! `sroa_variant_return` tracks a call by whether its result is dropped, reads

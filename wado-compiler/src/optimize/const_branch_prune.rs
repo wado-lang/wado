@@ -1,7 +1,7 @@
 //! Constant branch pruning: the trivial blocks other passes leave behind —
-//! `{ expr; }`, `label: { break label: val; }`, an empty block. Keys only on
-//! block and control-flow *structure*, never on labels or names, leaving
-//! constant-condition folding to `const_folding`. The in-loop run rides the
+//! `{ expr; }`, `label: { break label: val; }`, an empty block, and an `if` on
+//! a constant. Keys only on block and control-flow *structure*, never on labels
+//! or names. The in-loop run rides the
 //! unified [`super::peephole`] session; the two standalone entries keep theirs.
 
 use cranelift_entity::EntityRef;
