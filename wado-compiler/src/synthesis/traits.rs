@@ -336,6 +336,7 @@ pub fn synthesize_traits(project: Package) -> Package {
         };
         generate_enum_trait_impls(module, &mut ctx);
         generate_flags_trait_impls(module, &mut ctx);
+        generate_handle_eq_impls(module, &mut ctx);
         generate_struct_eq_ord_impls(module, &mut ctx);
         generate_variant_eq_impls(module, &mut ctx);
         generate_inspect_impls(module, &mut ctx);
@@ -3698,6 +3699,65 @@ fn generate_flags_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         }
     }
 
+    module.functions.extend(generated_functions);
+}
+
+/// Generate auto-derived `Eq` for the unrestricted resources in a module: the
+/// host interns handles, so the `f64`s compare.
+fn generate_handle_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
+    let eq_trait_name = module
+        .type_table
+        .borrow()
+        .compiler_items()
+        .trait_fq(CompilerItem::Eq);
+    let eq_key = eq_trait_name.canonical().expect(KEYED);
+    let mut generated_functions = Vec::new();
+    for resource in &module.resources {
+        let mut type_table = module.type_table.borrow_mut();
+        if !type_table.is_unrestricted_resource(resource.def) {
+            continue;
+        }
+        let receiver = &FqTypeName::declared(type_table.defs(), resource.def);
+        if !ctx.should_synthesize(receiver, &eq_key) {
+            continue;
+        }
+        let handle_type = type_table.make_resource(resource.def);
+        let ref_handle_type = type_table.make_ref(handle_type);
+        let bits = |index, name| {
+            common::cast(
+                deref_local(index, name, ref_handle_type, handle_type, resource.span),
+                TypeTable::F64,
+            )
+        };
+        let method_info = trait_method_info(receiver, &eq_trait_name, "eq");
+        let comparison = TirExpr::new(
+            TirExprKind::Binary {
+                left: Box::new(bits(0, "self")),
+                op: TirBinaryOp::Eq,
+                right: Box::new(bits(1, "other")),
+            },
+            TypeTable::BOOL,
+            resource.span,
+        );
+        let body = TirBlock::new(
+            vec![TirStmt::new(
+                TirStmtKind::Return {
+                    value: Some(comparison),
+                },
+                resource.span,
+            )],
+            resource.span,
+        );
+        generated_functions.push(Rc::new(RefCell::new(make_synthetic_method(
+            method_info.to_mangled_name(),
+            method_info,
+            binary_method_params(ref_handle_type, resource.span),
+            TypeTable::BOOL,
+            body,
+            binary_method_locals(ref_handle_type),
+        ))));
+        ctx.record_impl(receiver, &eq_key);
+    }
     module.functions.extend(generated_functions);
 }
 

@@ -1316,6 +1316,12 @@ impl TypeSystem {
             ResolvedType::Enum { .. } => Some(true),
             // A bitmask has no members to recurse into, like a plain `enum`.
             ResolvedType::Flags { .. } => Some(true),
+            // The host interns handles, so two are equal exactly when they name one object.
+            ResolvedType::Resource { def }
+                if tr == OnBoundTrait::Eq && self.type_table.borrow().is_unrestricted_resource(*def) =>
+            {
+                Some(true)
+            }
             ResolvedType::Struct { def, .. } => {
                 // An anonymous struct has fields to walk like any other; it
                 // just has no declaration to reach them through. Asking the

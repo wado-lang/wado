@@ -561,7 +561,7 @@ Four interactions need explicit rules. Everything else (`Default`, `Ord`, `Drop`
 
 #### `Eq` is auto-derived as reference equality
 
-Every unrestricted resource auto-derives `Eq`. Two handles compare equal iff they reference the same host object — JavaScript's `===` semantics for the browser case.
+Every unrestricted resource auto-derives `Eq`, so a type holding one derives it as well. Two handles compare equal iff they reference the same host object — JavaScript's `===` semantics for the browser case.
 
 `Eq` lowers to `f64` equality on the two handles. The host interns handles, and an object's class never changes, so two handles are equal exactly when they name one object. No host call is made.
 
@@ -728,7 +728,7 @@ Implemented, with tests in `wado-compiler/tests/integration/unrestricted_resourc
 - The registry reads that newtype two ways. `resolve_type` peels the handle to its `f64`, the view the boundary decides with: the flat ABI, the canonical options, the emitted WIT. `value_type` keeps the resource's own type, the view the guest holds. A binding's signature takes the second, because `Option<Element>` and `Option<f64>` are distinct GC types (`tests/integration/web_dom.rs`). `cm_type_to_type_id` finds the resource's `TypeId` under its package, a `web:` package being one flat file. A module outside the stdlib declares such a resource as the stdlib would: it is not a local newtype, so no instance exports it as a named type.
 
 - Type patterns. `p: T` is a pattern wherever one stands, and a `let` annotation is that pattern. An ascription `T` strictly extending the subject's type narrows: a plain `let` rejects it as refutable, and a `match` over one needs a final `_` and reports an arm an earlier ancestor arm shadows. The test compares the handle against `T`'s class range, and a target without `classes` is rejected.
-- `Eq`. `==` / `!=` on two handles one of whose types extends the other compares the two `f64`s.
+- `Eq`. `==` / `!=` on two handles one of whose types extends the other compares the two `f64`s. The trait holds of every unrestricted resource, so `Option<Node>` or a struct holding one derives it too (`tests/fixtures/resource_eq_through_option.wado`).
 - `as` between a handle and anything but `f64` or a handle type it upcasts to is rejected (`tests/fixtures/error_unrestricted_resource_cast.wado`).
 
 Not built:
@@ -736,7 +736,6 @@ Not built:
 - The `Inspect` / `Display` host imports.
 - Rule (5), visibility judged at the declaring module, and the unenforced parent-visibility bullet above. Both need per-method visibility on resources, which nothing asks for yet.
 - Declaring `linearity = "unrestricted"` on the non-owning tokens (`Waitable`, `core:icu`'s interned handles), which still take their value semantics from the absence of a `dtor`; and generic resources on either side of `extends`.
-- Calling a `#[cm(...)]` member a user module declares. The registry is built from the bundled binding modules and from component dependencies, so a binding declared anywhere else reaches WIR build with no import, and `wir_build` collects it as a `CmImportViolation` the driver reports (`wado-compiler/tests/integration/cm_resource_unbound.rs`). Declaring one without calling it still type-checks.
 - A parent declared by a prebuilt module. The collect pass skips what the stdlib snapshot covers, so a snapshot parent reaches validation without its method names or its arity; rather than accept what it cannot check, the compiler rejects the clause. `web:dom` is a package, never snapshotted, so nothing reaches it yet.
 
 ### Known gap: the handle is an index, not a reference
