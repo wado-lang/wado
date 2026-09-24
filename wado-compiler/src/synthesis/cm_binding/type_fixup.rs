@@ -1015,54 +1015,36 @@ impl TirRefVisitor for EffectCallCollector<'_> {
     }
 
     fn visit_expr(&mut self, expr: &TirExpr) {
-        match &expr.kind {
-            TirExprKind::Call { func, .. } => {
-                // Sync WASI effect calls (e.g. `Environment::get_arguments`).
-                if let Some(interface_name) = func.module_source.interface_name() {
-                    let qualified =
-                        DeclPath::from_declared(format!("{interface_name}::{}", func.name));
-                    if self
-                        .cm_interface_registry
-                        .get_function(&qualified)
-                        .is_some()
-                    {
-                        self.effects.insert(qualified);
-                    }
-                }
-                // WASI resource static method calls (e.g. `Response::new`).
-                // The registry keys on the declared `Resource::method`; the
-                // `#[cm]` the callee declares is what makes it that method.
-                if let Some(qualified) = cm_static_method_key(func)
-                    && self
-                        .cm_interface_registry
-                        .get_function(&qualified)
-                        .is_some()
-                {
-                    self.effects.insert(qualified);
-                }
-                // World function (Phase 9): the same-source check keeps a
-                // same-named local function from being taken for the import.
-                if self.cm_interface_registry.world_import_source(&func.name)
-                    == Some(&func.module_source)
-                {
-                    self.effects
-                        .insert(DeclPath::from_declared(func.name.clone()));
-                }
-            }
-            kind if kind.as_method_call().is_some() => {
-                let Some((receiver, func, _)) = kind.as_method_call() else {
-                    return;
-                };
-                let registry = self.cm_interface_registry;
-                if let Some(qualified) =
-                    cm_method_call_key(receiver, func, self.type_table, registry, |key| {
-                        registry.get_function(key).is_some()
-                    })
-                {
+        let registry = self.cm_interface_registry;
+        let is_registered = |key: &DeclPath| registry.get_function(key).is_some();
+        if let TirExprKind::Call { func, .. } = &expr.kind {
+            // Sync WASI effect calls (e.g. `Environment::get_arguments`).
+            if let Some(interface_name) = func.module_source.interface_name() {
+                let qualified = DeclPath::from_declared(format!("{interface_name}::{}", func.name));
+                if is_registered(&qualified) {
                     self.effects.insert(qualified);
                 }
             }
-            _ => {}
+            // WASI resource static method calls (e.g. `Response::new`).
+            // The registry keys on the declared `Resource::method`; the
+            // `#[cm]` the callee declares is what makes it that method.
+            if let Some(qualified) = cm_static_method_key(func)
+                && is_registered(&qualified)
+            {
+                self.effects.insert(qualified);
+            }
+            // World function (Phase 9): the same-source check keeps a
+            // same-named local function from being taken for the import.
+            if registry.world_import_source(&func.name) == Some(&func.module_source) {
+                self.effects
+                    .insert(DeclPath::from_declared(func.name.clone()));
+            }
+        }
+        if let Some((receiver, func, _)) = expr.kind.as_method_call()
+            && let Some(qualified) =
+                cm_method_call_key(receiver, func, self.type_table, registry, is_registered)
+        {
+            self.effects.insert(qualified);
         }
         self.walk_expr(expr);
     }
