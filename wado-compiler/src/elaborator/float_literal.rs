@@ -61,7 +61,9 @@ impl FloatFormat {
     pub(crate) fn value(self, bits: u64) -> f64 {
         match self {
             Self::F64 => f64::from_bits(bits),
-            Self::F32 => f64::from(f32::from_bits(u32::try_from(bits).expect("f32 bits fit u32"))),
+            Self::F32 => f64::from(f32::from_bits(
+                u32::try_from(bits).expect("f32 bits fit u32"),
+            )),
             _ => unreachable!("`{}` has no float value of its own", self.name),
         }
     }
@@ -88,13 +90,18 @@ impl FloatLiteralError {
 
 /// `repr` in `format`'s bits, rounded to nearest even from the literal's exact
 /// value, which a radix prefix spells as an integer of any width.
-pub(crate) fn float_literal_bits(repr: &str, format: FloatFormat) -> Result<u64, FloatLiteralError> {
+pub(crate) fn float_literal_bits(
+    repr: &str,
+    format: FloatFormat,
+) -> Result<u64, FloatLiteralError> {
     let clean = normalize_numeric_literal(repr);
     let radix = [("0x", 16), ("0b", 2), ("0o", 8)]
         .into_iter()
         .find_map(|(prefix, radix)| clean.strip_prefix(prefix).map(|digits| (digits, radix)));
     let exact = match radix {
-        Some((digits, radix)) => radix_to_decimal(digits, radix).ok_or(FloatLiteralError::Invalid)?,
+        Some((digits, radix)) => {
+            radix_to_decimal(digits, radix).ok_or(FloatLiteralError::Invalid)?
+        }
         None => clean,
     };
     let approx: f64 = exact.parse().map_err(|_| FloatLiteralError::Invalid)?;
@@ -134,9 +141,8 @@ fn radix_to_decimal(digits: &str, radix: u32) -> Option<String> {
     Some(out)
 }
 
-/// `value` rounded to nearest even in `format`, `None` where that is an
-/// infinity. `tie` breaks an exact midpoint: `value` may itself be a rounding
-/// of the literal, which is what it answers for.
+/// `value` rounded to nearest even in `format`, `None` at an infinity. `tie`
+/// settles an exact midpoint, since `value` may itself round the literal.
 fn narrow(value: f64, format: FloatFormat, tie: impl FnOnce() -> Ordering) -> Option<u64> {
     assert!(value >= 0.0, "a literal is unsigned until negated");
     let bits = value.to_bits();

@@ -4,7 +4,7 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved } from "lib:wadopoet";
 use { Axis, Shape } from "./shape.wado";
-use { Graph, Node, Rank, ValueInfo } from "./graph.wado";
+use { Graph, Node, Rank, ValueInfo, element_of } from "./graph.wado";
 use { constant_value, gemm_options, has_bias, transpose_perm } from "./infer.wado";
 
 /// A boundary tensor whose element type the kernels have no arithmetic for.
@@ -141,17 +141,6 @@ pub fn emit(graph: &Graph, shapes: &TreeMap<String, Shape>) -> Result<String, Em
 /// produces is in it, and a boundary held in another is converted past it.
 global KERNEL_ELEMENT: String = "f32";
 
-/// The Wado primitive a boundary tensor is held in, or `None` for an element
-/// type no kernel reaches. Half precision is held and widened, never computed.
-fn element_of(dtype: &String) -> Option<String> {
-    return match dtype.as_str_slice() {
-        "float" => Option::Some(KERNEL_ELEMENT),
-        "float16" => Option::Some("f16"),
-        "bfloat16" => Option::Some("bf16"),
-        _ => null,
-    };
-}
-
 /// What each boundary tensor is held in, and where an element type no kernel
 /// reaches stops the build. A node's own output is f32, so only these are kept.
 fn boundary_elements(graph: &Graph) -> Result<TreeMap<String, String>, EmitError> {
@@ -165,7 +154,7 @@ fn boundary_elements(graph: &Graph) -> Result<TreeMap<String, String>, EmitError
                     dtype: vi.dtype,
                 }));
             };
-            held[vi.name] = element;
+            held[vi.name] = element.primitive;
         }
     }
     return Result::Ok(held);

@@ -162,6 +162,17 @@ test "a half initializer's elements come out of the low half of int32_data" {
     assert g.initializers[0].data == Option::Some(b"\x00\x3c\x00\xc1");
 }
 
+test "a half's int32_data entry past sixteen bits names itself" {
+    let e = read_initializer_of(TensorProto {
+        dims: [1],
+        data_type: 16,
+        name: "H",
+        int32_data: [70000],
+    }).unwrap_err();
+
+    assert e == "H: 70000 is not a bfloat16 bit pattern";
+}
+
 test "an initializer carrying no data is left to the checkpoint" {
     let g = read_initializer_of(TensorProto {
         dims: [2],

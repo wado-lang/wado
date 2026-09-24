@@ -188,6 +188,19 @@ test "inline half values are bit patterns, as ONNX's parser reads them" {
     assert g.initializers[1].data == Option::Some(b"\x20\xc0");
 }
 
+test "a half bit pattern past sixteen bits names itself" {
+    for let text of ["70000", "-1"] {
+        let e = read(
+            `agraph (float16[1] X) => (float16[1] Y)
+            <float16[1] W = {${text}}>
+            {
+                Y = Add(X, W)
+            }`,
+        ).unwrap_err();
+        assert e == `W: ${text} is not a float16 bit pattern`;
+    }
+}
+
 test "a decimal in a half tensor names itself" {
     let e = read(
         `agraph (float16[1] X) => (float16[1] Y)

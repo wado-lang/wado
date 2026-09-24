@@ -12,8 +12,9 @@ use {
     Node,
     Rank,
     ValueInfo,
+    bit_pattern,
     check_element_count,
-    element_bytes,
+    element_of,
     parameters,
     push_element,
 } from "./graph.wado";
@@ -109,9 +110,10 @@ fn read_constant_data(
     let Some(values) = first_child_of_kind(s, data, onnx::RK_TENSOR_VALUES) else {
         return Result::Err(`${name}: an initializer whose data lives in another file is not read`);
     };
-    let Some(width) = element_bytes(dtype) else {
+    let Some(element) = element_of(dtype) else {
         return Result::Ok(null);
     };
+    let width = element.width;
     let mut extents: List<i32> = [];
     match rank {
         Scalar => {
@@ -133,14 +135,14 @@ fn read_constant_data(
     let mut bytes = ByteList::with_capacity(elements.len() * width);
     for let e of elements {
         let text = literal_text(toks, first_token(s, e));
-        push_element(&mut bytes, element_bits(name, &text, dtype)?, width);
+        push_element(&mut bytes, element_bits(name, &text, dtype, width)?, width);
     }
     return Result::Ok(Option::Some(bytes));
 }
 
-/// An element's bits in `dtype`, one of the types `element_bytes` sizes. ONNX
-/// writes a half as the integer its `int32_data` holds, not as a decimal.
-fn element_bits(name: &String, text: &String, dtype: &String) -> Result<u32, String> {
+/// An element's bits in `dtype`, `width` bytes wide. ONNX writes a half as the
+/// integer its `int32_data` holds, not as a decimal.
+fn element_bits(name: &String, text: &String, dtype: &String, width: i32) -> Result<u32, String> {
     if *dtype == "float" {
         let Ok(v) = f32::from_str(text) else {
             return Result::Err(`${name}: ${text} is not a float`);
@@ -150,7 +152,7 @@ fn element_bits(name: &String, text: &String, dtype: &String) -> Result<u32, Str
     let Ok(v) = i32::from_str(text) else {
         return Result::Err(`${name}: ${text} is not a ${dtype} bit pattern`);
     };
-    return Result::Ok(v as u32);
+    return bit_pattern(name, dtype, v, width);
 }
 
 /// A literal token's value as text `FromStr` reads: a string without its

@@ -9,11 +9,8 @@ use crate::nir_arena::PackedData;
 use crate::nir_package::NirPackage;
 use crate::wir::WirPackage;
 
-/// Whether a `PackedArray` gets a constant `array.new_fixed` rather than a
-/// data segment — the choice `translate_packed_array` makes, shared so
-/// `const_object_globalization` predicts the same verdict when it decides
-/// whether a hoist needs the lazy-init guard. Only bytes go inline: a typed
-/// array is embedded data, and a segment holds it most compactly.
+/// Whether a `PackedArray` is short bytes built by `array.new_fixed` rather than
+/// a data segment, which `const_object_globalization` must predict alike.
 #[must_use]
 pub(crate) fn packed_array_is_eager(
     data: &PackedData,

@@ -244,6 +244,26 @@ impl PackedData {
         Value::seq(type_id, elements)
     }
 
+    /// The array `elements` spell, the inverse of [`Self::to_value`]. `None`
+    /// where one is not a value of `elem`.
+    pub fn from_values(elements: &[Value], elem: PrimitiveType) -> Option<Self> {
+        let width = elem.data_width()?;
+        let mut bytes = Vec::with_capacity(elements.len() * width);
+        for element in elements {
+            let bits = match *element {
+                Value::Int { value, prim } if prim == elem => value,
+                Value::Float { value, prim } if prim == elem => match prim {
+                    PrimitiveType::F32 => u64::from((value as f32).to_bits()),
+                    PrimitiveType::F64 => value.to_bits(),
+                    _ => unreachable!("a half is held as its bits"),
+                },
+                _ => return None,
+            };
+            bytes.extend_from_slice(&bits.to_le_bytes()[..width]);
+        }
+        Some(Self::new(bytes, elem))
+    }
+
     fn element(&self, chunk: &[u8]) -> Option<Value> {
         let mut raw = [0u8; 8];
         raw[..chunk.len()].copy_from_slice(chunk);

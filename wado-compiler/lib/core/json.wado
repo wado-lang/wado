@@ -1442,16 +1442,8 @@ impl JsonDeserializer {
         }
     }
 
-    /// Scans the JSON number token at `pos` into the caller-provided `out`.
-    /// `lead` is the byte at `pos` as `peek_after_whitespace` returned it, so
-    /// whitespace is already skipped and -1 means end of input; every
-    /// `parse_*_with_lead` below takes it on the same terms.
-    ///
-    /// Only the first `FPFMT_DIGITS_MAX` significant digits are accumulated;
-    /// a nonzero dropped digit sets `inexact`, and dropped integer digits shift
-    /// the scale via `int_digits`.
-    /// Writing into a scratch struct keeps a `Result<ScannedNumber>` aggregate
-    /// off the hot decode path.
+    /// Scans the number token at `pos`, whose byte `peek_after_whitespace` gave
+    /// as `lead` (-1 at end of input), into the scratch `out`.
     fn scan_number_into(&mut self, lead: i32, out: &mut ScannedNumber) -> Result<(), DeserializeError> {
         let input = self.input;
         let len = input.len();

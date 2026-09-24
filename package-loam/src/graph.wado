@@ -25,14 +25,31 @@ pub struct ValueInfo {
     pub data: Option<ByteList> = null,
 }
 
-/// How many bytes one element of `dtype` takes, for the element types a
-/// kernel reaches. A payload of any other type is not read.
-pub fn element_bytes(dtype: &String) -> Option<i32> {
+/// An element type a kernel reaches: the Wado primitive a tensor of it is held
+/// in, and the bytes one element takes in a payload.
+pub struct Element {
+    pub primitive: String,
+    pub width: i32,
+}
+
+/// `dtype`'s element, or `None` for one no kernel reaches, whose payload is not
+/// read. Half precision is held and widened, never computed.
+pub fn element_of(dtype: &String) -> Option<Element> {
     return match dtype.as_str_slice() {
-        "float" => Option::Some(4),
-        "float16" | "bfloat16" => Option::Some(2),
+        "float" => Option::Some(Element { primitive: "f32", width: 4 }),
+        "float16" => Option::Some(Element { primitive: "f16", width: 2 }),
+        "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2 }),
         _ => null,
     };
+}
+
+/// An integer standing for one element, as `int32_data` and the text form write
+/// a half: its bit pattern, which must fit `width` bytes.
+pub fn bit_pattern(tensor: &String, dtype: &String, v: i32, width: i32) -> Result<u32, String> {
+    if v < 0 || v >= 1 << 8 * width {
+        return Result::Err(`${tensor}: ${v} is not a ${dtype} bit pattern`);
+    }
+    return Result::Ok(v as u32);
 }
 
 /// One element's low `width` bytes, little-endian, as the protobuf form lays
@@ -105,9 +122,8 @@ pub struct Graph {
     pub nodes: List<Node>,
 }
 
-/// The declared inputs that are parameters. An initializer's name may also
-/// appear among them, where it supplies that input's default rather than a
-/// second value, and Loam reads a weight from `Weights` either way.
+/// The declared inputs that are parameters. An input an initializer also names
+/// is that weight's default, and Loam reads it from `Weights`.
 pub fn parameters(inputs: List<ValueInfo>, initializers: &List<ValueInfo>) -> List<ValueInfo> {
     let mut weights: List<String> = [];
     for let vi of *initializers {

@@ -15,8 +15,9 @@ use {
     Node,
     Rank,
     ValueInfo,
+    bit_pattern,
     check_element_count,
-    element_bytes,
+    element_of,
     parameters,
     push_element,
 } from "./graph.wado";
@@ -315,9 +316,10 @@ fn read_initializer(t: &TensorProto) -> Result<ValueInfo, String> {
 /// A tensor's elements as little-endian bytes: `raw_data` as it stands, or the
 /// typed field re-encoded. A 16-bit element sits in the low half of an `int32`.
 fn payload(t: &TensorProto, dtype: &String, extents: &List<i32>) -> Result<Option<ByteList>, String> {
-    let Some(width) = element_bytes(dtype) else {
+    let Some(element) = element_of(dtype) else {
         return Result::Ok(null);
     };
+    let width = element.width;
     let mut bytes = t.raw_data;
     if bytes.is_empty() {
         if width == 4 {
@@ -326,7 +328,7 @@ fn payload(t: &TensorProto, dtype: &String, extents: &List<i32>) -> Result<Optio
             }
         } else {
             for let v of t.int32_data {
-                push_element(&mut bytes, v as u32, width);
+                push_element(&mut bytes, bit_pattern(&t.name, dtype, v, width)?, width);
             }
         }
     }

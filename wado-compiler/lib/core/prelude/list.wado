@@ -311,9 +311,8 @@ impl<T> List<T> {
 }
 
 impl<T: FromLeBytes> List<T> {
-    /// The `T`s `bytes` holds, little-endian and back to back. A byte string
-    /// literal or `#include_bytes` argument becomes a data segment, read with
-    /// no decode loop. Panics when `bytes` is not a whole number of `T`s.
+    /// The `T`s `bytes` holds, little-endian and back to back; panics on a partial
+    /// `T`. A literal argument becomes a data segment, with no decode loop.
     #[compiler_item("list_from_le_bytes")]
     pub fn from_le_bytes<B: AsByteSlice>(bytes: B) -> List<T> {
         let view = bytes.as_byte_slice();

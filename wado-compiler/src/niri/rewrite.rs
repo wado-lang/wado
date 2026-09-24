@@ -403,9 +403,8 @@ impl Interpreter<'_> {
         self.struct_literal(sink, existing, previous, type_id, written, span)
     }
 
-    /// `elements` as the backing array itself: bytes pack into a `PackedArray`,
-    /// which reaches WIR as one `array.new_data`, and everything else into an
-    /// `ArrayLiteral`.
+    /// `elements` as the backing array: a `PackedArray` for a primitive with a
+    /// data width, an `ArrayLiteral` for anything else.
     fn write_seq<S: EditSink>(
         &self,
         sink: &mut S,
@@ -421,21 +420,15 @@ impl Interpreter<'_> {
         let ResolvedType::BuiltinArray(element_type) = *self.type_table.get(type_id) else {
             return None;
         };
-        if element_type == TypeTable::U8 {
-            let mut bytes = Vec::with_capacity(elements.len());
-            for element in elements {
-                let (byte, PrimitiveType::U8) = element.as_int()? else {
-                    return None;
-                };
-                bytes.push(u8::try_from(byte).ok()?);
-            }
+        if let Some(elem) = packed_element(self.type_table, element_type) {
+            let packed = PackedData::from_values(elements, elem)?;
             if let Some(Operand::Expr(previous)) = existing
-                && matches!(&sink.body().exprs[previous].kind, ExprKind::PackedArray(b) if b.as_bytes() == Some(bytes.as_slice()))
+                && matches!(&sink.body().exprs[previous].kind, ExprKind::PackedArray(p) if *p == packed)
             {
                 return existing;
             }
             return Some(Operand::Expr(sink.alloc_expr(
-                ExprKind::PackedArray(PackedData::of_bytes(bytes)),
+                ExprKind::PackedArray(packed),
                 type_id,
                 span,
             )));
@@ -1267,17 +1260,16 @@ fn charge_leaves(value: &Value, type_table: &TypeTable, budget: &mut usize) -> O
 }
 
 /// Charge the operands inside an array literal — none where they pack into the
-/// single `PackedArray` a byte array becomes however long it is.
+/// single `PackedArray` the array becomes however long it is.
 fn charge_elements(
     type_id: TypeId,
     elements: &[Value],
     type_table: &TypeTable,
     budget: &mut usize,
 ) -> Option<()> {
-    if matches!(
-        type_table.get(type_id),
-        ResolvedType::BuiltinArray(e) if *e == TypeTable::U8
-    ) {
+    if let ResolvedType::BuiltinArray(e) = type_table.get(type_id)
+        && packed_element(type_table, *e).is_some()
+    {
         return Some(());
     }
     for element in elements {
@@ -1330,6 +1322,14 @@ fn scalar_kind(value: &Value, ty: TypeId) -> Option<ValueKind> {
         Value::Unit => ValueKind::Unit,
         Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => return None,
     })
+}
+
+/// The primitive an array of `element_type` packs, `None` for one with no
+/// data width.
+fn packed_element(type_table: &TypeTable, element_type: TypeId) -> Option<PrimitiveType> {
+    type_table
+        .primitive_head(element_type)
+        .filter(|prim| prim.data_width().is_some())
 }
 
 /// The operands a struct literal of `type_id` already holds, in `field_index`
