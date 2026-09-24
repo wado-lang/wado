@@ -326,7 +326,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
 This is the Wado analogue of Scala 3 Caprese's capture inference: a capability named in the signature does not need to be repeated in the capture set. Unlike Caprese, Wado has no subtyping on effect sets — inference only unions, never narrows.
 
-A [narrowing](./wep-2026-04-28-resource-inheritance.md#narrowing-is-a-pattern) is inferred the same way. A type pattern `p: R` in a function holding a resource `R` extends hands out that resource's handle as an `R`, as an operation returning `R` would, so `R` and what propagates from it are held in the function's body:
+A [narrowing](./wep-2026-04-28-resource-inheritance.md#narrowing-is-a-pattern) is inferred the same way. Say a function holds a resource that `R` extends. A type pattern `p: R` in it hands out that handle as an `R`, as an operation returning `R` would. So the body holds `R` too, and whatever propagates from it:
 
 ```wado
 // `n: Node` holds Node; the arm narrows it, so HtmlInputElement is held too.

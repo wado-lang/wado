@@ -17,6 +17,7 @@ use crate::ast::{
 use crate::attribute::{CM, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
 use crate::hashmap;
+use crate::tir::TypeTable;
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
@@ -641,7 +642,7 @@ impl Builder {
     }
 
     fn unit(&mut self) -> Type {
-        self.named("()", None)
+        self.named(TypeTable::UNIT_TYPE_NAME, None)
     }
 
     fn generic(&mut self, name: &str, args: Vec<Type>) -> Type {

@@ -59,9 +59,7 @@ use crate::elaborator::sem::types::{
     KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodNames, OperatorDispatch,
     SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
 };
-use crate::elaborator::stmt::{
-    collect_pattern_bindings_with_index, primitive_assoc_const_to_i128, remap_pattern_local,
-};
+use crate::elaborator::stmt::{collect_pattern_bindings_with_index, remap_pattern_local};
 use crate::elaborator::trait_query::{
     assoc_const_owner, assoc_const_owner_of_path, trait_sig_of_with,
 };
@@ -10103,44 +10101,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
-    /// [`super::util::range_endpoint_to_i128`] plus the one endpoint shape only
-    /// reify reaches: a user associated constant (`TokenKind::FOO`).
-    fn pattern_endpoint_value(
-        &mut self,
-        endpoint: &ast::Pattern,
-        is_unsigned: bool,
-        ctx: &mut FunctionContext,
-    ) -> i128 {
-        use crate::tir::TirExprKind;
-        if let ast::Pattern::Variant {
-            variant_name,
-            variant_qualifier,
-            bindings,
-            ..
-        } = endpoint
-            && bindings.is_empty()
-            && primitive_assoc_const_to_i128(
-                variant_qualifier.as_ref(),
-                variant_name,
-                &self.tysys.resolutions,
-            )
-            .is_none()
-            && let Some(AssocConstSig {
-                module: const_module,
-                ty: type_id,
-                value: const_expr,
-                ..
-            }) = self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
-        {
-            let resolved = self.with_const_module_perspective(&const_module, |this| {
-                this.reify_expr(&const_expr, ctx, Some(type_id))
-            });
-            if let TirExprKind::IntLiteral { repr, .. } = &resolved.kind {
-                return parse_int_bits(repr, is_unsigned).unwrap_or_else(|e| {
-                    panic!("a const range endpoint annotate accepted parses: {e}")
-                });
-            }
-        }
+    fn pattern_endpoint_value(&self, endpoint: &ast::Pattern, is_unsigned: bool) -> i128 {
         range_endpoint_to_i128(endpoint, is_unsigned, &self.tysys.resolutions)
             .expect("annotate diagnoses a range endpoint that denotes no integer")
     }
@@ -10576,8 +10537,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .borrow()
                     .is_unsigned_int(scrutinee_type);
                 TirPattern::Range {
-                    start: self.pattern_endpoint_value(start, is_unsigned, ctx),
-                    end: self.pattern_endpoint_value(end, is_unsigned, ctx),
+                    start: self.pattern_endpoint_value(start, is_unsigned),
+                    end: self.pattern_endpoint_value(end, is_unsigned),
                     inclusive,
                     is_unsigned,
                 }

@@ -104,8 +104,7 @@ pub(super) fn range_endpoint_to_i128(
             unescape_char(raw).ok().map(|c| i128::from(c as u32))
         }
         Pattern::Literal(Literal::Byte(raw)) => unescape_byte(raw).ok().map(i128::from),
-        // An associated constant (`i32::MAX`) resolved by value; a user constant
-        // needs the reify-side lookup its caller adds.
+        // Only a primitive's bound (`i32::MAX`); a user constant is no endpoint.
         Pattern::Variant {
             variant_name,
             variant_qualifier,

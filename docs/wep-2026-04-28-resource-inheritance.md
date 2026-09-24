@@ -356,7 +356,9 @@ pattern : type
 
 It matches when the subject is a value of that type, and the pattern to its left
 binds it. There is no `downcast` method, no `Option` in between, and no name
-synthesized into a resource's method namespace.
+synthesized into a resource's method namespace. A function that holds a parent
+holds what it narrows to; see
+[Signature-Resource Inference](./wep-2026-01-27-effect-system-design.md#signature-resource-inference).
 
 ```wado
 let el: Element = ...;
@@ -543,7 +545,7 @@ receiver. Their ownership model is specified in
 
 ### Interaction with existing features
 
-Four interactions need explicit rules. Everything else (`Default`, `Ord`, `Drop`/RAII, variants holding resources, `fn` types, effects, pattern matching) follows from the subtyping and method-resolution rules already established and needs no separate treatment.
+Four interactions need explicit rules. Everything else (`Default`, `Ord`, `Drop`/RAII, variants holding resources, `fn` types, pattern matching) follows from the subtyping and method-resolution rules already established and needs no separate treatment.
 
 #### `Eq` is auto-derived as reference equality
 
