@@ -238,14 +238,9 @@ fn synthesize_lift_inner(
         }
         Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         Type::Tuple(elems) => synthesize_lift_tuple(elems, addr, next_local, stmts, locals, ctx),
-        Type::Reference(_) | Type::MutReference(_)
-            if ctx.cm_interface_registry.extern_handle(ty).is_some() =>
-        {
+        Type::Reference(_) | Type::MutReference(_) => {
             let (load, loaded) = handle_load_op(ty, ctx.cm_interface_registry);
             builtin_call(load, vec![addr], loaded)
-        }
-        Type::Reference(_) | Type::MutReference(_) => {
-            builtin_call("i32_load", vec![addr], TypeTable::I32)
         }
         other => panic!("unsupported type for CM lift: {other:?}"),
     }
