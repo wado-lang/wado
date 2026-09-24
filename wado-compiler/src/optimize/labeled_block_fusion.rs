@@ -103,6 +103,7 @@ struct FusionInfo {
     temp_local: u32,
     label: String,
     value: FusedValue,
+    exits: Vec<StmtId>,
 }
 
 /// How the labeled block discriminates its break values, and what the consumer
@@ -201,7 +202,8 @@ fn check_fusion_preconditions_if_variant_test(
     }
 
     // --- LabeledBlock only breaks to L with null or VariantConstruct ---
-    let payload_type = check_lb_breaks_and_get_payload(body, lb_block, &label, case_index)?;
+    let (payload_type, exits) =
+        check_lb_breaks_and_get_payload(body, lb_block, &label, case_index)?;
 
     // --- temp is only used as VariantPayload(Local(X), C) in then_block,
     //     and not at all in else_block ---
@@ -238,6 +240,7 @@ fn check_fusion_preconditions_if_variant_test(
             payload_type,
             pattern_payload_binding: None,
         },
+        exits,
     })
 }
 
@@ -317,14 +320,9 @@ fn check_fusion_preconditions_match(
     // At most one payload binding slot.
     let pattern_payload_binding = single_payload_binding(body, bindings)?;
 
-    // The narrow traversal is what holds fusion to the breaks the transform
-    // rewrites, so the arm's case must be one it reaches.
-    if !narrow_break_carries_case(body, lb_block, &label, case_index) {
-        return None;
-    }
-
     // --- LabeledBlock only breaks to L with null or VariantConstruct ---
-    let payload_type = check_lb_breaks_and_get_payload(body, lb_block, &label, case_index)?;
+    let (payload_type, exits) =
+        check_lb_breaks_and_get_payload(body, lb_block, &label, case_index)?;
 
     // --- The reused binding slot must already be declared with payload type. ---
     if let Some(binding) = pattern_payload_binding
@@ -369,6 +367,7 @@ fn check_fusion_preconditions_match(
             payload_type,
             pattern_payload_binding,
         },
+        exits,
     })
 }
 
@@ -439,9 +438,7 @@ fn check_fusion_preconditions_slot_match(
     // each one selects an arm at fusion time, and whose unread elements are
     // pure — fusion drops those.
     let read: IndexSet<u32> = slots.iter().map(|s| s.field_index).collect();
-    if !check_lb_breaks_are_tagged_tuples(body, lb_block, &label, tag_value, &read) {
-        return None;
-    }
+    let exits = check_lb_breaks_are_tagged_tuples(body, lb_block, &label, tag_value, &read)?;
 
     if block_contains_loop(body, lb_block) {
         for arm_body in [tag_arm.body, else_arm.body] {
@@ -458,6 +455,7 @@ fn check_fusion_preconditions_slot_match(
         temp_local,
         label,
         value: FusedValue::Slots { tag_value, slots },
+        exits,
     })
 }
 
@@ -475,87 +473,6 @@ fn tag_slot_of(body: &Body, e: ExprId) -> Option<(u32, u32)> {
     Some((*index, *field_index))
 }
 
-// Its own traversal, not [`walk_exits`]: the shared walk visits `if` conditions,
-// whose exits the value-discarding transform leaves dangling.
-
-/// Whether some `break label:` in `block` constructs case `case`, over the
-/// breaks the value-discarding transform rewrites.
-fn narrow_break_carries_case(body: &Body, block: BlockId, label: &str, case: u32) -> bool {
-    body.blocks[block]
-        .stmts
-        .iter()
-        .any(|s| narrow_break_carries_case_in_stmt(body, *s, label, case))
-}
-
-fn narrow_break_carries_case_in_stmt(body: &Body, s: StmtId, label: &str, case: u32) -> bool {
-    match &body.stmts[s].kind {
-        StmtKind::Break {
-            label: Some(l),
-            value: Some(v),
-        } if l == label => v.as_expr().is_some_and(|e| {
-            matches!(
-                &body.exprs[e].kind,
-                ExprKind::VariantConstruct { case_index, .. } if *case_index == case
-            )
-        }),
-        StmtKind::LabeledBlock { label: l, .. } if l == label => false,
-        StmtKind::If {
-            then_block,
-            else_block,
-            ..
-        } => {
-            narrow_break_carries_case(body, *then_block, label, case)
-                || else_block.is_some_and(|eb| narrow_break_carries_case(body, eb, label, case))
-        }
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            narrow_break_carries_case(body, *b, label, case)
-        }
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            narrow_break_carries_case_in_operand(body, *value, label, case)
-        }
-        StmtKind::Expr(expr) => narrow_break_carries_case_in_operand(body, *expr, label, case),
-        StmtKind::Return { value } => {
-            value.is_some_and(|v| narrow_break_carries_case_in_operand(body, v, label, case))
-        }
-        StmtKind::Break { value: Some(v), .. } => {
-            narrow_break_carries_case_in_operand(body, *v, label, case)
-        }
-        StmtKind::Break { value: None, .. } | StmtKind::Continue => false,
-    }
-}
-
-fn narrow_break_carries_case_in_operand(body: &Body, op: Operand, label: &str, case: u32) -> bool {
-    op.as_expr()
-        .is_some_and(|e| narrow_break_carries_case_in_expr(body, e, label, case))
-}
-
-fn narrow_break_carries_case_in_expr(body: &Body, e: ExprId, label: &str, case: u32) -> bool {
-    match &body.exprs[e].kind {
-        ExprKind::LabeledBlock { block, .. } => {
-            narrow_break_carries_case(body, *block, label, case)
-        }
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            narrow_break_carries_case_in_operand(body, *condition, label, case)
-                || narrow_break_carries_case(body, *then_branch, label, case)
-                || else_branch.is_some_and(|b| narrow_break_carries_case(body, b, label, case))
-        }
-        ExprKind::Match { expr: scrut, arms } => {
-            narrow_break_carries_case_in_operand(body, *scrut, label, case)
-                || arms.iter().any(|arm| {
-                    narrow_break_carries_case_in_operand(body, arm.body, label, case)
-                        || arm.guard.is_some_and(|g| {
-                            narrow_break_carries_case_in_operand(body, g, label, case)
-                        })
-                })
-        }
-        _ => false,
-    }
-}
-
 /// Mirrors `block_has_free_unlabeled_loop_exit` but starting from an arm body
 /// expression. Walks into block children only.
 fn arm_body_has_free_unlabeled_loop_exit(body: &Body, e: ExprId) -> bool {
@@ -570,9 +487,8 @@ fn arm_body_has_free_unlabeled_loop_exit(body: &Body, e: ExprId) -> bool {
 /// in the parent map.
 ///
 /// Handing back the arm's own block instead would drop the expression node that
-/// held it, and the label on that node is what [`transform_lb_in_expr`] and
-/// [`thread_expr`] find the arm by. `const_branch_prune` flattens the wrapper
-/// again once nothing names it.
+/// held it, and the label on that node is what the arm's own breaks name.
+/// `const_branch_prune` flattens the wrapper again once nothing names it.
 fn arm_body_into_block(engine: &mut Engine, arm_body: ExprId, fallback_span: Span) -> BlockId {
     let stmt = engine.alloc_stmt(StmtKind::Expr(arm_body.into()), fallback_span);
     engine.alloc_block(vec![stmt], fallback_span)
@@ -614,91 +530,120 @@ trait ExitSink {
     fn reject_hidden_break(&self) -> bool;
 }
 
-fn walk_exits<S: ExitSink>(body: &Body, block: BlockId, label: &str, sink: &mut S) -> bool {
-    body.blocks[block]
-        .stmts
-        .clone()
+/// Every `break label` exit of `block`, once `sink` has accepted each. A rewrite
+/// takes this list rather than walking again, so it rewrites exactly what was
+/// checked.
+fn walk_exits<S: ExitSink>(
+    body: &Body,
+    block: BlockId,
+    label: &str,
+    sink: &mut S,
+) -> Option<Vec<StmtId>> {
+    let mut walk = ExitWalk {
+        label,
+        sink,
+        exits: Vec::new(),
+    };
+    walk.block(body, block).then_some(walk.exits)
+}
+
+struct ExitWalk<'s, S> {
+    label: &'s str,
+    sink: &'s mut S,
+    exits: Vec<StmtId>,
+}
+
+impl<S: ExitSink> ExitWalk<'_, S> {
+    fn block(&mut self, body: &Body, block: BlockId) -> bool {
+        body.blocks[block].stmts.iter().all(|s| self.stmt(body, *s))
+    }
+
+    fn stmt(&mut self, body: &Body, s: StmtId) -> bool {
+        match &body.stmts[s].kind {
+            StmtKind::Break {
+                label: Some(l),
+                value,
+            } if l == self.label => {
+                self.exits.push(s);
+                self.sink.visit(body, *value)
+            }
+            StmtKind::LabeledBlock { label: l, .. } if l == self.label => true,
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.operand(body, *condition)
+                    && self.block(body, *then_block)
+                    && else_block.is_none_or(|eb| self.block(body, eb))
+            }
+            StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
+                self.block(body, *b)
+            }
+            StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+                self.operand(body, *value)
+            }
+            StmtKind::Expr(op) => self.operand(body, *op),
+            StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+                value.is_none_or(|v| self.operand(body, v))
+            }
+            StmtKind::Continue => true,
+        }
+    }
+
+    fn operand(&mut self, body: &Body, op: Operand) -> bool {
+        op.as_expr().is_none_or(|e| self.expr(body, e))
+    }
+
+    fn expr(&mut self, body: &Body, e: ExprId) -> bool {
+        match &body.exprs[e].kind {
+            ExprKind::LabeledBlock {
+                label: l, block, ..
+            } => l == self.label || self.block(body, *block),
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.operand(body, *condition)
+                    && self.block(body, *then_branch)
+                    && else_branch.is_none_or(|eb| self.block(body, eb))
+            }
+            ExprKind::Match { expr, arms } if self.sink.descend_branches() => {
+                self.operand(body, *expr)
+                    && arms.iter().all(|arm| {
+                        self.operand(body, arm.body)
+                            && arm.guard.is_none_or(|g| self.operand(body, g))
+                    })
+            }
+            ExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } if self.sink.descend_branches() => {
+                self.operand(body, *scrutinee)
+                    && arms.iter().all(|b| self.block(body, *b))
+                    && self.block(body, *default)
+            }
+            // Opaque expression: any exit hidden inside is unresolved by this walk.
+            _ => !(self.sink.reject_hidden_break() && has_break_to(body, NodeRef::Expr(e), self.label)),
+        }
+    }
+}
+
+/// Replace exit `s` with `with` in the block holding it.
+fn replace_exit(engine: &mut Engine, s: StmtId, with: Vec<StmtId>) {
+    let Some(NodeRef::Block(parent)) = engine.parent_of(NodeRef::Stmt(s)) else {
+        panic!("labeled-block exit {s:?} is not held by a block");
+    };
+    let mut stmts = engine.body.blocks[parent].stmts.clone();
+    let at = stmts
         .iter()
-        .all(|s| walk_exit_stmt(body, *s, label, sink))
-}
-
-fn walk_exit_stmt<S: ExitSink>(body: &Body, s: StmtId, label: &str, sink: &mut S) -> bool {
-    match &body.stmts[s].kind {
-        StmtKind::Break {
-            label: Some(l),
-            value,
-        } if l == label => sink.visit(body, *value),
-        StmtKind::LabeledBlock { label: l, .. } if l == label => true,
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            walk_exit_operand(body, condition, label, sink)
-                && walk_exits(body, then_block, label, sink)
-                && else_block.is_none_or(|eb| walk_exits(body, eb, label, sink))
-        }
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            walk_exits(body, *b, label, sink)
-        }
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            walk_exit_operand(body, *value, label, sink)
-        }
-        // A `break L: <value>` can hide under a statement-position match/switch,
-        // and the transform walkers still rewrite it, so descend here too.
-        StmtKind::Expr(op) => walk_exit_operand(body, *op, label, sink),
-        StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-            value.is_none_or(|v| walk_exit_operand(body, v, label, sink))
-        }
-        StmtKind::Continue => true,
-    }
-}
-
-fn walk_exit_operand<S: ExitSink>(body: &Body, op: Operand, label: &str, sink: &mut S) -> bool {
-    op.as_expr()
-        .is_none_or(|e| walk_exit_expr(body, e, label, sink))
-}
-
-fn walk_exit_expr<S: ExitSink>(body: &Body, e: ExprId, label: &str, sink: &mut S) -> bool {
-    match &body.exprs[e].kind {
-        ExprKind::LabeledBlock {
-            label: l, block, ..
-        } => l == label || walk_exits(body, *block, label, sink),
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            walk_exit_operand(body, condition, label, sink)
-                && walk_exits(body, then_branch, label, sink)
-                && else_branch.is_none_or(|eb| walk_exits(body, eb, label, sink))
-        }
-        ExprKind::Match { expr, arms } if sink.descend_branches() => {
-            let (expr, arms) = (*expr, arms.clone());
-            walk_exit_operand(body, expr, label, sink)
-                && arms.iter().all(|arm| {
-                    walk_exit_operand(body, arm.body, label, sink)
-                        && arm
-                            .guard
-                            .is_none_or(|g| walk_exit_operand(body, g, label, sink))
-                })
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } if sink.descend_branches() => {
-            let (scrutinee, arms, default) = (*scrutinee, arms.clone(), *default);
-            walk_exit_operand(body, scrutinee, label, sink)
-                && arms.iter().all(|b| walk_exits(body, *b, label, sink))
-                && walk_exits(body, default, label, sink)
-        }
-        // Opaque expression: any exit hidden inside is unresolved by this walk.
-        _ => !(sink.reject_hidden_break() && has_break_to(body, NodeRef::Expr(e), label)),
-    }
+        .position(|held| *held == s)
+        .expect("a block holds the statement it parents");
+    stmts.splice(at..=at, with);
+    engine.set_block_stmts(parent, stmts);
 }
 
 /// [`ExitSink`] for `check_lb_breaks_and_get_payload`: every `break L:` must
@@ -752,23 +697,21 @@ impl ExitSink for BreakChecker<'_> {
 }
 
 /// Verify that all `break L: v` in `block` have `v` as either `null` or
-/// `VariantConstruct`. Returns the payload type of the matching case.
+/// `VariantConstruct`. Returns the payload type of the matching case, and the exits.
 fn check_lb_breaks_and_get_payload(
     body: &Body,
     block: BlockId,
     label: &str,
     case_index: u32,
-) -> Option<TypeId> {
+) -> Option<(TypeId, Vec<StmtId>)> {
     let mut payload_type: Option<TypeId> = None;
     let mut sink = BreakChecker {
         label,
         case_index,
         payload_type: &mut payload_type,
     };
-    if !walk_exits(body, block, label, &mut sink) {
-        return None;
-    }
-    payload_type
+    let exits = walk_exits(body, block, label, &mut sink)?;
+    Some((payload_type?, exits))
 }
 
 /// [`ExitSink`] for [`check_lb_breaks_are_tagged_tuples`]: every `break L:`
@@ -825,7 +768,7 @@ fn check_lb_breaks_are_tagged_tuples(
     label: &str,
     tag_value: i128,
     read: &IndexSet<u32>,
-) -> bool {
+) -> Option<Vec<StmtId>> {
     let mut sink = TaggedTupleChecker {
         label,
         tag_value,
@@ -1069,7 +1012,6 @@ fn expr_has_free_unlabeled_loop_exit_operand(body: &Body, op: Operand, loop_dept
 /// Everything the transform needs to rewrite one labeled block's exits into the
 /// consumer's arms.
 struct Fusion<'a> {
-    orig_label: &'a str,
     fused_label: &'a str,
     temp_local: u32,
     then_block: BlockId,
@@ -1162,7 +1104,6 @@ fn perform_fusion(
     let value = bind_value(engine, info.value);
     let fused_label = format!("$fused_{}", info.label);
     let fusion = Fusion {
-        orig_label: &info.label,
         fused_label: &fused_label,
         temp_local: info.temp_local,
         then_block,
@@ -1170,13 +1111,14 @@ fn perform_fusion(
         span,
         value,
     };
+    for exit in info.exits {
+        let with = fuse_exit(engine, exit, &fusion);
+        replace_exit(engine, exit, with);
+    }
 
-    // Reuse the LB block's stmt ids by clearing its list (the LB block becomes
-    // unreachable after `set_block_stmts` on the outer block; freeing the slot
-    // here is a Vec take, not an arena free).
-    let lb_stmts = std::mem::take(&mut engine.body.blocks[lb_block].stmts);
-    let fused_stmts = transform_lb_stmts(engine, lb_stmts, &fusion);
-
+    // The LB block becomes unreachable once the outer block drops the `let`;
+    // taking its list moves the stmts rather than sharing them.
+    let fused_stmts = std::mem::take(&mut engine.body.blocks[lb_block].stmts);
     let fused_body = engine.alloc_block(fused_stmts, span);
     let fused_stmt = engine.alloc_stmt(
         StmtKind::LabeledBlock {
@@ -1235,14 +1177,6 @@ fn bind_value(engine: &mut Engine, value: FusedValue) -> BoundValue {
                 .collect(),
         },
     }
-}
-
-fn transform_lb_stmts(engine: &mut Engine, stmts: Vec<StmtId>, f: &Fusion) -> Vec<StmtId> {
-    let mut out = Vec::new();
-    for s in stmts {
-        transform_lb_stmt(engine, s, f, &mut out);
-    }
-    out
 }
 
 fn emit_variant_payload_let(engine: &mut Engine, vc: ExprId, f: &Fusion, out: &mut Vec<StmtId>) {
@@ -1319,208 +1253,73 @@ fn emit_slot_lets(engine: &mut Engine, elements: &[Operand], f: &Fusion, out: &m
     }
 }
 
-fn transform_lb_stmt(engine: &mut Engine, s: StmtId, f: &Fusion, out: &mut Vec<StmtId>) {
-    // Check for `break orig_label: v` first.
-    let break_value = match &engine.body.stmts[s].kind {
-        StmtKind::Break {
-            label: Some(l),
-            value,
-        } if l == f.orig_label => Some(*value),
-        _ => None,
+/// What exit `s` becomes: its payload bound, the consumer arm it selects, and a
+/// `break` out of the fused block.
+fn fuse_exit(engine: &mut Engine, s: StmtId, f: &Fusion) -> Vec<StmtId> {
+    let StmtKind::Break { value, .. } = engine.body.stmts[s].kind else {
+        unreachable!("an exit is a break")
+    };
+    let mut out = Vec::new();
+    let selected = match &f.value {
+        BoundValue::Variant { case_index, .. } => {
+            let vc = value.and_then(Operand::as_expr).filter(|&e| {
+                matches!(&engine.body.exprs[e].kind,
+                    ExprKind::VariantConstruct { case_index: ci, .. } if ci == case_index)
+            });
+            match vc {
+                Some(vc) => emit_variant_payload_let(engine, vc, f, &mut out),
+                None => emit_untaken_payload(engine, value, f.span, &mut out),
+            }
+            vc.is_some()
+        }
+        BoundValue::Slots { tag_value, .. } => {
+            let e = value
+                .and_then(Operand::as_expr)
+                .expect("guarded by check_lb_breaks_are_tagged_tuples");
+            let ExprKind::TupleLiteral { elements } = &engine.body.exprs[e].kind else {
+                unreachable!("guarded by check_lb_breaks_are_tagged_tuples")
+            };
+            let elements = elements.clone();
+            let hit = break_tag_value(engine.body, &elements) == Some(*tag_value);
+            if hit {
+                emit_slot_lets(engine, &elements, f, &mut out);
+            }
+            hit
+        }
     };
 
-    if let Some(value) = break_value {
-        let selected = match &f.value {
-            BoundValue::Variant { case_index, .. } => {
-                let vc = value.and_then(Operand::as_expr).filter(|&e| {
-                    matches!(&engine.body.exprs[e].kind,
-                        ExprKind::VariantConstruct { case_index: ci, .. } if ci == case_index)
-                });
-                match vc {
-                    Some(vc) => emit_variant_payload_let(engine, vc, f, out),
-                    None => emit_untaken_payload(engine, value, f.span, out),
-                }
-                vc.is_some()
-            }
-            BoundValue::Slots { tag_value, .. } => {
-                let e = value
-                    .and_then(Operand::as_expr)
-                    .expect("guarded by check_lb_breaks_are_tagged_tuples");
-                let ExprKind::TupleLiteral { elements } = &engine.body.exprs[e].kind else {
-                    unreachable!("guarded by check_lb_breaks_are_tagged_tuples")
-                };
-                let elements = elements.clone();
-                let hit = break_tag_value(engine.body, &elements) == Some(*tag_value);
-                if hit {
-                    emit_slot_lets(engine, &elements, f, out);
-                }
-                hit
-            }
-        };
-
-        if selected {
-            let subst_then = engine.clone_block(f.then_block);
-            subst_temp_reads_in_block(engine, subst_then, f);
-            // Move the cloned stmts into `out` and empty the source block.
-            // Leaving them parented to `subst_then` AND a new block at the
-            // same time double-claims the stmt ids: the engine still
-            // enqueues `subst_then` for `apply_block`, and downstream
-            // rules (e.g. `const_branch_prune::eliminate_dead_stmts`'s
-            // void-block flatten) see the now-orphaned stmts a second
-            // time, which can erase live work.
-            let cloned_stmts = std::mem::take(&mut engine.body.blocks[subst_then].stmts);
-            out.extend(cloned_stmts);
-        } else if let Some(eb) = f.else_block {
-            // None / non-matching case → emit a clone of the else block.
-            let cloned = engine.clone_block(eb);
-            let cloned_stmts = std::mem::take(&mut engine.body.blocks[cloned].stmts);
-            out.extend(cloned_stmts);
-        }
-
-        // Emit `break fused_label;` unless the last emitted statement already
-        // terminates control flow.
-        if !out.last().is_some_and(|s| engine.body.terminates(*s)) {
-            let brk = engine.alloc_stmt(
-                StmtKind::Break {
-                    label: Some(f.fused_label.to_owned()),
-                    value: None,
-                },
-                f.span,
-            );
-            out.push(brk);
-        }
-        return;
+    if selected {
+        let subst_then = engine.clone_block(f.then_block);
+        subst_temp_reads_in_block(engine, subst_then, f);
+        // Move the cloned stmts into `out` and empty the source block.
+        // Leaving them parented to `subst_then` AND a new block at the
+        // same time double-claims the stmt ids: the engine still
+        // enqueues `subst_then` for `apply_block`, and downstream
+        // rules (e.g. `const_branch_prune::eliminate_dead_stmts`'s
+        // void-block flatten) see the now-orphaned stmts a second
+        // time, which can erase live work.
+        let cloned_stmts = std::mem::take(&mut engine.body.blocks[subst_then].stmts);
+        out.extend(cloned_stmts);
+    } else if let Some(eb) = f.else_block {
+        // None / non-matching case → emit a clone of the else block.
+        let cloned = engine.clone_block(eb);
+        let cloned_stmts = std::mem::take(&mut engine.body.blocks[cloned].stmts);
+        out.extend(cloned_stmts);
     }
 
-    // For any other statement, recursively transform nested blocks in place.
-    enum Shape {
-        Blocks(Vec<BlockId>),
-        Other,
+    // Emit `break fused_label;` unless the last emitted statement already
+    // terminates control flow.
+    if !out.last().is_some_and(|s| engine.body.terminates(*s)) {
+        let brk = engine.alloc_stmt(
+            StmtKind::Break {
+                label: Some(f.fused_label.to_owned()),
+                value: None,
+            },
+            f.span,
+        );
+        out.push(brk);
     }
-    let shape = match &engine.body.stmts[s].kind {
-        StmtKind::If {
-            then_block: tb,
-            else_block: eb,
-            ..
-        } => {
-            let mut v = vec![*tb];
-            if let Some(eb) = eb {
-                v.push(*eb);
-            }
-            Shape::Blocks(v)
-        }
-        StmtKind::Loop { body: b } => Shape::Blocks(vec![*b]),
-        StmtKind::LabeledBlock {
-            label: l, block, ..
-        } if l != f.orig_label => Shape::Blocks(vec![*block]),
-        _ => Shape::Other,
-    };
-    match shape {
-        Shape::Blocks(blocks) => {
-            for b in blocks {
-                let inner = std::mem::take(&mut engine.body.blocks[b].stmts);
-                let transformed = transform_lb_stmts(engine, inner, f);
-                engine.set_block_stmts(b, transformed);
-            }
-            out.push(s);
-        }
-        Shape::Other => {
-            transform_lb_in_stmt_kind(engine, s, f);
-            out.push(s);
-        }
-    }
-}
-
-fn transform_lb_in_stmt_kind(engine: &mut Engine, s: StmtId, f: &Fusion) {
-    let target = match &engine.body.stmts[s].kind {
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => Some(*value),
-        StmtKind::Expr(value) => Some(*value),
-        StmtKind::Return { value } | StmtKind::Break { value, .. } => *value,
-        StmtKind::If { .. }
-        | StmtKind::Loop { .. }
-        | StmtKind::LabeledBlock { .. }
-        | StmtKind::Continue => None,
-    };
-    if let Some(e) = target.and_then(Operand::as_expr) {
-        transform_lb_in_expr(engine, e, f);
-    }
-}
-
-fn transform_lb_in_expr(engine: &mut Engine, e: ExprId, f: &Fusion) {
-    enum Shape {
-        Block(BlockId),
-        Exprs(Vec<ExprId>),
-        ExprsAndBlocks(Vec<ExprId>, Vec<BlockId>),
-        None,
-    }
-    let shape = match &engine.body.exprs[e].kind {
-        ExprKind::LabeledBlock {
-            label: l, block, ..
-        } => {
-            if l.as_str() == f.orig_label {
-                Shape::None
-            } else {
-                Shape::Block(*block)
-            }
-        }
-        ExprKind::Match { expr, arms } => {
-            // Promoted-value scrutinee / arm bodies / guards have no skeleton
-            // subtree to descend into.
-            let mut exprs: Vec<ExprId> = expr.as_expr().into_iter().collect();
-            for arm in arms {
-                exprs.extend(arm.body.as_expr());
-                if let Some(g) = arm.guard {
-                    exprs.extend(g.as_expr());
-                }
-            }
-            Shape::Exprs(exprs)
-        }
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            let mut blocks = vec![*then_branch];
-            if let Some(eb) = else_branch {
-                blocks.push(*eb);
-            }
-            Shape::ExprsAndBlocks(condition.as_expr().into_iter().collect(), blocks)
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            let mut blocks = arms.clone();
-            blocks.push(*default);
-            Shape::ExprsAndBlocks(scrutinee.as_expr().into_iter().collect(), blocks)
-        }
-        _ => Shape::None,
-    };
-    match shape {
-        Shape::Block(b) => recurse_block(engine, b, f),
-        Shape::Exprs(exprs) => {
-            for ex in exprs {
-                transform_lb_in_expr(engine, ex, f);
-            }
-        }
-        Shape::ExprsAndBlocks(exprs, blocks) => {
-            for ex in exprs {
-                transform_lb_in_expr(engine, ex, f);
-            }
-            for b in blocks {
-                recurse_block(engine, b, f);
-            }
-        }
-        Shape::None => {}
-    }
-}
-
-fn recurse_block(engine: &mut Engine, b: BlockId, f: &Fusion) {
-    let inner = std::mem::take(&mut engine.body.blocks[b].stmts);
-    let transformed = transform_lb_stmts(engine, inner, f);
-    engine.set_block_stmts(b, transformed);
+    out
 }
 
 /// Redirect the consumer's reads of the fused temp — `VariantPayload(temp,
@@ -1884,6 +1683,7 @@ struct ThreadPlan {
     arms: Vec<ArmInfo>,
     result_type: TypeId,
     unit_result: bool,
+    exits: Vec<StmtId>,
 }
 
 fn plan_threading(body: &Body, id: ExprId, locals: &[NirLocal]) -> Option<ThreadPlan> {
@@ -1916,9 +1716,7 @@ fn plan_threading(body: &Body, id: ExprId, locals: &[NirLocal]) -> Option<Thread
 
     // Validate every `break L:` exit and record which arms it selects.
     let mut selected = vec![false; arm_infos.len()];
-    if !validate_exits_in_block(body, lb_block, &label, &arm_infos, locals, &mut selected) {
-        return None;
-    }
+    let exits = validate_exits_in_block(body, lb_block, &label, &arm_infos, locals, &mut selected)?;
 
     let lb_has_loop = block_contains_loop(body, lb_block);
     for (arm, used) in arm_infos.iter().zip(&selected) {
@@ -1950,6 +1748,7 @@ fn plan_threading(body: &Body, id: ExprId, locals: &[NirLocal]) -> Option<Thread
         arms: arm_infos,
         result_type,
         unit_result,
+        exits,
     })
 }
 
@@ -2067,7 +1866,7 @@ fn validate_exits_in_block(
     arms: &[ArmInfo],
     locals: &[NirLocal],
     selected: &mut [bool],
-) -> bool {
+) -> Option<Vec<StmtId>> {
     let mut sink = ExitValidator {
         label,
         arms,
@@ -2079,10 +1878,10 @@ fn validate_exits_in_block(
 
 fn perform_threading(engine: &mut Engine, match_id: ExprId, plan: ThreadPlan) {
     let fused_label = format!("$thread_{}", plan.label);
-    thread_block(engine, plan.lb_block, &plan, &fused_label);
-    // A `break plan.label` surviving here is a validate/thread walker divergence
-    // (a child position validated but not rewritten) that would dangle once the
-    // label is renamed. Fail loudly in dev rather than emit invalid Wasm.
+    for &exit in &plan.exits {
+        let with = thread_exit(engine, exit, &plan, &fused_label);
+        replace_exit(engine, exit, with);
+    }
     debug_assert!(
         !has_break_to(engine.body, NodeRef::Block(plan.lb_block), &plan.label),
         "labeled-block threading: unrewritten `break {}` survived",
@@ -2106,179 +1905,19 @@ fn perform_threading(engine: &mut Engine, match_id: ExprId, plan: ThreadPlan) {
     );
 }
 
-fn thread_block(engine: &mut Engine, block: BlockId, plan: &ThreadPlan, fused_label: &str) {
-    let stmts = std::mem::take(&mut engine.body.blocks[block].stmts);
-    let mut out = Vec::with_capacity(stmts.len());
-    for s in stmts {
-        thread_stmt(engine, s, plan, fused_label, &mut out);
-    }
-    engine.set_block_stmts(block, out);
-}
-
-fn thread_stmt(
+/// What exit `s` becomes: its payload bound, a clone of the arm it selects, and
+/// a `break` out of the threaded block carrying the arm's value.
+fn thread_exit(
     engine: &mut Engine,
     s: StmtId,
     plan: &ThreadPlan,
     fused_label: &str,
-    out: &mut Vec<StmtId>,
-) {
-    let exit_value = match &engine.body.stmts[s].kind {
-        StmtKind::Break {
-            label: Some(l),
-            value,
-        } if *l == plan.label => Some(*value),
-        _ => None,
+) -> Vec<StmtId> {
+    let StmtKind::Break { value, .. } = engine.body.stmts[s].kind else {
+        unreachable!("an exit is a break")
     };
-    if let Some(value) = exit_value {
-        let span = engine.body.stmts[s].span;
-        emit_threaded_exit(engine, value, plan, fused_label, span, out);
-        return;
-    }
-
-    enum Shape {
-        Blocks(Vec<BlockId>),
-        // An `if` condition can host an exit too, so thread it with the
-        // branches — `validate_exits_in_stmt` descends it.
-        CondAndBlocks(Operand, Vec<BlockId>),
-        Other,
-    }
-    let shape = match &engine.body.stmts[s].kind {
-        StmtKind::LabeledBlock { label: l, .. } if *l == plan.label => Shape::Blocks(vec![]),
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            let mut v = vec![*then_block];
-            if let Some(eb) = else_block {
-                v.push(*eb);
-            }
-            Shape::CondAndBlocks(*condition, v)
-        }
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            Shape::Blocks(vec![*b])
-        }
-        _ => Shape::Other,
-    };
-    match shape {
-        Shape::Blocks(blocks) => {
-            for b in blocks {
-                thread_block(engine, b, plan, fused_label);
-            }
-        }
-        Shape::CondAndBlocks(cond, blocks) => {
-            if let Some(ce) = cond.as_expr() {
-                thread_expr(engine, ce, plan, fused_label);
-            }
-            for b in blocks {
-                thread_block(engine, b, plan, fused_label);
-            }
-        }
-        Shape::Other => {
-            let target = match &engine.body.stmts[s].kind {
-                StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-                    Some(*value)
-                }
-                StmtKind::Expr(value) => Some(*value),
-                StmtKind::Return { value } | StmtKind::Break { value, .. } => *value,
-                StmtKind::If { .. }
-                | StmtKind::Loop { .. }
-                | StmtKind::LabeledBlock { .. }
-                | StmtKind::Continue => None,
-            };
-            if let Some(e) = target.and_then(Operand::as_expr) {
-                thread_expr(engine, e, plan, fused_label);
-            }
-        }
-    }
-    out.push(s);
-}
-
-fn thread_expr(engine: &mut Engine, e: ExprId, plan: &ThreadPlan, fused_label: &str) {
-    enum Shape {
-        Blocks(Vec<BlockId>),
-        Operands(Vec<Operand>),
-        OperandsAndBlocks(Vec<Operand>, Vec<BlockId>),
-        None,
-    }
-    let shape = match &engine.body.exprs[e].kind {
-        ExprKind::LabeledBlock {
-            label: l, block, ..
-        } => {
-            if *l == plan.label {
-                Shape::None
-            } else {
-                Shape::Blocks(vec![*block])
-            }
-        }
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            let mut blocks = vec![*then_branch];
-            if let Some(eb) = else_branch {
-                blocks.push(*eb);
-            }
-            Shape::OperandsAndBlocks(vec![*condition], blocks)
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            let mut blocks = arms.clone();
-            blocks.push(*default);
-            Shape::OperandsAndBlocks(vec![*scrutinee], blocks)
-        }
-        ExprKind::Match { expr, arms } => {
-            let mut ops: Vec<Operand> = vec![*expr];
-            for arm in arms {
-                ops.push(arm.body);
-                if let Some(g) = arm.guard {
-                    ops.push(g);
-                }
-            }
-            Shape::Operands(ops)
-        }
-        _ => Shape::None,
-    };
-    match shape {
-        Shape::Blocks(blocks) => {
-            for b in blocks {
-                thread_block(engine, b, plan, fused_label);
-            }
-        }
-        Shape::Operands(ops) => {
-            for op in ops {
-                if let Some(oe) = op.as_expr() {
-                    thread_expr(engine, oe, plan, fused_label);
-                }
-            }
-        }
-        Shape::OperandsAndBlocks(ops, blocks) => {
-            for op in ops {
-                if let Some(oe) = op.as_expr() {
-                    thread_expr(engine, oe, plan, fused_label);
-                }
-            }
-            for b in blocks {
-                thread_block(engine, b, plan, fused_label);
-            }
-        }
-        Shape::None => {}
-    }
-}
-
-fn emit_threaded_exit(
-    engine: &mut Engine,
-    value: Option<Operand>,
-    plan: &ThreadPlan,
-    fused_label: &str,
-    span: Span,
-    out: &mut Vec<StmtId>,
-) {
+    let span = engine.body.stmts[s].span;
+    let mut out = Vec::new();
     let vc = value
         .and_then(Operand::as_expr)
         .expect("guarded by plan_threading");
@@ -2377,6 +2016,7 @@ fn emit_threaded_exit(
         // A divergent arm already terminates; no fused break needed.
         None => {}
     }
+    out
 }
 
 /// Tagged-tuple temp scalarization: the `let temp = L: { …; break L: [tag,
@@ -2412,6 +2052,7 @@ struct SlotTempSroa {
     /// The declaring `let mut slot = <zero>` each one needs ahead of the block.
     zeros: Vec<(u32, TypeId, Operand)>,
     span: Span,
+    exits: Vec<StmtId>,
 }
 
 impl SlotTempSroa {
@@ -2534,7 +2175,8 @@ fn plan_slot_temp_sroa(
         struct_arity: None,
         saw_materialize: false,
     };
-    if !walk_exits(body, lb_block, &label, &mut sink) || !sink.admissible() {
+    let exits = walk_exits(body, lb_block, &label, &mut sink)?;
+    if !sink.admissible() {
         return None;
     }
 
@@ -2560,6 +2202,7 @@ fn plan_slot_temp_sroa(
         names: reads.slot_names,
         zeros,
         span,
+        exits,
     })
 }
 
@@ -2644,7 +2287,10 @@ fn perform_slot_temp_sroa(
     plan: SlotTempSroa,
 ) {
     let span = plan.span;
-    scalarize_exits(engine, plan.lb_block, &plan);
+    for &exit in &plan.exits {
+        let with = scalarize_exit(engine, exit, &plan);
+        replace_exit(engine, exit, with);
+    }
 
     // Every `temp.k` now reads the slot local instead. Collect first: the
     // rewrite only replaces expression kinds, so the ids stay valid.
@@ -2700,78 +2346,18 @@ fn perform_slot_temp_sroa(
     engine.note_elided_local(plan.temp_local);
 }
 
-/// Replace each `break L: [e0, …]` with the slot assignments the projections
-/// read and a value-less `break L`. The walk mirrors [`walk_exits`], which is
-/// what the plan checked against: an exit it accepted but this missed would
-/// keep a value-carrying break in a block that no longer has a result type.
-fn scalarize_exits(engine: &mut Engine, block: BlockId, plan: &SlotTempSroa) {
-    let stmts = engine.body.blocks[block].stmts.clone();
-    let mut out = Vec::with_capacity(stmts.len());
-    for s in stmts {
-        scalarize_stmt(engine, s, plan, &mut out);
-    }
-    engine.set_block_stmts(block, out);
-}
-
-fn scalarize_stmt(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa, out: &mut Vec<StmtId>) {
-    let exit = match &engine.body.stmts[s].kind {
-        StmtKind::Break {
-            label: Some(l),
-            value: Some(v),
-        } if *l == plan.label => v.as_expr(),
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            scalarize_operand(engine, condition, plan);
-            scalarize_exits(engine, then_block, plan);
-            if let Some(eb) = else_block {
-                scalarize_exits(engine, eb, plan);
-            }
-            None
-        }
-        StmtKind::Loop { body } => {
-            let body = *body;
-            scalarize_exits(engine, body, plan);
-            None
-        }
-        // A block re-binding the label owns every `break` to it inside, so the
-        // planner's walk skips it without looking — `walk_exit_stmt` returns
-        // for the shadowing case rather than descending. Rewriting those breaks
-        // here would scalarize exits that are not ours, which is why
-        // `scalarize_expr` skips the same shape.
-        StmtKind::LabeledBlock { label, block, .. } => {
-            if label != &plan.label {
-                let block = *block;
-                scalarize_exits(engine, block, plan);
-            }
-            None
-        }
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            let value = *value;
-            scalarize_operand(engine, value, plan);
-            None
-        }
-        StmtKind::Expr(value) => {
-            let value = *value;
-            scalarize_operand(engine, value, plan);
-            None
-        }
-        StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-            if let Some(v) = *value {
-                scalarize_operand(engine, v, plan);
-            }
-            None
-        }
-        StmtKind::Continue => None,
-    };
-    let Some(exit) = exit else {
-        out.push(s);
-        return;
+/// What `break L: [e0, …]` becomes: the slot assignments the projections read
+/// and a value-less `break L`.
+fn scalarize_exit(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa) -> Vec<StmtId> {
+    let StmtKind::Break {
+        value: Some(Operand::Expr(exit)),
+        ..
+    } = engine.body.stmts[s].kind
+    else {
+        unreachable!("guarded by SlotExitChecker")
     };
     let span = engine.body.stmts[s].span;
+    let mut out = Vec::new();
     // Field-carrying exits hand each operand straight to its slot; the rest bind
     // the aggregate first and project. `SlotExitChecker` admitted exactly these.
     let carried: Option<Vec<(u32, Operand)>> = match &engine.body.exprs[exit].kind {
@@ -2802,7 +2388,7 @@ fn scalarize_stmt(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa, out: &mut
                 out.push(stmt);
             }
         }
-        None => scalarize_materialized_exit(engine, exit, plan, span, out),
+        None => scalarize_materialized_exit(engine, exit, plan, span, &mut out),
     }
     let brk = engine.alloc_stmt(
         StmtKind::Break {
@@ -2812,6 +2398,7 @@ fn scalarize_stmt(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa, out: &mut
         span,
     );
     out.push(brk);
+    out
 }
 
 /// Allocate a local named after the index it lands at, so its declared name and
@@ -2891,84 +2478,6 @@ fn scalarize_materialized_exit(
         );
         let kind = slot_assign(engine, slot, Operand::Expr(read), span);
         out.push(engine.alloc_stmt(kind, span));
-    }
-}
-
-fn scalarize_operand(engine: &mut Engine, op: Operand, plan: &SlotTempSroa) {
-    if let Some(e) = op.as_expr() {
-        scalarize_expr(engine, e, plan);
-    }
-}
-
-/// The expression positions [`walk_exit_expr`] resolves. Every other kind is one
-/// it treats as opaque and the plan already refused an exit inside.
-fn scalarize_expr(engine: &mut Engine, e: ExprId, plan: &SlotTempSroa) {
-    match &engine.body.exprs[e].kind {
-        ExprKind::LabeledBlock { label, block, .. } => {
-            if label == &plan.label {
-                return;
-            }
-            let block = *block;
-            scalarize_exits(engine, block, plan);
-        }
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            scalarize_operand(engine, condition, plan);
-            scalarize_exits(engine, then_branch, plan);
-            if let Some(eb) = else_branch {
-                scalarize_exits(engine, eb, plan);
-            }
-        }
-        ExprKind::Match { expr, arms } => {
-            let (expr, arms) = (*expr, arms.clone());
-            scalarize_operand(engine, expr, plan);
-            for arm in &arms {
-                if let Some(g) = arm.guard {
-                    scalarize_operand(engine, g, plan);
-                }
-                scalarize_operand(engine, arm.body, plan);
-            }
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            let (scrutinee, arms, default) = (*scrutinee, arms.clone(), *default);
-            scalarize_operand(engine, scrutinee, plan);
-            for b in arms {
-                scalarize_exits(engine, b, plan);
-            }
-            scalarize_exits(engine, default, plan);
-        }
-        ExprKind::Binary { .. }
-        | ExprKind::Unary { .. }
-        | ExprKind::Call { .. }
-        | ExprKind::FieldAccess { .. }
-        | ExprKind::Index { .. }
-        | ExprKind::TupleLiteral { .. }
-        | ExprKind::ArrayLiteral { .. }
-        | ExprKind::StructLiteral { .. }
-        | ExprKind::VariantConstruct { .. }
-        | ExprKind::EnumConstruct { .. }
-        | ExprKind::Assign { .. }
-        | ExprKind::Cast { .. }
-        | ExprKind::GlobalVarGet { .. }
-        | ExprKind::GlobalVarSet { .. }
-        | ExprKind::Local { .. }
-        | ExprKind::PackedArray(_)
-        | ExprKind::Dead
-        | ExprKind::CmRawCall { .. }
-        | ExprKind::IndirectCall { .. }
-        | ExprKind::ClosureToCanonical { .. }
-        | ExprKind::VariantTag { .. }
-        | ExprKind::VariantTest { .. }
-        | ExprKind::VariantPayload { .. } => {}
     }
 }
 

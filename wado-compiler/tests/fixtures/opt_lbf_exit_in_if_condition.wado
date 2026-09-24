@@ -1,0 +1,24 @@
+// A `break check:` inside an `if` condition within the labeled block. The
+// fusion check accepted it, but the rewrite skipped `if` conditions, leaving
+// a break to the renamed `check` (ICE in WIR build).
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let n = builtin::black_box(7);
+    let r: Option<i32> = check: {
+        if (inner: {
+            if n > 0 { break check: Some(n); }
+            n < -5
+        }) {
+            break check: null;
+        }
+        break check: Some(0);
+    };
+    if let Some(v) = r {
+        println(`some ${v}`);
+    }
+}
+
+__DATA__
+{"stdout": "some 7\n"}
