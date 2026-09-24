@@ -638,32 +638,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .reflect_structure_head(self_ty);
-        let (base_name, module_source, type_args) =
-            match self.tysys.type_table.borrow().get(self_ty).clone() {
-                ResolvedType::GenericInstance { type_args, .. } => {
-                    let (name, module_source) = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_head(self_ty)
-                        .expect("a nominal type names a declaration");
-                    (name, module_source, type_args)
-                }
-                ResolvedType::Struct { .. } => {
-                    let (name, module_source) = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_head(self_ty)
-                        .expect("a nominal type names a declaration");
-                    (name, module_source, Vec::new())
-                }
-                _ => {
-                    let name = self.tysys.type_table.borrow().type_name(self_ty);
-                    let module_source = self.declaring_module_of(&name);
-                    (name, module_source, Vec::new())
-                }
-            };
+        let (base_name, module_source, type_args) = {
+            let tt = self.tysys.type_table.borrow();
+            let (name, module_source) = tt.nominal_head(self_ty)?;
+            (name, module_source, tt.nominal_type_args(self_ty).unwrap_or_default())
+        };
         let info = self
             .tysys
             .type_def(self_ty)
@@ -1374,18 +1353,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // The subject is an enum or a flags type — `subject_matches` just said
-        // so — and its `ResolvedType` carries the declaration, so the module
-        // comes off that rather than off the spelling.
         let module_source = self
             .tysys
             .type_table
             .borrow()
-            .nominal_def(structure_ty)
-            .map_or_else(
-                || self.declaring_module_of(&self_name),
-                |def| self.tysys.resolutions.defs().module(def).clone(),
-            );
+            .nominal_head(structure_ty)
+            .expect("an enum or flags type names its declaration")
+            .1;
         let Some(return_type) =
             self.check_reflect_scalar_args(spec, self_ty, &self_name, &method, static_call, ctx)
         else {

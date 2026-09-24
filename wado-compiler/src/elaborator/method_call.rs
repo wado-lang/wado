@@ -896,41 +896,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(method_impl_type_id)
             .clone()
         {
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
-                let (name, _module_source) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(method_impl_type_id)
-                    .expect("a nominal type names a declaration");
+            ResolvedType::GenericInstance { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::BuiltinArray(_) => {
+                let tt = self.tysys.type_table.borrow();
+                let type_args = tt
+                    .nominal_type_args(method_impl_type_id)
+                    .expect("an instantiation carries its arguments");
                 // Qualify the base and the arguments alike, so a concrete-generic
                 // impl's method name matches its definition (issue #1348). A
-                // tuple carries the tuple head, not a declared one, so it keeps
-                // the `[a,b]` spelling every other namespace gives it.
-                let type_arg_names: Vec<FqTypeName> = type_args
-                    .iter()
-                    .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
-                    .collect();
-                let base = if TypeTable::is_tuple_type(&name) {
+                // tuple keeps the `[a,b]` spelling every other namespace gives it.
+                let type_arg_names: Vec<FqTypeName> =
+                    type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
+                let base = if tt.is_tuple(method_impl_type_id) {
                     FqTypeName::tuple(Vec::new())
                 } else {
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .fq_base_type_name(method_impl_type_id)
+                    tt.fq_base_type_name(method_impl_type_id)
                 };
                 let mangled = base.clone().with_args(type_arg_names.clone());
                 (mangled, base, type_arg_names, Some(type_args))
-            }
-            // The raw GC array splits like a generic instance: the receiver
-            // name is the full `Array<T>` spelling, but the method-owner base
-            // name is "Array" (matching `impl Array<T>`'s registration).
-            ResolvedType::BuiltinArray(elem) => {
-                let arg_name = self.tysys.type_table.borrow().fq_type_name(elem);
-                let base = FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME);
-                let mangled = base.clone().with_args(vec![arg_name.clone()]);
-                (mangled, base, vec![arg_name], Some(vec![elem]))
             }
             // Named by its declaring module: a bare head names no definition,
             // and re-resolution would peel past the impl to the base.
@@ -2305,9 +2289,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         (flags_name, flags_module, fq, vec![])
                     } else {
                         (
-                            "u32".to_string(),
+                            TypeTable::FLAGS_BASE_NAME.to_string(),
                             ModuleSource::primitive(),
-                            FqTypeName::builtin("u32"),
+                            FqTypeName::builtin(TypeTable::FLAGS_BASE_NAME),
                             vec![],
                         )
                     }
@@ -3439,7 +3423,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow()
                 .compiler_trait_fq(CompilerItem::Default);
-            let module_source = self.declaring_module_of(struct_name);
+            let module_source = self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_head(struct_type)
+                .expect("a derivable struct names its declaration")
+                .1;
             self.tysys
                 .type_table
                 .borrow_mut()
@@ -3510,43 +3500,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     mangled_func_name.to_string(),
                 )
             } else {
-                let base_type_id = match self.tysys.type_table.borrow().get(newtype_id).clone() {
-                    ResolvedType::Newtype { .. } => Some(
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .representation_head(newtype_id),
-                    ),
-                    _ => None,
-                };
-                let base_name = base_type_id
-                    .map(|b| self.tysys.get_ultimate_base_struct_name(b))
-                    .or_else(|| match self.tysys.type_table.borrow().get(newtype_id) {
-                        ResolvedType::Flags { .. } => Some("u32".to_string()),
-                        _ => None,
-                    });
-                if let (Some(base_name), Some(base_type_id)) = (base_name.clone(), base_type_id) {
-                    let base_args = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_type_args(base_type_id)
-                        .unwrap_or_default();
-                    newtype_dispatch = Some((newtype_id, base_type_id, base_args));
-                    let base_fq = self.tysys.fq_receiver_head(base_type_id);
-                    let mangled = MethodName::format_local(&base_fq, None, method_name);
-                    (base_name, base_fq, mangled)
-                } else if let Some(base_name) = base_name {
-                    // Only a flags type, whose base is the `u32` it lowers to.
-                    let base_fq = FqTypeName::builtin(&base_name);
-                    let mangled = MethodName::format_local(&base_fq, None, method_name);
-                    (base_name, base_fq, mangled)
-                } else {
-                    (
+                let resolved = self.tysys.type_table.borrow().get(newtype_id).clone();
+                match resolved {
+                    ResolvedType::Newtype { .. } => {
+                        let (base_type_id, base_args) = {
+                            let tt = self.tysys.type_table.borrow();
+                            let base = tt.representation_head(newtype_id);
+                            (base, tt.nominal_type_args(base).unwrap_or_default())
+                        };
+                        newtype_dispatch = Some((newtype_id, base_type_id, base_args));
+                        let base_fq = self.tysys.fq_receiver_head(base_type_id);
+                        let mangled = MethodName::format_local(&base_fq, None, method_name);
+                        let base_name = self.tysys.get_ultimate_base_struct_name(base_type_id);
+                        (base_name, base_fq, mangled)
+                    }
+                    ResolvedType::Flags { .. } => {
+                        let base_fq = FqTypeName::builtin(TypeTable::FLAGS_BASE_NAME);
+                        let mangled = MethodName::format_local(&base_fq, None, method_name);
+                        (TypeTable::FLAGS_BASE_NAME.to_string(), base_fq, mangled)
+                    }
+                    _ => (
                         struct_name.to_string(),
                         qualified_struct_name,
                         mangled_func_name.to_string(),
-                    )
+                    ),
                 }
             }
         } else {

@@ -332,7 +332,7 @@ impl TypeSystem {
                     return self.type_table.borrow().def_name(def).to_string();
                 }
                 ResolvedType::Newtype { base_type, .. } => current = base_type,
-                ResolvedType::Flags { .. } => return "u32".to_string(),
+                ResolvedType::Flags { .. } => return TypeTable::FLAGS_BASE_NAME.to_string(),
                 // The raw GC array's base method-owner name is "Array"
                 // (its type args are carried separately), not the full
                 // `type_name` spelling `Array<T>`.

@@ -641,13 +641,6 @@ impl ModuleSource {
         }
     }
 
-    /// [`Self::of_primitive`] for a caller holding the type's name; `None`
-    /// where the name is not a primitive's.
-    #[must_use]
-    pub fn of_primitive_name(name: &str) -> Option<Self> {
-        PrimitiveType::from_name(name).map(Self::of_primitive)
-    }
-
     /// Convert to the legacy `Vec<String>` module path representation.
     ///
     /// This is the module's **portable qualifier** — the identity used to

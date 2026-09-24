@@ -328,7 +328,6 @@ impl TypeSystem {
                 let tt = self.type_table.borrow();
                 // `TypeHead` compares a declaration by `DefId` and an
                 // undeclared shape by its rendering, which is all it has.
-                // `nominal_def` answers `None` for `i32` and `()`.
                 let written_head = FqTypeName::of_head(self.resolutions.defs(), def);
                 if *written_head.head() != *tt.fq_base_type_name(recv).head() {
                     return false;

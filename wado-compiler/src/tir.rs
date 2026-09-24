@@ -962,6 +962,9 @@ impl TypeTable {
     /// so those scattered sites cannot drift out of agreement.
     pub const ARRAY_TYPE_NAME: &'static str = "Array";
 
+    /// The primitive a `flags` type lowers to, whose methods it inherits.
+    pub const FLAGS_BASE_NAME: &'static str = "u32";
+
     /// The `(base name, struct type args)` a generic container (`GenericInstance`
     /// or the raw GC array `Array<T>`, whose methods live in `impl Array<T>`)
     /// dispatches under. A trait-method call site

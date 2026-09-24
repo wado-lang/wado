@@ -581,11 +581,7 @@ fn representative(
             if let Some(id) = TypeTable::primitive_by_name(name) {
                 return Some(table.get(id).clone());
             }
-            if name == TypeTable::UNIT_TYPE_NAME {
-                Some(ResolvedType::Unit)
-            } else if name == "!" {
-                Some(ResolvedType::Never)
-            } else if name == TypeTable::ARRAY_TYPE_NAME {
+            if name == TypeTable::ARRAY_TYPE_NAME {
                 Some(ResolvedType::BuiltinArray(TypeTable::UNIT))
             } else if name == fn_shape_name(false) || name == fn_shape_name(true) {
                 Some(ResolvedType::Function {
@@ -970,15 +966,14 @@ impl SolverBridge {
         }
     }
 
-    /// A newtype inherits its base's impls. A `flags` type is stored as a
-    /// `u32` and inherits the same way.
+    /// A newtype inherits its base's impls, and a `flags` type its primitive's.
     fn state_newtype_bases(
         tysys: &TypeSystem,
         table: &TypeTable,
         lowering: &mut Lowering,
         program: &mut Program,
     ) {
-        let u32_ = SolverType::Decl(lowering.builtin("u32"), vec![]);
+        let u32_ = SolverType::Decl(lowering.builtin(TypeTable::FLAGS_BASE_NAME), vec![]);
         let mut newtype_base = |head: TypeDeclId, base: SolverType| {
             program.types.insert(
                 head,

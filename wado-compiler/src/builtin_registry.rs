@@ -155,9 +155,7 @@ impl BuiltinRegistry {
         self.functions.insert(func.name.clone(), info);
     }
 
-    /// Resolve an AST Type to a `TypeId`
-    ///
-    /// Handles primitive types, type parameters, and `Array<T>`.
+    /// The `TypeId` a `core:builtin` signature type names.
     fn resolve_type(ty: &Type, type_params: &[String], type_table: &RefCell<TypeTable>) -> TypeId {
         match ty {
             Type::Named(named) => {
@@ -171,10 +169,8 @@ impl BuiltinRegistry {
                 if let Some(id) = TypeTable::primitive_by_name(&named.name) {
                     return id;
                 }
-                // `i128` / `u128` are prelude struct declarations, which
-                // `core:builtin` imports like any other module's type — these
-                // arms are what honour that import, since the name is matched
-                // before the import list is consulted.
+                // The prelude structs `core:builtin` imports; nothing here reads
+                // its import list.
                 match named.name.as_str() {
                     "i128" => type_table
                         .borrow_mut()

@@ -3327,17 +3327,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inherent_visibility: None,
             defaults_module: None,
         };
-        // A shape no module declares (an anonymous struct, a tuple) derives
-        // where it is used.
         let impl_module_source = self
             .tysys
             .type_table
             .borrow()
-            .nominal_def(derive_id)
-            .map_or_else(
-                || self.current_module_source.clone(),
-                |def| self.tysys.resolutions.defs().module(def).clone(),
-            );
+            .nominal_head(derive_id)
+            .expect("an auto-derive-eligible type names a head")
+            .1;
         // The auto-derived trait is a compiler item, so it is named by the
         // declaration the registry holds, not by a spelling resolved here.
         let trait_fq = self.tysys.type_table.borrow().compiler_trait_fq(item);
