@@ -3069,10 +3069,11 @@ impl CmInterfaceRegistry {
     /// `None` for CM-imported or source-less references. The CM codegen emits a
     /// local newtype as a named alias at the boundary (issue #1456) rather than
     /// erasing it to its base; the returned source keys that alias so references
-    /// to one newtype never double-emit.
+    /// to one newtype never double-emit. An unrestricted resource is not one:
+    /// its handle crosses as the bare universal handle wherever it is declared.
     pub fn local_newtype_base(&self, source: Option<&str>, name: &str) -> Option<(&str, &Type)> {
         let source = source?;
-        if self.is_cm_source(source) {
+        if self.is_cm_source(source) || self.is_unrestricted_resource(source, name) {
             return None;
         }
         self.newtypes
