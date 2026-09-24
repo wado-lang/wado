@@ -370,13 +370,9 @@ pub struct LrAlt {
     /// Precedence assigned to this alt by ANTLR4's left-recursion
     /// rewrite (`own_prec = total_lr - lr_position`, values 1..N). The
     /// FIRST LR alt has the highest precedence; ties follow source order.
-    /// Right-associative alts use this same value for the inner self-ref
-    /// call (`min_prec = own_prec`), left-associative use `own_prec + 1`.
     pub own_prec: i32,
-    /// Minimum precedence required for the loop to enter this alt.
-    /// Equal to `own_prec` for left-associative and
-    /// `own_prec + 1`-derived adjustments for right-associative; the
-    /// exact recipe is fixed in `compute_lr_conflict_min_prec`.
+    /// `lr_trailing_prec`, raised past any tighter alt whose suffix starts
+    /// with one of this alt's delimiters (`compute_lr_conflict_min_prec`).
     pub conflict_min: i32,
     /// Index (within the alt's elements) of the LAST self-reference
     /// to the enclosing rule. -1 if there is no internal self-ref
@@ -397,6 +393,12 @@ pub struct LrAlt {
     /// only the right-hand side, so emit prepends this decl when
     /// laying out the struct.
     pub prefix_self_ref: FieldDecl,
+}
+
+/// The precedence ANTLR4's left-recursion rewrite passes an LR alt's trailing
+/// operand: its own for `<assoc=right>`, one tighter otherwise.
+pub fn lr_trailing_prec(own_prec: i32, right_associative: bool) -> i32 {
+    return if right_associative { own_prec } else { own_prec + 1 };
 }
 
 /// LR suffix dispatch metadata. The fields mirror

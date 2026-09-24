@@ -269,6 +269,7 @@ impl CtxArena {
             cand = self.intern_next[cand];
         }
         let id = self.node_start.len();
+        assert (id as i64) < ATN_NODE_PAIR_STRIDE, "a node id at the pair-key stride aliases two node pairs onto one key";
         self.node_start.push(s);
         self.node_len.push(n);
         self.intern_next.push(head);
@@ -383,7 +384,6 @@ impl CtxArena {
 }
 
 fn atn_node_pair_key(a: i32, b: i32) -> i64 {
-    assert ATN_NODE_PAIR_STRIDE > ATN_ARENA_CAP as i64, "the pair-key stride must exceed the arena cap, or two node id pairs alias onto one key";
     return a as i64 * ATN_NODE_PAIR_STRIDE + b as i64;
 }
 

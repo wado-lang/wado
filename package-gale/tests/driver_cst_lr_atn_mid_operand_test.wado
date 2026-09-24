@@ -44,3 +44,30 @@ test "the atom's first operand climbs the shared and when one is left over" {
         "(stat (expr between (expr (expr a) and (expr b)) and (expr c)) ;)",
     );
 }
+
+test "an and after a nested between goes to the outer between" {
+    assert_tree(
+        "a between b and c and d between e and f ;",
+        "(stat (expr (expr (expr a) between (expr (expr b) and (expr c)) and (expr d)) between (expr e) and (expr f)) ;)",
+    );
+    assert_tree(
+        "a between b and between c and d and e ;",
+        "(stat (expr (expr a) between (expr (expr b) and (expr between (expr c) and (expr d))) and (expr e)) ;)",
+    );
+    assert_tree(
+        "a between b and c between d and e and f ;",
+        "(stat (expr (expr a) between (expr (expr (expr b) and (expr c)) between (expr d) and (expr e)) and (expr f)) ;)",
+    );
+    assert_tree(
+        "a and b between c and d and e ;",
+        "(stat (expr (expr (expr a) and (expr b)) between (expr (expr c) and (expr d)) and (expr e)) ;)",
+    );
+    assert_tree(
+        "a between between b and c and d and e ;",
+        "(stat (expr (expr a) between (expr between (expr (expr b) and (expr c)) and (expr d)) and (expr e)) ;)",
+    );
+    assert_tree(
+        "between a and b between c and d and e ;",
+        "(stat (expr between (expr (expr (expr a) and (expr b)) between (expr c) and (expr d)) and (expr e)) ;)",
+    );
+}

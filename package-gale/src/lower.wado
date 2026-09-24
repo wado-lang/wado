@@ -146,6 +146,7 @@ use {
     alt_class_first_set,
     alt_class_is_nullable,
     alt_class_is_open_ended,
+    lr_trailing_prec,
 } from "./gir.wado";
 
 /// True when an element threads a `FollowArg` into a callee: a `RuleRef`,
@@ -930,14 +931,8 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     };
 }
 
-/// True when this LR rule's loop-entry is ATN-class: some atom (non-LR) alt
-/// contains a self-reference to the rule immediately followed by a fixed
-/// token (`Literal` / `TokenRef`) that is also a first token of some LR
-/// alt's suffix. In that shape the atom's inner operand and the LR loop
-/// compete for the shared delimiter, and the static first-token dispatch
-/// commits the loop greedily — starving the atom's own trailing literal
-/// (`'between' expr 'and' expr` vs `expr 'and' expr`). The runtime simulator
-/// resolves it with full context.
+/// True when this LR rule's loop entry needs the runtime simulator's full
+/// context, as with `'between' expr 'and' expr` beside `expr 'and' expr`.
 fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: &List<LrAlt>) -> bool {
     // A `.` / `~X`-led LR suffix has a real suffix but an empty static
     // `suffix_first`: the loop-entry can't be decided by a static first-token
@@ -946,6 +941,16 @@ fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: 
     for let a of lr_alts {
         if !a.suffix.ops.is_empty() && a.suffix_first.is_empty() {
             return true;
+        }
+    }
+
+    // A suffix that is a proper prefix of another's scans wherever the longer
+    // one does, so no static pick between them is right.
+    for let a of lr_alts {
+        for let b of lr_alts {
+            if lr_suffix_is_proper_prefix(rule, &rule.alternatives[a.alt_index], &rule.alternatives[b.alt_index]) {
+                return true;
+            }
         }
     }
 
@@ -960,6 +965,8 @@ fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: 
     if suffix_first_tokens.is_empty() {
         return false;
     }
+    // An atom operand followed by a loop delimiter: the static dispatch would
+    // commit the loop and starve the atom's own delimiter.
     for let idx of non_lr_indices {
         let alt = &rule.alternatives[*idx];
         for let mut i = 0; i + 1 < alt.elements.len(); i += 1 {
@@ -975,6 +982,28 @@ fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: 
         }
     }
     return false;
+}
+
+/// Whether `short`'s suffix is a proper prefix of `long`'s, element for element,
+/// each a fixed token or a self-reference.
+fn lr_suffix_is_proper_prefix(rule: &ParserRule, short: &Alternative, long: &Alternative) -> bool {
+    if short.elements.len() < 2 || short.elements.len() >= long.elements.len() {
+        return false;
+    }
+    for let mut i = 1; i < short.elements.len(); i += 1 {
+        let s = &short.elements[i];
+        let l = &long.elements[i];
+        let same = if element_is_self_ref(s, &rule.name) {
+            element_is_self_ref(l, &rule.name);
+        } else {
+            let tok = fixed_token_const_name(s);
+            tok != null && tok == fixed_token_const_name(l);
+        };
+        if !same {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// The token constant name (`TK_X` / `LIT_x`) of a fixed-token element
@@ -1030,8 +1059,7 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
                 // context; the static dispatch hands a mid operand the
                 // continuation it has to leave behind, and its loop gate stops it.
                 let mut cont_mask = -1;
-                let own = lr_alts[i].own_prec;
-                let natural_trailing = if lr_alts[i].right_associative { own } else { own + 1 };
+                let natural_trailing = lr_trailing_prec(lr_alts[i].own_prec, lr_alts[i].right_associative);
                 if atn_class {
                     prec = if k + 1 < suffix_len { 0 } else { natural_trailing };
                 } else if alt_gated && k + 1 == suffix_len {
@@ -1845,7 +1873,7 @@ fn compute_lr_conflict_min_prec(
     ctx: &mut GenContext,
     total_lr: i32,
 ) -> i32 {
-    let mut min_prec: i32 = if is_right_associative_alt(alt) { own_prec } else { own_prec + 1 };
+    let mut min_prec = lr_trailing_prec(own_prec, is_right_associative_alt(alt));
 
     let mut fixed_tokens: List<String> = [];
     for let mut ei = 1; ei < alt.elements.len(); ei += 1 {

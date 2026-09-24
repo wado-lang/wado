@@ -23,7 +23,7 @@
 //! `atn_blob_bytes` -> `atn_decode` round-trip.
 
 use { Grammar, ParserRule, Alternative, Element, RepeatKind } from "./ir.wado";
-use { LoweredGrammar, Rule, LeftRecursiveRule, LrAlt } from "./gir.wado";
+use { LoweredGrammar, Rule, LeftRecursiveRule, LrAlt, lr_trailing_prec } from "./gir.wado";
 use { lower, element_is_self_ref } from "./lower.wado";
 use { collect_literal_tokens, token_slot_order, LitToken } from "./lexer_gen.wado";
 use {
@@ -414,23 +414,18 @@ fn build_lr_suffix<S: AsStrSlice>(
     let entry = b.new_state(ATN_BASIC, r);
     let mut cursor = entry;
     for let mut i = 1; i < alt.elements.len(); i += 1 {
-        // An ATN-class mid operand is ANTLR4's `e[0]`: it climbs from 0 and the
-        // simulator stops it.
-        let mid_operand = atn_class && i + 1 < alt.elements.len() && element_is_self_ref(&alt.elements[i], rule_name);
-        // Whether an LR operator can follow this element in the rest of the
-        // suffix. The LR loop can re-enter on an operator after the suffix,
-        // so the suffix tail conservatively carries one (`tail_has = true`).
-        let follow_has = !mid_operand && elements_seq_first_has_lr(&alt.elements, i + 1, lr_first, true);
-        let seg = build_lr_suffix_element(
-            b,
-            &alt.elements[i],
-            rule_name,
-            lr_first,
-            lr_alt.conflict_min,
-            follow_has,
-            r,
-            rule_index,
-        );
+        let elem = &alt.elements[i];
+        let seg = if atn_class && element_is_self_ref(elem, rule_name) {
+            // ANTLR4's `e[0]` mid operand and `e[p+1]` trailing one: the
+            // simulator decides the climb, as `stamp_lr_self_ref_min_prec` has it.
+            let prec = if i + 1 < alt.elements.len() { 0 } else { lr_trailing_prec(lr_alt.own_prec, lr_alt.right_associative) };
+            self_ref_segment(b, r, prec, self_ref_call_site(elem));
+        } else {
+            // The LR loop can re-enter on an operator after the suffix, so the
+            // suffix tail conservatively carries one (`tail_has = true`).
+            let follow_has = elements_seq_first_has_lr(&alt.elements, i + 1, lr_first, true);
+            build_lr_suffix_element(b, elem, rule_name, lr_first, lr_alt.conflict_min, follow_has, r, rule_index);
+        };
         b.add_eps(cursor, seg.0);
         cursor = seg.1;
     }

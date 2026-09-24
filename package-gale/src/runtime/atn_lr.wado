@@ -237,7 +237,7 @@ pub fn atn_lr_loop_decision(
     if enter < 0 {
         return exit_alt;
     }
-    if !atn_caller_mandates(sim, &atn.stack, t, eof) {
+    if !atn_caller_contests(sim, &atn.stack, dstate, t, eof, min_prec) {
         return enter;
     }
     let alt = atn_predict_once(sim, decision, atn, tokens, pos, eof, min_prec);
@@ -278,12 +278,22 @@ fn atn_caller_alone_enters(sim: &AtnSim, dstate: i32, t: i32, eof: i32, caller_m
     return false;
 }
 
-fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -> bool {
+fn atn_caller_contests(sim: &AtnSim, rule_stack: &List<i32>, dstate: i32, t: i32, eof: i32, min_prec: i32) -> bool {
+    let mut mp = min_prec;
+    let mut same_loop = true;
     let mut i = rule_stack.len() - 1;
     while i >= 0 {
         let ret = rule_stack[i];
         if ret < 0 {
             return i == 0 && t == eof;
+        }
+        same_loop = same_loop && i >= 1 && sim.state_collapse_to[ret] == dstate;
+        if same_loop {
+            let caller_mp = atn_invocation_prec(sim, rule_stack, i - 1);
+            if atn_caller_alone_enters(sim, dstate, t, eof, caller_mp, mp) {
+                return true;
+            }
+            mp = caller_mp;
         }
         if sim.state_cont_nullable[ret] {
             i -= 1;
