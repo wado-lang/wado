@@ -144,31 +144,21 @@ pub struct PmHiLo {
 // A 128-bit coarse factor would leave the product up to 3 units above the
 // ceiling of 10^p, and `uscale` tolerates one.
 global POW10_COARSE: List<u64> = [
-    0x8049a4ac0c5811ae, 0x205b896d777d6278, 0xac261e9f5141430c,
-    0xcf42894a5dce35ea, 0x52064cac828675b9, 0x475f2b7d7df1ad7b,
-    0xa76c582338ed2621, 0xaf2af2b80af6f24e, 0x657c8f4d43323a37,
-    0x873e4f75e2224e68, 0x5a7744a6e804a291, 0xcc35eddfcf0996d8,
-    0xda7f5bf590966848, 0xaf39a475506a899e, 0xa30294cc2934e663,
-    0xb080392cc4349dec, 0xbd8d794d96aacfb3, 0xfe13a5c86af64419,
-    0x8e938662882af53e, 0x547eb47b7282ee9c, 0x41b0230e1421487e,
-    0xe65829b3046b0afa, 0x0cb4a5a3112a5112, 0xa3b561b1cb208397,
-    0xba121a4650e4ddeb, 0x92f34d62616ce413, 0x21a0183e10583cd4,
-    0x964e858c91ba2655, 0x3a6a07f8d510f86f, 0xe9082f25e9c5e9ed,
-    0xf2d56790ab41c2a2, 0xfae27299423fb9c3, 0x3695dad7e8858902,
-    0xc428d05aa4751e4c, 0xaa97e14c3c26b886, 0x96842dc95323f5a9,
-    0x9e74d1b791e07e48, 0x775ea264cf55347d, 0xca49f1c05120c9c8,
-    0x8000000000000000, 0x0000000000000000, 0x0000000000000000,
-    0xcecb8f27f4200f3a, 0x0000000000000000, 0x0000000000000000,
-    0xa70c3c40a64e6c51, 0x999090b65f67d924, 0x0000000000000000,
-    0x86f0ac99b4e8dafd, 0x69a028bb3ded71a3, 0xdf9f915627c04e28,
-    0xda01ee641a708de9, 0xe80e6f4820cc9495, 0xd74baad03bc1d8d4,
-    0xb01ae745b101e9e4, 0x5ec05dcff72e7f8f, 0xc04c79ffe3243020,
-    0x8e41ade9fbebc27d, 0x14588f13be847307, 0x23bd6a2059c002f6,
-    0xe5d3ef282a242e81, 0x8f1668c8a86da5fa, 0xf0b5ccf5176ecc7d,
-    0xb9a74a0637ce2ee1, 0x6d953e2bd7173692, 0x88efb0037ac08bdf,
-    0x95f83d0a1fb69cd9, 0x4abdaf101564f98e, 0x0d5a4af7b3a98e48,
-    0xf24a01a73cf2dccf, 0xbc633b39673c8cec, 0x3d9c44cd2f36917d,
-    0xc3b8358109e84f07, 0x0a862f80ec4700c8, 0x02606ea01029dc38,
+    0x8049a4ac0c5811ae, 0x205b896d777d6278, 0xac261e9f5141430c, 0xcf42894a5dce35ea, 0x52064cac828675b9,
+    0x475f2b7d7df1ad7b, 0xa76c582338ed2621, 0xaf2af2b80af6f24e, 0x657c8f4d43323a37, 0x873e4f75e2224e68,
+    0x5a7744a6e804a291, 0xcc35eddfcf0996d8, 0xda7f5bf590966848, 0xaf39a475506a899e, 0xa30294cc2934e663,
+    0xb080392cc4349dec, 0xbd8d794d96aacfb3, 0xfe13a5c86af64419, 0x8e938662882af53e, 0x547eb47b7282ee9c,
+    0x41b0230e1421487e, 0xe65829b3046b0afa, 0x0cb4a5a3112a5112, 0xa3b561b1cb208397, 0xba121a4650e4ddeb,
+    0x92f34d62616ce413, 0x21a0183e10583cd4, 0x964e858c91ba2655, 0x3a6a07f8d510f86f, 0xe9082f25e9c5e9ed,
+    0xf2d56790ab41c2a2, 0xfae27299423fb9c3, 0x3695dad7e8858902, 0xc428d05aa4751e4c, 0xaa97e14c3c26b886,
+    0x96842dc95323f5a9, 0x9e74d1b791e07e48, 0x775ea264cf55347d, 0xca49f1c05120c9c8, 0x8000000000000000,
+    0x0000000000000000, 0x0000000000000000, 0xcecb8f27f4200f3a, 0x0000000000000000, 0x0000000000000000,
+    0xa70c3c40a64e6c51, 0x999090b65f67d924, 0x0000000000000000, 0x86f0ac99b4e8dafd, 0x69a028bb3ded71a3,
+    0xdf9f915627c04e28, 0xda01ee641a708de9, 0xe80e6f4820cc9495, 0xd74baad03bc1d8d4, 0xb01ae745b101e9e4,
+    0x5ec05dcff72e7f8f, 0xc04c79ffe3243020, 0x8e41ade9fbebc27d, 0x14588f13be847307, 0x23bd6a2059c002f6,
+    0xe5d3ef282a242e81, 0x8f1668c8a86da5fa, 0xf0b5ccf5176ecc7d, 0xb9a74a0637ce2ee1, 0x6d953e2bd7173692,
+    0x88efb0037ac08bdf, 0x95f83d0a1fb69cd9, 0x4abdaf101564f98e, 0x0d5a4af7b3a98e48, 0xf24a01a73cf2dccf,
+    0xbc633b39673c8cec, 0x3d9c44cd2f36917d, 0xc3b8358109e84f07, 0x0a862f80ec4700c8, 0x02606ea01029dc38,
     0x9e19db92b4e31ba9, 0x6c07a2c26a8346d1, 0x4944d9f52cd0dec3,
 ];
 
@@ -889,8 +879,14 @@ impl BinaryFormat {
         return (self.precision - 1) as u64;
     }
 
+    /// The negated exponent of the smallest subnormal's unit.
+    fn tiny(&self) -> i32 {
+        let bias = (1 << self.exponent_bits - 1) - 1;
+        return bias + self.precision - 2;
+    }
+
     pub fn infinity_bits(&self) -> u64 {
-        return ((1 as u64 << self.exponent_bits as u64) - 1) << self.fraction_bits();
+        return (1 as u64 << self.exponent_bits as u64) - 1 << self.fraction_bits();
     }
 
     fn quiet_nan_bits(&self) -> u64 {
@@ -916,9 +912,7 @@ pub global PARSE_EXP_MIN: i32 = -351;
 pub fn parse_bits(d: u64, p: i32, format: &BinaryFormat) -> u64 {
     assert d != 0;
     let precision = format.precision;
-    let bias = (1 << format.exponent_bits - 1) - 1;
-    // The negated exponent of the smallest subnormal.
-    let tiny = bias + precision - 2;
+    let tiny = format.tiny();
     let b = u64_bit_len(d);
     let lp = log2_pow10(p);
     let mut e = i32::min(tiny, precision - b - lp);
@@ -942,7 +936,7 @@ pub fn parse_bits(d: u64, p: i32, format: &BinaryFormat) -> u64 {
     if m & hidden == 0 {
         return m;
     }
-    let biased = bias + precision - 1 - e;
+    let biased = tiny + 1 - e;
     if biased >= (1 << format.exponent_bits) - 1 {
         return format.infinity_bits();
     }
@@ -1125,7 +1119,11 @@ pub fn round_decimal(d: u64, p: i32, inexact: bool, mantissa: ByteSlice, exponen
     }
     // The value lies strictly between d and d + 1 at this scale, so only a
     // rounding boundary between their two results needs the digits dropped.
-    let hi = if d == 9999999999999999999 { scaled_bits(1000000000000000000, p + 1, format) } else { scaled_bits(d + 1, p, format) };
+    let hi = if d == 9999999999999999999 {
+        scaled_bits(1000000000000000000, p + 1, format);
+    } else {
+        scaled_bits(d + 1, p, format);
+    };
     if lo == hi {
         return lo;
     }
@@ -1183,9 +1181,7 @@ fn compare_to_midpoint(mantissa: ByteSlice, exponent: i32, below: u64, format: &
     }
 
     // The midpoint is (2m + 1) * 2^(q - 1), where `below` is m * 2^q.
-    let precision = format.precision;
-    let bias = (1 << format.exponent_bits - 1) - 1;
-    let tiny = bias + precision - 2;
+    let tiny = format.tiny();
     let fraction = below & (1 as u64 << format.fraction_bits()) - 1;
     let biased = (below >> format.fraction_bits()) as i32;
     let m = if biased == 0 { fraction } else { fraction | 1 as u64 << format.fraction_bits() };

@@ -845,16 +845,15 @@ fn scanned_to_f64(n: &ScannedNumber, input: &ByteSlice) -> f64 {
     return f64::from_bits(scanned_to_bits(n, input, &BINARY64));
 }
 
-/// Rounds a scanned number token once into `format`, as its bits. Exponents
-/// outside fpfmt's domain clamp to ±infinity / ±zero.
+/// Rounds a scanned number token once into `format`, as its bits.
 fn scanned_to_bits(n: &ScannedNumber, input: &ByteSlice, format: &BinaryFormat) -> u64 {
     let sign = if n.neg { format.sign_bit() } else { 0 };
     if n.digits == 0 {
         return sign;
     }
     // Integer digits beyond the accumulated ones shift the scale up; every
-    // fraction digit (accumulated or a skipped leading zero) shifts it down;
-    // dropped trailing fraction digits only truncate precision.
+    // fraction digit (accumulated or a skipped leading zero) shifts it down.
+    // Dropped fraction digits are reread from `input` only near a midpoint.
     let extra_int_digits = if n.int_digits > FPFMT_DIGITS_MAX { n.int_digits - FPFMT_DIGITS_MAX } else { 0 };
     let eff_p = n.exp - n.frac_digits - n.frac_lead_zeros + extra_int_digits;
     let mantissa = input.slice(n.mantissa_start, n.mantissa_end);
@@ -1445,8 +1444,8 @@ impl JsonDeserializer {
     /// `parse_*_with_lead` below takes it on the same terms.
     ///
     /// Only the first `FPFMT_DIGITS_MAX` significant digits are accumulated;
-    /// dropped fraction digits merely truncate precision, while dropped
-    /// integer digits shift the scale via `int_digits`.
+    /// a nonzero dropped digit sets `inexact`, and dropped integer digits shift
+    /// the scale via `int_digits`.
     /// Writing into a scratch struct keeps a `Result<ScannedNumber>` aggregate
     /// off the hot decode path.
     fn scan_number_into(&mut self, lead: i32, out: &mut ScannedNumber) -> Result<(), DeserializeError> {
@@ -1782,7 +1781,7 @@ impl JsonDeserializer {
         return Result::Ok(scanned_to_f64(n, &self.input));
     }
 
-    /// Parses an f32 directly, rounding the decimal once rather than through f64.
+    /// `parse_f64_direct`, rounded once into f32 rather than through f64.
     pub fn parse_f32_direct(&mut self) -> Result<f32, DeserializeError> {
         let n = &mut self.scratch;
         self.scan_number_into(self.peek_after_whitespace(), n)?;
