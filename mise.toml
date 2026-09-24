@@ -784,11 +784,8 @@ depends = ["jco-deps"]
 run = """
 #!/usr/bin/env bash
 set -e -o pipefail
-WORK="$(mktemp -d)"
-# V8 has no wide-arithmetic, which float formatting emits.
-cargo run -q -p wado-cli -- compile -f no-wide-arithmetic -o "$WORK/main.wasm" example/web-browser/src/main.wado
-node scripts/jco/transpile-released.mjs "$WORK/main.wasm" "$WORK/jco"
-WEB_BROWSER_JS="$WORK/jco/main.js" timeout 120 node --test "package-web/glue/*.test.mjs"
+example/web-browser/build.sh
+WEB_BROWSER_JS="$PWD/example/web-browser/build/main.js" timeout 120 node --test "package-web/glue/*.test.mjs"
 """
 
 [tasks.web-browser-demo]

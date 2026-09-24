@@ -42,7 +42,7 @@ test("one object crosses as one handle, tagged with its nearest class", async ()
     document.body.appendChild(object).id = id;
     return documentGlue.getElementById(global.document(), id);
   };
-  const div = handleOf(new HTMLDivElement("div"), "div");
+  const div = handleOf(new HTMLDivElement(), "div");
   const p = handleOf(document.createElement("p"), "p");
   const classOf = (h) => Math.floor(h / 2 ** 37);
   assert.equal(classOf(div), classOf(p));

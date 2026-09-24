@@ -187,18 +187,16 @@ fn write_function(out: &mut String, function: &WadoFunction, member: &JsMember) 
 
 /// `value`, as jco lifts it from the guest, in the form the DOM takes.
 fn from_guest(ty: &WadoType, value: &str) -> String {
-    match conversion(ty) {
-        Some((to_dom, _)) => format!("{to_dom}({value})"),
-        None => value.to_string(),
-    }
+    apply(conversion(ty).map(|(to_dom, _)| to_dom), value)
 }
 
 /// `value`, as the DOM returns it, in the form jco lowers to the guest.
 fn to_guest(ty: &WadoType, value: &str) -> String {
-    match conversion(ty) {
-        Some((_, to_guest)) => format!("{to_guest}({value})"),
-        None => value.to_string(),
-    }
+    apply(conversion(ty).map(|(_, to_guest)| to_guest), value)
+}
+
+fn apply(function: Option<String>, value: &str) -> String {
+    function.map_or_else(|| value.to_string(), |f| format!("{f}({value})"))
 }
 
 /// The functions converting a `ty` to the DOM and back, where jco's own form

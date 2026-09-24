@@ -8,7 +8,6 @@ export class Node extends EventTarget {
   childNodes = [];
 
   appendChild(child) {
-    child.parentNode?.childNodes.splice(child.parentNode.childNodes.indexOf(child), 1);
     child.parentNode = this;
     this.childNodes.push(child);
     return child;
@@ -18,11 +17,6 @@ export class Node extends EventTarget {
 export class Element extends Node {
   id = "";
   textContent = null;
-
-  constructor(localName) {
-    super();
-    this.localName = localName;
-  }
 }
 
 export class HTMLElement extends Element {}
@@ -32,10 +26,10 @@ export class HTMLInputElement extends HTMLElement {
 }
 
 export class Document extends Node {
-  body = this.appendChild(new HTMLElement("body"));
+  body = this.appendChild(new HTMLElement());
 
   createElement(localName) {
-    return localName === "input" ? new HTMLInputElement(localName) : new HTMLElement(localName);
+    return localName === "input" ? new HTMLInputElement() : new HTMLElement();
   }
 
   getElementById(id) {

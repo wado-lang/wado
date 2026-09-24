@@ -21,7 +21,7 @@ const outDir = process.argv[3] ?? wasmPath.replace(/\.wasm$/, "-jco-released");
 // jco's own WASI shim (`preview3-shim`) serves the `wasi:*` imports, and
 // `package-web`'s glue each `web:<package>/*` import, copied beside the output.
 const glueDir = join(here, "../../package-web/glue");
-const glue = (await readdir(glueDir)).filter((file) => /^[a-z]+\.js$/.test(file));
+const glue = (await readdir(glueDir)).filter((file) => file.endsWith(".js"));
 const map = Object.fromEntries(
   glue.map((file) => [`web:${basename(file, ".js")}/*`, `./web-${file}#*`]),
 );
