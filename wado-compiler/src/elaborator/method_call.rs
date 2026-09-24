@@ -326,7 +326,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut blanket_type_param: Option<String> = None;
         let mut blanket_binder: Option<FqTypeName> = None;
         let mut trait_impl_struct_name: Option<FqTypeName> = None;
-        let mut matched_impl_struct_name: Option<String> = None;
+        let mut matched_impl_decl: Option<DefId> = None;
         // `Some` when the ref-priority path below adopts a `&T` / `&mut T` impl,
         // so `base_struct_name` (then `"&"` / `"&mut"`) keys back to its typed
         // `Receiver::Ref` without re-inspecting the string.
@@ -361,7 +361,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let owner =
                         trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
-                    matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
+                    matched_impl_decl = trait_match.impl_struct_fq.head().def();
                     trait_impl_struct_name = Some(trait_match.impl_struct_fq);
                     matched_ref_kind = Some(ref_kind);
                     trait_name = Some(trait_match.trait_name);
@@ -423,8 +423,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(&mut probe),
             )
         {
-            matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
-            if trait_match.impl_struct_name != struct_name {
+            matched_impl_decl = trait_match.impl_struct_fq.head().def();
+            if trait_match.impl_struct_fq.head() != self.tysys.fq_receiver_head(base_type_id).head()
+            {
                 trait_impl_struct_name = Some(trait_match.impl_struct_fq);
             }
             trait_name = Some(trait_match.trait_name);
@@ -933,10 +934,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Named by its declaring module: a bare head names no definition,
             // and re-resolution would peel past the impl to the base.
-            ResolvedType::Newtype { def, .. }
-                if matched_impl_struct_name.as_deref()
-                    == Some(self.tysys.type_table.borrow().def_name(def)) =>
-            {
+            ResolvedType::Newtype { def, .. } if matched_impl_decl == Some(def) => {
                 let base = self
                     .tysys
                     .type_table

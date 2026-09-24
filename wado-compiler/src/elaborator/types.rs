@@ -3199,13 +3199,8 @@ pub(super) struct TraitMethodMatch {
     /// The receiver parameter's bounds as source writes them (`T: Limit`) —
     /// what an ambiguity names two blankets by, neither having a name.
     pub(super) blanket_bounds: Option<String>,
-    /// The struct name that actually has the trait impl (may differ from the
-    /// receiver's struct name when the impl was found through the newtype chain).
-    /// Written form — the impl-index key.
-    pub(super) impl_struct_name: String,
-    /// [`Self::impl_struct_name`] as the receiver form a mangled name embeds,
-    /// resolved from the impl's own module so it matches the name the impl's
-    /// methods were defined under.
+    /// The type that has the impl, as the receiver form its methods were
+    /// defined under. Not the receiver's when found through the newtype chain.
     pub(super) impl_struct_fq: FqTypeName,
     /// True for blanket ref impls like `impl<T: Inspect> Inspect for &T` where
     /// the inner type is a type parameter. False for specific ref impls like

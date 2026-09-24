@@ -5,7 +5,7 @@
 //! ([`crate::path::normalize`]), never percent-encoded, and project-root-relative.
 
 use crate::ast::{AstId, TestMetadata};
-use crate::defs::{DefId, DefTable};
+use crate::defs::{DefId, DefKind, DefTable};
 use crate::kiln::InvocationIndex;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::path::{normalize, relative_path};
@@ -2542,6 +2542,13 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
         || matches!(head, "()" | "!" | "Array" | "[]" | "Fn")
 }
 
+/// Whether `def` declares a builtin shape: a primitive, `Array` or the tuple
+/// family, which every mangler spells bare.
+#[must_use]
+pub fn is_builtin_shape_decl(defs: &DefTable, def: DefId) -> bool {
+    defs.kind(def) == DefKind::BuiltinType
+}
+
 /// A receiver name in the form a mangled name may embed, carrying the declaring
 /// module — a bare `&str` cannot become one by accident. The mangled spelling is
 /// a rendering ([`Self::to_mangled`]), never parsed back: a `ModuleSource` may
@@ -2774,7 +2781,7 @@ impl FqTypeName {
     /// `[]`, `Array`), [`Self::declared`] otherwise.
     #[must_use]
     pub fn of_head(defs: &DefTable, def: DefId) -> Self {
-        if is_builtin_shape_name(defs.name(def)) {
+        if is_builtin_shape_decl(defs, def) {
             Self::builtin(defs.name(def))
         } else {
             Self::declared(defs, def)

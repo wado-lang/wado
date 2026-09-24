@@ -3,10 +3,10 @@
 
 use crate::ast::Type;
 use crate::compiler_item::CompilerItem;
-use crate::defs::DefId;
+use crate::defs::{DefId, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, RefKind, TypeHead, is_builtin_shape_name};
+use crate::name::{FqTraitName, FqTypeName, RefKind, TypeHead, is_builtin_shape_decl};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
@@ -97,6 +97,16 @@ impl Lowering {
 
     fn builtin(&mut self, name: &str) -> TypeDeclId {
         TypeDeclId(intern(&mut self.decls, DeclKey::Builtin(name.to_string())))
+    }
+
+    /// The head a written type reaching `def` lowers under, keyed as
+    /// `ImplTargetKey::of_decl` keys it.
+    fn head_of(&mut self, defs: &DefTable, def: DefId) -> TypeDeclId {
+        if is_builtin_shape_decl(defs, def) {
+            self.builtin(defs.name(def))
+        } else {
+            self.type_decl(def)
+        }
     }
 
     fn anonymous_struct(&mut self) -> TypeDeclId {
@@ -215,26 +225,17 @@ impl Lowering {
         resolutions: &Resolutions,
         self_type: Option<&SolverType>,
     ) -> Option<SolverType> {
-        // A builtin shape is keyed by its spelling, as `ImplTargetKey::of_decl`
-        // keys it.
         match ty {
             Type::Named(named) if named.name == "Self" => self_type.cloned(),
             Type::Named(named) => match param(&named.name) {
                 Some(ParamKind::Type(index)) => Some(SolverType::Param(index)),
                 Some(ParamKind::Pack(index)) => Some(SolverType::Pack(index)),
-                None if is_builtin_shape_name(&named.name) => {
-                    Some(SolverType::Decl(self.builtin(&named.name), Vec::new()))
-                }
                 None => resolutions
                     .declared(named.id)
-                    .map(|def| SolverType::Decl(self.type_decl(def), Vec::new())),
+                    .map(|def| SolverType::Decl(self.head_of(resolutions.defs(), def), Vec::new())),
             },
             Type::Generic(generic) => {
-                let head = if is_builtin_shape_name(&generic.name) {
-                    self.builtin(&generic.name)
-                } else {
-                    self.type_decl(resolutions.declared(generic.id)?)
-                };
+                let head = self.head_of(resolutions.defs(), resolutions.declared(generic.id)?);
                 let args = generic
                     .args
                     .iter()

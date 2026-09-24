@@ -720,8 +720,7 @@ fn check_cm_boundary_representable_inner(
                     recurse(value, visited)
                 } else {
                     Err(format!(
-                        "generic type `{}` has no Component Model value \
-                         representation at an export boundary",
+                        "generic type `{}` has no Component Model value representation",
                         type_table.type_name(type_id)
                     ))
                 }

@@ -473,6 +473,7 @@ fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
 /// like any other function.
 pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
+    validate_imports_representable(&project)?;
     generate_import_adapters(&mut project);
     synthesize_export_adapters(&mut project)?;
     generate_test_world_bindings(&mut project);
@@ -1018,24 +1019,67 @@ fn validate_exports_representable(
     Ok(())
 }
 
-/// Reject a param or return type with no Component Model value representation
-/// in any world: an empty record, or a 128-bit, `v128` or half scalar.
+/// A `#[cm]` operation a user module declares crosses the boundary in the
+/// other direction, so its signature is held to what an export's is.
+fn validate_imports_representable(project: &Package) -> Result<(), String> {
+    let tt = entry_type_table(project);
+    let tt = tt.borrow();
+    for (source, module) in &project.tir_modules {
+        if source.is_core() || source.is_binding() {
+            continue;
+        }
+        let operations = module.effects.iter().flat_map(|e| &e.operations).chain(
+            module
+                .resources
+                .iter()
+                .filter(|r| !r.is_generic)
+                .flat_map(|r| &r.operations),
+        );
+        for op in operations.filter(|op| op.cm_name.is_some()) {
+            let result = if op.is_async {
+                tt.as_async_call(op.return_type)
+                    .expect("an async operation returns an `AsyncCall`")
+            } else {
+                op.return_type
+            };
+            signature_representable(
+                op.params.iter().map(|p| p.type_id),
+                result,
+                &tt,
+                &project.tir_modules,
+            )
+            .map_err(|reason| format!("import function `{}`: {reason}", op.name))?;
+        }
+    }
+    Ok(())
+}
+
 fn validate_boundary_representable(
     user_func: &TirFunction,
     export_name: &str,
     tt: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
 ) -> Result<(), String> {
-    let mut to_check: Vec<TypeId> = user_func.params.iter().map(|p| p.type_id).collect();
-    to_check.push(user_func.return_type);
-    for tid in to_check {
-        if let Err(reason) =
-            types::check_cm_boundary_representable(tid, tt, tir_modules, &mut Vec::new())
-        {
-            return Err(format!("export function `{export_name}`: {reason}"));
-        }
-    }
-    Ok(())
+    signature_representable(
+        user_func.params.iter().map(|p| p.type_id),
+        user_func.return_type,
+        tt,
+        tir_modules,
+    )
+    .map_err(|reason| format!("export function `{export_name}`: {reason}"))
+}
+
+/// Reject a param or return type with no Component Model value representation
+/// in any world: an empty record, or a 128-bit, `v128` or half scalar.
+fn signature_representable(
+    params: impl Iterator<Item = TypeId>,
+    result: TypeId,
+    tt: &TypeTable,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+) -> Result<(), String> {
+    params.chain(std::iter::once(result)).try_for_each(|tid| {
+        types::check_cm_boundary_representable(tid, tt, tir_modules, &mut Vec::new())
+    })
 }
 
 /// The boundary carries what the world declares, so the export's signature has

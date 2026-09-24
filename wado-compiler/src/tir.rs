@@ -2131,20 +2131,14 @@ impl TypeTable {
     /// Whether `id`, refs peeled, is the type a compiler item declares, compared
     /// by the `def` it carries (WEP 2026-08-12).
     pub fn is_compiler_item_type(&self, id: TypeId, item: CompilerItem) -> bool {
-        let Some(decl) = self.compiler_items.decl(item) else {
-            return false;
-        };
         // A dead declaration's body is cleared in place and its signature types
         // go with the prune, so an optimizer pass reading one off a function
         // record holds an id this table no longer carries.
         let Some(id) = self.try_peel_refs(id) else {
             return false;
         };
-        match (self.nominal_def(id), self.defs.of_ast_id(decl)) {
-            (Some(named), Some(declared)) => named == declared,
-            // A table built without defs, as a unit fixture's is, has only the node.
-            _ => self.decl_of_type(id) == Some(decl),
-        }
+        self.nominal_def(id)
+            .is_some_and(|def| self.compiler_item_def(item) == Some(def))
     }
 
     pub fn compiler_enum_name(&self, item: CompilerItem) -> &str {
@@ -7063,12 +7057,8 @@ pub struct TirEffectOp {
     pub params: Vec<TirParam>,
     pub return_type: TypeId,
     pub span: Span,
-    /// CM canonical name from `#[cm("...")]` on the resource method
-    /// declaration (e.g. `"stream-write"`, `"future-read"`). `None` for
-    /// effect operations and for resource methods that don't carry a
-    /// CM attribute. The dispatch synthesis uses this to map raw
-    /// resource call sites — which carry `cm_name` on their
-    /// `MethodInfo` — back to the right per-monomorphisation wrapper.
+    /// The `#[cm("...")]` payload on the operation, `None` where it carries
+    /// none.
     pub cm_name: Option<String>,
     pub is_async: bool,
     /// Set when the declaration gave the operation a body: what it does when

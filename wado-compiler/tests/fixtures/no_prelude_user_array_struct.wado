@@ -1,0 +1,31 @@
+#![no_prelude]
+// A user struct named `Array` is that struct, not the builtin GC array.
+
+pub struct Array<T> {
+    pub a: T,
+}
+
+impl<T> Array<T> {
+    pub fn get(&self) -> T {
+        return self.a;
+    }
+}
+
+trait First {
+    fn first(&self) -> i32;
+}
+
+impl First for Array<i32> {
+    fn first(&self) -> i32 {
+        return self.a;
+    }
+}
+
+export fn run() {
+    let x = Array::<i32> { a: 7 };
+    assert x.get() == 7;
+    assert x.first() == 7;
+}
+
+__DATA__
+{"stdout": ""}

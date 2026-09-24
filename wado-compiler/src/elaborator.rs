@@ -1129,15 +1129,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 None => self.binder_in_scope(written),
             };
         }
-        if is_builtin_shape_name(written) {
-            return FqTypeName::builtin(written);
-        }
-        self.decl_key_or_local(written).map_or_else(
+        match self.decl_key_or_local(written) {
+            Some(def) => FqTypeName::of_head(self.tysys.resolutions.defs(), def),
+            None if is_builtin_shape_name(written) => FqTypeName::builtin(written),
             // A name that reaches no declaration at all: it names a shape or
             // nothing, and the writing module is the only vantage left.
-            || FqTypeName::shape(&self.current_module_source, written),
-            |def| FqTypeName::of_head(self.tysys.resolutions.defs(), def),
-        )
+            None => FqTypeName::shape(&self.current_module_source, written),
+        }
     }
 
     /// The binder `written` names in the current type-param scope: owned by the

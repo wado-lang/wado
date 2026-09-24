@@ -122,7 +122,7 @@ impl ImplTargetKey {
     /// its declaration, so a definition reached through a written head and a
     /// lookup reached through a resolved type land on the same key.
     pub(crate) fn of_decl(defs: &DefTable, def: DefId) -> Self {
-        if name::is_builtin_shape_name(defs.name(def)) {
+        if name::is_builtin_shape_decl(defs, def) {
             return ImplTargetKey::Builtin(defs.name(def).to_string());
         }
         ImplTargetKey::Decl(def)

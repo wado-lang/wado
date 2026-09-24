@@ -3357,10 +3357,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_type_param: None,
             blanket_binder: None,
             blanket_bounds: None,
-            impl_struct_name: match inherited {
-                Some(id) => self.tysys.type_table.borrow().mangle_type_name(id),
-                None => struct_name.to_string(),
-            },
             impl_struct_fq: self.tysys.fq_receiver_head(derive_id),
             is_blanket_ref_impl: false,
             ref_impl_target: None,
