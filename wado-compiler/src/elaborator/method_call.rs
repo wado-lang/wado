@@ -256,6 +256,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `IntoIterator::into_iter(&list)` to the base type's impl where
         // `(&list).into_iter()` selects `impl IntoIterator for &List<T>`.
         let required_trait = required_trait.as_ref();
+
+        // The receiver's fault is reported where it arose; only the arguments
+        // can still say something new.
+        if self.tysys.get_base_type(receiver) == TypeTable::ERROR {
+            for arg in args_ast {
+                self.resolve_expr(arg, ctx, None);
+            }
+            return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
+        }
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
@@ -586,11 +595,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 hint: String::new(),
                 span,
             });
-            // Default to Unknown type for error recovery
             MethodInfo {
                 impl_type_bindings: Vec::new(),
                 method_def: None,
-                return_type: TypeTable::UNKNOWN,
+                return_type: TypeTable::ERROR,
                 self_kind: ast::SelfKind::Ref,
                 param_types: vec![],
                 param_is_mut: vec![],

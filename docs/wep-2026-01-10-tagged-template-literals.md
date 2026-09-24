@@ -65,7 +65,9 @@ A tag is an ordinary function — any effects, any return type — whose first
 parameter is satisfied by `ReflectTemplate`. The template is its one written
 argument, and ordinary call resolution fills the trailing parameters that
 declare a default. Nothing about being a tag appears on the declaration; a
-function is a tag because a call site wrote it before a backtick.
+function is a tag because a call site wrote it before a backtick. A first
+parameter of any other type is reported as a tag's missing bound, naming the
+type it takes, since the template's own type is one no source spells.
 
 ### The template type
 
@@ -73,8 +75,16 @@ Each template literal that carries a tag denotes a value of a compiler-synthesiz
 struct type, unique to that template's static shape, holding one field per
 hole. The shape is the tuple of (raw segments, specifiers, hole source texts,
 hole types): two templates with the same shape denote the same type and share
-every instantiation of the tag. The type is anonymous — nothing in the source
-can name it — and is reached only through the bound the tag declares.
+every instantiation of the tag. The source texts are part of the shape because
+`Hole::source()` is a constant, so `` tag`${a}` `` and `` tag`${b}` `` are two
+types even where `a` and `b` share one. The type is anonymous — nothing in the
+source can name it — and is reached only through the bound the tag declares.
+
+The name the type shows a reader, in a diagnostic and as `Reflect::type_name()`,
+is the template's text with each hole spelled as its type and specifier, cut to
+50 characters with `...`: `` sql`id = ${id:04}` `` is named
+`` `id = ${i32:04}` ``. The name describes the shape; it is not its identity,
+which also holds the source texts.
 
 A hole's field carries its value without copying it and without boxing it. A
 type whose reference is a bare GC handle — `struct`, `List`, `String`, `i128`
@@ -114,13 +124,17 @@ pub trait ReflectTemplate: Reflect {
 ```
 
 A hole is a member handle like `StructField`: sealed, fields private, minted only
-by `members()`, and not itself reflectable.
+by `members()`, and not itself reflectable. Like every member handle it is
+prelude API, so a helper that takes one names it.
 
 ```wado
 #[compiler_item("hole")]
 pub struct Hole<T, V> { … }
 
 impl<T, V> Hole<T, V> {
+    /// The hole's position in the template, from 0.
+    pub fn index(&self) -> i32;
+
     /// The literal text between the previous hole (or the start) and this one,
     /// escapes processed.
     pub fn lit(&self) -> String;
@@ -259,6 +273,16 @@ fn regex<T: ReflectTemplate<Holes = ()>>(t: T) -> Regex {
 }
 ```
 
+`members()` walks a pack, so those are the two spellings it can be called
+under. A concrete tuple (`Holes = [List<i32>]`) binds no pack, and the call is
+an error naming the binding it needs.
+
+A hole's type may not mention a type parameter of the enclosing item: the shape
+would have to be generic over it, and a shape is minted once. A generic body
+reaches a tag by taking the rendered value, or a concrete one, from its caller.
+The untagged template has no shape, so `` `${v}` `` over a `v: X` is fine where
+`` format`${v}` `` is not.
+
 ### The untagged template is a tag
 
 An untagged template means what the prelude's `format` tag means:
@@ -304,7 +328,8 @@ the optimizer's gap to close, not a reason to move the segments into a runtime
 value.
 
 Each distinct template shape instantiates the tag once, as inlining a builder at
-each site would. Two sites with the same shape share one instantiation.
+each site would. Two sites with the same shape share one instantiation; two
+that differ only in how a hole is spelled do not.
 
 ### Compile-time evaluation
 
@@ -398,7 +423,8 @@ introduces a mechanism; each item names the existing one it extends.
 - `reflect_kind` answers `ReflectTemplate` for a `Struct { def: Anon(shape) }`
   whose shape is a template; `is_sealed_reflect_member` adds the `Hole` handle.
 - `anon_struct_mangle` renders a template shape under a `$tmpl` prefix over the
-  shape's hash, the spelling `Reflect::type_name()` then answers. The mangle is
+  shape's hash, and `anon_struct_name` renders the reader's name above, which
+  `Reflect::type_name()` answers. The mangle is
   fixed when the shape is interned: it renders the hole types, and erasure
   later redirects a newtype among them to its base, so a second rendering
   would name a struct WIR never registered — the same failure a struct literal
@@ -413,7 +439,8 @@ introduces a mechanism; each item names the existing one it extends.
   has_spec }` with the constant accessors reading fields, and two bridged ones:
   `get` is `builtin::hole_get::<T, V>(t, self.index)`, `fmt` is
   `builtin::hole_fmt::<T>(t, self.index, f)`. Both builtins are bodyless
-  markers beside `struct_field_get`.
+  markers beside `struct_field_get`. `core:prelude` re-exports it with the
+  other member handles.
 - `compiler_item.rs` gains `ReflectTemplate`, `ReflectTemplateHole` and the
   three method items, in `ALL`, `attr_name`, `expected_kind`, `is_required`.
 - `format` in `core:prelude` and `String::raw` in the string module, written as
@@ -457,7 +484,9 @@ the tag's result type:
    typed, keyed by the template's `AstId`, so signature lookup, instantiation,
    the projection of `..V` from `Holes`, the bound check and the
    `StaticMethodDispatch` fact are the ones a spelled call records. A tag of
-   any other arity, or one that is not a function, is that path's diagnostic.
+   any other arity, or one the call path cannot find, is that path's
+   diagnostic. A tag naming a value is refused before the call is resolved, and
+   one that resolves without a dispatch fact after it.
 4. Record the template type under the template's `AstId`
    (`tagged_templates`); place-ness is reify's to read off the AST.
 5. The tag identifier's use→def edge falls out of the call resolution.
@@ -542,12 +571,16 @@ serial advances on read, so a template nested inside a hole mints its own
 - `tagged_template_format_equiv.wado`: `format` against the untagged form over
   the specifier matrix.
 - `tagged_template_string_raw.wado`: `String::raw` keeps escapes verbatim.
+- `tagged_template_type_name.wado`: the reader's name, specifiers and the cut
+  included.
 - `anon_struct_newtype_field.wado`, `reflect_pack_bound_free_fn_error.wado`:
   the two pre-existing defects the work surfaced, pinned.
 - Errors: a non-path tag, a path that is neither a function nor a static
-  method, whitespace before the backtick, a tag of the wrong arity, an
-  unsatisfied `..V` bound naming the hole type, a hole whose type mentions a
-  type parameter, a tag call whose effect the caller leaves undeclared.
+  method, an undefined tag, a tag whose parameter is not `ReflectTemplate`,
+  whitespace before the backtick in statement and argument position, a tag of
+  the wrong arity, an unsatisfied `..V` bound naming the hole type, a concrete
+  `Holes` binding, a hole whose type mentions a type parameter, a tag call
+  whose effect the caller leaves undeclared. Each is one diagnostic.
 
 ### Order
 
@@ -573,6 +606,9 @@ synthesis and the fold; then the prelude tags and fixtures.
 - A shape is interned per module, as struct literals are, so two modules
   writing one template instantiate the tag twice. Cross-module sharing is a
   size optimization the interner's key can take later.
+- A concrete tuple binding for `Holes` (`Holes = [List<i32>]`). It fixes the
+  arity, so `members()` would have a fixed type, but no tag has needed one;
+  `FieldTypes` and `CasePayloads` share the limit.
 - A tag with a turbofish (`` f::<T>`…` ``): the bare-turbofish path leaves the
   identifier's span at the name, so adjacency fails and the site is a syntax
   error. Nothing needs it yet.

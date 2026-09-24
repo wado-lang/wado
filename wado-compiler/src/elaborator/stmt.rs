@@ -2526,7 +2526,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             }) || matches!(
                 self.tysys.type_table.borrow().get(iterable_type_id),
-                ResolvedType::Unknown | ResolvedType::TypeParam { .. }
+                ResolvedType::Unknown | ResolvedType::Error | ResolvedType::TypeParam { .. }
             );
             if !implements_into_iter {
                 let type_name = self.tysys.type_table.borrow().type_name(iterable_type_id);
@@ -2892,7 +2892,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         }) && !matches!(
             self.tysys.type_table.borrow().get(iter_type),
-            ResolvedType::Unknown | ResolvedType::TypeParam { .. }
+            ResolvedType::Unknown | ResolvedType::Error | ResolvedType::TypeParam { .. }
         ) {
             let type_name = self.tysys.type_table.borrow().type_name(iter_type);
             let _ = self.emit(TypeError::MissingTraitImpl {
@@ -2971,8 +2971,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // `.next()` returned an unexpected non-Option type. The iterator-
             // trait check above (or method dispatch downstream) has already
-            // diagnosed it; degrade to `UNKNOWN` to keep resolution going.
-            None => TypeTable::UNKNOWN,
+            // diagnosed it, so the binding carries the error.
+            None => TypeTable::ERROR,
         };
 
         if let ResolvedType::MutRef(elem) = self.tysys.type_table.borrow().get(item_type).clone() {

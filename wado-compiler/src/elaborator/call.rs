@@ -25,7 +25,7 @@ use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::trait_query::SelfBinding;
-use super::types::{FunctionContext, TypeError};
+use super::types::{FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
 use super::util::parse_i128_literal;
 use crate::ast::{AstId, GenericParam};
@@ -321,6 +321,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// not-callable diagnostic instead of "unknown function").
     fn global_var_type(&self, site: ast::AstId, name: &str) -> Option<TypeId> {
         self.global_type_in(name, &self.home_module(site))
+    }
+
+    /// The value a bare callee names — a binding first, so shadowing wins, else
+    /// a global — with the binding it came from; `None` where it names none.
+    pub(super) fn callee_value(
+        &mut self,
+        ident: &ast::IdentExpr,
+        ctx: &mut FunctionContext,
+    ) -> Option<(TypeId, Option<VarRef>)> {
+        if ident.name.contains("::") {
+            return None;
+        }
+        match ctx.lookup_or_capture(&ident.name) {
+            Some(var_ref) => Some((var_ref.value_type(), Some(var_ref))),
+            None => self
+                .global_var_type(ident.id, &ident.name)
+                .map(|ty| (ty, None)),
+        }
     }
 
     /// Walk a callee expression down to its *root place* identifier so
@@ -619,76 +637,67 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             given_args.is_none() || call.args.is_empty(),
             "typed arguments replace the call's AST arguments, never join them"
         );
-        // Closure call: a bare identifier naming a value — a binding first, so
-        // shadowing wins, else a global — is called on its value.
+        // Closure call: a bare identifier naming a value is called on its value.
         if let Expr::Ident(ident) = &call.callee
-            && !ident.name.contains("::")
+            && let Some((value_ty, binding)) = self.callee_value(ident, ctx)
         {
-            let binding = ctx
-                .lookup_or_capture(&ident.name)
-                .map(|var_ref| (var_ref.value_type(), var_ref.defining_ast_id()));
-            let value_ty = binding
-                .map(|(ty, _)| ty)
-                .or_else(|| self.global_var_type(ident.id, &ident.name));
-            if let Some(value_ty) = value_ty {
-                // Record the use→def edge the same way `resolve_ident` would,
-                // so navigation on a value-binding callee (local or global)
-                // still resolves — the fast path bypasses `resolve_ident`.
-                match binding {
-                    Some((_, defining_ast_id)) => {
-                        self.record_reference_opt(ident.id, defining_ast_id);
-                    }
-                    None => self.record_item_reference_by_name(ident.id, &ident.name),
+            // Record the use→def edge the same way `resolve_ident` would,
+            // so navigation on a value-binding callee (local or global)
+            // still resolves — the fast path bypasses `resolve_ident`.
+            match &binding {
+                Some(var_ref) => {
+                    self.record_reference_opt(ident.id, var_ref.defining_ast_id());
                 }
+                None => self.record_item_reference_by_name(ident.id, &ident.name),
+            }
 
-                if let Some(sig) = self.as_fn_signature(value_ty) {
-                    self.record_indirect_callee(
-                        call.id,
-                        match binding {
-                            Some(_) => IndirectCallee::Binding,
-                            None => IndirectCallee::Global,
-                        },
-                    );
-                    // A `fn mut` needs a `mut` root binding, Rust's FnMut rule.
-                    // The non-identifier callee path below asks the same helper.
-                    self.check_fn_mut_root_mutability(&call.callee, ctx, sig.is_mut);
+            if let Some(sig) = self.as_fn_signature(value_ty) {
+                self.record_indirect_callee(
+                    call.id,
+                    match binding {
+                        Some(_) => IndirectCallee::Binding,
+                        None => IndirectCallee::Global,
+                    },
+                );
+                // A `fn mut` needs a `mut` root binding, Rust's FnMut rule.
+                // The non-identifier callee path below asks the same helper.
+                self.check_fn_mut_root_mutability(&call.callee, ctx, sig.is_mut);
 
-                    // Closure `let`-site defaults can pad missing trailing args
-                    // only for a callee that names a binding.
-                    return self.build_indirect_call(
-                        call,
-                        ctx,
-                        &sig.params,
-                        sig.return_type,
-                        /* pad_with_defaults */ binding.is_some(),
-                        given_args.as_deref(),
-                    );
-                }
+                // Closure `let`-site defaults can pad missing trailing args
+                // only for a callee that names a binding.
+                return self.build_indirect_call(
+                    call,
+                    ctx,
+                    &sig.params,
+                    sig.return_type,
+                    /* pad_with_defaults */ binding.is_some(),
+                    given_args.as_deref(),
+                );
+            }
 
-                // A binding whose initializer already reported keeps the one
-                // diagnostic its fault earned; calling it says nothing new.
-                if value_ty == TypeTable::ERROR {
-                    for arg in &call.args {
-                        self.resolve_expr(arg, ctx, None);
-                    }
-                    return TypeTable::ERROR;
-                }
-
-                // Names a binding that is not a function — a clear
-                // not-callable diagnostic, not the misleading "unknown
-                // function 'x'" from the named-function lookup below.
-                let type_name = self.tysys.type_table.borrow().type_name(value_ty);
-                let _ = self.emit(TypeError::CalleeNotCallable {
-                    type_name,
-                    span: call.callee.span(),
-                });
-                // Still resolve the arguments so errors inside them are
-                // reported rather than masked by the callee error.
+            // A binding whose initializer already reported keeps the one
+            // diagnostic its fault earned; calling it says nothing new.
+            if value_ty == TypeTable::ERROR {
                 for arg in &call.args {
                     self.resolve_expr(arg, ctx, None);
                 }
                 return TypeTable::ERROR;
             }
+
+            // Names a binding that is not a function — a clear
+            // not-callable diagnostic, not the misleading "unknown
+            // function 'x'" from the named-function lookup below.
+            let type_name = self.tysys.type_table.borrow().type_name(value_ty);
+            let _ = self.emit(TypeError::CalleeNotCallable {
+                type_name,
+                span: call.callee.span(),
+            });
+            // Still resolve the arguments so errors inside them are
+            // reported rather than masked by the callee error.
+            for arg in &call.args {
+                self.resolve_expr(arg, ctx, None);
+            }
+            return TypeTable::ERROR;
         }
 
         // Indirect call on a non-identifier callee. Any expression whose
@@ -945,6 +954,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Resolve arguments with coercion awareness
+        let is_tag_call = given_args.is_some();
         let mut args: Vec<TypeId> = match given_args {
             Some(args) => args,
             None => {
@@ -1833,17 +1843,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (None, effective_name.to_string())
         };
 
-        // Resolve the callee down to a single `CalleeRef`. For unknown
-        // callees we emit `UnknownFunction` and fall back to a sentinel in
-        // the current module so downstream lookups return empty safely.
-        let callee = if let Some(c) = callee_opt {
-            c
-        } else {
+        let Some(callee) = callee_opt else {
             let _ = self.emit(TypeError::UnknownFunction {
-                name: display_name.clone(),
+                name: display_name,
                 span: call.span,
             });
-            CalleeRef::rendered(self.current_module_source.clone(), display_name)
+            return TypeTable::ERROR;
         };
 
         // Every shape above narrows to this one callee, so asking here asks for
@@ -1971,11 +1976,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (i, arg) in args.iter_mut().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
                 self.pin_arg_hole_against(arg, expected);
-                self.typecheck(
-                    *arg,
-                    expected,
-                    call.args.get(i).map_or(call.span, ast::Expr::span),
-                );
+                if is_tag_call {
+                    self.check_tag_param(*arg, expected, &ident.name, call.span);
+                } else {
+                    self.typecheck(
+                        *arg,
+                        expected,
+                        call.args.get(i).map_or(call.span, ast::Expr::span),
+                    );
+                }
             }
         }
         if !check_param_types.is_empty() {

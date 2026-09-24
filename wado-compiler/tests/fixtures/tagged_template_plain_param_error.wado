@@ -1,0 +1,17 @@
+// A tag takes the template through a `ReflectTemplate` bound. A parameter of
+// any other type is reported as a tag fault, since the template's own type is
+// one no source spells (WEP 2026-01-10).
+fn plain(s: String) -> String {
+    return s;
+}
+
+export fn run() {
+    let x = 1;
+    let _ = plain`a ${x}`;
+}
+
+__DATA__
+{
+    "compile_error": "a template tag's parameter must be bound by `ReflectTemplate`; `plain` takes `String`",
+    "compile_errors_not_contains": ["$tmpl$", "type mismatch"]
+}

@@ -713,6 +713,16 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A reflect member called on a type parameter whose bound binds no pack
+    /// (`T: ReflectTemplate` without `Holes = [..V]`): the member reads one.
+    MissingReflectPackBound {
+        trait_name: String,
+        type_param: String,
+        method: String,
+        pack_bound: String,
+        span: Span,
+    },
+
     /// A bound naming something that is not a declared trait.
     UnknownBound {
         name: String,
@@ -1798,6 +1808,20 @@ impl TypeError {
                 Code::TraitBoundNotSatisfied,
                 format!(
                     "type '{type_name}' does not satisfy the associated type '{trait_name}::{assoc_name} = {expected}': it is '{actual}'"
+                ),
+                *span,
+            ),
+            TypeError::MissingReflectPackBound {
+                trait_name,
+                type_param,
+                method,
+                pack_bound,
+                span,
+            } => (
+                Code::TraitBoundNotSatisfied,
+                format!(
+                    "`{trait_name}::<{type_param}>::{method}()` needs `{type_param}` bound as \
+                     `{trait_name}<{pack_bound}>`"
                 ),
                 *span,
             ),

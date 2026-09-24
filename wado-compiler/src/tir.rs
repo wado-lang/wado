@@ -345,6 +345,9 @@ pub struct TemplateShape {
     pub holes: Vec<TemplateHole>,
 }
 
+/// How many characters of a template's text its type name shows.
+const TEMPLATE_NAME_MAX_CHARS: usize = 50;
+
 impl TemplateShape {
     /// The struct field holding hole `k`.
     #[must_use]
@@ -1471,13 +1474,46 @@ impl TypeTable {
     }
 
     /// The spelling an anonymous struct shows a reader —
-    /// `$anon_{x:i32,y:i32}`. The declaration namespace;
+    /// `$anon_{x:i32,y:i32}`, or a template's text. The declaration namespace;
     /// [`Self::anon_struct_mangle`] is what a key is built from.
     #[must_use]
     pub fn anon_struct_name(&self, id: AnonStructId) -> String {
-        self.render_shape(&self.anon_structs[id.0 as usize].shape, &|tt, ty| {
-            tt.type_name(ty)
-        })
+        match &self.anon_structs[id.0 as usize].shape {
+            AnonShape::Template(shape) => self.template_shape_name(shape),
+            shape @ (AnonShape::Fields(_) | AnonShape::Synthetic(_)) => {
+                self.render_shape(shape, &|tt, ty| tt.type_name(ty))
+            }
+        }
+    }
+
+    /// A template shape as its text, each hole spelled as its type and
+    /// specifier, cut to [`TEMPLATE_NAME_MAX_CHARS`] characters.
+    fn template_shape_name(&self, shape: &TemplateShape) -> String {
+        let mut text = String::new();
+        for (k, segment) in shape.segments.iter().enumerate() {
+            text.push_str(segment);
+            if let Some(hole) = shape.holes.get(k) {
+                let _ = write!(text, "${{{}", self.type_name(hole.ty));
+                if let Some(spec) = &hole.spec {
+                    let _ = write!(text, ":{spec}");
+                }
+                text.push('}');
+            }
+        }
+        let mut chars = text.chars();
+        let mut name = String::from("`");
+        for c in chars.by_ref().take(TEMPLATE_NAME_MAX_CHARS) {
+            if c.is_control() {
+                name.extend(c.escape_default());
+            } else {
+                name.push(c);
+            }
+        }
+        if chars.next().is_some() {
+            name.push_str("...");
+        }
+        name.push('`');
+        name
     }
 
     /// [`Self::anon_struct_name`] in the mangled namespace: every field type is

@@ -28,6 +28,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tagged_templates
             .insert(tagged.id, template_ty);
 
+        // A closure-typed binding would resolve as an indirect call, which
+        // reify cannot build the template into.
+        if let ast::Expr::Ident(ident) = &tagged.tag
+            && self.callee_value(ident, ctx).is_some()
+        {
+            return self.emit_not_a_tag(&tagged.tag);
+        }
+
         let call = ast::CallExpr {
             id: tagged.id,
             callee: tagged.tag.clone(),
@@ -36,27 +44,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             has_trailing_comma: false,
             span: tagged.span,
         };
+        let reported = self.logger.offered_error_count();
         let result =
             self.resolve_call_with_args(&call, ctx, expected_type, Some(vec![template_ty]));
 
-        // Reify rebuilds the call from the dispatch fact, so a path that
-        // records none is a tag reify cannot build: a variant case, a
-        // closure-typed binding, an abstract `T::method`. Each resolves as
-        // some other call kind, which either accepts the template silently or
-        // reports an arity it never had.
+        // Reify rebuilds the call from the dispatch fact. A call that failed
+        // has reported why; one that resolved without a fact is a variant
+        // case, which accepts the template silently.
         if !self
             .sem
             .types
             .static_method_dispatch
             .contains_key(&tagged.id)
         {
-            let _ = self.emit(TypeError::InvalidLiteral {
-                message: "a template tag must name a function or a static method".to_string(),
-                span: tagged.tag.span(),
-            });
+            if self.logger.offered_error_count() == reported {
+                return self.emit_not_a_tag(&tagged.tag);
+            }
             return TypeTable::ERROR;
         }
         result
+    }
+
+    fn emit_not_a_tag(&self, tag: &ast::Expr) -> TypeId {
+        let _ = self.emit(TypeError::InvalidLiteral {
+            message: "a template tag must name a function or a static method".to_string(),
+            span: tag.span(),
+        });
+        TypeTable::ERROR
+    }
+
+    /// Check the template against the tag's parameter. The template's type is
+    /// one no source spells, so a mismatch names the parameter's missing bound.
+    pub(super) fn check_tag_param(&self, template: TypeId, param: TypeId, tag: &str, span: Span) {
+        if self.tysys.typecheck(template, param).is_ok() {
+            return;
+        }
+        let param_name = self.tysys.type_table.borrow().type_name(param);
+        let _ = self.emit(TypeError::InvalidLiteral {
+            message: format!(
+                "a template tag's parameter must be bound by `ReflectTemplate`; \
+                 `{tag}` takes `{param_name}`"
+            ),
+            span,
+        });
     }
 
     /// The template's shape, or `None` where a hole cannot be a member of one:
