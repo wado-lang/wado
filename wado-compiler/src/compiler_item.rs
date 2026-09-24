@@ -412,7 +412,7 @@ pub enum CompilerItem {
     /// synthesized `ReflectEnum::members` / `ReflectFlags::members`
     /// call it.
     ListFromTuple,
-    /// `List::from_le_bytes` — a call on a byte literal folds to a data segment.
+    /// `List::from_le_bytes` — a call on a byte literal folds to a constant.
     ListFromLeBytes,
     /// `Reflect::type_name` — the declaration's name, for every kind.
     ReflectTypeName,

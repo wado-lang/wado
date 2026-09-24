@@ -508,13 +508,8 @@ fn register_single_function(
     });
 }
 
-/// Register passive data segments for string and bytes literals.
-///
-/// Both lower to a packed `Array<u8>` `repr` (see `translate_packed_array`).
-/// Only payloads longer than `string_inline_max_bytes` need a segment; shorter
-/// ones materialize inline as a constant `array.new_fixed<u8>`, so a segment for
-/// them would be dead. String and bytes payloads share one content-keyed map,
-/// so equal bytes dedup to one segment.
+/// Registers a passive data segment for every constant array built from one,
+/// keyed by content so equal payloads share it.
 fn register_literal_data(ctx: &mut WirContext<'_>) {
     // `package` is a `&NirPackage` whose lifetime outlives `ctx`, so copying the
     // reference lets us iterate the source literals while calling `&mut self`.
@@ -535,11 +530,8 @@ fn register_literal_data(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Every `PackedArray` payload in the program that needs a segment. The lower
-/// phase's recorded lists are not the whole set — the optimizer writes back
-/// literals no source literal accounts for — so NIR is the authority, appended
-/// after the recorded lists to keep their indices. Only what the module emits
-/// counts: a dead function or a displaced arena node would leave a dead segment.
+/// Every emitted `PackedArray` payload that needs a segment, the optimizer's
+/// written-back ones included, which no recorded source literal accounts for.
 fn synthesized_packed_payloads(package: &NirPackage, threshold: usize) -> Vec<Vec<u8>> {
     fn collect(body: &nir_arena::Body, threshold: usize, out: &mut Vec<Vec<u8>>) {
         for e in reachable_exprs(body) {

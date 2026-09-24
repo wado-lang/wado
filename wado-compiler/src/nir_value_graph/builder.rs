@@ -1367,10 +1367,8 @@ impl<'a> Builder<'a> {
             }
 
             // ---- Other Skel-side leaves ----
-            // The backing array of a sequence literal is a constant the pool
-            // can name, so a literal keeps its identity through a binding
-            // instead of going opaque at the first `let`. `Value::seq` declines
-            // one too long for any fold to repay the walk.
+            // Named by the pool, a literal keeps its identity through a binding
+            // rather than going opaque at the first `let`.
             ExprKind::PackedArray(data) => {
                 let ty = self.body.exprs[expr].type_id;
                 data.to_value(ty).map(|seq| self.pool.constant(&seq, ty))

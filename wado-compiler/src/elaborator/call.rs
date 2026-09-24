@@ -607,8 +607,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Check a `builtin::array_new_data` call. Its bytes become a data segment
-    /// read as whole elements, so they must be known at compile time.
+    /// Check a `builtin::array_new_data` call. Its bytes become a constant read
+    /// as whole elements, so they must be known at compile time.
     fn check_array_new_data(&mut self, args: &[Expr], result: TypeId, span: Span) {
         let width = self
             .tysys

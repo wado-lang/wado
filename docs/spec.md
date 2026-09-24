@@ -1177,11 +1177,12 @@ back, for any `T: FromLeBytes`: the fixed-width integers, `f16`, `bf16`, `f32`
 and `f64`. It panics when the byte count is not a whole number of `T`s.
 
 When the argument is a byte string literal or `#include_bytes` and `T` is
-concrete, the compiler folds the call. The bytes become a data segment, and the
-list is created from it with one `array.new_data`, so no decode loop runs at
-startup and the Wasm grows by the byte count alone. The folded list is an
-ordinary `List<T>`. A ragged literal is not folded, and panics as it would at
-run time.
+concrete, the compiler folds the call into a constant, so no decode loop runs at
+startup. A long list is created from a data segment with one `array.new_data`,
+and the Wasm grows by the byte count alone. A short one is built inline, where
+that encodes smaller. Either way the result is an ordinary `List<T>`. A ragged
+literal is not folded, and panics as it would at run time. Nor is a call whose
+`T` is a newtype with its own `FromLeBytes`, which decides what the bytes mean.
 
 `builtin::array_new_data::<T>(bytes)` is the same fold returning an `Array<T>`,
 for a caller building its own container. It has no run-time form, so its

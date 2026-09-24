@@ -8369,7 +8369,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// A call reading `T`s out of a byte literal, as that literal typed as the
-    /// result, so lowering places it in a data segment with no decode loop.
+    /// result, so lowering builds it as a constant with no decode loop.
     fn fold_le_bytes_call(
         &self,
         func: &tir::FunctionRef,

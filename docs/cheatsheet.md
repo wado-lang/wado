@@ -1575,7 +1575,7 @@ let src = #include_str("./runtime.wado");  // include file as String
 let icon = #include_bytes("./icon.png");   // include file as ByteList
 ```
 
-A literal read as numbers becomes a data segment, with no decode loop at startup.
+A literal read as numbers becomes a constant, with no decode loop at startup.
 See [the spec](./spec.md#embedded-data).
 
 ```wado
