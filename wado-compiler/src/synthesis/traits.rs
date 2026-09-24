@@ -4473,7 +4473,13 @@ fn unrestricted_inspect_body(
         common::let_stmt("$class", class_local, TypeTable::I32, class_value),
         common::expr_stmt(common::internal_call(
             CompilerItem::InspectHandle.attr_name(),
-            vec![fmt, name, h(), class(), common::f64_const(HandleClasses::STRIDE)],
+            vec![
+                fmt,
+                name,
+                h(),
+                class(),
+                common::f64_const(HandleClasses::STRIDE),
+            ],
             TypeTable::UNIT,
         )),
     ])

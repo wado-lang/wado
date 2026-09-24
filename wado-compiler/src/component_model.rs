@@ -749,7 +749,11 @@ impl CmFunctionInfo {
             .iter()
             .map(|(_, cm_name, ty)| (cm_name.as_str(), type_key(ty)))
             .collect();
-        (self.is_async, params, self.return_type.as_ref().map(type_key))
+        (
+            self.is_async,
+            params,
+            self.return_type.as_ref().map(type_key),
+        )
     }
 
     /// Whether `canon lower` requires the Memory canonical option.
@@ -3469,7 +3473,10 @@ impl CmInterfaceRegistry {
         self.used_names.insert(local_name.clone());
         self.local_aliases.insert(
             local_name,
-            (func_info.interface_path.clone(), func_info.wasi_func_name.clone()),
+            (
+                func_info.interface_path.clone(),
+                func_info.wasi_func_name.clone(),
+            ),
         );
         self.effect_to_func.insert(key, func_info.clone());
         Ok(true)
