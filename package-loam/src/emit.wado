@@ -533,7 +533,7 @@ fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
         }));
     }
     let Some(body) = unary_body(&op) else {
-        // Stage 0 has a shape rule for no operator the kernels lack.
+        // Stage 0 refuses every operator the kernels lack.
         unreachable();
     };
     return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
