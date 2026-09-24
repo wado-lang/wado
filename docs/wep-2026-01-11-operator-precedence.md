@@ -212,7 +212,7 @@ a != b != c   // ❌ Parse error: != chaining not allowed
 4. **Reject ambiguous cases**: Mixed directions (`a < b > c`) are rarely intentional
 5. **`!=` is ambiguous**: The meaning of `a != b != c` is unclear (is it "a, b, c are all different" or "a != b AND b != c"?)
 
-**Implementation**: The parser collects a comparison chain and rejects it unless:
+**Implementation**: The parser checks each operator as it extends a comparison chain, and rejects the first one that breaks either rule:
 
 - All operators in the chain are in the same "group" (ascending, descending, or equality)
 - `!=` is never chained
@@ -236,7 +236,7 @@ a != b != c   // ❌ Parse error: != chaining not allowed
    - **Mitigation**: Compiler error will catch this immediately
 2. **Diverges from Rust on comparison chaining**: Rust rejects all chaining, Wado allows valid chains
    - **Mitigation**: Well-documented feature; clearer than Rust's blanket rejection
-3. **Comparison chaining complicates the parser**: it must collect a whole chain before it can reject one
+3. **Comparison chaining complicates the parser**: it must track the chain's group while it parses one
    - **Mitigation**: Clear error messages guide developers to fix invalid chains
 4. **`!=` chaining is rejected**: Some developers might expect `a != b != c` to work
    - **Mitigation**: Error message suggests alternatives like `a != b && b != c` or "all different" checks

@@ -32,7 +32,8 @@ the whole program. No level sets it.
 
 A pass reports a change only when it made one, because the fixed-point loop
 stops once no pass reports a change. At `-O2`, `-O3`, and `-Os` the loop must
-converge within the iteration count. At `-O1` the count is only a budget.
+converge within the level's own count. At `-O1`, and wherever
+`--optimize-iterations` sets the count, it is only a budget.
 
 ## Architecture
 
@@ -45,8 +46,8 @@ propagation are not passes, because the hash-consing already does them. See
 
 ## Pipeline
 
-`-O0` runs only DCE, `match_to_switch`, and steps 7 and 8. Every other level
-runs the whole list.
+`-O0` runs only DCE, `match_to_switch`, step 7, and the part of step 8 that
+[WIR Passes](#wir-passes) keeps at `-O0`. Every other level runs the whole list.
 
 1. DCE.
 2. Before the loop: `cold_outline`, `match_to_switch` over global initializers,
@@ -70,12 +71,17 @@ runs the whole list.
 ## NIR Passes
 
 `peephole` is one worklist per function shared by the rules that need no fixed
-position: `aggregate_forward`, `closure_devirt`, `const_branch_prune`, part of
-`const_folding`, `drop_value`, `elide_box_local`, `elide_local`,
-`identity_cast`, `if_chain_to_match`, `known_case`, `labeled_block_fusion`,
-`match_to_bitset`, `match_to_switch`, `ref_elim`, `slot_temp_sroa`,
-`string_push`, and `tuple_projection`. It runs before and after `inline`, so
-the rules see what inlining exposes.
+position. It runs once before `inline` and once after, and each run has rules of
+its own:
+
+- Both runs: `aggregate_forward`, `const_branch_prune`, part of
+  `const_folding`, `elide_local`, `identity_cast`, `known_case`,
+  `string_push`, and `tuple_projection`.
+- Before `inline` only: `if_chain_to_match`, `match_to_bitset`, and
+  `match_to_switch`, so a copied body is already lowered.
+- After `inline` only: `closure_devirt`, `drop_value`, `elide_box_local`,
+  `labeled_block_fusion`, `ref_elim`, and `slot_temp_sroa`. Each cleans up a
+  shape that inlining leaves behind.
 
 Allocation and aggregates:
 

@@ -11,27 +11,28 @@ shape. Each module's doc says how it works.
 
 ## Pipeline
 
-| Phase                | Output           | Where                                       |
-| -------------------- | ---------------- | ------------------------------------------- |
-| Lex / Parse / Bind   | AST per module   | `lexer.rs`, `parser.rs`, `bind.rs`          |
-| Load                 | Every module     | `loader.rs`                                 |
-| Analyze              | Symbol table     | `analyze.rs`                                |
-| Resolve              | Declarations     | `defs.rs`, `resolve.rs`                     |
-| Annotate             | `Semantics`      | `elaborator/`                               |
-| Liveness             | Reachability     | `elaborator/`                               |
-| Reify                | TIR per module   | `elaborator/`                               |
-| Check                | Diagnostics      | `effect_check.rs`, `resource_move_check.rs` |
-| Synthesis            | TIR              | `synthesis/`                                |
-| Link                 | One flat package | `link.rs`                                   |
-| Monomorphize / Erase | Concrete TIR     | `monomorphize/`                             |
-| Lower                | NIR              | `lower/`                                    |
-| Optimize             | NIR              | `optimize/`                                 |
-| WIR Build            | WIR              | `wir_build/`                                |
-| WIR Optimize         | WIR              | `wir_optimize/`                             |
-| Codegen              | Component bytes  | `codegen/`                                  |
+| Phase                | Output           | Where                                           |
+| -------------------- | ---------------- | ----------------------------------------------- |
+| Load                 | AST per module   | `loader.rs`, `lexer.rs`, `parser.rs`, `bind.rs` |
+| Analyze              | Symbol table     | `analyze.rs`                                    |
+| Resolve              | Declarations     | `defs.rs`, `resolve.rs`                         |
+| Annotate             | `Semantics`      | `elaborator/`                                   |
+| Liveness             | Reachability     | `elaborator/`                                   |
+| Reify                | TIR per module   | `elaborator/`                                   |
+| Check                | Diagnostics      | `effect_check.rs`, `resource_move_check.rs`     |
+| Synthesis            | TIR              | `synthesis/`                                    |
+| Link                 | One flat package | `link.rs`                                       |
+| Monomorphize / Erase | Concrete TIR     | `monomorphize/`                                 |
+| Lower                | NIR              | `lower/`                                        |
+| Optimize             | NIR              | `optimize/`                                     |
+| WIR Build            | WIR              | `wir_build/`                                    |
+| WIR Optimize         | WIR              | `wir_optimize/`                                 |
+| Codegen              | Component bytes  | `codegen/`                                      |
 
-The driver is `compile_after_load` in `src/lib.rs`. The LSP runs the same
-phases up to liveness and stops there.
+The driver is `compile_with_options` in `src/lib.rs`. Load lexes, parses, and
+binds each module it reaches. The provider pre-pass follows, and then
+`compile_after_load` runs the rest. The LSP runs the same phases up to liveness
+and stops there.
 
 ## IRs
 
