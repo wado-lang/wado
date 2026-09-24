@@ -1,0 +1,73 @@
+// A closure captures by reference, so a write to a captured local after the
+// closure is made is what the closure reads.
+
+struct P {
+    a: i32,
+}
+
+fn call(f: fn() -> i32) -> i32 {
+    return f();
+}
+
+export fn run() {
+    let mut m = 10;
+    let get_m = || m;
+    m = 100;
+    assert get_m() == 100;
+
+    let mut n = 1;
+    let get_n = || n * 2;
+    n += 1;
+    assert call(get_n) == 4;
+
+    let mut q = P { a: 1 };
+    let get_q = || q.a;
+    q.a = 9;
+    assert get_q() == 9;
+
+    let mut l: List<i32> = [1];
+    let len = || l.len();
+    l.push(2);
+    assert len() == 2;
+
+    let mut o: Option<i32> = null;
+    let is_set = || o matches { Some(_) };
+    o = Some(1);
+    assert is_set();
+
+    let mut outer = 1;
+    let nested = || {
+        let inner = || outer;
+        return inner();
+    };
+    outer = 2;
+    assert nested() == 2;
+
+    let mut late = 0;
+    let read_late = || late;
+    let mut bump = || late += 5;
+    bump();
+    assert read_late() == 5;
+
+    let mut early = 0;
+    let mut bump_early = || early += 3;
+    let read_early = || early;
+    bump_early();
+    assert read_early() == 3;
+
+    let mut total = 0;
+    let mut i = 0;
+    let read_i = || i;
+    while i < 3 {
+        total += read_i();
+        i += 1;
+    }
+    assert total == 3;
+
+    let fixed = 5;
+    let get_fixed = || fixed;
+    assert get_fixed() == 5;
+}
+
+__DATA__
+{}

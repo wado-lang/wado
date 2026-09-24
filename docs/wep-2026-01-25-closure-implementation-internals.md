@@ -54,6 +54,8 @@ Each capture records where the frame building the closure reads the value from: 
 
 A binding is boxed by the frame that owns it, whatever depth the write comes from. The frames in between pass the box along, so they all see the one cell. The owning frame binds a `&mut` proxy for that box in a local slot annotate reserves, and reify's own allocation has to land on it.
 
+A binding the closure only reads takes a `&` proxy the same way, bound by lowering rather than annotate, where its reference is a box and the owning frame may write it while the closure lives: a write after the closure is built, one sharing a loop with it, or a borrow of the binding anywhere. Anywhere else the environment holds the value itself. Nothing can change the binding then, so the value reads what the reference would, and the binding stays unboxed. A binding whose `&` is its own GC handle needs no proxy either way.
+
 Which slot holds what is decided once. The annotate walk settles a closure's environment and records it. Reify opens the frame with those slots already in place, so its own walk reads them rather than deciding again, and a binding that reaches no slot means the two walks disagree, which the frame reports on the spot. How each binding is reached stays that frame's own question: a local of the enclosing frame, or a slot of its environment, answered against its own parent. No capture index crosses between the walks.
 
 ### Wasm GC representation

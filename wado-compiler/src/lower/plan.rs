@@ -9,6 +9,7 @@ use crate::logger::{Bail, ErrorSink};
 use crate::tir::ResolvedType;
 
 pub mod boxing;
+pub mod capture_ref;
 pub mod closure;
 pub mod globals;
 pub mod lift_mut;
@@ -61,6 +62,8 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
     // Record each parameter's `&mut`-ness before `boxing::prepare_types`
     // rewrites `&mut T` / `&T` to the same `Box<T>`, erasing the distinction.
     capture_param_mut_ref(flat);
+    // Ahead of every analysis, which then reads the proxy as any other borrow.
+    capture_ref::capture_observed_by_ref(flat);
     // The pre-boxing analyses share one graph: what follows rewrites bodies but
     // adds no function, so the callee sets do not move until closure lifting.
     let pre_boxing_calls = value_copy::callgraph::CallGraph::build(flat);

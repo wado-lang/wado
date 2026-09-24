@@ -386,9 +386,10 @@ pub fn deref_capture_name(index: u32) -> String {
     format!("{INTERNAL_PREFIX}deref_cap_{index}")
 }
 
-/// The `&mut` proxy an owning frame binds for a binding a closure writes.
+/// The reference proxy an owning frame binds for a binding a closure captures
+/// by reference.
 #[must_use]
-pub fn mut_capture_ref_name(var_name: &str) -> String {
+pub fn capture_ref_name(var_name: &str) -> String {
     format!("{INTERNAL_PREFIX}ref_{var_name}")
 }
 
