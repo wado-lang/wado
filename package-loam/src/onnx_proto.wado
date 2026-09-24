@@ -6,7 +6,7 @@
 //! subset leaves out is skipped by `core:protobuf`, so a real model reads
 //! whatever else it carries.
 
-use { from_bytes, read_fixed32, write_fixed32 } from "core:protobuf";
+use { from_bytes, write_fixed32 } from "core:protobuf";
 use {
     Attr,
     ConstTensor,
@@ -202,30 +202,19 @@ pub fn float_tensor(t: &TensorProto) -> Result<Option<[List<f32>, List<i32>]>, S
     if t.data_type != 1 {
         return Result::Ok(null);
     }
+    let extents = extents_of(t)?;
+    let Some(bytes) = payload(t, &"float", &extents)? else {
+        unreachable();
+    };
+    return Result::Ok(Option::Some([List::<f32>::from_le_bytes(bytes), extents]));
+}
+
+fn extents_of(t: &TensorProto) -> Result<List<i32>, String> {
     let mut extents: List<i32> = [];
     for let d of t.dims {
         extents.push(extent(d, &t.name)?);
     }
-    let data = if t.raw_data.is_empty() { t.float_data } else { raw_floats(&t.raw_data, &t.name)? };
-    check_element_count(&t.name, data.len(), &extents)?;
-    return Result::Ok(Option::Some([data, extents]));
-}
-
-fn raw_floats(raw: &ByteList, tensor: &String) -> Result<List<f32>, String> {
-    if raw.len() % 4 != 0 {
-        return Result::Err(`${tensor}: ${raw.len()} raw bytes is not whole f32 elements`);
-    }
-    let bytes = raw.as_byte_slice();
-    let mut data: List<f32> = List::with_capacity(raw.len() / 4);
-    let mut at = 0;
-    while at < bytes.len() {
-        let Some([bits, next]) = read_fixed32(&bytes, at) else {
-            unreachable();
-        };
-        data.push(f32::from_bits(bits));
-        at = next;
-    }
-    return Result::Ok(data);
+    return Result::Ok(extents);
 }
 
 /// The element type names the textual format spells, indexed by
@@ -309,11 +298,9 @@ fn read_initializer(t: &TensorProto) -> Result<ValueInfo, String> {
     let Some(dtype) = dtype_name(t.data_type) else {
         return Result::Err(`${t.name}: element type ${t.data_type}`);
     };
-    let mut extents: List<i32> = [];
+    let extents = extents_of(t)?;
     let mut dims: List<Dim> = [];
-    for let d of t.dims {
-        let e = extent(d, &t.name)?;
-        extents.push(e);
+    for let e of extents {
         dims.push(Dim::Static(e));
     }
     return Result::Ok(ValueInfo {
