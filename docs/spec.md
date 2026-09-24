@@ -1221,31 +1221,35 @@ denotes; it may not rely on the number of copies performed to produce it.
 
 ### Type Mapping at Component Boundaries
 
-Wado types are stored internally as WebAssembly core and GC types, and lift/lower to Component Model types when crossing component boundaries (the Canonical ABI). The compiler performs this conversion automatically, letting Wado use optimal internal representations (e.g. Wasm GC structs) while interoperating through standard CM types at the boundary.
+Wado types lift and lower to Component Model types when they cross a component boundary (the Canonical ABI). The compiler performs this conversion automatically.
 
 The table below is the Wado↔CM correspondence, read in both directions: Wado→CM when generating a component's exported interface, and CM→Wado when importing an external component (`use { Iface } from "./c.wasm" with { type: "wasm" }`, see [Wasm Module and Component Imports](#wasm-module-and-component-imports)). CM types are written in their WIT spelling.
 
-| Wado Type                 | Internal Representation    | CM Type at Boundary       | Notes                                                                                      |
-| ------------------------- | -------------------------- | ------------------------- | ------------------------------------------------------------------------------------------ |
-| `bool`                    | `i32`                      | `bool`                    | Boolean value                                                                              |
-| `char`                    | `i32`                      | `char`                    | Unicode scalar value                                                                       |
-| `i8`, `i16`, `i32`, `i64` | `i32`, `i32`, `i32`, `i64` | `s8`, `s16`, `s32`, `s64` | Signed integers                                                                            |
-| `u8`, `u16`, `u32`, `u64` | `i32`, `i32`, `i32`, `i64` | `u8`, `u16`, `u32`, `u64` | Unsigned integers                                                                          |
-| `i128`, `u128`            | GC `struct {u64, i64/u64}` | `record { low, high }`    | Prelude structs, so each crosses as its own record                                         |
-| `f32`, `f64`              | `f32`, `f64`               | `f32`, `f64`              | Floating point                                                                             |
-| `String`                  | GC `array i8` (UTF-8)      | `string`                  | UTF-8 string, GC-managed internally                                                        |
-| `List<T>`                 | GC `array T`               | `list<T>`                 | Dynamic array, GC-managed internally                                                       |
-| `TreeMap<K, V>`           | GC `struct` (AA tree)      | `map<K, V>`               | `K` is `bool`, `char`, `String`, or an integer; a repeated key takes the last pair's value |
-| `[T1, T2, ...]`           | GC `struct {T1, T2, ...}`  | `tuple<T1, T2, ...>`      | Tuple types                                                                                |
-| `Option<T>`               | GC variant                 | `option<T>`               | Optional value                                                                             |
-| `Result<T, E>`            | GC variant                 | `result<T, E>`            | Result type; `result<ok>` and bare `result` are the payload-elided forms                   |
-| `struct { ... }`          | GC `struct`                | `record { ... }`          | Wasm GC struct internally, record at CM boundary                                           |
-| `enum { ... }`            | `i32`                      | `enum { ... }`            | Enumeration without payloads                                                               |
-| `variant { ... }`         | GC variant                 | `variant { ... }`         | Variant/sum type with payloads                                                             |
-| `flags { ... }`           | `i32`/`i64`                | `flags { ... }`           | Bit flags                                                                                  |
-| `resource`                | `i32` (handle)             | `resource`                | Resource handle; owned and borrowed handles both map here                                  |
-| `Stream<T>`               | CM stream (P3)             | `stream<T>`               | Component Model async stream                                                               |
-| `Future<T>`               | CM future (P3)             | `future<T>`               | Component Model async future                                                               |
+| Wado Type                 | CM Type at Boundary       | Notes                                                                                      |
+| ------------------------- | ------------------------- | ------------------------------------------------------------------------------------------ |
+| `bool`                    | `bool`                    | Boolean value                                                                              |
+| `char`                    | `char`                    | Unicode scalar value                                                                       |
+| `i8`, `i16`, `i32`, `i64` | `s8`, `s16`, `s32`, `s64` | Signed integers                                                                            |
+| `u8`, `u16`, `u32`, `u64` | `u8`, `u16`, `u32`, `u64` | Unsigned integers                                                                          |
+| `i128`, `u128`            | `record { low, high }`    | Prelude structs, so each crosses as its own record                                         |
+| `f32`, `f64`              | `f32`, `f64`              | Floating point                                                                             |
+| `String`                  | `string`                  | UTF-8 string                                                                               |
+| `List<T>`                 | `list<T>`                 | Dynamic array                                                                              |
+| `TreeMap<K, V>`           | `map<K, V>`               | `K` is `bool`, `char`, `String`, or an integer; a repeated key takes the last pair's value |
+| `[T1, T2, ...]`           | `tuple<T1, T2, ...>`      | Tuple types                                                                                |
+| `Option<T>`               | `option<T>`               | Optional value                                                                             |
+| `Result<T, E>`            | `result<T, E>`            | Result type; `result<ok>` and bare `result` are the payload-elided forms                   |
+| `struct { ... }`          | `record { ... }`          | Record                                                                                     |
+| `enum { ... }`            | `enum { ... }`            | Enumeration without payloads                                                               |
+| `variant { ... }`         | `variant { ... }`         | Variant/sum type with payloads                                                             |
+| `flags { ... }`           | `flags { ... }`           | Bit flags                                                                                  |
+| `resource`                | `resource`                | Resource handle; owned and borrowed handles both map here                                  |
+| `Stream<T>`               | `stream<T>`               | Component Model async stream                                                               |
+| `Future<T>`               | `future<T>`               | Component Model async future                                                               |
+
+`f16` and `bf16` have no Component Model type, so they do not cross a component
+boundary. An `export fn` whose signature names either one is a compile error.
+See [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
 
 ### The Prelude
 
@@ -1255,13 +1259,14 @@ The prelude (`core:prelude`) is automatically imported into every module, provid
 
 - `String` - UTF-8 string type
 - `List<T>` - Dynamic array type
-- `Tuple<T1, T2, ...>` - Alias for `[T1, T2, ...]`
-- `Option<T>` and its variants: `Some(x)`, `None` (also accessible via `null` keyword)
-- `Result<T, E>` and its variants: `Ok(x)`, `Err(e)`
+- `Option<T>` and its cases `Some(x)` and `None` (`null` also denotes `None`)
+- `Result<T, E>` and its cases `Ok(x)` and `Err(e)`
 - `Stream<T>` - Component Model async stream
 - `Future<T>` - Component Model async future
-- `Pollable` - WASI I/O polling resource
 - `i128`, `u128` - 128-bit integer types
+
+A case is written bare (`Some(x)`) only where an expected type says which type
+it belongs to. Elsewhere it is qualified: `Option::Some(x)`.
 
 #### Disabling the Prelude
 
@@ -1269,34 +1274,40 @@ The prelude (`core:prelude`) is automatically imported into every module, provid
 #![no_prelude]  // At the top of a module
 
 // Now you must explicitly import everything
-use {String, List, Tuple, Option, Result, Stream, Future, Pollable} from "core:prelude";
+use {String, List, Option, Result, Stream, Future} from "core:prelude";
 ```
 
 ### Primitive Types
 
-Wasm primitive types are built into the language (no import required):
+Primitive types are built into the language (no import required):
 
 ```wado
 // Numeric
 i8, i16, i32, i64
 u8, u16, u32, u64
 f32, f64
+f16, bf16   // half precision: storage only, no arithmetic
 
 // Basic
 bool
 char
 ```
 
+`f16` and `bf16` hold a value but do no arithmetic, and `as` does not cast them.
+`to_bits` / `from_bits` reach the bits, and `From` / `TryFrom` / `from_f32`
+convert the value. A comparison widens both operands to `f32` and compares
+those. See [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
+
 ### Associated Constants
 
-Associated constants are compile-time constants defined in `impl` blocks using the `const` keyword. They are inlined at every use site and cannot be mutated.
+Associated constants are compile-time constants defined in `impl` blocks using the `const` keyword. They cannot be mutated.
 
 ```wado
 impl f64 {
     pub const PI: f64 = 3.14159265358979323846;
 }
 
-let pi = f64::PI;  // inlined as the literal value
+let pi = f64::PI;
 ```
 
 Primitive types provide built-in associated constants and static methods. See [`core:prelude`](./stdlib-core-prelude.md) for the full list.
@@ -1316,8 +1327,6 @@ let low = a.low();
 let high = a.high();
 ```
 
-WebAssembly has no native 128-bit integer type, so Wado represents them as pairs of 64-bit values. Addition, subtraction and multiplication use Wasm Wide Arithmetic instructions (`i64.add128`, `i64.sub128`, `i64.mul_wide_u`). Wasm has no 128-bit divide, so division and the bitwise operations are software implementations.
-
 Available operations:
 
 | Category   | Operations                                                     |
@@ -1328,8 +1337,8 @@ Available operations:
 | Conversion | `from_u64()`, `from_i64()`, `low()`, `high()`, `as`, `TryFrom` |
 
 Literal and range patterns work on them in every pattern position, nested ones
-included: `match [x, y] { [1..=5, _] => … }`. Each lowers to the same `Eq` /
-`Ord` call the equivalent comparison does.
+included: `match [x, y] { [1..=5, _] => … }`. Each pattern matches exactly when
+the equivalent `==` or range comparison holds.
 
 `as` casts follow Rust semantics in both directions:
 
@@ -1354,7 +1363,12 @@ Wado exposes WebAssembly SIMD via the `core:simd` module. A single primitive typ
 | Unsigned | `u8x16`, `u16x8`, `u32x4`, `u64x2` |
 | Float    | `f32x4`, `f64x2`                   |
 
-All SIMD newtypes share the `v128` base and can be reinterpreted via `as` cast (zero-cost). Each type provides `splat()` construction, `extract_lane()` access, comparison methods (`eq`, `lt`, `gt`, `le`, `ge`, `ne`), and operator overloading (`+`, `-`, `*`, `/`, `&`, `|`, `^`, `~`, `<<`, `>>`).
+All SIMD newtypes share the `v128` base and can be reinterpreted via `as` cast (zero-cost). Each type provides `splat()` construction, lane access, per-lane comparison methods such as `eq` and `lt`, and the operators its lanes support. The sets differ by type, following the Wasm SIMD instruction set:
+
+- `/` exists only on `f32x4` and `f64x2`, and the bitwise operators only on the integer types.
+- `i8x16` and `u8x16` have no `*`.
+- `u64x2` compares only with `eq` and `ne`.
+- `i8x16` and `i16x8` read a lane with `extract_lane_s` or `extract_lane_u`; the other types use `extract_lane`.
 
 Sequence literal coercion is supported via `impl From<Array<i32>> for i32x4`:
 
@@ -1367,7 +1381,7 @@ let sum = v + w;                   // [11, 12, 13, 14]
 let mask = v.lt(&w);              // per-lane comparison mask
 ```
 
-Beyond basic arithmetic and comparison, types provide specialized operations: saturating arithmetic (`add_sat_s/u`, `sub_sat_s/u`), lane narrowing/extension, extended multiplication, pairwise addition, type conversion between integer and float, and bit selection. See the `core:simd` module documentation for the full API.
+Beyond basic arithmetic and comparison, types provide specialized operations: saturating arithmetic (`add_sat_s/u` and `sub_sat_s/u` on signed types, `add_sat` and `sub_sat` on unsigned ones), lane narrowing/extension, extended multiplication, pairwise addition, type conversion between integer and float, and bit selection. See the `core:simd` module documentation for the full API.
 
 #### Relaxed SIMD
 
@@ -1378,7 +1392,7 @@ Relaxed SIMD operations trade strict determinism for performance. Edge-case beha
 - Truncation: `i32x4::relaxed_trunc_f32x4_s/u`, `relaxed_trunc_f64x2_s/u_zero`
 - Lane select: `relaxed_laneselect` on `i8x16`, `i16x8`, `i32x4`, `i64x2`
 - Swizzle: `i8x16.relaxed_swizzle`
-- Dot product: `i16x8.relaxed_dot_i8x16_i7x16_s`, `i32x4.relaxed_dot_i8x16_i7x16_add_s`
+- Dot product: `i16x8.relaxed_dot_i8x16_i7x16_s`, `i32x4::relaxed_dot_i8x16_i7x16_add_s(a, b, &c)`
 - Q15 multiply: `i16x8.relaxed_q15mulr_s`
 
 Relaxed SIMD is not modeled as an effect because: (1) results are deterministic within an environment, (2) hardware behavior cannot be intercepted, and (3) standard floats already have similar NaN non-determinism.
@@ -1425,14 +1439,14 @@ read_value(&mut x);   // OK: &mut i32 coerces to &i32
 
 #### Key Differences from Rust (GC-Based Memory Model)
 
-| Aspect                 | Rust                       | Wado                      |
-| ---------------------- | -------------------------- | ------------------------- |
-| Memory management      | Ownership + borrow checker | Garbage collection        |
-| Multiple mutable refs  | Not allowed                | Allowed                   |
-| Returning local refs   | Not allowed (dangling)     | Allowed (GC keeps alive)  |
-| Reference to reference | `&&T` (rare)               | `&&T` (fully supported)   |
-| Lifetime annotations   | Required                   | Not needed                |
-| Borrow checking        | Compile-time               | None (runtime GC instead) |
+| Aspect                 | Rust                       | Wado                     |
+| ---------------------- | -------------------------- | ------------------------ |
+| Memory management      | Ownership + borrow checker | Garbage collection       |
+| Multiple mutable refs  | Not allowed                | Allowed                  |
+| Returning local refs   | Not allowed (dangling)     | Allowed (GC keeps alive) |
+| Reference to reference | `&&T` (rare)               | `&&T` (fully supported)  |
+| Lifetime annotations   | Required                   | Not needed               |
+| Borrow checking        | Compile-time               | None; resources move     |
 
 #### Returning References to Local Variables
 
@@ -1470,19 +1484,19 @@ let r2 = &mut x;  // OK in Wado (no borrow checker)
 - Cost: Runtime overhead from garbage collection
 - Safety: Memory safety guaranteed by GC, not compile-time checks
 
-#### Method Receiver: `self` by Value is Prohibited
+#### Method Receiver: `self` by Value
 
-In method definitions, the `self` parameter must always be a reference (`&self` or `&mut self`). Bare `self` (by value) is a syntax error:
+A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on a resource, or on an aggregate that holds one:
 
 ```wado
 impl Point {
     fn sum(&self) -> i32 { ... }          // OK: immutable reference
     fn reset(&mut self) { ... }           // OK: mutable reference
-    // fn consume(self) -> i32 { ... }    // ERROR: `self` by value is not allowed
+    // fn consume(self) -> i32 { ... }    // ERROR: `self` by value is only allowed on a resource
 }
 ```
 
-In languages with ownership semantics (e.g., Rust), `self` by value transfers ownership to the method, preventing subsequent use of the receiver. Wado has no ownership system — there is no concept of "consuming" a value — so `self` by value serves no purpose. The parser rejects it with a clear error message guiding the user to `&self` or `&mut self`.
+A by-value `self` moves the receiver into the method, so the caller's binding cannot be used afterward. That is how an affine resource is consumed (see [Resource linearity](#resource-linearity)). A value type has nothing to consume, so `self` by value on one is a compile error. See [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md).
 
 #### `mut` Parameters
 
@@ -1495,12 +1509,12 @@ fn increment(mut n: i32) -> i32 {
 }
 
 fn normalize(mut s: String) -> String {
-    s = s.to_uppercase();  // rebinds local binding
+    s = s.to_ascii_uppercase();  // rebinds local binding
     return s;
 }
 ```
 
-The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function, except references (`&T`, `&mut T`) which share state with the caller. This applies uniformly to primitives, structs, `String`, and `List<T>`. Inside the callee, both reassignment (`p = new_value`) and in-place mutations — field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`) — operate on the callee's local copy and are not visible to the caller. To let the callee mutate the caller's value, declare the parameter as `&mut T` and pass a `&mut`-reference at the call site.
+The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function. References (`&T`, `&mut T`) are the exception: they share state with the caller. An affine resource is never copied: passing it moves it. This applies uniformly to primitives, structs, `String`, and `List<T>`. Inside the callee, both reassignment (`p = new_value`) and in-place mutations — field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`) — operate on the callee's local copy and are not visible to the caller. To let the callee mutate the caller's value, declare the parameter as `&mut T` and pass a `&mut`-reference at the call site.
 
 ```wado
 fn countdown(mut n: i32) with Stdout {
@@ -1539,27 +1553,15 @@ fn bad(n: i32) {
 #### Design Principles
 
 - Value semantics: deep-copied on assignment, parameter passing, and return — passing a `String` to a function gives the callee its own buffer
-- Mutable through the local binding: methods like `push_str` and operators like `+=` modify the receiver in place, but never the caller's binding
+- Mutable through the local binding: `push_str` modifies the receiver in place and `+=` reassigns the binding, but neither reaches the caller's value
 - GC-managed: Memory is automatically managed by Wasm GC
 - UTF-8 encoding: Direct mapping to Component Model `string`
 
 #### Semantics and Encoding
 
 - Semantically, a `String` is a sequence of Unicode scalar values
-- Internally represented as a UTF-8 byte array (`List<u8>`)
 - Invalid UTF-8 byte sequences are not allowed; all String values must be valid UTF-8
 - This ensures interoperability with Component Model `string` type and safe string operations
-
-#### Internal Structure
-
-```wado
-// Conceptual representation (not user-visible)
-struct String {
-    data: GcArray<u8>,   // UTF-8 bytes
-    len: i32,            // Length in bytes
-    capacity: i32,       // Buffer capacity for += operations
-}
-```
 
 #### Index Access (Prohibited)
 
@@ -1570,18 +1572,18 @@ let s = "Hello世界";
 
 // Prohibited
 s[0]      // Compile error
-s[0..5]   // Compile error
+s[0..<5]  // Compile error
 ```
 
 Use explicit methods instead:
 
 ```wado
 // Byte-level access
-let bytes: List<u8> = s.bytes();
+let bytes: List<u8> = s.bytes().collect();
 let first_byte = bytes[0];
 
 // Character-level access
-let chars: List<char> = s.chars();
+let chars: List<char> = s.chars().collect();
 let first_char = chars[0];
 
 // Other methods
@@ -1605,7 +1607,7 @@ for let b of "hello".bytes() {
 
 ##### String Building
 
-The `append` method provides efficient O(1) amortized string building:
+`push_str` appends to a `String` in place:
 
 ```wado
 let mut builder = String::with_capacity(20);
@@ -1616,6 +1618,10 @@ builder.push_str("World!");
 
 // `+` operator for two-string concatenation
 let combined = "Hello, " + "World!";  // "Hello, World!"
+
+// `join` concatenates a list with a separator
+let parts: List<String> = ["a", "b", "c"];
+let joined = parts.join(",");         // "a,b,c"
 ```
 
 #### Concatenation
@@ -1628,78 +1634,14 @@ let s2 = " world";
 let s3 = s1 + s2;  // Creates new String
 ```
 
-##### Mutation (`+=` operator)
+##### Reassignment (`+=` operator)
 
-The `+=` operator provides efficient in-place concatenation:
+`a += b` is `a = a + b` through `Add`. `String` follows the same rule as every other type:
 
 ```wado
 let mut s = "hello";
-s += " world";     // Efficient: uses internal capacity
-s += "!";          // May reallocate if capacity exceeded
-```
-
-##### Implementation
-
-`+=` desugars to `String::add_assign(&mut s, suffix)` which manages an internal buffer with amortized O(1) complexity.
-
-##### Pre-allocation
-
-```wado
-// Allocate capacity upfront for efficient building
-let mut result = String::with_capacity(1000);
-for let item of items {
-    result += item;  // No reallocations if within capacity
-}
-```
-
-#### Operator Consistency
-
-The `+=` operator has special semantics for String:
-
-```wado
-// For numeric types
-x += 5  ≡  x = x + 5  // Exact equivalence
-
-// For String
-s += t  ≈  s = s + t  // Same result, different implementation
-                      // += is more efficient (no intermediate allocation)
-```
-
-This special treatment will be generalized via traits in the future, allowing user types to define their own `+=` behavior.
-
-#### Performance Guidelines
-
-##### Efficient patterns
-
-```wado
-// 1. Pre-allocate when size is known
-let mut s = String::with_capacity(estimated_size);
-for let item of items {
-    s += item;
-}
-
-// 2. Use += for repeated concatenation
-let mut result = "";
-result += "Line 1\n";
-result += "Line 2\n";
-result += "Line 3\n";
-
-// 3. Join arrays of strings (future)
-let parts = ["a", "b", "c"];
-let result = parts.join(",");
-```
-
-##### Inefficient patterns
-
-```wado
-// Avoid: creates intermediate String objects
-let s = "a" + "b" + "c" + "d";
-
-// Prefer:
-let mut s = "a";
-s += "b";
-s += "c";
-s += "d";
+s += " world";     // s = s + " world"
+s += "!";
 ```
 
 See `docs/wep-2026-01-15-string-type-design.md` for design rationale.
@@ -1718,14 +1660,14 @@ let disabled = false;
 The `null` keyword is equivalent to `None` and represents the absence of a value:
 
 ```wado
-let missing: Option<i32> = null;  // Same as None
-let also_missing = None;          // Standard library identifier
+let missing: Option<i32> = null;            // Same as None
+let also_missing = Option::<i32>::None;
 
 // Both are equivalent
-assert null == None;
+assert missing == also_missing;
 ```
 
-Note: `null` is a language keyword, while `None` is an identifier from the prelude (`Option::None`). They compile to the same instructions.
+Note: `null` is a language keyword, while `None` is a case of the prelude's `Option`. Bare `None` needs an expected type to say which `Option` it belongs to.
 
 A bare `null` — one no expected type has pinned — has the type `Option<!>`: a value of every `Option<T>` and of no other type. That is what a type converts from to accept `null` where an `Option` is not expected, which is how `core:value::Value` takes JSON's `null` in a literal:
 
@@ -1741,7 +1683,7 @@ let doc: Value = { name: "Alice", nickname: null };
 
 #### Character Literals
 
-Character literals use single quotes and represent a Unicode scalar value. While internally represented as a 32-bit value (like `u32`), `char` is a distinct type with Unicode semantics—similar to how `String` differs from `List<u8>`:
+Character literals use single quotes and represent a Unicode scalar value. `char` is a distinct type with Unicode semantics, not an integer, just as `String` is not `List<u8>`:
 
 ```wado
 let letter = 'A';
@@ -1751,7 +1693,7 @@ let emoji = '😀';        // Direct Unicode character
 let newline = '\n';
 ```
 
-See [Escape Sequences](#escape-sequences) for supported escapes (`\'` for char, `\"` for string).
+See [Escape Sequences](#escape-sequences) for the supported escapes.
 
 ```wado
 let a = '\u0041';         // 'A' (BMP)
@@ -1800,7 +1742,7 @@ Casting `char` to non-integer types is a compile error:
 ```wado
 let c = 'A';
 let f = c as f64;     // compile error: char can only be cast to integer types
-let s = c as String;  // compile error: char can only be cast to integer types
+let s = c as String;  // compile error: the two types share no representation
 ```
 
 #### Integer Literals
@@ -1843,7 +1785,7 @@ let e: i8 = 0xFF;                 // compile error: literal out of range for `i8
 let f: i8 = 0xFF as i8;           // OK: explicit bit-pattern reinterpretation (value: -1)
 let g: i32 = 0xFFFF_FFFF;         // compile error: literal out of range for `i32`: 0xFFFF_FFFF
 let h: i32 = 0xFFFF_FFFF as i32;  // OK: explicit bit-pattern reinterpretation (value: -1)
-let i: u32 = 0x1_0000_0000;       // compile error: 33-bit value does not fit in u32
+let i: u32 = 0x1_0000_0000;       // compile error: literal out of range for `u32`: 0x1_0000_0000
 ```
 
 A literal that nothing coerces falls back to `i32`, and the same range check applies there. `-NUM` is checked as one literal, so it reaches the signed minimum.
@@ -1913,9 +1855,7 @@ The content must be ASCII; each `\xNN` escape (two hex digits) or source
 character contributes one byte, and the standard escapes (`\n`, `\t`, `\\`,
 `\"`, `\0`, `\r`, `\'`) are also accepted. Unicode escapes (`\u{...}` /
 `\uHHHH`) are rejected — a Unicode escape denotes a scalar, not a byte; use
-`\xNN` for a raw byte. A byte string lowers directly to a constant data segment
-— never an element-by-element builder — so a large blob costs nothing to
-optimize. (`#include_bytes("path")` produces the same `ByteList` from a file.)
+`\xNN` for a raw byte. (`#include_bytes("path")` produces the same `ByteList` from a file.)
 The default type is `ByteList`, but newtype literal coercion lets it flow into a
 `List<u8>` context (or any type whose base is `List<u8>`) with no cast.
 
@@ -1939,8 +1879,8 @@ except where the table names one:
 
 | Escape   | Character                   |
 | -------- | --------------------------- |
-| `\'`     | Single quote (char only)    |
-| `\"`     | Double quote (string only)  |
+| `\'`     | Single quote                |
+| `\"`     | Double quote                |
 | `` \` `` | Backtick (template only)    |
 | `\\`     | Backslash                   |
 | `\/`     | Forward slash               |
@@ -1951,15 +1891,14 @@ except where the table names one:
 | `\t`     | Tab                         |
 | `\0`     | Null                        |
 | `\$`     | Dollar sign (template only) |
-| `\{`     | Left brace (literal `{`)    |
-| `\}`     | Right brace (literal `}`)   |
+| `\{`     | Left brace (template only)  |
+| `\}`     | Right brace (template only) |
 | `\uHHHH` | Unicode BMP (4 hex digits)  |
 | `\u{H+}` | Unicode full range          |
 
-In a template string only `${` opens an interpolation, so `{` and `}` are already
-literal and need no escaping. Use `\$` to write a literal `$` before a `{`
-(e.g. `` `\${x}` `` renders the text `${x}`). `\{` / `\}` remain accepted but are
-no longer necessary.
+In a template string only `${` opens an interpolation, so `{` and `}` are
+literal and need no escaping, though `\{` and `\}` are accepted. Use `\$` to
+write a literal `$` before a `{` (e.g. `` `\${x}` `` renders the text `${x}`).
 
 For characters outside BMP (U+10000 and above), use either:
 
@@ -1994,7 +1933,7 @@ let pretty = `${p:#?}`;          // pretty-print: "Point {\n  x: 10,\n  y: 20,\n
 // `${p}` (Display) needs an `impl Display` for `Point`; use `${p:?}` for debug output.
 
 // Braces are literal — JSON embeds cleanly without escaping
-let json = `${"key": "${name}"}`;  // {"key": "Alice"}
+let json = `{"key": "${name}"}`;  // {"key": "Alice"}
 ```
 
 See [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md) for the full specifier table, [WEP: Format Traits](./wep-2026-02-01-format-traits.md) for the trait/Formatter infrastructure, and [WEP: Inspect](./wep-2026-02-21-inspect-debug-output.md) for the `:?` debug output format.
@@ -2031,7 +1970,7 @@ let trailing = [1, 2, 3,];            // Trailing comma allowed
 
 ##### Tuple Types
 
-Tuple types use bracket syntax `[T1, T2, ...]`. `Tuple<T1, T2, ...>` is available as an alias.
+Tuple types use bracket syntax `[T1, T2, ...]`.
 
 ```wado
 let point: [i32, i32] = [10, 20];
@@ -2099,24 +2038,24 @@ fn fail(msg: String) -> ! {
 
 #### List Literals
 
-Arrays require explicit conversion from tuple literals using `as` or implicit coercion when the target type is known at compile time.
+A bracket literal becomes a `List` through an explicit `as`, or through implicit coercion where the target type is known.
 
 ```wado
 // Explicit conversion with `as`
 let numbers = [1, 2, 3, 4, 5] as List<i32>;
 
 // Implicit coercion (target type known)
-fn takes_array(a: List<i32>) { ... }
-takes_array([1, 2, 3]);  // OK - compiler knows List<i32> is expected
+fn takes_list(a: List<i32>) { ... }
+takes_list([1, 2, 3]);  // OK - compiler knows List<i32> is expected
 
 // Type annotation
-let explicit: List<i32> = [1, 2, 3];  // Coerced to array
+let explicit: List<i32> = [1, 2, 3];  // Coerced to List
 ```
 
 ##### Coercion Rules
 
-- Compile-time: When the target type is known (function parameter, type annotation), implicit coercion is allowed
-- Runtime/ambiguous: Explicit `as List<T>` is required
+- Where the target type is known (a function parameter, a type annotation), the literal coerces implicitly
+- Elsewhere it is a tuple, and `as List<T>` converts it
 
 ```wado
 let t = [1, 2, 3];               // Tuple [i32, i32, i32] - no context
@@ -2142,15 +2081,11 @@ let mixed: [i32, String, bool] = [1, "hello", true];
 
 See `docs/wep-2026-01-15-tuple-and-array-literals.md` for detailed rationale.
 
-##### List Operations
-
-Arrays support index-based access and assignment:
-
 ##### List Constructors
 
 ```wado
-let arr = List::<i32>::with_capacity(10);     // empty array with pre-allocated capacity
-let bools = List::<bool>::filled(100, true);  // array of 100 elements, all true
+let arr = List::<i32>::with_capacity(10);     // empty list with room for 10 elements
+let bools = List::<bool>::filled(100, true);  // list of 100 elements, all true
 ```
 
 ##### List Operations
@@ -2162,7 +2097,7 @@ let mut arr: List<i32> = [1, 2, 3];
 let first = arr[0];  // 1
 
 // Index assignment (write)
-arr[0] = 100;        // Requires mutable array
+arr[0] = 100;        // Requires a `let mut` binding
 arr[1] = 200;
 
 // List methods
@@ -2172,25 +2107,29 @@ let len = arr.len(); // Get length
 
 ##### Index Assignment Rules
 
-- Requires the array variable to be declared with `let mut`
+- Requires the list binding to be declared with `let mut`
 - Index must be within bounds (runtime check, traps if out of bounds)
-- Works with arrays of any element type
+- Works with lists of any element type
 
 Sorting (stable, O(n log n) worst case):
 
-| Method        | Mutates? | Comparator                      |
-| ------------- | -------- | ------------------------------- |
-| `sort()`      | Yes      | `<` (requires `T: Ord`)         |
-| `sort_by()`   | Yes      | Custom `fn(&T, &T) -> Ordering` |
-| `sorted()`    | No       | `<` (requires `T: Ord`)         |
-| `sorted_by()` | No       | Custom `fn(&T, &T) -> Ordering` |
+| Method        | Mutates? | Comparator                          |
+| ------------- | -------- | ----------------------------------- |
+| `sort()`      | Yes      | `Ord::cmp` (requires `T: Ord`)      |
+| `sort_by()`   | Yes      | Custom `fn mut(&T, &T) -> Ordering` |
+| `sorted()`    | No       | `Ord::cmp` (requires `T: Ord`)      |
+| `sorted_by()` | No       | Custom `fn mut(&T, &T) -> Ordering` |
+
+On a float, `Ord` is the IEEE 754 total order rather than the order `<` gives,
+so a NaN still has a place in a sorted list. See
+[WEP: The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md).
 
 ```wado
 let mut nums: List<i32> = [5, 3, 8, 1];
 nums.sort();                             // in-place ascending
 
 let orig: List<i32> = [5, 3, 8, 1];
-let asc = orig.sorted();                // returns new sorted array
+let asc = orig.sorted();                // returns a new sorted list
 ```
 
 #### Collection Literal Coercion
@@ -2254,7 +2193,7 @@ coercion is not attempted.
 `..base` inside a literal merges through `LiteralSpread`, last write wins:
 
 ```wado
-internal trait LiteralSpread {
+pub trait LiteralSpread with () {
     fn spread_literal(&mut self, base: Self);
 }
 ```
@@ -2263,7 +2202,7 @@ A type without the impl rejects `..base` where it is written, and a sequence
 literal cannot carry one at all — `[..xs, 4]` is a tuple spread.
 
 See [`docs/wep-2026-08-24-literal-from-array.md`](./wep-2026-08-24-literal-from-array.md)
-for the lowering, the impl-selection rule, and the newtype peel.
+for the impl-selection rule and newtype targets.
 
 ### Compile-Time Location Literals
 
@@ -2273,10 +2212,10 @@ Compile-time location literals provide source location information at compile ti
 | ------------------------ | ---------- | -------------------------------------------------- |
 | `#file`                  | `String`   | Current source file path                           |
 | `#line`                  | `i32`      | Current line number (1-indexed)                    |
-| `#function`              | `String`   | Fully specialized function name                    |
+| `#function`              | `String`   | Name of the enclosing function                     |
 | `#data`                  | `String`   | `__DATA__` section content (compile error if none) |
 | `#include_str("path")`   | `String`   | External file content as string                    |
-| `#include_bytes("path")` | `List<u8>` | External file content as bytes                     |
+| `#include_bytes("path")` | `ByteList` | External file content as bytes                     |
 
 ```wado
 fn example() {
@@ -2301,25 +2240,25 @@ __DATA__
 
 #### `#include_str` and `#include_bytes`
 
-`#include_str("path")` reads an external file at compile time and returns its content as a `String`. The file must be valid UTF-8; otherwise, a compile error is raised. `#include_bytes("path")` returns the raw bytes as `List<u8>` without UTF-8 validation.
+`#include_str("path")` reads an external file at compile time and returns its content as a `String`. The file must be valid UTF-8; otherwise, a compile error is raised. `#include_bytes("path")` returns the raw bytes as `ByteList` without UTF-8 validation.
 
 The path argument must be a string literal. Paths are resolved relative to the source file containing the expression. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
 
 ```wado
 let template = #include_str("./templates/header.html");
-let icon: List<u8> = #include_bytes("./assets/logo.png");
+let icon: ByteList = #include_bytes("./assets/logo.png");
 ```
 
 #### `#function` Format
 
-Returns the fully specialized name without signature:
+Returns the name without type arguments or signature:
 
-| Context        | `#function` value            |
-| -------------- | ---------------------------- |
-| Free function  | `my_function`                |
-| Method         | `Point::distance`            |
-| Generic method | `List<String>::len`          |
-| Closure        | `parent_function::{closure}` |
+| Context                 | `#function` value            |
+| ----------------------- | ---------------------------- |
+| Free function           | `my_function`                |
+| Method                  | `Point::distance`            |
+| Method of `Box<String>` | `Box::name`                  |
+| Closure                 | `parent_function::{closure}` |
 
 #### Call-site evaluation in default arguments
 
@@ -2386,8 +2325,7 @@ A `?` in the body needs the return type known — via `-> Type` or an expected
 
 A closure declares no effects; they are inferred from the body.
 `with` after the parameter list, or after `-> Type`, would be that declaration,
-which the compiler does not carry yet and rejects. A handler body therefore
-needs a block or parentheses:
+and is a compile error. A handler body therefore needs a block or parentheses:
 
 ```wado
 let f = || (with Log => &mut sink do { Log::emit(`hi`); });
@@ -2414,7 +2352,7 @@ does with its reference _parameters_, which nothing in the language states — s
 
 ### Function References
 
-A bare function name is an expression of function type. It evaluates to a value of type `fn(P...) -> R [with E...]` matching the function's signature — internally a zero-capture closure over the named function.
+A bare function name is an expression of function type. It evaluates to a value of type `fn(P...) -> R [with E...]` matching the function's signature.
 
 ```wado
 fn double(n: i32) -> i32 { return n * 2; }
@@ -2428,7 +2366,7 @@ let g: fn(i32) -> i32 = double;
 
 Key points:
 
-- Function values carry no observable identity at the Wado level. The runtime uses a Wasm `ref` under the hood, but the language does not let you distinguish "value vs reference to value" — there is no state to observe, and no way to compare two `fn` values.
+- Function values carry no observable identity. There is no state to observe, and no way to compare two `fn` values.
 - `&` and `&mut` apply to `fn`-typed values like to any other value, with no special-casing:
   - `&f` has type `&fn(...)`; `&mut f` (on a mutable binding) has type `&mut fn(...)`.
   - These references behave per the [Reference Types](#reference-types) rules. `&fn(...)` is _not_ a synonym for `fn(...)`; passing one where the other is expected is a type error.
@@ -2437,8 +2375,8 @@ Key points:
 - Generic functions taken as values need their type arguments pinned. Two principled forms are supported:
   - Turbofish on the name itself: `let f = identity::<i32>;` evaluates to a `fn(i32) -> i32` value, and a non-call use like `apply(identity::<i32>, 7)` works the same way.
   - An expected `fn(...)` type at the use site: `let f: fn(i32) -> i32 = identity;` and `apply(identity, 7)` (where `apply`'s parameter is `fn(i32) -> i32`) both pin the type arguments through positional inference against the expected signature.
-  - When neither form applies, the compiler emits a dedicated diagnostic suggesting turbofish or a closure wrapper (`|x| identity(x)`). The error replaces the older "unknown function" cascade that used to leak from `UNKNOWN` typing.
-- Functions that appear at the Component Model boundary still cannot carry function-typed values across — see the closure WEP.
+  - When neither form applies, it is a compile error, and the diagnostic suggests turbofish or a closure wrapper (`|x| identity(x)`).
+- A function type cannot cross the Component Model boundary: an `export fn` whose signature names one is a compile error. See the closure WEP.
 
 ### Default Arguments
 
@@ -2478,7 +2416,7 @@ The same holds for an instance or static method, where the `impl` block's parame
 
 - `self` cannot have a default.
 - Function types do not carry default information; assigning a function with defaults to a `fn(...)` type erases them, and every call site of that variable must supply every argument.
-- Closures cannot declare defaults: a closure value's arity must match its `fn(...)` type. The parser accepts `= expr` on closure parameters for recovery only and the elaborator rejects it.
+- Closures cannot declare defaults: a closure value's arity must match its `fn(...)` type, so `= expr` on a closure parameter is a compile error.
 - `export fn` cannot declare defaults — exported functions appear in the component's WIT signature where every parameter is required by the CM ABI. Split into a private helper plus a thin `export fn` wrapper if defaults are needed.
 - Trait methods may declare defaults only in the trait definition; implementations receive every parameter and cannot add, remove, or change defaults. Direct `impl Type { ... }` methods (not part of any trait) may declare defaults freely.
 
@@ -2587,12 +2525,12 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
 }
 ```
 
-A hole handle answers `lit()` / `raw()` (the preceding segment, escapes
-processed or preserved), `get(&t)` (the value, `V`), `source()` (the
-expression text), `has_spec()`, and `fmt(&t, f)` (rendering as the untagged
-template would). Every answer but `get` and `fmt` is a constant, so after
-monomorphization the tag body is one constant append per segment and one typed
-operation per hole — what an untagged template costs.
+A hole handle answers `index()` (its position), `lit()` / `raw()` (the
+preceding segment, escapes processed or preserved), `get(&t)` (the value, `V`),
+`source()` (the expression text), `has_spec()`, and `fmt(&t, f)` (rendering as
+the untagged template would). `ReflectTemplate::<T>::tail()` and `raw_tail()`
+give the segment after the last hole. Every answer but `get` and `fmt` is a
+constant.
 
 Holes are evaluated once, left to right, before the tag runs. A tag may carry
 effects and return any type. Whether a call folds at compile time is the
