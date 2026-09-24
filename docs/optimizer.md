@@ -18,7 +18,7 @@ branchless conditionals, `array.copy` and `array.fill` for bulk operations, and
 
 | Flag            | Iterations | Inline threshold | Notes                                                 |
 | --------------- | ---------- | ---------------- | ----------------------------------------------------- |
-| `-O0`           | 0          | N/A              | DCE, `match_to_switch`, and the backend rewrites only |
+| `-O0`           | 0          | N/A              | Part of the pipeline; see [Pipeline](#pipeline)       |
 | `-O1`           | 2          | 4                |                                                       |
 | `-O2` (default) | 15         | 16               |                                                       |
 | `-O3`           | 20         | 26               |                                                       |
