@@ -79,6 +79,7 @@ use crate::name::{
 };
 use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
+use crate::synthesis::common::{handle_from_f64, handle_to_f64};
 use crate::tir::{
     EffectRef, StructDef, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
@@ -266,15 +267,15 @@ enum Identity {
     Handle,
 }
 
-/// An unrestricted resource handle as the `f64` it is at every layer.
+/// An unrestricted resource handle as the `u64` bits it is in the guest.
 fn handle_bits(handle: TirExpr) -> TirExpr {
     let span = handle.span;
     TirExpr::new(
         TirExprKind::Cast {
             expr: Box::new(handle),
-            target_type: TypeTable::F64,
+            target_type: TypeTable::U64,
         },
-        TypeTable::F64,
+        TypeTable::U64,
         span,
     )
 }
@@ -3202,6 +3203,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         }
                     }
                     _ => self.reify_expr(&cast.expr, ctx, None),
+                };
+                let (from_handle, to_handle) = {
+                    let tt = self.tysys.type_table.borrow();
+                    (
+                        tt.is_unrestricted_handle(inner.type_id),
+                        tt.is_unrestricted_handle(target_type),
+                    )
+                };
+                let inner = match (from_handle, to_handle) {
+                    (true, false) => handle_to_f64(inner),
+                    (false, true) => return handle_from_f64(inner, target_type),
+                    _ => inner,
                 };
                 TirExpr::new(
                     TirExprKind::Cast {
@@ -10869,13 +10882,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span,
             ))
         };
-        let bound = |value: f64| {
+        let bound = |bits: u64| {
             TirExpr::new(
-                TirExprKind::FloatLiteral {
-                    value,
-                    repr: format!("{value:?}"),
+                TirExprKind::IntLiteral {
+                    value: bits,
+                    repr: bits.to_string(),
                 },
-                TypeTable::F64,
+                TypeTable::U64,
                 span,
             )
         };

@@ -1728,8 +1728,7 @@ pub struct HandleClasses {
 }
 
 impl HandleClasses {
-    /// A handle is `class * STRIDE + index`: an integer-valued `f64` below
-    /// 2^53, so it is never a NaN and `==` on two is exact.
+    /// A handle is `class * STRIDE + index`: an integer-valued `f64` below 2^53.
     pub const STRIDE: f64 = 137_438_953_472.0;
 
     pub fn parse(value: &str) -> Option<Self> {
@@ -1738,12 +1737,13 @@ impl HandleClasses {
         (lo <= hi).then_some(Self { lo, hi })
     }
 
-    /// The half-open interval `[low, high)` of the handles these classes tag.
+    /// The half-open interval `[low, high)` of the handle bits these classes tag.
+    /// A non-negative `f64` orders as its bits do, and no other one falls inside.
     #[must_use]
-    pub fn handle_bounds(self) -> (f64, f64) {
+    pub fn handle_bounds(self) -> (u64, u64) {
         (
-            f64::from(self.lo) * Self::STRIDE,
-            (f64::from(self.hi) + 1.0) * Self::STRIDE,
+            (f64::from(self.lo) * Self::STRIDE).to_bits(),
+            ((f64::from(self.hi) + 1.0) * Self::STRIDE).to_bits(),
         )
     }
 

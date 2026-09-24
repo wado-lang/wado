@@ -152,6 +152,23 @@ pub fn cast(expr: TirExpr, target_type: TypeId) -> TirExpr {
     )
 }
 
+/// The `f64` an unrestricted handle is outside the guest: its bits, reinterpreted.
+pub fn handle_to_f64(handle: TirExpr) -> TirExpr {
+    builtin_call(
+        "f64_reinterpret_i64",
+        vec![cast(handle, TypeTable::I64)],
+        TypeTable::F64,
+    )
+}
+
+/// The unrestricted handle of type `handle_type` whose bits `value`, an `f64`, holds.
+pub fn handle_from_f64(value: TirExpr, handle_type: TypeId) -> TirExpr {
+    cast(
+        builtin_call("i64_reinterpret_f64", vec![value], TypeTable::I64),
+        handle_type,
+    )
+}
+
 /// Split a packed pointer/length `i64` — the `(ptr | len << 32)` encoding
 /// `cm_lower_string` / `cm_lower_array_u8` return — into its `ptr` (low 32
 /// bits) and `len` (high 32 bits) `i32` expressions. The one place the packing

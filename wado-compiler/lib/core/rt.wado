@@ -217,7 +217,8 @@ global HANDLE_LIMIT: f64 = 9007199254740992.0;
 /// or -1 for an `f64` no host mints.
 #[compiler_item("handle_class")]
 internal fn handle_class(handle: f64) -> i32 {
-    if !(handle >= 0.0 && handle < HANDLE_LIMIT && builtin::f64_floor(handle) == handle) {
+    let sign_clear = builtin::i64_reinterpret_f64(handle) >= 0;
+    if !(sign_clear && handle < HANDLE_LIMIT && builtin::f64_floor(handle) == handle) {
         return -1;
     }
     return builtin::f64_floor(handle / HANDLE_CLASS_STRIDE) as i32;

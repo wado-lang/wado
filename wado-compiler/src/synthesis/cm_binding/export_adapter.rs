@@ -23,9 +23,9 @@ use crate::tir::{
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call,
-    expr_stmt, generic_method_call, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
-    local_ref, loop_stmt, null_expr, option_none, option_some, param_local, return_stmt,
-    split_packed_ptr_len, synth_span,
+    expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const, if_stmt,
+    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, null_expr, option_none,
+    option_some, param_local, return_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::cm_free::{
@@ -129,13 +129,13 @@ fn lower_to_flat_inner(
             }]
         }
         ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
-            let scalar = ctx
-                .type_table
-                .borrow()
-                .handle_scalar(type_id)
-                .expect("a resource is a handle");
+            let (scalar, flat_value) = if ctx.type_table.borrow().is_unrestricted_handle(type_id) {
+                (TypeTable::F64, handle_to_f64(value))
+            } else {
+                (TypeTable::I32, value)
+            };
             let local = alloc_local(next_local, locals, scalar);
-            stmts.push(let_stmt("$flat", local, scalar, value));
+            stmts.push(let_stmt("$flat", local, scalar, flat_value));
             vec![FlatLocal {
                 index: local,
                 cm_type: cm_val_type_from_type_id(scalar),
@@ -939,7 +939,14 @@ pub(super) fn synthesize_lift_from_flat_params(
                     );
                 }
                 let scalar = cm_val_type_to_type_id(flat_types[0]);
-                (local_ref(flat_param_locals[0], "$p", scalar), 1)
+                let flat = local_ref(flat_param_locals[0], "$p", scalar);
+                if type_table_cell
+                    .borrow()
+                    .is_unrestricted_handle(target_type_id)
+                {
+                    return (handle_from_f64(flat, target_type_id), 1);
+                }
+                (flat, 1)
             }
         },
         Type::Generic(generic) => match generic.name.as_str() {

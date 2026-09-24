@@ -1803,14 +1803,23 @@ impl CmInterfaceRegistry {
             .contains_key(&(source.to_string(), name.to_string()))
     }
 
+    /// The unrestricted resource `ty` is, or references.
+    #[must_use]
+    pub fn extern_handle(&self, ty: &Type) -> Option<Type> {
+        let handle = self.deref_extern_handle(ty);
+        let Type::Named(named) = &handle else {
+            return None;
+        };
+        let source = self.source_interface(named)?;
+        self.is_unrestricted_resource(&source, &named.name)
+            .then_some(handle)
+    }
+
     /// The CM type of a declared parameter: an extern-handle loses its
-    /// reference, then newtypes resolve.
+    /// reference and stays the resource; other newtypes resolve.
     fn cm_param_type(&self, ty: &Type) -> Type {
-        resolve_type(
-            &self.deref_extern_handle(ty),
-            &self.newtypes,
-            &self.source_interfaces,
-        )
+        self.extern_handle(ty)
+            .unwrap_or_else(|| resolve_type(ty, &self.newtypes, &self.source_interfaces))
     }
 
     /// Drop the reference around an extern-handle: the handle is a value, so

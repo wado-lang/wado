@@ -16,8 +16,9 @@ use crate::tir::{
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, expr_stmt,
-    generic_method_call, generic_method_call_monomorphized, i32_const, i64_const, if_stmt,
-    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, split_packed_ptr_len, synth_span,
+    generic_method_call, generic_method_call_monomorphized, handle_to_f64, i32_const, i64_const,
+    if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, split_packed_ptr_len,
+    synth_span,
 };
 
 use super::lift::tree_map_instance;
@@ -1437,6 +1438,9 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 flat_args,
                 ctx,
             );
+        }
+        Type::Named(_) if ctx.cm_interface_registry.extern_handle(&resolved).is_some() => {
+            flat_args.push(handle_to_f64(value));
         }
         // Primitive, flags, resource, or borrow handle: the value is the single flat arg.
         Type::Named(_) | Type::Reference(_) | Type::MutReference(_) => flat_args.push(value),

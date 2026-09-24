@@ -3742,7 +3742,7 @@ fn generate_handle_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '
             ref_handle_type,
             &eq_trait_name,
             resource.span,
-            |handle| common::cast(handle, TypeTable::F64),
+            |handle| common::cast(handle, TypeTable::U64),
         );
         generated_functions.push(Rc::new(RefCell::new(func)));
         ctx.record_impl(receiver, &eq_key);
@@ -4468,7 +4468,7 @@ fn unrestricted_inspect_body(
             "$h",
             handle_local,
             TypeTable::F64,
-            common::cast(handle, TypeTable::F64),
+            common::handle_to_f64(handle),
         ),
         common::let_stmt("$class", class_local, TypeTable::I32, class_value),
         common::expr_stmt(common::internal_call(

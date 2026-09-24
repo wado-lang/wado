@@ -532,10 +532,16 @@ slice does not name falls back to its nearest named ancestor, which is what an
 open world needs.
 
 A narrowing to `T` with classes `lo..=hi` lowers to
-`lo * 2^37 <= h && h < (hi + 1) * 2^37` and a branch. It is two float compares
-with no boundary crossing, so a `match` with `k` type-pattern arms costs no host
-call at all. The handle flows through unchanged in the matching arm, because the
-two Wado types are one wasm value.
+`lo * 2^37 <= h && h < (hi + 1) * 2^37` and a branch. The guest compares the
+handle's bits as a `u64`, which orders a non-negative `f64` as its value does and
+puts every other `f64` outside the range. It is two integer compares with no
+boundary crossing, so a `match` with `k` type-pattern arms costs no host call at
+all. The handle flows through unchanged in the matching arm, because the two
+Wado types are one wasm value.
+
+The guest holds the bits rather than the `f64` so that every comparison on a
+handle is exact: `f64` equality would make a NaN unequal to itself and `-0.0`
+equal to `0.0`, and `as` makes a handle of any `f64`.
 
 The host hands out one handle per object, so the same object always crosses as
 the same number. That interning is what makes `==` a plain compare (below).
@@ -568,7 +574,9 @@ Four interactions need explicit rules. Everything else (`Default`, `Ord`, `Drop`
 
 Every unrestricted resource auto-derives `Eq`, so a type holding one derives it as well. Two handles compare equal iff they reference the same host object — JavaScript's `===` semantics for the browser case.
 
-`Eq` lowers to `f64` equality on the two handles. The host interns handles, and an object's class never changes, so two handles are equal exactly when they name one object. No host call is made.
+`Eq` compares the bits of the two handles. The host interns handles, and an object's class never changes, so two handles are equal exactly when they name one object. No host call is made.
+
+The comparison is on bits, not on `f64` values, so it agrees with itself on any `f64` that `as` makes a handle of: a NaN handle equals itself, and `0.0` and `-0.0` are two handles.
 
 Cross-type comparison falls out of subtyping. `el == html_input` is well-typed when one operand is upcast to the other's static type, and the upcast leaves the number as it was.
 
@@ -633,7 +641,7 @@ How `extends` and the operations on it lower from Wado to WIT/CM, and from WIT/C
 | ------ | --------------------------------------------------------------- |
 | Wado   | each type in the `extends` chain is distinct (`Element ≠ Node`) |
 | WIT/CM | one type, `extern-handle`                                       |
-| Wasm   | an `f64`: a class and a host-table index                        |
+| Wasm   | an `f64` bit pattern: a class and a host-table index            |
 
 This is the same erasure pattern as [Newtype Semantics](./wep-2026-01-29-newtype-semantics.md): the Wado type system holds the structure, the wasm output knows nothing about it. extends differs from newtype only in that **method namespacing is preserved at the WIT layer** — methods are imported under per-Wado-type WIT interfaces, even though the receiver type is universal.
 
@@ -700,13 +708,14 @@ they read.
 | `let n: Node = el;` (implicit upcast)    | identity                                                              |
 | `el.foo()` resolving to `Node::foo`      | call `node.foo(el, ...)`                                              |
 | `input: HtmlInputElement` (type pattern) | compare `el` against the target's class range, branch; `el` unchanged |
-| `a == b` for unrestricted `a`, `b`       | `f64.eq` on the two handles                                           |
+| `a == b` for unrestricted `a`, `b`       | `i64.eq` on the bits of the two handles                               |
 | `` `${x:?}` ``                           | name the resource owning `x`'s class, then write the class and index  |
 | `` `${x}` ``                             | call `display(x)`                                                     |
 
 Upcast and the receiver argument of inherited methods are wasm-level no-ops; the same handle value flows through unchanged.
 
-`as` converts a handle to or from `f64`, or upcasts it to a resource it extends.
+`as` converts a handle to or from `f64`, keeping every bit, or upcasts it to a
+resource it extends.
 No other cast accepts one. A cast to an integer would lose the class, and a
 downcast by `as` would skip the class test a type pattern makes.
 
@@ -736,12 +745,12 @@ Implemented, with tests in `wado-compiler/tests/integration/unrestricted_resourc
 - Method resolution over the chain, and the corner cases: override forbidden, trait-vs-inherited ambiguity, statics do not inherit, `Self` fixed at the declaring resource.
 
 - Class numbering — `resolve_resource_extends` checks each committed link against the rules in §"Host runtime contract", and `wado-from-idl` numbers `web:dom` in pre-order (`tests/fixtures/error_resource_classes.wado`).
-- Lowering. An unrestricted resource is not a CM `resource`: it registers as an `f64` newtype (`component_model.rs`), so every `own` / `borrow` path passes it by, a `&self` receiver loses its reference, and the WIT renders the same `f64` in every position (`wit_emit.rs::extern_handle`). The guest holds it as an `f64` too. Upcast and an inherited method's receiver are wasm-level no-ops — the call resolves to the declaring resource through `MethodOwner::Ancestor`.
+- Lowering. An unrestricted resource is not a CM `resource`: it registers as an `f64` newtype (`component_model.rs`), so every `own` / `borrow` path passes it by, a `&self` receiver loses its reference, and the WIT renders the same `f64` in every position (`wit_emit.rs::extern_handle`). The guest holds the `f64`'s bits as a `u64` (`TypeTable::handle_scalar`), which the boundary reinterprets, and linear memory stores as the same eight bytes. Upcast and an inherited method's receiver are wasm-level no-ops — the call resolves to the declaring resource through `MethodOwner::Ancestor`.
 
 - The registry reads that newtype two ways. `resolve_type` peels the handle to its `f64`, the view the boundary decides with: the flat ABI, the canonical options, the emitted WIT. `value_type` keeps the resource's own type, the view the guest holds. A binding's signature takes the second, because `Option<Element>` and `Option<f64>` are distinct GC types (`tests/integration/web_dom.rs`). `cm_type_to_type_id` finds the resource's `TypeId` under its package, a `web:` package being one flat file. A module outside the stdlib declares such a resource as the stdlib would: it is not a local newtype, so no instance exports it as a named type.
 
 - Type patterns. `p: T` is a pattern wherever one stands, and a `let` annotation is that pattern. An ascription `T` strictly extending the subject's type narrows: a plain `let` rejects it as refutable, and a `match` over one needs a final `_` and reports an arm an earlier ancestor arm shadows. The test compares the handle against `T`'s class range, and a target without `classes` is rejected.
-- `Eq`. `==` / `!=` on two handles one of whose types extends the other compares the two `f64`s. The trait holds of every unrestricted resource, so `Option<Node>` or a struct holding one derives it too (`tests/fixtures/resource_eq_through_option.wado`).
+- `Eq`. `==` / `!=` on two handles one of whose types extends the other compares their bits (`tests/fixtures/unrestricted_handle_bits.wado`). The trait holds of every unrestricted resource, so `Option<Node>` or a struct holding one derives it too (`tests/fixtures/resource_eq_through_option.wado`).
 - `as` between a handle and anything but `f64` or a handle type it upcasts to is rejected (`tests/fixtures/error_unrestricted_resource_cast.wado`).
 - `Inspect` renders the dynamic type (`tests/fixtures/inspect_unrestricted_handle.wado`).
 

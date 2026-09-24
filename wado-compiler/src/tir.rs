@@ -1202,23 +1202,23 @@ impl TypeTable {
             })
     }
 
-    /// The scalar a resource handle is: an `f64` for an unrestricted resource,
-    /// an `i32` for any other. `None` where `ty` is not a resource.
+    /// The scalar a resource handle is in the guest: the `u64` bits of the `f64`
+    /// an unrestricted handle is outside it, or an `i32`. `None` for a non-resource.
     #[must_use]
     pub fn handle_scalar(&self, ty: TypeId) -> Option<TypeId> {
         match self.get(ty) {
             ResolvedType::Resource { def } if self.is_unrestricted_resource(*def) => {
-                Some(Self::F64)
+                Some(Self::U64)
             }
             ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => Some(Self::I32),
             _ => None,
         }
     }
 
-    /// Whether `ty` is an unrestricted resource, whose handle is an `f64`.
+    /// Whether `ty` is an unrestricted resource, whose handle is an `f64` outside the guest.
     #[must_use]
     pub fn is_unrestricted_handle(&self, ty: TypeId) -> bool {
-        self.handle_scalar(ty) == Some(Self::F64)
+        self.handle_scalar(ty) == Some(Self::U64)
     }
 
     /// Record `child extends parent`, already validated by the caller.

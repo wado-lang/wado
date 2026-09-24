@@ -925,12 +925,15 @@ pub(super) fn cm_layout_i32(ty: &Type, registry: &CmInterfaceRegistry) -> (i32, 
 }
 
 /// The integer store for one flat value of `ty`, at the width its CM layout
-/// gives it. A type arriving as several values is not one store.
+/// gives it. An unrestricted handle stores its `f64` bits as the `u64` it is.
 pub(super) fn scalar_store_op(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
     names: &CmStdlibNames,
 ) -> &'static str {
+    if cm_interface_registry.extern_handle(ty).is_some() {
+        return "i64_store";
+    }
     match flatten_param_type(ty, cm_interface_registry, names)[..] {
         [TypeTable::F64] => "f64_store",
         [TypeTable::F32] => "f32_store",
@@ -951,6 +954,9 @@ pub(super) fn handle_load_op(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
 ) -> (&'static str, TypeId) {
+    if cm_interface_registry.extern_handle(ty).is_some() {
+        return ("i64_load", TypeTable::U64);
+    }
     let [flat] = cm_interface_registry.cm_flatten(ty)[..] else {
         panic!("a handle is one flat value: {ty:?}");
     };
@@ -1172,10 +1178,11 @@ fn flat_types_from_type_id_inner(
             }
         }
         ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
-            let scalar = type_table
-                .handle_scalar(type_id)
-                .expect("a resource is a handle");
-            flat_types_from_type_id_inner(scalar, out, tir_modules, type_table, names);
+            out.push(if type_table.is_unrestricted_handle(type_id) {
+                cm_abi::CmValType::F64
+            } else {
+                cm_abi::CmValType::I32
+            });
         }
         ResolvedType::Enum { .. } => out.push(cm_abi::CmValType::I32),
         ResolvedType::Variant { def } => {
