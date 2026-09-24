@@ -2625,17 +2625,10 @@ fn declaring_resource(method_info: &LocalMethodName) -> Option<(ModuleSource, St
 /// The type args of a resource type behind any `Ref`/`MutRef`, if the type is
 /// a resource.
 fn resource_type_args(type_id: TypeId, type_table: &TypeTable) -> Option<Vec<TypeId>> {
-    use crate::tir::ResolvedType;
-    let mut tid = type_id;
-    loop {
-        match type_table.get(tid) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                tid = *inner;
-            }
-            ResolvedType::Resource { .. } => return Some(Vec::new()),
-            ResolvedType::GenericResource { type_args, .. } => return Some(type_args.clone()),
-            _ => return None,
-        }
+    match type_table.get(type_table.peel_refs(type_id)) {
+        ResolvedType::Resource { .. } => Some(Vec::new()),
+        ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
+        _ => None,
     }
 }
 
@@ -2745,17 +2738,12 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 .method_info
                 .as_ref()
                 .and_then(|mi| mi.cm_name.as_ref().map(|cm| (mi, cm)));
-            // Only cm-backed method calls can rewrite to a binding, so resolve
-            // the resource instantiation lazily inside the guard. The inner
-            // block scopes the read borrow: the body below re-borrows
-            // `type_table` mutably (e.g. `make_ref` when a by-value `self`
-            // receiver must be wrapped), so the read borrow must not span it.
-            // The wrapper belongs to the resource declaring the method, which
-            // an `extends` chain can put above the receiver's own type. Such a
-            // resource is never generic, so the receiver's type args are its.
+            // `extends` can declare the method above the receiver's resource,
+            // never on a generic one, so the receiver's type args are its.
             if let Some((method_info, cm_name)) = mi_cm
                 && let Some(resource) = declaring_resource(method_info)
                 && let Some(type_args) = {
+                    // Scoped: the body re-borrows `type_table` mutably.
                     let tt = ctx.type_table.borrow();
                     resource_type_args(receiver.type_id, &tt)
                 }

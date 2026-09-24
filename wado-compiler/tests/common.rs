@@ -13,8 +13,6 @@
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
-use wado_compiler::module_source::CmNamespace;
-use wasmtime::component::types::ComponentItem;
 use wasmtime::component::{Component, ComponentExportIndex, Func, Instance, Linker, ResourceTable};
 use wasmtime::{Config, Engine, InstanceAllocationStrategy, PoolingAllocationConfig, Store};
 use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
@@ -958,36 +956,10 @@ pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     Ok(linker)
 }
 
-/// [`linker`] for `component`, each `web:*` import a trap. Mirrors
-/// `wado_cli::runtime::create_linker`: no Wado host is a browser, so an effect
-/// handler answers a `web:*` call or nothing does.
+/// [`linker`] for `component` as `wado` builds it, each `web:*` import a trap.
 pub fn host_linker(component: &Component) -> anyhow::Result<Linker<WasiState>> {
-    let engine = component.engine();
-    let mut linker = linker(engine)?;
-    let component_type = component.component_type();
-    for (interface, import) in component_type.imports(engine) {
-        if !matches!(
-            CmNamespace::split_specifier(interface),
-            Some((CmNamespace::Web, _))
-        ) {
-            continue;
-        }
-        let ComponentItem::ComponentInstance(instance) = import.ty else {
-            anyhow::bail!("`{interface}` is imported as something other than an instance");
-        };
-        let mut linker_instance = linker.instance(interface)?;
-        for (function, export) in instance.exports(engine) {
-            let ComponentItem::ComponentFunc(_) = export.ty else {
-                anyhow::bail!("`{interface}` exports `{function}`, which is not a function");
-            };
-            let name = format!("{interface}#{function}");
-            linker_instance.func_new(function, move |_, _, _, _| {
-                Err(wasmtime::Error::msg(format!(
-                    "`{name}` was called with no effect handler installed for it"
-                )))
-            })?;
-        }
-    }
+    let mut linker = linker(component.engine())?;
+    web_host::define_web_imports_as_traps(&mut linker, component)?;
     Ok(linker)
 }
 
@@ -1040,67 +1012,11 @@ pub fn lib_func(
         .unwrap_or_else(|| panic!("`{name}` export not found"))
 }
 
-/// Host implementation for `wasi:clocks/timezone`. Mirrors
-/// `wado_cli::timezone_host` (we cannot depend on `wado-cli` from the
-/// compiler tests because of the dependency direction).
-mod timezone_host {
-    use wasmtime::component::{HasData, Linker};
-    use wasmtime_wasi::p3::bindings::clocks::timezone::{self, Host, Instant, LinkOptions};
-
-    pub struct WadoTimezone;
-
-    impl HasData for WadoTimezone {
-        type Data<'a> = TimezoneCtx;
-    }
-
-    pub struct TimezoneCtx;
-
-    impl Host for TimezoneCtx {
-        fn iana_id(&mut self) -> wasmtime::Result<Option<String>> {
-            Ok(iana_time_zone::get_timezone().ok())
-        }
-
-        fn utc_offset(&mut self, when: Instant) -> wasmtime::Result<Option<i64>> {
-            Ok(local_offset_nanos(when.seconds))
-        }
-
-        fn to_debug_string(&mut self) -> wasmtime::Result<String> {
-            Ok(match iana_time_zone::get_timezone() {
-                Ok(timezone) => timezone,
-                Err(err) => format!("timezone unavailable: {err}"),
-            })
-        }
-    }
-
-    pub fn add_to_linker<T: 'static>(linker: &mut Linker<T>) -> anyhow::Result<()> {
-        let mut options = LinkOptions::default();
-        options.clocks_timezone(true);
-        timezone::add_to_linker::<T, WadoTimezone>(linker, &options, |_| TimezoneCtx)?;
-        Ok(())
-    }
-
-    #[cfg(unix)]
-    fn local_offset_nanos(secs: i64) -> Option<i64> {
-        use std::mem::MaybeUninit;
-        // `libc::time_t` is `i64` on 64-bit Linux/macOS but `i32` on some
-        // platforms; keep the conversion fallible for portability even where
-        // clippy would call it useless on the current target.
-        #[allow(clippy::useless_conversion)]
-        let t: libc::time_t = secs.try_into().ok()?;
-        let mut tm: MaybeUninit<libc::tm> = MaybeUninit::uninit();
-        let ret = unsafe { libc::localtime_r(&raw const t, tm.as_mut_ptr()) };
-        if ret.is_null() {
-            return None;
-        }
-        let tm = unsafe { tm.assume_init() };
-        Some(tm.tm_gmtoff * 1_000_000_000)
-    }
-
-    #[cfg(not(unix))]
-    fn local_offset_nanos(_secs: i64) -> Option<i64> {
-        None
-    }
-}
+// The host modules of `wado` itself, which the compiler tests cannot depend on.
+#[path = "../../wado-cli/src/timezone_host.rs"]
+mod timezone_host;
+#[path = "../../wado-cli/src/web_host.rs"]
+mod web_host;
 
 /// Backward-compat alias
 pub fn cli_linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
