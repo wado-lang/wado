@@ -1,0 +1,74 @@
+//! ANTLR4's error recovery: each expected tree is what `antlr4-oracle.sh`
+//! printed ("Skipped terminals in parse trees" in `antlr4-compatibility.md`).
+
+use { strip_skip_markers } from "./support/tree_compare.wado";
+
+use rec from "./grammars/antlr_recovery.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_antlr_recovery" },
+    };
+
+fn assert_tree(result: &rec::ParseResult, expected: String) {
+    let actual = strip_skip_markers(&rec::to_string_tree(result));
+    assert actual == expected, `\nexpected: ${expected}\nactual:   ${actual}`;
+    assert !result.ok(), `a recovered parse still reports: ${expected}`;
+}
+
+test "a loop entry deletes one extraneous token" {
+    assert_tree(&rec::parse_loop("x z y y !"), "(loop x z y y !)");
+}
+
+test "a loop entry with two bad tokens fails the rule, which skips to EOF" {
+    assert_tree(&rec::parse_loop("x z z !"), "(loop x z z !)");
+}
+
+test "after an iteration, a loop skips to what it or its rule can continue with" {
+    assert_tree(&rec::parse_loop("x y z y !"), "(loop x y z y !)");
+    assert_tree(&rec::parse_loop("x y z z y !"), "(loop x y z z y !)");
+}
+
+test "a loop entry at EOF fails the rule without inserting" {
+    assert_tree(&rec::parse_loop("x"), "(loop x)");
+}
+
+test "a loop that may end its rule leaves the token to the caller" {
+    assert_tree(&rec::parse_tail("x z y !"), "(tail (tailed x) z y !)");
+    assert_tree(&rec::parse_tail("x z !"), "(tail (tailed x) z !)");
+    assert_tree(&rec::parse_tail("x y z z !"), "(tail (tailed x y) z z !)");
+}
+
+test "an optional, a block and a `+` sync on entry" {
+    assert_tree(&rec::parse_opt("x z y !"), "(opt x z y !)");
+    assert_tree(&rec::parse_opt("x z z !"), "(opt x z z !)");
+    assert_tree(&rec::parse_grp("x z y !"), "(grp x z y !)");
+    assert_tree(&rec::parse_grp("x z !"), "(grp x z !)");
+    assert_tree(&rec::parse_plus("x z y !"), "(plus x z y !)");
+    assert_tree(&rec::parse_plus("x z !"), "(plus x z !)");
+    assert_tree(&rec::parse_plus("x y z y !"), "(plus x y z y !)");
+}
+
+test "a failed rule resynchronises on its own call's follow" {
+    assert_tree(&rec::parse_twice("x y z y w"), "(twice (one x) y (one z y) w)");
+    assert_tree(&rec::parse_twice("z z y x w"), "(twice (one z z) y (one x) w)");
+}
+
+test "only a rule with alternatives syncs on entry" {
+    assert_tree(&rec::parse_single("z y x"), "(single (inner z y) x)");
+    assert_tree(&rec::parse_single("z z y x"), "(single (inner z z y) x)");
+    assert_tree(&rec::parse_multi("z y"), "(multi z (my y))");
+    assert_tree(&rec::parse_multi("z z y"), "(multi z z y)");
+}
+
+test "a left-recursive rule syncs on its primary alternatives" {
+    assert_tree(&rec::parse_expr("z 1"), "(expr (e z 1))");
+    assert_tree(&rec::parse_expr("( z 1 )"), "(expr (e ( (e z 1) )))");
+    assert_tree(&rec::parse_expr("( z z ) + 1"), "(expr (e (e ( (e z z) )) + (e 1)))");
+}
+
+// ANTLR4 inserts a missing terminal wherever the token after it can follow,
+// the rules under way included; Gale inserts only against its own sequence.
+#[TODO]
+test "a terminal missing at the end of a rule is inserted where EOF follows" {
+    assert_tree(&rec::parse_loop("x y z"), "(loop x y z <missing TK_LIT_BANG>)");
+    assert_tree(&rec::parse_loop("x y"), "(loop x y <missing TK_LIT_BANG>)");
+}

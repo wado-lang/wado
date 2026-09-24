@@ -1,0 +1,184 @@
+//! The token sets error recovery reads off the ATN: what may follow each rule
+//! call inside its caller, and what each decision expects within its rule.
+
+use { Atn, rule_body_decision } from "./atn.wado";
+use {
+    ATN_RULE_STOP,
+    ATN_TR_EPSILON,
+    ATN_TR_ATOM,
+    ATN_TR_NOT_ATOM,
+    ATN_TR_WILDCARD,
+    ATN_TR_RULE,
+    ATN_TR_PRECEDENCE,
+    ATN_PLUS_LOOP_BACK,
+    ATN_LOOP_END,
+} from "./runtime/atn.wado";
+use { bits_set, bits_test, bits_union_into } from "./token_kinds.wado";
+
+pub struct RecoverySets {
+    /// Indexed by `atn_call_site`.
+    pub call_follow: List<List<i32>>,
+    /// Indexed by `atn_decision`: before the first entry into the subrule.
+    pub decision_entry: List<Option<List<i32>>>,
+    /// Indexed by `atn_decision`: after an iteration of a `*` / `+`.
+    pub decision_back: List<Option<List<i32>>>,
+    /// Indexed by rule: the rule's own alternative block, when it decides.
+    pub rule_entry: List<Option<List<i32>>>,
+}
+
+pub fn empty_recovery_sets() -> RecoverySets {
+    return RecoverySets { call_follow: [], decision_entry: [], decision_back: [], rule_entry: [] };
+}
+
+struct LocalNext {
+    bits: List<u64>,
+    reaches_end: bool,
+}
+
+struct Walker {
+    rule_first: List<List<u64>>,
+    rule_nullable: List<bool>,
+    mark: List<i32>,
+    stamp: i32,
+    any_token: List<u64>,
+}
+
+impl Walker {
+    fn local_next(&mut self, atn: &Atn, from: i32) -> LocalNext {
+        self.stamp += 1;
+        let mut out = LocalNext { bits: [], reaches_end: false };
+        let mut stack: List<i32> = [from];
+        while let Some(s) = stack.pop() {
+            if self.mark[s] == self.stamp {
+                continue;
+            }
+            self.mark[s] = self.stamp;
+            let st = &atn.states[s];
+            if st.kind == ATN_RULE_STOP {
+                out.reaches_end = true;
+                continue;
+            }
+            for let t of &st.transitions {
+                if t.kind == ATN_TR_EPSILON || t.kind == ATN_TR_PRECEDENCE {
+                    stack.push(t.target);
+                } else if t.kind == ATN_TR_ATOM {
+                    if t.label >= 0 {
+                        bits_set(&mut out.bits, t.label);
+                    }
+                } else if t.kind == ATN_TR_NOT_ATOM || t.kind == ATN_TR_WILDCARD {
+                    let _ = bits_union_into(&mut out.bits, &self.any_token);
+                } else if t.kind == ATN_TR_RULE {
+                    if t.label < 0 {
+                        continue;
+                    }
+                    let _ = bits_union_into(&mut out.bits, &self.rule_first[t.label]);
+                    if self.rule_nullable[t.label] {
+                        stack.push(t.follow);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    fn settle_rule_first(&mut self, atn: &Atn) {
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for let mut r = 0; r < atn.rule_start.len(); r += 1 {
+                let next = self.local_next(atn, atn.rule_start[r]);
+                if bits_union_into(&mut self.rule_first[r], &next.bits) {
+                    changed = true;
+                }
+                if next.reaches_end && !self.rule_nullable[r] {
+                    self.rule_nullable[r] = true;
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    /// `null` where the rule may end instead: what comes next is the caller's.
+    fn expected(&mut self, atn: &Atn, from: i32) -> Option<List<i32>> {
+        let next = self.local_next(atn, from);
+        if next.reaches_end {
+            return null;
+        }
+        return Option::Some(bits_to_kinds(&next.bits, atn.num_tokens));
+    }
+}
+
+fn bits_to_kinds(bits: &List<u64>, num_tokens: i32) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let mut k = 0; k < num_tokens; k += 1 {
+        if bits_test(bits, k) {
+            out.push(k);
+        }
+    }
+    return out;
+}
+
+/// `eof` is `TK_EOF`, which no wildcard or `~X` matches.
+pub fn recovery_sets(atn: &Atn, eof: i32) -> RecoverySets {
+    let nrules = atn.rule_start.len();
+    let mut any_token: List<u64> = [];
+    for let mut k = 0; k < atn.num_tokens; k += 1 {
+        if k != eof {
+            bits_set(&mut any_token, k);
+        }
+    }
+    let mut w = Walker {
+        rule_first: List::filled(nrules, [] as List<u64>),
+        rule_nullable: List::filled(nrules, false),
+        mark: List::filled(atn.states.len(), 0),
+        stamp: 0,
+        any_token,
+    };
+    w.settle_rule_first(atn);
+
+    let mut call_follow: List<List<i32>> = [];
+    for let ret of &atn.call_site_returns {
+        call_follow.push(
+            if *ret < 0 { [] as List<i32> } else { bits_to_kinds(&w.local_next(atn, *ret).bits, atn.num_tokens) },
+        );
+    }
+
+    let mut decision_entry: List<Option<List<i32>>> = [];
+    let mut decision_back: List<Option<List<i32>>> = [];
+    for let d of &atn.decision_sites {
+        if *d < 0 {
+            decision_entry.push(null);
+            decision_back.push(null);
+            continue;
+        }
+        let state = atn.decision_state[*d];
+        let at_decision = w.expected(atn, state);
+        if atn.states[state].kind == ATN_PLUS_LOOP_BACK {
+            decision_entry.push(w.expected(atn, plus_body_entry(atn, state)));
+        } else {
+            decision_entry.push(at_decision);
+        }
+        decision_back.push(at_decision);
+    }
+
+    let mut rule_entry: List<Option<List<i32>>> = [];
+    for let mut r = 0; r < nrules; r += 1 {
+        let d = rule_body_decision(atn, r);
+        rule_entry.push(if d < 0 { null } else { w.expected(atn, atn.decision_state[d]) });
+    }
+    return RecoverySets { call_follow, decision_entry, decision_back, rule_entry };
+}
+
+/// The state a `+` loop-back re-enters its body at: its one edge not to the
+/// loop's end.
+fn plus_body_entry(atn: &Atn, back: i32) -> i32 {
+    let mut entry = -1;
+    for let t of &atn.states[back].transitions {
+        if atn.states[t.target].kind != ATN_LOOP_END {
+            assert entry < 0, "a `+` loop-back re-enters its body by one edge";
+            entry = t.target;
+        }
+    }
+    assert entry >= 0, "a `+` loop-back re-enters its body";
+    return entry;
+}

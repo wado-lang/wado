@@ -77,11 +77,21 @@ Recovery replaces `expect(k)` with `expect_or_recover(k, sync)`:
    zero-width `missing` `k`, do not advance (`MissingToken`).
 4. **sync** — otherwise skip tokens into a `K_ERROR` region until a token in
    `FOLLOW(rule) ∪ FIRST(rest) ∪ anchors`; at EOF, fill remaining required
-   terminals with `missing` (`UnterminatedConstruct`).
+   terminals with `missing` (`UnterminatedConstruct`) where the input may end
+   after them, and fail the rule where it may not.
 
-Alternative dispatch with no viable alternative produces a `K_ERROR` node and a
-`NoViableAlternative` diagnostic. Sync sets reuse Gale's existing FIRST/FOLLOW
-analysis.
+A decision syncs the way ANTLR4's does. On entry to a `*`, `+`, `?`, block, or
+rule with alternatives, a token none of them can start is deleted when the next
+one can, and otherwise fails the rule. After a loop iteration, the loop skips
+to what it or the rules under way can continue with. Neither runs where the
+rule may end at the decision, which leaves the token to the caller.
+
+A failed rule recovers at its own entry. It reports once, then skips to a token
+the rules under way can continue with. That set is the union of the follows of
+the call sites on the invocation stack, computed from the ATN. The skipped
+tokens stay in the failed rule's node, and the caller carries on. After an
+error, neither a failed rule nor a sync reports again until a token matches, so
+the cascade of one mistake is one diagnostic.
 
 ## Diagnostics
 
@@ -105,7 +115,7 @@ applies after sorting, so it keeps the earliest errors.
 
 `recovery` names the edit applied: `Inserted`, `Deleted`, `SkippedTo`,
 `FilledMissing` (an insertion at end of input), or `None` for a failure that
-unwound.
+failed its rule.
 
 `line` / `col` are resolved once per parse. The line index behind them is built
 only when there is a diagnostic.
@@ -137,13 +147,16 @@ terminal recovers in place via a `recovering` flag rather than unwinding a
   (`<skip>`, `ExtraToken`), insert a missing one when the current token
   continues the rule (`<missing>`, `MissingToken`, `sync` = static
   FIRST-of-rest), or skip an unrecoverable run into a lossless `<error>`
-  (`K_ERROR`) region and resync to a `sync` token. Only a no-sync mismatch
-  unwinds.
+  (`K_ERROR`) region and resync to a `sync` token. A no-sync mismatch fails
+  the rule, which recovers at its entry as above.
 - Scan-gated `*`/`+` loops over a RuleRef body enter a malformed element when
   its FIRST token is present, so the broken element lands in the tree with its
   repair edits.
-- The no-viable-alt fallback records a `NoViableAlternative` diagnostic (the
-  unwind/fold represents the error region).
+- The no-viable-alt fallback records a `NoViableAlternative` diagnostic, and
+  the rule's resync keeps the tokens it skips as `<skip>` children.
+- Decision sync and rule-level resync match the jar's trees
+  (`tests/driver_cst_antlr_recovery_test.wado`); where Gale's own edits still
+  differ is listed in `TODO.md`.
 - `max_errors` is threaded onto the parser: once reached, recovery stops and
   folds the tree closed.
 - Fixtures in `tests/driver_cst_error_recovery_test.wado` assert the
@@ -165,10 +178,6 @@ statement fragment builds full subtrees (opt-in, byte-identical when empty). See
 
 ### Deferred
 
-- **No-viable `K_ERROR` _node_.** The no-viable fallback carries the
-  `NoViableAlternative` code but does not open an explicit `K_ERROR` node:
-  the diagnostic's `rule_stack` is built on unwind, which is incompatible
-  with placing a node and continuing. The fold represents the error region.
 - **Related-note bracket hints (e.g. "'(' opened here").** Needs
   bracket-pair detection the IR does not support today — `LiteralOp` carries
   no literal text, and pairing openers/closers across nesting plus tracking

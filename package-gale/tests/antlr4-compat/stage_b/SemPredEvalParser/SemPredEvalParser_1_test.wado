@@ -4,10 +4,14 @@
 // Source category: SemPredEvalParser (ANTLR4 runtime-testsuite).
 // Triage data: package-gale/tests/antlr4-compat/status.toml
 
-use { normalize_tree } from "../../../support/tree_compare.wado";
+use { normalize_tree, strip_skip_markers } from "../../../support/tree_compare.wado";
 
 // Source descriptor: SemPredEvalParser/PredFromAltTestedInLoopBack_1 (ANTLR4 runtime-testsuite).
 // Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*]).
+//
+// The descriptor's recovery consumes tokens, which ANTLR4 renders bare and
+// Gale wraps in `<skip …>`. `strip_skip_markers` drops the wrapper (not the
+// token) so the compare is over the recovery decision, not the marker.
 
 use t_PredFromAltTestedInLoopBack_1 from "../../grammars/SemPredEvalParser/PredFromAltTestedInLoopBack_1.g4"
     with {
@@ -17,8 +21,6 @@ use t_PredFromAltTestedInLoopBack_1 from "../../grammars/SemPredEvalParser/PredF
         },
     };
 
-// triage: recovery, not the predicate: `paraContent` matches, and Gale inserts a `<missing NL>` at end of input where ANTLR inserts nothing.
-#[TODO]
 test "stage_b: SemPredEvalParser/PredFromAltTestedInLoopBack_1" {
     let input = "s
 
@@ -27,7 +29,7 @@ x
 ";
     let expected = "(file_ (para (paraContent s) \\n \\n) (para (paraContent \\n x \\n)))";
     let result = t_PredFromAltTestedInLoopBack_1::parse_file_(&input);
-    let actual = t_PredFromAltTestedInLoopBack_1::to_string_tree(&result);
+    let actual = strip_skip_markers(&t_PredFromAltTestedInLoopBack_1::to_string_tree(&result));
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
 }

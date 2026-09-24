@@ -20,6 +20,7 @@ use { Admits, Diagnostic, DiagnosticKind, DiagnosticOwner, admits_or_everything 
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
+use { RecoverySets, empty_recovery_sets } from "./recovery_sets.wado";
 use { gate_body_of, SCAN_GATE_HANDLE, SCAN_GATE_FIELD } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
@@ -190,6 +191,7 @@ pub struct GenContext {
     /// number in `atn_predict_with_stack` instead of the retired unique
     /// exit-first BlockStart search. Empty for grammars without the ATN.
     atn_decision_sites: List<i32>,
+    recovery: RecoverySets,
     /// Index of the parser rule currently being emitted (set by
     /// `gen_parse_fn`). Read when emitting a non-greedy `??` to decide whether
     /// the rule is left-recursive (so the `??`'s `atn_predict_with_stack` call
@@ -310,7 +312,13 @@ pub struct GenContext {
     alt_exit_label: Option<String>,
     /// By helper name, the one call a helper that only forwards would make,
     /// which its callers make instead.
-    forwarded_calls: TreeMap<String, String>,
+    forwarded_calls: TreeMap<String, Forwarded>,
+}
+
+/// A forwarding helper's one call, and the call-site stamps it sets first.
+pub struct Forwarded {
+    pub stamps: List<String>,
+    pub call: String,
 }
 
 fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
@@ -372,6 +380,7 @@ impl GenContext {
             needs_lr_atn_seen: false,
             atn_call_site_returns: [],
             atn_decision_sites: [],
+            recovery: empty_recovery_sets(),
             current_rule_index: -1,
             scan_group_counter: 0,
             lr_loop_entry_decisions: [],
@@ -739,6 +748,41 @@ impl GenContext {
             return -1;
         }
         return self.atn_decision_sites[site];
+    }
+
+    pub fn set_recovery_sets(&mut self, sets: RecoverySets) {
+        self.recovery = sets;
+    }
+
+    pub fn recovery_sets(&self) -> &RecoverySets {
+        return &self.recovery;
+    }
+
+    /// What a subrule expects on entry, as `TK_*` names; `null` where its
+    /// rule may end there instead, or the site names no decision.
+    pub fn decision_entry_expect(&self, site: i32) -> Option<List<String>> {
+        return self.expect_names(&self.recovery.decision_entry, site);
+    }
+
+    /// What a `*` / `+` expects after an iteration.
+    pub fn decision_back_expect(&self, site: i32) -> Option<List<String>> {
+        return self.expect_names(&self.recovery.decision_back, site);
+    }
+
+    /// What a rule's own alternative block expects on entry.
+    pub fn rule_entry_expect(&self, rule: i32) -> Option<List<String>> {
+        return self.expect_names(&self.recovery.rule_entry, rule);
+    }
+
+    fn expect_names(&self, sets: &List<Option<List<i32>>>, i: i32) -> Option<List<String>> {
+        // `Atn.decision_sites` is sparse: a site past its end marks no decision.
+        if i < 0 || i >= sets.len() {
+            return null;
+        }
+        if let Some(ids) = &sets[i] {
+            return Option::Some(self.token_kinds.names_of(ids));
+        }
+        return null;
     }
 
     /// Record the rule whose body is currently being emitted (its index in
@@ -1181,6 +1225,10 @@ impl GenContext {
     /// The `TK_*` names by kind id, the order a vocabulary table is built in.
     pub fn token_kind_names(&self) -> &List<String> {
         return &self.token_kinds.names;
+    }
+
+    pub fn token_kind_id<S: AsStrSlice>(&self, name: S) -> i32 {
+        return self.token_kinds.id_of(name);
     }
 
     /// Install the vocabulary display names (`vocab_display_names`) by kind id.
@@ -2328,11 +2376,11 @@ impl GenContext {
         return Option::<i32>::Some(id);
     }
 
-    pub fn set_forwarded_call<S: AsStrSlice, S1: AsStrSlice>(&mut self, helper: S, call: S1) {
-        self.forwarded_calls[helper.to_string()] = call.to_string();
+    pub fn set_forwarded_call<S: AsStrSlice>(&mut self, helper: S, forwarded: Forwarded) {
+        self.forwarded_calls[helper.to_string()] = forwarded;
     }
 
-    pub fn forwarded_call<S: AsStrSlice>(&self, helper: S) -> Option<String> {
+    pub fn forwarded_call<S: AsStrSlice>(&self, helper: S) -> Option<Forwarded> {
         return self.forwarded_calls.get_str(helper);
     }
 
