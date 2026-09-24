@@ -5077,8 +5077,8 @@ mod tests {
     }
 
     /// An extern-handle is a value, so `&Handle` crosses as the handle itself
-    /// wherever it is written. A `Type::Reference` surviving here reaches
-    /// `codegen::component`, which has no borrow type to lower it to and panics.
+    /// wherever it is written, and the boundary sees its `f64`. A surviving
+    /// `Type::Reference` has no borrow type in `codegen::component` to lower to.
     #[test]
     fn an_extern_handle_argument_is_peeled_outside_a_resource_method() {
         let registry = registry_from(
@@ -5102,10 +5102,11 @@ mod tests {
         for (interface, method) in [("Handle", "sibling"), ("Dom", "adopt")] {
             for ty in param_types(&registry, interface, method) {
                 assert_matches!(
-                    ty,
-                    Type::Named(n) if n.name == "f64",
+                    &ty,
+                    Type::Named(n) if n.name == "Handle",
                     "{interface}::{method} keeps a handle behind a reference"
                 );
+                assert_matches!(registry.resolve_type(&ty), Type::Named(n) if n.name == "f64");
             }
         }
     }
