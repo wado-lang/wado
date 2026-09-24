@@ -39,6 +39,19 @@ test "a nested operand leaves between its and" {
     );
 }
 
+// Leaving an operand restores the caller's precedence, so an enclosing `or`
+// still takes a tighter `and` as its right operand.
+test "an operand the climb leaves keeps its caller's precedence" {
+    assert_tree(
+        "between X and X or X and X or X and X ;",
+        "(stat (expr between (expr (expr (expr (expr X) and (expr X)) or (expr (expr X) and (expr X))) or (expr X)) and (expr X)) ;)",
+    );
+    assert_tree(
+        "between X or X and X and X or X and X ;",
+        "(stat (expr between (expr (expr (expr X) or (expr (expr (expr X) and (expr X)) and (expr X))) or (expr X)) and (expr X)) ;)",
+    );
+}
+
 test "binary and/or chain parses" {
     assert_tree(
         "X1 and X2 or X3 and X4 ;",
