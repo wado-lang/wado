@@ -712,12 +712,12 @@ Y : 'Y' ;
 ";
     let mut tg = parse_grammar(tinput, "test.g4");
     let tout = generate(&mut tg, &DEFAULT_OPTIONS).source;
-    assert str_contains(&tout, "fn _parse_s__inner_scan_0(");
+    assert str_contains(&tout, "fn scan_s_alt_0(");
 }
 
 test "an alternative's scan helper is emitted once for the scan and the parse" {
-    // Alt 0 opens both of `scan_r`'s partitions, so the scan side hoists it;
-    // the parse side's tournament scans it too, and must call that function.
+    // Alt 0 is contested in `scan_r`, so the scan side emits its function; the
+    // parse side's tournament scans it too, and must call that function.
     let input = "grammar T;
 s : r EOF ;
 r : a X | A a Y | B a Z ;
@@ -983,8 +983,12 @@ ID : [e-k]+ ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, "fn scan_l("), output;
-    for let arm of ["alt_kind == TK_A", "suffix_kind == TK_L", "_sk == TK_L"] {
+    for let f of ["fn scan_l(", "fn _parse_l__inner("] {
+        let body = extract_fn_body(&output, f);
+        assert body.len() > 0, output;
+        assert !str_contains(&body, "if kind == TK_A {"), body;
+    }
+    for let arm of ["suffix_kind == TK_L", "_sk == TK_L"] {
         assert !str_contains(&output, arm), output;
     }
 }
@@ -1451,9 +1455,9 @@ ifStmt : 'if' 'y' statement ('else' statement)?? ;
     // ATN simulator (full context), not by a static first-set peek — so the
     // shape is still a single `Option<T>` if (not a `while` loop), but the
     // condition is the simulator call. The decision number is stamped at
-    // compile time (`atn_predict_with_stack`), retiring the old
+    // compile time (`atn_predict_once`), retiring the old
     // `atn_ng_optional_enter` exit-first BlockStart search.
-    assert str_contains(&body, "if atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&body, "if atn_predict_once(&ATN_SIM,");
     assert str_contains(&body, ") == 1");
     assert !str_contains(&body, "atn_ng_optional_enter(");
     assert !str_contains(&body, "if p.peek_kind() == TK_LIT_else");
@@ -1642,8 +1646,8 @@ test "non-greedy ?? inside a left-recursive rule threads min_prec" {
     // The atom fn carries `min_prec`, and the `??` enter check forwards it
     // to the simulator (stamped decision number, `== 1` for ENTER).
     assert str_contains(&output, "fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32");
-    assert str_contains(&output, ", &p.atn_stack, &p.kinds, p.pos, TK_EOF, min_prec) == 1");
-    assert str_contains(&output, "atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&output, ", &mut p.atn, &p.kinds, p.pos, TK_EOF, min_prec) == 1");
+    assert str_contains(&output, "atn_predict_once(&ATN_SIM,");
 }
 
 // Two non-greedy `??` in one rule must emit two distinct ATN decision numbers.
@@ -1657,8 +1661,8 @@ test "multiple ?? in a rule emit distinct ATN decision numbers" {
     let mut g = parse(TWO_QQ_CODEGEN_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_s__inner(");
-    assert str_contains(&body, "atn_predict_with_stack(&ATN_SIM, 0, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0) == 1");
-    assert str_contains(&body, "atn_predict_with_stack(&ATN_SIM, 1, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0) == 1");
+    assert str_contains(&body, "atn_predict_once(&ATN_SIM, 0, &mut p.atn, &p.kinds, p.pos, TK_EOF, 0) == 1");
+    assert str_contains(&body, "atn_predict_once(&ATN_SIM, 1, &mut p.atn, &p.kinds, p.pos, TK_EOF, 0) == 1");
     assert !str_contains(&body, "atn_ng_optional_enter(");
 }
 
@@ -1675,7 +1679,7 @@ test "at-end-conflict multi-alt rule routes through the ATN simulator" {
     let mut g = parse(AT_END_CONFLICT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_x__inner(");
-    assert str_contains(&body, "let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&body, "let _atn_alt = atn_predict_once(&ATN_SIM,");
     assert str_contains(&body, "if _atn_alt ==");
     assert !str_contains(&body, "_sd_best_i");
 }
@@ -1692,7 +1696,7 @@ test "FOLLOW-disjoint at-end conflict keeps the static tournament" {
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_x__inner(");
     assert str_contains(&body, "_sd_best_i");
-    assert !str_contains(&body, "atn_predict_with_stack");
+    assert !str_contains(&body, "atn_predict");
     assert !str_contains(&output, "global ATN_SIM");
 }
 
@@ -1708,7 +1712,7 @@ test "at-end conflict routes through the ATN when a nullable rule hides the call
     let mut g = parse(AT_END_NULLABLE_GAP_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_x__inner(");
-    assert str_contains(&body, "let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&body, "let _atn_alt = atn_predict_once(&ATN_SIM,");
     assert !str_contains(&body, "_sd_best_i");
 }
 
@@ -1723,7 +1727,7 @@ test "wildcard caller suffix keeps the at-end conflict on the ATN" {
     let mut g = parse(AT_END_WILDCARD_FOLLOW_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_x__inner(");
-    assert str_contains(&body, "let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&body, "let _atn_alt = atn_predict_once(&ATN_SIM,");
     assert !str_contains(&body, "_sd_best_i");
 }
 
@@ -1967,7 +1971,9 @@ test "the overlap rule dispatch orders its fallback last too" {
     let mut g = parse(RULE_OVERLAP_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_x__inner(");
-    let empty_arm = find_substr(&body, "if true");
+    // The follow set is exact, so the empty alternative is also tested by name;
+    // its unconditional arm is still the last.
+    let empty_arm = find_substr(&body, "scope:");
     let a_arm = find_substr(&body, "if kind == TK_A");
     assert a_arm >= 0, `the A-led alternatives lost their arm: ${body}`;
     assert empty_arm >= 0, `the empty alternative lost its arm: ${body}`;
@@ -1983,17 +1989,14 @@ test "an optional over a wildcard has no first set to guard on" {
     assert count_substr(&body, "p.any()") > 0, `the wildcard body must still be emitted: ${body}`;
 }
 
-test "a nullable alternative with a first set keeps its index" {
-    // Nullable is not the same as untestable. `A?` can match nothing, but a
-    // lookahead of `a` selects it, so it is not the arm that goes last —
-    // demoting it lets `B` take the `b` that the rule's caller needs.
+test "a nullable alternative the caller can follow contends with the one it follows into" {
+    // `A?` can match nothing, and then the `b` belongs to the caller; `B` takes
+    // it itself. Which is right depends on what the caller has left, so the
+    // simulator decides rather than an arm order.
     let mut g = parse(NULLABLE_BUT_SELECTABLE_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_r__inner(");
-    let opt_arm = find_substr(&body, "scope:");
-    let b_arm = find_substr(&body, "kind == TK_B");
-    assert opt_arm >= 0, `the nullable alternative lost its arm: ${body}`;
-    assert b_arm < 0 || opt_arm < b_arm, `a nullable alternative is not the trailing arm: ${body}`;
+    assert count_substr(&body, "let _atn_alt = ") == 1, `the contested lookahead is not simulated: ${body}`;
 }
 
 test "a wildcard behind a nullable prefix still makes its alternative open-ended" {
@@ -2037,6 +2040,17 @@ test "the op walker keeps an alternative open-ended through a rule in place" {
     assert named_arm < 0 || wild_arm < named_arm, `it was demoted behind a later alternative: ${body}`;
 }
 
+/// Whether the open-ended alt 0 of `s` competes on `a` before alt 1 can be
+/// committed to there — where a tie goes to it, the lowest viable alternative.
+fn open_alt_competes_on_a(body: &String) -> bool {
+    let a_arm = find_substr(body, "kind == TK_A");
+    if a_arm < 0 {
+        return false;
+    }
+    let open_scan = find_substr_from(body, "_sd_p_0 =", a_arm);
+    return open_scan >= 0 && open_scan < find_substr_from(body, "_parse_s__inner_alt_1(p)", a_arm);
+}
+
 test "an alternative open-ended through a rule keeps its index too" {
     // An empty first set says nothing about the surface element that produced
     // it, so reading the elements answers for a `.` written in place and not
@@ -2044,24 +2058,16 @@ test "an alternative open-ended through a rule keeps its index too" {
     let mut g = parse(INDIRECT_WILDCARD_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_s__inner(");
-    let wild_arm = find_substr(&body, "scope:");
-    let named_arm = find_substr(&body, "TK_A");
-    assert wild_arm >= 0, `the open-ended alternative lost its arm: ${body}`;
-    assert named_arm < 0 || wild_arm < named_arm, `it was moved past a later alternative: ${body}`;
+    assert open_alt_competes_on_a(&body), `the open-ended alternative was dropped from the \`a\` branch: ${body}`;
 }
 
 test "a wildcard alternative keeps its index against a narrower one" {
-    // It admits everything and shadowing what follows is the correct answer
-    // here — lowest viable alternative wins. Only an alternative no lookahead
-    // can test belongs at the end.
+    // It admits everything, `a` included, so it competes wherever the narrower
+    // alternative does and the tie is its — lowest viable alternative wins.
     let mut g = parse(WILDCARD_FIRST_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_s__inner(");
-    // A rule's unconditional arm is a bare `scope:` block, not `if true`.
-    let wild_arm = find_substr(&body, "scope:");
-    let named_arm = find_substr(&body, "TK_A");
-    assert wild_arm >= 0, `the wildcard alternative lost its arm: ${body}`;
-    assert named_arm < 0 || wild_arm < named_arm, `the wildcard alternative was moved past a later one: ${body}`;
+    assert open_alt_competes_on_a(&body), `the wildcard alternative was dropped from the \`a\` branch: ${body}`;
 }
 
 // An open-ended alternative can still have an enumerated first set: `A? .`
@@ -2081,7 +2087,7 @@ test "an open-ended alternative still contributes the first set it does have" {
     // alternative's own tokens have to reach both.
     let mut g = parse(OPEN_ENDED_WITH_FIRST_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let both = "global EXPECTED_0: List<i32> = [TK_A, TK_B];";
+    let both = ": List<i32> = [TK_A, TK_B];";
     assert find_substr(&output, &both) >= 0, `expected ${both}, got: ${output}`;
 }
 
@@ -2135,8 +2141,7 @@ test "dispatch branches sharing a sub-dispatch are emitted once" {
     assert count_substr(&body, "if p.peek_kind() == TK_A") == 0, `A got its own branch: ${body}`;
 }
 
-// Alt 1 (`n`) is reachable from the {A,B} partition it shares with alt 0 and
-// from its own {C} partition, so its body must be hoisted, not copied twice.
+// Alts 0 and 1 share `A` and `B`, which the token after them tells apart.
 global REPEATED_SCAN_ALT_G4: String = "
 grammar T;
 s : e EOF ;
@@ -2150,19 +2155,37 @@ K : 'k' ;
 WS : [ \\t\\r\\n]+ -> skip ;
 ";
 
-test "a scan alt reached from several partitions is emitted once" {
+test "a scan decides by the parse's lookahead, not by scanning every candidate" {
     let mut g = parse(REPEATED_SCAN_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, "fn scan_e_alt_1("), `alt 1 was not hoisted into a helper: ${output}`;
     let scan_e = extract_fn_body(&output, "fn scan_e(");
-    assert count_substr(&scan_e, "scan_e_alt_1(tokens, start") == 2, `both partitions must call the hoisted helper: ${scan_e}`;
-    assert count_substr(&scan_e, "scan_n(tokens, pos") == 0, `alt 1 body still inlined in scan_e: ${scan_e}`;
+    assert str_contains(&scan_e, "if la_1 == TK_LIT_LPAREN {"), scan_e;
+    assert str_contains(&scan_e, "return scan_e_alt_0(tokens, start"), scan_e;
+    assert str_contains(&scan_e, "return scan_e_alt_1(tokens, start"), scan_e;
 }
 
-test "a scan alt reached once stays inline" {
+test "a gate the scan cannot evaluate does not put its untested arm first" {
+    // The parse tests `p.ok()` and falls through to `A`; an ungated empty arm
+    // in the scan would end every scan of `r` before `A` is tried.
+    let input = "grammar G;
+options { language = Wado; }
+s : r A B EOF | r A C EOF ;
+r : { p.ok() }? | A ;
+A : 'a' ; B : 'b' ; C : 'c' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    let scan_r = extract_fn_body(&output, "fn scan_r(");
+    let tested = scan_r.find("if kind == TK_A {");
+    let untested = scan_r.find("scope:");
+    assert tested matches { Some(_) } && untested matches { Some(_) }, scan_r;
+    assert tested.unwrap() < untested.unwrap(), scan_r;
+}
+
+test "an uncontested alternative is scanned in place" {
     let mut g = parse(REPEATED_SCAN_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    assert !str_contains(&output, "fn scan_e_alt_2("), `single-use alt 2 was hoisted: ${output}`;
+    assert !str_contains(&output, "fn scan_e_alt_2("), output;
 }
 
 // `RustParser.g4`'s `crate : innerAttribute* item* EOF`: the reserve walks the

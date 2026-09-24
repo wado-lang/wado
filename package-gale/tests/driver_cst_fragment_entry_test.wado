@@ -41,11 +41,11 @@ test "fragment recovers a statement sequence under root" {
     assert tree == "(prog (<error> (stmt do x ;) (stmt do y ;)))", `unexpected tree: ${tree}`;
 }
 
-test "fragment without the option builds nothing" {
+test "fragment without the option builds no subtree" {
     let r = fe_off::parse("do x ; do y ;");
     assert !r.ok(), "fragment should report a diagnostic";
     let tree = fe_off::to_string_tree(&r);
-    assert tree == "prog", `unexpected tree: ${tree}`;
+    assert tree == "(prog <skip do> <skip x> <skip ;> <skip do> <skip y> <skip ;>)", `unexpected tree: ${tree}`;
 }
 
 test "fragment with trailing junk terminates" {

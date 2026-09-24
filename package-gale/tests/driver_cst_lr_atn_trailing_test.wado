@@ -1,0 +1,36 @@
+//! An ATN-class LR rule whose looser alternative shares its lead token with a
+//! tighter one. The trailing operand still climbs from its own precedence.
+//! Expected trees are the published ANTLR4 jar's (black-box oracle).
+
+use g from "./grammars/lr_atn_trailing.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_atn_trailing" },
+    };
+
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${input}: ${g::to_string_tree(&result)}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+}
+
+test "the tighter alternative chains left-associatively" {
+    assert_tree("a x b ;", "(stat (expr (expr a) x (expr b)) ;)");
+    assert_tree("a x b x c ;", "(stat (expr (expr (expr a) x (expr b)) x (expr c)) ;)");
+}
+
+test "a y after the operand selects the looser alternative" {
+    assert_tree("a x b y c ;", "(stat (expr (expr a) x (expr b) y (expr c)) ;)");
+    assert_tree(
+        "a x b y c x d y e ;",
+        "(stat (expr (expr (expr a) x (expr b) y (expr c)) x (expr d) y (expr e)) ;)",
+    );
+}
+
+test "the trailing operand takes a tighter operator that shares the lead token" {
+    assert_tree("a x b y c x d ;", "(stat (expr (expr a) x (expr b) y (expr (expr c) x (expr d))) ;)");
+}
+
+test "the atom's operand climbs the shared x when one is left over" {
+    assert_tree("y a x b x c ;", "(stat (expr y (expr (expr a) x (expr b)) x (expr c)) ;)");
+}

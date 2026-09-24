@@ -9,6 +9,7 @@ use {
     canonicalize_empty_alt_groups,
     alias_parser_literals,
     assign_atn_call_sites,
+    assign_atn_leaf_sites,
     assign_atn_decisions,
     assign_action_ids,
     find_lexer_rule,
@@ -29,7 +30,7 @@ use {
     lexer_grammar_run_action_ids,
     lexer_mode_attr_use,
 } from "./lexer_gen.wado";
-use { gen_parser, grammar_has_at_end_conflict } from "./parser_gen.wado";
+use { gen_parser, grammar_scans_through_atn } from "./parser_gen.wado";
 use { collect_members, translate_gate_bodies } from "./action_gen.wado";
 use { gen_kind_set_helpers, gen_follow_mask_globals, gen_sync_set_globals } from "./kind_set_gen.wado";
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
@@ -61,6 +62,7 @@ use { CodeWriter } from "lib:wadopoet";
 use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
+use { recovery_sets } from "./recovery_sets.wado";
 use { TreeMap, TreeSet } from "core:collections";
 use { collect_referenced_names } from "./gen_util.wado";
 use {
@@ -134,6 +136,7 @@ pub fn canonicalize_for_analysis(grammar: &mut Grammar) -> TokenKinds {
     // return states) is keyed consistently. Runs after canonicalization (the
     // numbered shape is the post-canonicalization one) and before lowering.
     assign_atn_call_sites(grammar);
+    assign_atn_leaf_sites(grammar);
     // Must run after `assign_atn_call_sites` (its `Repeat` / `Group` rebuild
     // would otherwise reset the freshly stamped decision-site ids).
     assign_atn_decisions(grammar);
@@ -241,16 +244,15 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         }
     }
     let lowered = lower_for_analysis(grammar, &lit_tokens, &mut ctx);
-    // Build the ATN up front when the grammar needs the simulator, so parser
-    // emit can push each rule call's exact return state (`call_site_returns`)
-    // and `gen_atn_data_global` can serialize the very same ATN. Gate-free
-    // grammars skip this entirely.
-    if !ctx.needs_atn() && grammar_has_at_end_conflict(grammar, &lowered, &mut ctx) {
-        ctx.mark_needs_atn();
+    if grammar_scans_through_atn(grammar, &lowered, &mut ctx) {
+        ctx.mark_needs_scan_atn();
     }
-    let mut atn = empty_atn();
+    // Every grammar reads its recovery sets off the ATN; only the simulator's
+    // grammars also embed it.
+    let atn = build_atn_with(grammar, &lowered);
+    let eof = ctx.eof_kind_id();
+    ctx.set_recovery_sets(recovery_sets(&atn, eof));
     if ctx.needs_atn() {
-        atn = build_atn_with(grammar, &lowered);
         ctx.set_atn_call_site_returns(&atn.call_site_returns);
         ctx.set_atn_decision_sites(&atn.decision_sites);
         let mut lr_decs: List<i32> = [];
@@ -329,11 +331,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     if emit_follow {
         gen_follow_mask_globals(&mut w, &ctx, &named);
     }
-    // Serialized ATN blob for the runtime simulator. Only emitted when
-    // lowering saw a construct that needs it (a non-greedy `??` or an
-    // ATN-class LR rule).
     if ctx.needs_atn() {
-        gen_atn_data_global(&mut w, &atn, ctx.needs_scan_atn());
+        gen_atn_data_global(&mut w, &atn, ctx.needs_lr_atn());
     }
     // Serialized lexer ATN blob, decoded once into `LATN_SIM`, for the
     // runtime lexer simulator (`latn_match`).
@@ -348,10 +347,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         &RuntimeFeatures {
             emit_follow,
             atn_decode: ctx.needs_atn() || needs_latn,
-            // Several decision kinds route here, each on its own condition;
-            // the emitted parser is the one place they all meet.
-            atn_predict: body.contains("atn_predict_with_stack("),
-            atn_lr: ctx.needs_scan_atn(),
+            atn_predict: ctx.needs_atn(),
+            atn_lr: ctx.needs_lr_atn(),
             latn: needs_latn,
             highlight: emit_highlight,
             superclass: ctx.has_superclass(),
@@ -593,16 +590,8 @@ fn element_has_open_first(e: &Element) -> bool {
 
 /// Emit the decoded `ATN_SIM` global: the serialized whole-grammar ATN the
 /// inlined runtime decodes once, at construction, into the module-level sim.
-fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
-    emit_atn_blob_global(w, atn, "ATN_SIM", emit_scan_globals);
-    // The mutable scan caller stack. The scan emit pushes/pops it around
-    // operand scans so an ATN-class LR rule's scan loop can route through
-    // `atn_lr_loop_decision` exactly like the parse side. Only needed when an
-    // ATN-class LR rule exists (a non-greedy-`??`-only grammar uses the
-    // simulator but not the scan-side routing).
-    if emit_scan_globals {
-        w.line("global mut SCAN_STACK: List<i32> = [];");
-    }
+fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, lr_tables: bool) {
+    emit_atn_blob_global(w, atn, "ATN_SIM", lr_tables);
     w.blank();
 }
 

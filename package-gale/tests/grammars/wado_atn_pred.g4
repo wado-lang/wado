@@ -43,4 +43,14 @@ af : { false }? 'a' 'b' { p.emit("ab"); }
    | { false }? 'a' 'b' 'c' { p.emit("abc"); }
    ;
 
+// A scan asks the same decision: `scanned`'s alternatives agree past any fixed
+// lookahead, so each scans `xg`, where both alternatives are viable and the
+// false gate leaves only the longer one.
+scanned : xg 'c'? 'k'* 'x' { p.emit("x"); }
+        | xg 'c'? 'k'* 'y' { p.emit("y"); }
+        ;
+xg : { false }? 'a' 'b' { p.emit("ab"); }
+   | 'a' 'b' 'c' { p.emit("abc"); }
+   ;
+
 WS : ' ' -> skip ;

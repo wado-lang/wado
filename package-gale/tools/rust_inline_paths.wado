@@ -292,11 +292,6 @@ test "macro hygiene is not an import" {
     assert find_inline_paths(&source).unwrap().len() == 0;
 }
 
-// `RustParser.g4` predates edition-2024 precise capturing, so `use<..>` in a
-// bound position is a parse error today — reported as an unmeasurable file
-// rather than silently counted wrong. Remove the `#[TODO]` once the grammar
-// gains `useBound`.
-#[TODO]
 test "a precise capture list is not a use item" {
     let source = "fn f<T>(t: T) -> impl Sized + use<T> { crate::wrap(t) }\n";
     let hits = find_inline_paths(&source).unwrap();

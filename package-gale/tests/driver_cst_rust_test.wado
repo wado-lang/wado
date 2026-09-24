@@ -809,3 +809,10 @@ test "attr: an unsafe attribute with a value" {
     let r = rlex_prs("#[unsafe(export_name = \"g\")]\npub fn f() {}");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
 }
+
+// Precise capturing (Rust 2024): `use<..>` in a bound is a capture list.
+test "bound: a precise capture list" {
+    let r = rlex_prs("fn f<'a, T>(t: &'a T) -> impl Sized + use<'a, T, Self,> { t }");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    assert rust::to_string_tree(&r).contains("(useBound use <"), rust::to_string_tree(&r);
+}

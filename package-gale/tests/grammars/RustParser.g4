@@ -1037,9 +1037,22 @@ typeParamBounds
     : typeParamBound (PLUS typeParamBound)* PLUS?
     ;
 
+// LOCAL: `useBound` — precise capturing `impl Trait + use<'a, T>` (Rust 2024),
+// absent upstream.
 typeParamBound
     : lifetime
     | traitBound
+    | useBound
+    ;
+
+useBound
+    : KW_USE LT ((useBoundGenericArg COMMA)* useBoundGenericArg COMMA?)? GT
+    ;
+
+useBoundGenericArg
+    : lifetime
+    | identifier
+    | KW_SELFTYPE
     ;
 
 traitBound

@@ -20,6 +20,7 @@ use { Admits, Diagnostic, DiagnosticKind, DiagnosticOwner, admits_or_everything 
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
+use { RecoverySets, empty_recovery_sets } from "./recovery_sets.wado";
 use { gate_body_of, SCAN_GATE_HANDLE, SCAN_GATE_FIELD } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
@@ -59,6 +60,11 @@ pub struct FollowMaskEntry {
 /// each continuation at the same depth, so a mask that already reaches it
 /// is the whole gate.
 pub global FOLLOW_MASK_MAX_K: i32 = FOLLOW_MAX_DEPTH;
+
+/// The parser's ATN state (`AtnState`): its field, and the name a scan
+/// function's `&mut` parameter borrows it under.
+pub global ATN_STATE_HANDLE: String = "atn";
+pub global ATN_STATE_TYPE: String = "AtnState";
 
 /// The labeled rule calls of one rule whose capture an action reads: `spans`
 /// carry the call's token range (`$x.text`), `nodes` its builder row (`$x.ctx`).
@@ -161,53 +167,37 @@ pub struct GenContext {
     /// paying an extra stack slot per recursive frame (the
     /// `Performance/ExpressionGrammar_2` stack-exhaustion regression).
     caller_follow_gate_seen: bool,
-    /// Set by lowering when it lowers a non-greedy optional (`??`) or an
-    /// ATN-class LR rule. When set, emit includes the runtime ATN simulator
-    /// infrastructure (the shared `ATN_SIM` global, decoded from its
-    /// serialized blob, the `Parser.atn_stack` field, and the
-    /// rule-entry stack push/pop) and routes the `??` enter/skip decision
-    /// through `atn_predict_with_stack` (keyed by the `??`'s stamped decision
-    /// number). Grammars without either stay byte-identical. (`*?`/`+?` keep
-    /// the dedicated non-greedy strategy and do not set this.)
+    /// Set where a decision routes to the runtime ATN simulator; gates its
+    /// infrastructure, so a grammar without one stays byte-identical.
     needs_atn_seen: bool,
-    /// Set by lowering for an ATN-class LR rule. Gates the scan-side caller
-    /// stack (`SCAN_STACK`) and the scan-side LR loop routing, so a
-    /// non-greedy-`??`-only grammar (which shares the same `ATN_SIM` but
-    /// needs no scan-side LR routing) does not carry a dead scan stack.
+    /// Set where a scan decides through the simulator too. Gates the scans'
+    /// `atn` parameter, so a `??`-only grammar's scans borrow nothing.
     needs_scan_atn_seen: bool,
+    /// Set by lowering for an ATN-class LR rule. Gates the LR tables.
+    needs_lr_atn_seen: bool,
     /// The ATN call-site → return-state correspondence (`Atn.call_site_returns`,
     /// indexed by `RuleRefElement.atn_call_site`). Populated after lowering
     /// by `set_atn_call_site_returns` when `needs_atn`, so parser emit can
     /// push each rule call's exact return state (`atn_ret_pending`). Empty
     /// for grammars that do not need the ATN. See P4.2b in `TODO.md`.
     atn_call_site_returns: List<i32>,
-    /// The ATN decision-site → decision-number correspondence
-    /// (`Atn.decision_sites`, indexed by `RepeatElement.atn_decision` /
-    /// `GroupElement.atn_decision`). Populated after `build_atn` when
-    /// `needs_atn`, so emit can give each non-greedy `??` its exact decision
-    /// number in `atn_predict_with_stack` instead of the retired unique
-    /// exit-first BlockStart search. Empty for grammars without the ATN.
+    /// Each ATN decision site's decision number (`Atn.decision_sites`), so a
+    /// non-greedy `??` predicts at its own decision. Empty without the ATN.
     atn_decision_sites: List<i32>,
-    /// Index of the parser rule currently being emitted (set by
-    /// `gen_parse_fn`). Read when emitting a non-greedy `??` to decide whether
-    /// the rule is left-recursive (so the `??`'s `atn_predict_with_stack` call
-    /// forwards `min_prec` rather than the literal `0`). -1 outside rule-body
-    /// emission.
+    recovery: RecoverySets,
+    /// Index of the parser rule currently being emitted, or -1 outside a
+    /// rule body.
     current_rule_index: i32,
     /// Monotonic counter for scan-group label uniqueness (`sg_<n>` etc.).
     /// Lives on the context — fresh per generation — so that generating two
     /// grammars in one process produces deterministic, run-order-independent
     /// labels. (Was a module-global that never reset.)
     scan_group_counter: i32,
-    /// Per-rule ATN loop-entry (`STAR_LOOP_ENTRY`) decision number, indexed
-    /// by rule, or -1 for a rule with no LR loop. Populated after `build_atn`
-    /// (only when `needs_atn`); read by the LR dispatch emitter to route an
-    /// ATN-class rule's loop-entry through `atn_predict_with_stack`.
+    /// Per rule, the ATN decision of its LR loop entry, which an ATN-class
+    /// rule's loop predicts at; -1 for a rule with no LR loop.
     lr_loop_entry_decisions: List<i32>,
-    /// Per-rule top-level-alternation (rule body) ATN decision number, indexed
-    /// by rule, or -1 for a single-alt rule. Populated after `build_atn` (only
-    /// when `needs_atn`); read by the rule emitter to route an `AtEndConflict`
-    /// multi-alt `Ambiguous` site through `atn_predict_with_stack`.
+    /// Per rule, the ATN decision of its top-level alternation, which an
+    /// `AtEndConflict` site predicts at; -1 for a single-alt or LR rule.
     atn_rule_body_decisions: List<i32>,
     /// When set, parser emit adds trace logging (rule enter/ok/fail plus
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
@@ -305,7 +295,13 @@ pub struct GenContext {
     alt_exit_label: Option<String>,
     /// By helper name, the one call a helper that only forwards would make,
     /// which its callers make instead.
-    forwarded_calls: TreeMap<String, String>,
+    forwarded_calls: TreeMap<String, Forwarded>,
+}
+
+/// A forwarding helper's one call, and the call-site stamps it sets first.
+pub struct Forwarded {
+    pub stamps: List<String>,
+    pub call: String,
 }
 
 fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
@@ -364,8 +360,10 @@ impl GenContext {
             caller_follow_gate_seen: false,
             needs_atn_seen: false,
             needs_scan_atn_seen: false,
+            needs_lr_atn_seen: false,
             atn_call_site_returns: [],
             atn_decision_sites: [],
+            recovery: empty_recovery_sets(),
             current_rule_index: -1,
             scan_group_counter: 0,
             lr_loop_entry_decisions: [],
@@ -485,6 +483,10 @@ impl GenContext {
         return self.one_token_rules.get_str(&self.scan_alias(snake));
     }
 
+    pub fn in_scan_fn(&self) -> bool {
+        return self.in_scan_fn;
+    }
+
     /// Enter or leave a scan function's body; returns the previous setting.
     pub fn set_in_scan_fn(&mut self, on: bool) -> bool {
         let was = self.in_scan_fn;
@@ -513,8 +515,7 @@ impl GenContext {
         return `${self.scan_gate_path()}.${field}`;
     }
 
-    /// The trailing gate argument of a scan call, empty without a gate.
-    pub fn scan_gate_arg(&self) -> String {
+    fn scan_gate_arg(&self) -> String {
         if !self.emit_scan_gate() {
             return String::new();
         }
@@ -578,32 +579,67 @@ impl GenContext {
         return self.caller_follow_gate_seen;
     }
 
-    /// Record that lowering encountered a construct that needs the runtime
-    /// simulator (a non-greedy `??` or an ATN-class LR rule), so emit must
-    /// include the ATN simulator infrastructure.
+    /// Record a decision the runtime simulator makes.
     pub fn mark_needs_atn(&mut self) {
         self.needs_atn_seen = true;
     }
 
-    /// Whether the generated parser should emit the ATN simulator
-    /// infrastructure (blob + the shared `ATN_SIM` global,
-    /// `Parser.atn_stack`, rule-entry stack maintenance). True iff lowering
-    /// saw a non-greedy `??` or an ATN-class LR rule.
+    /// Whether the generated parser emits the ATN simulator infrastructure
+    /// (the `ATN_SIM` blob, `Parser.atn`, rule-entry stack maintenance).
     pub fn needs_atn(&self) -> bool {
         return self.needs_atn_seen;
     }
 
-    /// Record that lowering saw an ATN-class LR rule (needs scan-side ATN
-    /// globals). Implies `needs_atn`.
+    /// Record a scan that decides through the simulator.
     pub fn mark_needs_scan_atn(&mut self) {
+        self.needs_atn_seen = true;
         self.needs_scan_atn_seen = true;
     }
 
-    /// Whether to emit the scan-side caller stack (`SCAN_STACK`) and
-    /// route the scan LR loop through the ATN. True iff an ATN-class LR rule
-    /// exists. (`ATN_SIM` itself is emitted whenever `needs_atn`.)
+    /// Whether scans decide through the ATN, so every scan borrows the parser's
+    /// ATN state. (`ATN_SIM` is emitted whenever `needs_atn`.)
     pub fn needs_scan_atn(&self) -> bool {
         return self.needs_scan_atn_seen;
+    }
+
+    /// Record an ATN-class LR rule: its loop decision reads the LR tables.
+    pub fn mark_needs_lr_atn(&mut self) {
+        self.needs_lr_atn_seen = true;
+        self.mark_needs_scan_atn();
+    }
+
+    /// Whether `ATN_SIM` carries the LR tables `atn_lr_loop_decision` reads.
+    pub fn needs_lr_atn(&self) -> bool {
+        return self.needs_lr_atn_seen;
+    }
+
+    /// The caller stack pushed and predicted with, as this code reaches it. A
+    /// scan borrows the parser's, so one launched mid-parse has full context.
+    pub fn atn_stack_place(&self) -> String {
+        return `${self.atn_state_path()}.stack`;
+    }
+
+    fn atn_state_path(&self) -> String {
+        if self.in_scan_fn {
+            return ATN_STATE_HANDLE;
+        }
+        return `${PARSER_HANDLE}.${ATN_STATE_HANDLE}`;
+    }
+
+    /// The ATN state as an argument: the scan's borrow passed on, or a fresh
+    /// borrow of the parser's field.
+    pub fn atn_state_arg(&self) -> String {
+        return if self.in_scan_fn { ATN_STATE_HANDLE } else { `&mut ${self.atn_state_path()}` };
+    }
+
+    /// The trailing arguments of a scan call for the parser state it borrows:
+    /// the gate, then the ATN state. Empty where the scan borrows neither.
+    pub fn scan_state_args(&self) -> String {
+        let mut args = self.scan_gate_arg();
+        if self.needs_scan_atn() {
+            args.push_str(`, ${self.atn_state_arg()}`);
+        }
+        return args;
     }
 
     /// Install what each rule's actions read off its labeled rule calls
@@ -687,7 +723,7 @@ impl GenContext {
     }
 
     /// Store the ATN call-site → return-state correspondence after the ATN
-    /// is built (only when `needs_atn`). Read by `atn_ret_pending_arg`.
+    /// is built (only when `needs_atn`). Read by the frame pushes around rule calls.
     pub fn set_atn_call_site_returns(&mut self, returns: &List<i32>) {
         self.atn_call_site_returns = *returns;
     }
@@ -716,6 +752,50 @@ impl GenContext {
             return -1;
         }
         return self.atn_decision_sites[site];
+    }
+
+    pub fn set_recovery_sets(&mut self, sets: RecoverySets) {
+        self.recovery = sets;
+    }
+
+    pub fn recovery_sets(&self) -> &RecoverySets {
+        return &self.recovery;
+    }
+
+    /// What may follow terminal `leaf_site` inside its rule, as `TK_*` names,
+    /// and whether the rule may end after it.
+    pub fn leaf_follow(&self, leaf_site: i32) -> [List<String>, bool] {
+        let r = &self.recovery;
+        assert leaf_site >= 0 && leaf_site < r.leaf_follow.len(), `terminal ${leaf_site} has an ATN state`;
+        return [self.token_kinds.names_of(&r.leaf_follow[leaf_site]), r.leaf_follow_ends[leaf_site]];
+    }
+
+    /// What a subrule expects on entry, as `TK_*` names; `null` where its
+    /// rule may end there instead, or the site names no decision.
+    pub fn decision_entry_expect(&self, site: i32) -> Option<List<String>> {
+        return self.expect_names(&self.recovery.decision_entry, site);
+    }
+
+    /// What a `*` / `+` expects after an iteration.
+    pub fn decision_back_expect(&self, site: i32) -> Option<List<String>> {
+        return self.expect_names(&self.recovery.decision_back, site);
+    }
+
+    /// What a rule's own alternative block expects on entry.
+    pub fn rule_entry_expect(&self, rule: i32) -> Option<List<String>> {
+        assert rule >= 0 && rule < self.recovery.rule_entry.len(), `rule_entry_expect: rule ${rule} has no entry set`;
+        return self.expect_names(&self.recovery.rule_entry, rule);
+    }
+
+    fn expect_names(&self, sets: &List<Option<List<i32>>>, i: i32) -> Option<List<String>> {
+        // `Atn.decision_sites` is sparse: a site past its end marks no decision.
+        if i < 0 || i >= sets.len() {
+            return null;
+        }
+        if let Some(ids) = &sets[i] {
+            return Option::Some(self.token_kinds.names_of(ids));
+        }
+        return null;
     }
 
     /// Record the rule whose body is currently being emitted (its index in
@@ -834,25 +914,11 @@ impl GenContext {
         return self.atn_rule_body_decisions[rule];
     }
 
-    /// The exact ATN return state to push onto `SCAN_STACK` before a scan
-    /// rule call (from `Atn.call_site_returns`), or -1 when the grammar has no
-    /// scan-side ATN routing. Every scan rule call brackets with this push/pop
-    /// — mirroring the parse side, where the rule-entry wrapper pushes every
-    /// call's return state — so an ATN-class LR rule scanned from any caller
-    /// (not only its own self-ref operand) sees the caller's mandatory
-    /// continuation (e.g. `between`'s `'and'`).
-    pub fn scan_atn_push_return(&self, atn_call_site: i32) -> i32 {
-        if !self.needs_scan_atn() {
-            return -1;
-        }
-        return self.atn_call_site_return(atn_call_site);
-    }
-
     /// Enable trace instrumentation in the generated parser (the
     /// `trace: true` generator option / `gale gen --trace`). Read across
     /// parser emit — by `gen_parser_struct` / `gen_rule_entry_wrapper`
     /// for the rule enter/ok/fail frames, and by `gen_multi_alt_body` /
-    /// `gen_prediction_code` for the multi-alt scan/pick/try lines.
+    /// `gen_prediction_code_inner` for the multi-alt scan/pick/try lines.
     pub fn set_trace(&mut self, on: bool) {
         self.trace = on;
     }
@@ -1108,7 +1174,7 @@ impl GenContext {
 
     /// Index of a parser rule by name (position in `parser_rules`), or -1.
     /// Matches `atn.wado::build_atn`'s rule indexing, so the generated
-    /// parser can push this onto `atn_stack` for full-context prediction.
+    /// parser can push this onto its caller stack for full-context prediction.
     pub fn rule_index_of<S: AsStrSlice>(&self, name: S) -> i32 {
         if let Some(i) = self.rule_index.get_str(name) {
             return i;
@@ -1715,13 +1781,30 @@ impl GenContext {
         return self.alt_reaches_open_end_at(alt, visiting, &mut min_cycle);
     }
 
+    /// `alt_reaches_open_end` for the elements from `start` on.
+    pub fn elements_reach_open_end(&mut self, elements: &List<Element>, start: i32) -> bool {
+        let mut visiting: List<String> = [];
+        let mut min_cycle = i32::MAX;
+        return self.elements_reach_open_end_at(elements, start, &mut visiting, &mut min_cycle);
+    }
+
     fn alt_reaches_open_end_at(&mut self, alt: &Alternative, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
-        for let elem of &alt.elements {
-            if self.element_reaches_open_end_at(elem, visiting, min_cycle) {
+        return self.elements_reach_open_end_at(&alt.elements, 0, visiting, min_cycle);
+    }
+
+    fn elements_reach_open_end_at(
+        &mut self,
+        elements: &List<Element>,
+        start: i32,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> bool {
+        for let mut i = start; i < elements.len(); i += 1 {
+            if self.element_reaches_open_end_at(&elements[i], visiting, min_cycle) {
                 return true;
             }
             let mut nullable_visiting: List<String> = [];
-            if !self.element_is_nullable_deep(elem, &mut nullable_visiting) {
+            if !self.element_is_nullable_deep(&elements[i], &mut nullable_visiting) {
                 return false;
             }
         }
@@ -1996,17 +2079,8 @@ impl GenContext {
         return result;
     }
 
-    /// Returns true if the rule is safe to scan as a predicate prefix.
-    ///
-    /// Left-recursive (LR) rules have faithful `scan_X_atom` / `scan_X_prec` /
-    /// `scan_X_lr_N` generated for them so nested scans can recurse through
-    /// them correctly. The dispatch sites all run a real longest-match
-    /// tournament (`gen_scan_winner_tournament` for the group dispatchers,
-    /// `gen_scan_partition_body` per partition): every candidate scans once
-    /// from the decision point and the greatest end wins, with ties resolved
-    /// to the first grammar alt. Each per-candidate LR scan is bounded by
-    /// the scan-helper structure, so the tournament stays linear in the
-    /// candidate count.
+    /// Whether the rule is safe to scan as a predicate prefix. A
+    /// left-recursive one is: its scan climbs precedence as its parse does.
     pub fn is_rule_scannable<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> bool {
         let mut min_cycle = i32::MAX;
         return self.is_rule_scannable_at(name, visiting, &mut min_cycle);
@@ -2272,11 +2346,11 @@ impl GenContext {
         return Option::<i32>::Some(id);
     }
 
-    pub fn set_forwarded_call<S: AsStrSlice, S1: AsStrSlice>(&mut self, helper: S, call: S1) {
-        self.forwarded_calls[helper.to_string()] = call.to_string();
+    pub fn set_forwarded_call<S: AsStrSlice>(&mut self, helper: S, forwarded: Forwarded) {
+        self.forwarded_calls[helper.to_string()] = forwarded;
     }
 
-    pub fn forwarded_call<S: AsStrSlice>(&self, helper: S) -> Option<String> {
+    pub fn forwarded_call<S: AsStrSlice>(&self, helper: S) -> Option<Forwarded> {
         return self.forwarded_calls.get_str(helper);
     }
 

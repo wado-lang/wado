@@ -345,6 +345,10 @@ pub struct LeftRecursiveRule {
     pub mid_operand_gated: bool = false,
 }
 
+/// `lr_cont_mask` of a trailing operand: whatever the invocation it ends must
+/// leave behind, it must too.
+pub global LR_CONT_FORWARD: i32 = -2;
+
 /// One left-recursive alternative, with the prefix self-reference
 /// stripped and replaced by precedence-climbing semantics.
 pub struct LrAlt {
@@ -366,13 +370,9 @@ pub struct LrAlt {
     /// Precedence assigned to this alt by ANTLR4's left-recursion
     /// rewrite (`own_prec = total_lr - lr_position`, values 1..N). The
     /// FIRST LR alt has the highest precedence; ties follow source order.
-    /// Right-associative alts use this same value for the inner self-ref
-    /// call (`min_prec = own_prec`), left-associative use `own_prec + 1`.
     pub own_prec: i32,
-    /// Minimum precedence required for the loop to enter this alt.
-    /// Equal to `own_prec` for left-associative and
-    /// `own_prec + 1`-derived adjustments for right-associative; the
-    /// exact recipe is fixed in `compute_lr_conflict_min_prec`.
+    /// `lr_trailing_prec`, raised past any tighter alt whose suffix starts
+    /// with one of this alt's delimiters (`compute_lr_conflict_min_prec`).
     pub conflict_min: i32,
     /// Index (within the alt's elements) of the LAST self-reference
     /// to the enclosing rule. -1 if there is no internal self-ref
@@ -383,9 +383,7 @@ pub struct LrAlt {
     /// `elements[1..]`). Drives the precedence-aware dispatch
     /// in the LR loop.
     pub suffix_first: List<String>,
-    /// True for `<assoc=right>` alts (driven by the alt option
-    /// block, not source order). Affects how `own_prec` is reused
-    /// for the trailing self-ref.
+    /// True for `<assoc=right>` alts; see `lr_trailing_prec`.
     pub right_associative: bool,
     /// FieldDecl for the leading self-reference that the LR rewrite
     /// stripped from `suffix.ops`. The CST struct for this alt still
@@ -393,6 +391,12 @@ pub struct LrAlt {
     /// only the right-hand side, so emit prepends this decl when
     /// laying out the struct.
     pub prefix_self_ref: FieldDecl,
+}
+
+/// The precedence ANTLR4's left-recursion rewrite passes an LR alt's trailing
+/// operand: its own for `<assoc=right>`, one tighter otherwise.
+pub fn lr_trailing_prec(own_prec: i32, right_associative: bool) -> i32 {
+    return if right_associative { own_prec } else { own_prec + 1 };
 }
 
 /// LR suffix dispatch metadata. The fields mirror
@@ -697,6 +701,8 @@ pub struct TokenOp {
     /// because the rebind elides the inner binding from emit. See
     /// `lower::rebind_op_field` for the rebind contract.
     pub dedup_base: String,
+    /// The surface `TokenRefElement.atn_leaf_site`.
+    pub atn_leaf_site: i32 = -1,
 }
 
 pub struct LiteralOp {
@@ -708,6 +714,8 @@ pub struct LiteralOp {
     /// Pre-dedup base name (`literal_field_name(&l.text)`). See
     /// `TokenOp.dedup_base` for the role.
     pub dedup_base: String,
+    /// The surface `LiteralElement.atn_leaf_site`.
+    pub atn_leaf_site: i32 = -1,
 }
 
 /// How a `RuleCall` supplies the runtime FOLLOW continuation to the
@@ -770,7 +778,8 @@ pub struct RuleCallOp {
     /// Follow-mask id for the continuation a mid-operand self-reference must
     /// leave behind. Passed as the callee's own `lr_cont` argument, never as
     /// `follow_arg` — every caller sets that one, and the LR loop must not
-    /// read a caller's continuation as this. -1 for every other call.
+    /// read a caller's continuation as this. `LR_CONT_FORWARD` on a trailing
+    /// operand, which hands on its caller's own; -1 for every other call.
     pub lr_cont_mask: i32 = -1,
     /// Dedupped field name in the enclosing alt's struct.
     pub field: String,
@@ -961,12 +970,15 @@ pub struct RepeatOp {
     /// oracle where no lookahead separates the two readings. Empty for a
     /// tail Repeat — the caller's FOLLOW answers alone.
     pub continuation_scan: List<ScanElement> = [],
-    /// True iff `continuation_scan` was built, which lowering only does for
-    /// a walk that reaches the rule's tail (soundness invariant 10) and whose
-    /// every remaining element is scannable — so a match really means the
-    /// continuation fits and the caller's FOLLOW is the right question at the
-    /// position it ended on. False keeps emit on the static condition.
+    /// True iff `continuation_scan` was built, which `lower_continuation_probe`
+    /// does only where its end settles the exit. False keeps emit static.
     pub continuation_scannable: bool = false,
+    /// The continuation ends at the rule's tail, so the verdict also asks the
+    /// caller's FOLLOW there (soundness invariant 10).
+    pub probe_asks_caller: bool = false,
+    /// A greedy `?` whose body and continuation can start on one token, which a
+    /// `.` or `~X` on either side does with every token.
+    pub probe_contested: bool = false,
     /// What each iteration owes before it commits. See `IterationDuties`.
     pub duties: IterationDuties = IterationDuties {},
     /// `non_greedy_static_undecided` for this Repeat — no lookahead
@@ -991,13 +1003,8 @@ pub struct RepeatOp {
     /// no longer baked here — it arrives at runtime via the `follow`
     /// argument the caller threads in.
     pub gate_caller_follow: bool,
-    /// Surface `RepeatElement.atn_decision` id, threaded from lowering. For a
-    /// non-greedy `??` (which routes its enter/skip decision through the
-    /// runtime ATN simulator), codegen maps this id to the rule's ATN decision
-    /// number (`GenContext::atn_decision_site`, from `Atn.decision_sites`) and
-    /// emits `atn_predict_with_stack(sim, decision, …)` — giving each `??` in a
-    /// rule its own decision instead of the retired unique-exit-first search.
-    /// -1 when decision sites were not assigned. See `TODO.md`.
+    /// Surface `RepeatElement.atn_decision` id: the decision site a non-greedy
+    /// `??` predicts its enter/skip at. -1 when sites were not assigned.
     pub atn_decision: i32 = -1,
 }
 
@@ -1026,6 +1033,9 @@ pub struct GroupOp {
     /// walkers partition alike (invariant 9); `null` where there is nothing to
     /// write, the caller's FOLLOW being the answer.
     pub empty_alt_admits: Option<EmptyAltAdmits>,
+    /// The group's ATN decision site where its empty alternative contends with
+    /// another on a token that can follow the group; -1 where lookahead decides.
+    pub atn_site: i32 = -1,
 }
 
 /// Lower-side classification of a Repeat's body op shape. Drives
@@ -1248,8 +1258,8 @@ pub struct ScanRuleCallElement {
     pub min_prec_arg: Option<i32>,
     /// Scan-side mirror of `RuleCallOp.atn_call_site`: the originating surface
     /// `RuleRefElement.atn_call_site` id, so the scan emit can push this call's
-    /// exact ATN return state onto the scan caller stack (`SCAN_STACK`)
-    /// for the ATN-class LR loop decision. -1 if none.
+    /// exact ATN return state onto the caller stack (`AtnState.stack`) for a
+    /// scan-side simulation. -1 if none.
     pub atn_call_site: i32 = -1,
 }
 
@@ -1280,11 +1290,13 @@ pub struct ScanRepeatElement {
     /// True for a non-greedy `*?` / `+?`. Over a body admitting everything the
     /// scan stops at the exit set, not a kind guard, as the parse side does.
     pub non_greedy: bool,
-    /// Mirrors the four `RepeatOp` probe stamps below, so a probed Repeat
+    /// Mirrors the `RepeatOp` probe stamps below, so a probed Repeat
     /// decides the same on both sides — the tournament measures scan lengths
     /// against what the parse consumes.
     pub continuation_scan: List<ScanElement> = [],
     pub continuation_scannable: bool = false,
+    pub probe_asks_caller: bool = false,
+    pub probe_contested: bool = false,
     pub static_exit_undecided: bool = false,
     pub probe_viable: List<String> = [],
     /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on
@@ -1304,6 +1316,8 @@ pub struct ScanGroupElement {
     /// What each alt matches (parallel to `alts`), classified at lower time —
     /// the whole input to the partition both sides branch on (invariant 9).
     pub alt_classes: List<AltClass>,
+    /// `GroupOp.atn_site`, for the scan's copy of the decision.
+    pub atn_site: i32 = -1,
 }
 
 pub struct ScanOptionalLookaheadElement {

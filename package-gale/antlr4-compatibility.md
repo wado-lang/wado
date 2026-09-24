@@ -129,21 +129,24 @@ only ever dropped in tail position (followed by closing parens /
 whitespace), so an `<EOF>` that is genuine token _text_ mid-tree is left
 untouched.
 
-### Deleted terminals in parse trees
+### Skipped terminals in parse trees
 
-A token deleted by single-token recovery prints as a bare child in ANTLR4 and
-as `<skip x>` in Gale. Like `<EOF>` this is a **rendering** difference over an
-identical tree, and both report the deletion outside the tree (ANTLR4 on the
-error stream, Gale as an `ExtraToken` diagnostic at the same position). Unlike
-`<EOF>` the divergence is Gale saying _more_, which is the point of the marker:
-it tells a recovered parse from a clean one at a glance.
+A token that recovery consumes prints as a bare child in ANTLR4 and as
+`<skip x>` in Gale. That covers single-token deletion, the run a loop skips
+after an iteration, and the resync a failed rule makes. Like `<EOF>` this is a
+**rendering** difference over an identical tree, and both report the recovery
+outside the tree (ANTLR4 on the error stream, Gale as a diagnostic at the same
+position). Unlike `<EOF>` the divergence is Gale saying _more_, which is the
+point of the marker: it tells a recovered parse from a clean one at a glance.
 
-So the normalisation runs the other way — the compare strips the wrapper from
-**Gale's** output, and only for descriptors whose own `[errors]` report an
-`extraneous input`. That gate is what keeps it honest: a deletion Gale invents
-has no counterpart in the expected tree, and deleting a _different_ token
-leaves different text behind. The compare asks exactly "did Gale delete what
-ANTLR4 deleted, in the same place".
+So the normalisation runs the other way. The compare strips the wrapper from
+**Gale's** output, and only for descriptors whose own `[errors]` report a
+recovery that can consume input: `extraneous input`, `mismatched input`,
+`no viable alternative`, or a failed predicate's `rule …` message. That gate is
+what keeps it honest: a skip Gale invents on a clean descriptor has no
+counterpart in the expected tree, and skipping a _different_ token leaves
+different text behind. The compare asks exactly "did Gale consume what ANTLR4
+consumed, in the same place".
 
 `<missing X>` needs no normalisation — Gale's rendering already matches.
 
@@ -174,10 +177,10 @@ that should be fixed before Stage C lands.
 >   `[input]` triggers an error, Gale's generated parser/lexer also
 >   detects it: `g::parse(&input)` returns `Err` for Parser-type
 >   grammars, or `g::tokenize(&input)` produces at least one
->   `TK_ERROR` token for Lexer-type grammars. Gale does not (yet) do
->   ANTLR4-style error recovery, so this claim is the well-defined
->   "Gale noticed the error" check against the descriptor's canonical
->   bad input.
+>   `TK_ERROR` token for Lexer-type grammars. Gale's recovery follows
+>   ANTLR4's decision sync and rule resync but not yet all of its edits
+>   (`TODO.md`), so this claim is the well-defined "Gale noticed the
+>   error" check against the descriptor's canonical bad input.
 > - **(d)** For every Lexer-type descriptor whose `[output]` is a
 >   clean `Token.toString()` dump, `g::tokenize(&input)` rendered
 >   through `to_lexer_string(&tokens, &input, TK_EOF)` equals the
@@ -477,19 +480,24 @@ ATN simulator (next section), never a try-fail-retry loop. Only the repeat-exit
 probe rewinds, and it decides nothing — it re-parses a failed element to
 record where the error is.
 
-### Multi-alt dispatch — a longest-match tournament
+### Multi-alt dispatch — prediction, then a longest-match tournament
 
-Multi-alt dispatch is a scan-side longest-match tournament: candidate
-alts are partitioned by their depth-0 first token, and within a partition
-every candidate is scanned from the same start, keeping the greatest
-successful end. A scan-length tie resolves to the lowest grammar
-alternative — ANTLR4's ambiguity resolution (SQLite's single-table `FROM`
-picks `table_or_subquery (',' table_or_subquery)*` over the `join_clause`
-catch-all). This is not first-success-wins — that is unsound when
-alts share a prefix and tie on static length (`'mut'? IDENT` vs `path '('
-… ')'` on `N(n)`). An alt whose suffix is unscannable at a tournament
-site is a codegen-time panic; the fix is to file an issue, never to add
-backtracking.
+A rule's parse and its scan choose an alternative with one emitter
+(`gen_rule_pick`). Each arm tests the first token its overlap group admits,
+and a contested group descends the SLL prediction tree. The scan must make the
+parse's choice: a scan that chose differently would accept an input the parse
+rejects, or the reverse. So only how each side reads a token and commits
+differs.
+
+Where the tree gives up, every candidate is scanned from the same start and
+the greatest successful end wins. A scan-length tie resolves to the lowest
+grammar alternative — ANTLR4's ambiguity resolution (SQLite's single-table
+`FROM` picks `table_or_subquery (',' table_or_subquery)*` over the
+`join_clause` catch-all). This is not first-success-wins — that is unsound
+when alts share a prefix and tie on static length (`'mut'? IDENT` vs
+`path '(' … ')'` on `N(n)`). An alt whose suffix is unscannable at a
+tournament site is a codegen-time panic; the fix is to file an issue, never
+to add backtracking.
 
 Emit reaches that tournament by two routes. The SLL prediction tree may
 give up (`Ambiguous`), or it may resolve the decision into a token cascade
@@ -587,12 +595,25 @@ the chain's `else` and is emitted last (`fallback_last`), which
 `open_decision_branch` asserts.
 
 Where the follow set overlaps another alternative's first set the lookahead
-cannot separate them and they share a tournament branch, an empty alternative
-included — it scans as epsilon, so it wins only where nothing longer does.
-That is where Gale still parts from ANTLR4, which picks the lowest-indexed
-alternative that lets the rule complete rather than the longest scan: the
-`#[TODO]` in `driver_cst_empty_alt_mid_test.wado`, resolvable only by the
-follow-aware decision the ATN simulator makes.
+cannot separate them. ANTLR4 then picks the lowest-indexed alternative that
+lets the rule complete. The longest scan cannot say that, because an empty
+alternative scans as nothing and loses to any longer one. So the ATN simulator
+decides such a group, in the parse and in the scan alike (`GroupOp.atn_site`,
+`ScanGroupElement.atn_site`). Fixture `empty_alt_mid.g4`.
+
+A rule's own alternatives partition the same way (`rule_overlap_groups`).
+Inside a merged branch `build_prediction` decides, and it reads a wildcard the
+same way at every depth: a position that reaches a `.` or `~X` joins every
+token's branch, and a token no alternative names goes to the tournament. So
+`r : A? . C | B D | B E` takes `b c` by its first alternative. Fixture
+`open_ended_rule_alt.g4`.
+
+A rule's nullable alternative is admitted by the rule's FOLLOW in the same way
+(`RuleOverlap.end_follow`). An at-end conflict is settled statically when its
+branch tokens cannot follow the rule: those tokens go to the alternatives that
+continue, and a token of the rule's FOLLOW goes to the lowest alternative that
+ends. When the branch tokens can follow the rule, the simulator decides.
+Fixture `nullable_first_alt.g4`.
 
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
@@ -826,17 +847,21 @@ relevant sites.
    the gap `warn_unsupported_prediction_predicate` names for the rule-level
    case. Not diagnosed: the same shape parses correctly wherever the group is
    not scanned, which `nested_action_gate_test.wado` pins.
-10. A viability probe is stamped only where the walk reaches the rule's tail.
-    The probe scans the continuation and, when that runs out, conjoins the
-    rule's FOLLOW — an answer that is only about the caller if nothing else
-    follows inside the rule. A group body, an LR suffix, and an LR rule's atom
-    alternative all end short of the rule (the LR atom ends where the
+10. A viability probe asks the caller only where the walk reaches the rule's
+    tail. The probe scans the continuation and, when that runs out, conjoins
+    the rule's FOLLOW — an answer that is only about the caller if nothing
+    else follows inside the rule. A group body, an LR suffix, and an LR rule's
+    atom alternative all end short of the rule (the LR atom ends where the
     precedence loop begins), so each answers `reaches_rule_tail = false`.
     Stamping the atom `true` rejected `CASE a WHEN 1 THEN 2 END + 1`: the probe
     asked the caller's FOLLOW at a position where the `+` loop would continue.
-    Keep it separate from `enclosing_at_tail`, which the FOLLOW gate uses and
-    which asks a weaker question — conflating the two is what put the probe
-    there. Fixture `tests/grammars/lr_atom_probe.g4`.
+    Short of the tail, a probe is stamped only where the continuation must
+    consume a token. Its scan then decides alone (`probe_asks_caller = false`):
+    `('=' m? '@' '#')` with `m : '@' '!'` enters `m` only where `m '@' '#'`
+    scans. Keep it separate from `enclosing_at_tail`, which the FOLLOW
+    gate uses and which asks a weaker question — conflating the two is what
+    put the probe there. Fixtures `tests/grammars/lr_atom_probe.g4`,
+    `ll_shape_prefix_signature.g4`.
 11. An LR overlap group's second-token sub-dispatch measures the element that
     carries the shared token, not the one after it — reading the next element
     is right only when the carrier matches exactly one token. Rust's
@@ -888,19 +913,29 @@ ANTLR4 replaced it with a runtime ALL(\*) simulator). Gale keeps the
 static compiled fast path for every decision static prediction already
 resolves and routes only the residual cold sites through the simulator.
 
-**The simulator decides exactly three parser sites; everything else keeps
+**The simulator decides exactly four parser sites; everything else keeps
 the compiled fast path:**
 
 1. A **left-recursive rule's loop entry**, where precedence — not a
    distinct lookahead token — decides whether to keep climbing or return
    to the caller. A rule is routed here when an ATOM alternative's operand
    competes with the loop for a shared delimiter (`'between' expr 'and' expr`
-   against `expr 'and' expr`; fixture `lr_between.g4`). The same shape inside
-   an LR alternative (SQLite's `expr NOT? BETWEEN expr AND expr`) is **not**
-   routed here: it would need the mid-alternative operand at ANTLR4's `expr[0]`
-   and the loop entry deciding per token, which makes the whole rule ATN-class
-   — measured far too expensive for a hot expression rule (TODO.md has the
-   numbers). Fixture `lr_mid_operand.g4` pins that divergence as `#[TODO]`.
+   against `expr 'and' expr`; fixture `lr_between.g4`), or when one LR
+   alternative's suffix is a proper prefix of another's (`expr 'x' expr`
+   against `expr 'x' expr 'y' expr`; fixture `lr_shared_lead.g4`). Its mid
+   operand is ANTLR4's `expr[0]`. The loop takes a token an enter edge admits,
+   and the full simulator decides instead in two cases. One is a caller that
+   must take the token. The other is a caller's loop that can take it through
+   an alternative this operand's precedence excludes (`lr_atn_trailing.g4`).
+   The same shape inside an LR alternative (SQLite's
+   `expr NOT? BETWEEN expr AND expr`) is **not** routed here, since a hot
+   expression rule cannot pay for that (`perf.md`). It stays static: the mid
+   operand also drops to `expr[0]`, and
+   each loop entry scans the operator's suffix and checks that the enclosing
+   alternative's continuation is still there (`lr_cont`). A trailing operand
+   forwards its caller's continuation and keeps ANTLR4's precedence. Fixture
+   `lr_mid_operand.g4`. The gate sees only one level of continuation, so a mid
+   operand nested in another still fails (`TODO.md`).
 2. A **non-greedy `??`**, whose enter-or-skip choice is taken at runtime;
    several `??` in one rule decide independently. Both emit walkers route it
    here — the surface-element walker from `RepeatElement.non_greedy`, the
@@ -921,13 +956,18 @@ the compiled fast path:**
    longer pick is either correct or fails a parse that had no valid
    reading, so the conflict stays on the tournament and the grammar needs
    no simulator. A rule reachable only past a `.` / `~X` (whose follow set
-   can't be enumerated) routes conservatively. Every other multi-alt
-   ambiguity keeps the tournament, whose longest-match matches ANTLR4
-   across the corpus. Regression fixtures: `tests/grammars/ll_longest_vs_context.g4`,
-   `ll_at_end_nullable_gap.g4` and `ll_opaque_at_end_context.g4` (routed to
-   the simulator), `ll_at_end_follow_disjoint.g4` and
-   `ll_opaque_at_end_gap.g4` (stay on the tournament),
-   `ll_optional_non_greedy_multi.g4`.
+   can't be enumerated) routes conservatively. A caller's scan of such a
+   rule asks the simulator too, with the parse's caller stack
+   (`Parser.atn`), so the scan ends where the parse will. Every other
+   multi-alt ambiguity keeps the tournament, whose longest-match matches
+   ANTLR4 across the corpus. Regression fixtures:
+   `tests/grammars/ll_longest_vs_context.g4`, `ll_at_end_nullable_gap.g4` and
+   `ll_opaque_at_end_context.g4` (routed to the simulator),
+   `ll_at_end_follow_disjoint.g4` and `ll_opaque_at_end_gap.g4` (stay on the
+   tournament), `ll_optional_non_greedy_multi.g4`.
+4. A **group whose nullable alternative competes** with another for the
+   tokens that follow the group (see "A nullable alternative is admitted by
+   what follows the group" above).
 
 Two more sites _would_ belong here on correctness grounds and are left out on
 cost — the ambiguous decisions of the section above: an ambiguous greedy `rule?`
@@ -967,6 +1007,13 @@ sub-dispatch the static LR path applies to the same question. The simulator is
 there for the enter-or-exit verdict, which needs full context; which member of
 the group to enter does not, and is re-taken from the scan twins by longest
 match, ties to the first alternative. Fixture: `lr_atn_shared_op.g4`.
+
+When the simulator predicts exit, the enclosing invocations of the same loop at
+the same position exit too, unless one of them could enter there on an operator
+the callee could not. The reason: leaving the callee lands in the caller's loop,
+so every continuation the caller's enter reaches, the callee's reached as well,
+and the callee's all died. So the verdict is recorded for each such caller in
+turn, and a caller with an operator of its own asks the simulator itself.
 
 Which gaps stay static is a cost decision as much as a correctness one — one
 prediction is a full closure over the grammar; see [`perf.md`](./perf.md).

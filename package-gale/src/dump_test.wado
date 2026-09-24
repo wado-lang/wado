@@ -430,6 +430,26 @@ Z : 'Z' ;";
     assert !str_contains(&report, "Leaf(alt "), report;
 }
 
+test "render_dump offers an open-ended alt on a token it does not name" {
+    // `A? . C` admits every token through its `.`, so `b` is its token too:
+    // the second token separates it from `B D` and `B E`, and only there is
+    // `[TK_C]` a branch.
+    let g = "grammar W;
+r : A? . C | B D | B E ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+D : 'd' ;
+E : 'e' ;";
+    let r = section_of(&dump_source(&g), "r");
+
+    assert str_contains(&r, "overlap group [alt 0, alt 1, alt 2]"), r;
+    assert str_contains(&r, "Dispatch[d=1]"), r;
+    assert str_contains(&r, "[TK_C] →"), r;
+    assert str_contains(&r, "Leaf(alt 1)"), r;
+    assert str_contains(&r, "Leaf(alt 2)"), r;
+}
+
 test "render_dump shows LR loop-entry dispatch with conflict-min" {
     // `e : e '.' ID | e '.' ID '(' ')' | ID ;` — both LR suffixes start
     // with '.', so the precedence loop's entry decision is NOT token-led:

@@ -71,6 +71,7 @@ internal fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragme
         w.line("return false;");
     } else {
         w.line("let _k = p.kinds[p.pos];");
+        w.line("p.site = -1;");
         for let mut i = 0; i < entries.len(); i += 1 {
             w.begin(`if kind_set_has(&_FRAGMENT_FIRST_${i}, _k)`);
             w.line(&entries[i].call);
@@ -92,9 +93,7 @@ internal fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragme
     w.line("let _did = _recover_fragment(p);");
     w.line("p.recovering = _was;");
     w.begin("if !_did || p.pos == _before");
-    w.line("let _sk = p.advance();");
-    w.line("p.tokens.mark_skipped(_sk);");
-    w.line("p.b.skip(_sk);");
+    w.line("p.skip_one();");
     w.end();
     w.end();
     w.blank();
@@ -175,12 +174,9 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.line("p.max_errors = max_errors;");
     w.line("entry(&mut p);");
     // The parser is infallible: a failure leaves `p.recovering` set and the
-    // deepest error in `p.pending`. Surface it as one diagnostic; the partial
-    // tree (open nodes folded by each wrapper's `finish_node`) is still returned.
+    // deepest error in `p.pending`, surfaced here as one diagnostic.
     w.begin("if p.recovering && p.diagnostics.len() < max_errors");
-    w.begin("if let Some(d) = p.pending");
-    w.line("p.diagnostics.push(d);");
-    w.end();
+    w.line("p.commit_pending();");
     w.end();
     w.line("merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);");
     w.line("resolve_positions(&mut p.diagnostics, p.tokens.chars);");
@@ -239,6 +235,186 @@ fn emit_diag_prologue(w: &mut CodeWriter) {
     w.line("if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }");
 }
 
+/// ANTLR4's rule-level recovery and decision sync: the parser methods a failed
+/// rule and a mismatched decision recover through.
+fn gen_rule_recovery(w: &mut CodeWriter) {
+    let mut rr = FnSpec::new("recover_rule");
+    rr.set_receiver("&mut self");
+    rr.add_param("rule", "NodeKind");
+    rr.add_param("name", "String");
+    rr.add_param("row", "i32");
+    rr.set_return_type("bool");
+    rr.emit_begin(w);
+    w.begin("if self.speculating || self.diagnostics.len() >= self.max_errors");
+    w.line("self.push_rule_stack(name);");
+    w.line("return false;");
+    w.end();
+    w.line("let node = if row < 0 { self.b.innermost_open() } else { row };");
+    w.line("self.b.resume_node(node, self.last_end());");
+    w.line("assert self.b.node_kind(node) == rule, \"recover_rule: the resumed node is the failed rule's\";");
+    w.line("self.commit_pending();");
+    w.line("self.recovering = false;");
+    w.line("self.skip_until(&self.resync_set(&[]));");
+    w.line("return true;");
+    w.end();
+    w.blank();
+
+    let mut cp = FnSpec::new("commit_pending");
+    cp.set_receiver("&mut self");
+    cp.emit_begin(w);
+    w.line("let Some(d) = self.pending else { return; };");
+    w.line("self.pending = null;");
+    w.line("let mut diag = d;");
+    w.line("self.b.push_open_rule_names(&RULE_NAMES, &mut diag.rule_stack);");
+    w.line("self.report(diag);");
+    w.end();
+    w.blank();
+
+    // ANTLR4's error recovery mode: once an error is reported, the next one
+    // waits for a token to match.
+    let mut rp = FnSpec::new("report");
+    rp.set_receiver("&mut self");
+    rp.add_param("diag", "Diagnostic");
+    rp.emit_begin(w);
+    w.line("if self.b.in_error_mode() { return; }");
+    w.line("self.diagnostics.push(diag);");
+    w.line("self.b.mark_error();");
+    w.end();
+    w.blank();
+
+    let mut rs = FnSpec::new("resync_set");
+    rs.set_receiver("&self");
+    rs.add_param("base", "&List<i32>");
+    rs.set_return_type("List<i32>");
+    rs.emit_begin(w);
+    w.line("let mut set = *base;");
+    w.begin("for let s of &self.sites");
+    w.line("if *s < 0 { continue; }");
+    w.line("let f = &CALL_FOLLOW_SETS[CALL_FOLLOW[*s]];");
+    w.line("while set.len() < f.len() { set.push(0); }");
+    w.line("for let mut i = 0; i < f.len(); i += 1 { set[i] = set[i] | f[i]; }");
+    w.end();
+    w.line("return set;");
+    w.end();
+    w.blank();
+
+    let mut fu = FnSpec::new("follows_rules_under_way");
+    fu.set_receiver("&self");
+    fu.add_param("k", "i32");
+    fu.set_return_type("bool");
+    fu.emit_begin(w);
+    w.begin("for let mut i = self.sites.len() - 1; i >= 0; i -= 1");
+    w.line("let s = self.sites[i];");
+    w.line("if s < 0 { return i == 0 && k == TK_EOF; }");
+    w.line("if kind_set_has(&CALL_FOLLOW_SETS[CALL_FOLLOW[s]], k) { return true; }");
+    w.line("if !CALL_FOLLOW_ENDS[s] { return false; }");
+    w.end();
+    w.line("return k == TK_EOF;");
+    w.end();
+    w.blank();
+
+    let mut su = FnSpec::new("skip_until");
+    su.set_receiver("&mut self");
+    su.add_param("set", "&List<i32>");
+    su.emit_begin(w);
+    w.begin("loop");
+    w.line("let k = self.kinds[self.pos];");
+    w.line("if k == TK_EOF || kind_set_has(set, k) { break; }");
+    w.line("self.skip_one();");
+    w.end();
+    w.end();
+    w.blank();
+
+    let mut so = FnSpec::new("skip_one");
+    so.set_receiver("&mut self");
+    so.emit_begin(w);
+    w.line("let _sk = self.advance();");
+    w.line("self.tokens.mark_skipped(_sk);");
+    w.line("self.b.skip(_sk);");
+    w.end();
+    w.blank();
+
+    let mut sd = FnSpec::new("sync_delete");
+    sd.set_receiver("&mut self");
+    sd.add_param("expected", "&List<i32>");
+    sd.add_param("names", "&List<i32>");
+    sd.set_return_type("bool");
+    sd.emit_begin(w);
+    w.begin(
+        "if self.speculating || self.kinds[self.pos] == TK_EOF || !kind_set_has(expected, self.peek_at(1))",
+    );
+    w.line("return false;");
+    w.end();
+    w.line("self.report_extraneous(names, RecoveryAction::Deleted);");
+    w.line("self.skip_one();");
+    w.line("return true;");
+    w.end();
+    w.blank();
+
+    let mut se = FnSpec::new("sync_enter");
+    se.set_receiver("&mut self");
+    se.add_param("expected", "&List<i32>");
+    se.add_param("names", "&List<i32>");
+    se.emit_begin(w);
+    w.begin("if !self.recovering && !self.sync_delete(expected, names)");
+    w.line("self.fail_expecting(names);");
+    w.end();
+    w.end();
+    w.blank();
+
+    let mut sa = FnSpec::new("sync_alts");
+    sa.set_receiver("&mut self");
+    sa.add_param("expected", "&List<i32>");
+    sa.add_param("names", "&List<i32>");
+    sa.emit_begin(w);
+    w.begin("if !self.recovering && !self.sync_delete(expected, names)");
+    w.line("self.no_viable(\"no viable alternative\", self.peek_span(), names);");
+    w.end();
+    w.end();
+    w.blank();
+
+    // At EOF there is nothing to skip, and what the loop left unfinished
+    // reports itself.
+    let mut sb = FnSpec::new("sync_back");
+    sb.set_receiver("&mut self");
+    sb.add_param("expected", "&List<i32>");
+    sb.add_param("names", "&List<i32>");
+    sb.emit_begin(w);
+    w.line("if self.recovering || self.kinds[self.pos] == TK_EOF { return; }");
+    w.begin("if self.speculating");
+    w.line("self.fail_expecting(names);");
+    w.line("return;");
+    w.end();
+    w.line("self.report_extraneous(names, RecoveryAction::SkippedTo);");
+    w.line("self.skip_until(&self.resync_set(expected));");
+    w.end();
+    w.blank();
+
+    // At EOF the wanted terminal closes a construct the input never finished.
+    let mut fd = FnSpec::new("fail_expecting");
+    fd.set_receiver("&mut self");
+    fd.add_param("names", "&List<i32>");
+    fd.emit_begin(w);
+    w.line(
+        "let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };",
+    );
+    w.line("self.fail_on_token(\"got\", names, code);");
+    w.end();
+    w.blank();
+
+    let mut rsy = FnSpec::new("report_extraneous");
+    rsy.set_receiver("&mut self");
+    rsy.add_param("names", "&List<i32>");
+    rsy.add_param("recovery", "RecoveryAction");
+    rsy.emit_begin(w);
+    emit_diag_prologue(w);
+    w.line(
+        "self.report(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));",
+    );
+    w.end();
+    w.blank();
+}
+
 pub fn gen_parser_struct<S: AsStrSlice>(
     w: &mut CodeWriter,
     trace: bool,
@@ -286,18 +462,23 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // `recovering`; `<= 1` is effectively fail-fast (one diagnostic, partial
     // tree). Defaults to `i32::MAX` — unbounded.
     s.add_field("max_errors", "i32");
+    // The rule calls under way as `atn_call_site` ids, whose follows a failed
+    // rule resynchronises on: a call stamps `site`, its entry pushes it.
+    s.add_field("site", "i32");
+    s.add_field("sites", "List<i32>");
     // Current recursive-descent depth, used only to indent trace output.
     if trace {
         s.add_field("trace_depth", "i32");
     }
     // Runtime ATN simulator state (only when a non-greedy / LR decision needs
     // it); the decoded ATN is shared via the module-level `ATN_SIM`.
-    // `atn_stack` is the caller stack of ATN return states for full-context
-    // prediction. `atn_ret_pending` passes a call site's return state to the
+    // `atn.stack` is the caller stack of ATN return states for full-context
+    // prediction, which a simulating scan borrows so it continues the parse's
+    // frames. `atn_ret_pending` passes a call site's return state to the
     // callee's entry wrapper, which pushes it and resets to -1 (an unstamped
     // call pushes -1 = unknown caller, handled as SLL).
     if needs_atn {
-        s.add_field("atn_stack", "List<i32>");
+        s.add_field("atn", "AtnState");
         s.add_field("atn_ret_pending", "i32");
     }
     // the parser drives a `TreeBuilder` (`b`) — the matched
@@ -341,13 +522,13 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     f.emit_begin(w);
     w.line("let kinds = tokens.kinds.to_array();");
     let mut init = String::from(
-        "tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX",
+        "tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: []",
     );
     if trace {
         init.push_str(", trace_depth: 0");
     }
     if needs_atn {
-        init.push_str(", atn_stack: [], atn_ret_pending: -1");
+        init.push_str(", atn: AtnState::new(), atn_ret_pending: -1");
     }
     init.push_str(", b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: []");
     if emit_actions {
@@ -570,10 +751,8 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     w.blank();
 
-    // Record an unrecoverable match failure and enter recovery. Infallible
-    // replacement for the old `return Result::Err(...)`: the deepest failure is
-    // kept in `pending` and `recovering` short-circuits the rest of the descent
-    // until the entry surfaces it. `rule_stack` fills in as the descent unwinds.
+    // Record a match failure and enter recovery: the deepest failure is kept in
+    // `pending` until `commit_pending` reports it.
     let mut ff = FnSpec::new("fail");
     ff.set_receiver("&mut self");
     ff.add_param("message", "String");
@@ -606,16 +785,12 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     w.blank();
 
-    // At EOF the wanted terminal closes a construct the input never finished.
     let mut fok = FnSpec::new("fail_on_kind");
     fok.set_receiver("&mut self");
     fok.add_param("kind", "i32");
     fok.emit_begin(w);
     w.begin("if self.supersedes_pending(self.tokens.starts[self.pos])");
-    w.line(
-        "let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };",
-    );
-    w.line("self.fail_on_token(\"got\", &([kind] as List<i32>), code);");
+    w.line("self.fail_expecting(&([kind] as List<i32>));");
     w.end();
     w.line("self.recovering = true;");
     w.end();
@@ -634,9 +809,8 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     w.blank();
 
-    // Append a rule name to the pending error's rule stack as the descent
-    // unwinds (each rule wrapper calls this on the way out when recovering),
-    // so tooling can report the context that failed.
+    // Append a rule name to the pending error's rule stack, so tooling can
+    // report the context that failed.
     let mut prs = FnSpec::new("push_rule_stack");
     prs.set_receiver("&mut self");
     prs.add_param("name", "String");
@@ -646,6 +820,8 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     w.end();
     w.blank();
+
+    gen_rule_recovery(w);
 
     // `trace_fail` is its only caller.
     if trace {
@@ -659,20 +835,6 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         w.blank();
     }
 
-    // Record a local recovery edit as a diagnostic and keep parsing (no
-    // `recovering`): a deleted spurious terminal (`ExtraToken`) or an inserted
-    // required terminal (`MissingToken`).
-    let mut rex = FnSpec::new("report_extra");
-    rex.set_receiver("&mut self");
-    rex.add_param("kind", "i32");
-    rex.emit_begin(w);
-    emit_diag_prologue(w);
-    w.line(
-        "self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::Deleted));",
-    );
-    w.end();
-    w.blank();
-
     // At EOF the insertion closes a construct the input never finished.
     let mut rmi = FnSpec::new("report_missing");
     rmi.set_receiver("&mut self");
@@ -684,7 +846,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line("let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };");
     w.line("let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };");
     w.line(
-        "self.diagnostics.push(Diagnostic::error(code, `missing ${token_kind_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));",
+        "self.report(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));",
     );
     w.end();
     w.blank();
@@ -696,7 +858,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     run.emit_begin(w);
     emit_diag_prologue(w);
     w.line(
-        "self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));",
+        "self.report(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));",
     );
     w.end();
     w.blank();
@@ -757,22 +919,13 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     w.blank();
 
-    // `p.expect(kind, sync)` matches a single token of the requested kind. EOF
-    // is matched without advancing so consecutive `EOF` references see the same
-    // sentinel (the stream holds one EOF; advancing past it reads out of
-    // bounds). Mirrors ANTLR4's `matchedEOF`.
-    //
-    // On a mismatch it recovers in place (never propagating): a single spurious
-    // token before the expected one is *deleted* (`<skip>`, `ExtraToken`); a
-    // token that continues the rule (`sync` = the rule's FIRST-of-rest) means
-    // the expected one is missing and is *inserted* (`<missing>`, `MissingToken`);
-    // anything else is unrecoverable here, so it sets `recovering` and unwinds.
-    // Delete and insert are local edits — they record a diagnostic but keep
-    // parsing, so a clean tail still parses.
+    // EOF matches without advancing, since the stream holds one EOF and
+    // consecutive `EOF` references must see the same one (ANTLR4's `matchedEOF`).
     let mut f7 = FnSpec::new("expect");
     f7.set_receiver("&mut self");
     f7.add_param("kind", "i32");
     f7.add_param("sync", "&List<i32>");
+    f7.add_param("may_end_rule", "bool");
     f7.set_return_type("i32");
     // Fragment recovery descends into rule entries, so `expect` reaches the
     // parse fns and must carry the base effect they declare.
@@ -806,34 +959,37 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // single-token deletion: the current token is spurious, the expected one
     // follows it.
     w.begin("if self.peek_at(1) == kind");
-    w.line("self.report_extra(kind);");
-    w.line("let _sk = self.advance();");
-    w.line("self.tokens.mark_skipped(_sk);");
-    w.line("self.b.skip(_sk);");
+    w.line("self.report_extraneous(&[kind], RecoveryAction::Deleted);");
+    w.line("self.skip_one();");
     emit_consume_kind_return(w);
     w.end();
-    // single-token insertion: the current token continues the rule, so the
-    // expected one is missing.
-    w.begin("if kind_set_has(sync, self.kinds[self.pos])");
+    // single-token insertion: the current token continues the rule, or the
+    // rules under way once this one ends, so the expected one is missing.
+    w.begin(
+        "if kind_set_has(sync, self.kinds[self.pos]) || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos])",
+    );
     w.line("self.report_missing(kind);");
     w.line("let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);");
     w.line("self.b.missing(_syn);");
     w.line("return _syn;");
     w.end();
-    // Neither match nor a single-token edit fits. If the rule's FIRST-of-rest
-    // (`sync`) is known, skip the offending run into a lossless `<error>`
-    // region and resync to it, then continue; otherwise record the deepest
-    // failure and unwind.
+    // Neither match nor a single-token edit fits. Skip the offending run into a
+    // lossless `<error>` region and resync to what may follow in the rule, then
+    // continue; with nothing to follow, fail the rule.
     w.begin("if !sync.is_empty()");
+    // Nothing to resync onto at EOF: the missing terminal completes the
+    // construct only where the input may end after it.
+    w.begin("if !may_end_rule && self.kinds[self.pos] == TK_EOF");
+    w.line("self.fail_on_kind(kind);");
+    w.line("return self.pos;");
+    w.end();
     w.line("self.report_unexpected(kind);");
     w.begin("if self.kinds[self.pos] != TK_EOF");
     w.line("self.b.start_error(self.tokens.span_at(self.pos).start);");
     w.begin("loop");
     w.line("let _k = self.kinds[self.pos];");
     w.line("if _k == TK_EOF || _k == kind || kind_set_has(sync, _k) { break; }");
-    w.line("let _sk = self.advance();");
-    w.line("self.tokens.mark_skipped(_sk);");
-    w.line("self.b.skip(_sk);");
+    w.line("self.skip_one();");
     w.end();
     w.line("self.b.finish_node(self.last_end());");
     w.end();
@@ -1031,13 +1187,10 @@ pub fn gen_trace_helpers(w: &mut CodeWriter) {
     w.blank();
 }
 
-/// Emit the ATN return-state bookkeeping a rule entry performs around its
-/// inner call: consume the pending return state the call site stamped, reset
-/// it, and push it onto the simulator's caller stack for full-context
-/// prediction (popped via `p.atn_stack.pop()` on every exit). Only emitted for
-/// grammars that need the ATN.
-pub fn emit_atn_enter(w: &mut CodeWriter) {
+/// Emit a rule entry's push of the return state its call site stamped onto
+/// `stack`, the `GenContext::atn_stack_place`.
+pub fn emit_atn_enter<S: AsStrSlice>(w: &mut CodeWriter, stack: S) {
     w.line("let _atn_ret = p.atn_ret_pending;");
     w.line("p.atn_ret_pending = -1;");
-    w.line("p.atn_stack.push(_atn_ret);");
+    w.line(`${stack}.push(_atn_ret);`);
 }
