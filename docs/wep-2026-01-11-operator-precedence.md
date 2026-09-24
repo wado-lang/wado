@@ -157,11 +157,12 @@ count += 1;  // ✅ Correct
 
 ### 5. No Power Operator
 
-Wado does **not** have a `**` power operator. Use the `pow()` function instead.
+Wado does **not** have a `**` power operator. Use `f64::pow` or `f32::pow`
+instead.
 
 ```wado
-let result = x ** 2;      // ❌ Compile error
-let result = pow(x, 2);   // ✅ Correct
+let result = x ** 2.0;          // ❌ Compile error
+let result = f64::pow(x, 2.0);  // ✅ Correct
 ```
 
 **Rationale**:
@@ -222,7 +223,7 @@ a != b != c   // ❌ Parse error: != chaining not allowed
 
 1. **Fixes C's design mistake**: `flags & MASK == VALUE` works correctly without parentheses
 2. **Avoids undefined behavior**: No `++`/`--` operators
-3. **Clear and explicit**: `pow(x, y)` instead of ambiguous `**`
+3. **Clear and explicit**: `f64::pow(x, y)` instead of ambiguous `**`
 4. **Familiar to C/Java/Python developers**: `~` for bitwise NOT
 5. **Mathematical comparison chaining**: `0 <= x <= 100` reads as one range test, and is evaluated as one
 6. **Rejects ambiguous chains**: `a < b > c` and `a != b != c` are errors
