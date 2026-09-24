@@ -252,6 +252,7 @@ pub fn gen_parser(
         w,
         ctx.is_trace(),
         ctx.needs_atn(),
+        ctx.needs_scan_atn(),
         ctx.emit_actions(),
         !ctx.fragment_entries().is_empty(),
         ctx.emit_scan_gate(),
@@ -639,7 +640,8 @@ fn gen_scan_function_named<S: AsStrSlice>(
 
     let multi_alt_plan = if rule.alternatives.len() > 1 && !is_compact_single_token(rule, ctx) {
         if let MultiAlt(m) = lowered_rule {
-            let plan = plan_scan_multi_alt(&rule.alternatives, ctx);
+            let mut plan = plan_scan_multi_alt(&rule.alternatives, ctx);
+            plan.atn_dec = ctx.scan_atn_body_decision(ctx.rule_index_of(&rule.name));
             let surface_alts: List<i32> = (0..<rule.alternatives.len()).collect();
             gen_scan_alt_helpers(w, &plan, &m.scan_alts, &surface_alts, ctx, fn_name);
             Option::Some(plan);
@@ -911,7 +913,7 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
     let decl = lr_atn_alt_decl(lr_dispatch);
     w.begin("loop");
     w.line(
-        `${decl} = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, ${decision}, tokens, pos, TK_EOF, min_prec);`,
+        `${decl} = atn_lr_loop_decision(&ATN_SIM, &ATN_STACK, ${decision}, tokens, pos, TK_EOF, min_prec);`,
     );
     emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, fn_name, "tokens", "pos", /*parse_launched=*/ false, ctx);
     w.line("let _lr_pos0 = pos;");
@@ -1501,6 +1503,9 @@ pub struct ScanAltPlan {
     groups_tokens: List<List<String>>,
     unguarded_idx: List<i32>,
     hoisted: List<i32>,
+    /// The ATN decision a contested partition picks its alternative by, where
+    /// the parse side simulates the rule's at-end conflict; -1 runs the tournament.
+    atn_dec: i32 = -1,
 }
 
 impl ScanAltPlan {
@@ -1822,17 +1827,19 @@ fn gen_scan_partition_body<S: AsStrSlice>(
     if total == 1 {
         let guarded = guarded_alts.len() == 1;
         let i = if guarded { guarded_alts[0] } else { unguarded_alts[0] };
-        if plan.is_hoisted(i) {
-            w.line(`pos = ${hoisted_scan_call(base_name, i, ctx)};`);
-            w.line("if pos >= 0 { break scan_alts; }");
-            w.line("return -1;");
-            return;
+        gen_scan_sole_candidate(w, i, guarded, scan_alts, ctx, plan, base_name, guard_tokens);
+        return;
+    }
+    if plan.atn_dec >= 0 {
+        w.line(`let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${plan.atn_dec}, &ATN_STACK, tokens, pos, TK_EOF, 0);`);
+        for let mut k = 0; k < total; k += 1 {
+            let guarded = k < guarded_alts.len();
+            let i = if guarded { guarded_alts[k] } else { unguarded_alts[k - guarded_alts.len()] };
+            w.begin(`if _atn_alt == ${i}`);
+            gen_scan_sole_candidate(w, i, guarded, scan_alts, ctx, plan, base_name, guard_tokens);
+            w.end();
         }
-        let body = &scan_alts[i];
-        let known = if guarded { known_at_start(guard_tokens) } else { NOTHING_KNOWN };
-        if gen_scan_alt_candidate(w, i, body, &known, ctx, "break scan_alts;", true) {
-            w.line("return -1;");
-        }
+        w.line("return -1;");
         return;
     }
     // Longest-match tournament (see the function doc): try each from
@@ -1870,6 +1877,29 @@ fn gen_scan_partition_body<S: AsStrSlice>(
     }
     gen_scan_rewind_break(w, ctx, "best", "best >= 0", "break scan_alts;");
     w.line("return -1;");
+}
+
+/// Scan alt `i` as the only candidate left: commit on success, `return -1` on a miss.
+fn gen_scan_sole_candidate<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    i: i32,
+    guarded: bool,
+    scan_alts: &List<ScanBody>,
+    ctx: &mut GenContext,
+    plan: &ScanAltPlan,
+    base_name: S,
+    guard_tokens: &List<String>,
+) {
+    if plan.is_hoisted(i) {
+        w.line(`pos = ${hoisted_scan_call(base_name, i, ctx)};`);
+        w.line("if pos >= 0 { break scan_alts; }");
+        w.line("return -1;");
+        return;
+    }
+    let known = if guarded { known_at_start(guard_tokens) } else { NOTHING_KNOWN };
+    if gen_scan_alt_candidate(w, i, &scan_alts[i], &known, ctx, "break scan_alts;", true) {
+        w.line("return -1;");
+    }
 }
 
 /// What the scan has proved about the tokens ahead: `known[d]` holds every kind
@@ -2028,19 +2058,18 @@ fn gen_scan_op_element<S: AsStrSlice>(
             } else {
                 String::new();
             };
-            // ATN-class scan: bracket every rule-call scan with the scan caller
-            // stack so the callee's LR loop yields the caller's mandatory
-            // continuation (e.g. `between`'s `'and'`), exactly as the parse side's
-            // rule-entry wrapper does. Pop before the fail check so an early return
-            // never leaks the frame.
+            // Scan-side ATN: bracket every rule-call scan with the caller stack so
+            // the callee's simulation sees the caller's continuation (e.g.
+            // `between`'s `'and'`), exactly as the parse side's rule-entry wrapper
+            // does. Pop before the fail check so an early return never leaks the frame.
             let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
             let cont = if rc.lr_cont_mask >= 0 { `, ${ctx.follow_mask_ref(rc.lr_cont_mask)}` } else { "" };
             assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
             let call = `pos = ${fn_name}(tokens, pos${ctx.scan_gate_arg()}${follow_arg_str}${min_prec_arg}${cont});`;
             if push_ret >= 0 {
-                w.line(`SCAN_STACK.push(${push_ret});`);
+                w.line(`ATN_STACK.push(${push_ret});`);
                 w.line(&call);
-                w.line("SCAN_STACK.pop();");
+                w.line("ATN_STACK.pop();");
             } else {
                 w.line(&call);
             }
@@ -2924,13 +2953,13 @@ pub fn rule_overlap_groups(
     return [non_lr_indices, first_sets, groups];
 }
 
-pub fn grammar_has_at_end_conflict(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) -> bool {
+/// Per rule, whether one of its at-end conflicts routes to the simulator.
+pub fn grammar_at_end_conflict_rules(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) -> List<bool> {
+    let mut out: List<bool> = [];
     for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
-        if rule_has_at_end_conflict(&grammar.parser_rules[r], &lowered.parser_rules[r], ctx) {
-            return true;
-        }
+        out.push(rule_has_at_end_conflict(&grammar.parser_rules[r], &lowered.parser_rules[r], ctx));
     }
-    return false;
+    return out;
 }
 
 fn rule_has_at_end_conflict(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) -> bool {
@@ -3116,7 +3145,7 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
         w.line("p.trace_depth += 1;");
     }
     if needs_atn {
-        emit_atn_enter(w);
+        emit_atn_enter(w, ctx.atn_stack_place());
     }
     // LR rules manage their own nodes (precedence climbing wraps each
     // level via `start_node_at`), so the wrapper must NOT open an outer
@@ -3138,7 +3167,7 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
         w.line("p.b.finish_node(p.last_end());");
     }
     if needs_atn {
-        w.line("p.atn_stack.pop();");
+        w.line(`${ctx.atn_stack_place()}.pop();`);
     }
     if trace {
         w.line("p.trace_depth -= 1;");
@@ -3973,7 +4002,7 @@ fn begin_plus_first_iteration(w: &mut CodeWriter, name_counts: &mut List<[String
 
 /// Emit `p.atn_ret_pending = <state>;` immediately before a `_parse_X` call
 /// so the callee's entry wrapper pushes the call's exact ATN return state
-/// onto `p.atn_stack` (full-context prediction). No-op unless the grammar
+/// onto the caller stack (full-context prediction). No-op unless the grammar
 /// needs the ATN and the call site has a known return state
 /// (`Atn.call_site_returns`, keyed by `RuleCallOp.atn_call_site`). An
 /// unstamped call leaves `atn_ret_pending` at -1, which the simulator reads
@@ -4429,7 +4458,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
     w.begin("loop");
     w.line("if p.recovering { break; }");
     w.line(
-        `${lr_atn_alt_decl(lr_dispatch)} = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
+        `${lr_atn_alt_decl(lr_dispatch)} = atn_lr_loop_decision(&ATN_SIM, &${ctx.atn_stack_place()}, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
     );
     emit_lr_atn_group_repick(
         w,
@@ -5270,7 +5299,7 @@ fn atn_optional_enter_cond(ctx: &GenContext, rep_op: &RepeatOp) -> String {
     // always invoked at 0 and its fns carry no `min_prec` parameter — pass the
     // literal `0` there.
     let prec_arg = if ctx.lr_loop_entry_decision(rule) >= 0 { "min_prec" } else { "0" };
-    return `atn_predict_with_stack(&ATN_SIM, ${decision}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, ${prec_arg}) == 1`;
+    return `atn_predict_with_stack(&ATN_SIM, ${decision}, &${ctx.atn_stack_place()}, &p.kinds, p.pos, TK_EOF, ${prec_arg}) == 1`;
 }
 
 /// Wrap a raw Optional entry condition with the runtime caller-FOLLOW
@@ -8762,7 +8791,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                     let dec = ctx.atn_rule_body_decision(amb_rule);
                     let disabled_arg = emit_atn_disabled_seed(w, &a.alts, alts, ctx);
                     w.line(
-                        `let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${dec}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0${disabled_arg});`,
+                        `let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${dec}, &${ctx.atn_stack_place()}, &p.kinds, p.pos, TK_EOF, 0${disabled_arg});`,
                     );
                     // A seed can exclude every alt (`_atn_alt == -1`), which the
                     // index dispatch would otherwise route to its last alt.

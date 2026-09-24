@@ -2113,7 +2113,6 @@ struct Parser {
     recovering: bool,
     speculating: bool,
     max_errors: i32,
-    atn_stack: List<i32>,
     atn_ret_pending: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -2130,7 +2129,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, atn_stack: [], atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
     fn supersedes_pending(&self, start: i32) -> bool {
@@ -2345,15 +2344,15 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_between {
             pos = start + 1;
             try_1: {
-                SCAN_STACK.push(20);
+                ATN_STACK.push(20);
                 pos = scan_expr(tokens, pos, 0);
-                SCAN_STACK.pop();
+                ATN_STACK.pop();
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_and { break try_1; }
                 pos += 1;
-                SCAN_STACK.push(24);
+                ATN_STACK.push(24);
                 pos = scan_expr(tokens, pos, 1);
-                SCAN_STACK.pop();
+                ATN_STACK.pop();
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
@@ -2369,9 +2368,9 @@ fn scan_expr_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_and { return -1; }
     pos += 1;
-    SCAN_STACK.push(32);
+    ATN_STACK.push(32);
     pos = scan_expr(tokens, pos, 4);
-    SCAN_STACK.pop();
+    ATN_STACK.pop();
     if pos < 0 { return -1; }
     return pos;
 }
@@ -2383,9 +2382,9 @@ fn scan_expr_lr_2(tokens: &Array<i32>, pos: i32) -> i32 {
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_in { return -1; }
     pos += 1;
-    SCAN_STACK.push(41);
+    ATN_STACK.push(41);
     pos = scan_expr(tokens, pos, 3);
-    SCAN_STACK.pop();
+    ATN_STACK.pop();
     if pos < 0 { return -1; }
     return pos;
 }
@@ -2397,9 +2396,9 @@ fn scan_expr_lr_3(tokens: &Array<i32>, pos: i32) -> i32 {
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_like { return -1; }
     pos += 1;
-    SCAN_STACK.push(50);
+    ATN_STACK.push(50);
     pos = scan_expr(tokens, pos, 2);
-    SCAN_STACK.pop();
+    ATN_STACK.pop();
     if pos < 0 { return -1; }
     return pos;
 }
@@ -2408,7 +2407,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_expr_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
-        let mut _atn_alt = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, 1, tokens, pos, TK_EOF, min_prec);
+        let mut _atn_alt = atn_lr_loop_decision(&ATN_SIM, &ATN_STACK, 1, tokens, pos, TK_EOF, min_prec);
         if _atn_alt == 1 || _atn_alt == 2 {
             let mut _lr_best: i32 = -1;
             let mut _lr_s_1: i32 = -1;
@@ -2459,12 +2458,12 @@ fn _parse_stat(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
+    ATN_STACK.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_STAT, _start);
     _parse_stat__inner(p);
     p.b.finish_node(p.last_end());
-    p.atn_stack.pop();
+    ATN_STACK.pop();
     if p.recovering {
         p.push_rule_stack("stat");
     }
@@ -2501,7 +2500,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
-        let mut _atn_alt = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, 1, &p.kinds, p.pos, TK_EOF, min_prec);
+        let mut _atn_alt = atn_lr_loop_decision(&ATN_SIM, &ATN_STACK, 1, &p.kinds, p.pos, TK_EOF, min_prec);
         if _atn_alt == 1 || _atn_alt == 2 {
             let mut _lr_best: i32 = -1;
             let mut _lr_s_1: i32 = -1;
@@ -2560,9 +2559,9 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
+    ATN_STACK.push(_atn_ret);
     _parse_expr__inner(p, min_prec);
-    p.atn_stack.pop();
+    ATN_STACK.pop();
     if p.recovering {
         p.push_rule_stack("expr");
     }
@@ -2629,5 +2628,5 @@ global SYNC_0: List<i32> = [513];
 global EXPECTED_0: List<i32> = [TK_ID, TK_LIT_between];
 
 global ATN_SIM: AtnSim = atn_with_lr_tables(atn_decode(&b"\x02\x00\x04\x00\x33\x00\x00\x00\x02\x00\x0b\x00\x19\x00\x22\x00\x2b\x00\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x06\x09\x07\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x04\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x04\x00\x01\x00\x04\x00\x05\x05\x05\x00\x00\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x01\x00\x01\x00\x04\x00\x00\x00\x00\x00\x01\x00\x01\x00\x04\x00\x05\x00\x0c\x00\x07\x00\x02\x00\x08\x00\x03\x00\x0a\x00\x0b\x00\x06\x00\x0e\x00\x11\x00\x1a\x00\x0f\x00\x10\x00\x0d\x00\x12\x00\x13\x00\x14\x00\x03\x00\x16\x00\x17\x00\x18\x00\x03\x00\x0d\x00\x1d\x00\x22\x00\x2b\x00\x1b\x00\x04\x00\x1a\x00\x1e\x00\x1f\x00\x20\x00\x03\x00\x1c\x00\x23\x00\x25\x00\x24\x00\x27\x00\x26\x00\x24\x00\x28\x00\x29\x00\x03\x00\x1c\x00\x2c\x00\x2e\x00\x2d\x00\x30\x00\x2f\x00\x2d\x00\x31\x00\x32\x00\x03\x00\x1c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x21\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x2a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x33\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x03\x00\x02\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00"));
-global mut SCAN_STACK: List<i32> = [];
+global mut ATN_STACK: List<i32> = [];
 

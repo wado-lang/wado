@@ -170,11 +170,13 @@ pub struct GenContext {
     /// number). Grammars without either stay byte-identical. (`*?`/`+?` keep
     /// the dedicated non-greedy strategy and do not set this.)
     needs_atn_seen: bool,
-    /// Set by lowering for an ATN-class LR rule. Gates the scan-side caller
-    /// stack (`SCAN_STACK`) and the scan-side LR loop routing, so a
-    /// non-greedy-`??`-only grammar (which shares the same `ATN_SIM` but
-    /// needs no scan-side LR routing) does not carry a dead scan stack.
+    /// Set for an ATN-class LR rule or an at-end conflict routed to the
+    /// simulator. Gates the shared caller stack (`ATN_STACK`) and the scan-side
+    /// ATN routing, so a non-greedy-`??`-only grammar (which shares the same
+    /// `ATN_SIM` but needs no scan-side routing) does not carry a dead stack.
     needs_scan_atn_seen: bool,
+    /// Set by lowering for an ATN-class LR rule. Gates the LR tables.
+    needs_lr_atn_seen: bool,
     /// The ATN call-site → return-state correspondence (`Atn.call_site_returns`,
     /// indexed by `RuleRefElement.atn_call_site`). Populated after lowering
     /// by `set_atn_call_site_returns` when `needs_atn`, so parser emit can
@@ -209,6 +211,9 @@ pub struct GenContext {
     /// when `needs_atn`); read by the rule emitter to route an `AtEndConflict`
     /// multi-alt `Ambiguous` site through `atn_predict_with_stack`.
     atn_rule_body_decisions: List<i32>,
+    /// Per-rule: whether an `AtEndConflict` of the rule routes to the simulator,
+    /// so its scan decides by the same simulation. Indexed by rule.
+    at_end_atn_rules: List<bool>,
     /// When set, parser emit adds trace logging (rule enter/ok/fail plus
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
@@ -364,12 +369,14 @@ impl GenContext {
             caller_follow_gate_seen: false,
             needs_atn_seen: false,
             needs_scan_atn_seen: false,
+            needs_lr_atn_seen: false,
             atn_call_site_returns: [],
             atn_decision_sites: [],
             current_rule_index: -1,
             scan_group_counter: 0,
             lr_loop_entry_decisions: [],
             atn_rule_body_decisions: [],
+            at_end_atn_rules: [],
             trace: false,
             fragment_entries: [],
             emit_actions: false,
@@ -593,17 +600,33 @@ impl GenContext {
         return self.needs_atn_seen;
     }
 
-    /// Record that lowering saw an ATN-class LR rule (needs scan-side ATN
-    /// globals). Implies `needs_atn`.
+    /// Record that a scan decides through the ATN: an ATN-class LR rule, or an
+    /// at-end conflict routed to the simulator. Implies `needs_atn`.
     pub fn mark_needs_scan_atn(&mut self) {
         self.needs_scan_atn_seen = true;
     }
 
-    /// Whether to emit the scan-side caller stack (`SCAN_STACK`) and
-    /// route the scan LR loop through the ATN. True iff an ATN-class LR rule
-    /// exists. (`ATN_SIM` itself is emitted whenever `needs_atn`.)
+    /// Whether scans decide through the ATN, so the caller stack is the global
+    /// `ATN_STACK` both sides share. (`ATN_SIM` is emitted whenever `needs_atn`.)
     pub fn needs_scan_atn(&self) -> bool {
         return self.needs_scan_atn_seen;
+    }
+
+    /// Record an ATN-class LR rule: its loop decision reads the LR tables.
+    pub fn mark_needs_lr_atn(&mut self) {
+        self.needs_lr_atn_seen = true;
+        self.needs_scan_atn_seen = true;
+    }
+
+    /// Whether `ATN_SIM` carries the LR tables `atn_lr_loop_decision` reads.
+    pub fn needs_lr_atn(&self) -> bool {
+        return self.needs_lr_atn_seen;
+    }
+
+    /// The caller stack the parse side pushes and predicts with: `ATN_STACK`
+    /// where scans read it too, so a scan launched mid-parse has full context.
+    pub fn atn_stack_place(&self) -> String {
+        return if self.needs_scan_atn_seen { "ATN_STACK" } else { "p.atn_stack" };
     }
 
     /// Install what each rule's actions read off its labeled rule calls
@@ -834,7 +857,23 @@ impl GenContext {
         return self.atn_rule_body_decisions[rule];
     }
 
-    /// The exact ATN return state to push onto `SCAN_STACK` before a scan
+    pub fn set_at_end_atn_rules(&mut self, rules: List<bool>) {
+        self.at_end_atn_rules = rules;
+    }
+
+    /// The decision a scan of `rule` picks its alternative by, or -1 where the
+    /// scan runs its longest-match tournament.
+    pub fn scan_atn_body_decision(&self, rule: i32) -> i32 {
+        if rule < 0 || rule >= self.at_end_atn_rules.len() || !self.at_end_atn_rules[rule] {
+            return -1;
+        }
+        if self.lr_loop_entry_decision(rule) >= 0 {
+            return -1;
+        }
+        return self.atn_rule_body_decision(rule);
+    }
+
+    /// The exact ATN return state to push onto `ATN_STACK` before a scan
     /// rule call (from `Atn.call_site_returns`), or -1 when the grammar has no
     /// scan-side ATN routing. Every scan rule call brackets with this push/pop
     /// — mirroring the parse side, where the rule-entry wrapper pushes every

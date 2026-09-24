@@ -29,7 +29,7 @@ use {
     lexer_grammar_run_action_ids,
     lexer_mode_attr_use,
 } from "./lexer_gen.wado";
-use { gen_parser, grammar_has_at_end_conflict } from "./parser_gen.wado";
+use { gen_parser, grammar_at_end_conflict_rules } from "./parser_gen.wado";
 use { collect_members, translate_gate_bodies } from "./action_gen.wado";
 use { gen_kind_set_helpers, gen_follow_mask_globals, gen_sync_set_globals } from "./kind_set_gen.wado";
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
@@ -245,9 +245,12 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // emit can push each rule call's exact return state (`call_site_returns`)
     // and `gen_atn_data_global` can serialize the very same ATN. Gate-free
     // grammars skip this entirely.
-    if !ctx.needs_atn() && grammar_has_at_end_conflict(grammar, &lowered, &mut ctx) {
+    let at_end_rules = grammar_at_end_conflict_rules(grammar, &lowered, &mut ctx);
+    if at_end_rules.contains(&true) {
         ctx.mark_needs_atn();
+        ctx.mark_needs_scan_atn();
     }
+    ctx.set_at_end_atn_rules(at_end_rules);
     let mut atn = empty_atn();
     if ctx.needs_atn() {
         atn = build_atn_with(grammar, &lowered);
@@ -333,7 +336,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // lowering saw a construct that needs it (a non-greedy `??` or an
     // ATN-class LR rule).
     if ctx.needs_atn() {
-        gen_atn_data_global(&mut w, &atn, ctx.needs_scan_atn());
+        gen_atn_data_global(&mut w, &atn, ctx.needs_lr_atn(), ctx.needs_scan_atn());
     }
     // Serialized lexer ATN blob, decoded once into `LATN_SIM`, for the
     // runtime lexer simulator (`latn_match`).
@@ -351,7 +354,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             // Several decision kinds route here, each on its own condition;
             // the emitted parser is the one place they all meet.
             atn_predict: ctx.needs_scan_atn() || body.contains("atn_predict_with_stack("),
-            atn_lr: ctx.needs_scan_atn(),
+            atn_lr: ctx.needs_lr_atn(),
             latn: needs_latn,
             highlight: emit_highlight,
             superclass: ctx.has_superclass(),
@@ -593,15 +596,12 @@ fn element_has_open_first(e: &Element) -> bool {
 
 /// Emit the decoded `ATN_SIM` global: the serialized whole-grammar ATN the
 /// inlined runtime decodes once, at construction, into the module-level sim.
-fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
-    emit_atn_blob_global(w, atn, "ATN_SIM", emit_scan_globals);
-    // The mutable scan caller stack. The scan emit pushes/pops it around
-    // operand scans so an ATN-class LR rule's scan loop can route through
-    // `atn_lr_loop_decision` exactly like the parse side. Only needed when an
-    // ATN-class LR rule exists (a non-greedy-`??`-only grammar uses the
-    // simulator but not the scan-side routing).
+fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, lr_tables: bool, emit_scan_globals: bool) {
+    emit_atn_blob_global(w, atn, "ATN_SIM", lr_tables);
+    // One caller stack for both sides: a scan launched mid-parse continues the
+    // parse's frames, so its simulation has the full context the parse has.
     if emit_scan_globals {
-        w.line("global mut SCAN_STACK: List<i32> = [];");
+        w.line("global mut ATN_STACK: List<i32> = [];");
     }
     w.blank();
 }

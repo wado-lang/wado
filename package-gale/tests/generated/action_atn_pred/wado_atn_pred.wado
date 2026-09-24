@@ -1,7 +1,5 @@
 #![generated(by = "gale", sources = ["tests/grammars/wado_atn_pred.g4"])]
 
-use { TreeMap } from "core:collections";
-
 // Grammar metadata from source .g4 prequels:
 //   option language = Wado
 
@@ -930,6 +928,7 @@ pub struct AtnSim {
     pub cont_first_label: List<i32> = [],
     pub cont_neg_label: List<i32> = [],
     pub state_cont_first_open: List<bool> = [],
+    pub state_collapse_to: List<i32> = [],
 }
 
 fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
@@ -1041,10 +1040,66 @@ global CTX_BOUNDARY: i32 = -3;
 
 global CTX_EMPTY: i32 = 0;
 
+struct AtnKeyMap {
+    keys: List<i64>,
+    vals: List<i32>,
+    len: i32,
+}
+
+impl AtnKeyMap {
+    fn new() -> AtnKeyMap {
+        return AtnKeyMap::with_slots(64);
+    }
+
+    fn with_slots(slots: i32) -> AtnKeyMap {
+        assert slots & slots - 1 == 0, "slot count is a power of two";
+        let mut keys: List<i64> = List::with_capacity(slots);
+        let mut vals: List<i32> = List::with_capacity(slots);
+        for let mut i = 0; i < slots; i += 1 {
+            keys.push(-1);
+            vals.push(-1);
+        }
+        return AtnKeyMap { keys, vals, len: 0 };
+    }
+
+    fn slot_of(&self, k: i64) -> i32 {
+        assert k >= 0, "keys are non-negative";
+        let mask = self.keys.len() - 1;
+        let mut i = ((k ^ k >> 29) * 0x5851F42D4C957F2D >> 32) as i32 & mask;
+        while self.keys[i] >= 0 && self.keys[i] != k {
+            i = i + 1 & mask;
+        }
+        return i;
+    }
+
+    fn get(&self, k: i64) -> i32 {
+        return self.vals[self.slot_of(k)];
+    }
+
+    fn set(&mut self, k: i64, v: i32) {
+        if (self.len + 1) * 2 > self.keys.len() {
+            let mut grown = AtnKeyMap::with_slots(self.keys.len() * 2);
+            for let mut i = 0; i < self.keys.len(); i += 1 {
+                if self.keys[i] >= 0 {
+                    grown.set(self.keys[i], self.vals[i]);
+                }
+            }
+            *self = grown;
+        }
+        let i = self.slot_of(k);
+        if self.keys[i] < 0 {
+            self.keys[i] = k;
+            self.len += 1;
+        }
+        self.vals[i] = v;
+    }
+}
+
 struct CtxArena {
     edges: List<List<[i32, i32, i32]>>,
-    intern: TreeMap<i64, List<i32>>,
-    merge_cache: TreeMap<i64, i32>,
+    intern_head: AtnKeyMap,
+    intern_next: List<i32>,
+    merge_cache: AtnKeyMap,
 }
 
 struct AtnConfig {
@@ -1060,8 +1115,9 @@ impl CtxArena {
         let empty: List<[i32, i32, i32]> = [];
         return CtxArena {
             edges: [empty],
-            intern: TreeMap::<i64, List<i32>>::new(),
-            merge_cache: TreeMap::<i64, i32>::new(),
+            intern_head: AtnKeyMap::new(),
+            intern_next: [-1],
+            merge_cache: AtnKeyMap::new(),
         };
     }
 
@@ -1080,22 +1136,18 @@ impl CtxArena {
             return CTX_EMPTY;
         }
         let h = CtxArena::hash_of(sorted);
-        if let Some(cands) = self.intern.get(h) {
-            for let id of &cands {
-                if edge_lists_eq(&self.edges[*id], sorted) {
-                    return *id;
-                }
+        let head = self.intern_head.get(h);
+        let mut cand = head;
+        while cand >= 0 {
+            if edge_lists_eq(&self.edges[cand], sorted) {
+                return cand;
             }
+            cand = self.intern_next[cand];
         }
         let id = self.edges.len();
         self.edges.push(*sorted);
-        let mut cands = if let Some(c) = self.intern.get(h) {
-            c;
-        } else {
-            [] as List<i32>;
-        };
-        cands.push(id);
-        self.intern[h] = cands;
+        self.intern_next.push(head);
+        self.intern_head.set(h, id);
         return id;
     }
 
@@ -1123,8 +1175,9 @@ impl CtxArena {
         let hi = if a < b { b } else { a };
         assert ATN_MERGE_CACHE_STRIDE > ATN_ARENA_CAP as i64, "the merge-cache stride must exceed the arena cap, or two arena id pairs alias onto one key";
         let ck = lo as i64 * ATN_MERGE_CACHE_STRIDE + hi as i64;
-        if let Some(id) = self.merge_cache.get(ck) {
-            return id;
+        let cached = self.merge_cache.get(ck);
+        if cached >= 0 {
+            return cached;
         }
         let ea = self.edges_view(a);
         let eb = self.edges_view(b);
@@ -1154,7 +1207,7 @@ impl CtxArena {
         }
         sort_ctx_edges(&mut merged);
         let id = self.intern_edges(&merged);
-        self.merge_cache[ck] = id;
+        self.merge_cache.set(ck, id);
         return id;
     }
 }
@@ -1209,7 +1262,7 @@ struct CfgSet {
     rs: List<i32>,
     pr: List<i32>,
     pctx: List<i32>,
-    index: TreeMap<i64, i32>,
+    index: AtnKeyMap,
 }
 
 impl CfgSet {
@@ -1220,7 +1273,7 @@ impl CfgSet {
             rs: [],
             pr: [],
             pctx: [],
-            index: TreeMap::<i64, i32>::new(),
+            index: AtnKeyMap::new(),
         };
     }
 
@@ -1230,11 +1283,12 @@ impl CfgSet {
         assert rs + 2 < CFG_KEY_RS_SLOT, `ATN config caller-stack depth ${rs} exceeds packed-key slot`;
         assert state + 2 < CFG_KEY_STATE_SLOT, `ATN config state ${state} exceeds packed-key slot`;
         let k = (((state + 2) as i64 * CFG_KEY_RS_SLOT as i64 + (rs + 2) as i64) * CFG_KEY_ALT_SLOT as i64 + (alt + 1) as i64) * CFG_KEY_PR_SLOT as i64 + (pr + 2) as i64;
-        if let Some(i) = self.index.get(k) {
-            let merged = arena.merge(self.pctx[i], pctx);
-            let changed = merged != self.pctx[i];
-            self.pctx[i] = merged;
-            return [i, changed];
+        let found = self.index.get(k);
+        if found >= 0 {
+            let merged = arena.merge(self.pctx[found], pctx);
+            let changed = merged != self.pctx[found];
+            self.pctx[found] = merged;
+            return [found, changed];
         }
         let i = self.state.len();
         self.state.push(state);
@@ -1242,7 +1296,7 @@ impl CfgSet {
         self.rs.push(rs);
         self.pr.push(pr);
         self.pctx.push(pctx);
-        self.index[k] = i;
+        self.index.set(k, i);
         return [i, true];
     }
 
@@ -1308,25 +1362,67 @@ fn atn_expand(
         rset.add(arena, cur.state, cur.alt, cur.rs, cur.pr, cur.pctx);
         return;
     }
+    let pctx = atn_collapse_into_caller_loop(sim, arena, cur, rstk, work);
+    if pctx < 0 {
+        return;
+    }
     let start = sim.state_tr_start[cur.state];
     let cnt = sim.state_tr_count[cur.state];
     for let mut j = 0; j < cnt; j += 1 {
         let k = sim.tr_kind[start + j];
         let target = sim.tr_target[start + j];
         if k == ATN_TR_EPSILON {
-            work.push(AtnConfig { state: target, alt: cur.alt, pctx: cur.pctx, rs: cur.rs, pr: cur.pr });
+            work.push(AtnConfig { state: target, alt: cur.alt, pctx, rs: cur.rs, pr: cur.pr });
         } else if k == ATN_TR_PRECEDENCE {
             if sim.tr_prec[start + j] >= cur.pr {
-                work.push(AtnConfig { state: target, alt: cur.alt, pctx: cur.pctx, rs: cur.rs, pr: cur.pr });
+                work.push(AtnConfig { state: target, alt: cur.alt, pctx, rs: cur.rs, pr: cur.pr });
             }
         } else if k == ATN_TR_RULE {
             if target < 0 || arena.edges.len() >= ATN_ARENA_CAP {
                 continue;
             }
-            let npctx = arena.push(sim.tr_follow[start + j], cur.pr, cur.pctx);
+            let npctx = arena.push(sim.tr_follow[start + j], cur.pr, pctx);
             work.push(AtnConfig { state: target, alt: cur.alt, pctx: npctx, rs: cur.rs, pr: sim.tr_prec[start + j] });
         }
     }
+}
+
+fn atn_collapse_into_caller_loop(
+    sim: &AtnSim,
+    arena: &mut CtxArena,
+    cur: &AtnConfig,
+    rstk: &List<i32>,
+    work: &mut List<AtnConfig>,
+) -> i32 {
+    if sim.state_collapse_to.is_empty() {
+        return cur.pctx;
+    }
+    if cur.pctx == CTX_EMPTY {
+        if cur.rs >= 0 && rstk[cur.rs] >= 0 && sim.state_collapse_to[rstk[cur.rs]] == cur.state {
+            work.push(AtnConfig { state: cur.state, alt: cur.alt, pctx: CTX_EMPTY, rs: cur.rs - 1, pr: cur.pr });
+            return -1;
+        }
+        return cur.pctx;
+    }
+    let edges = arena.edges[cur.pctx];
+    let mut kept: List<[i32, i32, i32]> = [];
+    for let e of &edges {
+        if e.0 >= 0 && sim.state_collapse_to[e.0] == cur.state && cur.pr >= e.1 {
+            work.push(AtnConfig { state: cur.state, alt: cur.alt, pctx: e.2, rs: cur.rs, pr: e.1 });
+        } else {
+            kept.push(*e);
+        }
+    }
+    if kept.len() == edges.len() {
+        return cur.pctx;
+    }
+    if kept.is_empty() {
+        return -1;
+    }
+    if kept.len() == 1 && kept[0].0 == CTX_BOUNDARY {
+        return CTX_EMPTY;
+    }
+    return arena.intern_edges(&kept);
 }
 
 fn atn_pop(
@@ -1436,6 +1532,38 @@ fn atn_min_alt(alts: &List<i32>) -> i32 {
     return m;
 }
 
+fn atn_single_viable_alt(configs: &List<AtnConfig>) -> i32 {
+    let mut heads = AtnKeyMap::new();
+    let mut ctx: List<i32> = [];
+    let mut min_alt: List<i32> = [];
+    let mut next: List<i32> = [];
+    for let c of configs {
+        let k = ((c.state + 2) as i64 * CFG_KEY_RS_SLOT as i64 + (c.rs + 2) as i64) * CFG_KEY_PR_SLOT as i64 + (c.pr + 2) as i64;
+        let head = heads.get(k);
+        let mut g = head;
+        while g >= 0 && ctx[g] != c.pctx {
+            g = next[g];
+        }
+        if g >= 0 {
+            if c.alt < min_alt[g] {
+                min_alt[g] = c.alt;
+            }
+        } else {
+            heads.set(k, ctx.len());
+            ctx.push(c.pctx);
+            min_alt.push(c.alt);
+            next.push(head);
+        }
+    }
+    let single = min_alt[0];
+    for let a of &min_alt {
+        if *a != single {
+            return -1;
+        }
+    }
+    return single;
+}
+
 fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
     if configs.is_empty() {
         return false;
@@ -1492,6 +1620,10 @@ pub fn atn_predict_with_stack(
         if alts.len() == 1 {
             return alts[0];
         }
+        let single = atn_single_viable_alt(&configs);
+        if single >= 0 {
+            return single;
+        }
         if atn_all_at_end(sim, &configs) {
             return atn_min_alt(&alts);
         }
@@ -1501,6 +1633,253 @@ pub fn atn_predict_with_stack(
         pos += 1;
         configs = atn_closure(sim, &mut arena, &moved, rule_stack);
     }
+}
+
+pub fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
+    let mut out = sim;
+    let nrules = out.rule_start.len();
+    for let mut r = 0; r < nrules; r += 1 {
+        out.rule_nullable.push(false);
+        out.rule_first.push([]);
+        out.rule_first_neg.push([]);
+        out.rule_first_open.push(false);
+    }
+    if out.tr_kind.contains(&ATN_TR_PRECEDENCE) {
+        atn_compute_first_nullable(&mut out);
+        atn_compute_state_cont(&mut out);
+        atn_compute_collapse(&mut out);
+    }
+    return out;
+}
+
+fn atn_compute_collapse(sim: &mut AtnSim) {
+    let nstates = sim.state_kind.len();
+    for let mut st = 0; st < nstates; st += 1 {
+        sim.state_collapse_to.push(atn_lr_entry_reached(sim, st));
+    }
+}
+
+fn atn_lr_entry_reached(sim: &AtnSim, from: i32) -> i32 {
+    let mut st = from;
+    for let mut steps = 0; steps < 8; steps += 1 {
+        let s = sim.state_tr_start[st];
+        let c = sim.state_tr_count[st];
+        for let mut j = 0; j < c; j += 1 {
+            if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE {
+                return if steps > 0 { st } else { -1 };
+            }
+        }
+        if c != 1 || sim.tr_kind[s] != ATN_TR_EPSILON {
+            return -1;
+        }
+        st = sim.tr_target[s];
+    }
+    return -1;
+}
+
+fn atn_compute_state_cont(sim: &mut AtnSim) {
+    let nstates = sim.state_kind.len();
+    for let mut st = 0; st < nstates; st += 1 {
+        let mut v1: List<i32> = [];
+        let nullable = atn_cont_nullable(sim, st, &mut v1);
+        let mut v2: List<i32> = [];
+        let mut f: List<i32> = [];
+        let mut fneg: List<i32> = [];
+        let open = atn_cont_first(sim, st, &mut v2, &mut f, &mut fneg);
+        sim.state_cont_nullable.push(nullable);
+        sim.state_cont_first_start.push(sim.cont_first_label.len());
+        sim.state_cont_first_count.push(f.len());
+        for let t of &f {
+            sim.cont_first_label.push(*t);
+        }
+        sim.state_cont_neg_start.push(sim.cont_neg_label.len());
+        sim.state_cont_neg_count.push(fneg.len());
+        for let x of &fneg {
+            sim.cont_neg_label.push(*x);
+        }
+        sim.state_cont_first_open.push(open);
+    }
+}
+
+fn atn_compute_first_nullable(sim: &mut AtnSim) {
+    let nrules = sim.rule_start.len();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for let mut r = 0; r < nrules; r += 1 {
+            let mut v1: List<i32> = [];
+            if atn_cont_nullable(sim, sim.rule_start[r], &mut v1) && !sim.rule_nullable[r] {
+                sim.rule_nullable[r] = true;
+                changed = true;
+            }
+            let mut v2: List<i32> = [];
+            let mut f: List<i32> = [];
+            let mut fneg: List<i32> = [];
+            if atn_cont_first(sim, sim.rule_start[r], &mut v2, &mut f, &mut fneg) && !sim.rule_first_open[r] {
+                sim.rule_first_open[r] = true;
+                changed = true;
+            }
+            for let t of &f {
+                if !sim.rule_first[r].contains(t) {
+                    sim.rule_first[r].push(*t);
+                    changed = true;
+                }
+            }
+            for let x of &fneg {
+                if !sim.rule_first_neg[r].contains(x) {
+                    sim.rule_first_neg[r].push(*x);
+                    changed = true;
+                }
+            }
+        }
+    }
+}
+
+fn atn_cont_nullable(sim: &AtnSim, state: i32, visited: &mut List<i32>) -> bool {
+    if visited.contains(&state) {
+        return false;
+    }
+    visited.push(state);
+    if sim.state_kind[state] == ATN_RULE_STOP {
+        return true;
+    }
+    let s = sim.state_tr_start[state];
+    let c = sim.state_tr_count[state];
+    for let mut j = 0; j < c; j += 1 {
+        let k = sim.tr_kind[s + j];
+        if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
+            if atn_cont_nullable(sim, sim.tr_target[s + j], visited) {
+                return true;
+            }
+        } else if k == ATN_TR_RULE {
+            let callee = sim.tr_label[s + j];
+            if callee >= 0 && sim.rule_nullable[callee] && atn_cont_nullable(sim, sim.tr_follow[s + j], visited) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut List<i32>, neg: &mut List<i32>) -> bool {
+    if visited.contains(&state) {
+        return false;
+    }
+    visited.push(state);
+    if sim.state_kind[state] == ATN_RULE_STOP {
+        return false;
+    }
+    let mut open = false;
+    let s = sim.state_tr_start[state];
+    let c = sim.state_tr_count[state];
+    for let mut j = 0; j < c; j += 1 {
+        let k = sim.tr_kind[s + j];
+        if k == ATN_TR_ATOM {
+            if !out.contains(&sim.tr_label[s + j]) {
+                out.push(sim.tr_label[s + j]);
+            }
+        } else if k == ATN_TR_WILDCARD {
+            open = true;
+        } else if k == ATN_TR_NOT_ATOM {
+            if !neg.contains(&sim.tr_label[s + j]) {
+                neg.push(sim.tr_label[s + j]);
+            }
+        } else if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
+            if atn_cont_first(sim, sim.tr_target[s + j], visited, out, neg) {
+                open = true;
+            }
+        } else if k == ATN_TR_RULE {
+            let callee = sim.tr_label[s + j];
+            if callee >= 0 {
+                for let t of &sim.rule_first[callee] {
+                    if !out.contains(t) {
+                        out.push(*t);
+                    }
+                }
+                for let x of &sim.rule_first_neg[callee] {
+                    if !neg.contains(x) {
+                        neg.push(*x);
+                    }
+                }
+                if sim.rule_first_open[callee] {
+                    open = true;
+                }
+                if sim.rule_nullable[callee] && atn_cont_first(sim, sim.tr_follow[s + j], visited, out, neg) {
+                    open = true;
+                }
+            }
+        }
+    }
+    return open;
+}
+
+fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
+    if sim.state_cont_first_open[state] && t != eof {
+        return true;
+    }
+    let fs = sim.state_cont_first_start[state];
+    let fc = sim.state_cont_first_count[state];
+    for let mut j = 0; j < fc; j += 1 {
+        if sim.cont_first_label[fs + j] == t {
+            return true;
+        }
+    }
+    if t != eof {
+        let ns = sim.state_cont_neg_start[state];
+        let nc = sim.state_cont_neg_count[state];
+        for let mut j = 0; j < nc; j += 1 {
+            if sim.cont_neg_label[ns + j] != t {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+pub fn atn_lr_loop_decision(
+    sim: &AtnSim,
+    rule_stack: &List<i32>,
+    decision: i32,
+    tokens: &Array<i32>,
+    pos: i32,
+    eof: i32,
+    min_prec: i32 = 0,
+) -> i32 {
+    let dstate = sim.decision_state[decision];
+    let t = if pos < tokens.len() { tokens[pos] } else { eof };
+    let s = sim.state_tr_start[dstate];
+    let c = sim.state_tr_count[dstate];
+    let exit_alt = c - 1;
+    let mut enter = -1;
+    for let mut j = 0; j < c; j += 1 {
+        if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE && sim.tr_prec[s + j] >= min_prec && atn_state_cont_admits(sim, sim.tr_target[s + j], t, eof) {
+            enter = j;
+            break;
+        }
+    }
+    if enter < 0 {
+        return exit_alt;
+    }
+    if !atn_caller_mandates(sim, rule_stack, t, eof) {
+        return enter;
+    }
+    return atn_predict_with_stack(sim, decision, rule_stack, tokens, pos, eof, min_prec);
+}
+
+fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -> bool {
+    let mut i = rule_stack.len() - 1;
+    while i >= 0 {
+        let ret = rule_stack[i];
+        if ret < 0 {
+            return i == 0 && t == eof;
+        }
+        if sim.state_cont_nullable[ret] {
+            i -= 1;
+            continue;
+        }
+        return atn_state_cont_admits(sim, ret, t, eof);
+    }
+    return false;
 }
 pub global TK_WS: i32 = 0;
 pub global TK_EOF: i32 = 1;
@@ -1648,7 +2027,6 @@ struct Parser {
     recovering: bool,
     speculating: bool,
     max_errors: i32,
-    atn_stack: List<i32>,
     atn_ret_pending: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -1666,7 +2044,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, atn_stack: [], atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
     }
 
     fn emit(&mut self, s: String) {
@@ -1976,12 +2354,12 @@ fn _parse_takes(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
+    ATN_STACK.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_TAKES, _start);
     _parse_takes__inner(p);
     p.b.finish_node(p.last_end());
-    p.atn_stack.pop();
+    ATN_STACK.pop();
     if p.recovering {
         p.push_rule_stack("takes");
     }
@@ -2032,7 +2410,7 @@ fn _parse_xt__inner(p: &mut Parser) -> () {
     if kind == TK_LIT_a {
         let mut _atn_disabled: List<i32> = [];
         if !(pred_1(p)) { _atn_disabled.push(1); }
-        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 0, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0, &_atn_disabled);
+        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 0, &ATN_STACK, &p.kinds, p.pos, TK_EOF, 0, &_atn_disabled);
         if _atn_alt < 0 {
             p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
             return;
@@ -2054,12 +2432,12 @@ fn _parse_xt(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
+    ATN_STACK.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_XT, _start);
     _parse_xt__inner(p);
     p.b.finish_node(p.last_end());
-    p.atn_stack.pop();
+    ATN_STACK.pop();
     if p.recovering {
         p.push_rule_stack("xt");
     }
@@ -2076,12 +2454,12 @@ fn _parse_rejects(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
+    ATN_STACK.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_REJECTS, _start);
     _parse_rejects__inner(p);
     p.b.finish_node(p.last_end());
-    p.atn_stack.pop();
+    ATN_STACK.pop();
     if p.recovering {
         p.push_rule_stack("rejects");
     }
@@ -2132,7 +2510,7 @@ fn _parse_xr__inner(p: &mut Parser) -> () {
     if kind == TK_LIT_a {
         let mut _atn_disabled: List<i32> = [];
         if !(pred_4(p)) { _atn_disabled.push(1); }
-        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 1, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0, &_atn_disabled);
+        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 1, &ATN_STACK, &p.kinds, p.pos, TK_EOF, 0, &_atn_disabled);
         if _atn_alt < 0 {
             p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
             return;
@@ -2154,12 +2532,12 @@ fn _parse_xr(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
+    ATN_STACK.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_XR, _start);
     _parse_xr__inner(p);
     p.b.finish_node(p.last_end());
-    p.atn_stack.pop();
+    ATN_STACK.pop();
     if p.recovering {
         p.push_rule_stack("xr");
     }
@@ -2176,12 +2554,12 @@ fn _parse_ctxkeep(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
+    ATN_STACK.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_CTXKEEP, _start);
     _parse_ctxkeep__inner(p);
     p.b.finish_node(p.last_end());
-    p.atn_stack.pop();
+    ATN_STACK.pop();
     if p.recovering {
         p.push_rule_stack("ctxkeep");
     }
@@ -2237,7 +2615,7 @@ fn _parse_ck__inner(p: &mut Parser) -> CkVals {
     if kind == TK_LIT_a {
         let mut _atn_disabled: List<i32> = [];
         if !( vals.mode == 1 ) { _atn_disabled.push(1); }
-        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 2, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0, &_atn_disabled);
+        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 2, &ATN_STACK, &p.kinds, p.pos, TK_EOF, 0, &_atn_disabled);
         if _atn_alt < 0 {
             p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
             return vals;
@@ -2259,12 +2637,12 @@ fn _parse_ck(p: &mut Parser) -> CkVals {
     if p.recovering { return CkVals {}; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
+    ATN_STACK.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_CK, _start);
     let __vals = _parse_ck__inner(p);
     p.b.finish_node(p.last_end());
-    p.atn_stack.pop();
+    ATN_STACK.pop();
     if p.recovering {
         p.push_rule_stack("ck");
     }
@@ -2282,12 +2660,12 @@ fn _parse_ctxdrop(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
+    ATN_STACK.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_CTXDROP, _start);
     _parse_ctxdrop__inner(p);
     p.b.finish_node(p.last_end());
-    p.atn_stack.pop();
+    ATN_STACK.pop();
     if p.recovering {
         p.push_rule_stack("ctxdrop");
     }
@@ -2343,7 +2721,7 @@ fn _parse_cd__inner(p: &mut Parser) -> CdVals {
     if kind == TK_LIT_a {
         let mut _atn_disabled: List<i32> = [];
         if !( vals.mode == 0 ) { _atn_disabled.push(1); }
-        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 3, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0, &_atn_disabled);
+        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 3, &ATN_STACK, &p.kinds, p.pos, TK_EOF, 0, &_atn_disabled);
         if _atn_alt < 0 {
             p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
             return vals;
@@ -2365,12 +2743,12 @@ fn _parse_cd(p: &mut Parser) -> CdVals {
     if p.recovering { return CdVals {}; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
+    ATN_STACK.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_CD, _start);
     let __vals = _parse_cd__inner(p);
     p.b.finish_node(p.last_end());
-    p.atn_stack.pop();
+    ATN_STACK.pop();
     if p.recovering {
         p.push_rule_stack("cd");
     }
@@ -2388,12 +2766,12 @@ fn _parse_allfalse(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
+    ATN_STACK.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_ALLFALSE, _start);
     _parse_allfalse__inner(p);
     p.b.finish_node(p.last_end());
-    p.atn_stack.pop();
+    ATN_STACK.pop();
     if p.recovering {
         p.push_rule_stack("allfalse");
     }
@@ -2446,7 +2824,7 @@ fn _parse_af__inner(p: &mut Parser) -> () {
         let mut _atn_disabled: List<i32> = [];
         if !(pred_14(p)) { _atn_disabled.push(0); }
         if !(pred_16(p)) { _atn_disabled.push(1); }
-        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 4, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0, &_atn_disabled);
+        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 4, &ATN_STACK, &p.kinds, p.pos, TK_EOF, 0, &_atn_disabled);
         if _atn_alt < 0 {
             p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
             return;
@@ -2468,12 +2846,12 @@ fn _parse_af(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
-    p.atn_stack.push(_atn_ret);
+    ATN_STACK.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_AF, _start);
     _parse_af__inner(p);
     p.b.finish_node(p.last_end());
-    p.atn_stack.pop();
+    ATN_STACK.pop();
     if p.recovering {
         p.push_rule_stack("af");
     }
@@ -2590,5 +2968,6 @@ global SYNC_0: List<i32> = [32];
 global SYNC_1: List<i32> = [8];
 global EXPECTED_2: List<i32> = [TK_LIT_a];
 
-global ATN_SIM: AtnSim = atn_decode(&b"\x0a\x00\x05\x00\x7d\x00\x00\x00\x02\x00\x04\x00\x06\x00\x08\x00\x0a\x00\x0c\x00\x0e\x00\x10\x00\x12\x00\x1b\x00\x30\x00\x45\x00\x5a\x00\x6f\x00\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x15\x00\x1c\x00\x2a\x00\x31\x00\x3f\x00\x46\x00\x54\x00\x5b\x00\x69\x00\x70\x00\x17\x00\x02\x00\x18\x00\x03\x00\x1a\x00\x1b\x00\x16\x00\x1e\x00\x23\x00\x04\x00\x1f\x00\x20\x00\x21\x00\x22\x00\x1d\x00\x24\x00\x25\x00\x26\x00\x27\x00\x28\x00\x29\x00\x1d\x00\x2c\x00\x06\x00\x2d\x00\x07\x00\x2f\x00\x30\x00\x2b\x00\x33\x00\x38\x00\x08\x00\x34\x00\x35\x00\x36\x00\x37\x00\x32\x00\x39\x00\x3a\x00\x3b\x00\x3c\x00\x3d\x00\x3e\x00\x32\x00\x41\x00\x0a\x00\x42\x00\x0b\x00\x44\x00\x45\x00\x40\x00\x48\x00\x4d\x00\x0c\x00\x49\x00\x4a\x00\x4b\x00\x4c\x00\x47\x00\x4e\x00\x4f\x00\x50\x00\x51\x00\x52\x00\x53\x00\x47\x00\x56\x00\x0e\x00\x57\x00\x0f\x00\x59\x00\x5a\x00\x55\x00\x5d\x00\x62\x00\x10\x00\x5e\x00\x5f\x00\x60\x00\x61\x00\x5c\x00\x63\x00\x64\x00\x65\x00\x66\x00\x67\x00\x68\x00\x5c\x00\x6b\x00\x12\x00\x6c\x00\x13\x00\x6e\x00\x6f\x00\x6a\x00\x72\x00\x77\x00\x14\x00\x73\x00\x74\x00\x75\x00\x76\x00\x71\x00\x78\x00\x79\x00\x7a\x00\x7b\x00\x7c\x00\x7d\x00\x71\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x2e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x43\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x58\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x6d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
+global ATN_SIM: AtnSim = atn_with_lr_tables(atn_decode(&b"\x0a\x00\x05\x00\x7d\x00\x00\x00\x02\x00\x04\x00\x06\x00\x08\x00\x0a\x00\x0c\x00\x0e\x00\x10\x00\x12\x00\x1b\x00\x30\x00\x45\x00\x5a\x00\x6f\x00\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x15\x00\x1c\x00\x2a\x00\x31\x00\x3f\x00\x46\x00\x54\x00\x5b\x00\x69\x00\x70\x00\x17\x00\x02\x00\x18\x00\x03\x00\x1a\x00\x1b\x00\x16\x00\x1e\x00\x23\x00\x04\x00\x1f\x00\x20\x00\x21\x00\x22\x00\x1d\x00\x24\x00\x25\x00\x26\x00\x27\x00\x28\x00\x29\x00\x1d\x00\x2c\x00\x06\x00\x2d\x00\x07\x00\x2f\x00\x30\x00\x2b\x00\x33\x00\x38\x00\x08\x00\x34\x00\x35\x00\x36\x00\x37\x00\x32\x00\x39\x00\x3a\x00\x3b\x00\x3c\x00\x3d\x00\x3e\x00\x32\x00\x41\x00\x0a\x00\x42\x00\x0b\x00\x44\x00\x45\x00\x40\x00\x48\x00\x4d\x00\x0c\x00\x49\x00\x4a\x00\x4b\x00\x4c\x00\x47\x00\x4e\x00\x4f\x00\x50\x00\x51\x00\x52\x00\x53\x00\x47\x00\x56\x00\x0e\x00\x57\x00\x0f\x00\x59\x00\x5a\x00\x55\x00\x5d\x00\x62\x00\x10\x00\x5e\x00\x5f\x00\x60\x00\x61\x00\x5c\x00\x63\x00\x64\x00\x65\x00\x66\x00\x67\x00\x68\x00\x5c\x00\x6b\x00\x12\x00\x6c\x00\x13\x00\x6e\x00\x6f\x00\x6a\x00\x72\x00\x77\x00\x14\x00\x73\x00\x74\x00\x75\x00\x76\x00\x71\x00\x78\x00\x79\x00\x7a\x00\x7b\x00\x7c\x00\x7d\x00\x71\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x2e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x43\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x58\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x6d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"));
+global mut ATN_STACK: List<i32> = [];
 
