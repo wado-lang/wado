@@ -821,7 +821,6 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                 };
                 let name = &type_table.def_name(*def).to_string();
                 let module_source = &type_table.def_module(*def).clone();
-                {};
                 // Option is now handled as a regular variant (SubtypeHierarchy).
                 // TODO: NullableRef optimization — when T is non-nullable (ref type,
                 // not another Option), skip variant registration and represent
