@@ -1096,6 +1096,8 @@ impl FunctionTranslator<'_, '_> {
                 // No bindings needed
             }
             PatKind::Tuple(sub_patterns, _) => {
+                // A reference to a GC type is that type in Wasm (match ergonomics).
+                let scrut_type = self.type_table.peel_refs(scrut_type);
                 let wir_type = self.wir_type(scrut_type);
                 let type_id = &self.ref_type_id(scrut_type);
                 let element_types = self
@@ -1149,7 +1151,7 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             PatKind::Struct { fields, .. } => {
-                // Emit field bindings for struct patterns in match arms
+                let scrut_type = self.type_table.peel_refs(scrut_type);
                 let wir_type = self.wir_type(scrut_type);
                 let type_id = &self.ref_type_id(scrut_type);
                 for field in fields {
@@ -1161,14 +1163,21 @@ impl FunctionTranslator<'_, '_> {
                             name: scrut_local.to_string(),
                             result_ty: wir_type.clone(),
                         }),
-                        result_ty: field_result_ty,
+                        result_ty: field_result_ty.clone(),
                     };
                     match &arena.pats[field.pattern].kind {
                         PatKind::Binding { local_index, .. } => {
-                            instrs.push(WirInstr::LocalSet {
-                                name: self.local_name(*local_index),
-                                value: Box::new(field_get),
-                            });
+                            let binding_wir = self.ctx.type_id_to_wir_type(
+                                self.type_table,
+                                self.tir_func.locals[*local_index as usize].type_id,
+                            );
+                            self.emit_pattern_binding_set(
+                                *local_index,
+                                &binding_wir,
+                                Some(&field_result_ty),
+                                field_get,
+                                instrs,
+                            );
                         }
                         PatKind::Wildcard => {}
                         _ => {

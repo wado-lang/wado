@@ -1104,9 +1104,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a let pattern (for tuple/struct destructuring).
-    /// Applies match ergonomics: if `type_id` is `&T` or `&mut T` and the pattern is
-    /// a compound pattern (tuple/struct), peels the reference and wraps bindings.
+    /// `type_id` with its reference layers peeled, and the reference kind a
+    /// binding beneath takes under match ergonomics: any `&` downgrades `&mut`.
+    fn peel_scrutinee_refs(
+        &self,
+        type_id: TypeId,
+        ref_binding: RefBinding,
+    ) -> (TypeId, RefBinding) {
+        let tt = self.tysys.type_table.borrow();
+        let mut current = type_id;
+        let mut ref_binding = ref_binding;
+        loop {
+            match tt.get(current) {
+                ResolvedType::Ref(inner) => {
+                    current = *inner;
+                    ref_binding = RefBinding::Ref;
+                }
+                ResolvedType::MutRef(inner) => {
+                    current = *inner;
+                    if ref_binding == RefBinding::None {
+                        ref_binding = RefBinding::MutRef;
+                    }
+                }
+                _ => return (current, ref_binding),
+            }
+        }
+    }
+
+    /// Resolve an irrefutable destructuring pattern (`let`, the `for` of a tuple).
     pub(super) fn resolve_let_pattern(
         &mut self,
         pattern: &ast::Pattern,
@@ -1117,34 +1142,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) {
         self.check_irrefutable_pattern(pattern, span, site);
-        // Match ergonomics for let patterns: peel references from the type
-        // when the pattern is a compound (tuple/struct) pattern.
-        let (peeled_type, ref_binding) = match pattern {
-            ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
-                let mut current = type_id;
-                let mut rb = RefBinding::None;
-                while let resolved @ (ResolvedType::Ref(_) | ResolvedType::MutRef(_)) =
-                    self.tysys.type_table.borrow().get(current).clone()
-                {
-                    match resolved {
-                        ResolvedType::Ref(inner) => {
-                            current = inner;
-                            rb = RefBinding::Ref;
-                        }
-                        ResolvedType::MutRef(inner) => {
-                            current = inner;
-                            if rb == RefBinding::None {
-                                rb = RefBinding::MutRef;
-                            }
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-                (current, rb)
-            }
-            _ => (type_id, RefBinding::None),
-        };
-        self.resolve_let_pattern_inner(pattern, peeled_type, is_mut, span, site, ctx, ref_binding);
+        self.resolve_let_pattern_inner(pattern, type_id, is_mut, span, site, ctx, RefBinding::None);
     }
 
     /// Whether a struct pattern's qualifier names the scrutinee's own head.
@@ -1223,7 +1221,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_local_symbol(*id, name, *name_span, pat_mut, binding_type);
             }
             ast::Pattern::Tuple(patterns, has_rest) => {
-                // Get element types from the tuple type
+                let (type_id, ref_binding) = self.peel_scrutinee_refs(type_id, ref_binding);
                 let elem_types = {
                     let type_table = self.tysys.type_table.borrow();
                     if let Some(elem_types) = type_table.as_tuple(type_id) {
@@ -1280,6 +1278,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 has_rest,
                 span: pat_span,
             } => {
+                let (type_id, ref_binding) = self.peel_scrutinee_refs(type_id, ref_binding);
                 // Every lookup below asks the scrutinee's head, which an
                 // anonymous shape and a function-local `struct` both have and
                 // neither of them can be reached by spelling. A newtype's head
@@ -1600,27 +1599,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         span: Span,
     ) -> PatBindings {
-        let mut peeled_type = scrutinee_type;
-        let mut ref_binding = RefBinding::None;
-        while let resolved @ (ResolvedType::Ref(_) | ResolvedType::MutRef(_)) =
-            self.tysys.type_table.borrow().get(peeled_type).clone()
-        {
-            match resolved {
-                ResolvedType::Ref(inner) => {
-                    peeled_type = inner;
-                    // &T always downgrades to Ref (most restrictive wins)
-                    ref_binding = RefBinding::Ref;
-                }
-                ResolvedType::MutRef(inner) => {
-                    peeled_type = inner;
-                    // &mut T only sets MutRef if not already downgraded to Ref
-                    if ref_binding == RefBinding::None {
-                        ref_binding = RefBinding::MutRef;
-                    }
-                }
-                _ => unreachable!(),
-            }
-        }
+        let (peeled_type, ref_binding) = self.peel_scrutinee_refs(scrutinee_type, RefBinding::None);
         self.resolve_if_pattern_inner(pattern, peeled_type, ctx, span, ref_binding)
     }
 
@@ -1716,7 +1695,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Vec::new()
             }
             Pattern::Tuple(patterns, has_rest) => {
-                // For tuple patterns, extract element types
+                let (scrutinee_type, ref_binding) =
+                    self.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 let element_types =
                     if let Some(types) = self.tysys.type_table.borrow().as_tuple(scrutinee_type) {
                         types
@@ -1748,6 +1728,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 bindings,
                 span,
             } => {
+                let (scrutinee_type, ref_binding) =
+                    self.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 // `<ns>::<Case>` (single `::`, prefix is a namespace import
                 // alias) canonicalizes to the bare `<Case>`; the registries
                 // below are keyed by canonical names. Multi-segment forms
@@ -1992,6 +1974,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 has_rest,
                 span: pat_span,
             } => {
+                let (scrutinee_type, ref_binding) =
+                    self.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 let mut type_name_matches = true;
                 if let Some(expected_name) = type_name {
                     let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
