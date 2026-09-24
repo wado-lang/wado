@@ -1,0 +1,16 @@
+// Arms that all yield one constant make an `if` denote it, but a condition that
+// traps still traps. Folding `(if 10 / z > 0 { 7 } else { 7 }) * 2` to `14`
+// deleted the division by zero.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let z = builtin::black_box(0);
+    let w = (if 10 / z > 0 { 7 } else { 7 }) * 2;
+    println(`${w}`);
+}
+
+__DATA__
+{
+    "stdout": "",
+    "trapped": true
+}

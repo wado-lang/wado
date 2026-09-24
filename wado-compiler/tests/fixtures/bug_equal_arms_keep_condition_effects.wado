@@ -1,0 +1,28 @@
+// Arms that all yield one constant make an `if` or `match` denote it, but the
+// condition or scrutinee still runs first. Folding the whole expression to the
+// constant deleted the call that decides the branch, and its output with it.
+use { println, Stdout } from "core:cli";
+
+fn side() -> bool with Stdout {
+    println("side");
+    return true;
+}
+
+fn tick(n: i32) -> i32 with Stdout {
+    println(`tick ${n}`);
+    return n;
+}
+
+export fn run() with Stdout {
+    let v = (if side() { 5 } else { 5 }) + 1;
+    println(`${v}`);
+    let w = (match tick(1) { 1 => 5, _ => 5 }) + 1;
+    println(`${w}`);
+    let u = (match 1 { n && tick(n) > 0 => 5, _ => 5 }) + 1;
+    println(`${u}`);
+}
+
+__DATA__
+{
+    "stdout": "side\n6\ntick 1\n6\ntick 1\n6\n"
+}
