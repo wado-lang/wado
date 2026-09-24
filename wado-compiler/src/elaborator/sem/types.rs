@@ -848,9 +848,6 @@ pub(crate) struct MutCapture {
     pub(crate) inner_type: TypeId,
     /// `TypeId` of the mut-ref (`&mut T`).
     pub(crate) ref_type: TypeId,
-    /// Local index `resolve_closure` reserved for `ref_name`, which reify's own
-    /// allocation has to land on — two closures over one binding reserve two.
-    pub(crate) ref_index: u32,
 }
 
 /// One entry in the closure's capture list: the binding it holds and the type

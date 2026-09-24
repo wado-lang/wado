@@ -1,6 +1,6 @@
-// A mut-capturing closure takes the `$ref_` local annotate reserved for it, so
-// reify must walk it once. A lone template hole and a `.len()` receiver each
-// used to be reified, inspected and thrown away before the real walk.
+// A lone template hole and a `.len()` receiver each used to be reified,
+// inspected and thrown away before the real walk, which crashed the compiler on
+// a mut-capturing closure inside.
 
 use { println, Stdout } from "core:cli";
 

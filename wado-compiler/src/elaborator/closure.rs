@@ -178,9 +178,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For each assigned name that resolves to an outer `mut` local,
         // record a `MutCapture` (so reify replays the `$ref_<var>`
         // materialisation in the same order) and mark the outer local
-        // address-taken. The `$ref_<var>` local slot is also reserved on
-        // the outer `ctx` so any subsequent local-index accounting in the
-        // parent function stays consistent with what reify will produce.
+        // address-taken.
         let mut deref_overrides: IndexMap<String, (String, TypeId)> = IndexMap::default();
         let mut mut_captures: Vec<MutCapture> = Vec::new();
         let mut any_mutating_capture = false;
@@ -198,7 +196,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let outer_index = local.index;
                 let ref_type = self.tysys.type_table.borrow_mut().make_mut_ref(inner_type);
                 let ref_name = capture_ref_name(var_name);
-                let ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
+                ctx.add_local(ref_name.clone(), ref_type, false, None);
                 ctx.address_taken_locals.insert(outer_index);
 
                 mut_captures.push(MutCapture {
@@ -206,7 +204,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ref_name: ref_name.clone(),
                     inner_type,
                     ref_type,
-                    ref_index,
                 });
                 deref_overrides.insert(var_name.clone(), (ref_name, inner_type));
             }

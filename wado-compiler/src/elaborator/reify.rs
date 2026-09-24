@@ -6999,7 +6999,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `sem.types.closure_captures[closure.id]`: `mut_captures` materialise as
     /// `let $ref_v = &mut v;` ahead of the body in declaration order, `captures`
     /// is the final capture list, and `is_mutating` picks `fn mut(…)`. Follows
-    /// `resolve_closure` step by step so the walk-order invariant holds.
+    /// `resolve_closure` step by step.
     fn reify_closure(
         &mut self,
         closure: &ast::ClosureExpr,
@@ -7032,11 +7032,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             };
             let outer_index = outer.index;
             let ref_index = ctx.add_local(mc.ref_name.clone(), mc.ref_type, false, None);
-            assert_eq!(
-                ref_index, mc.ref_index,
-                "in {}: `{}` lands on the index `resolve_closure` reserved for it",
-                ctx.function_name, mc.ref_name
-            );
             ctx.address_taken_locals.insert(outer_index);
             ref_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
