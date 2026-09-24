@@ -73,6 +73,22 @@ impl FrameLocals<'_> {
         }
     }
 
+    /// Where the local was declared; `None` for a closure parameter, which no
+    /// loop of the body it heads can declare.
+    fn span(&self, index: u32) -> Option<Span> {
+        let index = index as usize;
+        match self {
+            Self::Function { locals, .. } => locals.get(index).map(|local| local.span),
+            Self::Closure {
+                params,
+                body_locals,
+            } => index
+                .checked_sub(params.len())
+                .and_then(|index| body_locals.get(index))
+                .map(|local| local.span),
+        }
+    }
+
     fn alloc(&mut self, name: String, type_id: TypeId) -> u32 {
         let local = TirLocal {
             name,
@@ -124,7 +140,8 @@ fn rewrite_frame(
                 .filter(|(_, local, type_id)| {
                     complete
                         && type_table.is_boxed_reference_target(*type_id)
-                        && (address_taken.contains(local) || scan.written_after(*local, site))
+                        && (address_taken.contains(local)
+                            || scan.written_after(*local, site, locals.span(*local)))
                 })
                 .map(|(slot, _, _)| *slot)
                 .collect()
@@ -171,7 +188,9 @@ struct Write {
 struct Scan {
     clock: u32,
     loops: Vec<u32>,
-    next_loop: u32,
+    /// Each loop's source, by its number. A C-style `for` splices its header's
+    /// bindings ahead of its loop, so only the span still ties them to it.
+    loop_spans: Vec<Span>,
     for_bodies: Vec<u32>,
     /// The loop each `for` body belongs to, by the body's own number.
     for_body_loops: Vec<u32>,
@@ -182,24 +201,28 @@ struct Scan {
 
 impl Scan {
     /// Whether the closure built at `site` can observe a write to `local`: one
-    /// after it is built, or in a loop around it on a later iteration.
-    fn written_after(&self, local: u32, site: &Site) -> bool {
+    /// after it is built, or in a loop around it on a later iteration. `declared`
+    /// is where `local` was declared.
+    fn written_after(&self, local: u32, site: &Site, declared: Option<Span>) -> bool {
         self.writes.iter().any(|w| {
-            // A `for` header's update belongs to the next iteration, whose
-            // bindings a closure built in this one's body does not hold.
             w.local == local
-                && !self.in_header_of(&w.at, &site.at)
+                && !self.in_own_header_of(&w.at, &site.at, declared)
                 && (w.at.clock > site.at.clock
                     || w.at.loops.iter().any(|l| site.at.loops.contains(l)))
         })
     }
 
     /// Whether `write` runs in the header of a `for` loop whose body holds
-    /// `site`.
-    fn in_header_of(&self, write: &At, site: &At) -> bool {
+    /// `site`, on a binding that header declares: the write acts on the next
+    /// iteration's copy, which a closure built in this one does not hold.
+    fn in_own_header_of(&self, write: &At, site: &At, declared: Option<Span>) -> bool {
         site.for_bodies.iter().any(|body| {
+            let for_loop = self.for_body_loops[*body as usize];
             !write.for_bodies.contains(body)
-                && write.loops.contains(&self.for_body_loops[*body as usize])
+                && write.loops.contains(&for_loop)
+                && declared.is_some_and(|declared| {
+                    encloses(&self.loop_spans[for_loop as usize], &declared)
+                })
         })
     }
 
@@ -216,9 +239,10 @@ impl Scan {
         self.highest_local = self.highest_local.max(Some(index));
     }
 
-    fn in_loop(&mut self, walk: impl FnOnce(&mut Self)) {
-        self.loops.push(self.next_loop);
-        self.next_loop += 1;
+    fn in_loop(&mut self, span: Span, walk: impl FnOnce(&mut Self)) {
+        self.loops
+            .push(u32::try_from(self.loop_spans.len()).unwrap());
+        self.loop_spans.push(span);
         walk(self);
         self.loops.pop();
     }
@@ -238,10 +262,10 @@ impl Scan {
 impl TirRefVisitor for Scan {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
-            TirStmtKind::Loop { .. } => self.in_loop(|scan| scan.walk_stmt(stmt)),
+            TirStmtKind::Loop { .. } => self.in_loop(stmt.span, |scan| scan.walk_stmt(stmt)),
             TirStmtKind::VariadicForOf { binding_local, .. } => {
                 self.saw_local(*binding_local);
-                self.in_loop(|scan| scan.walk_stmt(stmt));
+                self.in_loop(stmt.span, |scan| scan.walk_stmt(stmt));
             }
             TirStmtKind::LabeledBlock { label, .. } if is_for_body_label(label) => {
                 self.in_for_body(|scan| scan.walk_stmt(stmt));
@@ -293,7 +317,7 @@ impl TirRefVisitor for Scan {
         }
         if let TirExprKind::VariadicTupleComprehension { binding_local, .. } = &expr.kind {
             self.saw_local(*binding_local);
-            self.in_loop(|scan| scan.walk_expr(expr));
+            self.in_loop(expr.span, |scan| scan.walk_expr(expr));
             return;
         }
         self.walk_expr(expr);
@@ -306,6 +330,10 @@ impl TirRefVisitor for Scan {
             self.writes.push(Write { local, at });
         }
     }
+}
+
+fn encloses(outer: &Span, inner: &Span) -> bool {
+    outer.space == inner.space && outer.start <= inner.start && inner.end <= outer.end
 }
 
 /// Whether `body` reads slot `slot` through a dereference: the binding was
