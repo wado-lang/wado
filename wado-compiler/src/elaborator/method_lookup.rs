@@ -333,7 +333,10 @@ impl TypeSystem {
                 if *written_head.head() != *tt.fq_base_type_name(recv).head() {
                     return false;
                 }
-                let recv_args = tt.generic_type_args(recv).unwrap_or_default();
+                let recv_args = tt
+                    .nominal_type_args(recv)
+                    .or_else(|| tt.generic_type_args(recv))
+                    .unwrap_or_default();
                 drop(tt);
                 let written_args = match written {
                     Type::Generic(g) => g.args.as_slice(),

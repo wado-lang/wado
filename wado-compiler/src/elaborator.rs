@@ -2155,12 +2155,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     let tt = scope.tysys.type_table.borrow();
                     let peeled = tt.peel_refs(self_type);
                     let is_instantiation = match tt.get(peeled) {
-                        ResolvedType::GenericInstance { .. } => true,
                         ResolvedType::Newtype { type_args, .. } => {
                             // A trait impl needs none: the trait index keys it.
                             !type_args.is_empty() && trait_name.is_none()
                         }
-                        _ => false,
+                        // The shapes a call site mangles with their arguments.
+                        _ => tt.nominal_type_args(peeled).is_some(),
                     };
                     is_instantiation.then(|| tt.fq_type_name(peeled))
                 } else {

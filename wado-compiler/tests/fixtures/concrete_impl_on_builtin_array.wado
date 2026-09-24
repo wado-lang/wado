@@ -1,0 +1,52 @@
+// A concrete impl on the builtin `Array` head names its methods per
+// instantiation, as one on `List` does, and a nested `Array` argument matches.
+
+trait First with () {
+    fn first(&self) -> i32;
+}
+
+impl First for Array<i32> {
+    fn first(&self) -> i32 {
+        return self.len();
+    }
+}
+
+impl First for Array<String> {
+    fn first(&self) -> i32 {
+        return 100 + self.len();
+    }
+}
+
+impl First for List<Array<i32>> {
+    fn first(&self) -> i32 {
+        return 10 * self.len();
+    }
+}
+
+fn first_of<T: First>(t: &T) -> i32 {
+    return t.first();
+}
+
+test "a bound holds for each instantiation" {
+    let ints: List<i32> = [7];
+    let strs: List<String> = ["a", "b"];
+    assert first_of(&ints.to_array()) == 1;
+    assert first_of(&strs.to_array()) == 102;
+}
+
+test "a method call reaches each instantiation" {
+    let ints: List<i32> = [7];
+    let strs: List<String> = ["a", "b"];
+    assert ints.to_array().first() == 1;
+    assert strs.to_array().first() == 102;
+}
+
+test "an Array argument of another head matches" {
+    let ints: List<i32> = [7];
+    let nested: List<Array<i32>> = [ints.to_array(), ints.to_array()];
+    assert first_of(&nested) == 20;
+    assert nested.first() == 20;
+}
+
+__DATA__
+{}

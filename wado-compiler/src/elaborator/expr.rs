@@ -5193,7 +5193,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             !tt.contains_infer_var(target_type) && !tt.contains_infer_var(from_type),
             "`From` conversion recorded over an unsolved type"
         );
-        let target_name = DeclName::new(&tt.type_name(target_type));
+        let target_name = DeclName::new(tt.type_name(target_type));
         let from_name = tt.fq_type_name(from_type);
         let from_trait_name = tt.compiler_trait_fq(CompilerItem::From);
         drop(tt);
