@@ -268,16 +268,16 @@ original tokens always round-trip:
 
 | Edit                       | Store                             | Diagnostic code   |
 | -------------------------- | --------------------------------- | ----------------- |
-| delete a spurious terminal | `<skip x>` (`E_SKIP` row)         | `ExtraToken`      |
-| insert a missing terminal  | `<missing X>` (`E_MISS` row)      | `MissingToken`    |
+| delete a spurious terminal | `<skip x>` (`Skip` row)           | `ExtraToken`      |
+| insert a missing terminal  | `<missing X>` (`Miss` row)        | `MissingToken`    |
 | skip an unrecoverable run  | `<error>` region (`K_ERROR` node) | `UnexpectedToken` |
 
 A token that doesn't start any alternative produces a `NoViableAlternative`
-diagnostic; the parser then folds the open nodes closed and carries on. The
-`parse(input, max_errors)` overload caps how many diagnostics are collected
-before recovery stops and folds the rest (`max_errors` defaults to unbounded
-and must be `>= 1`); `<= 1` is effectively fail-fast while still returning a
-partial tree.
+diagnostic; the parser then folds the open nodes closed and carries on.
+`parse(input, max_errors)` caps how many diagnostics are collected before
+recovery stops and folds the rest. `max_errors` defaults to unbounded and must
+be `>= 1`; `1` is fail-fast that still returns a partial tree. The diagnostics
+come back in source order, and the cap keeps the earliest.
 
 ### Parsing a fragment
 
@@ -314,9 +314,9 @@ Every generated parser module exports, at minimum:
 
 | Item                                                         | What it is                                                     |
 | ------------------------------------------------------------ | -------------------------------------------------------------- |
-| `parse(input: &String) -> ParseResult`                       | parse from the start rule                                      |
+| `parse(input) -> ParseResult`                                | parse from the start rule                                      |
 | `parse_<rule>(input) -> ParseResult`                         | parse starting from any rule                                   |
-| `tokenize(input: &String) -> TokenStream`                    | run only the lexer                                             |
+| `tokenize(input) -> TokenStream`                             | run only the lexer                                             |
 | `to_string_tree(result: &ParseResult) -> String`             | ANTLR4-style S-expression of the tree                          |
 | `ParseResult { cst, tokens, diagnostics }`                   | `.ok()` is true on a clean parse                               |
 | `CstStore` + cursor methods                                  | the flat parse tree (see above)                                |
@@ -425,7 +425,7 @@ A query maps tokens to capture names from the tree-sitter standard vocabulary
 (`keyword`, `string`, `number`, `comment`, `constant.builtin`,
 `punctuation.bracket`, `operator`, …); each capture becomes a CSS class
 (`punctuation.bracket` → `class="punctuation bracket"`), which you style
-yourself. Two forms:
+yourself. Three forms:
 
 ```scheme
 ; default: a token kind -> capture
@@ -435,7 +435,13 @@ yourself. Two forms:
 
 ; override: within a parser rule, a token -> capture (the context tier)
 (functionCall (IDENTIFIER) @function)
+
+; rule capture: every token under a rule whose alternatives are each one token
+(keyword) @variable
 ```
+
+An override or a rule capture beats a default. For one rule and one token, the
+capture written last wins. Across rules, the capture written first wins.
 
 Match a token by its **lexer-rule name** `(NAME)` when the parser references it
 by name, and by **literal text** `"…"` when it appears inline in parser rules

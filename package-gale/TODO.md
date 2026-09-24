@@ -29,7 +29,9 @@ Empty right now.
 
 Design in [`action.md`](./action.md). Landed: every lexer emit the match can take replays its translatable actions in place (restructured repeats included), the lexer `$`-attribute surface answers in a `language = Wado` body, `@lexer::members` works under `language = Java`, and a same-named label resolves against the rule its own alternative called. A body the translator refuses is still reported and dropped rather than replayed — `UnsupportedAction`, warn-and-emit, unchanged. What is left below is held by something other than action execution.
 
-One narrow gap remains in the surface itself: `$line` has no `$`-form, because the inlined runtime carries no line-number helper and adding one would land in every generated parser for an attribute no grammar asks for. A reference to it is a loud error.
+One narrow gap remains in the surface itself: the lexer's `$line` has no `$`-form. The runtime's line index (`line_starts`) covers the whole input and is built after tokenizing, so a read while lexing would rescan from the start. The alternative is a lexer that counts lines as it goes, for an attribute no grammar asks for. A reference to it is a loud error.
+
+A caller's scan evaluates a called rule's predicate only when it reads no parser state or only fields the scan gate simulates. `action.md` counts every predicate without `$arg` / `$local` / `$ret` as context-independent, so one calling `p.la(1)` or a base method is still read as true there. A scan has no `p`, and `scan_gate.wado` says why handing it the parser would read stale state.
 
 ### Not Stage C, and blocked
 

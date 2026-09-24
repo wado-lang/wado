@@ -1,0 +1,20 @@
+//! Why a `.g4` grammar failed to parse or assemble: what was found, where, and
+//! what was wanted instead.
+
+use { Span, with_expected } from "../runtime/lex.wado";
+
+pub struct ParseError {
+    pub message: String,
+    pub span: Span,
+    pub expected: List<String>,
+}
+
+impl ParseError {
+    pub fn new<S: AsStrSlice>(message: S, span: Span, expected: List<String>) -> ParseError {
+        return ParseError { message: message.to_string(), span, expected };
+    }
+
+    pub fn full_message(&self) -> String {
+        return with_expected(&self.message, &self.expected);
+    }
+}

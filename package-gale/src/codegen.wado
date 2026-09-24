@@ -56,12 +56,13 @@ use {
 use { gen_highlight } from "./highlight_gen.wado";
 use { HighlightRule } from "./highlight_query.wado";
 use { GenContext } from "./gen_context.wado";
-use { SCAN_GATE_HANDLE, SCAN_GATE_TYPE, scan_gate_fields } from "./scan_gate.wado";
-use { CodeWriter, EnumSpec, Vis } from "lib:wadopoet";
+use { SCAN_GATE_TYPE, scan_gate_fields } from "./scan_gate.wado";
+use { CodeWriter } from "lib:wadopoet";
 use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
+use { collect_referenced_names } from "./gen_util.wado";
 use {
     LoweredGrammar,
     Diagnostic,
@@ -284,23 +285,12 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             }
         }
     }
-    gen_header(&mut w, grammar);
-    if options.trace {
-        w.line("use { Level, Log, TextSink, enabled, log_level, set_log_level, trace } from \"core:log\";");
-        w.blank();
-    }
-    gen_grammar_metadata(&mut w, grammar);
-    // Scan functions (and their kind-set helpers) are emitted only when a rule
-    // needs a longest-match tournament; the FOLLOW runtime / mask globals only
-    // when lowering built a caller-FOLLOW gate (`emit_follow`).
-    let ef = ctx.emit_follow();
-    // A superClass grammar can't be highlighted: the `highlight` / exported
-    // `run` entries call `tokenize` / `parse` (base effect) but can't install
-    // the handler. Skip it (warned below) instead of emitting uncompilable code.
+    let emit_follow = ctx.emit_follow();
+    // A superClass grammar can't be highlighted: the `highlight` entry calls
+    // `tokenize` / `parse` (base effect) but can't install the handler. Skip it
+    // (warned below) instead of emitting uncompilable code.
     let any_base = ctx.has_superclass() || ctx.has_parser_superclass();
     let emit_highlight = options.highlight_query matches { Some(_) } && !any_base;
-    gen_runtime(&mut w, ef, ctx.needs_atn(), needs_latn, emit_highlight, ctx.has_superclass());
-    gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     let has_members = members_present(&lexer_members);
     gen_lexer(
@@ -332,12 +322,12 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
         }
     }
-    // The scan emission may intern kind-set helpers (`_kind_set_N`);
-    // emit whatever was interned (a no-op when none).
-    gen_kind_set_helpers(&mut w, &lowered, &ctx);
-    gen_sync_set_globals(&mut w, &ctx);
-    if ef {
-        gen_follow_mask_globals(&mut w, &ctx);
+    let mut named = TreeSet::<String>::new();
+    collect_referenced_names(&w.to_string(), &["_kind_set_", "SYNC_", "EXPECTED_", "FOLLOW_MASK_"], &mut named);
+    gen_kind_set_helpers(&mut w, &lowered, &ctx, &named);
+    gen_sync_set_globals(&mut w, &ctx, &named);
+    if emit_follow {
+        gen_follow_mask_globals(&mut w, &ctx, &named);
     }
     // Serialized ATN blob for the runtime simulator. Only emitted when
     // lowering saw a construct that needs it (a non-greedy `??` or an
@@ -351,15 +341,45 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         gen_latn_data_global(&mut w, &latn.atn);
     }
     if ctx.emit_scan_gate() {
-        gen_scan_gate_global(&mut w, ctx.scan_gate_fields(), &parser_members);
+        gen_scan_gate_type(&mut w, ctx.scan_gate_fields(), &parser_members);
     }
+    let body = w.to_string();
+    let rt = gen_runtime(
+        &RuntimeFeatures {
+            emit_follow,
+            atn_decode: ctx.needs_atn() || needs_latn,
+            // Several decision kinds route here, each on its own condition;
+            // the emitted parser is the one place they all meet.
+            atn_predict: body.contains("atn_predict_with_stack("),
+            atn_lr: ctx.needs_scan_atn(),
+            latn: needs_latn,
+            highlight: emit_highlight,
+            superclass: ctx.has_superclass(),
+        },
+    );
+    let mut head = CodeWriter::new();
+    gen_header(&mut head, grammar);
+    if options.trace {
+        head.line("use { Level, Log, TextSink, enabled, log_level, set_log_level, trace } from \"core:log\";");
+        head.blank();
+    }
+    for let std_use of &rt.imports {
+        head.raw(std_use);
+    }
+    if !rt.imports.is_empty() {
+        head.blank();
+    }
+    gen_grammar_metadata(&mut head, grammar);
+    let head_text = head.to_string();
+    let rt_text = rt.code.to_string();
+    let mut source = String::with_capacity(head_text.len() + rt_text.len() + body.len());
+    source.push_str(&head_text);
+    source.push_str(&rt_text);
+    source.push_str(&body);
     // Read the full diagnostic set from `ctx`, not `lowered.diagnostics`:
     // the latter is a lowering-time snapshot, and the emit walk's
     // `warn_unhandled_actions` safety net pushes to `ctx` afterwards.
-    return GeneratedOutput {
-        source: w.to_string(),
-        diagnostics: ctx.copy_diagnostics(),
-    };
+    return GeneratedOutput { source, diagnostics: ctx.copy_diagnostics() };
 }
 
 /// Wire each declared `superClass` base to its effect interface, or refuse it
@@ -574,8 +594,7 @@ fn element_has_open_first(e: &Element) -> bool {
 /// Emit the decoded `ATN_SIM` global: the serialized whole-grammar ATN the
 /// inlined runtime decodes once, at construction, into the module-level sim.
 fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
-    let lr_tables = if emit_scan_globals { "true" } else { "false" };
-    emit_atn_blob_global(w, atn, "ATN_SIM", `, ${lr_tables}`);
+    emit_atn_blob_global(w, atn, "ATN_SIM", emit_scan_globals);
     // The mutable scan caller stack. The scan emit pushes/pops it around
     // operand scans so an ATN-class LR rule's scan loop can route through
     // `atn_lr_loop_decision` exactly like the parse side. Only needed when an
@@ -587,24 +606,21 @@ fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
     w.blank();
 }
 
-/// Emit the scan's copy of the parser's gate members: one struct global the
-/// scan walk mutates. Its fields carry the parser's own names, which is what
-/// lets one predicate text render for both sides — see `scan_gate.wado`.
-///
-/// The parse seeds it from `p` before each scan, so nothing here has to
-/// survive a scan the tournament abandons.
-fn gen_scan_gate_global(w: &mut CodeWriter, fields: &List<String>, members: &MemberDecls) {
+/// Emit the type of the scan's copy of the parser's gate members, which the
+/// parser holds and every scan walks by reference. Its fields carry the
+/// parser's own names, which is what lets one predicate text render for both
+/// sides — see `scan_gate.wado`.
+fn gen_scan_gate_type(w: &mut CodeWriter, fields: &List<String>, members: &MemberDecls) {
     w.begin(`struct ${SCAN_GATE_TYPE}`);
     for let f of fields {
         // The member's own declared type and initialiser, not `i32 = 0`. The
-        // seed is `SCAN_GATE.f = p.f;`, so a `long` member declared here as an
+        // seed is `p.scan_gate.f = p.f;`, so a `long` member declared here as an
         // `i32` is a type error in the generated parser rather than anything
         // this side would notice.
         let [ty, init] = member_field(members, f);
         w.line(`${*f}: ${ty} = ${init},`);
     }
     w.end();
-    w.line(`global mut ${SCAN_GATE_HANDLE}: ${SCAN_GATE_TYPE} = ${SCAN_GATE_TYPE} {};`);
     w.blank();
 }
 
@@ -616,36 +632,28 @@ fn member_field<S: AsStrSlice>(members: &MemberDecls, name: S) -> [String, Strin
             return [mf.ty, mf.init];
         }
     }
-    panic(`gen_scan_gate_global: '${name}' is simulated but no member declares it`);
+    panic(`gen_scan_gate_type: '${name}' is simulated but no member declares it`);
 }
 
 /// Emit the decoded `LATN_SIM` global for the runtime lexer simulator. Same
 /// blob format and decoder as the parser ATN; only the atom semantics differ
 /// (char ranges vs token kinds).
 fn gen_latn_data_global(w: &mut CodeWriter, atn: &Atn) {
-    emit_atn_blob_global(w, atn, "LATN_SIM", "");
+    emit_atn_blob_global(w, atn, "LATN_SIM", false);
     w.blank();
 }
 
-/// Emit `global <sim_name>: AtnSim = atn_decode(&b"...packed blob...");`.
-/// Shared by the parser (`ATN_SIM`) and lexer (`LATN_SIM`) — same wire format
-/// and decoder; only the atom semantics differ.
-///
-/// The literal is a bare call argument, not bound to its own `global` first:
-/// a `global` is a permanent GC root for the module's lifetime, so naming it
-/// (`global ATN_DATA = b"...";`) would keep the raw blob reachable forever
-/// even though `atn_decode` reads it once and never stores a reference. As
-/// an argument it has no referrers left once `atn_decode` returns, so it's
-/// collectible immediately — and this costs nothing at compile time:
-/// `array.new_data` fires the same way whether the literal is a global's
-/// initializer or a nested call argument.
-fn emit_atn_blob_global<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, atn: &Atn, sim_name: S, extra_args: S1) {
+/// Emit `global <sim_name>: AtnSim = atn_decode(&b"...");`. The blob is a call
+/// argument rather than a global of its own, a GC root, so it dies once decoded.
+fn emit_atn_blob_global<S: AsStrSlice>(w: &mut CodeWriter, atn: &Atn, sim_name: S, lr_tables: bool) {
     let bytes = atn_blob_bytes(atn);
     let mut body = String::with_capacity(bytes.len() * 4);
     for let b of &bytes {
         push_hex_byte(&mut body, *b);
     }
-    w.line(`global ${sim_name}: AtnSim = atn_decode(&b"${body}"${extra_args});`);
+    let decode = `atn_decode(&b"${body}")`;
+    let init = if lr_tables { `atn_with_lr_tables(${decode})` } else { decode };
+    w.line(`global ${sim_name}: AtnSim = ${init};`);
 }
 
 /// Append the `\xNN` byte escape (lowercase, zero-padded to two digits) for
@@ -666,19 +674,9 @@ fn push_attr_escaped<S: AsStrSlice>(out: &mut String, s: S) {
 }
 
 fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
-    // Emit `#![generated(by = "gale", sources = ["a.g4", "b.g4"])]`. If the
-    // grammar has no recorded source files (e.g. constructed directly in a
-    // unit test), fall back to `{name}.g4` so existing tests still see a
-    // sensible provenance entry.
-    let mut sources: List<String> = [];
-    // `source_files` is set by both entry points (the Kiln generator from
-    // `req.primary.path`, the CLI from the loaded file paths). When it is
-    // genuinely unknown, emit an empty list rather than fabricating
-    // `<GrammarName>.g4` — a plausible-looking name for a file that does
-    // not exist.
-    for let sf of &grammar.source_files {
-        sources.push(*sf);
-    }
+    // With no recorded source file, `sources` stays empty rather than naming a
+    // plausible `<GrammarName>.g4` that does not exist.
+    let sources = &grammar.source_files;
     let mut parts = String::with_capacity(32);
     parts.push_str("#![generated(by = \"gale\", sources = [");
     for let mut i = 0; i < sources.len(); i += 1 {
@@ -694,116 +692,81 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
     w.blank();
 }
 
-/// Emit the inlined runtime, split across `src/runtime/*.wado` and gated so
-/// a generated parser carries only the fragments it actually needs:
-///
-/// - `lex` / `diag` / `tree` / `tools` are always emitted: the core lexing
-///   vocabulary, the diagnostics types, the flat CST store + `TreeBuilder`,
-///   and the ANTLR4-format token-stream dump (`to_lexer_string`), which
-///   takes the generated `TokenStream` and so cannot live outside the
-///   generated module. Comparison helpers that take only strings are not
-///   bundled — see `tests/support/tree_compare.wado`.
-/// - `follow` only when lowering built a caller-FOLLOW gate (`emit_follow`).
-/// - `highlight` (`highlight` + `highlight_walk`) only when the `highlight`
-///   generator option is on.
-/// - `atn` only when lowering needs the runtime simulator (`needs_atn`).
-///
-/// Each fragment is a real module for dev/test, importing its siblings via
-/// `use { ... } from "./lex.wado"` etc.; `gen_runtime_fragment` drops those
-/// relative imports because every fragment is concatenated into the single
-/// generated module (in dependency order — `lex` first, then `diag`, then
-/// `tree`, which references both), where such imports are both redundant and
-/// unresolvable.
-fn gen_runtime(
-    w: &mut CodeWriter,
+/// Which runtime fragments a generated parser needs. Read after the parser is
+/// emitted, so a gate can ask what the output calls.
+struct RuntimeFeatures {
     emit_follow: bool,
-    needs_atn: bool,
-    needs_latn: bool,
+    atn_decode: bool,
+    atn_predict: bool,
+    atn_lr: bool,
+    latn: bool,
     highlight: bool,
-    has_superclass: bool,
-) {
-    gen_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
-    gen_runtime_fragment(w, &#include_str("./runtime/diag.wado"));
-    gen_runtime_fragment(w, &#include_str("./runtime/tree.wado"));
-    gen_runtime_fragment(w, &#include_str("./runtime/tools.wado"));
-    // The `LexerView` handle passed to base effect operations.
-    if has_superclass {
-        gen_runtime_fragment(w, &#include_str("./runtime/superclass.wado"));
-    }
-    // Scan functions reference `follow_yields` / `EMPTY_FOLLOW` when the
-    // grammar has a caller-FOLLOW gate.
-    if emit_follow {
-        gen_runtime_fragment(w, &#include_str("./runtime/follow.wado"));
-    }
-    // The ATN runtime (`AtnSim`, `atn_decode`, the simulator) is shared by
-    // both the parser prediction path (`needs_atn`) and the lexer simulator
-    // (`needs_latn`, which decodes its own `LATN_SIM` with the same decoder).
-    if needs_atn || needs_latn {
-        gen_runtime_fragment(w, &#include_str("./runtime/atn.wado"));
-    }
-    // The lexer Pike-VM (`latn_match`) for ATN-class lexer rules.
-    if needs_latn {
-        gen_runtime_fragment(w, &#include_str("./runtime/latn.wado"));
-    }
-    if highlight {
-        gen_runtime_fragment(w, &#include_str("./runtime/highlight.wado"));
-        gen_runtime_fragment(w, &#include_str("./runtime/highlight_walk.wado"));
-    }
+    superclass: bool,
 }
 
-/// Append a runtime fragment, dropping only its sibling-runtime imports
-/// (`from "./..."`) — those siblings are inlined too, so the import would be
-/// redundant and unresolvable in the generated file. A `use` may span multiple
-/// lines, so a sibling import is stripped from the `use` keyword through its
-/// terminating `;` (semicolons are mandatory). Standard-library imports
-/// (`core:` / `wasi:`) are kept verbatim and flow into the generated parser
-/// (none are needed today, but they are permitted).
-fn gen_runtime_fragment<S: AsStrSlice>(w: &mut CodeWriter, src: S) {
-    // Lines of an open `use ...;` statement whose siblingness is not yet known.
-    let mut block: List<String> = [];
+/// The inlined runtime: its standard-library imports, hoisted to the top of
+/// the generated file, and the fragment bodies.
+struct InlinedRuntime {
+    imports: List<String>,
+    code: CodeWriter,
+}
+
+/// The fragments of `src/runtime/` a generated parser carries: `lex`, `diag`,
+/// `tree` and `tools` always, each other one only when the parser calls it.
+fn gen_runtime(f: &RuntimeFeatures) -> InlinedRuntime {
+    let mut rt = InlinedRuntime { imports: [], code: CodeWriter::new() };
+    gen_runtime_fragment(&mut rt, &#include_str("./runtime/lex.wado"));
+    gen_runtime_fragment(&mut rt, &#include_str("./runtime/diag.wado"));
+    gen_runtime_fragment(&mut rt, &#include_str("./runtime/tree.wado"));
+    gen_runtime_fragment(&mut rt, &#include_str("./runtime/tools.wado"));
+    if f.superclass {
+        gen_runtime_fragment(&mut rt, &#include_str("./runtime/superclass.wado"));
+    }
+    if f.emit_follow {
+        gen_runtime_fragment(&mut rt, &#include_str("./runtime/follow.wado"));
+    }
+    if f.atn_decode {
+        gen_runtime_fragment(&mut rt, &#include_str("./runtime/atn.wado"));
+    }
+    if f.atn_predict {
+        gen_runtime_fragment(&mut rt, &#include_str("./runtime/atn_predict.wado"));
+    }
+    if f.atn_lr {
+        gen_runtime_fragment(&mut rt, &#include_str("./runtime/atn_lr.wado"));
+    }
+    if f.latn {
+        gen_runtime_fragment(&mut rt, &#include_str("./runtime/latn.wado"));
+    }
+    if f.highlight {
+        gen_runtime_fragment(&mut rt, &#include_str("./runtime/highlight.wado"));
+        gen_runtime_fragment(&mut rt, &#include_str("./runtime/highlight_walk.wado"));
+    }
+    return rt;
+}
+
+/// Append a runtime fragment. A sibling import (`from "./..."`) is dropped,
+/// since the sibling is inlined too, and a standard-library one is hoisted.
+fn gen_runtime_fragment<S: AsStrSlice>(rt: &mut InlinedRuntime, src: S) {
+    let mut block = String::new();
     let mut in_use = false;
     for let line of src.lines() {
-        if in_use {
-            block.push(line);
-            if line.contains(";") {
-                flush_use_block(w, &block);
-                block = [];
-                in_use = false;
+        if !in_use && !line.trim_start().starts_with("use ") {
+            rt.code.raw(&line);
+            rt.code.raw("\n");
+            continue;
+        }
+        in_use = true;
+        block.push_str(&line);
+        block.push('\n');
+        if line.contains(";") {
+            if !block.contains("from \"./") && !rt.imports.contains(&block) {
+                rt.imports.push(block);
             }
-        } else if line.trim_start().starts_with("use ") {
-            block.push(line);
-            if line.contains(";") {
-                flush_use_block(w, &block);
-                block = [];
-            } else {
-                in_use = true;
-            }
-        } else {
-            w.raw(&line);
-            w.raw("\n");
+            block = String::new();
+            in_use = false;
         }
     }
-    // A well-formed fragment never ends mid-`use`; emit any stray buffer
-    // verbatim rather than silently dropping it.
-    for let l of &block {
-        w.raw(l);
-        w.raw("\n");
-    }
-}
-
-/// Emit a complete (possibly multi-line) `use ...;` statement unless it is a
-/// sibling import (`from "./..."`), which is dropped because the symbols are
-/// already inlined ahead of this fragment.
-fn flush_use_block(w: &mut CodeWriter, block: &List<String>) {
-    for let l of block {
-        if l.contains("from \"./") {
-            return;
-        }
-    }
-    for let l of block {
-        w.raw(l);
-        w.raw("\n");
-    }
+    assert !in_use, "a runtime fragment ends inside a `use`";
 }
 
 /// Surface grammar-level options and named actions from the .g4 prequel as
@@ -858,22 +821,4 @@ fn format_option_value(v: &OptionValue) -> String {
         Int(n) => `${n}`,
         Action(_) => "{ ... }",
     };
-}
-
-
-fn gen_token_kind(w: &mut CodeWriter, lexer_rules: &List<LexerRule>) {
-    let mut e = EnumSpec::new("TokenKind", Vis::Pub);
-    for let rule of lexer_rules {
-        if !rule.is_fragment {
-            if rule.is_virtual {
-                e.add_member_with_comment(&rule.name, "virtual");
-            } else {
-                e.add_member(&rule.name);
-            }
-        }
-    }
-    e.add_member("Eof");
-    e.add_member("Error");
-    e.emit(w);
-    w.blank();
 }

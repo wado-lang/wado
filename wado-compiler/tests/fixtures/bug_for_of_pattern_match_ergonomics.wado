@@ -1,0 +1,109 @@
+// A destructuring pattern through a reference matches the referent and binds
+// refs (match ergonomics) wherever it stands — a for-of as a `let`, a match arm
+// — and at whatever depth of the pattern the reference is met.
+
+struct P { x: i32, y: i32 }
+
+struct Line { a: P, b: [i32, i32] }
+
+test "tuple pattern over &List" {
+    let ts: List<[i32, i32]> = [[1, 2], [3, 4]];
+    let mut s = 0;
+    for let [a, b] of &ts {
+        s += *a + *b;
+    }
+    assert s == 10;
+}
+
+test "struct pattern over &List" {
+    let ps: List<P> = [P { x: 1, y: 2 }, P { x: 3, y: 4 }];
+    let mut s = 0;
+    for let { x, y } of &ps {
+        s += *x + *y;
+    }
+    assert s == 10;
+}
+
+test "named struct pattern over &List" {
+    let ps: List<P> = [P { x: 1, y: 2 }];
+    let mut s = 0;
+    for let P { x, y } of &ps {
+        s += *x * 10 + *y;
+    }
+    assert s == 12;
+}
+
+test "nested pattern over &List" {
+    let ls: List<Line> = [Line { a: P { x: 1, y: 2 }, b: [3, 4] }];
+    let mut s = 0;
+    for let { a: { x, y }, b: [c, d] } of &ls {
+        s += *x * 1000 + *y * 100 + *c * 10 + *d;
+    }
+    assert s == 1234;
+}
+
+test "tuple pattern over &mut List mutates in place" {
+    let mut ts: List<[P, P]> = [[P { x: 1, y: 2 }, P { x: 3, y: 4 }]];
+    for let [a, b] of &mut ts {
+        a.x += 10;
+        b.y += 20;
+    }
+    assert ts[0].0.x == 11;
+    assert ts[0].1.y == 24;
+}
+
+test "nested pattern over &mut List mutates in place" {
+    let mut ls: List<Line> = [Line { a: P { x: 1, y: 2 }, b: [3, 4] }];
+    for let { a, .. } of &mut ls {
+        a.x = 7;
+    }
+    assert ls[0].a.x == 7;
+    assert ls[0].a.y == 2;
+}
+
+test "a reference below the top of the pattern" {
+    let p = P { x: 1, y: 2 };
+    let pairs: List<[i32, &P]> = [[10, &p]];
+    let mut s = 0;
+    for let [n, { x, y }] of pairs {
+        s += n + *x + *y;
+    }
+    let [m, { x: px, y: py }] = pairs[0];
+    assert s == 13;
+    assert m + *px + *py == 13;
+}
+
+test "enumerate over &List" {
+    let ps: List<P> = [P { x: 1, y: 2 }, P { x: 3, y: 4 }];
+    let mut s = 0;
+    for let [i, { x, y }] of (&ps).into_iter().enumerate() {
+        s += i * 100 + *x * 10 + *y;
+    }
+    assert s == 146;
+}
+
+test "match and if let through a reference" {
+    let p = P { x: 1, y: 2 };
+    let r = &p;
+    let s = match r {
+        { x, y } => *x + *y,
+    };
+    assert s == 3;
+
+    let o: Option<[i32, P]> = Some([10, P { x: 1, y: 2 }]);
+    let ro = &o;
+    if let Some([n, { x, .. }]) = ro {
+        assert *n + *x == 11;
+    } else {
+        assert false;
+    }
+}
+
+test "by-value iteration still binds by value" {
+    let ps: List<P> = [P { x: 1, y: 2 }];
+    let mut s = 0;
+    for let { x, y } of ps {
+        s += x + y;
+    }
+    assert s == 3;
+}

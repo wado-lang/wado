@@ -1,3 +1,5 @@
+use { chars_text } from "./lex.wado";
+
 pub struct LexerView {
     chars: &List<char>,
     start: i32,
@@ -14,11 +16,7 @@ impl LexerView {
     }
 
     pub fn text(&self) -> String {
-        let mut s = String::with_capacity(if self.pos > self.start { self.pos - self.start } else { 0 });
-        for let mut i = self.start; i < self.pos; i += 1 {
-            s.push(self.chars[i]);
-        }
-        return s;
+        return chars_text(self.chars, self.start, self.pos);
     }
 
     pub fn start(&self) -> i32 {

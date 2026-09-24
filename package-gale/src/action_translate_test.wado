@@ -223,7 +223,7 @@ e @after { p.emit($ctx.toStringTree()); } : e '+' e | INT ;
 
 test "a lexer body maps $text to the matched slice" {
     let out = translate_lexer_body(" $text == \"enum\" ", &PRED_ATTRS).unwrap();
-    assert out == " LexerSlice::new(chars, start, pos).to_string() == \"enum\" ", `out: '${out}'`;
+    assert out == " chars_text(chars, start, pos) == \"enum\" ", `out: '${out}'`;
 }
 
 test "a lexer body with no $-reference passes through verbatim" {
