@@ -1564,8 +1564,7 @@ pub(super) fn param_needs_lifting(type_id: TypeId, tt: &TypeTable) -> bool {
             tt.is_unrestricted_handle(type_id)
         }
         // One-scalar handle-shaped types flow through.
-        ResolvedType::Enum { .. }
-        | ResolvedType::Flags { .. } => false,
+        ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => false,
         // `ResolvedType::Newtype` unwraps at the CM boundary, so recurse on
         // the base type rather than treating the newtype itself as
         // opaque.

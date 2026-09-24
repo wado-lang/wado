@@ -4837,7 +4837,8 @@ fn cm_lower_array_u8(arr: List<u8>) -> i64 {
 }
 
 fn handle_class(handle: f64) -> i32 {
-    if !(((handle >= 0.0) && (handle < core::rt::HANDLE_LIMIT)) && (core::builtin::f64_floor(handle) == handle)) {
+    let sign_clear: bool = (core::builtin::i64_reinterpret_f64(handle) >= 0);
+    if !((sign_clear && (handle < core::rt::HANDLE_LIMIT)) && (core::builtin::f64_floor(handle) == handle)) {
         return -1;
     }
     return core::builtin::f64_floor((handle / core::rt::HANDLE_CLASS_STRIDE)) as i32;
