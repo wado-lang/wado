@@ -183,7 +183,7 @@ fn cli_program_emits_faithful_world_imports_and_run_export() {
     // A `run` entry with `with Stdout` maps to the standard `wasi:cli/run`
     // export and imports the used `wasi:cli/stdout` interface by FQ.
     let text = emit(
-        "use { println } from \"core:cli\";\n\
+        "use { println, Stdout } from \"core:cli\";\n\
          export fn run() with Stdout { println(\"hi\"); }",
     );
     assert!(text.contains("world command {"), "\n{text}");
@@ -285,7 +285,7 @@ fn full_scope_inlines_referenced_interfaces_and_reparses() {
     // `full` scope inlines the referenced WASI interfaces as nested packages,
     // producing a self-describing document that re-parses without a registry.
     let text = emit_scope(
-        "use { println } from \"core:cli\";\n\
+        "use { println, Stdout } from \"core:cli\";\n\
          export fn run() with Stdout { println(\"hi\"); }",
         WitScope::Full,
     );
