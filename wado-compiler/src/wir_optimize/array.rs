@@ -3,7 +3,6 @@
 //! packing encodes smaller than inline operands, and splitting one past the
 //! threshold into `array.new_default` + sets.
 
-use crate::primitive::PrimitiveType;
 use crate::wir::{WirData, WirInstr, WirPackage, WirType, WirTypeDef};
 use crate::wir_optimize::util::is_same_free_read;
 use crate::wir_visitor::WirMutVisitor;
@@ -24,6 +23,17 @@ pub(crate) enum ConstOperand {
 }
 
 impl ConstOperand {
+    /// The operand a constant instruction is.
+    pub(crate) fn of(instr: &WirInstr) -> Self {
+        match instr {
+            WirInstr::I32Const(v) => Self::I32(*v),
+            WirInstr::I64Const(v) => Self::I64(*v),
+            WirInstr::F32Const(_) => Self::F32,
+            WirInstr::F64Const(_) => Self::F64,
+            other => panic!("[WIR] packed array element is not a constant: {other:?}"),
+        }
+    }
+
     /// Encoded size: the `T.const` opcode byte plus its immediate — signed
     /// LEB128 for the integer forms, a fixed 4 / 8 bytes for the float ones.
     pub(crate) fn encoded_bytes(self) -> usize {
@@ -149,16 +159,7 @@ impl WirMutVisitor for PromoteConstantArrays<'_> {
 fn fixed_operand_bytes(elements: &[WirInstr]) -> usize {
     elements
         .iter()
-        .map(|e| {
-            let operand = match e {
-                WirInstr::I32Const(v) => ConstOperand::I32(*v),
-                WirInstr::I64Const(v) => ConstOperand::I64(*v),
-                WirInstr::F32Const(_) => ConstOperand::F32,
-                WirInstr::F64Const(_) => ConstOperand::F64,
-                other => panic!("[WIR] packed array element is not a constant: {other:?}"),
-            };
-            operand.encoded_bytes()
-        })
+        .map(|e| ConstOperand::of(e).encoded_bytes())
         .sum()
 }
 
@@ -176,25 +177,6 @@ fn try_pack_constant_elements(element_type: &WirType, elements: &[WirInstr]) -> 
     }
 
     Some(bytes)
-}
-
-/// Storage byte width of a packable element, keyed on the NIR primitive rather
-/// than the WIR type — the same question [`element_byte_width`] answers after
-/// lowering, asked by `const_object_globalization` before it. `bool` is not a
-/// `PrimitiveType`; an enum or flags element is four bytes, like the `u32` it
-/// lowers to.
-pub(crate) fn primitive_byte_width(prim: PrimitiveType) -> Option<usize> {
-    use crate::primitive::PrimitiveType as P;
-    Some(match prim {
-        P::I8 | P::U8 => 1,
-        // A half is its `u16` in a data segment, as it is everywhere else.
-        P::I16 | P::U16 | P::F16 | P::Bf16 => 2,
-        P::I32 | P::U32 | P::F32 => 4,
-        P::I64 | P::U64 | P::F64 => 8,
-        // `bool` and `char` are packed by the caller, which knows the
-        // discriminant width; `v128` has no data-segment element form.
-        P::Bool | P::Char | P::V128 => return None,
-    })
 }
 
 /// Returns the storage byte width for a primitive element type in a data segment,

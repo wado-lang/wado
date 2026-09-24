@@ -36,7 +36,6 @@ use {
     check_special,
     SpecialKind,
     parse,
-    parse_text,
 } from "core:prelude/fpfmt.wado";
 
 test "log10_pow2 approximation" {
@@ -84,6 +83,23 @@ test "get_pow10 shortcut agrees with the general decomposition" {
         let general = mul_pow10(p);
         assert fast.hi == general.hi;
         assert fast.lo == general.lo;
+    }
+}
+
+test "mul_pow10 is the exact ceiling of 10^p" {
+    // Computed exactly with big integers, as hi << 64 - lo.
+    let expected: List<[i32, u64, u64]> = [
+        [-1, 0xcccccccccccccccd, 0x3333333333333333],
+        [-2, 0xa3d70a3d70a3d70b, 0xc28f5c28f5c28f5c],
+        [-27, 0x9e74d1b791e07e49, 0x88a15d9b30aacb82],
+        [-351, 0x8049a4ac0c5811af, 0xdfa4769288829d87],
+        [27, 0xcecb8f27f4200f3a, 0x0],
+        [28, 0x813f3978f8940985, 0xc000000000000000],
+        [350, 0xcc573c2a0eccdaa7, 0x20531390de1f4000],
+    ];
+    for let [p, hi, lo] of expected {
+        let got = mul_pow10(p);
+        assert got.hi == hi && got.lo == lo, `10^${p}`;
     }
 }
 
@@ -471,61 +487,61 @@ test "parse roundtrip basic" {
     assert parse(1, 6) == 1000000.0;
 }
 
-test "parse_text basic" {
-    assert parse_text(&"3.14".as_str_slice()) matches { Some(v) && v == 3.14 };
-    assert parse_text(&"1".as_str_slice()) matches { Some(v) && v == 1.0 };
-    assert parse_text(&"0.5".as_str_slice()) matches { Some(v) && v == 0.5 };
+test "f64::from_str basic" {
+    assert f64::from_str("3.14") matches { Ok(v) && v == 3.14 };
+    assert f64::from_str("1") matches { Ok(v) && v == 1.0 };
+    assert f64::from_str("0.5") matches { Ok(v) && v == 0.5 };
 }
 
-test "parse_text with exponent" {
-    assert parse_text(&"1e2".as_str_slice()) matches { Some(v) && v == 100.0 };
-    assert parse_text(&"1.5e-3".as_str_slice()) matches { Some(v) && v == 0.0015 };
+test "f64::from_str with exponent" {
+    assert f64::from_str("1e2") matches { Ok(v) && v == 100.0 };
+    assert f64::from_str("1.5e-3") matches { Ok(v) && v == 0.0015 };
 }
 
-test "parse_text malformed input" {
-    assert parse_text(&"".as_str_slice()) matches { None };
-    assert parse_text(&"abc".as_str_slice()) matches { None };
-    assert parse_text(&"1.2.3".as_str_slice()) matches { None };
-    assert parse_text(&".5".as_str_slice()) matches { None };
-    assert parse_text(&"5.".as_str_slice()) matches { None };
-    assert parse_text(&"+".as_str_slice()) matches { None };
-    assert parse_text(&"-".as_str_slice()) matches { None };
-    assert parse_text(&"e5".as_str_slice()) matches { None };
-    assert parse_text(&"1e".as_str_slice()) matches { None };
-    assert parse_text(&"infi".as_str_slice()) matches { None };
-    assert parse_text(&"nana".as_str_slice()) matches { None };
+test "f64::from_str malformed input" {
+    assert f64::from_str("") matches { Err(_) };
+    assert f64::from_str("abc") matches { Err(_) };
+    assert f64::from_str("1.2.3") matches { Err(_) };
+    assert f64::from_str(".5") matches { Err(_) };
+    assert f64::from_str("5.") matches { Err(_) };
+    assert f64::from_str("+") matches { Err(_) };
+    assert f64::from_str("-") matches { Err(_) };
+    assert f64::from_str("e5") matches { Err(_) };
+    assert f64::from_str("1e") matches { Err(_) };
+    assert f64::from_str("infi") matches { Err(_) };
+    assert f64::from_str("nana") matches { Err(_) };
 }
 
-test "parse_text with sign" {
-    assert parse_text(&"-42".as_str_slice()) matches { Some(v) && v == -42.0 };
-    assert parse_text(&"+3.14".as_str_slice()) matches { Some(v) && v == 3.14 };
-    assert parse_text(&"-0.5e2".as_str_slice()) matches { Some(v) && v == -50.0 };
+test "f64::from_str with sign" {
+    assert f64::from_str("-42") matches { Ok(v) && v == -42.0 };
+    assert f64::from_str("+3.14") matches { Ok(v) && v == 3.14 };
+    assert f64::from_str("-0.5e2") matches { Ok(v) && v == -50.0 };
 }
 
-test "parse_text infinity" {
-    assert parse_text(&"inf".as_str_slice()) matches { Some(v) && v == f64::INFINITY };
-    assert parse_text(&"Inf".as_str_slice()) matches { Some(v) && v == f64::INFINITY };
-    assert parse_text(&"-inf".as_str_slice()) matches { Some(v) && v == f64::NEG_INFINITY };
-    assert parse_text(&"+infinity".as_str_slice()) matches { Some(v) && v == f64::INFINITY };
-    assert parse_text(&"-Infinity".as_str_slice()) matches { Some(v) && v == f64::NEG_INFINITY };
-    assert parse_text(&"INF".as_str_slice()) matches { Some(v) && v == f64::INFINITY };
-    assert parse_text(&"INFINITY".as_str_slice()) matches { Some(v) && v == f64::INFINITY };
+test "f64::from_str infinity" {
+    assert f64::from_str("inf") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str("Inf") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str("-inf") matches { Ok(v) && v == f64::NEG_INFINITY };
+    assert f64::from_str("+infinity") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str("-Infinity") matches { Ok(v) && v == f64::NEG_INFINITY };
+    assert f64::from_str("INF") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str("INFINITY") matches { Ok(v) && v == f64::INFINITY };
 }
 
-test "parse_text nan" {
-    assert parse_text(&"nan".as_str_slice()) matches { Some(_) };
-    assert parse_text(&"NaN".as_str_slice()) matches { Some(_) };
-    assert parse_text(&"NAN".as_str_slice()) matches { Some(_) };
+test "f64::from_str nan" {
+    assert f64::from_str("nan") matches { Ok(_) };
+    assert f64::from_str("NaN") matches { Ok(_) };
+    assert f64::from_str("NAN") matches { Ok(_) };
 }
 
-test "parse_text negative zero" {
-    assert parse_text(&"-0".as_str_slice()) matches { Some(v) && v == 0.0 };
+test "f64::from_str negative zero" {
+    assert f64::from_str("-0") matches { Ok(v) && v == 0.0 };
 }
 
-test "parse_text overflow underflow" {
-    assert parse_text(&"1e999".as_str_slice()) matches { Some(v) && v == f64::INFINITY };
-    assert parse_text(&"-1e999".as_str_slice()) matches { Some(v) && v == f64::NEG_INFINITY };
-    assert parse_text(&"1e-999".as_str_slice()) matches { Some(v) && v == 0.0 };
+test "f64::from_str overflow underflow" {
+    assert f64::from_str("1e999") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str("-1e999") matches { Ok(v) && v == f64::NEG_INFINITY };
+    assert f64::from_str("1e-999") matches { Ok(v) && v == 0.0 };
 }
 
 test "parse roundtrip via short" {

@@ -71,6 +71,19 @@ export fn run() {
     assert bf16::from_f32(f32::from_bits(0x3F81_8000)).to_bits() == 0x3F82;
     assert bf16::from_f32(f32::from_bits(0x3F7F_8000)).to_bits() == 0x3F80;
 
+    // f64 -> half rounds once. Each lands just above a midpoint f32 holds
+    // exactly, so narrowing through f32 would tie to even instead.
+    assert f16::from_f64(f64::from_bits(0x3FF0_0200_0000_0001)).to_bits() == 0x3C01;
+    assert bf16::from_f64(f64::from_bits(0x3FF0_1000_0000_0001)).to_bits() == 0x3F81;
+    assert f16::from_f64(-f64::from_bits(0x3FF0_0200_0000_0001)).to_bits() == 0xBC01;
+    assert f16::from_f64(2049.0).to_bits() == 0x6800;
+    assert f16::from_f64(-0.0).to_bits() == 0x8000;
+    assert f16::from_f64(1.0e300).to_bits() == 0x7C00;
+    assert bf16::from_f64(f64::MAX).to_bits() == 0x7F80;
+    assert bf16::from_f64(-1.0e-300).to_bits() == 0x8000;
+    assert f16::from_f64(f64::NAN).is_nan();
+    assert bf16::from_f64(f64::INFINITY).to_bits() == 0x7F80;
+
     // f64 widening goes through f32, and every binary16 value is exact there.
     assert f64::from(f16::from_bits(0x3C00)) == 1.0;
     assert f64::from(bf16::from_bits(0x3F80)) == 1.0;

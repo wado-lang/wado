@@ -1183,6 +1183,30 @@ Without it, `to_i8(300)` folds to `44` and the test no longer reaches `to_i8`.
 The barrier binds the Wado compiler only. The Wasm engine that runs the program
 is still free to fold the value.
 
+### Embedded Data
+
+`List::<T>::from_le_bytes(bytes)` reads `bytes` as little-endian `T`s, back to
+back, for any `T: FromLeBytes`: the fixed-width integers, `f16`, `bf16`, `f32`
+and `f64`. It panics when the byte count is not a whole number of `T`s.
+
+When the argument is a byte string literal or `#include_bytes` and `T` is
+concrete, the compiler folds the call into a constant, so no decode loop runs at
+startup. A long list is created from a data segment with one `array.new_data`,
+and the Wasm grows by the byte count alone. A short one is built inline, where
+that encodes smaller. Either way the result is an ordinary `List<T>`. A ragged
+literal is not folded, and panics as it would at run time. Nor is a call whose
+`T` is a newtype with its own `FromLeBytes`, which decides what the bytes mean.
+
+`builtin::array_new_data::<T>(bytes)` is the same fold returning an `Array<T>`,
+for a caller building its own container. It has no run-time form, so its
+argument must be a literal, `T` must be a numeric primitive, and the byte count
+must be a whole number of `T`s. Each is a compile error otherwise.
+
+```wado
+let weights = List::<f32>::from_le_bytes(#include_bytes("./weights.bin"));
+let bias = List::<bf16>::from_le_bytes(b"\x80\x3f\x00\x40");   // [1.0, 2.0]
+```
+
 ## Memory Model
 
 ### Core Principles
@@ -1818,11 +1842,22 @@ let explicit_positive = 2.5e+10;
 
 ##### Type coercion
 
-Floating-point literals coerce to either `f32` or `f64` when the target type is known:
+Floating-point literals coerce to `f32`, `f64`, `f16` or `bf16` when the target type is known:
 
 ```wado
 let single: f32 = 3.14;
 let double: f64 = 3.14159265358979;
+let half: f16 = 0.5;
+let weights: List<bf16> = [0.5, -1.25, 3.0];
+```
+
+A literal is rounded once, from its decimal text to the nearest value of its
+type, ties to even. One that rounds past the type's largest finite value is a
+compile error, as an integer literal past its type's range is:
+
+```wado
+let x: f16 = 65520.0;             // compile error: literal out of range for `f16`: 65520.0
+let y: f32 = 1e39;                // compile error: literal out of range for `f32`: 1e39
 ```
 
 Type conversion (via `as`):
@@ -3619,7 +3654,7 @@ impl Default for Point {
 
 ### String Parsing Traits
 
-Two prelude traits parse a value from text, both taking any `AsStrSlice` and returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. `char`, `bool`, the integer types (`i128`/`u128` included), and `f32`/`f64` implement both; `String` implements only the lenient one, since taking a string as itself cannot fail.
+Two prelude traits parse a value from text, both taking any `AsStrSlice` and returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. `char`, `bool`, the integer types (`i128`/`u128` included), and the float types implement both; `String` implements only the lenient one, since taking a string as itself cannot fail.
 
 ```wado
 i32::from_str("42")              // Ok(42)

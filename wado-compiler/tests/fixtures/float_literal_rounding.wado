@@ -1,0 +1,19 @@
+// A float literal is rounded once, from its decimal text into its type.
+// Reading it as an `f64` first and narrowing that is two roundings, and an
+// exponent literal with no point is a float, not an integer out of range.
+
+export fn run() {
+    // f64 rounds this onto the f32 midpoint above 1; one rounding lands above.
+    let above_tie: f32 = 1.00000005960464477539062500000000001;
+    assert above_tie.to_bits() == 0x3F80_0001;
+    let at_tie: f32 = 1.000000059604644775390625;
+    assert at_tie.to_bits() == 0x3F80_0000;
+
+    let wide: f64 = 1e39;
+    assert wide == 1.0e39;
+    let near_max: f32 = 3e38;
+    assert near_max == 3.0e38;
+}
+
+__DATA__
+{}

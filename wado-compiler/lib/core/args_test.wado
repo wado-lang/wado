@@ -102,6 +102,18 @@ test "lenient scalar conversion" {
     assert c.jobs == 16;
 }
 
+struct HalfCli {
+    scale: f16,
+    gain: bf16,
+}
+impl Deserialize for HalfCli;
+
+test "a half option rounds its text once, leniently" {
+    let r = parse::<HalfCli>(["--scale", "1.00048828125000000000000001", "--gain", "1.003_906_250_000_000_000_000_01"]);
+    assert r matches { Ok(c) && c.scale.to_bits() == 0x3c01 && c.gain.to_bits() == 0x3f81 };
+    assert parse::<HalfCli>(["--scale", "one", "--gain", "1"]) matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
+}
+
 test "missing required positional reports MissingArgument" {
     let r = parse::<Cli>(["--jobs", "2"]);
     assert r matches { Err(e) && e.kind == ArgsErrorKind::MissingArgument };

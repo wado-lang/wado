@@ -1,0 +1,9 @@
+// An exponent literal past `f32`'s range is refused. It was read as an
+// integer past `u128`, which failed and compiled to zero.
+
+export fn run() {
+    let _x: f32 = 1e39;
+}
+
+__DATA__
+{"compile_error": "literal out of range for `f32`: 1e39"}

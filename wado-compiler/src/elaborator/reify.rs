@@ -42,16 +42,17 @@ use crate::ast::{
     AttrArg, Attribute, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
     WIRE_NUMBER_RESERVED, wire_number_of, wire_number_written,
 };
-use crate::compiler_item::CompilerItem;
+use crate::compiler_item::{CompilerItem, Resolved};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
-use crate::elaborator::call::omits_a_default;
+use crate::elaborator::call::{ARRAY_NEW_DATA, omits_a_default};
 use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
 use crate::elaborator::expr::{
     compose_union_plan, int_literal_cast_operand, int_literal_repr, peel_to_struct,
 };
+use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
@@ -3259,7 +3260,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // only fits as the already-negative value, or a type
                 // mismatch when the operand's literal type differs).
                 if matches!(op, TirUnaryOp::Neg) {
+                    let half = self.half_format(inner.type_id);
                     match &inner.kind {
+                        TirExprKind::IntLiteral { value, .. } if let Some(format) = half => {
+                            return half_literal(value ^ format.sign_bit(), inner.type_id, span);
+                        }
                         TirExprKind::IntLiteral { value, repr } => {
                             return TirExpr::new(
                                 TirExprKind::IntLiteral {
@@ -8064,6 +8069,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 static_call.span,
                 ctx,
             );
+            if let Some(folded) = self.fold_le_bytes_call(
+                &dispatch.function_ref,
+                &args,
+                recorded_type,
+                static_call.span,
+            ) {
+                return folded;
+            }
 
             // Replay the production `Call`'s exact type args (method-level;
             // impl args ride along in `function_ref.monomorph_info`).
@@ -8378,6 +8391,87 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         deref_to_value(value, span, &self.tysys.type_table)
     }
 
+    /// The format of `ty` when it is a half, whose value is carried as bits.
+    fn half_format(&self, ty: TypeId) -> Option<FloatFormat> {
+        self.tysys
+            .type_table
+            .borrow()
+            .primitive_head(ty)
+            .filter(|p| p.is_half())
+            .and_then(FloatFormat::of)
+    }
+
+    /// Whether `func` reads `result`'s elements out of bytes as their raw bits:
+    /// `builtin::array_new_data`, or `List::from_le_bytes` over a prelude impl.
+    fn reads_le_bytes(&self, func: &tir::FunctionRef, result: TypeId) -> bool {
+        if func.module_source.is_builtin() {
+            return func.name == ARRAY_NEW_DATA;
+        }
+        if !self.reads_prelude_le_bytes(result) {
+            return false;
+        }
+        let tt = self.tysys.type_table.borrow();
+        let items = tt.compiler_items();
+        let Some(Resolved::Method {
+            module_source,
+            owner_head: Some(owner),
+            name,
+            ..
+        }) = items.get(CompilerItem::ListFromLeBytes)
+        else {
+            return false;
+        };
+        func.module_source == *module_source
+            && func.method_info.as_ref().is_some_and(|info| {
+                info.trait_name.is_none()
+                    && info.method_name == *name
+                    && info.receiver == Receiver::Type(owner.clone())
+            })
+    }
+
+    /// Whether `seq`'s element answers `FromLeBytes` with its primitive's own
+    /// impl, rather than one a newtype over it writes.
+    fn reads_prelude_le_bytes(&self, seq: TypeId) -> bool {
+        let Some(elem) = self.tysys.type_table.borrow().seq_element(seq) else {
+            return false;
+        };
+        let trait_ = self
+            .tysys
+            .compiler_trait_def(CompilerItem::FromLeBytes)
+            .expect("the prelude declares `FromLeBytes`");
+        self.tysys.own_impl_link(elem, trait_).is_none_or(|link| {
+            matches!(
+                self.tysys.type_table.borrow().get(link),
+                ResolvedType::Primitive(_)
+            )
+        })
+    }
+
+    /// A call reading `T`s out of a byte literal, as that literal typed as the
+    /// result, so lowering builds it as a constant with no decode loop.
+    fn fold_le_bytes_call(
+        &self,
+        func: &tir::FunctionRef,
+        args: &[CallArg],
+        result: TypeId,
+        span: Span,
+    ) -> Option<TirExpr> {
+        let [arg] = args else {
+            return None;
+        };
+        let TirExprKind::BytesLiteral(bytes) = &arg.expr.kind else {
+            return None;
+        };
+        let width = self
+            .tysys
+            .type_table
+            .borrow()
+            .packed_element(result)?
+            .data_width()?;
+        (bytes.len() % width == 0 && self.reads_le_bytes(func, result))
+            .then(|| TirExpr::new(TirExprKind::BytesLiteral(bytes.clone()), result, span))
+    }
+
     /// Reify a `CallExpr`, mirroring `Elaborator::resolve_call`
     /// The arms below are ordered by precedence and each
     /// documents the recorded fact it reads; nothing here re-resolves a
@@ -8524,6 +8618,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span,
                 ctx,
             );
+            if let Some(folded) =
+                self.fold_le_bytes_call(&dispatch.function_ref, &arg_exprs, recorded_type, span)
+            {
+                return folded;
+            }
             // Type args: replay exactly what the production builder put on
             // the `Call`. This already folds in any explicit turbofish and,
             // crucially, carries only the method-level type args — a generic
@@ -10113,6 +10212,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .type_table
             .borrow()
             .representation_head(recorded_type);
+        // A half has no float value of its own: its literal is its bits.
+        if let Some(format) = self.half_format(base_target) {
+            let bits = float_literal_bits(repr, format).unwrap_or(0);
+            return half_literal(bits, recorded_type, span);
+        }
         // A float-only literal (`1.0`, `0.0`, `1e2`) is a float regardless of
         // the recorded type: when the recorded type is missing/UNKNOWN (e.g. a
         // stdlib const body whose `expression_types` entry is absent from the
@@ -10124,13 +10228,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             || base_target == TypeTable::F64
             || (recorded_type == TypeTable::UNKNOWN && util::is_float_only_literal(repr));
         if is_float_target {
-            let value: f64 = if util::is_float_only_literal(repr) {
-                util::parse_float_literal(repr).unwrap_or(0.0)
+            // Rounded once, into the target format, so the later narrowing
+            // of an `f32` is exact.
+            let format = if base_target == TypeTable::F32 {
+                FloatFormat::F32
             } else {
-                util::parse_u128_literal(repr)
-                    .map(|v| v as f64)
-                    .unwrap_or(0.0)
+                FloatFormat::F64
             };
+            let value = format.value(float_literal_bits(repr, format).unwrap_or(0));
             // The literal's *type* must be a concrete float, not the (possibly
             // UNKNOWN) recorded type: a float-only literal with no recorded
             // type defaults to `f64` (matching production's
@@ -11578,4 +11683,16 @@ pub(crate) fn default_impl_methods(decl: &InterfaceDecl) -> Vec<ast::Function> {
             ..method.clone()
         })
         .collect()
+}
+
+/// A half precision literal, given as its bits.
+fn half_literal(bits: u64, ty: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: bits,
+            repr: format!("{bits:#06x}"),
+        },
+        ty,
+        span,
+    )
 }

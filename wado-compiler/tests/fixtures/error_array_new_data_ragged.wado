@@ -1,0 +1,8 @@
+// A byte count that is not a whole number of elements is refused.
+
+export fn run() {
+    let _a = builtin::array_new_data::<f32>(b"\x00\x00\x80");
+}
+
+__DATA__
+{"compile_error": "`builtin::array_new_data` reads 4-byte elements, but has 3 bytes"}

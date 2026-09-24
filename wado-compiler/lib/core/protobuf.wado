@@ -1048,6 +1048,14 @@ impl Deserializer for ProtobufDeserializer {
         return Result::Ok(f64::from_bits(raw));
     }
 
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        return Result::Ok(f16::from_f32(self.deserialize_f32()?));
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        return Result::Ok(bf16::from_f32(self.deserialize_f32()?));
+    }
+
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
         let raw = self.de.scalar_varint()?;
         return Result::Ok(raw != 0);
