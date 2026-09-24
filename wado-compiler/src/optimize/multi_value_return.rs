@@ -238,7 +238,7 @@ fn candidate_info(
         tail_ok,
         tail_call_lowerable: true,
     };
-    if !all_returns_match_shape(body, body.root, &expected) {
+    if !all_returns_match_shape(body, NodeRef::Block(body.root), &expected) {
         return None;
     }
 
@@ -349,66 +349,34 @@ fn collect_stmts(body: &Body, node: NodeRef, out: &mut Vec<StmtId>) {
     body.for_each_child(node, |c| collect_stmts(body, c, out));
 }
 
-fn all_returns_match_shape(body: &Body, block: BlockId, expected: &ExpectedShape<'_>) -> bool {
-    body.blocks[block]
-        .stmts
-        .iter()
-        .all(|&stmt| stmt_returns_match(body, stmt, expected))
-}
-
-fn stmt_returns_match(body: &Body, stmt: StmtId, expected: &ExpectedShape<'_>) -> bool {
-    match &body.stmts[stmt].kind {
-        StmtKind::Return { value: None } => false,
-        StmtKind::Return { value: Some(v) } => expr_returns_match_operand(body, *v, expected),
-        // The condition too — a `?` in it desugars to a `return`, and the shape
-        // check has to see it like any other. Same gap as
-        // `sroa_variant_return::stmt_returns_scalarizable` had.
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            nested_returns_in_expr_match_operand(body, *condition, expected)
-                && all_returns_match_shape(body, *then_block, expected)
-                && else_block.is_none_or(|b| all_returns_match_shape(body, b, expected))
-        }
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            all_returns_match_shape(body, *b, expected)
-        }
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            nested_returns_in_expr_match_operand(body, *value, expected)
-        }
-        StmtKind::Expr(e) => nested_returns_in_expr_match_operand(body, *e, expected),
-        StmtKind::Break { value, .. } => {
-            value.is_none_or(|v| nested_returns_in_expr_match_operand(body, v, expected))
-        }
-        StmtKind::Continue => true,
+/// Whether every `Return` under `node` has the expected shape. Every one the
+/// lowering splits, so a `return` nested in another's value, a condition or an
+/// argument is checked too.
+fn all_returns_match_shape(body: &Body, node: NodeRef, expected: &ExpectedShape<'_>) -> bool {
+    if let NodeRef::Stmt(s) = node
+        && let StmtKind::Return { value } = body.stmts[s].kind
+        && !value.is_some_and(|v| expr_returns_match_operand(body, v, expected))
+    {
+        return false;
     }
+    let mut ok = true;
+    body.for_each_child(node, |c| {
+        ok = ok && all_returns_match_shape(body, c, expected);
+    });
+    ok
 }
 
 fn expr_returns_match_operand(body: &Body, op: Operand, expected: &ExpectedShape<'_>) -> bool {
     op.as_expr()
         .is_some_and(|e| expr_returns_match(body, e, expected))
 }
-fn nested_returns_in_expr_match_operand(
-    body: &Body,
-    op: Operand,
-    expected: &ExpectedShape<'_>,
-) -> bool {
-    op.as_expr()
-        .is_none_or(|e| nested_returns_in_expr_match(body, e, expected))
-}
 fn expr_break_values_match_operand(body: &Body, op: Operand, expected: &ExpectedShape<'_>) -> bool {
     op.as_expr()
         .is_none_or(|e| expr_break_values_match(body, e, expected))
 }
 
-fn nested_returns_in_expr_match(body: &Body, expr: ExprId, expected: &ExpectedShape<'_>) -> bool {
-    let mut stmts = Vec::new();
-    collect_stmts(body, NodeRef::Expr(expr), &mut stmts);
-    stmts.iter().all(|&s| stmt_returns_match(body, s, expected))
-}
-
+/// The value of a `return`, in tail position. A `return` nested inside it is
+/// [`all_returns_match_shape`]'s to check.
 fn expr_returns_match(body: &Body, expr: ExprId, expected: &ExpectedShape<'_>) -> bool {
     if body.exprs[expr].type_id == TypeTable::NEVER {
         return true;
@@ -432,23 +400,16 @@ fn expr_returns_match(body: &Body, expr: ExprId, expected: &ExpectedShape<'_>) -
             None => false,
         },
         ExprKind::LabeledBlock { block: b, .. } => {
-            let b = *b;
-            all_returns_match_shape(body, b, expected)
-                && block_tail_returns_match(body, b, expected)
-                && all_break_values_match_shape(body, b, expected)
+            block_tail_returns_match(body, *b, expected)
+                && all_break_values_match_shape(body, *b, expected)
         }
         ExprKind::If {
             then_branch,
             else_branch,
             ..
         } => {
-            let (then_branch, else_branch) = (*then_branch, *else_branch);
-            all_returns_match_shape(body, then_branch, expected)
-                && block_tail_returns_match(body, then_branch, expected)
-                && else_branch.is_none_or(|b| {
-                    all_returns_match_shape(body, b, expected)
-                        && block_tail_returns_match(body, b, expected)
-                })
+            block_tail_returns_match(body, *then_branch, expected)
+                && else_branch.is_none_or(|b| block_tail_returns_match(body, b, expected))
         }
         ExprKind::Match { arms, .. } => arms.iter().all(|a| {
             // A promoted-value arm body (e.g. a `String` literal) is a leaf, not
@@ -457,15 +418,10 @@ fn expr_returns_match(body: &Body, expr: ExprId, expected: &ExpectedShape<'_>) -
                 .as_expr()
                 .is_some_and(|b| expr_returns_match(body, b, expected))
         }),
-        ExprKind::Switch { arms, default, .. } => {
-            let arms = arms.clone();
-            let default = *default;
-            arms.iter().all(|&arm| {
-                all_returns_match_shape(body, arm, expected)
-                    && block_tail_returns_match(body, arm, expected)
-            }) && all_returns_match_shape(body, default, expected)
-                && block_tail_returns_match(body, default, expected)
-        }
+        ExprKind::Switch { arms, default, .. } => arms
+            .iter()
+            .chain(std::iter::once(default))
+            .all(|&b| block_tail_returns_match(body, b, expected)),
         _ => false,
     }
 }
