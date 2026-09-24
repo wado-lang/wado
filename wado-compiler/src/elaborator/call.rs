@@ -60,11 +60,26 @@ pub(super) struct StaticCallee<'a> {
     pub receiver_key: Option<&'a ImplTargetKey>,
 }
 
-/// One span per resolved argument. An argument the source does not spell — a
-/// tagged template's, which is the template itself — reports at the call.
-pub(super) fn arg_spans_of(raw_args: &[Expr], resolved: usize, call_span: Span) -> Vec<Span> {
+/// Where a resolved argument came from, for its diagnostics. A tagged
+/// template's argument is the template itself, which no source spells.
+#[derive(Clone, Copy)]
+pub(super) enum ArgSite {
+    Written(Span),
+    Template(Span),
+}
+
+impl ArgSite {
+    /// Argument `i` of a call over `raw_args`, at `call_span` if unwritten.
+    pub(super) fn of(raw_args: &[Expr], i: usize, call_span: Span) -> Self {
+        raw_args
+            .get(i)
+            .map_or(Self::Template(call_span), |arg| Self::Written(arg.span()))
+    }
+}
+
+pub(super) fn arg_sites_of(raw_args: &[Expr], resolved: usize, call_span: Span) -> Vec<ArgSite> {
     (0..resolved)
-        .map(|i| raw_args.get(i).map_or(call_span, Expr::span))
+        .map(|i| ArgSite::of(raw_args, i, call_span))
         .collect()
 }
 
@@ -1260,7 +1275,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(&expected) = substituted.get(i)
                         && !self.is_unbound_type_param(expected)
                     {
-                        self.typecheck_call_arg(call, i, *arg, expected);
+                        self.typecheck_arg(*arg, expected, ArgSite::of(&call.args, i, call.span));
                     }
                 }
 
@@ -1720,12 +1735,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
                     // The same check the bare `Type::method` spelling gets: a
                     // count is only skipped where no signature answered.
-                    let arg_spans = arg_spans_of(&call.args, args.len(), call.span);
+                    let arg_sites = arg_sites_of(&call.args, args.len(), call.span);
                     if declares_params
                         && !self.check_static_call_args(
                             &checked,
                             &args,
-                            &arg_spans,
+                            &arg_sites,
                             &param_defaults,
                             call.span,
                         )
@@ -1962,7 +1977,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (i, arg) in args.iter_mut().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
                 self.pin_arg_hole_against(arg, expected);
-                self.typecheck_call_arg(call, i, *arg, expected);
+                self.typecheck_arg(*arg, expected, ArgSite::of(&call.args, i, call.span));
             }
         }
         if !check_param_types.is_empty() {
@@ -2052,7 +2067,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = fn_params.get(i) {
-                self.typecheck_call_arg(call, i, *arg, expected);
+                self.typecheck_arg(*arg, expected, ArgSite::of(&call.args, i, call.span));
             }
         }
 
@@ -3686,15 +3701,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(TypeTable::ERROR);
         }
         // Built here rather than on the caller's hot path: only a call that
-        // actually reaches a blanket static needs the per-argument spans.
-        let arg_spans = arg_spans_of(raw_args, args.len(), span);
+        // actually reaches a blanket static needs the per-argument sites.
+        let arg_sites = arg_sites_of(raw_args, args.len(), span);
         self.resolve_blanket_static_method(
             receiver_ty,
             method,
             call_id,
             &[],
             args,
-            &arg_spans,
+            &arg_sites,
             span,
             ctx,
         )

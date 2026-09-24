@@ -4,12 +4,12 @@
 //! [`TypeMismatchPayload`], then [`Elaborator::typecheck`] emitting the
 //! diagnostic. The last two each have a `_return` flavour where `UNIT` passes.
 
-use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::tir::{ResolvedType, TupleSlot, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
+use super::call::ArgSite;
 use super::types::TypeError;
 use super::tysys::TypeSystem;
 
@@ -378,21 +378,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// [`Self::typecheck`] on argument `i` of `call`. An argument no AST spells
-    /// is a tagged template's, so its mismatch is the tag's parameter at fault.
-    pub(super) fn typecheck_call_arg(
-        &self,
-        call: &ast::CallExpr,
-        i: usize,
-        actual: TypeId,
-        expected: TypeId,
-    ) {
-        match call.args.get(i) {
-            Some(arg) => self.typecheck(actual, expected, arg.span()),
-            None => self.typecheck_worded(actual, expected, call.span, |payload| {
+    /// [`Self::typecheck`] on a call argument. A template's mismatch is the
+    /// tag's parameter at fault, since no source spells the template's type.
+    pub(super) fn typecheck_arg(&self, actual: TypeId, expected: TypeId, site: ArgSite) {
+        match site {
+            ArgSite::Written(span) => self.typecheck(actual, expected, span),
+            ArgSite::Template(span) => self.typecheck_worded(actual, expected, span, |payload| {
                 TypeError::TagParamNotTemplate {
                     param: payload.expected,
-                    span: call.span,
+                    span,
                 }
             }),
         }

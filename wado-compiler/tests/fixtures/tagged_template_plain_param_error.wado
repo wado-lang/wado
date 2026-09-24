@@ -1,6 +1,8 @@
 // A tag takes the template through a `ReflectTemplate` bound. A parameter of
 // any other type is reported as a tag fault on every call path, since the
 // template's own type is one no source spells (WEP 2026-01-10).
+use lib from "./sub/tagged_template_qualified_tag_lib.wado";
+
 fn plain(s: String) -> String {
     return s;
 }
@@ -13,15 +15,31 @@ impl Q {
     }
 }
 
+trait Make {
+    fn make(n: bool) -> bool;
+}
+
+impl<T: Eq> Make for T {
+    fn make(n: bool) -> bool {
+        return n;
+    }
+}
+
 export fn run() {
     let x = 1;
     let _ = plain`a ${x}`;
     let _ = Q::plain`b ${x}`;
+    let _ = lib::Sql::plain`c ${x}`;
+    let _ = i32::make`d ${x}`;
 }
 
 __DATA__
 {
     "compile_error": "a template tag's parameter must be bound by `ReflectTemplate`, not `String`",
-    "compile_errors_contains": ["a template tag's parameter must be bound by `ReflectTemplate`, not `i32`"],
+    "compile_error_count": 2,
+    "compile_errors_contains": [
+        "a template tag's parameter must be bound by `ReflectTemplate`, not `i32`",
+        "a template tag's parameter must be bound by `ReflectTemplate`, not `bool`"
+    ],
     "compile_errors_not_contains": ["$tmpl$", "type mismatch"]
 }

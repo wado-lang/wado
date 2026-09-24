@@ -12,7 +12,9 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::{SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot};
+use super::call::{
+    ArgSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
+};
 use super::callee::StaticMethodRef;
 use super::coercion::is_numeric_literal_arg;
 use super::expr::IndexAccess;
@@ -1742,7 +1744,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Resolve arguments with expected types for coercion. `arg_spans` runs
+        // Resolve arguments with expected types for coercion. `arg_sites` runs
         // parallel to `args` so a diagnostic still lands on the argument that
         // caused it rather than on the whole call.
         let mut args: Vec<TypeId> = static_call
@@ -1754,7 +1756,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_expr(a, ctx, expected_type)
             })
             .collect();
-        let mut arg_spans: Vec<Span> = static_call.args.iter().map(Expr::span).collect();
+        let mut arg_sites: Vec<ArgSite> = static_call
+            .args
+            .iter()
+            .map(|arg| ArgSite::Written(arg.span()))
+            .collect();
 
         let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
         let declaring_trait = callee_sig
@@ -1893,7 +1899,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &static_type_bindings,
             Some(static_call.id),
             ctx,
-            |_, _, default_expr, _| arg_spans.push(default_expr.span()),
+            |_, _, default_expr, _| arg_sites.push(ArgSite::Written(default_expr.span())),
         );
 
         // A declared static is checked against its signature here, where the
@@ -1903,7 +1909,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !self.check_static_call_args(
                 &param_types,
                 &args,
-                &arg_spans,
+                &arg_sites,
                 &static_method_defaults,
                 static_call.span,
             )
@@ -2379,7 +2385,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 static_call.id,
                 &method_type_args,
                 &args,
-                &arg_spans,
+                &arg_sites,
                 static_call.span,
                 ctx,
             )
@@ -2533,7 +2539,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         call_id: AstId,
         method_type_args: &[TypeId],
         args: &[TypeId],
-        arg_spans: &[Span],
+        arg_sites: &[ArgSite],
         span: Span,
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
@@ -2589,7 +2595,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.check_static_call_args(
             &param_types,
             args,
-            arg_spans,
+            arg_sites,
             &static_method_defaults,
             span,
         ) {
@@ -2742,13 +2748,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         param_types: &[TypeId],
         args: &[TypeId],
-        arg_spans: &[Span],
+        arg_sites: &[ArgSite],
         static_method_defaults: &[(String, Option<ast::Expr>)],
         span: Span,
     ) -> bool {
         assert_eq!(
             args.len(),
-            arg_spans.len(),
+            arg_sites.len(),
             "every resolved argument carries the span it was written at"
         );
         let optional = static_method_defaults
@@ -2767,7 +2773,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.tysys.type_table.borrow().contains_type_param(expected) {
                 continue;
             }
-            self.typecheck(*arg, expected, arg_spans[i]);
+            self.typecheck_arg(*arg, expected, arg_sites[i]);
         }
         true
     }
