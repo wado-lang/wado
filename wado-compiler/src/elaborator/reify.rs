@@ -75,8 +75,8 @@ use crate::escape::{
 };
 use crate::format_spec::{FormatKind, TemplateFormatSpec};
 use crate::name::{
-    LocalMethodName, MethodName, deref_capture_name, display_function_name,
-    effect_default_impl_name, mangle_local_item_name, test_function_name,
+    LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
+    display_function_name, effect_default_impl_name, mangle_local_item_name, test_function_name,
 };
 use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
@@ -5363,6 +5363,56 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// The method call an operator annotate dispatched to a trait method
+    /// stands for: `left.method(right)`, each side adjusted as the method
+    /// declares it.
+    fn binary_operator_call(
+        &mut self,
+        dispatch: OperatorDispatch,
+        left: TirExpr,
+        right: TirExpr,
+        span: Span,
+    ) -> TirExpr {
+        let receiver = adjust_receiver_for_self_kind(
+            left,
+            dispatch.self_kind,
+            /* is_ref_impl */ false,
+            span,
+            &self.tysys.type_table,
+        );
+        let call_args: Vec<CallArg> = std::iter::once(right)
+            .zip(dispatch.arg_ref_wraps.iter().copied())
+            .map(|(arg, wrap)| {
+                let arg_expr = if wrap {
+                    let arg_ref_type = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Ref(arg.type_id));
+                    TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(arg),
+                        },
+                        arg_ref_type,
+                        span,
+                    )
+                } else {
+                    arg
+                };
+                CallArg::new(arg_expr, false)
+            })
+            .collect();
+        build_tir_method_call(
+            receiver,
+            dispatch.function_ref,
+            vec![],
+            call_args,
+            dispatch.return_type,
+            span,
+        )
+    }
+
     /// Reify a binary expression. When the elaborator dispatched the
     /// operator to a trait method, the
     /// `sem.types.operator_dispatch[binary.id]` entry carries the
@@ -5376,7 +5426,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{CallArg, ResolvedType, TirExprKind, TirUnaryOp, TypeTable};
+        use crate::tir::{TirExprKind, TirUnaryOp, TypeTable};
 
         // Mirror `resolve_binary_operands_with_coercion`:
         // a numeric-literal operand is typed from the *other* operand (or,
@@ -5447,50 +5497,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         if let Some(dispatch) = self.ann_operator_dispatch(binary.id) {
-            // Operator-trait dispatch path. Reuse the shared receiver
-            // adjuster (statically; no Elaborator needed) and the
-            // shared arg-wrap helper to produce TIR identical to what
-            // `build_trait_op_method_call_on_resolved` emitted.
-            let receiver = adjust_receiver_for_self_kind(
-                left,
-                dispatch.self_kind,
-                /* is_ref_impl */ false,
-                binary.span,
-                &self.tysys.type_table,
-            );
-            let args = vec![right];
-            let call_args: Vec<CallArg> = args
-                .into_iter()
-                .zip(dispatch.arg_ref_wraps.iter().copied())
-                .map(|(arg, wrap)| {
-                    let arg_expr = if wrap {
-                        let arg_ref_type = self
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .intern(ResolvedType::Ref(arg.type_id));
-                        TirExpr::new(
-                            TirExprKind::Unary {
-                                op: TirUnaryOp::Ref,
-                                expr: Box::new(arg),
-                            },
-                            arg_ref_type,
-                            binary.span,
-                        )
-                    } else {
-                        arg
-                    };
-                    CallArg::new(arg_expr, false)
-                })
-                .collect();
-            let call = build_tir_method_call(
-                receiver,
-                dispatch.function_ref,
-                vec![],
-                call_args,
-                dispatch.return_type,
-                binary.span,
-            );
+            let call = self.binary_operator_call(dispatch, left, right, binary.span);
             // `!=` negates `eq`, and an ordering operator reads `cmp`'s
             // `Ordering`; an `OperatorOrd` method already answers a `bool`.
             return match binary.op {
@@ -10372,6 +10379,41 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         None
     }
 
+    /// A constant pattern whose `==` annotate dispatched to `Eq`: the scrutinee
+    /// held in the local annotate reserved, matching where the call holds.
+    fn compare_constant_by_eq(
+        &mut self,
+        pattern_id: Option<AstId>,
+        pattern: TirPattern,
+        scrutinee_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> TirPattern {
+        let TirPattern::ConstantValue { expr: constant } = &pattern else {
+            return pattern;
+        };
+        let Some(dispatch) = pattern_id.and_then(|id| self.ann_operator_dispatch(id)) else {
+            return pattern;
+        };
+        let span = constant.span;
+        let name = constant_pattern_local_name();
+        let local_index = ctx.add_local(name.clone(), scrutinee_type, false, None);
+        let scrutinee = TirExpr::new(
+            TirExprKind::Local {
+                index: local_index,
+                name,
+            },
+            scrutinee_type,
+            span,
+        );
+        let test = self.binary_operator_call(dispatch, scrutinee, (**constant).clone(), span);
+        TirPattern::Narrow {
+            name: None,
+            local_index,
+            type_id: scrutinee_type,
+            test: Box::new(test),
+        }
+    }
+
     /// Wrap `inner` in the reference kind of `scrutinee_type` for match
     /// ergonomics. Walks the reference layers of the scrutinee: a `&mut`
     /// sets `&mut` unless a `&` is also present (most restrictive wins),
@@ -10430,7 +10472,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return self.reify_nullary_variant_case(scrutinee_type, name);
                 }
                 if let Some(const_pat) = self.reify_immutable_global_pattern(name, *span) {
-                    return const_pat;
+                    return self.compare_constant_by_eq(Some(*id), const_pat, scrutinee_type, ctx);
                 }
                 let local_index = ctx.add_local_at(
                     name.clone(),
@@ -10545,6 +10587,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Pattern::Variant {
                 variant_name,
                 variant_qualifier,
+                name_id,
                 bindings,
                 span,
                 ..
@@ -10565,7 +10608,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         ctx,
                     )
                 {
-                    return const_pat;
+                    return self.compare_constant_by_eq(*name_id, const_pat, scrutinee_type, ctx);
                 }
 
                 // `ns::NAME` naming an immutable global the namespace exports
@@ -10577,7 +10620,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
                     && let Some(const_pat) = self.reify_immutable_global_pattern(&alias, *span)
                 {
-                    return const_pat;
+                    return self.compare_constant_by_eq(*name_id, const_pat, scrutinee_type, ctx);
                 }
 
                 // Variant patterns appear in `match Some(x) { Some(v) => …

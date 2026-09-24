@@ -392,6 +392,12 @@ pub fn mut_capture_ref_name(var_name: &str) -> String {
     format!("{INTERNAL_PREFIX}ref_{var_name}")
 }
 
+/// The local a constant pattern compared by `Eq` holds its scrutinee in.
+#[must_use]
+pub fn constant_pattern_local_name() -> String {
+    format!("{INTERNAL_PREFIX}constant")
+}
+
 /// Local holding one flattened field of a variant-return slot. `slot_local`
 /// trails verbatim, so a source name and a minted one cannot collide.
 #[must_use]

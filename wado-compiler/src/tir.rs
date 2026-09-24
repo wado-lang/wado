@@ -5639,9 +5639,9 @@ pub enum TirPattern {
         inclusive: bool,
         is_unsigned: bool,
     },
-    /// A type pattern the host decides: holds the scrutinee at the narrower
-    /// `type_id`, and matches only when `test`, which reads that local, holds.
-    /// `name` is the binding it makes, `None` for `_`.
+    /// Holds the scrutinee at `type_id`, and matches only when `test`, which
+    /// reads that local, holds: a type pattern the host decides, or a constant
+    /// compared by `Eq`. `name` is the binding it makes, `None` for none.
     Narrow {
         name: Option<String>,
         local_index: u32,

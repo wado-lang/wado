@@ -1005,6 +1005,10 @@ let kind = match token {
 };
 ```
 
+The pattern matches where `scrutinee == CONSTANT` holds, so a constant of any
+type with an `Eq` compares as `==` would: a `String`, a struct, a tuple or an
+`Option` constant matches at the top of an arm or nested in another pattern.
+
 #### Or Patterns
 
 Or patterns match if any alternative matches. All alternatives must bind the same names with the same types:
