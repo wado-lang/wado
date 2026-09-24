@@ -1202,6 +1202,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `#[cm(..., classes = ...)]` numbers an `extends` tree in a way a handle
+    /// cannot be tested against, or a type pattern narrows to an unnumbered resource.
+    ResourceClasses {
+        message: String,
+        span: Span,
+    },
+
     /// A bare generic function name was used as a value with no expected
     /// `fn(...)` type to drive inference. The function type depends on
     /// type arguments that have not been supplied. The fix is to either
@@ -2381,6 +2388,9 @@ impl TypeError {
             }
             TypeError::ResourceExtends { message, span } => {
                 (Code::ResourceExtends, message.clone(), *span)
+            }
+            TypeError::ResourceClasses { message, span } => {
+                (Code::ResourceClasses, message.clone(), *span)
             }
             TypeError::AmbiguousResourceMethod {
                 method,

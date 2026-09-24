@@ -1,5 +1,5 @@
 // A plain `let` cannot narrow: an `Element` may not be an `HtmlInputElement`.
-use { Element, HtmlInputElement } from "web:dom";
+use { Element, HtmlInputElement } from "wado-lang:web";
 
 fn take(el: Element) {
     let input: HtmlInputElement = el;
@@ -8,4 +8,7 @@ fn take(el: Element) {
 export fn run() {}
 
 __DATA__
-{"compile_error":":5:9: analysis error: invalid pattern: refutable pattern in `let` binding: not every `Element` is `HtmlInputElement`; use `let ... else` or `if let` instead"}
+{
+  "compile_error": ":5:9: analysis error: invalid pattern: refutable pattern in `let` binding: not every `Element` is `HtmlInputElement`; use `let ... else` or `if let` instead",
+  "dependencies": { "wado-lang:web": "../../../package-web/src/lib.wado" }
+}

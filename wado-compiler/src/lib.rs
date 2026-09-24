@@ -63,7 +63,7 @@ pub mod test_names;
 use crate::ast::UseDecl;
 use std::sync::Arc;
 
-use crate::component_model::{CmInterfaceRegistry, declares_cm_binding, wado_primitive_name_to_cm};
+use crate::component_model::wado_primitive_name_to_cm;
 use crate::name::entry_dir_of;
 use crate::wit_consume::module_host_leaf_imports;
 use crate::world_registry::WorldInfo;
@@ -232,57 +232,13 @@ fn panic_on_invalid_artifact<H: CompilerHost>(host: &H, invalid: &InvalidArtifac
 }
 
 /// [`report_without_span`], for a caller that stops at the first such error.
-fn bail_with<H: compiler_host::CompilerHost>(
+pub(crate) fn bail_with<H: compiler_host::CompilerHost>(
     logger: &Logger<'_, H>,
     code: compiler_host::Code,
     message: String,
 ) -> Bail {
     report_without_span(logger, code, message);
     Bail
-}
-
-/// The program's own modules that bind a CM import. The stdlib's bindings are
-/// in the shared registry and a component dependency's are folded in by
-/// `fold_component_interfaces`, so only these are left to register.
-fn user_cm_modules(
-    modules: &IndexMap<ModuleSource, ast::Module>,
-) -> Vec<(&ModuleSource, &ast::Module)> {
-    modules
-        .iter()
-        .filter(|(source, module)| {
-            !source.is_core()
-                && !source.is_binding()
-                && !source.is_wasm_asset()
-                && declares_cm_binding(module)
-        })
-        .collect()
-}
-
-/// Register what [`user_cm_modules`] found, so a call to one of those bindings
-/// lowers to its import. Every entry into the back end runs this: a phase that
-/// never saw these declarations reports the call unresolved instead.
-fn register_user_cm_modules<H: compiler_host::CompilerHost>(
-    registry: &mut Arc<CmInterfaceRegistry>,
-    modules: &[(&ModuleSource, &ast::Module)],
-    logger: &Logger<'_, H>,
-) -> Result<(), Bail> {
-    if modules.is_empty() {
-        return Ok(());
-    }
-    let registry = Arc::make_mut(registry);
-    for (source, module) in modules {
-        registry
-            .register_user_cm_decls(module, source)
-            .map_err(|msg| bail_with(logger, Code::DuplicateDefinition, msg))?;
-    }
-    // Only once every module is registered: an `interface` naming a resource's
-    // operations may sit in a module other than the one declaring it.
-    for (_, module) in modules {
-        registry
-            .validate_cm_function_names(module)
-            .map_err(|msg| bail_with(logger, Code::UnknownType, msg))?;
-    }
-    Ok(())
 }
 
 /// Compilation failure with metadata from the successfully-parsed AST.
@@ -1583,10 +1539,8 @@ fn compile_after_load<H: CompilerHost>(
         tir_modules,
         interner,
         liveness,
-        modules,
         ..
     } = sem;
-    let user_cm_modules = user_cm_modules(&modules);
 
     // `is_complete()` was checked above, so the full pipeline ran and `state`
     // is populated.
@@ -1629,8 +1583,6 @@ fn compile_after_load<H: CompilerHost>(
             return Err(bail_with(logger, Code::DuplicateDefinition, msg));
         }
     }
-
-    register_user_cm_modules(&mut tysys.cm_interface_registry, &user_cm_modules, logger)?;
 
     debug_assert_eq!(
         Arc::strong_count(&tysys.trait_env),
@@ -2125,7 +2077,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // `Iterator::Item` projection to reach WIR build and panic on programs
     // `compile` handled fine.
     let sem = semantics::semantics_with_logger(load_result, &logger, true);
-    let user_cm_modules = user_cm_modules(&sem.modules);
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
     let entry_module_source_out = sem.entry_module_source.clone();
@@ -2154,12 +2105,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 .state
                 .expect("elaborator state present when is_complete");
             let world_registry = state.world_registry;
-            let mut tysys = state.tysys;
-            register_user_cm_modules(
-                &mut tysys.cm_interface_registry,
-                &user_cm_modules,
-                &logger,
-            )?;
+            let tysys = state.tysys;
             let builtin_registry = std::rc::Rc::try_unwrap(tysys.builtin_registry)
                 .unwrap_or_else(|rc| (*rc).clone());
 

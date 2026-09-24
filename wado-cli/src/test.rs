@@ -837,7 +837,7 @@ fn load_module(
             runtime_knobs,
         )?);
         let component = Arc::new(Component::new(&engine, &artifact.wasm)?);
-        let linker = Arc::new(runtime::create_linker(&engine)?);
+        let linker = Arc::new(runtime::create_linker(&component)?);
         let profiler = match (profile, profiler_slot) {
             (ProfileMode::Guest { interval_ms, .. }, Some(slot)) => {
                 let interval = Duration::from_millis(*interval_ms);

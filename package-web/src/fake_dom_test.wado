@@ -1,0 +1,200 @@
+use { Document, Dom, Element, HtmlElement, HtmlInputElement, Node } from "./dom.wado";
+use { FakeDom } from "./fake_dom.wado";
+
+test "a fresh document has a body" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = doc.body().unwrap();
+        assert body.tag_name() == "BODY";
+        let html = doc.document_element().unwrap();
+        assert html.tag_name() == "HTML";
+        assert body.parent_element() == Option::Some(html);
+        assert Dom::window().document() == doc;
+    };
+}
+
+test "the handles carry the classes dom.wado numbers" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let input = doc.create_element("input", null);
+        let div = doc.create_element("div", null);
+        assert input matches { _: HtmlInputElement };
+        assert div matches { _: HtmlElement };
+        assert !div matches { _: HtmlInputElement };
+        let node: Node = doc;
+        assert node matches { _: Document };
+        assert !node matches { _: Element };
+        div.set_text_content(Option::Some("hi"));
+        let text = div.first_child().unwrap();
+        assert !text matches { _: Element };
+        assert text.node_name() == "#text";
+    };
+}
+
+test "a handle inspects as the type its class names" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let node: Node = Dom::document().create_element("div", null);
+        assert `${node:?}` == "HtmlElement { type_id: 3, object_id: 5 }";
+    };
+}
+
+test "handles compare equal when they name one object" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let div = doc.create_element("div", null);
+        let as_node: Node = div;
+        assert as_node == div;
+        assert div != doc.create_element("div", null);
+        assert Dom::document() == doc;
+    };
+}
+
+test "a tree is built by appending" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = doc.body().unwrap();
+        let list = doc.create_element("ul", null);
+        let first = doc.create_element("li", null);
+        let second = doc.create_element("li", null);
+        body.append_child(list);
+        list.append_child(first);
+        list.append_child(second);
+        assert list.first_child() == Option::Some(first as Node);
+        assert list.last_child() == Option::Some(second as Node);
+        assert first.next_sibling() == Option::Some(second as Node);
+        assert second.previous_sibling() == Option::Some(first as Node);
+        assert first.previous_sibling() == null;
+        assert body.contains(Option::Some(second as Node));
+        assert !first.contains(Option::Some(second as Node));
+
+        body.append_child(first);
+        assert list.first_child() == Option::Some(second as Node);
+        assert first.parent_node() == Option::Some(body as Node);
+
+        list.remove_child(second);
+        assert !list.has_child_nodes();
+        assert second.parent_node() == null;
+    };
+}
+
+test "text content concatenates the descendants' text" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let p = doc.create_element("p", null);
+        let b = doc.create_element("b", null);
+        p.set_text_content(Option::Some("Hello, "));
+        b.set_text_content(Option::Some("Wado"));
+        p.append_child(b);
+        assert p.text_content() == Option::Some("Hello, Wado");
+        assert doc.text_content() == null;
+
+        p.set_text_content(Option::Some("replaced"));
+        assert p.text_content() == Option::Some("replaced");
+        assert b.parent_node() == null;
+    };
+}
+
+test "setting a document's text content changes nothing" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        doc.set_text_content(Option::Some("x"));
+        assert doc.text_content() == null;
+        assert doc.body() != null;
+    };
+}
+
+#[expect_trap]
+test "a node appended into itself is a hierarchy error" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let div = Dom::document().create_element("div", null);
+        div.append_child(div);
+    };
+}
+
+#[expect_trap]
+test "an ancestor appended into its descendant is a hierarchy error" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let outer = doc.create_element("div", null);
+        let inner = doc.create_element("div", null);
+        outer.append_child(inner);
+        inner.append_child(outer);
+    };
+}
+
+#[expect_trap]
+test "the document is never a child" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        doc.create_element("div", null).append_child(doc);
+    };
+}
+
+#[expect_trap]
+test "the document holds one element" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        doc.append_child(doc.create_element("html", null));
+    };
+}
+
+#[expect_trap]
+test "a text node holds no children" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let p = doc.create_element("p", null);
+        p.set_text_content(Option::Some("text"));
+        p.first_child().unwrap().append_child(doc.create_element("b", null));
+    };
+}
+
+test "an element is found by id once it is in the document" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let el = doc.create_element("div", null);
+        el.set_id("app");
+        assert el.id() == "app";
+        assert el.get_attribute("id") == Option::Some("app");
+        assert doc.get_element_by_id("app") == null;
+        doc.body().unwrap().append_child(el);
+        assert doc.get_element_by_id("app") == Option::Some(el);
+    };
+}
+
+test "attributes are set, read and removed" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let el = Dom::document().create_element("a", null);
+        assert !el.has_attribute("href");
+        el.set_attribute("href", "/home");
+        assert el.get_attribute("href") == Option::Some("/home");
+        el.remove_attribute("href");
+        assert el.get_attribute("href") == null;
+    };
+}
+
+test "an input holds its value" {
+    let mut dom = FakeDom::new();
+    with &mut dom do {
+        let input = Dom::document().create_element("input", null);
+        let input: HtmlInputElement = input else {
+            unreachable();
+        };
+        assert input.value() == "";
+        input.set_value("typed");
+        assert input.value() == "typed";
+    };
+}

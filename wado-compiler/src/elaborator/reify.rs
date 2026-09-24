@@ -18,10 +18,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{
-    FqTypeName, IDENTITY_TEST_METHOD, INTERNAL_PREFIX, NARROWING_TEST_METHOD, Receiver,
-    global_init_function, global_name,
-};
+use crate::name::{FqTypeName, INTERNAL_PREFIX, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
@@ -82,6 +79,7 @@ use crate::name::{
 };
 use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
+use crate::synthesis::common::{handle_bits, handle_from_f64, handle_to_f64};
 use crate::tir::{
     EffectRef, StructDef, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
@@ -265,8 +263,8 @@ fn build_literal_from_call(array: TirExpr, call: &LiteralFromCall, span: Span) -
 /// What `==` compares when it compares by identity.
 enum Identity {
     Reference,
-    /// A resource handle, compared under this chain root.
-    Handle(TypeId),
+    /// An unrestricted resource handle, which the host interns.
+    Handle,
 }
 
 /// Cast a `from` result to the newtype the literal targeted, where it targeted
@@ -3192,6 +3190,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         }
                     }
                     _ => self.reify_expr(&cast.expr, ctx, None),
+                };
+                let (from_handle, to_handle) = {
+                    let tt = self.tysys.type_table.borrow();
+                    (
+                        tt.is_unrestricted_handle(inner.type_id),
+                        tt.is_unrestricted_handle(target_type),
+                    )
+                };
+                let inner = match (from_handle, to_handle) {
+                    (true, false) => handle_to_f64(inner),
+                    (false, true) => return handle_from_f64(inner, target_type),
+                    _ => inner,
                 };
                 TirExpr::new(
                     TirExprKind::Cast {
@@ -6734,7 +6744,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if !matches!(op, ast::BinaryOp::Eq | ast::BinaryOp::NotEq) {
             return None;
         }
-        let mut type_table = self.tysys.type_table.borrow_mut();
+        let type_table = self.tysys.type_table.borrow();
         if matches!(
             (type_table.get(left), type_table.get(right)),
             (ResolvedType::Ref(_), ResolvedType::Ref(_))
@@ -6742,11 +6752,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ) {
             return Some(Identity::Reference);
         }
-        type_table.identity_root(left, right).map(Identity::Handle)
+        type_table
+            .handles_compare(left, right)
+            .then_some(Identity::Handle)
     }
 
-    /// `==` / `!=` by identity: `ref.eq` on references, the host's `is-same`
-    /// on resource handles.
+    /// `==` / `!=` by identity: `ref.eq` on references, bit equality on
+    /// resource handles.
     fn identity_comparison(
         &mut self,
         identity: Identity,
@@ -6755,44 +6767,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         right: TirExpr,
         span: Span,
     ) -> TirExpr {
-        use crate::tir::{CallArg, TirBinaryOp, TirExprKind, TirUnaryOp, TypeTable};
-
         let is_eq = op == ast::BinaryOp::Eq;
-        let same = match identity {
-            Identity::Reference => {
-                let op = if is_eq {
-                    TirBinaryOp::RefEq
+        let (op, left, right) = match identity {
+            Identity::Reference if is_eq => (TirBinaryOp::RefEq, left, right),
+            Identity::Reference => (TirBinaryOp::RefNotEq, left, right),
+            Identity::Handle => (
+                if is_eq {
+                    TirBinaryOp::Eq
                 } else {
-                    TirBinaryOp::RefNotEq
-                };
-                return TirExpr::new(
-                    TirExprKind::Binary {
-                        op,
-                        left: Box::new(left),
-                        right: Box::new(right),
-                    },
-                    TypeTable::BOOL,
-                    span,
-                );
-            }
-            Identity::Handle(root) => TirExpr::new(
-                TirExprKind::method_call(
-                    Box::new(left),
-                    self.lang_predicate_ref(root, IDENTITY_TEST_METHOD),
-                    vec![],
-                    vec![CallArg::new(right, false)],
-                ),
-                TypeTable::BOOL,
-                span,
+                    TirBinaryOp::NotEq
+                },
+                handle_bits(left),
+                handle_bits(right),
             ),
         };
-        if is_eq {
-            return same;
-        }
         TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Not,
-                expr: Box::new(same),
+            TirExprKind::Binary {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
             },
             TypeTable::BOOL,
             span,
@@ -10838,7 +10831,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// `name: R` over a supertype of `R`: the value binds at `R`, and the pattern
-    /// holds only when the handle's `is-r` import answers true.
+    /// holds only when the class the handle carries lies in `R`'s classes.
     fn reify_narrowing(
         &mut self,
         inner: &ast::Pattern,
@@ -10859,51 +10852,54 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             other => panic!("annotate rejects a narrowing over {other:?}"),
         };
-        let receiver = TirExpr::new(
-            TirExprKind::Local {
-                index: local_index,
-                name: local_name,
-            },
-            target,
-            span,
-        );
-        let test = TirExpr::new(
-            TirExprKind::method_call(
-                Box::new(receiver),
-                self.lang_predicate_ref(target, NARROWING_TEST_METHOD),
-                vec![],
-                vec![],
-            ),
-            TypeTable::BOOL,
-            span,
+        let (low, high) = self
+            .tysys
+            .type_table
+            .borrow()
+            .narrowing_classes(target)
+            .expect("annotate rejects a narrowing to a resource without classes")
+            .handle_bounds();
+        let handle = || {
+            handle_bits(TirExpr::new(
+                TirExprKind::Local {
+                    index: local_index,
+                    name: local_name.clone(),
+                },
+                target,
+                span,
+            ))
+        };
+        let bound = |bits: u64| {
+            TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: bits,
+                    repr: bits.to_string(),
+                },
+                TypeTable::U64,
+                span,
+            )
+        };
+        let compare = |op, left, right| {
+            TirExpr::new(
+                TirExprKind::Binary {
+                    op,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                TypeTable::BOOL,
+                span,
+            )
+        };
+        let test = compare(
+            TirBinaryOp::And,
+            compare(TirBinaryOp::LtEq, bound(low), handle()),
+            compare(TirBinaryOp::Lt, handle(), bound(high)),
         );
         TirPattern::Narrow {
             name,
             local_index,
             type_id: target,
             test: Box::new(test),
-        }
-    }
-
-    /// `R::method`, one of the host's `lang` predicates over `resource`'s handles.
-    fn lang_predicate_ref(&self, resource: TypeId, method: &str) -> tir::FunctionRef {
-        let method_info = LocalMethodName::new(
-            self.tysys.fq_receiver_of_impl(resource, false),
-            None,
-            method.to_string(),
-        );
-        let module_source = self
-            .tysys
-            .type_table
-            .borrow()
-            .nominal_head(resource)
-            .map(|(_, m)| m)
-            .expect("a `lang` predicate's receiver is a declared resource");
-        tir::FunctionRef {
-            module_source,
-            name: method_info.to_mangled_name(),
-            monomorph_info: None,
-            method_info: Some(method_info),
         }
     }
 

@@ -2184,6 +2184,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .is_resource_narrowing(scrutinee_type, target)
                 {
+                    self.require_handle_classes(target, *typed_span);
                     match ctx.irrefutable_site {
                         Some(site) => self.reject_refutable_narrowing(
                             scrutinee_type,
@@ -2200,6 +2201,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Parser error-recovery placeholder; inert.
             Pattern::Error(_) => Vec::new(),
+        }
+    }
+
+    /// A narrowing tests the class a handle carries, so its target must number one.
+    fn require_handle_classes(&mut self, target: TypeId, span: Span) {
+        let unnumbered = {
+            let tt = self.tysys.type_table.borrow();
+            tt.narrowing_classes(target)
+                .is_none()
+                .then(|| tt.type_name(target))
+        };
+        if let Some(name) = unnumbered {
+            let _ = self.emit(TypeError::ResourceClasses {
+                message: format!(
+                    "a type pattern cannot narrow to `{name}`: it declares no `#[cm(..., classes = \"lo..=hi\")]`"
+                ),
+                span,
+            });
         }
     }
 

@@ -610,6 +610,10 @@ pub enum CompilerItem {
     FormatterWriteLiteral,
     /// `core:rt::assert_failed`.
     AssertFailed,
+    /// `core:rt::handle_class`.
+    HandleClass,
+    /// `core:rt::inspect_handle`.
+    InspectHandle,
     /// `core:rt::cm_future_pair`.
     CmFuturePair,
     /// `core:rt::cm_stream_pair`.
@@ -843,6 +847,8 @@ impl CompilerItem {
         Self::FormatterNew,
         Self::FormatterWriteLiteral,
         Self::AssertFailed,
+        Self::HandleClass,
+        Self::InspectHandle,
         Self::CmFuturePair,
         Self::CmStreamPair,
         Self::MemoryToGcString,
@@ -999,6 +1005,8 @@ impl CompilerItem {
             Self::FormatterNew => "formatter_new",
             Self::FormatterWriteLiteral => "formatter_write_literal",
             Self::AssertFailed => "assert_failed",
+            Self::HandleClass => "handle_class",
+            Self::InspectHandle => "inspect_handle",
             Self::CmFuturePair => "cm_future_pair",
             Self::CmStreamPair => "cm_stream_pair",
             Self::MemoryToGcString => "memory_to_gc_string",
@@ -1090,6 +1098,8 @@ impl CompilerItem {
             // Always loaded — `core:prelude` is auto-imported, and `core:rt`
             // carries the CM ABI helpers the binding synthesis calls.
             | Self::AssertFailed
+            | Self::HandleClass
+            | Self::InspectHandle
             | Self::CmFuturePair
             | Self::CmStreamPair
             | Self::MemoryToGcString
@@ -1337,6 +1347,8 @@ impl CompilerItem {
         match self {
             Self::FormatterNew | Self::FormatterWriteLiteral => CompilerItemKind::Method,
             Self::AssertFailed
+            | Self::HandleClass
+            | Self::InspectHandle
             | Self::CmFuturePair
             | Self::CmStreamPair
             | Self::MemoryToGcString

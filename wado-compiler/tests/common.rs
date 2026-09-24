@@ -13,7 +13,7 @@
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
-use wasmtime::component::{ComponentExportIndex, Func, Instance, Linker, ResourceTable};
+use wasmtime::component::{Component, ComponentExportIndex, Func, Instance, Linker, ResourceTable};
 use wasmtime::{Config, Engine, InstanceAllocationStrategy, PoolingAllocationConfig, Store};
 use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{
@@ -956,6 +956,13 @@ pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     Ok(linker)
 }
 
+/// [`linker`] for `component` as `wado` builds it, each `web:*` import a trap.
+pub fn host_linker(component: &Component) -> anyhow::Result<Linker<WasiState>> {
+    let mut linker = linker(component.engine())?;
+    web_host::define_web_imports_as_traps(&mut linker, component)?;
+    Ok(linker)
+}
+
 /// Compile `source` as the `world_fq` library world, under `allocator` where
 /// one is named and the world's own default otherwise.
 pub fn compile_lib_world(
@@ -1005,67 +1012,11 @@ pub fn lib_func(
         .unwrap_or_else(|| panic!("`{name}` export not found"))
 }
 
-/// Host implementation for `wasi:clocks/timezone`. Mirrors
-/// `wado_cli::timezone_host` (we cannot depend on `wado-cli` from the
-/// compiler tests because of the dependency direction).
-mod timezone_host {
-    use wasmtime::component::{HasData, Linker};
-    use wasmtime_wasi::p3::bindings::clocks::timezone::{self, Host, Instant, LinkOptions};
-
-    pub struct WadoTimezone;
-
-    impl HasData for WadoTimezone {
-        type Data<'a> = TimezoneCtx;
-    }
-
-    pub struct TimezoneCtx;
-
-    impl Host for TimezoneCtx {
-        fn iana_id(&mut self) -> wasmtime::Result<Option<String>> {
-            Ok(iana_time_zone::get_timezone().ok())
-        }
-
-        fn utc_offset(&mut self, when: Instant) -> wasmtime::Result<Option<i64>> {
-            Ok(local_offset_nanos(when.seconds))
-        }
-
-        fn to_debug_string(&mut self) -> wasmtime::Result<String> {
-            Ok(match iana_time_zone::get_timezone() {
-                Ok(timezone) => timezone,
-                Err(err) => format!("timezone unavailable: {err}"),
-            })
-        }
-    }
-
-    pub fn add_to_linker<T: 'static>(linker: &mut Linker<T>) -> anyhow::Result<()> {
-        let mut options = LinkOptions::default();
-        options.clocks_timezone(true);
-        timezone::add_to_linker::<T, WadoTimezone>(linker, &options, |_| TimezoneCtx)?;
-        Ok(())
-    }
-
-    #[cfg(unix)]
-    fn local_offset_nanos(secs: i64) -> Option<i64> {
-        use std::mem::MaybeUninit;
-        // `libc::time_t` is `i64` on 64-bit Linux/macOS but `i32` on some
-        // platforms; keep the conversion fallible for portability even where
-        // clippy would call it useless on the current target.
-        #[allow(clippy::useless_conversion)]
-        let t: libc::time_t = secs.try_into().ok()?;
-        let mut tm: MaybeUninit<libc::tm> = MaybeUninit::uninit();
-        let ret = unsafe { libc::localtime_r(&raw const t, tm.as_mut_ptr()) };
-        if ret.is_null() {
-            return None;
-        }
-        let tm = unsafe { tm.assume_init() };
-        Some(tm.tm_gmtoff * 1_000_000_000)
-    }
-
-    #[cfg(not(unix))]
-    fn local_offset_nanos(_secs: i64) -> Option<i64> {
-        None
-    }
-}
+// The host modules of `wado` itself, which the compiler tests cannot depend on.
+#[path = "../../wado-cli/src/timezone_host.rs"]
+mod timezone_host;
+#[path = "../../wado-cli/src/web_host.rs"]
+mod web_host;
 
 /// Backward-compat alias
 pub fn cli_linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
@@ -1297,6 +1248,39 @@ pub fn compile_capturing_diagnostics(
     }
 }
 
+/// The coordinate `package-web` publishes the `web:dom` bindings under.
+pub const WEB_PACKAGE: &str = "wado-lang:web";
+
+/// The `[dependencies]` binding [`WEB_PACKAGE`] to `package-web`, relative to
+/// the repository root.
+fn web_dependency() -> indexmap::IndexMap<String, String> {
+    indexmap::IndexMap::from([(
+        WEB_PACKAGE.to_string(),
+        "package-web/src/lib.wado".to_string(),
+    )])
+}
+
+fn repository_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
+}
+
+/// A host at the repository root with `package-web` as [`WEB_PACKAGE`].
+pub fn web_host() -> FilesystemHost {
+    FilesystemHost::new(repository_root()).with_dependencies(web_dependency())
+}
+
+/// Compile `source` with `package-web` as its [`WEB_PACKAGE`] dependency.
+pub fn compile_against_web(source: &str) -> CapturedCompile {
+    compile_capturing_diagnostics(
+        &repository_root().join("entry.wado"),
+        source,
+        CompilerOptions::default(),
+        None,
+        indexmap::IndexMap::new(),
+        web_dependency(),
+    )
+}
+
 /// Compile a file asynchronously (for use within async context)
 pub async fn compile_file_async(
     path: &Path,
@@ -1407,7 +1391,6 @@ pub fn run_wasm_with_full_options(
     outgoing_mocks: indexmap::IndexMap<String, OutgoingMockResponse>,
     tls_mocks: indexmap::IndexMap<String, TlsMockResponse>,
 ) -> anyhow::Result<WasmRunResult> {
-    use wasmtime::component::Component;
     use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
 
     let rt = runtime();
@@ -1415,7 +1398,7 @@ pub fn run_wasm_with_full_options(
 
     rt.block_on(async {
         let component = Component::new(engine, &wasm)?;
-        let linker = linker(engine)?;
+        let linker = host_linker(&component)?;
 
         let stdout_pipe = MemoryOutputPipe::new(65536);
         let stdout_clone = stdout_pipe.clone();
@@ -1524,8 +1507,8 @@ pub fn run_test_world(
     let engine = engine();
 
     rt.block_on(async {
-        let component = wasmtime::component::Component::new(engine, wasm)?;
-        let linker = linker(engine)?;
+        let component = Component::new(engine, wasm)?;
+        let linker = host_linker(&component)?;
 
         // Find test exports
         let component_ty = component.component_type();

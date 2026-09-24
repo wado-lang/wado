@@ -226,6 +226,26 @@ fn agrees_with_target(ty: TypeId, target: TypeId) -> bool {
     ty == target || ty == TypeTable::NEVER
 }
 
+/// The reason a cast naming an unrestricted resource is refused: its handle is
+/// an `f64`, and only a type pattern moves it down the `extends` chain.
+fn handle_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    let other = match (
+        tt.is_unrestricted_handle(source),
+        tt.is_unrestricted_handle(target),
+    ) {
+        (false, false) => return None,
+        (true, true) if tt.resource_join(source, target) == Some(target) => return None,
+        (true, true) if tt.is_resource_narrowing(source, target) => {
+            return Some("`as` only upcasts a handle; a type pattern narrows one".to_string());
+        }
+        (true, true) => return Some("neither resource extends the other".to_string()),
+        (true, false) => target,
+        (false, true) => source,
+    };
+    (tt.representation_head(other) != TypeTable::F64)
+        .then(|| "an unrestricted resource handle is an `f64`".to_string())
+}
+
 /// The reason a cast naming `f16` or `bf16` is refused, or `None` where it
 /// names neither or is the newtype step every type admits (WEP 2026-09-22).
 fn half_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
@@ -3447,6 +3467,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if source_type == TypeTable::ERROR {
             return TypeTable::ERROR;
+        }
+
+        let handle_cast = {
+            let tt = self.tysys.type_table.borrow();
+            handle_cast_hint(&tt, source_type, target_type)
+                .map(|hint| (tt.type_name(source_type), tt.type_name(target_type), hint))
+        };
+        if let Some((from, to, hint)) = handle_cast {
+            let _ = self.emit(TypeError::InvalidCast {
+                from,
+                to,
+                hint,
+                span: cast.span,
+            });
+            return target_type;
         }
 
         let half_cast = {

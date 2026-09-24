@@ -14,7 +14,7 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, RestClause, Visibility};
+use crate::ast::{AstId, HandleClasses, RestClause, Visibility};
 use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -845,9 +845,9 @@ pub struct TypeTable {
     /// [`Self::cm_decl_in_module_named`]: a caller holding an interface FQ can
     /// spell that without an interner.
     cm_decl_index: IndexMap<(String, Option<CmNamespace>, String), DefId>,
-    /// Resources declared `#[cm(..., linearity = "unrestricted")]`: a copyable
-    /// handle to a host object, outside the affine resource discipline.
-    unrestricted_resources: IndexSet<DefId>,
+    /// Resources declared `#[cm(..., linearity = "unrestricted")]`, with the
+    /// classes their handles carry where they declare them.
+    unrestricted_resources: IndexMap<DefId, Option<HandleClasses>>,
     /// `resource Child extends Parent`, child → parent.
     resource_parents: IndexMap<DefId, DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
@@ -983,7 +983,7 @@ impl TypeTable {
             anon_struct_mangles: IndexSet::default(),
             decl_index: IndexMap::default(),
             cm_decl_index: IndexMap::default(),
-            unrestricted_resources: IndexSet::default(),
+            unrestricted_resources: IndexMap::default(),
             resource_parents: IndexMap::default(),
             defs: std::sync::Arc::default(),
         };
@@ -1163,15 +1163,65 @@ impl TypeTable {
             .copied()
     }
 
-    pub fn mark_unrestricted_resource(&mut self, def: DefId) {
-        self.unrestricted_resources.insert(def);
+    pub fn mark_unrestricted_resource(&mut self, def: DefId, classes: Option<HandleClasses>) {
+        self.unrestricted_resources.insert(def, classes);
     }
 
     /// Whether `def` declares an unrestricted resource, which no affine check
     /// and no cleanup pass owns.
     #[must_use]
     pub fn is_unrestricted_resource(&self, def: DefId) -> bool {
-        self.unrestricted_resources.contains(&def)
+        self.unrestricted_resources.contains_key(&def)
+    }
+
+    /// The classes an unrestricted resource's handles carry, where it declares them.
+    #[must_use]
+    pub fn handle_classes(&self, def: DefId) -> Option<HandleClasses> {
+        self.unrestricted_resources.get(&def).copied().flatten()
+    }
+
+    /// The classes a narrowing to the resource `target` tests.
+    #[must_use]
+    pub fn narrowing_classes(&self, target: TypeId) -> Option<HandleClasses> {
+        let ResolvedType::Resource { def } = self.get(target) else {
+            unreachable!("only a resource is narrowed to");
+        };
+        self.handle_classes(*def)
+    }
+
+    /// Each class the resource tree holding `def` numbers, with the resource
+    /// whose own class it is.
+    pub fn handle_class_owners(&self, def: DefId) -> impl Iterator<Item = (u16, DefId)> {
+        let root = self
+            .resource_chain(def)
+            .last()
+            .expect("a chain starts at `def`");
+        self.unrestricted_resources
+            .iter()
+            .filter_map(move |(&member, classes)| {
+                let lo = classes.as_ref()?.lo;
+                self.is_resource_subtype(member, root)
+                    .then_some((lo, member))
+            })
+    }
+
+    /// The scalar a resource handle is in the guest: the `u64` bits of the `f64`
+    /// an unrestricted handle is outside it, or an `i32`. `None` for a non-resource.
+    #[must_use]
+    pub fn handle_scalar(&self, ty: TypeId) -> Option<TypeId> {
+        match self.get(ty) {
+            ResolvedType::Resource { def } if self.is_unrestricted_resource(*def) => {
+                Some(Self::U64)
+            }
+            ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => Some(Self::I32),
+            _ => None,
+        }
+    }
+
+    /// Whether `ty` is an unrestricted resource, whose handle is an `f64` outside the guest.
+    #[must_use]
+    pub fn is_unrestricted_handle(&self, ty: TypeId) -> bool {
+        self.handle_scalar(ty) == Some(Self::U64)
     }
 
     /// Record `child extends parent`, already validated by the caller.
@@ -1234,23 +1284,12 @@ impl TypeTable {
         value != target && self.is_resource_subtype(*target, *value)
     }
 
-    /// The root resource whose `$same` compares `a` and `b` by identity: both
-    /// unrestricted, one extending the other.
+    /// Whether `==` compares `a` and `b` as handles: both unrestricted, one
+    /// extending the other. The host interns handles, so equal means same object.
     #[must_use]
-    pub fn identity_root(&mut self, a: TypeId, b: TypeId) -> Option<TypeId> {
-        let joined = self.resource_join(a, b)?;
-        let ResolvedType::Resource { def } = self.get(joined) else {
-            return None;
-        };
-        let def = *def;
-        if !self.is_unrestricted_resource(def) {
-            return None;
-        }
-        let root = self
-            .resource_chain(def)
-            .last()
-            .expect("a chain starts at its own resource");
-        Some(self.make_resource(root))
+    pub fn handles_compare(&self, a: TypeId, b: TypeId) -> bool {
+        self.resource_join(a, b)
+            .is_some_and(|joined| self.is_unrestricted_handle(joined))
     }
 
     /// Attach the program's declarations, so a nominal type can render its

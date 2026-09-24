@@ -1,7 +1,6 @@
-#![generated(by = "wado-from-idl", sources = ["wado-compiler/lib/web/dom.webidl.json"])]
-#![stdlib("web:dom")]
+#![generated(by = "wado-from-idl", sources = ["package-web/idl/dom.webidl.json"])]
 
-#[cm("web:dom/event-target", linearity = "unrestricted")]
+#[cm("web:dom/event-target", linearity = "unrestricted", classes = "0..=6")]
 pub resource EventTarget {
     #[cm("web:dom/event-target#new")]
     fn new() -> EventTarget;
@@ -10,7 +9,7 @@ pub resource EventTarget {
     fn dispatch_event(&self, event: Event) -> bool;
 }
 
-#[cm("web:dom/event", linearity = "unrestricted")]
+#[cm("web:dom/event", linearity = "unrestricted", classes = "7..=7")]
 pub resource Event {
     #[cm("web:dom/event#new")]
     #[cm_params("type")]
@@ -74,7 +73,7 @@ pub resource Event {
     fn init_event(&self, type: String, bubbles: Option<bool>, cancelable: Option<bool>);
 }
 
-#[cm("web:dom/node", linearity = "unrestricted")]
+#[cm("web:dom/node", linearity = "unrestricted", classes = "1..=5")]
 pub resource Node extends EventTarget {
     #[cm("web:dom/node#node-type")]
     #[cm_params("self")]
@@ -168,7 +167,7 @@ pub resource Node extends EventTarget {
     fn remove_child(&self, child: Node) -> Node;
 }
 
-#[cm("web:dom/element", linearity = "unrestricted")]
+#[cm("web:dom/element", linearity = "unrestricted", classes = "2..=4")]
 pub resource Element extends Node {
     #[cm("web:dom/element#get-spatial-navigation-container")]
     #[cm_params("self")]
@@ -616,7 +615,7 @@ pub resource Element extends Node {
     fn aria_notify(&self, announcement: String);
 }
 
-#[cm("web:dom/html-element", linearity = "unrestricted")]
+#[cm("web:dom/html-element", linearity = "unrestricted", classes = "3..=4")]
 pub resource HtmlElement extends Element {
     #[cm("web:dom/html-element#container-timing")]
     #[cm_params("self")]
@@ -812,7 +811,7 @@ pub resource HtmlElement extends Element {
     fn blur(&self);
 }
 
-#[cm("web:dom/html-input-element", linearity = "unrestricted")]
+#[cm("web:dom/html-input-element", linearity = "unrestricted", classes = "4..=4")]
 pub resource HtmlInputElement extends HtmlElement {
     #[cm("web:dom/html-input-element#webkitdirectory")]
     #[cm_params("self")]
@@ -1104,7 +1103,7 @@ pub resource HtmlInputElement extends HtmlElement {
     fn set_popover_target_action(&self, value: String);
 }
 
-#[cm("web:dom/document", linearity = "unrestricted")]
+#[cm("web:dom/document", linearity = "unrestricted", classes = "5..=5")]
 pub resource Document extends Node {
     #[cm("web:dom/document#element-from-point")]
     #[cm_params("self", "x", "y")]
@@ -1326,7 +1325,7 @@ pub resource Document extends Node {
     fn aria_notify(&self, announcement: String);
 }
 
-#[cm("web:dom/window", linearity = "unrestricted")]
+#[cm("web:dom/window", linearity = "unrestricted", classes = "6..=6")]
 pub resource Window extends EventTarget {
     #[cm("web:dom/window#credentialless")]
     #[cm_params("self")]
@@ -1473,6 +1472,17 @@ pub resource Window extends EventTarget {
     #[cm_params("self", "handle")]
     fn cancel_animation_frame(&self, handle: u32);
 }
+
+/// A handle is `class * HANDLE_CLASS_STRIDE + index`.
+internal global HANDLE_CLASS_STRIDE: f64 = 137438953472.0;
+internal global EVENT_TARGET_CLASS: f64 = 0.0;
+internal global EVENT_CLASS: f64 = 7.0;
+internal global NODE_CLASS: f64 = 1.0;
+internal global ELEMENT_CLASS: f64 = 2.0;
+internal global HTML_ELEMENT_CLASS: f64 = 3.0;
+internal global HTML_INPUT_ELEMENT_CLASS: f64 = 4.0;
+internal global DOCUMENT_CLASS: f64 = 5.0;
+internal global WINDOW_CLASS: f64 = 6.0;
 
 /// The `web:dom` entry points, which hand out the first handle.
 #[cm("web:dom/global")]

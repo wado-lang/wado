@@ -592,8 +592,8 @@ impl FunctionTranslator<'_, '_> {
                 let from_wir = self.ctx.type_id_to_wir_type(self.type_table, from_type);
                 let to_wir = self.ctx.type_id_to_wir_type(self.type_table, to_type);
                 assert_eq!(
-                    from_wir.is_reference(),
-                    to_wir.is_reference(),
+                    from_wir.scalar_kind(),
+                    to_wir.scalar_kind(),
                     "[WIR] cast crosses Wasm representations and was not lowered \
                      before WIR build: {from:?} ({from_wir:?}) as {to:?} ({to_wir:?})",
                     from = self.type_table.get(from_type),

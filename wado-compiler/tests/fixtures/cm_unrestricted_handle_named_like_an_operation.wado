@@ -1,0 +1,25 @@
+// An unrestricted handle crosses as a bare `f64`, not an exported type, so
+// `Window` leaves the name `window` to the operation.
+
+#[cm("web:demo/window", linearity = "unrestricted", classes = "0..=0")]
+resource Window {}
+
+#[cm("web:demo/global")]
+interface Dom {
+    #[cm("web:demo/global#window")]
+    fn window() -> Window;
+}
+
+export fn run() with Dom {
+    let _ = Dom::window();
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "skip_os": true,
+  "wat_lines": [
+    { "contains": ["(export", "\"window\"", "(func"], "count": 1 },
+    { "contains": ["(export", "\"window\"", "(type (eq"], "count": 0 }
+  ]
+}

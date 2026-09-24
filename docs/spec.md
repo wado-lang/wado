@@ -3200,7 +3200,6 @@ The unit of coherence is a package — all source files compiled together from t
 | A `[dependencies]` package                          | Foreign        |
 | `core:*` (standard library)                         | Foreign        |
 | `wasi:*` (WASI interfaces)                          | Foreign        |
-| `web:*` (Web API bindings)                          | Foreign        |
 | A Wasm asset (`with { type: "wasm" }` or `"wat"`)   | Foreign        |
 | Remote URL                                          | Foreign        |
 
@@ -4311,13 +4310,12 @@ file-private name is a visibility error, like any other import. See [Re-export S
 | Source Type   | Syntax                        | Example                              |
 | ------------- | ----------------------------- | ------------------------------------ |
 | WASI standard | `"wasi:<package>"`            | `"wasi:cli"`, `"wasi:filesystem"`    |
-| Web platform  | `"web:<package>"`             | `"web:dom"`                          |
 | Core library  | `"core:<module>"`             | `"core:cli"`, `"core:json"`          |
 | CM coordinate | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
 | Library alias | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
 | Local file    | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
 
-A specifier names a package only — no interface segment; interfaces and members are selected in the `use { ... }` list. `core:`/`wasi:`/`web:` are bundled coordinates, not a separate scheme. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
+A specifier names a package only — no interface segment; interfaces and members are selected in the `use { ... }` list. `core:`/`wasi:` are bundled coordinates, not a separate scheme. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
 
 ### Module Path Validation
 
@@ -4327,7 +4325,7 @@ Module paths are validated before loading to provide clear error messages:
 
 Namespace Resolution (a namespace is reserved iff the compiler bundles it):
 
-1. Bundled namespaces `core:` / `wasi:` / `web:`: resolved from the embedded stdlib.
+1. Bundled namespaces `core:` / `wasi:`: resolved from the embedded stdlib.
 
 2. Open coordinates `<ns>:<pkg>` (any other namespace): resolved from a `[dependencies]` entry in `wado.toml` or an inline `with` source. An undeclared coordinate is an error.
 
@@ -4427,14 +4425,14 @@ An inline `with` source and a `wado.toml` entry for the same specifier are mutua
 
 #### Type Attribute Requirement
 
-| Import Source               | `type` Attribute         | Notes                          |
-| --------------------------- | ------------------------ | ------------------------------ |
-| `.wado` files               | Optional                 | Type inferred from Wado source |
-| `.wasm` files               | Required                 | `type: "wasm"`                 |
-| `.wat` files                | Required                 | `type: "wat"`                  |
-| `core:*`, `wasi:*`, `web:*` | Not applicable           | Bundled namespace handling     |
-| `https:` URLs               | Required for non-`.wado` | Must specify content type      |
-| CM / `lib:` deps            | Optional                 | Type inferred from package     |
+| Import Source      | `type` Attribute         | Notes                          |
+| ------------------ | ------------------------ | ------------------------------ |
+| `.wado` files      | Optional                 | Type inferred from Wado source |
+| `.wasm` files      | Required                 | `type: "wasm"`                 |
+| `.wat` files       | Required                 | `type: "wat"`                  |
+| `core:*`, `wasi:*` | Not applicable           | Bundled namespace handling     |
+| `https:` URLs      | Required for non-`.wado` | Must specify content type      |
+| CM / `lib:` deps   | Optional                 | Type inferred from package     |
 
 #### Rationale
 
@@ -5579,20 +5577,20 @@ A `#[cm(...)]` resource may declare what may be done with its handle: `linearity
 
 An affine resource is move-only and carries a drop obligation, per [Resource Ownership](./wep-2026-05-21-resource-ownership.md). An unrestricted one owns nothing, so it is an ordinary copyable value. Assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope.
 
-The representation follows from the linearity. An affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain integer the host interprets.
+The representation follows from the linearity. An affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain `f64` the host interprets. `as` converts an unrestricted handle to or from `f64`, keeping every bit, or upcasts it to a resource it extends. No other cast accepts one.
 
 ### Resource Inheritance
 
 `resource Child extends Parent` declares that a child handle is usable wherever the parent is. Both resources must declare `linearity = "unrestricted"`, because an upcast copies the handle and an affine one may not be copied. Single inheritance only, and a cycle is an error.
 
 ```wado
-#[cm("example:ui/target", linearity = "unrestricted")]
+#[cm("example:ui/target", linearity = "unrestricted", classes = "0..=1")]
 resource Target {
     #[cm("example:ui/target#add-listener")]
     fn add_listener(&self, kind: String);
 }
 
-#[cm("example:ui/widget", linearity = "unrestricted")]
+#[cm("example:ui/widget", linearity = "unrestricted", classes = "1..=1")]
 resource Widget extends Target {
     #[cm("example:ui/widget#label")]
     fn label(&self) -> Option<String>;
@@ -5607,8 +5605,9 @@ fn use_it(w: Widget) {
 Rules:
 
 - The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet. `&mut T`, container elements (`List<T>`, `Option<T>`, …) and function types are invariant.
-- Narrowing back to a child is never implicit. It is written as a type pattern (below), which asks the host whether the handle really is one.
-- `==` and `!=` compare two handles when one type extends the other, and ask the host whether both name one object. There is no ordering.
+- Narrowing back to a child is never implicit. It is written as a type pattern (below), which tests the class the host tagged the handle with.
+- `classes = "lo..=hi"` numbers those classes: a resource's own is `lo`, and the resources extending it hold the rest. A child's range lies inside its parent's, above the parent's own class. Sibling ranges do not overlap, and an `extends` tree declares `classes` on every resource or on none. A type pattern narrows only to a resource that declares them.
+- `==` and `!=` compare two handles when one type extends the other. The host hands out one handle per object, so equal handles name one object. Handles compare by bits, so a NaN handle equals itself and `-0.0` differs from `0.0`. An unrestricted resource is `Eq`, so a type holding one derives `Eq` too. There is no ordering.
 - A child may not redeclare a method it inherits. A name reachable through both the chain and a trait impl is ambiguous: write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
 - Static methods (no `&self`) are not inherited, and `Self` in an inherited method names the resource that declares it.
 - A generic resource takes no part in `extends`.
@@ -6036,7 +6035,7 @@ Component Model interop: The compiler automatically converts between Wado conven
 - CM: Wasm Component Model
 - module: a Wado file
 - package: a collection of modules, described by one `wado.toml`
-- Wado standard library: consists of `core:`, `wasi:` and `web:`
+- Wado standard library: consists of `core:` and `wasi:`
 - effect: the concept; e.g., "the `Stdout` effect"
 - effect interface: the declaration (`interface Stdout { ... }`); synonyms in literature: "effect signature", "effect type"
 - operation: a function in an effect interface; synonym: "effect operation"

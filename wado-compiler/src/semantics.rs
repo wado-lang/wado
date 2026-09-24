@@ -4,11 +4,14 @@
 //! emit Wasm bytes. The resulting [`Semantics`] carries every fact an editor
 //! query needs without paying for monomorphize / lower / codegen.
 
+use std::sync::Arc;
+
 use crate::analyze::Analyzer;
 use crate::ast::{AstId, AstIdSpace, ImplBlock, Item, Module, SelfKind, Visibility};
 use crate::ast_index::AstIndex;
-use crate::compiler_host::{CompilerHost, LogLevel};
-use crate::component_model::CmInterfaceRegistry;
+use crate::bail_with;
+use crate::compiler_host::{Code, CompilerHost, LogLevel};
+use crate::component_model::{CmInterfaceRegistry, declares_cm_binding};
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::Liveness;
@@ -18,7 +21,7 @@ use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::kiln::import_check::inject_kiln_request_adapter;
-use crate::logger::Logger;
+use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::resolve_import_with_entry;
 use crate::resolve::Resolutions;
@@ -1169,6 +1172,13 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             Err(_) => (IndexMap::default(), false),
         }
     };
+    let lower_ok = lower_ok
+        && register_user_cm_modules(
+            &mut state.tysys.cm_interface_registry,
+            &load_result.modules,
+            logger,
+        )
+        .is_ok();
 
     // Take an immutable snapshot of the type table at the end of lowering.
     // LSP queries read this snapshot; any further lowering (none today) would
@@ -1217,6 +1227,41 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         is_complete: lower_ok && no_syntax_errors,
         wit_contract: None,
     }
+}
+
+/// Register the CM bindings the program's own modules declare, for the back end
+/// and WIT emission to read.
+fn register_user_cm_modules<H: CompilerHost>(
+    registry: &mut Arc<CmInterfaceRegistry>,
+    modules: &IndexMap<ModuleSource, Module>,
+    logger: &Logger<'_, H>,
+) -> Result<(), Bail> {
+    let modules: Vec<(&ModuleSource, &Module)> = modules
+        .iter()
+        .filter(|(source, module)| {
+            !source.is_core()
+                && !source.is_binding()
+                && !source.is_wasm_asset()
+                && declares_cm_binding(module)
+        })
+        .collect();
+    if modules.is_empty() {
+        return Ok(());
+    }
+    let registry = Arc::make_mut(registry);
+    for (source, module) in &modules {
+        registry
+            .register_user_cm_decls(module, source)
+            .map_err(|msg| bail_with(logger, Code::DuplicateDefinition, msg))?;
+    }
+    // Only once every module is registered: an `interface` naming a resource's
+    // operations may sit in a module other than the one declaring it.
+    for (_, module) in &modules {
+        registry
+            .validate_cm_function_names(module)
+            .map_err(|msg| bail_with(logger, Code::UnknownType, msg))?;
+    }
+    Ok(())
 }
 
 /// True when `b` is an `impl` on `want_type` and — if `want_trait` is set —
