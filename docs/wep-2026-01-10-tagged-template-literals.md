@@ -613,8 +613,8 @@ synthesis and the fold; then the prelude tags and fixtures.
   identifier's span at the name, so adjacency fails and the site is a syntax
   error. Nothing needs it yet.
 - A tag that is not a function or a static method — a variant case, a
-  closure-typed binding — is a diagnostic. Each resolves through a call path
-  that records no dispatch, so reify has nothing to rebuild.
+  closure-typed binding — is a diagnostic. Reify rebuilds a tag call only from
+  a static dispatch, and neither records one.
 - A tag on a type parameter (`` T::tag`…` ``) works, but a mismatch between the
   template and the method's parameter is not reported: that path checks no
   argument, whatever the call's spelling. Pinned as

@@ -256,26 +256,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `IntoIterator::into_iter(&list)` to the base type's impl where
         // `(&list).into_iter()` selects `impl IntoIterator for &List<T>`.
         let required_trait = required_trait.as_ref();
+        // NOTE: args are resolved later (after method lookup) to enable literal coercion
+        // using the method's parameter types as expected types.
+
+        // Base (non-ref) type for method lookup. `mut`: deferred-inference may
+        // concretise the receiver below.
+        let mut base_type_id = self.tysys.get_base_type(receiver);
 
         // The receiver's fault is reported where it arose; only the arguments
         // can still say something new.
-        if self.tysys.get_base_type(receiver) == TypeTable::ERROR {
+        if base_type_id == TypeTable::ERROR {
             for arg in args_ast {
                 self.resolve_expr(arg, ctx, None);
             }
             return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
         }
-        // NOTE: args are resolved later (after method lookup) to enable literal coercion
-        // using the method's parameter types as expected types.
 
         // The handle argument-directed selection classifies through (WEP
         // 2026-07-31). Constructing it costs nothing: a class is synthesized
         // only if the candidate set turns out to be an overload set.
         let mut probe = ArgProbe::new(args_ast, ctx);
-
-        // Base (non-ref) type for method lookup. `mut`: deferred-inference may
-        // concretise the receiver below.
-        let mut base_type_id = self.tysys.get_base_type(receiver);
 
         // Get struct name and module source from base type
         // The struct_module is where the struct is defined (and inherent methods live)
