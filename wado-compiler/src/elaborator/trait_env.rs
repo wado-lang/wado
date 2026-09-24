@@ -615,12 +615,6 @@ pub(super) struct ViaClause {
 /// `Eq`.
 pub(super) type SupertraitClosureIndex = IndexMap<DefId, Vec<InheritedBound>>;
 
-/// Every `interface` declaration.
-pub(super) type EffectDeclIndex = IndexSet<DefId>;
-
-/// Every `resource` declaration.
-pub(super) type ResourceDeclIndex = IndexSet<DefId>;
-
 /// A method an impl block declares on a type, reachable by name.
 #[derive(Clone, Debug)]
 pub(super) struct ImplMethodEntry {
@@ -961,8 +955,7 @@ impl TraitEnv {
         }
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut all_impl_index: TraitImplIndex = IndexMap::default();
-        let mut effect_decl_index: EffectDeclIndex = IndexSet::default();
-        let mut resource_decl_index: ResourceDeclIndex = IndexSet::default();
+        let mut effect_decl_index: IndexSet<DefId> = IndexSet::default();
         let mut blanket_impls: IndexMap<DefId, Vec<BlanketImpl>> = IndexMap::default();
         let mut impl_headers: IndexMap<DefId, ImplHeader> = IndexMap::default();
         let mut trait_decl_headers: IndexMap<DefId, TraitDeclHeader> = IndexMap::default();
@@ -978,13 +971,7 @@ impl TraitEnv {
         let mut impl_method_index: ImplMethodIndex = IndexMap::default();
         let mut resource_static_method_index: ResourceStaticMethodIndex = IndexMap::default();
 
-        // Pass 1: walk every module's items to populate the
-        // declaration-side indices (trait / effect / resource / type
-        // decls). We need these populated *before* impl blocks are
-        // canonicalised in pass 2, because the build-time canonical-key
-        // helper falls back to scanning the decl indices when the
-        // per-module symbol table misses (typical for prelude-implicit
-        // names that no `use` declaration explicitly threads).
+        // Pass 1: the declaration-side indices, which pass 2's impl blocks read.
         let defs = resolutions.defs();
         for (module_source, module) in modules {
             for item in &module.items {
@@ -998,7 +985,7 @@ impl TraitEnv {
                         let Some(resource_key) = defs.of_ast_id(resource.id) else {
                             continue;
                         };
-                        resource_decl_index.insert(resource_key);
+                        effect_decl_index.insert(resource_key);
                         // Index static methods from resource declarations.
                         // The resource declaration itself is the receiver.
                         for (method_idx, method) in resource.methods.iter().enumerate() {
@@ -1310,12 +1297,7 @@ impl TraitEnv {
         let concrete_trait_impl_modules = index_impl_modules(&impl_headers, resolutions, true);
         let decls_by_name = index_decls_by_name(
             defs,
-            [
-                &type_decl_index,
-                &decl_index,
-                &effect_decl_index,
-                &resource_decl_index,
-            ],
+            [&type_decl_index, &decl_index, &effect_decl_index],
             [&struct_like_decl_modules, &newtype_decl_modules],
         );
 
@@ -2734,7 +2716,7 @@ fn check_all_orphan_rules(
 /// duplicate would make a caller taking the unique answer see two.
 fn index_decls_by_name(
     defs: &DefTable,
-    sets: [&IndexSet<DefId>; 4],
+    sets: [&IndexSet<DefId>; 3],
     maps: [&IndexMap<String, Vec<DefId>>; 2],
 ) -> IndexMap<String, Vec<DefId>> {
     let mut out: IndexMap<String, Vec<DefId>> = IndexMap::default();

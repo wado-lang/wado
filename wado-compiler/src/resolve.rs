@@ -416,6 +416,22 @@ impl Resolutions {
         }
     }
 
+    /// The declaration `site` names, or `unwalked`'s answer where no walk
+    /// reached it: a node the elaborator minted, which only a spelling names.
+    pub fn declared_or(
+        &self,
+        site: Option<AstId>,
+        unwalked: impl FnOnce() -> Option<DefId>,
+    ) -> Option<DefId> {
+        match site.and_then(|site| self.walked(site)) {
+            Some(Resolution::Def(def)) => Some(def),
+            Some(Resolution::Binder(_) | Resolution::Projection(_) | Resolution::Unresolved) => {
+                None
+            }
+            None => unwalked(),
+        }
+    }
+
     /// The whole answer for a site the walk reached, `None` for a node it
     /// never saw — the only case for which any other source of truth is honest.
     #[must_use]

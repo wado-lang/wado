@@ -3531,13 +3531,10 @@ impl<'a> TypeLookup<'a> {
             .or_else(|| self.declaration_at(Some(bound.id), &bound.name))
     }
 
-    /// The declaration a type reference names: the walk's answer at `site`, or
-    /// the frame's for a node no walk reached. See `Elaborator::decl_key_at`.
+    /// The declaration a type reference names.
     pub(super) fn declaration_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
-        match site.filter(|site| self.resolutions.walked(*site).is_some()) {
-            Some(site) => self.resolutions.declared(site),
-            None => self.declaration(name),
-        }
+        self.resolutions
+            .declared_or(site, || self.declaration(name))
     }
 
     /// Which declaration `name` names in the frame this view stands in — for a

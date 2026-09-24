@@ -1228,10 +1228,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The declaration `name` names where it is written: the walk's answer at
     /// `site`, or the frame's for a node no walk reached.
     pub(crate) fn decl_key_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
-        match site.filter(|site| self.tysys.resolutions.walked(*site).is_some()) {
-            Some(site) => self.tysys.resolutions.declared(site),
-            None => self.decl_key_or_local(name),
-        }
+        self.tysys
+            .resolutions
+            .declared_or(site, || self.decl_key_or_local(name))
     }
 
     /// Whether `name` names a type where it is written: a primitive, or a type

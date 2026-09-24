@@ -214,11 +214,18 @@ position and only it, so every header carries a declaration and dispatch has no
 spelling to fall back to.
 
 A `with` clause is the same: each effect it names is a reference site, a trait
-head's and a function type's included. An effect parameter answers as its
-binder. A name reaching no `interface` or resource is rejected where it is
-written, however many modules declare an effect under it, so `with Stdout`
-needs `Stdout` in scope like any other name. Fixture:
-`error_with_unknown_effect.wado`.
+head's and a function type's included. A method that inherits its trait head's
+clause gets sites of its own, resolved in the trait's module, so the impl's
+module cannot capture the name. Fixture:
+`trait_head_effect_reaches_impl_module.wado`.
+
+A binder declared `effect` answers as the parameter. Any other binder, a type
+parameter among them, names no effect. A name reaching no `interface` or
+resource is rejected where it is written, however many modules declare an effect
+under it, so `with Stdout` needs `Stdout` in scope like any other name.
+`#[benign(E)]` is held to the same rule. Fixtures:
+`error_with_unknown_effect.wado`, `error_with_type_param_effect.wado`,
+`error_benign_unknown_effect.wado`.
 
 ### 4. Queries take identities, never a name beside one
 
@@ -937,8 +944,8 @@ directly works, because both sides mint the same name. The pending fixture is
 
 A synthesised bound carries its referent (§7); a synthesised `ast::Type` has no
 field to carry one. The Component Model binding synthesis builds types such as
-`Fields`, `Response` and `WaitableSet` whose nodes no walk visited, so
-`decl_key_at` answers them through the frame derivation. What it admits is §7's
+`Fields`, `Response` and `WaitableSet` whose nodes no walk visited, so the
+frame derivation answers them. What it admits is §7's
 hazard at those nodes: the frame, not the synthesis, decides which declaration a
 spelling reaches.
 
