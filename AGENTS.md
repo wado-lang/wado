@@ -2,8 +2,6 @@
 
 This document describes how to develop the Wado compiler toolchain.
 
-Note: `CLAUDE.md` is a symlink to `AGENTS.md`.
-
 ## Principles
 
 - Succinctly — say and write the least that fully conveys the point.
