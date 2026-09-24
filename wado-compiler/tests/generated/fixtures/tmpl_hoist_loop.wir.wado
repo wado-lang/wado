@@ -79,7 +79,6 @@ fn "tmpl_hoist_loop.wado/run"() with Stdout {
     let i_7: i32;
     let $local_11: ref "core:prelude/string.wado//String";
     let $local_15: ref "core:prelude/string.wado//String";
-    let $local_17: ref "core:prelude/string.wado//String";
     let new_used_30: i32;
     let start_31: i32;
     let handle_42: i32;
@@ -106,6 +105,7 @@ fn "tmpl_hoist_loop.wado/run"() with Stdout {
     let tx_165: i32;
     let $tmpl_buf_176: ref "core:prelude/string.wado//String";
     let $tmpl_buf_178: ref "core:prelude/string.wado//String";
+    let $tmpl_buf_181: ref "core:prelude/string.wado//String";
     total = 0;
     i_1 = 0;
     $tmpl_buf_176 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
@@ -188,23 +188,24 @@ fn "tmpl_hoist_loop.wado/run"() with Stdout {
     "core:rt/write_string_to_stream"(tx_134, $local_15.repr, $local_15.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_111);
     i_7 = 0;
+    $tmpl_buf_181 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     b9: block {
         l10: loop {
             break_if b9 i_7 >= 3;
-            $local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-            new_used_150 = 0 + 5;
-            if @unlikely(new_used_150 > builtin::array_len($local_17.repr)) {
+            $tmpl_buf_181.used = 0;
+            new_used_150 = $tmpl_buf_181.used + 5;
+            if @unlikely(new_used_150 > builtin::array_len($tmpl_buf_181.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_17, new_used_150);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_181, new_used_150);
             }
-            start_151 = $local_17.used;
-            $local_17.used = new_used_150;
-            builtin::array_copy<u8>($local_17.repr, start_151, global:tmpl_hoist_loop.wado::$const_obj_1, 0, 5);
-            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i_7, $local_17);
+            start_151 = $tmpl_buf_181.used;
+            $tmpl_buf_181.used = new_used_150;
+            builtin::array_copy<u8>($tmpl_buf_181.repr, start_151, global:tmpl_hoist_loop.wado::$const_obj_1, 0, 5);
+            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i_7, $tmpl_buf_181);
             rx_164 = builtin::i32_wrap_i64(local.tee packed_163("wasi/stream-new"()));
             tx_165 = builtin::i32_wrap_i64(packed_163 >> 32_i64);
             handle_161 = "tmpl_hoist_loop.wado/$cm_binding__Stdout_write_via_stream"(rx_164);
-            "core:rt/write_string_to_stream"(tx_165, $local_17.repr, $local_17.used);
+            "core:rt/write_string_to_stream"(tx_165, $tmpl_buf_181.repr, $tmpl_buf_181.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_161);
             i_7 = i_7 + 1;
             continue l10;

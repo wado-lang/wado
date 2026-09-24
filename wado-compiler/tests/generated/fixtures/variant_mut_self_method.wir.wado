@@ -207,17 +207,20 @@ fn "variant_mut_self_method.wado/run"() with Stdout {
     let packed_56: i64;
     let rx_57: i32;
     let tx_58: i32;
-    let handle_67: i32;
-    let packed_71: i64;
-    let rx_72: i32;
-    let tx_73: i32;
+    let v_64: ref "variant_mut_self_method.wado//P";
+    let $vc_payload_0: ref "variant_mut_self_method.wado//Cell";
+    let $vc_payload_1: i32;
+    let handle_70: i32;
+    let packed_74: i64;
+    let rx_75: i32;
+    let tx_76: i32;
     let elements: ref "Array<variant_mut_self_method.wado/P>";
-    let self_79: ref "variant_mut_self_method.wado//P";
-    let c_80: ref "variant_mut_self_method.wado//Cell";
-    let handle_90: i32;
-    let packed_100: i64;
-    let rx_101: i32;
-    let tx_102: i32;
+    let self_82: ref "variant_mut_self_method.wado//P";
+    let c_83: ref "variant_mut_self_method.wado//Cell";
+    let handle_93: i32;
+    let packed_103: i64;
+    let rx_104: i32;
+    let tx_105: i32;
     let $sroa_h_p: ref "variant_mut_self_method.wado//P";
     let $sroa_xs_used: i32;
     p = struct.new "core:prelude/types.wado//Box<variant_mut_self_method.wado/P>" { value: struct.new "variant_mut_self_method.wado//P::A" { discriminant: 0, payload_0: struct.new "variant_mut_self_method.wado//Cell" { v: black_box(1) } } };
@@ -256,25 +259,32 @@ fn "variant_mut_self_method.wado/run"() with Stdout {
     $write_back_before_15 = $write_back_14.value;
     $write_back_14.value = struct.new "variant_mut_self_method.wado//P::B" { discriminant: 1, payload_0: 42 };
     if ref.eq(local.tee $load_8($write_back_14.value), $write_back_before_15) == 0 {
-        $sroa_h_p = $load_8;
+        v_64 = $load_8;
+        $sroa_h_p = (if ref.test "variant_mut_self_method.wado//P::A"(v_64) -> ref "variant_mut_self_method.wado//P" {
+            $vc_payload_0 = ref.cast "variant_mut_self_method.wado//P::A"(v_64).payload_0;
+            struct.new "variant_mut_self_method.wado//P::A" { discriminant: 0, payload_0: struct.new "variant_mut_self_method.wado//Cell" { v: $vc_payload_0.v } };
+        } else {
+            $vc_payload_1 = ref.cast "variant_mut_self_method.wado//P::B"(v_64).payload_0;
+            struct.new "variant_mut_self_method.wado//P::B" { discriminant: 1, payload_0: $vc_payload_1 };
+        });
     }
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/traits.wado/variant_mut_self_method.wado/P^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(struct.new "core:prelude/types.wado//Box<variant_mut_self_method.wado/P>" { value: $sroa_h_p }, $local_10);
-    rx_72 = builtin::i32_wrap_i64(local.tee packed_71("wasi/stream-new"()));
-    tx_73 = builtin::i32_wrap_i64(packed_71 >> 32_i64);
-    handle_67 = "variant_mut_self_method.wado/$cm_binding__Stdout_write_via_stream"(rx_72);
-    "core:rt/write_string_to_stream"(tx_73, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_67);
+    rx_75 = builtin::i32_wrap_i64(local.tee packed_74("wasi/stream-new"()));
+    tx_76 = builtin::i32_wrap_i64(packed_74 >> 32_i64);
+    handle_70 = "variant_mut_self_method.wado/$cm_binding__Stdout_write_via_stream"(rx_75);
+    "core:rt/write_string_to_stream"(tx_76, $local_10.repr, $local_10.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_70);
     elements = array.new_fixed<ref "variant_mut_self_method.wado//P">(struct.new "variant_mut_self_method.wado//P::A" { discriminant: 0, payload_0: struct.new "variant_mut_self_method.wado//Cell" { v: black_box(1) } });
     $sroa_xs_used = builtin::array_len(elements);
-    self_79 = if @unlikely(0 >= $sroa_xs_used) {
+    self_82 = if @unlikely(0 >= $sroa_xs_used) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<variant_mut_self_method.wado/P>^core:prelude/traits.wado/IndexRef<i32>::index_ref$cold0"($sroa_xs_used);
         unreachable;
     }; struct.new "core:prelude/types.wado//Box<variant_mut_self_method.wado/P>" { value: builtin::array_get_value<ref "variant_mut_self_method.wado//P">(elements, 0) }.value;
-    if ref.test "variant_mut_self_method.wado//P::A"(self_79) {
-        c_80 = ref.cast "variant_mut_self_method.wado//P::A"(self_79).payload_0;
-        c_80.v = 9;
+    if ref.test "variant_mut_self_method.wado//P::A"(self_82) {
+        c_83 = ref.cast "variant_mut_self_method.wado//P::A"(self_82).payload_0;
+        c_83.v = 9;
     } else {
     }
     $local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -283,11 +293,11 @@ fn "variant_mut_self_method.wado/run"() with Stdout {
         "core:prelude/list.wado/core:prelude/list.wado/List<variant_mut_self_method.wado/P>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($sroa_xs_used);
         unreachable;
     }; builtin::array_get_value<ref "variant_mut_self_method.wado//P">(elements, 0)) }, $local_12);
-    rx_101 = builtin::i32_wrap_i64(local.tee packed_100("wasi/stream-new"()));
-    tx_102 = builtin::i32_wrap_i64(packed_100 >> 32_i64);
-    handle_90 = "variant_mut_self_method.wado/$cm_binding__Stdout_write_via_stream"(rx_101);
-    "core:rt/write_string_to_stream"(tx_102, $local_12.repr, $local_12.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_90);
+    rx_104 = builtin::i32_wrap_i64(local.tee packed_103("wasi/stream-new"()));
+    tx_105 = builtin::i32_wrap_i64(packed_103 >> 32_i64);
+    handle_93 = "variant_mut_self_method.wado/$cm_binding__Stdout_write_via_stream"(rx_104);
+    "core:rt/write_string_to_stream"(tx_105, $local_12.repr, $local_12.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_93);
 }
 
 fn "variant_mut_self_method.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -561,14 +571,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = $mv$data$start + ($mv$data$end - $mv$data$start);
     offset = $mv$data$start;
     block {
-        l37: loop {
+        l38: loop {
             $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b38: block {
-                l39: loop {
-                    break_if b38 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b39: block {
+                l40: loop {
+                    break_if b39 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
                     i = i + 1;
-                    continue l39;
+                    continue l40;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -601,7 +611,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
-            continue l37;
+            continue l38;
         };
     };
 }
@@ -646,14 +656,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b47: block {
-        l48: loop {
-            break_if b47 i >= digit_count_4;
+    b48: block {
+        l49: loop {
+            break_if b48 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l48;
+            continue l49;
         };
     };
 }

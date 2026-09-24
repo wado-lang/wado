@@ -75,32 +75,33 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 fn "closure_iterator_effectful.wado/run"() with Stdout {
     let self_2: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let item_8: i32;
-    let $local_2: ref "core:prelude/string.wado//String";
     let handle: i32;
     let packed: i64;
     let rx_25: i32;
     let tx_26: i32;
     let $licm_repr_35: ref Array<i32>;
+    let $tmpl_buf_36: ref "core:prelude/string.wado//String";
     let $sroa_nums_repr: ref Array<i32>;
-    let $hfs_index_55: i32;
+    let $hfs_index_57: i32;
     $sroa_nums_repr = array.new_fixed<i32>(1, 2, 3);
     self_2 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_nums_repr, index: 0, end: 3 };
     $licm_repr_35 = self_2.repr;
-    $hfs_index_55 = 0;
+    $tmpl_buf_36 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $hfs_index_57 = 0;
     b0: block {
         l1: loop {
-            if $hfs_index_55 >= 3 {
-                self_2.index = $hfs_index_55;
+            if $hfs_index_57 >= 3 {
+                self_2.index = $hfs_index_57;
                 break b0;
             }
-            item_8 = builtin::array_get_value<i32>($licm_repr_35, $hfs_index_55);
-            $hfs_index_55 = $hfs_index_55 + 1;
-            $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(item_8, $local_2);
+            item_8 = builtin::array_get_value<i32>($licm_repr_35, $hfs_index_57);
+            $hfs_index_57 = $hfs_index_57 + 1;
+            $tmpl_buf_36.used = 0;
+            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(item_8, $tmpl_buf_36);
             rx_25 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
             tx_26 = builtin::i32_wrap_i64(packed >> 32_i64);
             handle = "closure_iterator_effectful.wado/$cm_binding__Stdout_write_via_stream"(rx_25);
-            "core:rt/write_string_to_stream"(tx_26, $local_2.repr, $local_2.used);
+            "core:rt/write_string_to_stream"(tx_26, $tmpl_buf_36.repr, $tmpl_buf_36.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
             continue l1;
         };

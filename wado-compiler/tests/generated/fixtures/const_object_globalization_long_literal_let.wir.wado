@@ -104,7 +104,6 @@ fn "const_object_globalization_long_literal_let.wado/run"() with Stdout {
     let $load_3: ref Array<u8>;
     let $load_5: i32;
     let i: i32;
-    let $local_2: ref "core:prelude/string.wado//String";
     let handle: i32;
     let new_used_26: i32;
     let start_27: i32;
@@ -115,24 +114,26 @@ fn "const_object_globalization_long_literal_let.wado/run"() with Stdout {
     let packed: i64;
     let rx_52: i32;
     let tx_53: i32;
-    let $sroa_other_used_65: i32;
+    let $tmpl_buf_60: ref "core:prelude/string.wado//String";
+    let $sroa_other_used_67: i32;
     i = 0;
+    $tmpl_buf_60 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     b0: block {
         l1: loop {
             break_if b0 i >= 2;
             if ref.is_null(global:const_object_globalization_long_literal_let.wado::$const_obj_1) {
                 global:const_object_globalization_long_literal_let.wado::$const_obj_1 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alpha, the first of the letters, spelled out well past the eager bound"), used: 70 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bravo, the second of the letters, spelled out well past the eager bound"), used: 71 });
             }
-            $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i, $local_2);
-            new_used_26 = $local_2.used + 1;
-            if @unlikely(new_used_26 > builtin::array_len($local_2.repr)) {
+            $tmpl_buf_60.used = 0;
+            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i, $tmpl_buf_60);
+            new_used_26 = $tmpl_buf_60.used + 1;
+            if @unlikely(new_used_26 > builtin::array_len($tmpl_buf_60.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_26);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_60, new_used_26);
             }
-            start_27 = $local_2.used;
-            $local_2.used = new_used_26;
-            builtin::array_copy<u8>(local.tee $load_3($local_2.repr), start_27, global:const_object_globalization_long_literal_let.wado::$const_obj_0, 0, 1);
+            start_27 = $tmpl_buf_60.used;
+            $tmpl_buf_60.used = new_used_26;
+            builtin::array_copy<u8>(local.tee $load_3($tmpl_buf_60.repr), start_27, global:const_object_globalization_long_literal_let.wado::$const_obj_0, 0, 1);
             index_33 = i % 2;
             if @unlikely(index_33 >= 2) {
                 cold_path;
@@ -147,22 +148,22 @@ fn "const_object_globalization_long_literal_let.wado/run"() with Stdout {
             let $array_clone_dst_2: ref Array<u8>;
             $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
             builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
-            $sroa_other_used_65 = $load_5;
+            $sroa_other_used_67 = $load_5;
             $inline_core_prelude_string_wado_String__internal_push_string_17: block {
-                break_if $inline_core_prelude_string_wado_String__internal_push_string_17 $sroa_other_used_65 == 0;
-                new_used_48 = $local_2.used + $sroa_other_used_65;
+                break_if $inline_core_prelude_string_wado_String__internal_push_string_17 $sroa_other_used_67 == 0;
+                new_used_48 = $tmpl_buf_60.used + $sroa_other_used_67;
                 if @unlikely(new_used_48 > builtin::array_len($load_3)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_48);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_60, new_used_48);
                 }
-                start_49 = $local_2.used;
-                $local_2.used = new_used_48;
-                builtin::array_copy<u8>($local_2.repr, start_49, $array_clone_dst_2, 0, $sroa_other_used_65);
+                start_49 = $tmpl_buf_60.used;
+                $tmpl_buf_60.used = new_used_48;
+                builtin::array_copy<u8>($tmpl_buf_60.repr, start_49, $array_clone_dst_2, 0, $sroa_other_used_67);
             };
             rx_52 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
             tx_53 = builtin::i32_wrap_i64(packed >> 32_i64);
             handle = "const_object_globalization_long_literal_let.wado/$cm_binding__Stdout_write_via_stream"(rx_52);
-            "core:rt/write_string_to_stream"(tx_53, $local_2.repr, $local_2.used);
+            "core:rt/write_string_to_stream"(tx_53, $tmpl_buf_60.repr, $tmpl_buf_60.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
             i = i + 1;
             continue l1;
