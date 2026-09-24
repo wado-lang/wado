@@ -181,34 +181,23 @@ pub struct GenContext {
     /// push each rule call's exact return state (`atn_ret_pending`). Empty
     /// for grammars that do not need the ATN. See P4.2b in `TODO.md`.
     atn_call_site_returns: List<i32>,
-    /// The ATN decision-site → decision-number correspondence
-    /// (`Atn.decision_sites`, indexed by `RepeatElement.atn_decision` /
-    /// `GroupElement.atn_decision`). Populated after `build_atn` when
-    /// `needs_atn`, so emit can give each non-greedy `??` its exact decision
-    /// number in `atn_predict_with_stack` instead of the retired unique
-    /// exit-first BlockStart search. Empty for grammars without the ATN.
+    /// Each ATN decision site's decision number (`Atn.decision_sites`), so a
+    /// non-greedy `??` predicts at its own decision. Empty without the ATN.
     atn_decision_sites: List<i32>,
     recovery: RecoverySets,
-    /// Index of the parser rule currently being emitted (set by
-    /// `gen_parse_fn`). Read when emitting a non-greedy `??` to decide whether
-    /// the rule is left-recursive (so the `??`'s `atn_predict_with_stack` call
-    /// forwards `min_prec` rather than the literal `0`). -1 outside rule-body
-    /// emission.
+    /// Index of the parser rule currently being emitted, or -1 outside a
+    /// rule body.
     current_rule_index: i32,
     /// Monotonic counter for scan-group label uniqueness (`sg_<n>` etc.).
     /// Lives on the context — fresh per generation — so that generating two
     /// grammars in one process produces deterministic, run-order-independent
     /// labels. (Was a module-global that never reset.)
     scan_group_counter: i32,
-    /// Per-rule ATN loop-entry (`STAR_LOOP_ENTRY`) decision number, indexed
-    /// by rule, or -1 for a rule with no LR loop. Populated after `build_atn`
-    /// (only when `needs_atn`); read by the LR dispatch emitter to route an
-    /// ATN-class rule's loop-entry through `atn_predict_with_stack`.
+    /// Per rule, the ATN decision of its LR loop entry, which an ATN-class
+    /// rule's loop predicts at; -1 for a rule with no LR loop.
     lr_loop_entry_decisions: List<i32>,
-    /// Per-rule top-level-alternation (rule body) ATN decision number, indexed
-    /// by rule, or -1 for a single-alt rule. Populated after `build_atn` (only
-    /// when `needs_atn`); read by the rule emitter to route an `AtEndConflict`
-    /// multi-alt `Ambiguous` site through `atn_predict_with_stack`.
+    /// Per rule, the ATN decision of its top-level alternation, which an
+    /// `AtEndConflict` site predicts at; -1 for a single-alt or LR rule.
     atn_rule_body_decisions: List<i32>,
     /// When set, parser emit adds trace logging (rule enter/ok/fail plus
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
@@ -492,6 +481,10 @@ impl GenContext {
     /// The kinds a rule matches when its scan is one token test, or `null`.
     pub fn one_token_rule<S: AsStrSlice>(&self, snake: S) -> Option<List<String>> {
         return self.one_token_rules.get_str(&self.scan_alias(snake));
+    }
+
+    pub fn in_scan_fn(&self) -> bool {
+        return self.in_scan_fn;
     }
 
     /// Enter or leave a scan function's body; returns the previous setting.
@@ -790,6 +783,7 @@ impl GenContext {
 
     /// What a rule's own alternative block expects on entry.
     pub fn rule_entry_expect(&self, rule: i32) -> Option<List<String>> {
+        assert rule >= 0 && rule < self.recovery.rule_entry.len(), `rule_entry_expect: rule ${rule} has no entry set`;
         return self.expect_names(&self.recovery.rule_entry, rule);
     }
 
@@ -2085,17 +2079,8 @@ impl GenContext {
         return result;
     }
 
-    /// Returns true if the rule is safe to scan as a predicate prefix.
-    ///
-    /// Left-recursive (LR) rules have faithful `scan_X_atom` / `scan_X_prec` /
-    /// `scan_X_lr_N` generated for them so nested scans can recurse through
-    /// them correctly. The dispatch sites all run a real longest-match
-    /// tournament (`gen_scan_winner_tournament` for the group dispatchers,
-    /// `emit_scan_side_tournament` for a rule's): every candidate scans once
-    /// from the decision point and the greatest end wins, with ties resolved
-    /// to the first grammar alt. Each per-candidate LR scan is bounded by
-    /// the scan-helper structure, so the tournament stays linear in the
-    /// candidate count.
+    /// Whether the rule is safe to scan as a predicate prefix. A
+    /// left-recursive one is: its scan climbs precedence as its parse does.
     pub fn is_rule_scannable<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> bool {
         let mut min_cycle = i32::MAX;
         return self.is_rule_scannable_at(name, visiting, &mut min_cycle);

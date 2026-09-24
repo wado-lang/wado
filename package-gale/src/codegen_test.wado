@@ -2164,6 +2164,24 @@ test "a scan decides by the parse's lookahead, not by scanning every candidate" 
     assert str_contains(&scan_e, "return scan_e_alt_1(tokens, start"), scan_e;
 }
 
+test "a gate the scan cannot evaluate does not put its untested arm first" {
+    // The parse tests `p.ok()` and falls through to `A`; an ungated empty arm
+    // in the scan would end every scan of `r` before `A` is tried.
+    let input = "grammar G;
+options { language = Wado; }
+s : r A B EOF | r A C EOF ;
+r : { p.ok() }? | A ;
+A : 'a' ; B : 'b' ; C : 'c' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    let scan_r = extract_fn_body(&output, "fn scan_r(");
+    let tested = scan_r.find("if kind == TK_A {");
+    let untested = scan_r.find("scope:");
+    assert tested matches { Some(_) } && untested matches { Some(_) }, scan_r;
+    assert tested.unwrap() < untested.unwrap(), scan_r;
+}
+
 test "an uncontested alternative is scanned in place" {
     let mut g = parse(REPEATED_SCAN_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;

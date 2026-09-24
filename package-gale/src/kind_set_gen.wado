@@ -7,6 +7,7 @@ use { LoweredGrammar } from "./gir.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
 use { join_kinds, FOLLOW_SLOT_BITS, FOLLOW_CONT_SLOTS, FOLLOW_MAX_POSITION_ID } from "./gen_util.wado";
 use { MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
+use { DISPATCH_KIND_LOCAL } from "./ident.wado";
 use { CodeWriter, FnSpec } from "lib:wadopoet";
 use { TreeSet } from "core:collections";
 
@@ -56,7 +57,7 @@ fn join_lookahead_condition(
             result.push_str(" && ");
         }
         let part = match access {
-            ScanKind && d == 0 => ctx.kind_check_str(&sig[d], "kind"),
+            ScanKind && d == 0 => ctx.kind_check_str(&sig[d], DISPATCH_KIND_LOCAL),
             Scan | ScanKind => {
                 let idx_expr = if d == 0 { `pos` } else { `pos + ${d}` };
                 let check = ctx.kind_check_str(&sig[d], `tokens[${idx_expr}]`);
@@ -67,7 +68,7 @@ fn join_lookahead_condition(
                 ctx.kind_check_str(&sig[d], &check_expr);
             },
             ParseKind => {
-                let check_expr = if d == 0 { `kind` } else { `p.peek_at(${d})` };
+                let check_expr = if d == 0 { DISPATCH_KIND_LOCAL } else { `p.peek_at(${d})` };
                 ctx.kind_check_str(&sig[d], &check_expr);
             },
         };

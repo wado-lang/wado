@@ -1118,10 +1118,8 @@ fn element_eq(a: &Element, b: &Element) -> bool {
     };
 }
 
-/// Whether an `Ambiguous` node's decision is emitted as a runtime-ATN
-/// prediction (`atn_predict_with_stack`). Shared by the marking pass and
-/// `gen_prediction_code_inner`'s `route_via_atn` so the two cannot disagree
-/// about which nodes take the ATN path.
+/// Whether an `Ambiguous` node's decision is a runtime-ATN prediction. The
+/// marking pass and `gen_prediction_code_inner` both ask here.
 pub fn ambiguous_node_routes_via_atn<S: AsStrSlice>(a: &AmbiguousNode, rule_name: S, ctx: &GenContext) -> bool {
     return a.reason matches { AtEndConflict }
         && ctx.emits_at_end_conflict_via_atn(ctx.current_rule_index(), rule_name, &a.branch_tokens);

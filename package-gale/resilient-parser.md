@@ -68,7 +68,7 @@ The parser drives a `TreeBuilder` (`start_node` / `token` / `missing` / `skip` /
 `start_error` / `finish_node`), which appends a flat event stream into the
 columns and finalizes them once (one linear pass in `finish()`).
 
-Recovery replaces `expect(k)` with `expect_or_recover(k, sync)`:
+Each terminal is matched by `expect(k, sync, may_end_rule)`, which recovers:
 
 1. **match** — consume.
 2. **delete** — if `peek(1) == k`, the current token is spurious: `skip` it, then
@@ -79,9 +79,9 @@ Recovery replaces `expect(k)` with `expect_or_recover(k, sync)`:
    outward through the call sites while each caller may end there as well, and
    past the entry rule it accepts EOF.
 4. **sync** — otherwise skip tokens into a `K_ERROR` region until a token in
-   `FOLLOW(rule) ∪ FIRST(rest) ∪ anchors`; at EOF, fill remaining required
-   terminals with `missing` (`UnterminatedConstruct`) where the input may end
-   after them, and fail the rule where it may not.
+   `sync`, what the ATN says may follow `k` in its rule; at EOF, fill remaining
+   required terminals with `missing` (`UnterminatedConstruct`) where the input
+   may end after them, and fail the rule where it may not.
 
 A decision syncs the way ANTLR4's does. On entry to a `*`, `+`, `?`, block, or
 rule with alternatives, a token the decision cannot continue with is deleted

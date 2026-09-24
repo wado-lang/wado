@@ -90,13 +90,8 @@ pub struct Atn {
     /// exact return state around each rule call. Empty when call sites were
     /// not assigned (`assign_atn_call_sites` not run).
     pub call_site_returns: List<i32>,
-    /// Compile-time correspondence `atn_decision -> decision number`, indexed
-    /// by the surface `RepeatElement.atn_decision` / `GroupElement.atn_decision`
-    /// id (`-1` for any id whose node marked no decision, e.g. a single-alt
-    /// group). NOT part of the serialized blob — codegen reads it to emit each
-    /// `??`'s exact `atn_predict_with_stack(sim, decision, …)` call, retiring
-    /// the runtime "unique exit-first BlockStart" search. Empty when decision
-    /// sites were not assigned (`assign_atn_decisions` not run).
+    /// Compile-time `atn_decision -> decision number`, -1 for a site that marks
+    /// no decision. Not serialized; empty when sites were not assigned.
     pub decision_sites: List<i32>,
     /// Compile-time `atn_leaf_site -> the state after the terminal matches`,
     /// `-1` for an id no segment took. Not serialized.
@@ -135,11 +130,9 @@ pub fn lr_loop_entry_decision(atn: &Atn, rule: i32) -> i32 {
     return -1;
 }
 
-/// The decision number of parser rule `rule`'s top-level alternation (the
-/// `BlockStart` directly off its `RuleStart`), or -1 if the rule body marks
-/// no decision (a single-alt rule). Codegen uses this to route an `AtEndConflict`
-/// multi-alt `Ambiguous` site through `atn_predict_with_stack`. For an LR rule
-/// this is the atom block's decision, not the loop entry (`lr_loop_entry_decision`).
+/// The decision number of rule `rule`'s top-level alternation, which an
+/// `AtEndConflict` site predicts at; -1 for a single-alt rule. For an LR rule
+/// it is the atom block's, not the loop entry (`lr_loop_entry_decision`).
 pub fn rule_body_decision(atn: &Atn, rule: i32) -> i32 {
     let start = atn.rule_start[rule];
     if atn.states[start].transitions.is_empty() {

@@ -571,13 +571,6 @@ answer rather than four derivations of it. Lower bakes the classification into
 carries the built `ScanGroupElement` rather than bare scan bodies, so emit has
 nothing left to assemble a second classification into.
 
-A rule's own alternatives partition the same way (`rule_overlap_groups`).
-Inside a merged branch `build_prediction` decides, and it reads a wildcard the
-same way at every depth: a position that reaches a `.` or `~X` joins every
-token's branch, and a token no alternative names goes to the tournament. So
-`r : A? . C | B D | B E` takes `b c` by its first alternative. Fixture
-`open_ended_rule_alt.g4`.
-
 A branch of the decision therefore carries what it admits — `Admits`, one of
 `Everything`, `Untestable`, or `Kinds` (never empty) — instead of a rendered
 test, and `kind_check_str` refuses an empty set rather than choosing for the
@@ -607,6 +600,13 @@ lets the rule complete. The longest scan cannot say that, because an empty
 alternative scans as nothing and loses to any longer one. So the ATN simulator
 decides such a group, in the parse and in the scan alike (`GroupOp.atn_site`,
 `ScanGroupElement.atn_site`). Fixture `empty_alt_mid.g4`.
+
+A rule's own alternatives partition the same way (`rule_overlap_groups`).
+Inside a merged branch `build_prediction` decides, and it reads a wildcard the
+same way at every depth: a position that reaches a `.` or `~X` joins every
+token's branch, and a token no alternative names goes to the tournament. So
+`r : A? . C | B D | B E` takes `b c` by its first alternative. Fixture
+`open_ended_rule_alt.g4`.
 
 A rule's nullable alternative is admitted by the rule's FOLLOW in the same way
 (`RuleOverlap.end_follow`). An at-end conflict is settled statically when its
@@ -925,7 +925,8 @@ the compiled fast path:**
    the caller can continue with that token too; then the full simulator
    decides. The same shape inside an LR alternative (SQLite's
    `expr NOT? BETWEEN expr AND expr`) is **not** routed here, since a hot
-   expression rule cannot pay for that (`perf.md`). It stays static: the mid operand also drops to `expr[0]`, and
+   expression rule cannot pay for that (`perf.md`). It stays static: the mid
+   operand also drops to `expr[0]`, and
    each loop entry scans the operator's suffix and checks that the enclosing
    alternative's continuation is still there (`lr_cont`). A trailing operand
    forwards its caller's continuation and keeps ANTLR4's precedence. Fixture
@@ -1003,14 +1004,12 @@ there for the enter-or-exit verdict, which needs full context; which member of
 the group to enter does not, and is re-taken from the scan twins by longest
 match, ties to the first alternative. Fixture: `lr_atn_shared_op.g4`.
 
-An exit the simulator predicts also answers the enclosing loop the frame returns
-into, at the same position. The caller asks enter or exit too, and its answer is
-exit whenever each operator it would enter on the token is one the callee could
-have entered. Every continuation the caller's enter reaches, the callee's enter
-reaches as well, since leaving the callee lands in the caller's loop. The
-callee's enter died first, so the caller's dies no later, and only its exit is
-left. The verdict is recorded for each such caller in turn, and a caller where
-the condition fails asks the simulator itself.
+When the simulator predicts exit, the enclosing invocations of the same loop at
+the same position exit too, unless one of them could enter there on an operator
+the callee could not. The reason: leaving the callee lands in the caller's loop,
+so every continuation the caller's enter reaches, the callee's reached as well,
+and the callee's all died. So the verdict is recorded for each such caller in
+turn, and a caller with an operator of its own asks the simulator itself.
 
 Which gaps stay static is a cost decision as much as a correctness one — one
 prediction is a full closure over the grammar; see [`perf.md`](./perf.md).

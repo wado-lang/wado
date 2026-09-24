@@ -9,7 +9,7 @@ use { DiagnosticKind, DiagnosticOwner, LoweredGrammar, Rule, rule_header } from 
 use { GenContext } from "./gen_context.wado";
 use { join_kinds } from "./gen_util.wado";
 use { kind_bitset_words } from "./kind_set_gen.wado";
-use { CodeWriter, FnSpec, ImplSpec, ParamSpec, StructSpec, Vis } from "lib:wadopoet";
+use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis } from "lib:wadopoet";
 use { add_parser_super_effect, entry_emits_vals } from "./action_gen.wado";
 use { MemberDecls } from "./java2wado/jmembers.wado";
 use { SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
@@ -174,8 +174,7 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.line("p.max_errors = max_errors;");
     w.line("entry(&mut p);");
     // The parser is infallible: a failure leaves `p.recovering` set and the
-    // deepest error in `p.pending`. Surface it as one diagnostic; the partial
-    // tree (open nodes folded by each wrapper's `finish_node`) is still returned.
+    // deepest error in `p.pending`, surfaced here as one diagnostic.
     w.begin("if p.recovering && p.diagnostics.len() < max_errors");
     w.line("p.commit_pending();");
     w.end();
@@ -752,10 +751,8 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     w.blank();
 
-    // Record an unrecoverable match failure and enter recovery. Infallible
-    // replacement for the old `return Result::Err(...)`: the deepest failure is
-    // kept in `pending` and `recovering` short-circuits the rest of the descent
-    // until the entry surfaces it. `rule_stack` fills in as the descent unwinds.
+    // Record a match failure and enter recovery: the deepest failure is kept in
+    // `pending` until `commit_pending` reports it.
     let mut ff = FnSpec::new("fail");
     ff.set_receiver("&mut self");
     ff.add_param("message", "String");
@@ -812,9 +809,8 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     w.blank();
 
-    // Append a rule name to the pending error's rule stack as the descent
-    // unwinds (each rule wrapper calls this on the way out when recovering),
-    // so tooling can report the context that failed.
+    // Append a rule name to the pending error's rule stack, so tooling can
+    // report the context that failed.
     let mut prs = FnSpec::new("push_rule_stack");
     prs.set_receiver("&mut self");
     prs.add_param("name", "String");

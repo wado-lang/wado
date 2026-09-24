@@ -1009,13 +1009,9 @@ impl WildcardElement {
 pub struct GroupElement {
     pub alternatives: List<Alternative>,
     pub options: List<GrammarOption>,
-    /// Unique decision-site id, assigned by `assign_atn_decisions` (parallel
-    /// to `atn_call_site`). Ties this group's alternation BlockStart to its
-    /// ATN decision number: `build_atn` records `atn_decision -> decision` in
-    /// `Atn.decision_sites`, and codegen reads it to emit
-    /// `atn_predict_with_stack(sim, decision, …)` for an ATN-class multi-alt
-    /// group. -1 until assigned (and for single-alt groups, which mark no
-    /// decision). See `TODO.md` "ATN-class grammars".
+    /// Decision-site id (`assign_atn_decisions`), which `Atn.decision_sites`
+    /// maps to the decision an ATN-class group predicts at. -1 until assigned
+    /// and for a single-alt group.
     pub atn_decision: i32 = -1,
 }
 
@@ -1029,14 +1025,8 @@ pub struct RepeatElement {
     pub kind: RepeatKind,
     pub element: Element,
     pub non_greedy: bool,
-    /// Unique decision-site id, assigned by `assign_atn_decisions` (parallel
-    /// to `atn_call_site`). Ties this repeat's loop/optional decision state to
-    /// its ATN decision number: `build_atn` records `atn_decision -> decision`
-    /// in `Atn.decision_sites`, and codegen reads it to emit
-    /// `atn_predict_with_stack(sim, decision, …)` for a non-greedy `??` —
-    /// retiring the runtime "unique exit-first BlockStart" search, so several
-    /// `??` in one rule each get their own decision. -1 until assigned. See
-    /// `TODO.md` "ATN-class grammars".
+    /// Decision-site id (`assign_atn_decisions`), which `Atn.decision_sites`
+    /// maps to the decision a non-greedy `??` predicts at. -1 until assigned.
     pub atn_decision: i32 = -1,
 }
 

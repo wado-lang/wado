@@ -1017,14 +1017,21 @@ pub fn mark_alt_gate_answered(alt: &Alternative, ctx: &mut GenContext) {
 /// token-led dispatch condition, or "" when off (keeping non-Wado grammars
 /// byte-identical) or the alt has none.
 pub fn alt_gate_and_suffix(alt: &Alternative, ctx: &mut GenContext) -> String {
-    let suffix = alt_gate_suffix_unanswered(alt, ctx);
-    if suffix.is_empty() {
-        return suffix;
+    return and_gate(alt_gate_condition(alt, ctx));
+}
+
+/// An alt's gateable predicates joined into one condition, registered as
+/// answered by it, or "" where it has none.
+pub fn alt_gate_condition(alt: &Alternative, ctx: &mut GenContext) -> String {
+    return join_gate_conds(&alt_initial_gate_conditions(alt, ctx));
+}
+
+/// The ` && <cond>` a rendered gate condition adds to a test, or nothing.
+pub fn and_gate(cond: String) -> String {
+    if cond.is_empty() {
+        return cond;
     }
-    // This suffix is rendered into the caller's own test, so emitting it is
-    // what answers the predicate — one collector, two bookkeepings.
-    mark_alt_gate_answered(alt, ctx);
-    return suffix;
+    return ` && ${cond}`;
 }
 
 /// The same suffix and `pred_<id>` fn without claiming the predicate answered;
@@ -1040,50 +1047,7 @@ pub fn alt_gate_suffix_unanswered(alt: &Alternative, ctx: &mut GenContext) -> St
             conds.push(c);
         }
     }
-    if conds.is_empty() {
-        return String::new();
-    }
-    return ` && ${join_gate_conds(&conds)}`;
-}
-
-/// Emit predicate-gated selection for an interchangeable `Ambiguous` group, in
-/// grammar order: the first alt whose predicates hold wins, an unpredicated alt
-/// is always viable and closes the chain, and all-false is no viable alternative.
-pub fn gen_predicate_gated_dispatch<S: AsStrSlice, S1: AsStrSlice>(
-    w: &mut CodeWriter,
-    amb_alts: &List<i32>,
-    alts: &List<Alternative>,
-    fn_name: S,
-    ctx: &mut GenContext,
-    rule_display: S1,
-) {
-    let order = amb_alts.sorted();
-    let mut opened = false;
-    for let idx of &order {
-        let conds = alt_initial_gate_conditions(&alts[*idx], ctx);
-        if conds.is_empty() {
-            if !opened {
-                emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
-                return;
-            }
-            w.else_begin("else");
-            emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
-            w.end();
-            return;
-        }
-        let cond = join_gate_conds(&conds);
-        if !opened {
-            w.begin(`if ${cond}`);
-            opened = true;
-        } else {
-            w.else_begin(`else if ${cond}`);
-        }
-        emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
-    }
-    w.else_begin("else");
-    w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
-    emit_no_viable_return(w, ctx);
-    w.end();
+    return and_gate(join_gate_conds(&conds));
 }
 
 /// The `, vals` a multi-alt dispatch forwards to an `_alt_<n>` helper so the
@@ -1119,20 +1083,6 @@ pub fn emit_no_viable_return(w: &mut CodeWriter, ctx: &GenContext) {
     } else {
         w.line("return;");
     }
-}
-
-/// Emit a gated branch body: the trace pick and the tail call into the alt.
-fn emit_gated_pick<S: AsStrSlice, S1: AsStrSlice>(
-    w: &mut CodeWriter,
-    idx: i32,
-    fn_name: S,
-    ctx: &GenContext,
-    rule_display: S1,
-) {
-    if ctx.is_trace() {
-        w.line(wado`trace_pick(p, "${rule_display.to_string()}", ${idx});`);
-    }
-    emit_alt_helper_exit(w, fn_name, idx, ctx);
 }
 
 /// The statements that run alternative `idx` as the rule's finished

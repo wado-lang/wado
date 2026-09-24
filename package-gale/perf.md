@@ -543,10 +543,10 @@ path. Full context in `TODO.md` ("Soundness and compatibility divergence") and
 
 **A memoised ATN / lookahead DFA is a last resort.** It was the named lever for
 an LR mid operand and for the ambiguous `rule?` below before each closed on the
-compiled scan instead. It is
-unmeasured in Gale, but ANTLR4's lookahead DFA _is_ that cache and still parses
-this grammar and input at 216.991 ms/iter against Gale's 2.535
-(`benchmark/README.md`). Reach for the scan and the runtime FOLLOW gate first.
+compiled scan instead. It is unmeasured in Gale, but ANTLR4's lookahead DFA
+_is_ that cache and still parses this grammar and input at 216.991 ms/iter
+against Gale's 2.535 (`benchmark/README.md`). Reach for the scan and the
+runtime FOLLOW gate first.
 
 - **A tournament asks the simulator once per alternative it scans**
   (`DropLoopEntryBranchInLRRule_4`). Each loop-entry prediction there looks
