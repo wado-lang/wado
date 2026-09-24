@@ -3416,34 +3416,34 @@ impl CmInterfaceRegistry {
             .function
             .clone()
             .unwrap_or_else(|| method_name.replace('_', "-"));
-        // Params carry their value types: newtypes peeled, extern handles kept,
-        // so a binding's GC-level types match the caller's.
-        let resolved_params: Vec<(String, String, Type)> = params
-            .into_iter()
-            .map(|(name, cm_name, ty)| (name, cm_name, self.value_type(&ty)))
-            .collect();
         let func_info = CmFunctionInfo {
             namespace: wasi.namespace.clone(),
             interface_name: interface_name.to_string(),
             method_name: method_name.to_string(),
-            wasi_func_name: wasi_func_name.clone(),
+            wasi_func_name,
             interface_path: interface_path.clone(),
             package: wasi.package.clone(),
             is_async,
-            params: resolved_params,
+            params: self.value_params(params),
             return_type,
         };
 
-        if !self.bind(format!("{interface_name}::{method_name}"), &func_info)? {
-            return Ok(());
+        if self.bind(format!("{interface_name}::{method_name}"), &func_info)? {
+            self.interfaces
+                .entry(interface_path)
+                .or_default()
+                .push(func_info);
         }
-        self.local_aliases
-            .insert(func_info.local_alias_name(), (interface_path.clone(), wasi_func_name));
-        self.interfaces
-            .entry(interface_path)
-            .or_default()
-            .push(func_info);
         Ok(())
+    }
+
+    /// `params` at their value types: newtypes peeled and extern handles kept, so a
+    /// binding's GC-level types match the caller's.
+    fn value_params(&self, params: Vec<(String, String, Type)>) -> Vec<(String, String, Type)> {
+        params
+            .into_iter()
+            .map(|(name, cm_name, ty)| (name, cm_name, self.value_type(&ty)))
+            .collect()
     }
 
     /// Binds `key` to `func_info`; `Ok(false)` when `key` already binds the same signature.
@@ -3465,7 +3465,12 @@ impl CmInterfaceRegistry {
             }
             return Ok(false);
         }
-        self.used_names.insert(func_info.local_alias_name());
+        let local_name = func_info.local_alias_name();
+        self.used_names.insert(local_name.clone());
+        self.local_aliases.insert(
+            local_name,
+            (func_info.interface_path.clone(), func_info.wasi_func_name.clone()),
+        );
         self.effect_to_func.insert(key, func_info.clone());
         Ok(true)
     }
@@ -3481,10 +3486,6 @@ impl CmInterfaceRegistry {
         params: Vec<(String, String, Type)>,
         return_type: Option<Type>,
     ) -> Result<(), String> {
-        let resolved_params: Vec<(String, String, Type)> = params
-            .into_iter()
-            .map(|(name, cm_name, ty)| (name, cm_name, self.value_type(&ty)))
-            .collect();
         let func_info = CmFunctionInfo {
             // A world import sits above any interface, so it has no namespace,
             // package or interface path to name: its alias is a bare key.
@@ -3495,17 +3496,12 @@ impl CmInterfaceRegistry {
             interface_path: String::new(),
             package: String::new(),
             is_async,
-            params: resolved_params,
+            params: self.value_params(params),
             return_type,
         };
-        if !self.bind(func_name.to_string(), &func_info)? {
-            return Ok(());
+        if self.bind(func_name.to_string(), &func_info)? {
+            self.world_import_functions.insert(func_name.to_string());
         }
-        self.local_aliases.insert(
-            func_info.local_alias_name(),
-            (String::new(), cm_func_name.to_string()),
-        );
-        self.world_import_functions.insert(func_name.to_string());
         Ok(())
     }
 
