@@ -1219,7 +1219,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &struct_name,
                         expr_type,
                         trait_,
-                        &trait_name,
                         method_name,
                         false,
                         None,
@@ -1229,7 +1228,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &lookup_name,
                             lookup_type_id,
                             trait_,
-                            &trait_name,
                             method_name,
                             false,
                             None,
@@ -1939,21 +1937,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         rhs: Option<&ArgClass>,
     ) -> Option<ResolvedTraitMethod> {
         let trait_ = self.tysys.compiler_trait_def(item)?;
-        let trait_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_trait_name(item)
-            .to_string();
-        self.resolve_trait_method_for_op(
-            struct_name,
-            lookup_type_id,
-            trait_,
-            &trait_name,
-            method,
-            false,
-            rhs,
-        )
+        self.resolve_trait_method_for_op(struct_name, lookup_type_id, trait_, method, false, rhs)
     }
 
     /// The `OperatorOrd` method an ordering operator reads, for a type that

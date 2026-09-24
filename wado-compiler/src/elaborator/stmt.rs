@@ -431,8 +431,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if scope.type_decl_at(Some(id), name).is_some() {
                 return false;
             }
-            // A bare name has tiers no declaration index covers, `Self` and the
-            // frame's parameters among them. A head carrying arguments has none.
+            // A bare name has tiers the module scope does not hold, `Self` and
+            // the frame's parameters among them. A head carrying arguments has none.
             if !has_args && scope.resolve_named_type(id, name, span, false) != TypeTable::UNKNOWN {
                 return false;
             }
@@ -1414,10 +1414,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // An `async fn` names its result with `task return`; a bare `return`
         // still ends the function, carrying whatever was already delivered.
         if ctx.is_async && ret_stmt.value.is_some() {
-            let _ = self.emit(TypeError::InvalidLiteral {
-                message:
-                    "cannot use `return expr` in `export async fn`; use `task return expr` instead"
-                        .to_string(),
+            let _ = self.emit(TypeError::ReturnValueInAsync {
                 span: ret_stmt.span,
             });
         }
@@ -1442,10 +1439,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) {
         if !ctx.is_async {
-            let _ = self.emit(TypeError::InvalidLiteral {
-                message: "`task return` is only valid inside `export async fn`".to_string(),
-                span: tr_stmt.span,
-            });
+            let _ = self.emit(TypeError::TaskReturnOutsideAsync { span: tr_stmt.span });
         }
         let expected = ctx.task_return_type;
         let mut value_type = self.resolve_expr(&tr_stmt.value, ctx, expected);

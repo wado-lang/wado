@@ -420,8 +420,8 @@ way (each was also an LSP false positive / under-report):
 - [x] Effect identity is non-canonical: `EffectRef::Concrete.module_source`
       reflects the recording module's import perspective (user `with
       Stdout` → entry module; stdlib → `wasi:cli`). Effects are now
-      canonicalised by name through the declaration index before
-      comparison / closure lookup.
+      canonicalised through their declaration before comparison / closure
+      lookup.
 - [x] Effect-handler scopes: `with H => … do { … }` grants `H` to the
       do-block body (pushed / popped around the body walk).
 - [x] Indirect calls through a function-typed parameter resolve the

@@ -1162,6 +1162,27 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `return expr` in an `export async fn`, which delivers with `task return`.
+    ReturnValueInAsync {
+        span: Span,
+    },
+
+    /// `task return` outside an `export async fn`.
+    TaskReturnOutsideAsync {
+        span: Span,
+    },
+
+    /// A template tag that names neither a function nor a static method.
+    TemplateTagNotCallable {
+        span: Span,
+    },
+
+    /// A tagged template hole whose type mentions a type parameter.
+    TemplateHoleGeneric {
+        type_name: String,
+        span: Span,
+    },
+
     /// `#[compiler_item("...")]` attribute that failed validation —
     /// unknown name, kind mismatch (e.g. `#[compiler_item("option")]`
     /// on a struct), or used outside a `core::*` module. The
@@ -1479,6 +1500,31 @@ impl TypeError {
                 Code::InvalidSyntax,
                 "multiple effect parameters are not allowed; use a single effect parameter instead"
                     .to_string(),
+                *span,
+            ),
+            TypeError::ReturnValueInAsync { span } => (
+                Code::InvalidSyntax,
+                "cannot use `return expr` in `export async fn`; use `task return expr` instead"
+                    .to_string(),
+                *span,
+            ),
+            TypeError::TaskReturnOutsideAsync { span } => (
+                Code::InvalidSyntax,
+                "`task return` is only valid inside `export async fn`".to_string(),
+                *span,
+            ),
+            TypeError::TemplateTagNotCallable { span } => (
+                Code::InvalidSyntax,
+                "a template tag must name a function or a static method".to_string(),
+                *span,
+            ),
+            TypeError::TemplateHoleGeneric { type_name, span } => (
+                Code::InvalidSyntax,
+                format!(
+                    "a tagged template hole of type `{type_name}` mentions a type parameter; \
+                     a template's type is minted per shape and cannot be generic over the \
+                     enclosing item"
+                ),
                 *span,
             ),
             TypeError::CannotInferType { message, span } => {
@@ -3503,17 +3549,15 @@ impl<'a> TypeLookup<'a> {
             .copied()
     }
 
-    /// Which of `bounds` declares `assoc_name`. `None` where the declaration
-    /// indexes are absent, since no bound can be asked what it declares then.
+    /// Which of `bounds` declares `assoc_name`. `None` before the trait
+    /// declarations exist, since no bound can be asked what it declares then.
     pub(super) fn bound_declaring_assoc_type(
         &self,
         bounds: &[ast::TraitBound],
         assoc_name: &str,
     ) -> Option<DefId> {
         self.decls?
-            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
-                self.resolutions.bound_decl(bound)
-            })
+            .bound_declaring_assoc_type(bounds, assoc_name, self.resolutions)
     }
 
     /// The declaration a type reference names.

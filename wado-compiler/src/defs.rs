@@ -301,7 +301,7 @@ impl DefTable {
     }
 
     /// Identify each member a module's items declare, under its owner. One the
-    /// symbol table collected as `Owner::op` keeps that identity as a member.
+    /// symbol table collected as `Owner::op` keeps that identity, renamed `op`.
     fn declare_members(&mut self, module: &ModuleSource, ast: &Module) {
         for item in &ast.items {
             self.declare_item_members(module, item);

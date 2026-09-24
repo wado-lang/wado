@@ -2682,11 +2682,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Self::validate_expr_type_names(&range.end, known_type_names, type_params, logger)?;
             }
             ast::Expr::WithHandler(with_handler) => {
-                // The LHS of `E = h` in a `with` clause is an effect
-                // name, not a type name. The real elaborator validates it
-                // against the effect declaration index in
-                // `resolve_with_handler`; here we only walk the handler
-                // expression and the body for type-name references.
+                // `E` in `with E => h` is an effect name, which
+                // `resolve_with_handler` checks; only `h` and the body name types.
                 for binding in &with_handler.handlers {
                     Self::validate_expr_type_names(
                         &binding.handler,
@@ -3263,7 +3260,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             let Some(owning_trait) = trait_env.bound_declaring_assoc_type(
                                 &param.bounds,
                                 &ns.name,
-                                |bound| resolutions.declared(bound.id),
+                                resolutions,
                             ) else {
                                 continue;
                             };

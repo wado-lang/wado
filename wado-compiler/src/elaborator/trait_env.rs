@@ -918,14 +918,11 @@ impl TraitEnv {
         }
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut all_impl_index: TraitImplIndex = IndexMap::default();
-        let mut effect_decl_index: IndexSet<DefId> = IndexSet::default();
         let mut blanket_impls: IndexMap<DefId, Vec<BlanketImpl>> = IndexMap::default();
         let mut impl_headers: IndexMap<DefId, ImplHeader> = IndexMap::default();
         let mut trait_decl_headers: IndexMap<DefId, TraitDeclHeader> = IndexMap::default();
         let mut function_type_params: IndexMap<(ModuleSource, String), Vec<ast::GenericParam>> =
             IndexMap::default();
-        let mut struct_like_decl_modules: IndexMap<String, Vec<DefId>> = IndexMap::default();
-        let mut newtype_decl_modules: IndexMap<String, Vec<DefId>> = IndexMap::default();
         // Every type declaration, for the orphan rule's "does this package own
         // it?" check. A declaration, so a user type shadowing a stdlib name
         // cannot vouch for the stdlib type it shadows.
@@ -939,16 +936,10 @@ impl TraitEnv {
         for (module_source, module) in modules {
             for item in &module.items {
                 match item {
-                    Item::Interface(effect_decl) => {
-                        if let Some(def) = defs.of_ast_id(effect_decl.id) {
-                            effect_decl_index.insert(def);
-                        }
-                    }
                     Item::Resource(resource) => {
                         let Some(resource_key) = defs.of_ast_id(resource.id) else {
                             continue;
                         };
-                        effect_decl_index.insert(resource_key);
                         let is_resource = |ty: &ast::Type| {
                             matches!(ty, ast::Type::Named(n)
                                 if n.name == "Self" || resolutions.declared(n.id) == Some(resource_key))
@@ -1018,64 +1009,11 @@ impl TraitEnv {
         // every PascalCase reference to its declaring module.
         for (module_source, module) in modules {
             for item in &module.items {
-                // Digest the per-item facts `lookup_function_type_params` reads,
-                // so it need not re-scan `loaded_modules`.
-                match item {
-                    Item::Function(f) => {
-                        function_type_params.insert(
-                            (module_source.clone(), f.name.clone()),
-                            f.type_params.clone(),
-                        );
-                    }
-                    Item::Struct(s) => {
-                        if let Some(def) = defs.of_ast_id(s.id) {
-                            struct_like_decl_modules
-                                .entry(s.name.clone())
-                                .or_default()
-                                .push(def);
-                        }
-                    }
-                    Item::Resource(r) => {
-                        if let Some(def) = defs.of_ast_id(r.id) {
-                            struct_like_decl_modules
-                                .entry(r.name.clone())
-                                .or_default()
-                                .push(def);
-                        }
-                    }
-                    Item::Variant(v) => {
-                        if let Some(def) = defs.of_ast_id(v.id) {
-                            struct_like_decl_modules
-                                .entry(v.name.clone())
-                                .or_default()
-                                .push(def);
-                        }
-                    }
-                    Item::Enum(e) => {
-                        if let Some(def) = defs.of_ast_id(e.id) {
-                            struct_like_decl_modules
-                                .entry(e.name.clone())
-                                .or_default()
-                                .push(def);
-                        }
-                    }
-                    Item::BuiltinTypeDecl(d) => {
-                        if let Some(def) = defs.of_ast_id(d.id) {
-                            struct_like_decl_modules
-                                .entry(d.name.clone())
-                                .or_default()
-                                .push(def);
-                        }
-                    }
-                    Item::Newtype(n) => {
-                        if let Some(def) = defs.of_ast_id(n.id) {
-                            newtype_decl_modules
-                                .entry(n.name.clone())
-                                .or_default()
-                                .push(def);
-                        }
-                    }
-                    _ => {}
+                if let Item::Function(f) = item {
+                    function_type_params.insert(
+                        (module_source.clone(), f.name.clone()),
+                        f.type_params.clone(),
+                    );
                 }
                 if let Item::Trait(trait_decl) = item {
                     let Some(trait_def) = defs.of_ast_id(trait_decl.id) else {
@@ -1785,24 +1723,23 @@ impl TraitEnv {
 
     /// Which of `bounds` declares `assoc_name`, making `T::assoc_name` mean
     /// `<T as ThatTrait>::assoc_name`.
-    // `resolve` says which declaration each bound names: only its reader knows
-    // the scope it was written in.
     pub(super) fn bound_declaring_assoc_type<B: Borrow<ast::TraitBound>>(
         &self,
         bounds: &[B],
         assoc_name: &str,
-        resolve: impl Fn(&ast::TraitBound) -> Option<DefId>,
+        resolutions: &Resolutions,
     ) -> Option<DefId> {
-        bounds
-            .iter()
-            .filter_map(|bound| resolve(bound.borrow()))
+        let decls = || {
+            bounds
+                .iter()
+                .filter_map(|bound| resolutions.bound_decl(bound.borrow()))
+        };
+        decls()
             .find(|decl| self.declares_assoc_type(decl, assoc_name))
             // Searched after every direct bound, so a trait redeclaring the
             // name still wins for itself.
             .or_else(|| {
-                bounds.iter().find_map(|bound| {
-                    self.supertrait_declaring_assoc_type(&resolve(bound.borrow())?, assoc_name)
-                })
+                decls().find_map(|decl| self.supertrait_declaring_assoc_type(&decl, assoc_name))
             })
     }
 

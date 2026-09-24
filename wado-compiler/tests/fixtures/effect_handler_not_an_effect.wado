@@ -1,7 +1,5 @@
-// Negative test: the `E` in `with E => h do` must name an effect or resource
-// declaration. A plain trait is installable nowhere — it declares no
-// operations to dispatch — so naming one in the handler position is rejected
-// with `NotAnEffect` instead of silently installing a no-op handler.
+// The `E` in `with E => h do` must name an effect or resource. A plain trait
+// declares no operations to dispatch, so it is rejected, not installed as a no-op.
 
 trait Plain with () {
     fn ping(&self) -> i32;
@@ -25,4 +23,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "'Plain' is not an effect"}
+{"compile_error": ":20:10: analysis error: 'Plain' is not a declared effect"}

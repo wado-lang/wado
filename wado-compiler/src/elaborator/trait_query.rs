@@ -38,7 +38,7 @@ use crate::elaborator::trait_env::{
 };
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
-use crate::resolve::{Resolution, Resolutions, head_site};
+use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{SlotProjections, TraitRef};
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
@@ -335,22 +335,14 @@ impl TypeSystem {
         Some((item, trait_name, self.auto_derive_return_type(item)))
     }
 
-    /// Mirror of [`Self::auto_derive_by_method`] keyed by trait name, for
-    /// operator dispatch which already knows the trait. Returns the compiler
-    /// item the name matched and its fixed return type, or `None` when
-    /// `trait_name` is not an auto-derived trait.
-    ///
-    /// Returning the item, not just the type, is what lets the caller name the
-    /// trait by its declaration rather than re-deriving one from the spelling.
-    pub(super) fn auto_derive_by_trait(&self, trait_name: &str) -> Option<(CompilerItem, TypeId)> {
-        let item = Self::AUTO_DERIVED_METHODS.iter().find_map(|(item, _)| {
-            let name = self
-                .type_table
-                .borrow()
-                .compiler_trait_name(*item)
-                .to_string();
-            (name == trait_name).then_some(*item)
-        })?;
+    /// Mirror of [`Self::auto_derive_by_method`] for operator dispatch, which
+    /// already knows the trait: its compiler item and fixed return type, or
+    /// `None` when `trait_` is not an auto-derived trait.
+    pub(super) fn auto_derive_by_trait(&self, trait_: DefId) -> Option<(CompilerItem, TypeId)> {
+        let item = Self::AUTO_DERIVED_METHODS
+            .iter()
+            .map(|(item, _)| *item)
+            .find(|item| self.compiler_trait_def(*item) == Some(trait_))?;
         Some((item, self.auto_derive_return_type(item)))
     }
 
@@ -461,8 +453,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The trait an `impl` header's trait position names.
     pub(super) fn impl_trait_decl(&self, trait_type: &ast::Type) -> Option<DefId> {
-        self.decl_key_at(head_site(trait_type), &self.get_type_name(trait_type))
-            .filter(|def| self.is_trait_like(*def))
+        let resolutions = &self.tysys.resolutions;
+        resolutions
+            .head_decl(trait_type)
+            .filter(|def| resolutions.defs().kind(*def).is_trait_like())
     }
 
     /// Enforce a trait's associated-type bounds (`type X: Bound`) against an
@@ -2024,15 +2018,10 @@ type DeclaredAssocType = (DefId, ast::AssociatedTypeDecl);
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// The trait, interface or resource `bound` names.
     pub(super) fn trait_decl_of(&self, bound: &ast::TraitBound) -> Option<DefId> {
-        self.tysys
-            .resolutions
+        let resolutions = &self.tysys.resolutions;
+        resolutions
             .bound_decl(bound)
-            .filter(|def| self.is_trait_like(*def))
-    }
-
-    /// Whether `def` is what a bound can name: a trait, interface or resource.
-    pub(super) fn is_trait_like(&self, def: DefId) -> bool {
-        self.tysys.resolutions.defs().kind(def).is_trait_like()
+            .filter(|def| resolutions.defs().kind(*def).is_trait_like())
     }
 
     /// The header of `method_name` on the trait `key` names. The cheap form of
@@ -3208,7 +3197,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         lookup_type_id: TypeId,
         trait_: DefId,
-        trait_name: &str,
         method_name: &str,
         is_type_param: bool,
         rhs: Option<&ArgClass>,
@@ -3219,7 +3207,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         //
         // Retrying unselected is what leaves a lone `Eq<Self>` impl to
         // type-check the operand and report a mismatch as one.
-        let auto_derive = self.tysys.auto_derive_by_trait(trait_name);
+        let auto_derive = self.tysys.auto_derive_by_trait(trait_);
         let written = rhs
             .and_then(|rhs| {
                 self.find_arithmetic_trait_impl(

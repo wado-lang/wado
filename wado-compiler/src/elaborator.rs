@@ -246,17 +246,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The symbol `name` reaches from `module`, for a caller whose reference site
     /// is not at hand — a mangled name, a synthesis target. No scope is run.
     pub(crate) fn symbol_named(&self, module: &ModuleSource, name: &str) -> Option<&'a Symbol> {
-        // Three recorded facts, in the order the scope stores them and none of
-        // them a walk: what this module `use`d under the name, what it declares
-        // itself, and what the prelude puts in scope everywhere. No spelling
-        // another module happens to share can steer any of them.
-        if let Some(def) = self.tysys.resolutions.imported_as(module, name) {
-            return self.symbols.get(&self.tysys.resolutions.defs().ast_id(def));
-        }
-        if let Some(symbol) = self.symbols.lookup_in_module(module, name) {
-            return Some(symbol);
-        }
-        let def = self.tysys.resolutions.prelude_decl(name)?;
+        let def = self.tysys.resolutions.resolve_in(module, name)?;
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
 
@@ -1230,26 +1220,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .is_some_and(|def| self.tysys.resolutions.defs().kind(def).is_type())
     }
 
-    /// The declaration indexes, for a caller holding a spelling whose reference
-    /// site is not at hand — a rendered head, a synthesis target. One that
-    /// holds a site should call [`Self::decl_key_at`] instead.
-    ///
-    /// The frame is where the AST being resolved was written: the walk's own
-    /// position, or the author's module while the walk is inside a travelled
-    /// expression. One frame and not a preference between two, so a name both
-    /// modules declare is not decided by which is tried first.
+    /// The declaration `name` reaches where the AST under resolution was written,
+    /// for a caller with no reference site; one holding a site calls [`Self::decl_key_at`].
     pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<DefId> {
-        let frame = self
-            .annotate_ctx
-            .resolving_home
-            .clone()
-            .unwrap_or_else(|| self.current_module_source.clone());
         // A binder shadows every declaration of its name and has no identity of
         // its own; the module scope cannot see binders and would answer `struct T`.
         if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
             return None;
         }
-        self.tysys.resolutions.resolve_in(&frame, name)
+        let frame = self
+            .annotate_ctx
+            .resolving_home
+            .as_ref()
+            .unwrap_or(&self.current_module_source);
+        self.tysys.resolutions.resolve_in(frame, name)
     }
 
     /// The trait `bound` names; one naming no declaration keeps its spelling,

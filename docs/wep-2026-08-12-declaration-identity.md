@@ -525,9 +525,6 @@ sited counterpart a caller with a reference site reaches instead.
 
 - `decl_key_or_local`, `TypeLookup::declaration` — for a rendered head
 - `namespace_member` — the `ns$Name` alias a namespace import registers
-- `bound_declaring_assoc_type` — which of a _binder's_ bounds declares a name.
-  One algorithm on `TraitEnv`, reading each bound through the reference site its
-  caller supplies, so a frame and a declaration-level resolver share it.
 
 The same derivation in the `Symbol` currency, which §5's `DefId` columns subsume:
 
@@ -573,15 +570,15 @@ This is a module's own reach, so a declaration it cannot see stays unseen here.
 The derivation never widens to the whole program, and a name no module brought
 into scope is unresolved, the same answer the walk gives.
 
-Which module is "this" one is the walk's position, and the walk is not always
-standing where the name was written: a parameter or field default is read at the
-call site and written in the declaring module. The writing module answers first,
-or a caller declaring its own same-named type takes the answer away from the
-module that wrote the name — this WEP's defect class by the back door. Both
-frames come from the walk's position; the derivation takes no module, so no
-caller can supply a vantage.
+The frame is the module that wrote the name. The walk is not always standing
+there: a parameter or field default is read at the call site but written in the
+declaring module. There the frame is the declaring module. Otherwise a caller
+declaring its own same-named type would take the answer away from the module
+that wrote the name. The walk supplies the frame and the derivation takes no
+module, so no caller can supply a vantage.
 
-There is no fourth tier, and a caller that can avoid the derivation does.
+A type parameter and a function-local item shadow the scope, so they are checked
+before it. A caller that can avoid the derivation does.
 `Type::method` names its receiver at its own path segment, which the resolve pass
 answered for like any other reference, so the site is read and the spelling is
 never split back into an identity. The derivation answers only where a caller
@@ -648,6 +645,11 @@ see, so what a name means comes to depend on the rest of the program.
   tiebreak. One key, built from the receiver the caller holds: the path
   segment's own site, the middle segment of `ns::Type::method`, or the receiver
   type's declaration. A head naming none falls to the frame derivation.
+
+An impl module looked up for an instantiated receiver (`Foo<i32>`) before the
+receiver's declaration (`Foo`) is not a second key. It is the coherence rule
+that a concrete impl wins over a generic one, so the order is the rule, not a
+tiebreak.
 
 Where a position reaches nothing the answer is a diagnostic, not a wider search.
 An `impl` header's trait position is §3's case: implementing a trait is naming
@@ -950,11 +952,11 @@ written on the impl, so a constraint the data declaration means to carry has to
 be restated at each impl that needs it. The pending fixture is
 `data_decl_bound_projects_off_self.wado`.
 
-## Known gap: effect dispatch keys an effect by module and name
+## Known gap: `EffectRef::Concrete` is a module and a name
 
-The effect-dispatch synthesis keys each effect or resource by its declaring
-module and its name, not by its `DefId`, and so does every per-instantiation key
-built from it. A module declares one item per name, so the pair names one
-declaration. What it admits is a second identity beside the `DefId`: a pass
-holding a `DefId` has to render it into that pair, and nothing checks that the
-two agree.
+A concrete effect is carried as its declaring module and its name, not as its
+`DefId`. The effect check, the handler facts and the effect-dispatch synthesis
+all key by that pair, and so does every per-instantiation key built from it. A
+module declares one item per name, so the pair names one declaration. What it
+admits is a second identity beside the `DefId`: a pass holding a `DefId` has to
+render it into that pair, and nothing checks that the two agree.

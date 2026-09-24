@@ -50,8 +50,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .static_method_dispatch
             .contains_key(&tagged.id)
         {
-            let _ = self.emit(TypeError::InvalidLiteral {
-                message: "a template tag must name a function or a static method".to_string(),
+            let _ = self.emit(TypeError::TemplateTagNotCallable {
                 span: tagged.tag.span(),
             });
             return TypeTable::ERROR;
@@ -105,14 +104,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if self.tysys.type_table.borrow().contains_type_param(ty) {
             let type_name = self.tysys.type_table.borrow().type_name(ty);
-            let _ = self.emit(TypeError::InvalidLiteral {
-                message: format!(
-                    "a tagged template hole of type `{type_name}` mentions a type parameter; \
-                     a template's type is minted per shape and cannot be generic over the \
-                     enclosing item"
-                ),
-                span,
-            });
+            let _ = self.emit(TypeError::TemplateHoleGeneric { type_name, span });
             return false;
         }
         true

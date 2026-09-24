@@ -109,12 +109,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ctx
             .type_param_bounds
             .get(param_name)?;
-        // Each bound is resolved through its own reference site. Asking by the
-        // written name first would answer from this frame, which a default body
-        // materialized for an impl in another module does not share.
         self.tysys
             .trait_env
-            .bound_declaring_assoc_type(bounds, assoc_name, |bound| self.trait_decl_of(bound))
+            .bound_declaring_assoc_type(bounds, assoc_name, &self.tysys.resolutions)
     }
 
     /// The identity an impl header names: the trait, plus the arguments it

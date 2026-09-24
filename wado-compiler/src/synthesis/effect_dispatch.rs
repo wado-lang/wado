@@ -3148,26 +3148,16 @@ fn build_handler_impl_index(
             let Some(method_info) = &func.method_info else {
                 continue;
             };
-            // Decl indices are keyed by canonical `(decl_module, base_name)`,
-            // so generic-resource impls (`impl Stream<u8> for MockCM`)
-            // resolve through the bare base name. Per-monomorphisation
-            // distinction lives in the key's `trait_type_args` slot:
-            // `impl Stream<u8>` and `impl Stream<i32>` produce two
-            // distinct keys so the dispatch synthesis emits one infra
-            // triple per instantiation.
+            // `impl Stream<u8>` and `impl Stream<i32>` share the base name and
+            // differ in `trait_type_args`, so each instantiation gets its own key.
             let Some(base_trait_name) = method_info.base_trait_name() else {
                 continue;
             };
             let Some(effect_module) = method_info.base_trait_module() else {
-                // Elaborator did not record a declaring module — only the
-                // synthesis-derived auto-impl path leaves this `None`,
-                // and those never target effects / resources.
                 continue;
             };
             let effect_key = (effect_module.clone(), base_trait_name.to_string());
             if !effect_index.contains_key(&effect_key) {
-                // Not an effect / resource — skip (the trait is a regular
-                // user trait whose decl module just happens to match).
                 continue;
             }
             let key: HandlerImplKey = (
