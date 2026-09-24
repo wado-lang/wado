@@ -1492,7 +1492,7 @@ fn payload_decl_type_idx(ctx: &ComponentModelContext, project: &NirPackage, decl
         .unwrap_or_else(|| unaliased(&format!("the canonical payload `{}`", decl.name_suffix())))
 }
 
-/// The distinct declarations the canonicals' payloads reach as `kind`.
+/// The distinct declarations the canonicals reach as `kind`.
 fn payload_decls(
     canonical_intrinsics: &[CanonicalIntrinsic],
     kind: CmDeclKind,
@@ -1504,18 +1504,14 @@ fn payload_decls(
         }
     };
     for intrinsic in canonical_intrinsics {
-        if let Some(CmFuturePayload::Value(p)) = intrinsic.future_payload() {
-            p.for_each_decl(&mut keep);
-        }
-        if let Some(CmStreamPayload::Value(p)) = intrinsic.stream_payload() {
-            p.for_each_decl(&mut keep);
-        }
+        intrinsic.for_each_decl(&mut keep);
     }
     out
 }
 
-/// Import the interface defining every resource a payload names, so `own<r>`
-/// has a type to point at. Nothing else does for a guest-created future.
+/// Import the interface defining every resource a canonical names, so `own<r>`
+/// and `resource.drop` have a type to point at. Nothing else does for a
+/// guest-created future, or for a resource no imported function mentions.
 fn prebuild_resource_payload_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,

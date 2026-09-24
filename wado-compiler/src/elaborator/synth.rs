@@ -738,7 +738,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// reference site. A variant constructor, a static path or an effect
     /// operation names no function there and is left to the expected type.
     fn synth_callee_ref(&self, ident: &ast::IdentExpr) -> Option<CalleeRef> {
-        if ident.name.contains("::") {
+        if ident.name.contains("::") || self.dispatched_operation(ident).is_some() {
             return None;
         }
         Some(self.callee_of(self.free_function_at(ident.id)?))

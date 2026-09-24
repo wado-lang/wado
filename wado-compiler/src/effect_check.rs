@@ -704,25 +704,25 @@ struct EffectIndex<'a> {
     provided_import_fqs: &'a IndexSet<String>,
 }
 
-/// The segment naming the interface in a dispatch path `[ns::]*E::op`: the one
-/// before the operation, so a namespace qualifier ahead of `E` does not stand in
-/// for it.
-fn interface_segment(callee: &Expr) -> Option<&ast::PathSegment> {
+/// The declaration an operation call names, with the operation: `E` of
+/// `[ns::]*E::op`, or the one a bare `op` imported as `use { E::{op} }` is a
+/// member of.
+fn operation_at<'a>(sem: &'a Semantics, callee: &'a Expr) -> Option<(DefId, &'a str)> {
     let Expr::Ident(ident) = callee else {
         return None;
     };
-    ident.owner_segment()
+    sem.resolutions()?.operation_at(ident)
 }
 
-/// The `interface` the name at `site` declares, as its declaring module, its
-/// name, and its `#[cm]` FQ. `None` when the name declares anything else.
+/// The `interface` `def` is, as its declaring module, its name, and its `#[cm]`
+/// FQ. `None` when `def` declares anything else.
 fn interface_at<'a>(
     sem: &Semantics,
     index: &EffectIndex<'a>,
-    site: Option<AstId>,
+    def: Option<DefId>,
 ) -> Option<(ModuleSource, String, &'a Option<String>)> {
     let resolutions = sem.resolutions()?;
-    let def = resolutions.declared(site?)?;
+    let def = def?;
     let defs = resolutions.defs();
     let key = (defs.module(def).clone(), defs.name(def).to_string());
     let cm_fq = index.interface_cm_fq.get(&key)?;
@@ -780,20 +780,20 @@ fn binding_granted_effects(
         .collect()
 }
 
-/// What a direct `E::op()` call at `site` demands of its caller.
+/// What a direct `E::op()` call through `interface` demands of its caller.
 ///
-/// Empty where it demands nothing: the site names no interface, or `E` is a
+/// Empty where it demands nothing: the call names no interface, or `E` is a
 /// user-defined effect, whose operation an installed handler answers and whose
 /// dispatch with none traps — a runtime outcome, not a demand on the position.
 /// A purely computational component's operation demands nothing either.
 fn operation_requirements(
     sem: &Semantics,
     index: &EffectIndex,
-    site: Option<AstId>,
+    interface: Option<DefId>,
 ) -> Vec<EffectRef> {
-    // The callee names its interface's declaration; the site says which one
-    // that is, so a same-named local `interface` cannot stand in for it.
-    let Some((decl_module, name, cm_fq)) = interface_at(sem, index, site) else {
+    // The callee names its interface's declaration, so a same-named local
+    // `interface` cannot stand in for it.
+    let Some((decl_module, name, cm_fq)) = interface_at(sem, index, interface) else {
         return Vec::new();
     };
     let Some(fq) = cm_fq else {
@@ -1276,7 +1276,7 @@ fn call_site_effects(
     }
     // Only a free function in this program dispatches through the path: a
     // method names its receiver, and a host binding is already the import.
-    let path_site = interface_segment(callee).map(|seg| seg.id);
+    let interface = operation_at(sem, callee).map(|(def, _)| def);
     dispatches
         .into_iter()
         .map(|(func_ref, self_in_args)| {
@@ -1292,7 +1292,7 @@ fn call_site_effects(
                 name: callee_name(callee).to_string(),
                 declared: resolve_effect_params(sem, index, &effects, &params, is_method, args),
                 dispatched: if dispatches_through_path {
-                    operation_requirements(sem, index, path_site)
+                    operation_requirements(sem, index, interface)
                 } else {
                     Vec::new()
                 },
@@ -1950,10 +1950,10 @@ impl PurityWalker<'_> {
     /// Flags `Site::op(…)` when the dispatch demands a capability the position
     /// does not hold. An operation declares no `with` clause of its own, so
     /// nothing but the site says so.
-    fn flag_if_operation(&mut self, site: AstId, op: &str, span: Span) {
+    fn flag_if_operation(&mut self, interface: DefId, op: &str, span: Span) {
         // An operation declares no effect parameters, so there is nothing for
         // the arguments to resolve.
-        let required = operation_requirements(self.sem, self.index, Some(site));
+        let required = operation_requirements(self.sem, self.index, Some(interface));
         if self.unanswered(&required) {
             self.flag(Impurity::Dispatch(op.to_string()), span);
         }
@@ -1985,11 +1985,8 @@ impl AstVisitor for PurityWalker<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {
-                if let Some(interface) = interface_segment(&call.callee)
-                    && let Expr::Ident(ident) = &call.callee
-                    && let Some(op) = ident.segments.last()
-                {
-                    self.flag_if_operation(interface.id, &op.name, call.span);
+                if let Some((interface, op)) = operation_at(self.sem, &call.callee) {
+                    self.flag_if_operation(interface, op, call.span);
                 }
                 self.flag_call(&call.callee, call.id, &call.args, call.span);
             }
@@ -2012,8 +2009,11 @@ impl AstVisitor for PurityWalker<'_> {
                 }
             }
             Expr::StaticMethodCall(static_call) => {
-                if let ast::Type::Named(named) = &static_call.target_type {
-                    self.flag_if_operation(named.id, &static_call.method, static_call.span);
+                if let ast::Type::Named(named) = &static_call.target_type
+                    && let Some(interface) =
+                        self.sem.resolutions().and_then(|r| r.declared(named.id))
+                {
+                    self.flag_if_operation(interface, &static_call.method, static_call.span);
                 }
                 for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
                     let effects = self.index.method_effects(&func_ref);

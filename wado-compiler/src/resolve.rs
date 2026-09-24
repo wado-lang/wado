@@ -376,6 +376,20 @@ impl Resolutions {
         }
     }
 
+    /// The declaration an operation call names, with the operation: the owner
+    /// segment of `[ns::]E::op`, or for a bare `op` imported as
+    /// `use { E::{op} }`, the declaration `op` is a member of.
+    #[must_use]
+    pub fn operation_at<'a>(&'a self, ident: &'a ast::IdentExpr) -> Option<(DefId, &'a str)> {
+        if let Some(owner) = ident.owner_segment() {
+            return Some((self.declared(owner.id)?, &ident.segments.last()?.name));
+        }
+        let member = self.declared_if_walked(ident.id)?;
+        let name = self.defs().name(member);
+        let operation = name.rsplit_once("::").map_or(name, |(_, op)| op);
+        Some((self.defs().parent(member)?, operation))
+    }
+
     /// The whole answer for a site the walk reached, `None` for a node it
     /// never saw.
     ///

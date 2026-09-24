@@ -444,13 +444,27 @@ impl SymbolTable {
             return Some(symbol.visibility);
         }
 
-        let reexport = self.get_reexport(module_source, name)?;
-        let source = self.effective_visibility_with_visited(
-            &reexport.source_module,
-            &reexport.source_name,
-            visited,
-        )?;
-        Some(reexport.visibility.narrower(source))
+        if let Some(reexport) = self.get_reexport(module_source, name) {
+            let source = self.effective_visibility_with_visited(
+                &reexport.source_module,
+                &reexport.source_name,
+                visited,
+            )?;
+            return Some(reexport.visibility.narrower(source));
+        }
+
+        // A member reaches as far as the owner reaches from here, and no
+        // farther than it reaches from its own declaration.
+        let (owner, member) = name.rsplit_once("::")?;
+        let owner_reach = self.effective_visibility_with_visited(module_source, owner, visited)?;
+        let owner_sym = self
+            .member_owner_with_visited(module_source, name, &mut Vec::new())?
+            .0;
+        let declaring = owner_sym.module_source().clone();
+        let qualified = format!("{}::{member}", owner_sym.name);
+        let member_reach =
+            self.effective_visibility_with_visited(&declaring, &qualified, visited)?;
+        Some(owner_reach.narrower(member_reach))
     }
 
     /// Names a module re-exports via `pub use`, in declaration order.
@@ -559,7 +573,24 @@ impl SymbolTable {
             );
         }
 
-        None
+        let (owner, member) = self.member_owner_with_visited(module_source, name, visited)?;
+        let declaring = owner.module_source().clone();
+        let qualified = format!("{}::{member}", owner.name);
+        self.lookup_in_module_with_visited(&declaring, &qualified, visited)
+    }
+
+    /// The interface or resource an `Owner::member` name reaches from
+    /// `module_source`, through whatever re-exports `Owner`, with the member.
+    fn member_owner_with_visited<'a>(
+        &self,
+        module_source: &ModuleSource,
+        name: &'a str,
+        visited: &mut Vec<(ModuleSource, String)>,
+    ) -> Option<(&Symbol, &'a str)> {
+        let (owner, member) = name.rsplit_once("::")?;
+        let owner = self.lookup_in_module_with_visited(module_source, owner, visited)?;
+        matches!(owner.kind, SymbolKind::Effect(_) | SymbolKind::Resource(_))
+            .then_some((owner, member))
     }
 
     /// Whether `name` names a type every module reads without importing it:

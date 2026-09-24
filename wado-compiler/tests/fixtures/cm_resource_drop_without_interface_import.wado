@@ -1,0 +1,29 @@
+// An owned WASI resource parameter is dropped at scope exit, so the component
+// needs `resource.drop` over it even where no function of the interface
+// declaring it is called, and nothing else imports that interface. A user
+// interface operation taking one is the same case.
+use { println } from "core:cli";
+use { Request } from "wasi:http";
+use { Descriptor } from "wasi:filesystem";
+
+interface Sink {
+    fn put(request: Request) -> i32;
+}
+
+fn call(request: Request) -> i32 with Sink {
+    return Sink::put(request);
+}
+
+fn eat(request: Request) {}
+
+fn close(file: Descriptor) {}
+
+export fn run() with Stdout {
+    let _ = call;
+    let _ = eat;
+    let _ = close;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
