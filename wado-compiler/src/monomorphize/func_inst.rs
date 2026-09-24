@@ -861,9 +861,11 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
         // `element<T: Serialize>(&mut self, value: &T)` the first arg is `&T`,
         // so unwrap references (and an auto-boxed `Box<T>`) to reach T.
         let mut arg_type = self.type_table.peel_refs(first_arg.expr.type_id);
-        if let ResolvedType::GenericInstance { def, type_args: ta } = self.type_table.get(arg_type)
-            && self.type_table.def_name(*def) == "Box"
+        if let ResolvedType::GenericInstance { type_args: ta, .. } = self.type_table.get(arg_type)
             && ta.len() == 1
+            && self
+                .type_table
+                .is_compiler_item_type(arg_type, CompilerItem::Box)
         {
             arg_type = ta[0];
         }
@@ -1675,10 +1677,12 @@ impl Monomorphizer {
                                     let arg_idx = pi - 1;
                                     if let Some(arg) = args.get(arg_idx) {
                                         let mut arg_type = type_table.peel_refs(arg.expr.type_id);
-                                        if let ResolvedType::GenericInstance { def, type_args: ta } =
-                                            type_table.get(arg_type)
-                                            && type_table.def_name(*def) == "Box"
+                                        if let ResolvedType::GenericInstance {
+                                            type_args: ta, ..
+                                        } = type_table.get(arg_type)
                                             && ta.len() == 1
+                                            && type_table
+                                                .is_compiler_item_type(arg_type, CompilerItem::Box)
                                         {
                                             arg_type = ta[0];
                                         }

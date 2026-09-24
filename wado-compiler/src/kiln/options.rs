@@ -257,9 +257,7 @@ fn lower_type(
                 None
             }
         },
-        ResolvedType::Struct { def, .. } if types.struct_head_name(*def) == "String" => {
-            Some(OptionsType::String)
-        }
+        ResolvedType::Struct { .. } if types.is_string(type_id) => Some(OptionsType::String),
         ResolvedType::Struct { def, .. } => {
             let name = &types.struct_head_name(*def);
             let module_source = &types.struct_head_module(*def).clone();

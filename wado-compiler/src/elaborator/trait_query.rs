@@ -339,11 +339,11 @@ impl TypeSystem {
     /// already knows the trait: its compiler item and fixed return type, or
     /// `None` when `trait_` is not an auto-derived trait.
     pub(super) fn auto_derive_by_trait(&self, trait_: DefId) -> Option<(CompilerItem, TypeId)> {
-        let item = Self::AUTO_DERIVED_METHODS
+        let item = self.compiler_item_of_trait(trait_)?;
+        Self::AUTO_DERIVED_METHODS
             .iter()
-            .map(|(item, _)| *item)
-            .find(|item| self.compiler_trait_def(*item) == Some(trait_))?;
-        Some((item, self.auto_derive_return_type(item)))
+            .any(|(derived, _)| *derived == item)
+            .then(|| (item, self.auto_derive_return_type(item)))
     }
 
     /// Check that concrete type args at non-type-parameter positions match the impl type.

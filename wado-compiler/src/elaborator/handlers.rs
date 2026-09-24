@@ -101,7 +101,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let interface_name = self.get_type_name(effect_ty);
         let site = effect_ty.id();
         let effect = self.effect_named_at(site, effect_ty.span(), &interface_name);
-        let effect_decl = site.and_then(|id| self.tysys.resolutions.declared(id));
+        let effect_decl = self.tysys.resolutions.head_decl(effect_ty);
         // An effect declares its own parameter defaults, and a `with` clause
         // writes no argument for them.
         let effect_trait =

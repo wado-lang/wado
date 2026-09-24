@@ -762,14 +762,11 @@ impl<'a> WirContext<'a> {
             // the same absence `Unit` denotes.
             ResolvedType::Never => WirType::Unit,
             ResolvedType::Struct { def, type_args } => {
-                let decl_name = &type_table.struct_head_name(*def);
                 let module_source = &type_table.struct_head_module(*def).clone();
                 // The WIR struct map is keyed on the rendered spelling: each
                 // instantiation is its own struct type.
-                let _ = decl_name;
                 let name = &type_table.struct_rendered_name(*def, type_args);
-                // String is always at ModuleSource::string().
-                let lookup_module = if name == "String" {
+                let lookup_module = if type_table.is_string(type_id) {
                     ModuleSource::string()
                 } else {
                     module_source.clone()
@@ -782,8 +779,8 @@ impl<'a> WirContext<'a> {
                 };
                 Self::ref_to(type_id)
             }
-            ResolvedType::GenericInstance { def, type_args }
-                if type_table.def_name(*def) == "List" && type_args.len() == 1 =>
+            ResolvedType::GenericInstance { type_args, .. }
+                if type_args.len() == 1 && type_table.is_list(type_id) =>
             {
                 let lookup_name = list_wrapper_struct_name(type_table, type_args[0]);
                 let Some(type_id) = self.struct_type_map.get(&lookup_name) else {

@@ -4,8 +4,8 @@ use std::hash::Hash;
 
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
+use crate::compiler_item::CompilerItem;
 use crate::hashmap;
-use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -741,6 +741,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_generic_type_at(Some(site), name, args, span)
     }
 
+    /// The compiler item `def` declares, among the generic heads the compiler
+    /// builds a type of its own for.
+    fn compiler_built_generic(&self, def: DefId) -> Option<CompilerItem> {
+        let tt = self.tysys.type_table.borrow();
+        [
+            CompilerItem::Option,
+            CompilerItem::Stream,
+            CompilerItem::StreamWritable,
+            CompilerItem::Future,
+            CompilerItem::FutureWritable,
+            CompilerItem::Array,
+        ]
+        .into_iter()
+        .find(|item| tt.compiler_item_def(*item) == Some(def))
+    }
+
     fn resolve_generic_type_at(
         &mut self,
         site: Option<AstId>,
@@ -748,39 +764,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[Type],
         span: Span,
     ) -> TypeId {
-        // Prelude module path for looking up Option/Result
-        let prelude_source = ModuleSource::prelude();
-
-        match name {
-            "Option" => {
-                // Verify Option variant exists in symbol table (declared in prelude)
-                // First check local imports, then fall back to prelude module
-                let found_as_variant = self
-                    .symbol_named(&self.current_module_source, "Option")
-                    .or_else(|| self.symbols.lookup_in_module(&prelude_source, "Option"))
-                    .is_some_and(|s| matches!(s.kind, SymbolKind::Variant(_)));
-
-                if !found_as_variant {
-                    // Option not found as a variant - likely #![no_prelude] without explicit import
-                    let _ = self.emit(TypeError::UnknownType {
-                        name: "Option".to_string(),
-                        span,
-                    });
-                }
+        let def = self.decl_key_at(site, name);
+        match def.and_then(|def| self.compiler_built_generic(def)) {
+            Some(CompilerItem::Option) => {
                 let inner = args
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
                 self.tysys.type_table.borrow_mut().make_option(inner)
             }
-            "Stream" => {
+            Some(CompilerItem::Stream) => {
                 let elem = args
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
                 self.tysys.type_table.borrow_mut().make_stream(elem)
             }
-            "StreamWritable" => {
+            Some(CompilerItem::StreamWritable) => {
                 let elem = args
                     .first()
                     .map(|t| self.resolve_type(t))
@@ -790,14 +790,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow_mut()
                     .make_stream_writable(elem)
             }
-            "Future" => {
+            Some(CompilerItem::Future) => {
                 let elem = args
                     .first()
                     .map(|t| self.resolve_type(t))
                     .unwrap_or(TypeTable::UNKNOWN);
                 self.tysys.type_table.borrow_mut().make_future(elem)
             }
-            "FutureWritable" => {
+            Some(CompilerItem::FutureWritable) => {
                 let elem = args
                     .first()
                     .map(|t| self.resolve_type(t))
@@ -807,15 +807,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow_mut()
                     .make_future_writable(elem)
             }
-            // `Array<T>` is the user-facing spelling of the raw GC array
-            // builtin (`ResolvedType::BuiltinArray`), declared
-            // definition-less via `#[compiler_item("array")]` in
-            // `core:prelude`. Resolved by its canonical name, like the
-            // other prelude builtins (`Option` / `Stream` / `Future`);
-            // this also resolves the builtin module's own signatures,
-            // which are elaborated before the compiler-item registry is
-            // populated.
-            _ if name == TypeTable::ARRAY_TYPE_NAME => {
+            // The raw GC array builtin, declared definition-less in `core:prelude`.
+            Some(CompilerItem::Array) => {
                 if args.len() != 1 {
                     let _ = self.emit(TypeError::ArgumentCountMismatch {
                         expected: 1,
@@ -831,9 +824,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .make_builtin_array(element_type)
             }
             _ => {
-                // Which declaration the head names is the site's answer; the
-                // kind it turns out to be decides which shape is built.
-                let Some(def) = self.decl_key_at(site, name) else {
+                // The kind of the declaration the head names decides which
+                // shape is built.
+                let Some(def) = def else {
                     return self.resolve_generic_type_out_of_scope(site, name, args, span);
                 };
                 let struct_info = self.lookup_struct_fields_of_decl(def).cloned();

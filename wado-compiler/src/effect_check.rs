@@ -674,21 +674,6 @@ struct EffectIndex<'a> {
     resolutions: &'a Resolutions,
 }
 
-/// The declaration owning what `callee` names: `E` in `[ns::]E::op` through its
-/// site, or the owner of an imported bare `op` through the operation's own.
-fn callee_owner(index: &EffectIndex, callee: &Expr) -> Option<DefId> {
-    let Expr::Ident(ident) = callee else {
-        return None;
-    };
-    let resolutions = index.resolutions;
-    if let Some(owner) = ident.owner_segment() {
-        return resolutions.declared(owner.id);
-    }
-    resolutions
-        .defs()
-        .parent(resolutions.declared_if_walked(ident.id)?)
-}
-
 /// The effects `with E => h do` grants to its body.
 fn binding_granted_effects(
     annotations: Option<&TypeAnnotations>,
@@ -1177,6 +1162,10 @@ fn call_site_effects(
     }
     // Only a free function in this program dispatches through the path: a
     // method names its receiver, and a host binding is already the import.
+    let owner = match callee {
+        Expr::Ident(ident) => index.resolutions.operation_owner(ident),
+        _ => None,
+    };
     dispatches
         .into_iter()
         .map(|(func_ref, self_in_args)| {
@@ -1192,7 +1181,7 @@ fn call_site_effects(
                 name: callee_name(callee).to_string(),
                 declared: resolve_effect_params(sem, index, &effects, &params, is_method, args),
                 dispatched: if dispatches_through_path {
-                    operation_requirements(sem, index, callee_owner(index, callee))
+                    operation_requirements(sem, index, owner)
                 } else {
                     Vec::new()
                 },
@@ -1826,9 +1815,9 @@ impl PurityWalker<'_> {
         }
     }
 
-    /// Flags `Site::op(…)` when the dispatch demands a capability the position
-    /// does not hold. An operation declares no `with` clause of its own, so
-    /// nothing but the site says so.
+    /// Flags a call of an operation whose dispatch demands a capability the
+    /// position does not hold. An operation declares no `with` clause, so only
+    /// its owner says so.
     fn flag_if_operation(&mut self, owner: Option<DefId>, op: &str, span: Span) {
         // An operation declares no effect parameters, so there is nothing for
         // the arguments to resolve.
@@ -1850,8 +1839,8 @@ impl PurityWalker<'_> {
             id,
             args,
         );
-        // `dispatched` is left to `flag_if_operation`, which asks the path
-        // rather than each dispatch and so answers once per site.
+        // `dispatched` is left to `flag_if_operation`, which asks the owner
+        // once per site rather than once per dispatch.
         for site in sites {
             if self.unanswered(&site.declared) {
                 self.flag(Impurity::Call(site.name), span);
@@ -1867,7 +1856,7 @@ impl AstVisitor for PurityWalker<'_> {
                 if let Expr::Ident(ident) = &call.callee
                     && let Some(op) = ident.segments.last()
                 {
-                    let owner = callee_owner(self.index, &call.callee);
+                    let owner = self.index.resolutions.operation_owner(ident);
                     self.flag_if_operation(owner, &op.name, call.span);
                 }
                 self.flag_call(&call.callee, call.id, &call.args, call.span);

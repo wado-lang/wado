@@ -2391,7 +2391,7 @@ fn check_variadic_impl_overlap(
     let mut groups: IndexMap<DefId, Vec<VariadicImpl<'_>>> = IndexMap::default();
 
     for header in impl_headers.values() {
-        if header.trait_ty().is_none() {
+        if !header.is_trait_impl() {
             continue;
         }
         let Some(target) = variadic_target(&header.ty) else {

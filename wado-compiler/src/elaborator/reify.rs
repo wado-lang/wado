@@ -6357,7 +6357,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 tt.as_option(inner_type).is_some(),
                 matches!(
                     tt.get(inner_type),
-                    ResolvedType::GenericInstance { def, .. } if tt.def_name(*def) == "Result"
+                    ResolvedType::GenericInstance { .. }
+                        if tt.is_compiler_item_type(inner_type, CompilerItem::Result)
                 ),
             )
         };

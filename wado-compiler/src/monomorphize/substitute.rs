@@ -107,17 +107,16 @@ impl Monomorphizer {
             // This can happen when function substitution creates new GenericInstance types
             // with different TypeIds for the type arguments
             ResolvedType::GenericInstance { def, type_args } => {
-                let name = type_table.def_name(def).to_string();
-                // Skip List and Tuple - they have special codegen handling and should remain
-                // as GenericInstance, not be rewritten to Struct
-                if name == "List" || TypeTable::is_tuple_type(&name) {
+                let is_tuple = TypeTable::is_tuple_type(type_table.def_name(def));
+                // Lowered by codegen as they are, never as a monomorphized struct.
+                if is_tuple || type_table.is_list(type_id) {
                     let new_args: Vec<TypeId> = type_args
                         .iter()
                         .map(|&id| self.rewrite_type_id(id, type_table))
                         .collect();
                     return if new_args == type_args {
                         type_id
-                    } else if TypeTable::is_tuple_type(&name) {
+                    } else if is_tuple {
                         type_table.make_tuple(new_args)
                     } else {
                         type_table.make_generic_instance(def, new_args)
@@ -143,14 +142,7 @@ impl Monomorphizer {
             if let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) {
                 let name = &type_table.def_name(*def).to_string();
                 let module_source = &type_table.def_module(*def).clone();
-                // Skip empty type_args (invalid generic instances)
-                if type_args.is_empty() {
-                    continue;
-                }
-
-                // Skip List - it has special codegen handling and should not be
-                // monomorphized as a regular struct
-                if name == "List" {
+                if type_args.is_empty() || type_table.is_list(id) {
                     continue;
                 }
 

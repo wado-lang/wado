@@ -514,23 +514,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// or an imported bare `op` through its own.
     fn effect_operation_of(&self, ident: &ast::IdentExpr) -> Option<EffectOperation> {
         let resolutions = &self.tysys.resolutions;
-        let defs = resolutions.defs();
-        let (decl, op) = if let Some(owner) = ident.owner_segment() {
-            let decl = resolutions
-                .declared(owner.id)
-                .filter(|d| defs.kind(*d).is_effect())?;
-            let name = &ident.segments.last()?.name;
-            (
-                decl,
-                self.tysys.signatures.resource_method_sig(decl, name)?.def,
-            )
+        let signatures = &self.tysys.signatures;
+        let decl = resolutions
+            .operation_owner(ident)
+            .filter(|d| resolutions.defs().kind(*d).is_effect())?;
+        let sig = if ident.owner_segment().is_some() {
+            signatures.resource_method_sig(decl, &ident.segments.last()?.name)?
         } else {
-            let op = resolutions.declared_if_walked(ident.id)?;
-            let decl = defs.parent(op).filter(|d| defs.kind(*d).is_effect())?;
-            self.tysys.signatures.method_sig(op)?;
-            (decl, op)
+            signatures.method_sig(resolutions.declared_if_walked(ident.id)?)?
         };
-        Some(EffectOperation { decl, op })
+        Some(EffectOperation { decl, op: sig.def })
     }
 
     fn effect_operation_sig(&self, op: &EffectOperation) -> &MethodSig {
@@ -3643,7 +3636,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // layout (a generic variant never becomes its own declaration, WEP
         // 2026-02-09) and reaches WIR build unregistered.
         if let Some(expected) = self
-            .decl_key_at(None, type_name)
+            .decl_key_or_local(type_name)
             .and_then(|def| self.bare_generic_type_arity(def))
             && self
                 .find_blanket_static_method(receiver_ty, method)

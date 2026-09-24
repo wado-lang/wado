@@ -432,6 +432,16 @@ impl Resolutions {
         bound.resolved.or_else(|| self.declared(bound.id))
     }
 
+    /// The declaration owning what `ident` names: `E` in `[ns::]E::op` through
+    /// its site, or the owner of an imported bare `op` through the operation's.
+    #[must_use]
+    pub fn operation_owner(&self, ident: &ast::IdentExpr) -> Option<DefId> {
+        match ident.owner_segment() {
+            Some(owner) => self.declared(owner.id),
+            None => self.defs().parent(self.declared_if_walked(ident.id)?),
+        }
+    }
+
     /// The declaration a written type names at its head.
     #[must_use]
     pub fn head_decl(&self, ty: &ast::Type) -> Option<DefId> {

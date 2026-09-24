@@ -2115,7 +2115,7 @@ impl TypeTable {
     /// node for only the first, so [`Self::decl_of_type`] answers no for every
     /// other spelling of the same type. A table built without defs — an
     /// anonymous-struct unit fixture — has no identity, and asks the node.
-    fn is_compiler_item_type(&self, id: TypeId, item: CompilerItem) -> bool {
+    pub fn is_compiler_item_type(&self, id: TypeId, item: CompilerItem) -> bool {
         let Some(decl) = self.compiler_items.decl(item) else {
             return false;
         };
@@ -2270,9 +2270,9 @@ impl TypeTable {
 
     /// If `type_id` is a `AsyncCall<T>` `GenericInstance`, return `T`.
     pub fn as_async_call(&self, type_id: TypeId) -> Option<TypeId> {
-        if let ResolvedType::GenericInstance { def, type_args } = self.get(type_id)
-            && self.def_name(*def) == "AsyncCall"
+        if let ResolvedType::GenericInstance { type_args, .. } = self.get(type_id)
             && type_args.len() == 1
+            && self.is_compiler_item_type(type_id, CompilerItem::AsyncCall)
         {
             return Some(type_args[0]);
         }
@@ -3918,8 +3918,8 @@ impl TypeTable {
     /// Also unwraps Ref/MutRef types to check the inner type.
     pub fn as_list(&self, id: TypeId) -> Option<TypeId> {
         match self.get(id) {
-            ResolvedType::GenericInstance { def, type_args }
-                if self.def_name(*def) == "List" && type_args.len() == 1 =>
+            ResolvedType::GenericInstance { type_args, .. }
+                if type_args.len() == 1 && self.is_list(id) =>
             {
                 Some(type_args[0])
             }
