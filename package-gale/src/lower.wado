@@ -906,7 +906,6 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // Route such a rule's loop-entry through the runtime simulator.
     let atn_class = lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts);
     if atn_class {
-        ctx.mark_needs_atn();
         ctx.mark_needs_lr_atn();
     }
 
@@ -2331,9 +2330,8 @@ fn with_scan_group_atn_site(
     return ScanElement::Group(sg);
 }
 
-/// `g`'s decision site where its empty alternative shares a branch with another
-/// — both admit a token that can follow the group, so only the simulator can
-/// tell which one the rest of the input takes — or -1.
+/// `g`'s decision site where its empty alternative shares a branch with another,
+/// so only the simulator can tell which the rest of the input takes; else -1.
 fn group_atn_site(
     g: &GroupElement,
     classes: &List<AltClass>,
@@ -2345,7 +2343,6 @@ fn group_atn_site(
     };
     for let branch of &compute_overlap_groups_of(classes) {
         if branch.len() > 1 && branch.contains(&e.alt_index) {
-            ctx.mark_needs_atn();
             ctx.mark_needs_scan_atn();
             return g.atn_decision;
         }
@@ -2618,7 +2615,15 @@ fn rebind_scan_repeat_caller_follow(
     rule_name: &String = &NO_PROBE_RULE,
 ) -> ScanElement {
     if let Repeat(re) = se {
-        let probe = lower_continuation_probe(re.non_greedy, re.kind, alt_elements, index, ctx, reaches_rule_tail, rule_name);
+        let probe = lower_continuation_probe(
+            re.non_greedy,
+            re.kind,
+            alt_elements,
+            index,
+            ctx,
+            reaches_rule_tail,
+            rule_name,
+        );
         let probe_contested = optional_probe_contested(
             re.non_greedy,
             re.kind,
@@ -4540,7 +4545,15 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
     reaches_rule_tail: bool,
     rule_name: S,
 ) -> RepeatOp {
-    let probe = lower_continuation_probe(rep_op.non_greedy, rep_op.kind, alt_elements, index, ctx, reaches_rule_tail, rule_name);
+    let probe = lower_continuation_probe(
+        rep_op.non_greedy,
+        rep_op.kind,
+        alt_elements,
+        index,
+        ctx,
+        reaches_rule_tail,
+        rule_name,
+    );
     let probe_contested = optional_probe_contested(
         rep_op.non_greedy,
         rep_op.kind,
@@ -4699,13 +4712,7 @@ struct ContinuationProbe {
 }
 
 /// The continuation for emit's probe, built only for the Repeat kinds whose
-/// decision can need it, and only where the scan's end means something.
-///
-/// At the rule's tail the verdict asks the caller's FOLLOW. Anywhere else it
-/// cannot (invariant 10): inside a group the walk stops at that group's end,
-/// so `useTree : (simplePath? PATHSEP)? (STAR | …)` would ask it on `*` and
-/// reject `use foo::*`. There a continuation that must consume a token decides
-/// alone, and one that may match nothing is not stamped.
+/// decision can need it, and only where the scan's end settles the exit.
 fn lower_continuation_probe<S: AsStrSlice>(
     non_greedy: bool,
     kind: RepeatKind,
@@ -4716,6 +4723,8 @@ fn lower_continuation_probe<S: AsStrSlice>(
     rule_name: S,
 ) -> ContinuationProbe {
     let wants_probe = non_greedy || kind matches { Optional };
+    // Only a tail walk may ask the caller's FOLLOW (invariant 10: a group's walk
+    // ends at the group, `use foo::*`); elsewhere the continuation must consume.
     if !wants_probe || !reaches_rule_tail && ctx.tail_is_nullable_deep(alt_elements, index + 1) {
         return ContinuationProbe {};
     }

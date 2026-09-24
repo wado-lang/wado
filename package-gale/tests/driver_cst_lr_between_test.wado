@@ -1,6 +1,6 @@
 //! ATN-class LR loop entry: `'between' expr 'and' expr` shares the `'and'`
 //! delimiter with the binary `expr 'and' expr` alternative. Expected trees are
-//! the published ANTLR4 jar's (black-box oracle) — the middle operand climbs the
+//! the published ANTLR4 jar's (black-box oracle). The middle operand climbs the
 //! shared delimiter as long as the alternative can still find its own.
 
 use g from "./grammars/lr_between.g4"
@@ -15,8 +15,6 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
-// between's mandatory `'and'` must survive the binary `and`-loop: the middle
-// operand takes an `and` exactly while another is left for between itself.
 test "between with trailing and brackets the middle operand as ANTLR4 does" {
     assert_tree("between X1 and X2 and X3 ;", "(stat (expr between (expr (expr X1) and (expr X2)) and (expr X3)) ;)");
     assert_tree(
@@ -41,7 +39,6 @@ test "a nested operand leaves between its and" {
     );
 }
 
-// Plain binary chains still parse.
 test "binary and/or chain parses" {
     assert_tree(
         "X1 and X2 or X3 and X4 ;",

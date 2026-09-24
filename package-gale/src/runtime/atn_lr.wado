@@ -227,7 +227,9 @@ pub fn atn_lr_loop_decision(
     let exit_alt = c - 1;
     let mut enter = -1;
     for let mut j = 0; j < c; j += 1 {
-        if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE && sim.tr_prec[s + j] >= min_prec && atn_state_cont_admits(sim, sim.tr_target[s + j], t, eof) {
+        if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE
+            && sim.tr_prec[s + j] >= min_prec
+            && atn_state_cont_admits(sim, sim.tr_target[s + j], t, eof) {
             enter = j;
             break;
         }

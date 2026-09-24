@@ -242,20 +242,16 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         }
     }
     let lowered = lower_for_analysis(grammar, &lit_tokens, &mut ctx);
-    // Build the ATN up front when the grammar needs the simulator, so parser
-    // emit can push each rule call's exact return state (`call_site_returns`)
-    // and `gen_atn_data_global` can serialize the very same ATN. Gate-free
-    // grammars skip this entirely.
     let at_end_rules = grammar_at_end_conflict_rules(grammar, &lowered, &mut ctx);
     if at_end_rules.contains(&true) {
-        ctx.mark_needs_atn();
         ctx.mark_needs_scan_atn();
     }
     ctx.set_at_end_atn_rules(at_end_rules);
     // Every grammar reads its recovery sets off the ATN; only the simulator's
     // grammars also embed it.
     let atn = build_atn_with(grammar, &lowered);
-    ctx.set_recovery_sets(recovery_sets(&atn, ctx.token_kind_id("TK_EOF")));
+    let eof = ctx.eof_kind_id();
+    ctx.set_recovery_sets(recovery_sets(&atn, eof));
     if ctx.needs_atn() {
         ctx.set_atn_call_site_returns(&atn.call_site_returns);
         ctx.set_atn_decision_sites(&atn.decision_sites);
@@ -335,9 +331,6 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     if emit_follow {
         gen_follow_mask_globals(&mut w, &ctx, &named);
     }
-    // Serialized ATN blob for the runtime simulator. Only emitted when
-    // lowering saw a construct that needs it (a non-greedy `??` or an
-    // ATN-class LR rule).
     if ctx.needs_atn() {
         gen_atn_data_global(&mut w, &atn, ctx.needs_lr_atn(), ctx.needs_scan_atn());
     }

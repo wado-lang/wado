@@ -38,7 +38,11 @@ impl AtnKeyMap {
 
     fn with_slots(slots: i32) -> AtnKeyMap {
         assert slots & slots - 1 == 0, "slot count is a power of two";
-        return AtnKeyMap { keys: List::filled(slots, -1 as i64), vals: List::filled(slots, -1), used: [] };
+        return AtnKeyMap {
+            keys: List::filled(slots, -1 as i64),
+            vals: List::filled(slots, -1),
+            used: [],
+        };
     }
 
     fn clear(&mut self) {
@@ -320,7 +324,12 @@ struct ClosureScratch {
 
 impl ClosureScratch {
     fn new() -> ClosureScratch {
-        return ClosureScratch { cset: CfgSet::new(), rset: CfgSet::new(), work: [], expanded: [] };
+        return ClosureScratch {
+            cset: CfgSet::new(),
+            rset: CfgSet::new(),
+            work: [],
+            expanded: [],
+        };
     }
 }
 
@@ -335,9 +344,7 @@ fn atn_closure(
     scratch.rset.clear();
     scratch.expanded.clear();
     scratch.work.clear();
-    for let mut i = 0; i < seeds.len(); i += 1 {
-        scratch.work.push(seeds[i]);
-    }
+    scratch.work.extend(seeds);
     let mut guard = 0;
     while let Some(c) = scratch.work.pop() {
         guard += 1;
@@ -425,8 +432,7 @@ fn atn_collapse_into_caller_loop(
     let edges = &arena.edges[cur.pctx];
     let mut collapses = false;
     for let mut i = 0; i < edges.len(); i += 1 {
-        let e = &edges[i];
-        if e.0 >= 0 && sim.state_collapse_to[e.0] == cur.state && cur.pr >= e.1 {
+        if atn_edge_collapses(sim, &edges[i], cur) {
             collapses = true;
             break;
         }
@@ -437,7 +443,7 @@ fn atn_collapse_into_caller_loop(
     let mut kept: List<[i32, i32, i32]> = [];
     for let mut i = 0; i < edges.len(); i += 1 {
         let e = &edges[i];
-        if e.0 >= 0 && sim.state_collapse_to[e.0] == cur.state && cur.pr >= e.1 {
+        if atn_edge_collapses(sim, e, cur) {
             work.push(AtnConfig { state: cur.state, alt: cur.alt, pctx: e.2, rs: cur.rs, pr: e.1 });
         } else {
             kept.push(*e);
@@ -450,6 +456,10 @@ fn atn_collapse_into_caller_loop(
         return CTX_EMPTY;
     }
     return arena.intern_edges(&kept);
+}
+
+fn atn_edge_collapses(sim: &AtnSim, e: &[i32, i32, i32], cur: &AtnConfig) -> bool {
+    return e.0 >= 0 && sim.state_collapse_to[e.0] == cur.state && cur.pr >= e.1;
 }
 
 fn atn_pop(

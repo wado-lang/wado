@@ -1,7 +1,6 @@
-//! Stage 3 down-payment on the emitter: when a malformed repeated
-//! element and the following construct fail at the same position, the reported
-//! diagnostic must name the malformed element (the `_gale_pick_error`
-//! tie-break, now applied on the parse entry too).
+//! A malformed repeated element and the construct after its loop fail at the
+//! same token. The diagnostic must name the element, although only the
+//! repeat-exit probe parsed it and the parse itself took the construct.
 use tie from "./grammars/tie_recovery.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_tie_recovery" },

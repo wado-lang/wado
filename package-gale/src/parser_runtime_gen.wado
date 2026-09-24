@@ -365,7 +365,7 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     se.add_param("names", "&List<i32>");
     se.emit_begin(w);
     w.begin("if !self.recovering && !self.sync_delete(expected, names)");
-    w.line("self.fail_at_decision(names);");
+    w.line("self.fail_expecting(names);");
     w.end();
     w.end();
     w.blank();
@@ -390,7 +390,7 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     sb.emit_begin(w);
     w.line("if self.recovering || self.kinds[self.pos] == TK_EOF { return; }");
     w.begin("if self.speculating");
-    w.line("self.fail_at_decision(names);");
+    w.line("self.fail_expecting(names);");
     w.line("return;");
     w.end();
     w.line("self.report_extraneous(names, RecoveryAction::SkippedTo);");
@@ -398,7 +398,8 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     w.end();
     w.blank();
 
-    let mut fd = FnSpec::new("fail_at_decision");
+    // At EOF the wanted terminal closes a construct the input never finished.
+    let mut fd = FnSpec::new("fail_expecting");
     fd.set_receiver("&mut self");
     fd.add_param("names", "&List<i32>");
     fd.emit_begin(w);
@@ -805,16 +806,12 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     w.blank();
 
-    // At EOF the wanted terminal closes a construct the input never finished.
     let mut fok = FnSpec::new("fail_on_kind");
     fok.set_receiver("&mut self");
     fok.add_param("kind", "i32");
     fok.emit_begin(w);
     w.begin("if self.supersedes_pending(self.tokens.starts[self.pos])");
-    w.line(
-        "let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };",
-    );
-    w.line("self.fail_on_token(\"got\", &([kind] as List<i32>), code);");
+    w.line("self.fail_expecting(&([kind] as List<i32>));");
     w.end();
     w.line("self.recovering = true;");
     w.end();
@@ -946,18 +943,8 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     w.blank();
 
-    // `p.expect(kind, sync)` matches a single token of the requested kind. EOF
-    // is matched without advancing so consecutive `EOF` references see the same
-    // sentinel (the stream holds one EOF; advancing past it reads out of
-    // bounds). Mirrors ANTLR4's `matchedEOF`.
-    //
-    // On a mismatch it recovers in place (never propagating): a single spurious
-    // token before the expected one is *deleted* (`<skip>`, `ExtraToken`); a
-    // token that continues the rule (`sync` = the rule's FIRST-of-rest) means
-    // the expected one is missing and is *inserted* (`<missing>`, `MissingToken`);
-    // anything else is unrecoverable here, so it sets `recovering` and unwinds.
-    // Delete and insert are local edits — they record a diagnostic but keep
-    // parsing, so a clean tail still parses.
+    // EOF matches without advancing, since the stream holds one EOF and
+    // consecutive `EOF` references must see the same one (ANTLR4's `matchedEOF`).
     let mut f7 = FnSpec::new("expect");
     f7.set_receiver("&mut self");
     f7.add_param("kind", "i32");
@@ -1003,7 +990,9 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     // single-token insertion: the current token continues the rule, or the
     // rules under way once this one ends, so the expected one is missing.
-    w.begin("if kind_set_has(sync, self.kinds[self.pos]) || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos])");
+    w.begin(
+        "if kind_set_has(sync, self.kinds[self.pos]) || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos])",
+    );
     w.line("self.report_missing(kind);");
     w.line("let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);");
     w.line("self.b.missing(_syn);");
@@ -1223,11 +1212,8 @@ pub fn gen_trace_helpers(w: &mut CodeWriter) {
     w.blank();
 }
 
-/// Emit the ATN return-state bookkeeping a rule entry performs around its
-/// inner call: consume the pending return state the call site stamped, reset
-/// it, and push it onto the simulator's caller stack for full-context
-/// prediction (popped on every exit). Only emitted for grammars that need the
-/// ATN; `stack` is `GenContext::atn_stack_place`.
+/// Emit a rule entry's push of the return state its call site stamped onto
+/// `stack`, the `GenContext::atn_stack_place`.
 pub fn emit_atn_enter<S: AsStrSlice>(w: &mut CodeWriter, stack: S) {
     w.line("let _atn_ret = p.atn_ret_pending;");
     w.line("p.atn_ret_pending = -1;");

@@ -138,7 +138,7 @@ pub fn build_prediction(
     alt_elements: &List<List<Element>>,
     max_depth: i32,
     ctx: &mut GenContext,
-    end_follow: &List<String> = &NO_END_FOLLOW,
+    end_follow: &List<String>,
 ) -> PredictionNode {
     let mut configs: List<SllConfig> = [];
     for let mut i = 0; i < alt_indices.len(); i += 1 {
@@ -152,8 +152,6 @@ pub fn build_prediction(
     let tree = build_sll_node(&configs, 0, max_depth, ctx, end_follow);
     return strip_dead_consume(tree);
 }
-
-pub global NO_END_FOLLOW: List<String> = [];
 
 /// Project an overlap `group` (indices into `non_lr_indices`) to surface
 /// alt indices in the canonical prediction order: numeric, then by
@@ -371,24 +369,14 @@ fn config_is_at_end(c: &SllConfig, ctx: &mut GenContext) -> bool {
     if c.pos == SLL_POS_OPAQUE {
         return false;
     }
-    if !elements_nullable_from(c.elements, c.pos, ctx) {
+    if !ctx.tail_is_nullable_deep(c.elements, c.pos) {
         return false;
     }
     let mut i = c.return_stack.len();
     while i > 0 {
         i -= 1;
         let frame = &c.return_stack[i];
-        if !elements_nullable_from(frame.elements, frame.pos, ctx) {
-            return false;
-        }
-    }
-    return true;
-}
-
-fn elements_nullable_from(elements: &List<Element>, from: i32, ctx: &mut GenContext) -> bool {
-    for let i of from..<elements.len() {
-        let mut visiting: List<String> = [];
-        if !ctx.element_is_nullable_deep(&elements[i], &mut visiting) {
+        if !ctx.tail_is_nullable_deep(frame.elements, frame.pos) {
             return false;
         }
     }

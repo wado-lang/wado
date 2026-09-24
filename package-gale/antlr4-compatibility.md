@@ -139,7 +139,7 @@ outside the tree (ANTLR4 on the error stream, Gale as a diagnostic at the same
 position). Unlike `<EOF>` the divergence is Gale saying _more_, which is the
 point of the marker: it tells a recovered parse from a clean one at a glance.
 
-So the normalisation runs the other way — the compare strips the wrapper from
+So the normalisation runs the other way. The compare strips the wrapper from
 **Gale's** output, and only for descriptors whose own `[errors]` report a
 recovery that can consume input: `extraneous input`, `mismatched input`,
 `no viable alternative`, or a failed predicate's `rule …` message. That gate is
@@ -566,11 +566,12 @@ answer rather than four derivations of it. Lower bakes the classification into
 carries the built `ScanGroupElement` rather than bare scan bodies, so emit has
 nothing left to assemble a second classification into.
 
-A rule's own arms partition the same way (`rule_overlap_groups`), and the
-branch that merges is decided by `build_prediction`, which knows the same thing
-at every depth: a position that reaches a `.` or `~X` joins every token branch,
-and the tokens no alternative names go to the tournament. `r : A? . C | B D |
-B E` takes `b c` by its first alternative. Fixture `open_ended_rule_alt.g4`.
+A rule's own alternatives partition the same way (`rule_overlap_groups`).
+Inside a merged branch `build_prediction` decides, and it reads a wildcard the
+same way at every depth: a position that reaches a `.` or `~X` joins every
+token's branch, and a token no alternative names goes to the tournament. So
+`r : A? . C | B D | B E` takes `b c` by its first alternative. Fixture
+`open_ended_rule_alt.g4`.
 
 A branch of the decision therefore carries what it admits — `Admits`, one of
 `Everything`, `Untestable`, or `Kinds` (never empty) — instead of a rendered
@@ -596,17 +597,18 @@ the chain's `else` and is emitted last (`fallback_last`), which
 `open_decision_branch` asserts.
 
 Where the follow set overlaps another alternative's first set the lookahead
-cannot separate them. A longest scan would pick wrong there, since an empty
-alternative scans as epsilon, while ANTLR4 picks the lowest-indexed alternative
-that lets the rule complete. So such a group is decided by the ATN simulator,
-on the parse side and in the scan alike (`GroupOp.atn_site`,
+cannot separate them. ANTLR4 then picks the lowest-indexed alternative that
+lets the rule complete. The longest scan cannot say that, because an empty
+alternative scans as nothing and loses to any longer one. So the ATN simulator
+decides such a group, in the parse and in the scan alike (`GroupOp.atn_site`,
 `ScanGroupElement.atn_site`). Fixture `empty_alt_mid.g4`.
 
 A rule's nullable alternative is admitted by the rule's FOLLOW in the same way
-(`RuleOverlap.end_follow`). An at-end conflict whose branch tokens cannot follow
-the rule is settled statically: those tokens dispatch to the alternatives that
-continue, and the rule's FOLLOW to the lowest one that ends. One whose tokens
-can follow it goes to the simulator. Fixture `nullable_first_alt.g4`.
+(`RuleOverlap.end_follow`). An at-end conflict is settled statically when its
+branch tokens cannot follow the rule: those tokens go to the alternatives that
+continue, and a token of the rule's FOLLOW goes to the lowest alternative that
+ends. When the branch tokens can follow the rule, the simulator decides.
+Fixture `nullable_first_alt.g4`.
 
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
@@ -848,10 +850,10 @@ relevant sites.
     precedence loop begins), so each answers `reaches_rule_tail = false`.
     Stamping the atom `true` rejected `CASE a WHEN 1 THEN 2 END + 1`: the probe
     asked the caller's FOLLOW at a position where the `+` loop would continue.
-    Short of the tail a probe is stamped only over a continuation that must
-    consume a token, whose scan then decides alone (`probe_asks_caller =
-    false`): `('=' m? '@' '#')` with `m : '@' '!'` enters `m` only where `m '@'
-    '#'` scans. Keep it separate from `enclosing_at_tail`, which the FOLLOW
+    Short of the tail, a probe is stamped only where the continuation must
+    consume a token. Its scan then decides alone (`probe_asks_caller = false`):
+    `('=' m? '@' '#')` with `m : '@' '!'` enters `m` only where `m '@' '#'`
+    scans. Keep it separate from `enclosing_at_tail`, which the FOLLOW
     gate uses and which asks a weaker question — conflating the two is what
     put the probe there. Fixtures `tests/grammars/lr_atom_probe.g4`,
     `ll_shape_prefix_signature.g4`.
@@ -914,16 +916,16 @@ the compiled fast path:**
    to the caller. A rule is routed here when an ATOM alternative's operand
    competes with the loop for a shared delimiter (`'between' expr 'and' expr`
    against `expr 'and' expr`; fixture `lr_between.g4`). Its mid operand is
-   ANTLR4's `expr[0]`, and the entry runs the full simulator whenever the
-   caller mandates the lookahead token an enter edge also admits. The same
-   shape inside an LR alternative (SQLite's `expr NOT? BETWEEN expr AND expr`)
-   is **not** routed here, since a hot expression rule cannot pay for that
-   (`perf.md`). It stays static: the mid operand also drops to `expr[0]`, and
+   ANTLR4's `expr[0]`. The loop takes a token an enter edge admits, unless
+   the caller can continue with that token too; then the full simulator
+   decides. The same shape inside an LR alternative (SQLite's
+   `expr NOT? BETWEEN expr AND expr`) is **not** routed here, since a hot
+   expression rule cannot pay for that (`perf.md`). It stays static: the mid operand also drops to `expr[0]`, and
    each loop entry scans the operator's suffix and checks that the enclosing
    alternative's continuation is still there (`lr_cont`). A trailing operand
    forwards its caller's continuation and keeps ANTLR4's precedence. Fixture
-   `lr_mid_operand.g4`; one level of that continuation is all the gate sees
-   (TODO.md).
+   `lr_mid_operand.g4`. The gate sees only one level of continuation, so a mid
+   operand nested in another still fails (`TODO.md`).
 2. A **non-greedy `??`**, whose enter-or-skip choice is taken at runtime;
    several `??` in one rule decide independently. Both emit walkers route it
    here — the surface-element walker from `RepeatElement.non_greedy`, the

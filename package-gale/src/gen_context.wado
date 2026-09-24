@@ -162,19 +162,11 @@ pub struct GenContext {
     /// paying an extra stack slot per recursive frame (the
     /// `Performance/ExpressionGrammar_2` stack-exhaustion regression).
     caller_follow_gate_seen: bool,
-    /// Set by lowering when it lowers a non-greedy optional (`??`) or an
-    /// ATN-class LR rule. When set, emit includes the runtime ATN simulator
-    /// infrastructure (the shared `ATN_SIM` global, decoded from its
-    /// serialized blob, the `Parser.atn_stack` field, and the
-    /// rule-entry stack push/pop) and routes the `??` enter/skip decision
-    /// through `atn_predict_with_stack` (keyed by the `??`'s stamped decision
-    /// number). Grammars without either stay byte-identical. (`*?`/`+?` keep
-    /// the dedicated non-greedy strategy and do not set this.)
+    /// Set where a decision routes to the runtime ATN simulator; gates its
+    /// infrastructure, so a grammar without one stays byte-identical.
     needs_atn_seen: bool,
-    /// Set for an ATN-class LR rule or an at-end conflict routed to the
-    /// simulator. Gates the shared caller stack (`ATN_STACK`) and the scan-side
-    /// ATN routing, so a non-greedy-`??`-only grammar (which shares the same
-    /// `ATN_SIM` but needs no scan-side routing) does not carry a dead stack.
+    /// Set where a scan decides through the simulator too. Gates the shared
+    /// caller stack (`ATN_STACK`), so a `??`-only grammar carries no dead stack.
     needs_scan_atn_seen: bool,
     /// Set by lowering for an ATN-class LR rule. Gates the LR tables.
     needs_lr_atn_seen: bool,
@@ -594,24 +586,20 @@ impl GenContext {
         return self.caller_follow_gate_seen;
     }
 
-    /// Record that lowering encountered a construct that needs the runtime
-    /// simulator (a non-greedy `??` or an ATN-class LR rule), so emit must
-    /// include the ATN simulator infrastructure.
+    /// Record a decision the runtime simulator makes.
     pub fn mark_needs_atn(&mut self) {
         self.needs_atn_seen = true;
     }
 
-    /// Whether the generated parser should emit the ATN simulator
-    /// infrastructure (blob + the shared `ATN_SIM` global,
-    /// `Parser.atn_stack`, rule-entry stack maintenance). True iff lowering
-    /// saw a non-greedy `??` or an ATN-class LR rule.
+    /// Whether the generated parser emits the ATN simulator infrastructure
+    /// (the `ATN_SIM` blob, `Parser.atn_stack`, rule-entry stack maintenance).
     pub fn needs_atn(&self) -> bool {
         return self.needs_atn_seen;
     }
 
-    /// Record that a scan decides through the ATN: an ATN-class LR rule, or an
-    /// at-end conflict routed to the simulator. Implies `needs_atn`.
+    /// Record a scan that decides through the simulator.
     pub fn mark_needs_scan_atn(&mut self) {
+        self.needs_atn_seen = true;
         self.needs_scan_atn_seen = true;
     }
 
@@ -624,7 +612,7 @@ impl GenContext {
     /// Record an ATN-class LR rule: its loop decision reads the LR tables.
     pub fn mark_needs_lr_atn(&mut self) {
         self.needs_lr_atn_seen = true;
-        self.needs_scan_atn_seen = true;
+        self.mark_needs_scan_atn();
     }
 
     /// Whether `ATN_SIM` carries the LR tables `atn_lr_loop_decision` reads.
@@ -909,9 +897,6 @@ impl GenContext {
     /// scan runs its longest-match tournament.
     pub fn scan_atn_body_decision(&self, rule: i32) -> i32 {
         if rule < 0 || rule >= self.at_end_atn_rules.len() || !self.at_end_atn_rules[rule] {
-            return -1;
-        }
-        if self.lr_loop_entry_decision(rule) >= 0 {
             return -1;
         }
         return self.atn_rule_body_decision(rule);
@@ -1225,10 +1210,6 @@ impl GenContext {
     /// The `TK_*` names by kind id, the order a vocabulary table is built in.
     pub fn token_kind_names(&self) -> &List<String> {
         return &self.token_kinds.names;
-    }
-
-    pub fn token_kind_id<S: AsStrSlice>(&self, name: S) -> i32 {
-        return self.token_kinds.id_of(name);
     }
 
     /// Install the vocabulary display names (`vocab_display_names`) by kind id.

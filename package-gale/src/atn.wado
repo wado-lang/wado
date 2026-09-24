@@ -3,10 +3,9 @@
 //! This is the codegen-side representation of the grammar as an NFA, the
 //! foundation of the hybrid runtime ATN simulator (see the "ATN-class
 //! grammars" section of `TODO.md`). The simulator runs only at the cold
-//! decisions that need it — today, non-greedy `??` (each one keyed to its own
-//! decision number via `assign_atn_decisions` -> `Atn.decision_sites`) and an
-//! ATN-class LR rule's loop entry; the static fast path handles everything
-//! else. The ATN is the data it walks.
+//! decisions static prediction cannot settle, each keyed to its own decision
+//! number (`assign_atn_decisions` -> `Atn.decision_sites`). The ATN is the data
+//! it walks, and what every grammar's recovery sets are read off.
 //!
 //! Clean-room: the construction here follows the textbook Thompson-style
 //! NFA-for-a-grammar (rule-start/stop states, alternation block-start
@@ -409,17 +408,13 @@ fn build_lr_suffix<S: AsStrSlice>(
     let entry = b.new_state(ATN_BASIC, r);
     let mut cursor = entry;
     for let mut i = 1; i < alt.elements.len(); i += 1 {
+        // An ATN-class mid operand is ANTLR4's `e[0]`: it climbs from 0 and the
+        // simulator stops it.
         let mid_operand = atn_class && i + 1 < alt.elements.len() && element_is_self_ref(&alt.elements[i], rule_name);
-        if mid_operand {
-            let seg = self_ref_segment(b, r, 0, self_ref_call_site(&alt.elements[i]));
-            b.add_eps(cursor, seg.0);
-            cursor = seg.1;
-            continue;
-        }
         // Whether an LR operator can follow this element in the rest of the
         // suffix. The LR loop can re-enter on an operator after the suffix,
         // so the suffix tail conservatively carries one (`tail_has = true`).
-        let follow_has = elements_seq_first_has_lr(&alt.elements, i + 1, lr_first, true);
+        let follow_has = !mid_operand && elements_seq_first_has_lr(&alt.elements, i + 1, lr_first, true);
         let seg = build_lr_suffix_element(
             b,
             &alt.elements[i],

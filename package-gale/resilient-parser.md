@@ -75,18 +75,19 @@ Recovery replaces `expect(k)` with `expect_or_recover(k, sync)`:
    consume `k` (`ExtraToken`).
 3. **insert** — if the current token continues the rule, synthesise a
    zero-width `missing` `k`, do not advance (`MissingToken`). Where the rule may
-   end after `k`, a token the rules under way continue with also counts, walked
-   outward through the call sites and ending at EOF past the entry rule.
+   end after `k`, a token its caller continues with counts too. The check walks
+   outward through the call sites while each caller may end there as well, and
+   past the entry rule it accepts EOF.
 4. **sync** — otherwise skip tokens into a `K_ERROR` region until a token in
    `FOLLOW(rule) ∪ FIRST(rest) ∪ anchors`; at EOF, fill remaining required
    terminals with `missing` (`UnterminatedConstruct`) where the input may end
    after them, and fail the rule where it may not.
 
 A decision syncs the way ANTLR4's does. On entry to a `*`, `+`, `?`, block, or
-rule with alternatives, a token none of them can start is deleted when the next
-one can, and otherwise fails the rule. After a loop iteration, the loop skips
-to what it or the rules under way can continue with. Neither runs where the
-rule may end at the decision, which leaves the token to the caller.
+rule with alternatives, a token the decision cannot continue with is deleted
+when the next token can. Otherwise the rule fails. After a loop iteration, the
+loop skips to what it or the rules under way can continue with. Neither runs
+where the rule may end at the decision, which leaves the token to the caller.
 
 A failed rule recovers at its own entry. It reports once, then skips to a token
 the rules under way can continue with. That set is the union of the follows of
@@ -116,8 +117,8 @@ Diagnostic { severity, code, message, span, line, col,
 applies after sorting, so it keeps the earliest errors.
 
 `recovery` names the edit applied: `Inserted`, `Deleted`, `SkippedTo`,
-`FilledMissing` (an insertion at end of input), or `None` for a failure that
-failed its rule.
+`FilledMissing` (an insertion at end of input), or `None` where the rule
+failed.
 
 `line` / `col` are resolved once per parse. The line index behind them is built
 only when there is a diagnostic.
@@ -157,8 +158,8 @@ terminal recovers in place via a `recovering` flag rather than unwinding a
 - The no-viable-alt fallback records a `NoViableAlternative` diagnostic, and
   the rule's resync keeps the tokens it skips as `<skip>` children.
 - Decision sync and rule-level resync match the jar's trees
-  (`tests/driver_cst_antlr_recovery_test.wado`); where Gale's own edits still
-  differ is listed in `TODO.md`.
+  (`tests/driver_cst_antlr_recovery_test.wado`). `TODO.md` lists where Gale's
+  own edits still differ.
 - `max_errors` is threaded onto the parser: once reached, recovery stops and
   folds the tree closed.
 - Fixtures in `tests/driver_cst_error_recovery_test.wado` assert the

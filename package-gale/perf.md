@@ -579,12 +579,12 @@ this grammar and input at 216.991 ms/iter against Gale's 2.535
   priced out for the static half — on the dev profile over 40 statements it took
   `SELECT … BETWEEN 1 AND 10 AND y = 2` from 41 ms to 2.3 s. A rule already
   routed to the simulator now decides its loop entry with full context whenever
-  the caller mandates the lookahead token, which closed `lr_atn_mid_operand.g4`
-  and `lr_between.g4` (2026-09) at a price this descriptor shows: its input went
-  from about 40 µs to 0.76 s at `-O2`. The ambiguity is real, so each such
-  decision looks ahead to EOF, and `stat`'s tournament scans `expr` once per
-  alternative before the parse decides the same positions again. Over 15 lines
-  that is 214 predictions, 14k closure steps, and about 86 configurations a step.
+  the caller can continue with the lookahead token too. That closed
+  `lr_atn_mid_operand.g4` and `lr_between.g4` (2026-09), and this descriptor
+  shows the price: its input went from about 40 µs to 0.76 s at `-O2`. The
+  ambiguity is real, so each such decision looks ahead to EOF. On top of that,
+  `stat`'s tournament scans `expr` once per alternative before the parse decides
+  the same positions again. Over 15 lines that is 214 predictions, 14k closure steps, and about 86 configurations a step.
 - **`lr_between.g4` is ATN-class and may not need to be.** Its shared-delimiter
   competition sits in an _atom_ alternative (`'between' expr 'and' expr` — no leading
   self-reference), so the continuation gate above does not reach it. The question it
@@ -600,8 +600,8 @@ this grammar and input at 216.991 ms/iter against Gale's 2.535
   exiting. Where the scan runs out — the rule's tail — the verdict conjoins
   the rule's classical FOLLOW, which cost one bug fix in `follow_env` (an
   optional's callee was receiving the inner's own FIRST) rather than a second
-  runtime argument. That last conjunct is why a probe may only ask it where
-  the walk really reaches the rule's tail (soundness invariant 10). Release
+  runtime argument. That last conjunct is why a probe may ask the FOLLOW only
+  where the walk really reaches the rule's tail (soundness invariant 10). Release
   `sqlite_parse` measured unchanged at every step, each arm's own spread moving
   further than any gap between the arms.
 - **Recursive lexer rule with `.+?` / `.*?`**
