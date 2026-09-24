@@ -2530,13 +2530,12 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
 }
 ```
 
-<<<<<<< HEAD
-A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0), `lit()` /
-`raw()` (the preceding segment, escapes processed or preserved), `get(&t)` (the
-value, `V`), `source()` (the expression text), `has_spec()`, and `fmt(&t, f)`
-(rendering as the untagged template would). Every answer but `get` and `fmt` is
-a constant, so after monomorphization the tag body is one constant append per
-segment and one typed operation per hole — what an untagged template costs.
+A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0),
+`lit()` / `raw()` (the preceding segment, escapes processed or preserved),
+`get(&t)` (the value, `V`), `source()` (the expression text), `has_spec()`, and
+`fmt(&t, f)` (rendering as the untagged template would).
+`ReflectTemplate::<T>::tail()` and `raw_tail()` give the segment after the last
+hole. Every answer but `get` and `fmt` is a constant.
 
 `members()` walks a pack, so `Holes` is bound either as one (`[..V]`) or as the
 empty tuple (`()`, for a tag that reads only `tail()`). A concrete tuple
@@ -2546,21 +2545,6 @@ A hole's type may not mention a type parameter of the enclosing item, since the
 shape is minted once rather than per instantiation. A generic body passes its
 tag a concrete value from its caller. The untagged template makes no shape, so
 `` `${v}` `` over a `v: X` is accepted where `` format`${v}` `` is not.
-||||||| 1c849b3d8
-A hole handle answers `lit()` / `raw()` (the preceding segment, escapes
-processed or preserved), `get(&t)` (the value, `V`), `source()` (the
-expression text), `has_spec()`, and `fmt(&t, f)` (rendering as the untagged
-template would). Every answer but `get` and `fmt` is a constant, so after
-monomorphization the tag body is one constant append per segment and one typed
-operation per hole — what an untagged template costs.
-=======
-A hole handle answers `index()` (its position), `lit()` / `raw()` (the
-preceding segment, escapes processed or preserved), `get(&t)` (the value, `V`),
-`source()` (the expression text), `has_spec()`, and `fmt(&t, f)` (rendering as
-the untagged template would). `ReflectTemplate::<T>::tail()` and `raw_tail()`
-give the segment after the last hole. Every answer but `get` and `fmt` is a
-constant.
->>>>>>> origin/main
 
 Holes are evaluated once, left to right, before the tag runs. A tag may carry
 effects and return any type. Whether a call folds at compile time is the
