@@ -9,9 +9,10 @@ module doc.
 ## Philosophy
 
 When WebAssembly provides a native instruction for a feature, prefer it over a
-complex compiler transformation — it keeps the compiler small, leverages the
-runtime JIT, and produces smaller output (`select` for branchless conditionals,
-`array.copy`/`array.fill` for bulk ops, `br_table` for dense matches).
+complex compiler transformation. That keeps the compiler small, lets the runtime
+JIT do the work, and produces smaller output: `select` for branchless
+conditionals, `array.copy`/`array.fill` for bulk ops, `br_table` for dense
+matches.
 
 ## Optimization Levels
 
@@ -27,9 +28,9 @@ The inline budget counts the Wasm instructions on the callee's hot path.
 `--optimize-inline-growth <pct>` also bounds how far inlining may grow the whole
 program; no level sets it.
 
-The fixed-point loop stops once no pass reports a change, so a pass reports one
-only when it made one. At `-O2`, `-O3`, and `-Os` the iteration count is sized
-so the loop converges under it; at `-O1` it is a budget.
+A pass reports a change only when it made one, because the fixed-point loop
+stops once no pass reports a change. At `-O2`, `-O3`, and `-Os` the iteration
+count is sized so the loop converges under it; at `-O1` it is a budget.
 
 ## Architecture
 
@@ -60,13 +61,15 @@ propagation are not passes: they fall out of the hash-consing. See
    `multi_value_param`, `freeze_pure_arith`.
 8. The WIR passes.
 
-`-O0` runs steps 1 and 7 and `match_to_switch`.
-
 ## NIR Passes
 
-`peephole` hosts the rules that need no fixed position, on one worklist per
-function. It runs before and after `inline`, so each rule sees what the other
-exposes.
+`peephole` is one worklist per function shared by the rules that need no fixed
+position: `aggregate_forward`, `closure_devirt`, `const_branch_prune`, part of
+`const_folding`, `drop_value`, `elide_box_local`, `elide_local`,
+`identity_cast`, `if_chain_to_match`, `known_case`, `labeled_block_fusion`,
+`match_to_bitset`, `match_to_switch`, `ref_elim`, `slot_temp_sroa`,
+`string_push`, and `tuple_projection`. It runs before and after `inline`, so
+the rules see what inlining exposes.
 
 Allocation and aggregates:
 
@@ -150,8 +153,8 @@ Whole program and backend:
 
 ## WIR Passes
 
-A WIR pass earns its place only by changing the emitted Wasm; one that NIR or a
-sibling already covers is removed. At every level, nullable references are
+A WIR pass stays only if it changes the emitted Wasm. One that NIR or another
+WIR pass already covers is removed. At every level, nullable references are
 lowered first. `-O0` then only infers branch hints and removes dead items.
 
 1. Trivial copy propagation.

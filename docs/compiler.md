@@ -80,10 +80,10 @@ targets one concrete function, and there is no vtable
 [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)).
 
 A type parameter is rigid inside the item that declares it: nothing but itself
-is assignable to it. An inference variable is flexible. Each use of a generic
-signature instantiates its parameters into fresh variables, so a callee's
-parameter never meets a check as itself. No inference variable survives
-elaboration; type parameters are gone after monomorphization.
+is assignable to it. An inference variable is flexible: it takes the type the
+solver finds. Each use of a generic signature replaces its parameters with fresh
+inference variables. No inference variable survives elaboration, and no type
+parameter survives monomorphization.
 
 ## Checks
 
@@ -150,8 +150,8 @@ Kiln turns an input file (a schema, a grammar, a Wado dialect) into `.wado`
 source. A generator is an ordinary Wado package targeting the
 `core:kiln/generator` world; `wado-cli` builds and runs it, and caches the
 output by its inputs, options, and the generator's source. The compiler holds
-only the pure-data half — invocations, their order, cache keys, and option
-checks — and redirects an import to the generated source. See
+only the pure-data half: the invocations, their order, cache keys, and option
+checks. It redirects an import to the generated source. See
 [WEP: Kiln](./wep-2026-04-12-kiln.md).
 
 ## LSP
