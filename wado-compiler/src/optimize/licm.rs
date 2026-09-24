@@ -373,10 +373,8 @@ fn licm_block(
         };
 
         if let Some(lb) = loop_body {
-            let hoist_stmts = licm_loop(engine, lb, ctx, outer_aliases);
-            if !hoist_stmts.is_empty() {
-                changed = true;
-            }
+            let (hoist_stmts, loop_changed) = licm_loop(engine, lb, ctx, outer_aliases);
+            changed |= loop_changed;
             new_stmts.extend(hoist_stmts);
         } else {
             // Recurse into every nested block — `if`/`match`/`switch` arms,
@@ -422,14 +420,16 @@ fn licm_children(
 /// within a session the set itself is authoritative.
 const LICM_HOIST_PREFIX: &str = "$licm_";
 
-/// Apply LICM to a single loop, returning hoisting statement ids to prepend.
+/// Apply LICM to a single loop, returning hoisting statement ids to prepend and
+/// whether anything under the loop changed.
 fn licm_loop(
     engine: &mut Engine,
     loop_body: BlockId,
     ctx: &mut LicmCtx,
     outer_aliases: &[(u32, u32)],
-) -> Vec<StmtId> {
+) -> (Vec<StmtId>, bool) {
     let mut all_hoist_stmts = Vec::new();
+    let mut changed = false;
 
     // Run LICM iteratively until no more candidates are found (second-level
     // hoisting), bounded to avoid pathological cases.
@@ -487,6 +487,7 @@ fn licm_loop(
             // every iteration). Runs here, after field-hoisting, so the
             // `$licm_*` locals it created are visible as stable operands.
             if hoist_invariant_arith(engine, loop_body, &modified_vars, &mut all_hoist_stmts, ctx) {
+                changed = true;
                 continue;
             }
             break;
@@ -574,9 +575,10 @@ fn licm_loop(
     // Nested loops: recurse. The nested `licm_block` accumulates aliases from
     // the outer loop's `let` statements on its own walk.
     let mut nested_aliases: Vec<(u32, u32)> = outer_aliases.to_vec();
-    licm_block(engine, loop_body, ctx, &mut nested_aliases);
+    changed |= licm_block(engine, loop_body, ctx, &mut nested_aliases);
 
-    all_hoist_stmts
+    changed |= !all_hoist_stmts.is_empty();
+    (all_hoist_stmts, changed)
 }
 
 /// Type of the source local a candidate reads, falling back to the field type
