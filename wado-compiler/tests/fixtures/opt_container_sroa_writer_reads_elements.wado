@@ -1,0 +1,42 @@
+// `push_new` has `push`'s signature but compares the incoming element with the
+// stored ones. Splitting `List<[i32, i32]>` per field would hand it one field of
+// each element, so the list must stay whole.
+
+use { println, Stdout } from "core:cli";
+
+trait PushNew<T> {
+    fn push_new(&mut self, x: T);
+}
+
+impl<T: Eq> PushNew<T> for List<T> {
+    fn push_new(&mut self, x: T) {
+        for let mut i = 0; i < self.len(); i += 1 {
+            if self[i] == x {
+                return;
+            }
+        }
+        self.push(x);
+    }
+}
+
+fn touch() with Stdout {
+    let mut w: List<i32> = List::with_capacity(builtin::black_box(2));
+    w.push(builtin::black_box(5));
+    w.push_new(builtin::black_box(5));
+    w[0] = builtin::black_box(6);
+    println(`${w[0]} ${w.len()}`);
+}
+
+export fn run() with Stdout {
+    touch();
+    let mut v: List<[i32, i32]> = List::with_capacity(4);
+    v.push([1, 2]);
+    v.push_new([1, 3]);
+    v.push_new([1, 2]);
+    println(`${v.len()} ${v[1].0} ${v[1].1}`);
+}
+
+__DATA__
+{
+    "stdout": "6 1\n2 1 3\n"
+}

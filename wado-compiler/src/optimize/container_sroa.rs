@@ -18,7 +18,7 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
 use crate::token::Span;
 
 use cranelift_entity::EntityRef;
@@ -418,6 +418,11 @@ fn build_method_catalog(
     let array_new = builtin_ids(CtfeBuiltin::ArrayNew);
     demote_element_reading_queries(project, type_table, &array_len, &mut sig);
     demote_filling_constructors(project, &array_new, &mut sig);
+    let storage_builtins: IndexSet<FuncId> = ctfe_builtins
+        .iter()
+        .filter_map(|(&id, &b)| is_storage_builtin(b).then_some(id))
+        .collect();
+    demote_element_inspecting_handlers(project, type_table, &storage_builtins, &mut sig);
     (catalog, sig)
 }
 
@@ -519,6 +524,263 @@ fn builds_empty(
         }),
         ExprKind::Call { func_id, args, .. } => pure_call(func_id, args, empty),
         _ => false,
+    }
+}
+
+/// Whether `builtin` touches an array's elements only by moving them.
+fn is_storage_builtin(builtin: CtfeBuiltin) -> bool {
+    match builtin {
+        CtfeBuiltin::ArrayGet
+        | CtfeBuiltin::ArrayLen
+        | CtfeBuiltin::ArrayNew
+        | CtfeBuiltin::ArraySet
+        | CtfeBuiltin::ArrayCopy
+        | CtfeBuiltin::ArrayClonePrefix
+        | CtfeBuiltin::ColdPath
+        | CtfeBuiltin::Select => true,
+        CtfeBuiltin::I32AsChar => false,
+    }
+}
+
+/// Unclassify every element-handling family (`ElementWriter`, `IndexReader`,
+/// `IndexWriter`) one member of which does more with an element than move it.
+// Types single out only an aggregate element (a scalar one is also an index),
+// so a scalar member is vouched for by siblings sharing its generic body.
+fn demote_element_inspecting_handlers(
+    project: &NirPackage,
+    type_table: &TypeTable,
+    storage_builtins: &IndexSet<FuncId>,
+    sig: &mut MethodSig,
+) {
+    let value_copy_ids = project.value_copy_func_ids();
+    let handlers: IndexSet<FuncId> = [
+        ListMethodKind::ElementWriter,
+        ListMethodKind::IndexReader,
+        ListMethodKind::IndexWriter,
+    ]
+    .into_iter()
+    .flat_map(|kind| members_of(sig, kind))
+    .collect();
+    let mut families: IndexMap<SigKey, Vec<FuncId>> = IndexMap::default();
+    for id in &handlers {
+        families
+            .entry(sig.id_sigkeys[id].clone())
+            .or_default()
+            .push(*id);
+    }
+    let generic_origin = |id: FuncId| {
+        project.functions[id.index()]
+            .borrow()
+            .monomorph_info
+            .as_ref()
+            .map(|m| m.generic_name.clone())
+    };
+    let mut movers_by_element: IndexMap<TypeKey, IndexSet<FuncId>> = IndexMap::default();
+    let mut holding: IndexSet<FuncId> = IndexSet::default();
+    for members in families.values() {
+        let origin = generic_origin(members[0]);
+        let one_body = members.iter().all(|&id| generic_origin(id) == origin);
+        let moves_only = members.iter().all(|&id| {
+            let element = element_type_of(project, id);
+            if !value_copy::needs_value_copy(element, type_table) {
+                return true;
+            }
+            movers_by_element
+                .entry(type_table.type_key(element))
+                .or_insert_with(|| {
+                    movers_of(
+                        project,
+                        type_table,
+                        element,
+                        storage_builtins,
+                        &value_copy_ids,
+                    )
+                })
+                .contains(&id)
+        });
+        if one_body && moves_only {
+            holding.extend(members.iter().copied());
+        }
+    }
+    demote_families(sig, &handlers, &holding);
+}
+
+/// The element type `T` of a catalogued `List<T>` method.
+fn element_type_of(project: &NirPackage, id: FuncId) -> TypeId {
+    project.functions[id.index()]
+        .borrow()
+        .monomorph_info
+        .as_ref()
+        .expect("a catalogued method is monomorphized")
+        .impl_type_args[0]
+}
+
+/// The bodied functions that touch values of `element` only by moving them,
+/// handing one, or anything holding one, to no function but another such.
+fn movers_of(
+    project: &NirPackage,
+    type_table: &TypeTable,
+    element: TypeId,
+    storage_builtins: &IndexSet<FuncId>,
+    value_copy_ids: &IndexSet<FuncId>,
+) -> IndexSet<FuncId> {
+    let key = type_table.type_key(element);
+    let mut movers: IndexSet<FuncId> = project
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            // A bodyless function's signature types may already be gone.
+            f.body.as_ref()?;
+            let touches = f
+                .params
+                .iter()
+                .map(|p| p.type_id)
+                .chain(std::iter::once(f.return_type))
+                .any(|t| holds_element(type_table, t, key));
+            touches.then_some(f.id).flatten()
+        })
+        .filter(|id| !value_copy_ids.contains(id))
+        .collect();
+    greatest_fixpoint(project, &mut movers, |func, movers| {
+        let passes = |callee: &FuncId| {
+            movers.contains(callee)
+                || storage_builtins.contains(callee)
+                || value_copy_ids.contains(callee)
+        };
+        moves_elements_only(func, type_table, key, &passes)
+    });
+    movers
+}
+
+/// Whether a value of type `ty` is, or holds, a value of the type `element`.
+fn holds_element(type_table: &TypeTable, ty: TypeId, element: TypeKey) -> bool {
+    if type_table.type_key(ty) == element {
+        return true;
+    }
+    match type_table.get(ty) {
+        ResolvedType::Ref(inner)
+        | ResolvedType::MutRef(inner)
+        | ResolvedType::Reactive(inner)
+        | ResolvedType::BuiltinArray(inner) => holds_element(type_table, *inner, element),
+        ResolvedType::Struct { type_args, .. }
+        | ResolvedType::GenericInstance { type_args, .. }
+        | ResolvedType::GenericResource { type_args, .. } => type_args
+            .iter()
+            .any(|t| holds_element(type_table, *t, element)),
+        ResolvedType::Newtype {
+            type_args,
+            base_type,
+            ..
+        } => {
+            holds_element(type_table, *base_type, element)
+                || type_args
+                    .iter()
+                    .any(|t| holds_element(type_table, *t, element))
+        }
+        ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } => {
+            holds_element(type_table, *return_type, element)
+                || params
+                    .iter()
+                    .any(|t| holds_element(type_table, *t, element))
+        }
+        ResolvedType::Primitive(_)
+        | ResolvedType::Unit
+        | ResolvedType::Never
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Resource { .. }
+        | ResolvedType::Variant { .. }
+        | ResolvedType::TypeParam { .. }
+        | ResolvedType::InferVar(_)
+        | ResolvedType::TypePack { .. }
+        | ResolvedType::AssocTypeProjection { .. }
+        | ResolvedType::Flags { .. }
+        | ResolvedType::Unknown
+        | ResolvedType::Error => false,
+    }
+}
+
+/// Whether `func` only moves the values of `element` it meets, and hands what
+/// holds one to no callee but those `passes` admits.
+fn moves_elements_only(
+    func: &NirFunction,
+    type_table: &TypeTable,
+    element: TypeKey,
+    passes: &dyn Fn(&FuncId) -> bool,
+) -> bool {
+    let Some(body) = func.body.as_ref() else {
+        return false;
+    };
+    let mut ok = true;
+    body.for_each_reachable_node(|node| {
+        body.for_each_operand(node, |op| {
+            let ty = body.operand_type(op);
+            let is_element = type_table.type_key(ty) == element;
+            if ok && (is_element || holds_element(type_table, ty, element)) {
+                ok = accepts_element_operand(body, node, op, is_element, passes);
+            }
+        });
+    });
+    ok
+}
+
+/// Whether `node` may be handed `op`, which is an element (`is_element`) or
+/// holds one. An element may only be moved; a holder may also be taken apart.
+fn accepts_element_operand(
+    body: &Body,
+    node: NodeRef,
+    op: Operand,
+    is_element: bool,
+    passes: &dyn Fn(&FuncId) -> bool,
+) -> bool {
+    match node {
+        NodeRef::Stmt(s) => match &body.stmts[s].kind {
+            StmtKind::Let { .. }
+            | StmtKind::Expr(_)
+            | StmtKind::Return { .. }
+            | StmtKind::Break { .. } => true,
+            StmtKind::If { .. }
+            | StmtKind::Loop { .. }
+            | StmtKind::Continue
+            | StmtKind::LabeledBlock { .. }
+            | StmtKind::LetDestructure { .. } => false,
+        },
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Call { func_id, .. } => passes(func_id),
+            ExprKind::Assign { target, .. } => {
+                !is_element || matches!(body.exprs[*target].kind, ExprKind::Local { .. })
+            }
+            ExprKind::Match { expr, .. } => op != *expr,
+            ExprKind::FieldAccess { .. } | ExprKind::Index { .. } | ExprKind::Unary { .. } => {
+                !is_element
+            }
+            ExprKind::Dead
+            | ExprKind::PackedArray(_)
+            | ExprKind::Local { .. }
+            | ExprKind::GlobalVarGet { .. }
+            | ExprKind::GlobalVarSet { .. }
+            | ExprKind::Binary { .. }
+            | ExprKind::Cast { .. }
+            | ExprKind::CmRawCall { .. }
+            | ExprKind::If { .. }
+            | ExprKind::StructLiteral { .. }
+            | ExprKind::TupleLiteral { .. }
+            | ExprKind::ArrayLiteral { .. }
+            | ExprKind::IndirectCall { .. }
+            | ExprKind::ClosureToCanonical { .. }
+            | ExprKind::VariantConstruct { .. }
+            | ExprKind::EnumConstruct { .. }
+            | ExprKind::LabeledBlock { .. }
+            | ExprKind::VariantTag { .. }
+            | ExprKind::VariantTest { .. }
+            | ExprKind::VariantPayload { .. }
+            | ExprKind::Switch { .. } => false,
+        },
+        NodeRef::Pat(_) | NodeRef::Block(_) => false,
     }
 }
 
