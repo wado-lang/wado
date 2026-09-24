@@ -410,7 +410,7 @@ fix-points, the return rewriting, the call-site rewriting — is subsumed.
 `return_temp.rs` normalized temps `field_scalarize` left and `wir_build`
 materialized; those temps are gone at their source rather than recognised
 afterwards — see
-[the return temp](#the-return-temp--resolved-in-field_scalarize).
+[the return temp](#the-return-temp-belongs-to-field_scalarize).
 
 | file                     | lines | now                                                 |
 | ------------------------ | ----- | --------------------------------------------------- |

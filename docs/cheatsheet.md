@@ -43,7 +43,7 @@ Any file that is neither `.wado` nor a Wasm asset (`.wasm` / `.wat`) is imported
 ```wado
 use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
     generator: {
-        module: "wado-lang:gale@0.1",
+        module: "wado-lang:gale",
     },
 };
 ```

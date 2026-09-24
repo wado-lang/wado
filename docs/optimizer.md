@@ -85,7 +85,8 @@ Allocation and aggregates:
 - `sroa_variant_return` — return a variant as a `[tag, slots…]` tuple
   ([WEP: Variant Return Scalarization](./wep-2026-08-03-variant-return-abi.md)).
 - `elide_box_local` — collapse a box bound once and read once into its value.
-- `drop_value` — a value whose result is discarded keeps only its effects.
+- `drop_value` — a value-producing labeled block whose result is discarded keeps
+  only its effects.
 - `string_push` — specialize a constant ASCII push, and reserve a run of
   appends at once.
 - `value_copy_demote` — make a deep list copy shallow when its elements are
