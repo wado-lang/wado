@@ -4061,7 +4061,7 @@ let opt = map.get("x");          // returns Option<V>
 map.try_insert("x", 99);         // inserts only if absent; reports whether it did
 
 // Keys preserve insertion order
-let keys = map.keys();  // returns List<K> in insertion order
+let keys = map.keys();  // an iterator over the keys, in insertion order
 
 // Functional-update spread: seed from a base map, then override/add keys
 let m2: TreeMap<String, i32> = { ..map, "x": 99, "w": 40 };
@@ -4138,7 +4138,7 @@ The explicit marker `impl Serialize for T;` still works — write it to force th
 
 ### Bound-Driven Eq / Ord
 
-`Eq` / `Ord` derive the same on-demand way: the impl for `T` is synthesized only where a `==` / `<` call site, a bound, or an explicit marker needs it — not for every declared type. No existing call site's behavior changes.
+`Eq` / `Ord` derive the same on-demand way: the impl for `T` is synthesized only where a `==` / `<` call site, a bound, or an explicit marker needs it — not for every declared type.
 
 The explicit marker `impl Eq for T;` / `impl Ord for T;` is a hard guarantee, not just a request: a compile error, with a reason chain, at the marker's own span if any field or case is ineligible:
 
@@ -4153,7 +4153,7 @@ impl Eq for Handler;
 
 `${x:?}` / `${x:#?}` (`Inspect`, plainly or indented) work for every type — no bound needed.
 
-`${x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one; a struct, variant, or generic container needs a hand-written `impl Display`, otherwise `${x}` is a compile error and `${x:?}` gives its debug form. So `T: Display` certifies a real string representation — e.g. `String::push_display` takes any `Display`. `${x:#}` runs the same `Display` with `Formatter.alternate` set; an impl that ignores the flag renders identically.
+`${x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one. So do the prelude's sequences, tuples and ranges, where their elements allow it. Any other struct or variant needs a hand-written `impl Display`; otherwise `${x}` is a compile error and `${x:?}` gives its debug form. So `T: Display` certifies a real string representation — e.g. `String::push_display` takes any `Display`. `${x:#}` runs the same `Display` with `Formatter.alternate` set; an impl that ignores the flag renders identically.
 
 ```wado
 fn describe<T>(v: &T) -> String { return `${v:?}`; }         // any type
@@ -4198,6 +4198,7 @@ The same `Serialize` and `Deserialize` trait impls work with both `core:json` an
 
 ```wado
 use { parse } from "core:args";
+use { Deserialize } from "core:serde";
 
 struct Cli {
     #[wire(positional)] input: String,
@@ -4367,30 +4368,30 @@ Namespace Resolution (a namespace is reserved iff the compiler bundles it):
 
 1. Bundled namespaces `core:` / `wasi:` / `web:` — resolved from embedded stdlib.
 
-2. Open coordinates `<ns>:<pkg>` (any other namespace) — resolved from the default registry, or a `with`/manifest source override.
+2. Open coordinates `<ns>:<pkg>` (any other namespace) — resolved from a `[dependencies]` entry in `wado.toml` or an inline `with` source. An undeclared coordinate is an error.
 
 3. Library aliases `lib:<nick>` — indirection (rename, short name, multiple majors, or a dependency with no public coordinate), resolved via `wado.toml` or an inline `with`.
 
-4. Remote modules (`http://` or `https://`): Delegated to CompilerHost.
+4. Remote modules (`http://` or `https://`): fetched by the host. Not yet implemented; see [WEP: Module Loader Design](./wep-2026-01-24-module-loader.md).
 
 5. Local modules (`./` or `../`): Resolved relative to importing module.
 
 6. Invalid paths: Paths not matching any pattern are rejected.
-   - Error: `invalid module path 'xxx'; use './' for local modules or a 'namespace:package' coordinate`
+   - Error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`
 
-Bare names (`"router"`) are rejected. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md) for resolution and version rules.
+Bare names (`"router"`) are rejected. The one exception is a bare key in `[dependencies]`, which is deprecated and draws a warning. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md) for resolution and version rules.
 
 ### Symbol Notation
 
 A symbol is named `MODULE#SYMBOL` — the written form used by docs, `wado query`, and diagnostics. `MODULE` is the import specifier verbatim (quoted as in `use`; quotes may be dropped for a scheme or bare name with no whitespace). `SYMBOL` uses Wado's own operators, so its kind is visible from the separator: `::` for static scope, `.` for an instance method, `^` for a trait-impl member.
 
 ```
-core:json#parse                      # free function / global
-core:math#f64::PI                    # associated const / static fn
-core:collections#TreeMap.get         # instance method
-core:prelude#List<String>::len       # generics use Wado angle brackets
-core:fmt#Point^Display::fmt          # trait-impl member
-"./utils.wado"#Helper::new           # relative path — must be quoted
+core:json#to_string                        # free function / global
+core:collections#TreeMap::new              # associated const / static fn
+core:collections#TreeMap.get               # instance method
+core:collections#TreeMap<String, i32>.get  # generics use Wado angle brackets
+core:url#Url^Display::fmt                  # trait-impl member
+"./utils.wado"#Helper::new                 # relative path — must be quoted
 ```
 
 See [WEP: Symbol Notation](./wep-2026-06-14-symbol-notation.md).
@@ -4412,16 +4413,16 @@ use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
 
 // 2. Core library (core:*)
 use {println, eprintln} from "core:cli";
-use {format} from "core:fmt";
+use {to_string, from_string} from "core:json";
 
-// 3. Remote modules (https:)
+// 3. Remote modules (https:), not yet implemented
 use {ApiClient} from "https://example.com/api.wado";
 
 // 4. Local files (relative path, extension required)
 use {Helper} from "./utils.wado";
 use {Config} from "../config.wado";
 
-// 5. CM coordinate (resolved via wado.toml or default registry)
+// 5. CM coordinate (declared in wado.toml, or given an inline `with` source)
 use {Regexp} from "docs:regex";
 
 // 6. Library alias (rename / private / coordinate-less dependency)
@@ -4458,9 +4459,9 @@ Use `with { ... }` to specify import metadata:
 ```wado
 // Inline dependency source (single-file scripts; no wado.toml needed).
 // Same vocabulary as a [dependencies] value, with an exact version.
-use {Regexp} from "docs:regex@1.0.0";  // exact pin via the specifier
-use {Router} from "lib:router" with { git = "https://github.com/user/router.git", ref = "v1.0" };
-use {Parse}  from "lib:rx"     with { registry = "oci://ghcr.io/acme", package = "docs:regex", version = "1.0.0" };
+use {Regexp} from "docs:regex@1.0.0" with { registry: "oci://ghcr.io/acme" };  // exact pin via the specifier
+use {Router} from "lib:router" with { git: "https://github.com/user/router.git", ref: "v1.0" };
+use {Parse}  from "lib:rx"     with { registry: "oci://ghcr.io/acme", package: "docs:regex", version: "1.0.0" };
 
 // Type attribute (REQUIRED for non-.wado imports)
 use {sin, cos} from "./libm.wasm" with { type: "wasm" };
@@ -4472,17 +4473,20 @@ use {foo} from "./external.wasm" with {
 };
 ```
 
+The `wit` attribute is not yet implemented: it is accepted and has no effect.
+
 An inline `with` source and a `wado.toml` entry for the same specifier are mutually exclusive. Version ranges (`^`/`~`/`=`) are allowed only in `wado.toml`, where a lock file resolves them; the specifier `@ver` and a single-file `with` take an exact version — a range there is an error.
 
 #### Type Attribute Requirement
 
-| Import Source      | `type` Attribute         | Notes                          |
-| ------------------ | ------------------------ | ------------------------------ |
-| `.wado` files      | Optional                 | Type inferred from Wado source |
-| `.wasm` files      | Required                 | `type: "wasm"`                 |
-| `core:*`, `wasi:*` | Not applicable           | Bundled namespace handling     |
-| `https:` URLs      | Required for non-`.wado` | Must specify content type      |
-| CM / `lib:` deps   | Optional                 | Type inferred from package     |
+| Import Source               | `type` Attribute         | Notes                          |
+| --------------------------- | ------------------------ | ------------------------------ |
+| `.wado` files               | Optional                 | Type inferred from Wado source |
+| `.wasm` files               | Required                 | `type: "wasm"`                 |
+| `.wat` files                | Required                 | `type: "wat"`                  |
+| `core:*`, `wasi:*`, `web:*` | Not applicable           | Bundled namespace handling     |
+| `https:` URLs               | Required for non-`.wado` | Must specify content type      |
+| CM / `lib:` deps            | Optional                 | Type inferred from package     |
 
 #### Rationale
 
@@ -4498,14 +4502,14 @@ A `use` clause whose source is neither a `.wado` module nor a Wasm asset (`.wasm
 // Gale generates a parser from an ANTLR4 grammar
 use { Parser } from "./Calc.g4" with {
     generator: {
-        module: "wado:gale@0.1",
+        module: "wado-lang:gale",
     },
 };
 
 // With supplementary input files (paths relative to the source file)
 use { RustParser } from "./Rust.g4" with {
     generator: {
-        module: "wado:gale@0.1",
+        module: "wado-lang:gale",
         inputs: ["./RustLexer.g4"],
     },
 };
@@ -4526,16 +4530,23 @@ Generators are declared in `[build-dependencies]` of `wado.toml` (a build-only g
 
 ```toml
 [build-dependencies]
-gale = { registry = "wado", package = "gale", version = "0.1" }
+"wado-lang:gale" = { version = "^0.0.9" }
 ```
 
-A bare `use { ... } from "./schema.g4"` against such a file with no `with` clause is a hard error (`Code::KilnMissingWith`). Two `use` clauses for the same `from` in the same file collapse to a single invocation if their `(module, inputs, options, output_dir)` match; mismatched clauses are a duplicate-generator error.
+A bare `use { ... } from "./schema.g4"` against such a file with no `with` clause is a hard error (`KILN_MISSING_WITH`). Two `use` clauses for the same `from` in the same file collapse to a single invocation if their `(module, inputs, options, output_dir)` match; mismatched clauses are a duplicate-generator error.
 
-A file that is not `.wado` is only ever reached through a generator. When a `use` names one and no invocation produced a module for that schema, the import is a hard error (`Code::KilnNoGeneratedModule`); the compiler never falls back to parsing the schema as Wado.
+A file that is not `.wado` is only ever reached through a generator. When a `use` names one and no invocation produced a module for that schema, the import is a hard error (`KILN_NO_GENERATED_MODULE`); the compiler never falls back to parsing the schema as Wado.
 
 #### Authoring a generator
 
-A generator is a normal Wado package whose `wado.toml` declares a `[package].generator` entry pointing at a module that exports the `core:kiln/generator` world:
+A generator is a normal Wado package whose `wado.toml` maps the `core:kiln/generator` world to a module under `[world]`:
+
+```toml
+[world]
+"core:kiln/generator" = "src/generator.wado"
+```
+
+That module exports the world's `generate` function:
 
 ```wado
 use { Request, Response, Error } from "core:kiln";
@@ -4549,9 +4560,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 }
 ```
 
-The compiler extracts the `Options` shape from the generator's IR and type-checks every call site against it. Generators run in a deterministic sandbox (no clocks, randomness, network, environment, or filesystem): every input they see arrives by value, listed at the use site. Outputs are persisted under `build/kiln/<synthesized-id>/` and stamped with a `#![generated(by = "...", sources = [...])]` header. Cache state is recorded per invocation in `<output_dir>/<primary>.kiln.json`, beside the generated outputs; a subsequent compile skips the generator when its content-addressed cache key matches the one recorded there. `wado.lock` stays dependency-pin-only.
-
-In hosts that cannot execute generators (today's wasm32-bundled LSP / browser playground), Kiln falls back to consume-only mode: the compiler reads cached generated `.wado` files from disk and emits a stale-cache warning if hashes do not match. Projects that want a full LSP experience in such hosts commit `build/kiln/` and `wado.lock` to their repository.
+Every use site's `options` is type-checked against the generator's `Options`. Generators run in a deterministic sandbox (no clocks, randomness, network, environment, or filesystem): every input they see arrives by value, listed at the use site. Outputs are persisted under `build/kiln/<synthesized-id>/` and stamped with a `#![generated(by = "...", sources = [...])]` header. A compile reruns a generator only when its inputs have changed.
 
 ### Wasm Module and Component Imports
 
@@ -4589,18 +4598,18 @@ use utils from "./utils.wado";
 utils::helper_function();      // not utils["helper_function"], as it's analyzed at compile time
 ```
 
-A namespace import makes all pub symbols from the source module available. At the source level, symbols are accessed with the `ns::` prefix. Internally, the compiler desugars the prefix away during the desugar phase and registers all pub symbols from the source module as named imports:
+A namespace import binds one name, the namespace. The source module's pub symbols are reached through the `ns::` prefix and are not imported under their bare names, so `distance(p1, p2)` below is an unknown function:
 
 ```wado
 use geo from "./geo.wado";
 
 // Functions
-geo::distance(p1, p2);           // → distance(p1, p2)
+geo::distance(p1, p2);
 
 // Types (structs, enums, variants)
-let p: geo::Point = geo::Point::origin();   // → Point, Point::origin()
-let c = geo::Color::Red;                    // → Color::Red
-let s = geo::Shape::Circle(3.14);           // → Shape::Circle(3.14)
+let p: geo::Point = geo::Point::origin();
+let c = geo::Color::Red;
+let s = geo::Shape::Circle(3.14);
 
 // Traits and types in an `impl` header, on either side
 impl geo::Show for Local { ... }
@@ -4630,8 +4639,10 @@ use utils from "./utils.wado";                   // Namespace import
 
 // Prohibited patterns
 use * from "core:cli";           // Wildcard not allowed
-use println from "core:cli";     // Named items require curly braces
+use {*} from "core:cli";         // Wildcard not allowed
 ```
+
+Without braces, `use println from "core:cli"` is a namespace import named `println`, so the function is `println::println`.
 
 ### Calling Effect Operations
 
@@ -4686,24 +4697,24 @@ use {sin, cos, sine} from "lib:math";
 Re-export rules:
 
 - `pub use` combines `pub` visibility with import syntax
-- Can only re-export `pub` symbols from the source module
+- A re-export reaches no further than the symbol it names (see [Re-export visibility](#re-export-visibility))
 - Re-export chains are resolved transparently (A re-exports from B, B re-exports from C)
 - Circular re-exports are prohibited
 - Wildcards prohibited: `pub use * from "..."` is not allowed
 
 ### Exception: The Prelude
 
-The prelude is automatically imported into every module, making `Option`, `Result`, `Stream`, `Future`, and `Pollable` available without explicit imports.
+The prelude is automatically imported into every module, making `String`, `List`, `Option`, `Result`, `Stream`, `Future`, and the prelude traits available without explicit imports.
 
 ### Standard Library
 
 ```
 core            # core: namespace for the core library
-├── prelude     # Automatically imported (Option, Result, Stream, Future, Pollable)
+├── prelude     # Automatically imported (String, List, Option, Result, Stream, Future)
 ├── cli         # CLI helpers (println, eprintln, args, env, exit, ...)
 ├── serde       # Serialization traits (Serialize, Deserialize, Serializer, Deserializer)
 ├── json        # JSON format implementation (to_string, from_string)
-├── collections # TreeMap
+├── collections # TreeMap, TreeSet
 ├── base64      # Base64 encoding/decoding
 ├── zlib        # Compression
 ├── ...
@@ -4713,10 +4724,7 @@ wasi            # wasi: namespace for system interfaces
 ├── ...
 ```
 
-For full API documentation, see:
-
-- Core Standard Library — one reference per module: [`prelude`](./stdlib-core-prelude.md), [`cli`](./stdlib-core-cli.md), [`collections`](./stdlib-core-collections.md), [`serde`](./stdlib-core-serde.md), [`json`](./stdlib-core-json.md), [`json_nsd`](./stdlib-core-json_nsd.md), [`value`](./stdlib-core-value.md), [`base64`](./stdlib-core-base64.md), [`zlib`](./stdlib-core-zlib.md), [`simd`](./stdlib-core-simd.md), [`url`](./stdlib-core-url.md), [`kiln`](./stdlib-core-kiln.md)
-- [WASI Standard Library Reference](./stdlib-wasi.md), and [`wasi:webgpu`](./stdlib-wasi-webgpu.md) in a reference of its own
+The [cheatsheet's Standard Library section](./cheatsheet.md#standard-library) links the API reference for every module.
 
 ### Global Functions defined in `core:prelude`
 
@@ -4742,12 +4750,15 @@ guarded operand never runs when its guard fails. An operand the run did not
 reach is reported as `<not evaluated>`.
 
 ```wado
+let list: List<i32> = [1, 2, 3];
 let i = 99;
 assert i < list.len() && list[i] == 1;
 // condition: i < list.len() && list[i] == 1
 // i: 99
+// list: [1, 2, 3]
 // list.len(): 3
 // i < list.len(): false
+// i: <not evaluated>
 // list[i]: <not evaluated>
 // list[i] == 1: <not evaluated>
 ```
@@ -4763,7 +4774,7 @@ value yourself.
 
 ## Testing
 
-Wado has built-in support for writing and running tests. Test declarations are first-class syntax, and the `wado test` command provides a test runner similar to `cargo test` or `moon test`.
+Tests are first-class syntax: a `test` block declares one, and `wado test` runs them. The runner's flags, file discovery and output are described by `wado test --help` and [WEP: Test Discovery](./wep-2026-05-02-test-discovery.md).
 
 ### Test Declaration Syntax
 
@@ -4775,7 +4786,7 @@ test "addition works" {
     assert 1 + 1 == 2;
 }
 
-// Unnamed test (identified by file:line)
+// Unnamed test
 test {
     let result = compute_something();
     assert result > 0;
@@ -4831,19 +4842,15 @@ test {
 - Tests can use any effects (side effects are allowed in tests)
 - Attributes (e.g., `#[expect_trap]`, `#[TODO]`, `#[timeout_ms(N)]`, `#[synopsis]`) may appear before the `test` keyword
 
-#### Test Identification
-
-- Named tests: identified by their string name
-- Unnamed tests: identified by `{filename}:{line_number}`
-
 ### Test Semantics
 
 #### Execution
 
-- Each test runs in isolation with fresh state
-- Test order is deterministic (declaration order within a file)
+- Each test runs in isolation with fresh state: every global starts from its initializer
+- Tests are independent, so they may run in any order, and concurrently
 - A test passes if it completes without panicking or trapping
 - A test fails if `assert` fails, `panic` is called, or a trap occurs
+- Test blocks belong to the `test` world; compiling for any other world leaves them out
 
 #### `#[expect_trap]` Attribute
 
@@ -4869,7 +4876,7 @@ The `#[TODO]` attribute marks a test as a placeholder for a feature not yet impl
 
 #### `#[timeout_ms(N)]` Attribute
 
-The `#[timeout_ms(N)]` attribute overrides the default test timeout (5000ms) for a specific test. `N` is an integer literal specifying the timeout in milliseconds. If a test exceeds its timeout, it is interrupted and reported as failed with a message suggesting the `#[timeout_ms(N)]` attribute. This is useful for tests that involve expensive computation or I/O:
+The `#[timeout_ms(N)]` attribute overrides the default test timeout (5000ms) for a specific test. `N` is an integer literal specifying the timeout in milliseconds. If a test exceeds its timeout, it is interrupted and fails. This is useful for tests that involve expensive computation or I/O:
 
 ```wado
 #[timeout_ms(30000)]
@@ -4901,7 +4908,7 @@ Tests marked with `#[TODO]` are reported separately from regular tests. They do 
 | Body traps              | todo (pending)  | None — the feature is still unimplemented |
 | Body completes normally | todo (resolved) | Remove `#[TODO]` — the feature now works  |
 
-A resolved TODO test is a hard failure (exit code 1). This enforces cleanup: once the underlying feature is implemented, the `#[TODO]` attribute must be removed so the test joins the regular pass/fail pool.
+A resolved TODO test fails the run. This enforces cleanup: once the underlying feature is implemented, the `#[TODO]` attribute must be removed so the test joins the regular pass/fail pool.
 
 A pending TODO test never causes a failure. This means fixing a compiler bug cannot increase the failure count — newly-passing TODO tests appear as "resolved" on the TODO axis rather than as unexpected failures on the pass/fail axis.
 
@@ -4911,110 +4918,12 @@ The `#![TODO]` inner attribute applies TODO semantics to an entire module:
 
 - If the module fails to compile, it is reported as a single pending TODO entry.
 - If the module compiles successfully, each test block is implicitly treated as `#[TODO]`.
-- If the module compiles and all tests pass (i.e., the feature is implemented), it is reported as resolved — a hard failure.
-
-#### Output Format
-
-The test runner displays results grouped by file. Regular tests use `✓` (green) and `✗` (red). TODO tests use `·` (yellow, pending) and `✓` (cyan, resolved):
-
-```
-Running tests in math_test.wado... (compiled in 50ms)
-  ✓ addition (2ms)
-  ✗ division_edge_case (3ms)
-    assertion failed at line 15
-  · future_feature # TODO (1ms)
-  ✓ now_works # TODO resolved (2ms)
-    remove the #[TODO] attribute
-```
-
-At the end of the run, a TODO summary section lists all TODO tests with their status:
-
-```
-TODO tests (3):
-  · pending   math_test.wado — future_feature
-  ✓ resolved  math_test.wado — now_works
-  · pending   unimpl_test.wado — #![TODO] module
-
-1 TODO test(s) resolved — remove the #[TODO] attribute
-```
-
-The final summary line reports both axes:
-
-```
-N passed, N failed; N todo (M resolved) (duration)
-```
-
-#### Exit Codes
-
-| Condition                                 | Exit Code |
-| ----------------------------------------- | --------- |
-| All regular tests pass, no resolved TODOs | 0         |
-| One or more regular tests fail            | 1         |
-| One or more TODO tests resolved           | 1         |
-
-##### Effects
-
-- Tests implicitly have access to all effects (no `with` declaration required)
-- This allows tests to perform I/O, use the filesystem, etc.
-
-##### No Runtime Overhead
-
-- Test functions are only included when running `wado test`
-- Regular compilation (`wado compile`, `wado run`) excludes test code via dead code elimination
-
-### Test Runner CLI
-
-The `wado test` command discovers and runs tests:
-
-```sh
-# Auto-discover every *.wado file under the project root
-wado test
-
-# Run tests in specific file(s)
-wado test path/to/file.wado
-wado test path                 # walk path with the discovery rules
-
-# Filter discovered files by path (shell wildcard, not regex)
-wado test --filter '*addition*'
-
-# Show help
-wado test --help
-```
-
-#### Discovery (WEP 2026-05-02)
-
-When no files are specified, `wado test` walks the project root for every
-`*.wado` file. The walker honours `.gitignore`, `.gitmodules`, dot-prefixed
-paths, nested `wado.toml` package boundaries, and the root manifest's
-`[test].exclude` glob list. Symbolic links are followed once each, with
-canonical-path cycle detection. Sub-packages (any directory containing its
-own `wado.toml`) are run as separate package contexts and reported with a
-`=== package: <label> ===` banner; an `=== aggregate ===` block sums the
-three axes when more than one package ran.
-
-Files without `test` blocks are still parsed and compiled; only files with
-test blocks register and run tests. Compile failures are tracked on a
-separate axis from test failures and produce a non-zero exit.
-
-#### Filtering
-
-`--filter <pattern>` matches discovered file paths using shell wildcards
-(`*`, `?`, `[...]`); regex syntax is not supported. Wrap the term in `*`s
-to match anywhere within a path (e.g. `'*foo*'`).
-
-#### Output and Exit Codes
-
-See Test Outcome Model above for the full output format, TODO summary, and
-exit code rules. The summary prints three axes — compile, test, todo — and
-the run exits non-zero whenever any of `compile failed`, `test failed`, or
-`todo resolved` is non-zero.
+- If the module compiles and all tests pass (i.e., the feature is implemented), it is reported as resolved, which fails the run.
 
 ### Test File Conventions
 
-`*_test.wado` is the recommended convention for files that contain only
-tests, but the runner no longer requires the suffix: every `*.wado` file
-discovered under the project root is visited, and any file with `test`
-blocks contributes its tests.
+`*_test.wado` is the recommended name for a file that contains only tests. The
+suffix is not required: any file with `test` blocks contributes its tests.
 
 ```
 src/
@@ -5052,38 +4961,52 @@ test "add negative numbers" {
 
 ## Concurrency Model
 
-### Stack Switching Based (Colorless)
+Wado follows the Component Model's concurrency model. It has no `await`: a
+wait blocks the current task until the value is ready, so an ordinary function
+may wait without saying so in its signature.
+
+### Async Imports
+
+A Component Model `async func` import is an interface operation declared
+`async fn op(...) -> AsyncCall<T>`. Calling it starts the call and returns an
+`AsyncCall<T>` at once. The caller decides when to wait:
+
+- `.wait()` blocks until the call returns, then yields its `T`.
+- `.cancel()` abandons the call.
+- `.join(&set)` adds the call to a `WaitableSet`, so one wait covers several
+  calls and streams.
 
 ```wado
-// No async keyword needed in function implementations
-fn fetch_user(id: i32) -> Result<User, HttpError> with Http {
-    let response = Http::get(`users/${id}`)?;  // Even if Http::get is async in WIT
-    let user = response.json()?;
-    return Ok(user);
-}
+use { Client, Request, Response, ErrorCode } from "wasi:http";
 
-// Called normally
-fn main() with Http {
-    let user = fetch_user(1);
-}
-
-// Concurrent execution
-fn load_data() -> Data with Http {
-    let [users, posts] = join(
-        || fetch_users(),
-        || fetch_posts(),
-    );
-    return Data { users, posts };
+fn fetch(req: Request) -> Result<Response, ErrorCode> with Client {
+    let call = Client::send(req);   // the request starts; nothing waits yet
+    // ... work here runs while the host handles the request ...
+    return call.wait();             // blocks until the response arrives
 }
 ```
 
-Wado is colorless: a function's signature does not record whether it suspends,
-so an asynchronous callee imposes nothing on its caller and one implementation
-serves both. Suspension is Wasm stack switching, not a source-level transform.
+An `AsyncCall<T>` is used once: after `wait` or `cancel` it must not be touched
+again. A handler for an async operation resumes with the `T` itself, and the
+caller's `.wait()` returns it at once. See
+[WEP: Generic `AsyncCall<T>`](./wep-2026-04-22-subtask-generic.md) and
+[WEP: Effect Handler](./wep-2026-04-11-effect-handler.md).
 
-The `async` keyword appears only in world declarations, where the Component
-Model surface has to match WIT's `async func` signature for an export. Effect
-declarations and function implementations never use it.
+A structured `join` that runs closures concurrently and returns their results
+as a tuple, `let [users, posts] = join(|| fetch_users(), || fetch_posts());`,
+is not yet implemented.
+
+### Async Exports
+
+An `export async fn` uses the Component Model async calling convention. Its
+body delivers the result with [`task return`](#task-return-statement) and may
+keep running afterwards, for example to write a response's trailers.
+
+### Streams and Futures
+
+`Stream<T>` and `Future<T>` are unbuffered channels. A `write` blocks until the
+other end reads, and a `read` blocks until the other end writes, so the two ends
+must be driven by different tasks.
 
 ## Effect System
 
