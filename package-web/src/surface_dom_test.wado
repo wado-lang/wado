@@ -14,6 +14,36 @@ test "a fresh document has a body" {
     };
 }
 
+test "a fresh document starts with its doctype" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let doctype = doc.first_child().unwrap();
+        assert doctype.node_type() == 10;
+        assert doctype.node_name() == "html";
+        assert doctype.text_content() == null;
+        assert doctype.next_sibling() == Option::Some(doc.document_element().unwrap() as Node);
+    };
+}
+
+#[expect_trap]
+test "a doctype is never an element's child" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        doc.body().unwrap().append_child(doc.first_child().unwrap());
+    };
+}
+
+#[expect_trap]
+test "the document holds one doctype" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        doc.append_child(doc.first_child().unwrap());
+    };
+}
+
 test "the handles carry the classes dom.wado numbers" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
@@ -37,7 +67,7 @@ test "a handle inspects as the type its class names" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let node: Node = Dom::document().create_element("div", null);
-        assert `${node:?}` == "HtmlElement { type_id: 3, object_id: 5 }";
+        assert `${node:?}` == "HtmlElement { type_id: 3, object_id: 6 }";
     };
 }
 
@@ -184,6 +214,76 @@ test "attributes are set, read and removed" {
         el.remove_attribute("href");
         assert el.get_attribute("href") == null;
     };
+}
+
+test "get_html serializes an element's children" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let list = doc.create_element("ul", null);
+        list.set_attribute("class", "menu");
+        list.set_id("nav");
+        let item = doc.create_element("li", null);
+        item.set_text_content(Option::Some("One"));
+        list.append_child(item);
+        let body = doc.body().unwrap();
+        body.append_child(list);
+        assert body.get_html() == "<ul class=\"menu\" id=\"nav\"><li>One</li></ul>";
+        assert item.get_html() == "One";
+    };
+}
+
+test "text and attribute values are escaped" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let div = doc.create_element("div", null);
+        let p = doc.create_element("p", null);
+        p.set_attribute("title", "\"q\" & <x>");
+        p.set_text_content(Option::Some("a < b & \"c\" > d\u{A0}"));
+        div.append_child(p);
+        assert div.get_html() == "<p title=\"&quot;q&quot; &amp; &lt;x&gt;\">a &lt; b &amp; \"c\" &gt; d&nbsp;</p>";
+    };
+}
+
+test "a void element has no end tag, and an input's value is no attribute" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let form = doc.create_element("form", null);
+        let input = doc.create_element("input", null);
+        input.set_attribute("type", "text");
+        let input: HtmlInputElement = input else {
+            unreachable();
+        };
+        input.set_value("typed");
+        form.append_child(input);
+        form.append_child(doc.create_element("br", null));
+        assert form.get_html() == "<input type=\"text\"><br>";
+    };
+}
+
+test "a script's text is not escaped" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let head = doc.create_element("head", null);
+        let script = doc.create_element("script", null);
+        script.set_text_content(Option::Some("if (a < b && c) {}"));
+        head.append_child(script);
+        assert head.get_html() == "<script>if (a < b && c) {}</script>";
+    };
+}
+
+test "the document serializes with its doctype" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let p = doc.create_element("p", null);
+        p.set_text_content(Option::Some("Hi"));
+        doc.body().unwrap().append_child(p);
+    };
+    assert dom.to_html() == "<!DOCTYPE html><html><head></head><body><p>Hi</p></body></html>";
 }
 
 test "an input holds its value" {

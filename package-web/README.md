@@ -36,6 +36,10 @@ layout, style or scripting. It holds a tree, text, attributes and an input's
 value. A call it does not answer traps, and so does an insertion the DOM standard rejects with a
 `HierarchyRequestError`.
 
+A server renders a page by serializing it. `dom.to_html()` gives the whole
+document, doctype included, and `Element::get_html` an element's children. Both
+follow the HTML standard's serialization.
+
 ## Layout
 
 - `idl/dom.webidl.json` — the vendored WebIDL slice, as a webidl2 AST
