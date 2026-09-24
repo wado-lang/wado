@@ -581,10 +581,23 @@ this grammar and input at 216.991 ms/iter against Gale's 2.535
   routed to the simulator now decides its loop entry with full context whenever
   the caller can continue with the lookahead token too. That closed
   `lr_atn_mid_operand.g4` and `lr_between.g4` (2026-09), and this descriptor
-  shows the price: its input went from about 40 µs to 0.76 s at `-O2`. The
-  ambiguity is real, so each such decision looks ahead to EOF. On top of that,
-  `stat`'s tournament scans `expr` once per alternative before the parse decides
-  the same positions again. Over 15 lines that is 214 predictions, 14k closure steps, and about 86 configurations a step.
+  shows the price. The ambiguity is real, so each such decision looks ahead to
+  EOF. Over 15 lines there are 214 of them. 132 come from three passes over
+  the same positions: `stat`'s tournament scans `expr` once per alternative, and
+  the parse then decides again. The other 82 follow an exit: each enclosing loop
+  then decides the same position again.
+
+  | 15 lines at `-O2`                     | time   | configs a step |
+  | ------------------------------------- | ------ | -------------- |
+  | before full context                   | ~40 µs | —              |
+  | full context, caller stack kept apart | 0.79 s | ~86            |
+  | caller stack in the context graph     | 0.18 s | ~12            |
+
+  Configs that differed only in how deep the caller stack was used to stay
+  apart, and they now merge. At 30 lines that took 6.3 s to 0.74 s. What remains
+  is quadratic: one lookahead to EOF per prediction. Cutting the number of
+  predictions needs a verdict the scan can hand to the parse, and a scan has no
+  instance to keep one on.
 - **`lr_between.g4` is ATN-class and may not need to be.** Its shared-delimiter
   competition sits in an _atom_ alternative (`'between' expr 'and' expr` — no leading
   self-reference), so the continuation gate above does not reach it. The question it

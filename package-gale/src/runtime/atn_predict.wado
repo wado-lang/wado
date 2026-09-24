@@ -14,7 +14,7 @@ global ATN_ACCEPT_EOF: i32 = -2;
 global ATN_CLOSURE_GUARD: i32 = 2000000;
 global ATN_ARENA_CAP: i32 = 400000;
 
-global ATN_MERGE_CACHE_STRIDE: i64 = 1000000;
+global ATN_NODE_PAIR_STRIDE: i64 = 1000000;
 
 global CFG_KEY_PR_SLOT: i32 = 2048;
 global CFG_KEY_ALT_SLOT: i32 = 2048;
@@ -168,7 +168,9 @@ impl CtxArena {
         }
         let t = self.node_start[node];
         for let mut i = 0; i < n; i += 1 {
-            if self.ret[t + i] != self.ret[s + i] || self.rpr[t + i] != self.rpr[s + i] || self.parent[t + i] != self.parent[s + i] {
+            if self.ret[t + i] != self.ret[s + i]
+                || self.rpr[t + i] != self.rpr[s + i]
+                || self.parent[t + i] != self.parent[s + i] {
                 return false;
             }
         }
@@ -218,10 +220,7 @@ impl CtxArena {
         if a == b {
             return a;
         }
-        let lo = if a < b { a } else { b };
-        let hi = if a < b { b } else { a };
-        assert ATN_MERGE_CACHE_STRIDE > ATN_ARENA_CAP as i64, "the merge-cache stride must exceed the arena cap, or two arena id pairs alias onto one key";
-        let ck = lo as i64 * ATN_MERGE_CACHE_STRIDE + hi as i64;
+        let ck = if a < b { atn_node_pair_key(a, b) } else { atn_node_pair_key(b, a) };
         let cached = self.merge_cache.get(ck);
         if cached >= 0 {
             return cached;
@@ -251,7 +250,13 @@ impl CtxArena {
         i = 0;
         j = 0;
         while i < na || j < nb {
-            let c = if i >= na { 1 } else if j >= nb { -1 } else { self.key_cmp(sa + i, sb + j) };
+            let c = if i >= na {
+                1;
+            } else if j >= nb {
+                -1;
+            } else {
+                self.key_cmp(sa + i, sb + j);
+            };
             if c < 0 {
                 self.append_edge(self.ret[sa + i], self.rpr[sa + i], self.parent[sa + i]);
                 i += 1;
@@ -275,7 +280,7 @@ impl CtxArena {
         if outer == inner {
             return true;
         }
-        let ck = outer as i64 * ATN_MERGE_CACHE_STRIDE + inner as i64;
+        let ck = atn_node_pair_key(outer, inner);
         let cached = self.cover_cache.get(ck);
         if cached >= 0 {
             return cached == 1;
@@ -299,6 +304,17 @@ impl CtxArena {
         self.cover_cache.set(ck, if covered { 1 } else { 0 });
         return covered;
     }
+}
+
+fn atn_node_pair_key(a: i32, b: i32) -> i64 {
+    assert ATN_NODE_PAIR_STRIDE > ATN_ARENA_CAP as i64, "the pair-key stride must exceed the arena cap, or two node id pairs alias onto one key";
+    return a as i64 * ATN_NODE_PAIR_STRIDE + b as i64;
+}
+
+fn atn_state_pr_key(state: i32, pr: i32) -> i64 {
+    assert pr + 2 < CFG_KEY_PR_SLOT, `ATN config precedence ${pr} exceeds packed-key slot`;
+    assert state + 2 < CFG_KEY_STATE_SLOT, `ATN config state ${state} exceeds packed-key slot`;
+    return (state + 2) as i64 * CFG_KEY_PR_SLOT as i64 + (pr + 2) as i64;
 }
 
 fn atn_invocation_prec(sim: &AtnSim, rstk: &List<i32>, k: i32) -> i32 {
@@ -345,10 +361,8 @@ impl CfgSet {
     }
 
     fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, pr: i32, pctx: i32) -> [i32, bool] {
-        assert pr + 2 < CFG_KEY_PR_SLOT, `ATN config precedence ${pr} exceeds packed-key slot`;
         assert alt + 1 < CFG_KEY_ALT_SLOT, `ATN config alt ${alt} exceeds packed-key slot`;
-        assert state + 2 < CFG_KEY_STATE_SLOT, `ATN config state ${state} exceeds packed-key slot`;
-        let k = ((state + 2) as i64 * CFG_KEY_ALT_SLOT as i64 + (alt + 1) as i64) * CFG_KEY_PR_SLOT as i64 + (pr + 2) as i64;
+        let k = atn_state_pr_key(state, pr) * CFG_KEY_ALT_SLOT as i64 + (alt + 1) as i64;
         let found = self.index.get(k);
         if found >= 0 {
             let merged = arena.merge(self.pctx[found], pctx);
@@ -468,12 +482,7 @@ fn atn_expand(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnConfig, work: &mut Li
     }
 }
 
-fn atn_collapse_into_caller_loop(
-    sim: &AtnSim,
-    arena: &mut CtxArena,
-    cur: &AtnConfig,
-    work: &mut List<AtnConfig>,
-) -> i32 {
+fn atn_collapse_into_caller_loop(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnConfig, work: &mut List<AtnConfig>) -> i32 {
     if sim.state_collapse_to.is_empty() {
         return cur.pctx;
     }
@@ -569,29 +578,20 @@ fn atn_unique_alts(configs: &List<AtnConfig>) -> List<i32> {
     return alts;
 }
 
-fn atn_min_alt(alts: &List<i32>) -> i32 {
-    if alts.is_empty() {
-        return -1;
-    }
-    let mut m = alts[0];
-    for let a of alts {
-        if *a < m {
-            m = *a;
-        }
-    }
-    return m;
+fn atn_min_alt(sorted_alts: &List<i32>) -> i32 {
+    return if sorted_alts.is_empty() { -1 } else { sorted_alts[0] };
 }
 
 fn atn_min_alt_covers_rest(arena: &mut CtxArena, configs: &List<AtnConfig>, min_alt: i32) -> bool {
     let mut min_ctx = AtnKeyMap::new();
     for let c of configs {
         if c.alt == min_alt {
-            min_ctx.set((c.state + 2) as i64 * CFG_KEY_PR_SLOT as i64 + (c.pr + 2) as i64, c.pctx);
+            min_ctx.set(atn_state_pr_key(c.state, c.pr), c.pctx);
         }
     }
     for let c of configs {
         if c.alt != min_alt {
-            let e = min_ctx.get((c.state + 2) as i64 * CFG_KEY_PR_SLOT as i64 + (c.pr + 2) as i64);
+            let e = min_ctx.get(atn_state_pr_key(c.state, c.pr));
             if e < 0 || !arena.covers(e, c.pctx) {
                 return false;
             }
@@ -661,7 +661,7 @@ pub fn atn_predict_with_stack(
             return alts[0];
         }
         if atn_all_at_end(sim, &configs) {
-            return atn_min_alt(&alts);
+            return alts[0];
         }
         prev = alts;
         let token = if pos < tokens.len() { tokens[pos] } else { eof };

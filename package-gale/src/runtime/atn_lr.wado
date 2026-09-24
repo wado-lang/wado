@@ -38,7 +38,8 @@ fn atn_compute_collapse(sim: &mut AtnSim) {
 fn atn_compute_call_prec(sim: &mut AtnSim) {
     sim.state_call_prec = List::filled(sim.state_kind.len(), 0);
     for let mut j = 0; j < sim.tr_kind.len(); j += 1 {
-        if sim.tr_kind[j] == ATN_TR_RULE && sim.tr_follow[j] >= 0 {
+        if sim.tr_kind[j] == ATN_TR_RULE {
+            assert sim.tr_follow[j] >= 0, "a rule transition returns to a follow state";
             sim.state_call_prec[sim.tr_follow[j]] = sim.tr_prec[j];
         }
     }
