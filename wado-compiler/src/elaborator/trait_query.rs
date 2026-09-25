@@ -58,12 +58,11 @@ pub(super) enum NewtypePeel {
 
 /// The compiler traits a written spelling can name where the scope resolves
 /// nothing: every [`OnBoundTrait`], plus `Display` and the `From` marker.
-const SPELLED_COMPILER_TRAITS: [CompilerItem; 18] = [
+const SPELLED_COMPILER_TRAITS: [CompilerItem; 17] = [
     CompilerItem::Eq,
     CompilerItem::Ord,
     CompilerItem::Serialize,
     CompilerItem::Deserialize,
-    CompilerItem::WireNumbered,
     CompilerItem::Default,
     CompilerItem::Reflect,
     CompilerItem::ReflectStruct,
@@ -1172,101 +1171,7 @@ impl TypeSystem {
         scope: &TypeLookup,
         trait_name: &str,
     ) -> Option<OnBoundTrait> {
-<<<<<<< HEAD
-        let (on_bound, compiler_module) = {
-            let tt = self.type_table.borrow();
-            let items = tt.compiler_items();
-            let of = |item: CompilerItem, on_bound: OnBoundTrait| {
-                items.trait_module(item).map(|m| (on_bound, m.clone()))
-            };
-            if trait_name == items.trait_name(CompilerItem::Eq) {
-                of(CompilerItem::Eq, OnBoundTrait::Eq)
-            } else if trait_name == items.trait_name(CompilerItem::Ord) {
-                of(CompilerItem::Ord, OnBoundTrait::Ord)
-            } else if items.trait_name_opt(CompilerItem::Serialize) == Some(trait_name) {
-                of(CompilerItem::Serialize, OnBoundTrait::Serialize)
-            } else if items.trait_name_opt(CompilerItem::Deserialize) == Some(trait_name) {
-                of(CompilerItem::Deserialize, OnBoundTrait::Deserialize)
-            } else if trait_name == items.trait_name(CompilerItem::Default) {
-                of(CompilerItem::Default, OnBoundTrait::Default)
-            } else if trait_name == items.trait_name(CompilerItem::Reflect) {
-                of(CompilerItem::Reflect, OnBoundTrait::Reflect)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectStruct) {
-                of(CompilerItem::ReflectStruct, OnBoundTrait::ReflectStruct)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectVariant) {
-                of(CompilerItem::ReflectVariant, OnBoundTrait::ReflectVariant)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectEnum) {
-                of(CompilerItem::ReflectEnum, OnBoundTrait::ReflectEnum)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectFlags) {
-                of(CompilerItem::ReflectFlags, OnBoundTrait::ReflectFlags)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectNewtype) {
-                of(CompilerItem::ReflectNewtype, OnBoundTrait::ReflectNewtype)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectTemplate) {
-                of(CompilerItem::ReflectTemplate, OnBoundTrait::ReflectTemplate)
-            } else if trait_name == items.trait_name(CompilerItem::Ref) {
-                of(CompilerItem::Ref, OnBoundTrait::Ref)
-            } else if trait_name == items.trait_name(CompilerItem::RefMut) {
-                of(CompilerItem::RefMut, OnBoundTrait::RefMut)
-            } else if trait_name == items.trait_name(CompilerItem::Inspect) {
-                of(CompilerItem::Inspect, OnBoundTrait::Inspect)
-            } else {
-                None
-            }
-        }?;
-        match self.scoped_trait_decl_module(scope, trait_name) {
-            Some(module) => (*module == compiler_module).then_some(on_bound),
-            None => Some(on_bound),
-        }
-||||||| 014361be8a2
-        let (on_bound, compiler_module) = {
-            let tt = self.type_table.borrow();
-            let items = tt.compiler_items();
-            let of = |item: CompilerItem, on_bound: OnBoundTrait| {
-                items.trait_module(item).map(|m| (on_bound, m.clone()))
-            };
-            if trait_name == items.trait_name(CompilerItem::Eq) {
-                of(CompilerItem::Eq, OnBoundTrait::Eq)
-            } else if trait_name == items.trait_name(CompilerItem::Ord) {
-                of(CompilerItem::Ord, OnBoundTrait::Ord)
-            } else if items.trait_name_opt(CompilerItem::Serialize) == Some(trait_name) {
-                of(CompilerItem::Serialize, OnBoundTrait::Serialize)
-            } else if items.trait_name_opt(CompilerItem::Deserialize) == Some(trait_name) {
-                of(CompilerItem::Deserialize, OnBoundTrait::Deserialize)
-            } else if items.trait_name_opt(CompilerItem::WireNumbered) == Some(trait_name) {
-                of(CompilerItem::WireNumbered, OnBoundTrait::WireNumbered)
-            } else if trait_name == items.trait_name(CompilerItem::Default) {
-                of(CompilerItem::Default, OnBoundTrait::Default)
-            } else if trait_name == items.trait_name(CompilerItem::Reflect) {
-                of(CompilerItem::Reflect, OnBoundTrait::Reflect)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectStruct) {
-                of(CompilerItem::ReflectStruct, OnBoundTrait::ReflectStruct)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectVariant) {
-                of(CompilerItem::ReflectVariant, OnBoundTrait::ReflectVariant)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectEnum) {
-                of(CompilerItem::ReflectEnum, OnBoundTrait::ReflectEnum)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectFlags) {
-                of(CompilerItem::ReflectFlags, OnBoundTrait::ReflectFlags)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectNewtype) {
-                of(CompilerItem::ReflectNewtype, OnBoundTrait::ReflectNewtype)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectTemplate) {
-                of(CompilerItem::ReflectTemplate, OnBoundTrait::ReflectTemplate)
-            } else if trait_name == items.trait_name(CompilerItem::Ref) {
-                of(CompilerItem::Ref, OnBoundTrait::Ref)
-            } else if trait_name == items.trait_name(CompilerItem::RefMut) {
-                of(CompilerItem::RefMut, OnBoundTrait::RefMut)
-            } else if trait_name == items.trait_name(CompilerItem::Inspect) {
-                of(CompilerItem::Inspect, OnBoundTrait::Inspect)
-            } else {
-                None
-            }
-        }?;
-        match self.scoped_trait_decl_module(scope, trait_name) {
-            Some(module) => (*module == compiler_module).then_some(on_bound),
-            None => Some(on_bound),
-        }
-=======
         OnBoundTrait::of_compiler_item(self.scoped_compiler_trait(scope, trait_name)?)
->>>>>>> origin/main
     }
 
     /// Whether `trait_name` names the prelude's `Display` in `scope`.

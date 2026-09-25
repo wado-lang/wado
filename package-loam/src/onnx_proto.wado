@@ -1,31 +1,12 @@
-<<<<<<< HEAD
 //! Reading a graph out of a serialized ONNX `ModelProto`. The schema is
 //! `onnx.proto` as ONNX ships it, and Grog generates its types.
-||||||| 014361be8a2
-//! The ONNX protobuf format, as much of it as Loam reads. Field numbers are
-//! `vendor/onnx/onnx/onnx.proto`; `onnx-ml.proto` declares them identically.
-//!
-//! Every field carries a default, since protobuf omits a field holding its
-//! type's default and a missing one would otherwise be an error. A field the
-//! subset leaves out is skipped by `core:protobuf`, so a real model reads
-//! whatever else it carries.
-=======
-//! The ONNX protobuf format, as much of it as Loam reads, numbered as in
-//! `vendor/onnx/onnx/onnx.proto`. Protobuf omits a default, so each field has one.
->>>>>>> origin/main
 
-<<<<<<< HEAD
+use { TreeMap } from "core:collections";
 use grog from "lib:grog";
 use onnx from "./onnx.proto"
     with {
         generator: { module: "lib:grog" },
     };
-||||||| 014361be8a2
-use { from_bytes } from "core:protobuf";
-=======
-use { TreeMap } from "core:collections";
-use { from_bytes } from "core:protobuf";
->>>>>>> origin/main
 use {
     Attr,
     Dim,
@@ -47,401 +28,34 @@ use {
     upgraded,
 } from "./graph.wado";
 
-<<<<<<< HEAD
 /// `TensorProto.DataType`'s `FLOAT`.
 global FLOAT: i32 = 1;
 
 /// A bare `TensorProto`, which is how ONNX's backend test data stores one.
 pub fn read_tensor<S: AsByteSlice>(bytes: S) -> Result<onnx::TensorProto, String> {
     return grog::decode::<onnx::TensorProto, S>(bytes).map_err(|e| `${e}`);
-||||||| 014361be8a2
-/// Nesting flattens: `.proto` nests a message inside a message and Wado has
-/// no nested declaration, so the path is joined into the name: Grog's rule,
-/// applied by hand.
-pub struct TensorShapeProtoDimension {
-    #[wire(number = 1)]
-    pub dim_value: Option<i64> = null,
-    #[wire(number = 2)]
-    pub dim_param: Option<String> = null,
-    #[wire(number = 3)]
-    pub denotation: String = "",
-=======
-/// `TensorShapeProto.Dimension`. Wado has no nested declaration, so the path
-/// is joined into the name, as Grog joins it.
-pub struct TensorShapeProtoDimension {
-    #[wire(number = 1)]
-    pub dim_value: Option<i64> = null,
-    #[wire(number = 2)]
-    pub dim_param: Option<String> = null,
-    #[wire(number = 3)]
-    pub denotation: String = "",
->>>>>>> origin/main
-}
-
-<<<<<<< HEAD
-/// A `FLOAT` tensor's elements and extents, or `None` for any other element type.
-pub fn float_tensor(t: &onnx::TensorProto) -> Result<Option<[List<f32>, List<i32>]>, String> {
-    if t.data_type != Option::Some(FLOAT) {
-        return Result::Ok(null);
-    }
-    let name = name_of(t);
-    let extents = extents_of(t, &name)?;
-    let Some(bytes) = payload(t, &name, &"float", &extents)? else {
-        return Result::Err(`${name}: no data`);
-||||||| 014361be8a2
-pub struct TensorShapeProto {
-    #[wire(number = 1)]
-    pub dim: List<TensorShapeProtoDimension> = [],
-}
-
-pub struct TypeProtoTensor {
-    #[wire(number = 1)]
-    pub elem_type: i32 = 0,
-    #[wire(number = 2)]
-    pub shape: Option<TensorShapeProto> = null,
-}
-
-/// The `oneof value` in the schema. A `oneof` is a set of ordinary fields of
-/// which at most one is written, so on the wire it is these numbers and
-/// nothing more.
-pub struct TypeProto {
-    #[wire(number = 1)]
-    pub tensor_type: Option<TypeProtoTensor> = null,
-}
-
-pub struct ValueInfoProto {
-    #[wire(number = 1)]
-    pub name: String = "",
-    #[wire(number = 2)]
-    pub type_: Option<TypeProto> = null,
-    #[wire(number = 3)]
-    pub doc_string: String = "",
-}
-
-pub struct StringStringEntryProto {
-    #[wire(number = 1)]
-    pub key: String = "",
-    #[wire(number = 2)]
-    pub value: String = "",
-}
-
-pub struct TensorProto {
-    #[wire(number = 1)]
-    pub dims: List<i64> = [],
-    #[wire(number = 2)]
-    pub data_type: i32 = 0,
-    #[wire(number = 4)]
-    pub float_data: List<f32> = [],
-    #[wire(number = 5)]
-    pub int32_data: List<i32> = [],
-    #[wire(number = 7)]
-    pub int64_data: List<i64> = [],
-    #[wire(number = 8)]
-    pub name: String = "",
-    #[wire(number = 9)]
-    pub raw_data: ByteList = b"",
-    #[wire(number = 10)]
-    pub double_data: List<f64> = [],
-    #[wire(number = 11)]
-    pub uint64_data: List<u64> = [],
-    #[wire(number = 13)]
-    pub external_data: List<StringStringEntryProto> = [],
-    #[wire(number = 14)]
-    pub data_location: i32 = 0,
-}
-
-/// `TensorProto.DataLocation`: `EXTERNAL` says the bytes are in a file beside
-/// the model rather than in `raw_data`.
-pub global DATA_LOCATION_EXTERNAL: i32 = 1;
-
-/// An attribute, carried as the payload fields the schema declares. `g` and
-/// `graphs` are left out: a subgraph belongs to the control-flow operators,
-/// which Loam does not cover, and reading it would make the declarations
-/// mutually recursive.
-pub struct AttributeProto {
-    #[wire(number = 1)]
-    pub name: String = "",
-    #[wire(number = 2)]
-    pub f: f32 = 0.0,
-    #[wire(number = 3)]
-    pub i: i64 = 0,
-    #[wire(number = 4)]
-    pub s: ByteList = b"",
-    #[wire(number = 5)]
-    pub t: Option<TensorProto> = null,
-    #[wire(number = 7)]
-    pub floats: List<f32> = [],
-    #[wire(number = 8)]
-    pub ints: List<i64> = [],
-    #[wire(number = 9)]
-    pub strings: List<ByteList> = [],
-    #[wire(number = 10)]
-    pub tensors: List<TensorProto> = [],
-    #[wire(number = 20)]
-    pub type_: i32 = 0,
-}
-
-/// `AttributeProto.AttributeType`, the discriminator saying which payload
-/// field above is in use.
-pub global ATTRIBUTE_FLOAT: i32 = 1;
-pub global ATTRIBUTE_INT: i32 = 2;
-pub global ATTRIBUTE_STRING: i32 = 3;
-pub global ATTRIBUTE_TENSOR: i32 = 4;
-pub global ATTRIBUTE_FLOATS: i32 = 6;
-pub global ATTRIBUTE_INTS: i32 = 7;
-pub global ATTRIBUTE_STRINGS: i32 = 8;
-pub global ATTRIBUTE_TENSORS: i32 = 9;
-
-pub struct NodeProto {
-    #[wire(number = 1)]
-    pub input: List<String> = [],
-    #[wire(number = 2)]
-    pub output: List<String> = [],
-    #[wire(number = 3)]
-    pub name: String = "",
-    #[wire(number = 4)]
-    pub op_type: String = "",
-    #[wire(number = 5)]
-    pub attribute: List<AttributeProto> = [],
-    #[wire(number = 6)]
-    pub doc_string: String = "",
-    #[wire(number = 7)]
-    pub domain: String = "",
-}
-
-pub struct GraphProto {
-    #[wire(number = 1)]
-    pub node: List<NodeProto> = [],
-    #[wire(number = 2)]
-    pub name: String = "",
-    #[wire(number = 5)]
-    pub initializer: List<TensorProto> = [],
-    #[wire(number = 10)]
-    pub doc_string: String = "",
-    #[wire(number = 11)]
-    pub input: List<ValueInfoProto> = [],
-    #[wire(number = 12)]
-    pub output: List<ValueInfoProto> = [],
-    #[wire(number = 13)]
-    pub value_info: List<ValueInfoProto> = [],
-}
-
-pub struct OperatorSetIdProto {
-    #[wire(number = 1)]
-    pub domain: String = "",
-    #[wire(number = 2)]
-    pub version: i64 = 0,
-}
-
-pub struct ModelProto {
-    #[wire(number = 1)]
-    pub ir_version: i64 = 0,
-    #[wire(number = 2)]
-    pub producer_name: String = "",
-    #[wire(number = 3)]
-    pub producer_version: String = "",
-    #[wire(number = 4)]
-    pub domain: String = "",
-    #[wire(number = 5)]
-    pub model_version: i64 = 0,
-    #[wire(number = 6)]
-    pub doc_string: String = "",
-    #[wire(number = 7)]
-    pub graph: Option<GraphProto> = null,
-    #[wire(number = 8)]
-    pub opset_import: List<OperatorSetIdProto> = [],
-}
-
-/// A `FLOAT` tensor's elements and extents. ONNX writes the elements either
-/// in the typed `float_data` or, as every exporter does, as little-endian
-/// bytes in `raw_data`. `None` where the tensor is some other element type.
-pub fn float_tensor(t: &TensorProto) -> Result<Option<[List<f32>, List<i32>]>, String> {
-    if t.data_type != 1 {
-        return Result::Ok(null);
-    }
-    let extents = extents_of(t)?;
-    let Some(bytes) = payload(t, &"float", &extents)? else {
-        return Result::Err(`${t.name}: no data`);
-=======
-pub struct TensorShapeProto {
-    #[wire(number = 1)]
-    pub dim: List<TensorShapeProtoDimension> = [],
-}
-
-pub struct TypeProtoTensor {
-    #[wire(number = 1)]
-    pub elem_type: i32 = 0,
-    #[wire(number = 2)]
-    pub shape: Option<TensorShapeProto> = null,
-}
-
-/// The schema's `oneof value`, which on the wire is ordinary fields of which
-/// at most one is written.
-pub struct TypeProto {
-    #[wire(number = 1)]
-    pub tensor_type: Option<TypeProtoTensor> = null,
-}
-
-pub struct ValueInfoProto {
-    #[wire(number = 1)]
-    pub name: String = "",
-    #[wire(number = 2)]
-    pub type_: Option<TypeProto> = null,
-    #[wire(number = 3)]
-    pub doc_string: String = "",
-}
-
-pub struct StringStringEntryProto {
-    #[wire(number = 1)]
-    pub key: String = "",
-    #[wire(number = 2)]
-    pub value: String = "",
-}
-
-pub struct TensorProto {
-    #[wire(number = 1)]
-    pub dims: List<i64> = [],
-    #[wire(number = 2)]
-    pub data_type: i32 = 0,
-    #[wire(number = 4)]
-    pub float_data: List<f32> = [],
-    #[wire(number = 5)]
-    pub int32_data: List<i32> = [],
-    #[wire(number = 7)]
-    pub int64_data: List<i64> = [],
-    #[wire(number = 8)]
-    pub name: String = "",
-    #[wire(number = 9)]
-    pub raw_data: ByteList = b"",
-    #[wire(number = 10)]
-    pub double_data: List<f64> = [],
-    #[wire(number = 11)]
-    pub uint64_data: List<u64> = [],
-    #[wire(number = 13)]
-    pub external_data: List<StringStringEntryProto> = [],
-    #[wire(number = 14)]
-    pub data_location: i32 = 0,
-}
-
-/// `TensorProto.DataLocation`: `EXTERNAL` says the bytes are in a file beside
-/// the model rather than in `raw_data`.
-pub global DATA_LOCATION_EXTERNAL: i32 = 1;
-
-/// An attribute without `g` and `graphs`: only control flow, which Loam does
-/// not cover, carries a subgraph, and one would make the declarations recursive.
-pub struct AttributeProto {
-    #[wire(number = 1)]
-    pub name: String = "",
-    #[wire(number = 2)]
-    pub f: f32 = 0.0,
-    #[wire(number = 3)]
-    pub i: i64 = 0,
-    #[wire(number = 4)]
-    pub s: ByteList = b"",
-    #[wire(number = 5)]
-    pub t: Option<TensorProto> = null,
-    #[wire(number = 7)]
-    pub floats: List<f32> = [],
-    #[wire(number = 8)]
-    pub ints: List<i64> = [],
-    #[wire(number = 9)]
-    pub strings: List<ByteList> = [],
-    #[wire(number = 10)]
-    pub tensors: List<TensorProto> = [],
-    #[wire(number = 20)]
-    pub type_: i32 = 0,
-}
-
-/// `AttributeProto.AttributeType`, the discriminator saying which payload
-/// field above is in use.
-pub global ATTRIBUTE_FLOAT: i32 = 1;
-pub global ATTRIBUTE_INT: i32 = 2;
-pub global ATTRIBUTE_STRING: i32 = 3;
-pub global ATTRIBUTE_TENSOR: i32 = 4;
-pub global ATTRIBUTE_FLOATS: i32 = 6;
-pub global ATTRIBUTE_INTS: i32 = 7;
-pub global ATTRIBUTE_STRINGS: i32 = 8;
-pub global ATTRIBUTE_TENSORS: i32 = 9;
-
-pub struct NodeProto {
-    #[wire(number = 1)]
-    pub input: List<String> = [],
-    #[wire(number = 2)]
-    pub output: List<String> = [],
-    #[wire(number = 3)]
-    pub name: String = "",
-    #[wire(number = 4)]
-    pub op_type: String = "",
-    #[wire(number = 5)]
-    pub attribute: List<AttributeProto> = [],
-    #[wire(number = 6)]
-    pub doc_string: String = "",
-    #[wire(number = 7)]
-    pub domain: String = "",
-}
-
-pub struct GraphProto {
-    #[wire(number = 1)]
-    pub node: List<NodeProto> = [],
-    #[wire(number = 2)]
-    pub name: String = "",
-    #[wire(number = 5)]
-    pub initializer: List<TensorProto> = [],
-    #[wire(number = 10)]
-    pub doc_string: String = "",
-    #[wire(number = 11)]
-    pub input: List<ValueInfoProto> = [],
-    #[wire(number = 12)]
-    pub output: List<ValueInfoProto> = [],
-    #[wire(number = 13)]
-    pub value_info: List<ValueInfoProto> = [],
-}
-
-pub struct OperatorSetIdProto {
-    #[wire(number = 1)]
-    pub domain: String = "",
-    #[wire(number = 2)]
-    pub version: i64 = 0,
-}
-
-pub struct ModelProto {
-    #[wire(number = 1)]
-    pub ir_version: i64 = 0,
-    #[wire(number = 2)]
-    pub producer_name: String = "",
-    #[wire(number = 3)]
-    pub producer_version: String = "",
-    #[wire(number = 4)]
-    pub domain: String = "",
-    #[wire(number = 5)]
-    pub model_version: i64 = 0,
-    #[wire(number = 6)]
-    pub doc_string: String = "",
-    #[wire(number = 7)]
-    pub graph: Option<GraphProto> = null,
-    #[wire(number = 8)]
-    pub opset_import: List<OperatorSetIdProto> = [],
 }
 
 /// A tensor's elements, from its typed field or the little-endian `raw_data`
 /// every exporter writes. `None` for an element type not read.
-pub fn known_tensor(t: &TensorProto) -> Result<Option<Known>, String> {
-    let raw = &t.raw_data;
-    let width = match t.data_type {
-        1 | 6 => 4,
+pub fn known_tensor(t: &onnx::TensorProto) -> Result<Option<Known>, String> {
+    let name = name_of(t);
+    let raw = t.raw_data.unwrap_or(b"");
+    let data_type = t.data_type.unwrap_or(0);
+    let width = match data_type {
+        FLOAT | 6 => 4,
         7 => 8,
         9 => 1,
         _ => {
             return Result::Ok(null);
         },
->>>>>>> origin/main
     };
     if raw.len() % width != 0 {
-        return Result::Err(`${t.name}: ${raw.len()} raw bytes is not whole elements of ${width} bytes`);
+        return Result::Err(`${name}: ${raw.len()} raw bytes is not whole elements of ${width} bytes`);
     }
     let typed = raw.is_empty();
-    let elements = match t.data_type {
-        1 => Elements::Floats(if typed { t.float_data } else { List::<f32>::from_le_bytes(raw) }),
+    let elements = match data_type {
+        FLOAT => Elements::Floats(if typed { t.float_data } else { List::<f32>::from_le_bytes(raw) }),
         6 => {
             let values = if typed { t.int32_data } else { List::<i32>::from_le_bytes(raw) };
             Elements::Ints(values.into_iter().map(|v| v as i64).collect());
@@ -457,11 +71,11 @@ pub fn known_tensor(t: &TensorProto) -> Result<Option<Known>, String> {
         },
         _ => unreachable(),
     };
-    let known = Known { extents: extents_of(t)?, elements };
-    if known.len() == 0 && check_element_count(&t.name, 0, &known.extents).is_err() {
-        return Result::Err(constant_without_values(&t.name));
+    let known = Known { extents: extents_of(t, &name)?, elements };
+    if known.len() == 0 && check_element_count(&name, 0, &known.extents).is_err() {
+        return Result::Err(constant_without_values(&name));
     }
-    check_element_count(&t.name, known.len(), &known.extents)?;
+    check_element_count(&name, known.len(), &known.extents)?;
     return Result::Ok(Option::Some(known));
 }
 
@@ -477,16 +91,7 @@ fn extents_of(t: &onnx::TensorProto, name: &String) -> Result<List<i32>, String>
     return Result::Ok(extents);
 }
 
-<<<<<<< HEAD
 /// The element type name the textual format spells for a `TensorProto.DataType`.
-||||||| 014361be8a2
-/// The element type names the textual format spells, indexed by
-/// `TensorProto.DataType`. The two formats must agree, since one `Graph`
-/// serves both readers.
-=======
-/// A `TensorProto.DataType` as the textual format names it, since one `Graph`
-/// serves both readers.
->>>>>>> origin/main
 fn dtype_name(elem_type: i32) -> Option<String> {
     return match elem_type {
         FLOAT => Option::Some("float"),
@@ -509,16 +114,7 @@ fn dtype_name(elem_type: i32) -> Option<String> {
     };
 }
 
-<<<<<<< HEAD
 /// An ONNX `int64` dimension as the shape algebra's `i32` extent.
-||||||| 014361be8a2
-/// An extent as the shape algebra holds it. ONNX states a dimension as an
-/// `int64` and no tensor that fits in memory needs one, so narrowing it is
-/// where a file says something no graph can mean.
-=======
-/// An ONNX `int64` dimension as the extent the shape algebra holds. No tensor
-/// that fits in memory needs a wider one, so a file stating one is refused.
->>>>>>> origin/main
 fn extent(dim: i64, tensor: &String) -> Result<i32, String> {
     if !(0 <= dim <= i32::MAX as i64) {
         return Result::Err(`${tensor}: dimension ${dim}`);
@@ -559,41 +155,19 @@ fn read_value_info(vi: &onnx::ValueInfoProto) -> Result<ValueInfo, String> {
     return Result::Ok(ValueInfo { name, dtype, rank });
 }
 
-<<<<<<< HEAD
-/// An initializer as a `ValueInfo`: its name, type, extents and data.
-fn read_initializer(t: &onnx::TensorProto) -> Result<ValueInfo, String> {
-    let name = name_of(t);
-||||||| 014361be8a2
-/// An initializer as a `ValueInfo`: its name, type, extents and data.
-fn read_initializer(t: &TensorProto) -> Result<ValueInfo, String> {
-=======
-fn check_inline(t: &TensorProto) -> Result<(), String> {
->>>>>>> origin/main
+fn check_inline(t: &onnx::TensorProto, name: &String) -> Result<(), String> {
     if let Some(entry) = t.external_data.first() {
         return Result::Err(`${name}: external data (${entry.key.unwrap_or("")})`);
     }
     if t.data_location matches { Some(External) } {
         return Result::Err(`${name}: external data`);
     }
-<<<<<<< HEAD
-    let data_type = t.data_type.unwrap_or(0);
-    let Some(dtype) = dtype_name(data_type) else {
-        return Result::Err(`${name}: element type ${data_type}`);
-    };
-    let extents = extents_of(t, &name)?;
-||||||| 014361be8a2
-    let Some(dtype) = dtype_name(t.data_type) else {
-        return Result::Err(`${t.name}: element type ${t.data_type}`);
-    };
-    let extents = extents_of(t)?;
-=======
     return Result::Ok(());
 }
 
 /// An initializer as a `ValueInfo`: its name, type, extents and data.
-fn read_initializer(t: &TensorProto, dtype: String) -> Result<ValueInfo, String> {
-    let extents = extents_of(t)?;
->>>>>>> origin/main
+fn read_initializer(t: &onnx::TensorProto, name: String, dtype: String) -> Result<ValueInfo, String> {
+    let extents = extents_of(t, &name)?;
     let mut dims: List<Dim> = [];
     for let e of extents {
         dims.push(Dim::Static(e));
@@ -666,40 +240,10 @@ fn read_attr(a: &onnx::AttributeProto) -> Result<Attr, String> {
                 values.push(String::from_utf8_lossy(v));
             }
         },
-<<<<<<< HEAD
-        // A tensor has no text form, so it travels whole. Only a float one
-        // does, since the kernels compute in f32.
-        Some(onnx::AttributeProtoAttributeType::Tensor) => {
-            if let Some(t) = &a.t {
-                if let Some([data, _]) = float_tensor(t)? {
-                    return Result::Ok(Attr { name, values, tensor: Option::Some(ConstTensor { data }) });
-                }
-||||||| 014361be8a2
-        // A tensor has no text form, so it travels whole. Only a float one
-        // does, since the kernels compute in f32.
-        ATTRIBUTE_TENSOR => {
-            is_list = false;
-            if let Some(t) = &a.t {
-                if let Some([data, _]) = float_tensor(t)? {
-                    return Result::Ok(Attr {
-                        name: a.name,
-                        values: [],
-                        is_list: false,
-                        tensor: Option::Some(ConstTensor { data }),
-                    });
-                }
-=======
         // A tensor has no text form, so it travels whole.
-        ATTRIBUTE_TENSOR => {
-            is_list = false;
+        Some(onnx::AttributeProtoAttributeType::Tensor) => {
             if let Some(t) = &a.t && let Some(known) = known_tensor(t)? {
-                return Result::Ok(Attr {
-                    name: a.name,
-                    values: [],
-                    is_list: false,
-                    tensor: Option::Some(known),
-                });
->>>>>>> origin/main
+                return Result::Ok(Attr { name, values, tensor: Option::Some(known) });
             }
         },
         // A graph or a type has no text form, so the attribute is carried with
@@ -710,34 +254,7 @@ fn read_attr(a: &onnx::AttributeProto) -> Result<Attr, String> {
     return Result::Ok(Attr { name, values });
 }
 
-<<<<<<< HEAD
 fn read_node(n: &onnx::NodeProto) -> Result<Node, String> {
-||||||| 014361be8a2
-/// ONNX declares a string attribute as `bytes`, and the specification says it
-/// is UTF-8. Bytes that are not are kept as the replacement character rather
-/// than failing the read, since no shape rule consults an attribute.
-fn utf8(bytes: &ByteList) -> String {
-    let mut out = String::with_capacity(bytes.len());
-    if let Err(_) = out.push_utf8(bytes) {
-        return "\u{FFFD}";
-    }
-    return out;
-}
-
-fn read_node(n: &NodeProto) -> Result<Node, String> {
-=======
-/// A string attribute, which ONNX declares as UTF-8 `bytes`. Bytes that are not
-/// become U+FFFD, since failing would refuse a model over an attribute unread.
-fn utf8(bytes: &ByteList) -> String {
-    let mut out = String::with_capacity(bytes.len());
-    if let Err(_) = out.push_utf8(bytes) {
-        return "\u{FFFD}";
-    }
-    return out;
-}
-
-fn read_node(n: &NodeProto) -> Result<Node, String> {
->>>>>>> origin/main
     let mut attrs: List<Attr> = [];
     for let a of n.attribute {
         attrs.push(read_attr(&a)?);
@@ -747,30 +264,12 @@ fn read_node(n: &NodeProto) -> Result<Node, String> {
 
 /// Read a graph out of a serialized `ModelProto`. What the subset does not
 /// cover names itself, as the textual reader's errors do.
-<<<<<<< HEAD
-pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
-    let model = grog::decode::<onnx::ModelProto, S>(bytes).map_err(|e| `${e}`)?;
-||||||| 014361be8a2
-pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
-    let model = match from_bytes::<ModelProto, S>(bytes) {
-        Ok(m) => m,
-        Err(e) => {
-            return Result::Err(`${e.message}`);
-        },
-    };
-=======
 pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, ReadError> {
     return read_model(bytes).map_err(|reason| ReadError { reason });
 }
 
 fn read_model<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
-    let model = match from_bytes::<ModelProto, S>(bytes) {
-        Ok(m) => m,
-        Err(e) => {
-            return Result::Err(`${e.message}`);
-        },
-    };
->>>>>>> origin/main
+    let model = grog::decode::<onnx::ModelProto, S>(bytes).map_err(|e| `${e}`)?;
     let Some(graph) = &model.graph else {
         return Result::Err("a model without a graph");
     };
@@ -778,14 +277,16 @@ fn read_model<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     let mut initializers: List<ValueInfo> = [];
     let mut constants = TreeMap::<String, Known>::new();
     for let t of graph.initializer {
-        check_inline(&t)?;
-        let Some(dtype) = dtype_name(t.data_type) else {
-            return Result::Err(`${t.name}: element type ${t.data_type}`);
+        let name = name_of(&t);
+        check_inline(&t, &name)?;
+        let data_type = t.data_type.unwrap_or(0);
+        let Some(dtype) = dtype_name(data_type) else {
+            return Result::Err(`${name}: element type ${data_type}`);
         };
         if is_build_time(&dtype) {
-            constants[t.name] = known_tensor(&t)?.unwrap();
+            constants[name] = known_tensor(&t)?.unwrap();
         } else {
-            initializers.push(read_initializer(&t, dtype)?);
+            initializers.push(read_initializer(&t, name, dtype)?);
         }
     }
     let mut declared: List<ValueInfo> = [];
@@ -801,7 +302,7 @@ fn read_model<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     for let n of graph.node {
         nodes.push(read_node(&n)?);
     }
-    let imports: List<[String, i64]> = model.opset_import.into_iter().map(|o| [o.domain, o.version]).collect();
+    let imports: List<[String, i64]> = model.opset_import.into_iter().map(|o| [o.domain.unwrap_or(""), o.version.unwrap_or(0)]).collect();
     let opset = default_opset(&imports);
     return Result::Ok(Graph {
         name: graph.name.unwrap_or(""),

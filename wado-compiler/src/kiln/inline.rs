@@ -553,7 +553,7 @@ fn module_key(module: &GeneratorModule) -> String {
 }
 
 fn identity_key(inv: &Invocation) -> String {
-    let (module, from, inputs, output_dir, options) = inv.identity_tuple();
+    let (module, _, from, inputs, output_dir, options) = inv.identity_tuple();
     clause_digest(module, from, inputs, Some(output_dir), &options)
 }
 

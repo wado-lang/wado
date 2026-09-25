@@ -1,24 +1,11 @@
 //! Reading the tensors the ONNX backend test data ships beside each model.
 //! One `.pb` file is one bare `TensorProto`.
 
-<<<<<<< HEAD
-use { float_tensor, read_tensor } from "../src/onnx_proto.wado";
-||||||| 014361be8a2
-use { from_bytes } from "core:protobuf";
-use { TensorProto, float_tensor } from "../src/onnx_proto.wado";
-=======
-use { from_bytes } from "core:protobuf";
 use { Known } from "../src/graph.wado";
-use { TensorProto, known_tensor } from "../src/onnx_proto.wado";
->>>>>>> origin/main
+use { known_tensor, read_tensor } from "../src/onnx_proto.wado";
 
 /// A `.pb` file's elements and extents.
 pub fn tensor_of(bytes: ByteList) -> [List<f32>, List<i32>] {
-<<<<<<< HEAD
-    let Ok(t) = read_tensor(bytes) else {
-||||||| 014361be8a2
-    let Ok(t) = from_bytes::<TensorProto, ByteList>(bytes) else {
-=======
     let Known { extents, elements: Floats(data) } = known_of(bytes) else {
         panic("the tensor is not float");
     };
@@ -34,8 +21,7 @@ pub fn ints_of(bytes: ByteList) -> [List<i64>, List<i32>] {
 }
 
 fn known_of(bytes: ByteList) -> Known {
-    let Ok(t) = from_bytes::<TensorProto, ByteList>(bytes) else {
->>>>>>> origin/main
+    let Ok(t) = read_tensor(bytes) else {
         panic("the tensor did not decode");
     };
     let Ok(Some(k)) = known_tensor(&t) else {

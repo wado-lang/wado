@@ -118,14 +118,6 @@ pub struct Known {
     pub elements: Elements,
 }
 
-<<<<<<< HEAD
-/// An attribute's values as the text they were written in, which the operator reads.
-/// A tensor payload has no text form and travels in `tensor`.
-||||||| 014361be8a2
-/// An attribute's values as written. ONNX types an attribute by the operator's
-/// schema rather than by the syntax, so the text is kept and the operator
-/// reads it. A tensor payload has no text form and travels in `tensor`.
-=======
 /// A known tensor's elements, in the type stage 0 computes them in. ONNX's
 /// integer types all fit `i64`, as its shape arithmetic does.
 pub variant Elements {
@@ -146,17 +138,9 @@ impl Known {
 
 /// An attribute's values as written, since ONNX types one by the operator
 /// rather than the syntax. A tensor has no text form and travels in `tensor`.
->>>>>>> origin/main
 pub struct Attr {
     pub name: String,
     pub values: List<String>,
-<<<<<<< HEAD
-    pub tensor: Option<ConstTensor> = null,
-||||||| 014361be8a2
-    pub is_list: bool,
-    pub tensor: Option<ConstTensor> = null,
-=======
-    pub is_list: bool,
     pub tensor: Option<Known> = null,
 }
 
@@ -228,7 +212,6 @@ fn float_of(text: &String) -> Result<f32, String> {
         return Result::Err(`holds '${text}', which is not a number`);
     };
     return Result::Ok(v);
->>>>>>> origin/main
 }
 
 pub struct Node {
@@ -311,11 +294,7 @@ pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, Str
         }
         if version < 4 && node.op == "Concat" && node.attr("axis") matches { None } {
             let mut attrs = node.attrs;
-            attrs.push(Attr {
-                name: "axis",
-                values: ["1"],
-                is_list: false,
-            });
+            attrs.push(Attr { name: "axis", values: ["1"] });
             out.push(Node { ..node, attrs });
             continue;
         }
