@@ -349,85 +349,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-<<<<<<< HEAD
-    /// How an argument's class reads in a diagnostic — the reason-chain step
-    /// that says what this argument contributed to selection.
-    pub(super) fn describe_arg_class(&self, class: &ArgClass) -> String {
-        let tt = self.tysys.type_table.borrow();
-        match class {
-            ArgClass::Exact(t) => format!("has type `{}`", tt.type_name(*t)),
-            ArgClass::Head(head) => format!(
-                "is a `{}` whose type arguments are not pinned here",
-                head.to_display()
-            ),
-            ArgClass::IntLit => {
-                "is an integer literal, which admits every numeric parameter".to_string()
-            }
-            ArgClass::FloatLit => {
-                "is a float literal, which admits every float parameter".to_string()
-            }
-            ArgClass::StrLit => {
-                "is a string literal, which admits `String` and its newtypes".to_string()
-            }
-            ArgClass::BytesLit => {
-                "is a byte-string literal, which admits `List<u8>` and its newtypes".to_string()
-            }
-            ArgClass::NullLit => "is `null`, which admits every `Option`".to_string(),
-            ArgClass::Opaque(OpaqueReason::Closure) => {
-                "is a closure, so the parameter is what would type it".to_string()
-            }
-            ArgClass::Opaque(OpaqueReason::CompoundLiteral) => {
-                "is a compound literal, so the parameter is what would type it".to_string()
-            }
-            ArgClass::Opaque(OpaqueReason::Inference) => {
-                "has a type that depends on inference here, so it admits every candidate"
-                    .to_string()
-            }
-            ArgClass::Opaque(OpaqueReason::Unresolved) => {
-                "did not resolve, so it admits every candidate".to_string()
-            }
-        }
-    }
-
-||||||| dc6a50794
-    /// How an argument's class reads in a diagnostic — the reason-chain step
-    /// that says what this argument contributed to selection.
-    pub(super) fn describe_arg_class(&self, class: &ArgClass) -> String {
-        let tt = self.tysys.type_table.borrow();
-        match class {
-            ArgClass::Exact(t) => format!("has type `{}`", tt.type_name(*t)),
-            ArgClass::Head(head) => format!(
-                "is a `{}` whose type arguments are not pinned here",
-                head.to_display()
-            ),
-            ArgClass::IntLit => {
-                "is an integer literal, which admits every numeric parameter".to_string()
-            }
-            ArgClass::FloatLit => {
-                "is a float literal, which admits every float parameter".to_string()
-            }
-            ArgClass::StrLit => {
-                "is a string literal, which admits `String` and its newtypes".to_string()
-            }
-            ArgClass::NullLit => "is `null`, which admits every `Option`".to_string(),
-            ArgClass::Opaque(OpaqueReason::Closure) => {
-                "is a closure, so the parameter is what would type it".to_string()
-            }
-            ArgClass::Opaque(OpaqueReason::CompoundLiteral) => {
-                "is a compound literal, so the parameter is what would type it".to_string()
-            }
-            ArgClass::Opaque(OpaqueReason::Inference) => {
-                "has a type that depends on inference here, so it admits every candidate"
-                    .to_string()
-            }
-            ArgClass::Opaque(OpaqueReason::Unresolved) => {
-                "did not resolve, so it admits every candidate".to_string()
-            }
-        }
-    }
-
-=======
->>>>>>> origin/main
     /// The judgement. One arm per `ast::Expr` variant, no wildcard: an
     /// expression form either has a rule or names the reason it has none.
     fn synth(&mut self, expr: &ast::Expr, scope: &mut SynthScope<'_>) -> ArgClass {
@@ -748,30 +669,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.class_of_type(return_type)
     }
 
-<<<<<<< HEAD
-    /// The callee identity of a plain `name(…)` call, read off its own
-    /// reference site. A variant constructor, a static path or an effect
-    /// operation names no function there and is left to the expected type.
-    fn synth_callee_ref(&self, ident: &ast::IdentExpr) -> Option<CalleeRef> {
-        if ident.name.contains("::") || self.dispatched_operation(ident).is_some() {
-            return None;
-        }
-        Some(self.callee_of(self.free_function_at(ident.id)?))
-    }
-
-||||||| dc6a50794
-    /// The callee identity of a plain `name(…)` call, read off its own
-    /// reference site. A variant constructor, a static path or an effect
-    /// operation names no function there and is left to the expected type.
-    fn synth_callee_ref(&self, ident: &ast::IdentExpr) -> Option<CalleeRef> {
-        if ident.name.contains("::") {
-            return None;
-        }
-        Some(self.callee_of(self.free_function_at(ident.id)?))
-    }
-
-=======
->>>>>>> origin/main
     fn synth_method_call(
         &mut self,
         call: &ast::MethodCallExpr,
@@ -1155,9 +1052,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
 impl TypeSystem {
     /// The callee identity of a plain `name(…)` call, read off its own
-    /// reference site.
+    /// reference site. A variant constructor, a static path or an effect
+    /// operation names no function there and is left to the expected type.
     fn synth_callee_ref(&self, ident: &ast::IdentExpr) -> Option<CalleeRef> {
-        if ident.name.contains("::") {
+        if ident.name.contains("::") || self.dispatched_operation(ident).is_some() {
             return None;
         }
         Some(self.callee_of(self.free_function_at(ident.id)?))
@@ -1206,6 +1104,9 @@ impl TypeSystem {
             }
             ArgClass::StrLit => {
                 "is a string literal, which admits `String` and its newtypes".to_string()
+            }
+            ArgClass::BytesLit => {
+                "is a byte-string literal, which admits `List<u8>` and its newtypes".to_string()
             }
             ArgClass::NullLit => "is `null`, which admits every `Option`".to_string(),
             ArgClass::Opaque(OpaqueReason::Closure) => {

@@ -5357,7 +5357,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-<<<<<<< HEAD
         let Some(newtype) = self
             .ann_coercions(struct_lit.id)
             .filter(|choice| choice.kind == CoercionKind::StructNewtype)
@@ -5378,11 +5377,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::{TirExprKind, TirStructField};
 
-||||||| dc6a50794
-        use crate::tir::{TirExprKind, TirStructField};
-
-=======
->>>>>>> origin/main
         // A recorded `key_value_coercions[struct_lit.id]` means the literal
         // builds an `Array<[K, V]>` for the target's `From`.
         if let Some(facts) = self.ann_key_value_coercions(struct_lit.id) {

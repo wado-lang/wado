@@ -588,37 +588,11 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-<<<<<<< HEAD
-    /// Whether `name` is a declared effect (`interface`) or resource —
-    /// the set of identifiers `resolve_call`'s qualified-call fallback may
-    /// treat as a deferred effect operation (`Stdout::write()`, etc.).
-    fn is_effect_or_resource_decl(&self, def: DefId) -> bool {
-        self.tysys.trait_env.effect_decl_index.contains(&def)
-            || self.tysys.trait_env.resource_decl_index.contains(&def)
-    }
-
-    /// The effect or resource an operation call dispatches through, with the
-    /// operation: `[ns::]E::op`, or a bare `op` imported as `use { E::{op} }`.
-    pub(super) fn dispatched_operation(&self, ident: &ast::IdentExpr) -> Option<(DefId, String)> {
-        let (decl, operation) = self.tysys.resolutions.operation_at(ident)?;
-        let dispatches = match ident.owner_segment() {
-            Some(_) => self.is_effect_or_resource_decl(decl),
-            None => self.tysys.trait_env.effect_decl_index.contains(&decl),
-        };
-        (dispatches
-            && self
-                .tysys
-                .signatures
-                .resource_method_sig(decl, operation)
-                .is_some())
-        .then(|| (decl, operation.to_string()))
-    }
-
     /// The effect or resource `callee_kind` dispatches an operation through,
     /// with the operation.
     fn operation_decl(&self, callee_kind: &CalleeIdentKind<'_>) -> Option<(DefId, String)> {
         match callee_kind {
-            CalleeIdentKind::AsIs(ident) => self.dispatched_operation(ident),
+            CalleeIdentKind::AsIs(ident) => self.tysys.dispatched_operation(ident),
             CalleeIdentKind::Operation {
                 interface,
                 operation,
@@ -635,63 +609,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn effect_operation_callee(&self, decl: DefId, operation: &str) -> CalleeRef {
         let declared = self.tysys.resolutions.defs().name(decl).to_string();
         CalleeRef::local_namespace(&mut self.interner.borrow_mut(), &declared, operation)
-||||||| dc6a50794
-    /// Whether `name` is a declared effect (`interface`) or resource —
-    /// the set of identifiers `resolve_call`'s qualified-call fallback may
-    /// treat as a deferred effect operation (`Stdout::write()`, etc.).
-    fn is_effect_or_resource_decl(&self, def: DefId) -> bool {
-        self.tysys.trait_env.effect_decl_index.contains(&def)
-            || self.tysys.trait_env.resource_decl_index.contains(&def)
-    }
-
-    /// The effect / resource declaration a qualified callee's receiver segment
-    /// names — answered by the site the walk resolved, so an import alias needs
-    /// no translation back into a spelling.
-    fn effect_or_resource_decl_at(&self, site: Option<ast::AstId>) -> Option<DefId> {
-        let def = self.tysys.resolutions.declared(site?)?;
-        self.is_effect_or_resource_decl(def).then_some(def)
-    }
-
-    /// The callee of an operation dispatch `[ns::]E::op`, where `E` names an
-    /// effect or resource declaring `op`. `None` leaves the caller to report an
-    /// unknown function rather than defer an unvalidated call to codegen.
-    ///
-    /// Signature resolution, the effect check, dispatch and WIR all key on the
-    /// declaration's own name and the bare operation, so neither an import
-    /// alias nor a namespace qualifier may reach them.
-    fn effect_operation_callee(&self, ident: &ast::IdentExpr, path: &str) -> Option<CalleeRef> {
-        let (_, operation) = path.rsplit_once("::")?;
-        let decl = self.effect_or_resource_decl_at(Some(ident.owner_segment()?.id))?;
-        self.tysys
-            .signatures
-            .resource_method_sig(decl, operation)
-            .is_some()
-            .then(|| {
-                let declared = self.tysys.resolutions.defs().name(decl).to_string();
-                CalleeRef::local_namespace(&mut self.interner.borrow_mut(), &declared, operation)
-            })
-=======
-    /// The callee of an operation dispatch `[ns::]E::op`, where `E` names an
-    /// effect or resource declaring `op`. `None` leaves the caller to report an
-    /// unknown function rather than defer an unvalidated call to codegen.
-    ///
-    /// Signature resolution, the effect check, dispatch and WIR all key on the
-    /// declaration's own name and the bare operation, so neither an import
-    /// alias nor a namespace qualifier may reach them.
-    fn effect_operation_callee(&self, ident: &ast::IdentExpr, path: &str) -> Option<CalleeRef> {
-        let (_, operation) = path.rsplit_once("::")?;
-        let decl = self
-            .tysys
-            .effect_or_resource_decl_at(Some(ident.owner_segment()?.id))?;
-        self.tysys
-            .signatures
-            .resource_method_sig(decl, operation)
-            .is_some()
-            .then(|| {
-                let declared = self.tysys.resolutions.defs().name(decl).to_string();
-                CalleeRef::local_namespace(&mut self.interner.borrow_mut(), &declared, operation)
-            })
->>>>>>> origin/main
     }
 
     /// The variant a `Variant::Case(...)` callee constructs: the one the walk
@@ -920,7 +837,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if let CalleeIdentKind::AsIs(bare) = callee_kind
             && bare.owner_segment().is_none()
-            && let Some((interface, operation)) = self.dispatched_operation(bare)
+            && let Some((interface, operation)) = self.tysys.dispatched_operation(bare)
         {
             let declared = self.tysys.resolutions.defs().name(interface);
             let spelled = mangle_local_method(declared, &operation);
@@ -1004,7 +921,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let operation = self.operation_decl(&callee_kind);
         // An operation is its declaration's, whatever else the path spells.
         let operation_signature = operation.as_ref().map(|(decl, op)| {
-            self.resolve_effect_op_signature(*decl, op)
+            self.tysys
+                .resolve_effect_op_signature(*decl, op)
                 .expect("`dispatched_operation` found the operation's signature")
         });
         let signature = match &operation_signature {
@@ -2157,29 +2075,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.tysys.get_builtin_return_type(builtin_name);
         }
 
-<<<<<<< HEAD
-||||||| dc6a50794
-        // Effect operations are routed here as `CalleeRef::local_namespace`, so
-        // `ModuleSource::Local { path }` matches `is_effect_like()`.
-        if callee_module.is_effect_like()
-            && let Some(decl) = self.effect_or_resource_decl_at(interface_site)
-            && let Some((_, Some(return_type))) = self.resolve_effect_op_signature(decl, func_name)
-        {
-            return return_type;
-        }
-
-=======
-        // Effect operations are routed here as `CalleeRef::local_namespace`, so
-        // `ModuleSource::Local { path }` matches `is_effect_like()`.
-        if callee_module.is_effect_like()
-            && let Some(decl) = self.tysys.effect_or_resource_decl_at(interface_site)
-            && let Some((_, Some(return_type))) =
-                self.tysys.resolve_effect_op_signature(decl, func_name)
-        {
-            return return_type;
-        }
-
->>>>>>> origin/main
         if let Some(def) = callee.def()
             && let Some(sig) = self.tysys.signatures.function_sig(def)
             && let Some(return_type) = sig.decl.return_type
@@ -2247,28 +2142,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ));
             }
 
-<<<<<<< HEAD
-||||||| dc6a50794
-            // The operation is the path's last segment: a namespace ahead of
-            // the interface stays on `suffix`, which `interface_site` skips.
-            if let Some((_, operation)) = name.rsplit_once("::")
-                && let Some(decl) = self.effect_or_resource_decl_at(interface_site)
-                && let Some((params, _)) = self.resolve_effect_op_signature(decl, operation)
-            {
-                return Some((params, Vec::new()));
-            }
-
-=======
-            // The operation is the path's last segment: a namespace ahead of
-            // the interface stays on `suffix`, which `interface_site` skips.
-            if let Some((_, operation)) = name.rsplit_once("::")
-                && let Some(decl) = self.tysys.effect_or_resource_decl_at(interface_site)
-                && let Some((params, _)) = self.tysys.resolve_effect_op_signature(decl, operation)
-            {
-                return Some((params, Vec::new()));
-            }
-
->>>>>>> origin/main
             // A namespace member's signature lives in that module, which no
             // bare-name lookup reaches. Without it the arguments resolve with no
             // expected type, so a sequence literal never coerces to its `List`
@@ -2620,26 +2493,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // declaration, the same place `resolve_effect_op_signature` reads the
         // parameter types the padding fills — and off the same segment, so the
         // two agree on how many arguments the call owes.
-<<<<<<< HEAD
-        if let Some((decl, operation)) = self.dispatched_operation(ident)
+        if let Some((decl, operation)) = self.tysys.dispatched_operation(ident)
             && let Some(sig) = self.tysys.signatures.resource_method_sig(decl, &operation)
-||||||| dc6a50794
-        if let Some(owner) = ident.owner_segment()
-            && let Some(operation) = ident.segments.last()
-            && let Some(decl) = self.effect_or_resource_decl_at(Some(owner.id))
-            && let Some(sig) = self
-                .tysys
-                .signatures
-                .resource_method_sig(decl, &operation.name)
-=======
-        if let Some(owner) = ident.owner_segment()
-            && let Some(operation) = ident.segments.last()
-            && let Some(decl) = self.tysys.effect_or_resource_decl_at(Some(owner.id))
-            && let Some(sig) = self
-                .tysys
-                .signatures
-                .resource_method_sig(decl, &operation.name)
->>>>>>> origin/main
         {
             let defaults = Param::named_defaults(&sig.params);
             let module = self.tysys.resolutions.defs().module(sig.def).clone();
@@ -3819,11 +3674,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// The effect or resource declaration a qualified callee's receiver
-    /// segment names.
-    fn effect_or_resource_decl_at(&self, site: Option<ast::AstId>) -> Option<DefId> {
-        let def = self.resolutions.declared(site?)?;
-        self.is_effect_or_resource_decl(def).then_some(def)
+    /// The effect or resource an operation call dispatches through, with the
+    /// operation: `[ns::]E::op`, or a bare `op` imported as `use { E::{op} }`.
+    pub(super) fn dispatched_operation(&self, ident: &ast::IdentExpr) -> Option<(DefId, String)> {
+        let (decl, operation) = self.resolutions.operation_at(ident)?;
+        let dispatches = match ident.owner_segment() {
+            Some(_) => self.is_effect_or_resource_decl(decl),
+            None => self.trait_env.effect_decl_index.contains(&decl),
+        };
+        (dispatches && self.signatures.resource_method_sig(decl, operation).is_some())
+            .then(|| (decl, operation.to_string()))
     }
 
     /// [`Self::packs_args_reach`] for a free function, whose parameter types

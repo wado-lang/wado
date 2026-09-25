@@ -14,14 +14,8 @@ use crate::token::Span;
 use super::types::{BindingSite, FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
-<<<<<<< HEAD
 use super::{Elaborator, ForwardDefaults};
-use crate::ast::{BinaryOp, RangeKind, StructPatternField, wire_numbers_of};
-||||||| dc6a50794
-use crate::ast::{BinaryOp, RangeKind, StructPatternField, wire_numbers_of};
-=======
 use crate::ast::{BinaryOp, RangeKind, StructPatternField};
->>>>>>> origin/main
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
@@ -33,16 +27,8 @@ use crate::name::{
     namespace_member_alias,
 };
 use crate::symbol_notation::render;
-<<<<<<< HEAD
-use crate::tir::{StructDef, TirTypeParam};
-use crate::{IndexMap, escape, hashmap, tir};
-||||||| dc6a50794
-use crate::tir::{StructDef, TirTypeParam};
-use crate::{IndexMap, hashmap, tir};
-=======
 use crate::tir::StructDef;
-use crate::{hashmap, tir};
->>>>>>> origin/main
+use crate::{escape, hashmap, tir};
 
 /// Tracks the reference binding mode for match ergonomics.
 /// When matching a reference-typed scrutinee, bindings inherit the reference kind.
@@ -1101,7 +1087,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_let_pattern_inner(pattern, type_id, is_mut, span, site, ctx, RefBinding::None);
     }
 
-<<<<<<< HEAD
     /// The struct a pattern destructures (a newtype's base), and whether its
     /// written name names it. A scrutinee that is no struct is reported instead.
     fn struct_pattern_head(
@@ -1127,7 +1112,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         };
         let name_matches = type_name.is_none_or(|written| {
-            let matches = self.pattern_qualifier_matches(type_name_id, head);
+            let matches = self.tysys.pattern_qualifier_matches(type_name_id, head);
             if !matches {
                 let (expected, found) =
                     self.pattern_mismatch_names(type_name_id, written, scrutinee);
@@ -1142,70 +1127,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((head, name_matches))
     }
 
-    /// Report the fields of `head` a struct pattern without `..` leaves out.
-    fn report_unlisted_struct_fields(
-        &self,
-        head: StructDef,
-        fields: &[StructPatternField],
-        span: Span,
-    ) {
-        let Some(struct_info) = self.lookup_struct_fields_of(head) else {
-            return;
-        };
-        let missing: Vec<_> = struct_info
-            .fields
-            .iter()
-            .filter(|(name, _, _)| !fields.iter().any(|f| f.field_name == *name))
-            .map(|(name, _, _)| name.clone())
-            .collect();
-        if missing.is_empty() {
-            return;
-        }
-        let _ = self.emit(TypeError::PatternTypeMismatch {
-            expected: format!(
-                "all fields (missing: {}), or use `..` to ignore remaining fields",
-                missing.join(", ")
-            ),
-            found: format!(
-                "pattern with {} of {} fields",
-                fields.len(),
-                struct_info.fields.len()
-            ),
-            span,
-        });
-    }
-
-    /// Whether a struct pattern's qualifier names the scrutinee's own head.
-    ///
-    /// Declaration against declaration, never spelling against spelling. A
-    /// shape names no declaration, so no qualifier matches one; a qualifier the
-    /// walk could not place is left to the diagnostic its unresolved name earns
-    /// elsewhere.
-    fn pattern_qualifier_matches(&self, site: Option<AstId>, head: StructDef) -> bool {
-        let Some(written) = site.and_then(|site| self.tysys.resolutions.declared_if_walked(site))
-        else {
-            return true;
-        };
-        head.decl() == Some(written)
-    }
-
-||||||| dc6a50794
-    /// Whether a struct pattern's qualifier names the scrutinee's own head.
-    ///
-    /// Declaration against declaration, never spelling against spelling. A
-    /// shape names no declaration, so no qualifier matches one; a qualifier the
-    /// walk could not place is left to the diagnostic its unresolved name earns
-    /// elsewhere.
-    fn pattern_qualifier_matches(&self, site: Option<AstId>, head: StructDef) -> bool {
-        let Some(written) = site.and_then(|site| self.tysys.resolutions.declared_if_walked(site))
-        else {
-            return true;
-        };
-        head.decl() == Some(written)
-    }
-
-=======
->>>>>>> origin/main
     /// The two spellings a pattern mismatch prints.
     ///
     /// The written qualifier and the scrutinee's rendering can be the same
@@ -1334,100 +1255,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 has_rest,
                 span: pat_span,
             } => {
-<<<<<<< HEAD
-                let (type_id, ref_binding) = self.peel_scrutinee_refs(type_id, ref_binding);
+                let (type_id, ref_binding) = self.tysys.peel_scrutinee_refs(type_id, ref_binding);
                 let head = self.struct_pattern_head(
                     type_name.as_deref(),
                     *type_name_id,
                     type_id,
                     *pat_span,
                 );
-||||||| dc6a50794
-                let (type_id, ref_binding) = self.peel_scrutinee_refs(type_id, ref_binding);
-                // Every lookup below asks the scrutinee's head, which an
-                // anonymous shape and a function-local `struct` both have and
-                // neither of them can be reached by spelling. A newtype's head
-                // is its base's: it inherits the fields it wraps.
-                let struct_head = {
-                    let tt = self.tysys.type_table.borrow();
-                    match tt.get(tt.reflect_structure_head(type_id)) {
-                        ResolvedType::Struct { def, .. } => Some(*def),
-                        _ => None,
-                    }
-                };
-=======
-                let (type_id, ref_binding) = self.tysys.peel_scrutinee_refs(type_id, ref_binding);
-                // Every lookup below asks the scrutinee's head, which an
-                // anonymous shape and a function-local `struct` both have and
-                // neither of them can be reached by spelling. A newtype's head
-                // is its base's: it inherits the fields it wraps.
-                let struct_head = {
-                    let tt = self.tysys.type_table.borrow();
-                    match tt.get(tt.reflect_structure_head(type_id)) {
-                        ResolvedType::Struct { def, .. } => Some(*def),
-                        _ => None,
-                    }
-                };
->>>>>>> origin/main
 
-<<<<<<< HEAD
-||||||| dc6a50794
-                let type_name_matches = match (type_name, struct_head) {
-                    (Some(written), Some(head)) => {
-                        let matches = self.pattern_qualifier_matches(*type_name_id, head);
-                        if !matches {
-                            let (expected, found) =
-                                self.pattern_mismatch_names(*type_name_id, written, type_id);
-                            let _ = self.emit(TypeError::PatternTypeMismatch {
-                                expected,
-                                found,
-                                span: *pat_span,
-                            });
-                        }
-                        matches
-                    }
-                    _ => true,
-                };
-
-                if struct_head.is_none() {
-                    let _ = self.emit(TypeError::PatternTypeMismatch {
-                        expected: "struct type".to_string(),
-                        found: self.tysys.type_table.borrow().type_name(type_id),
-                        span: *pat_span,
-                    });
-                    return;
-                }
-
-                // Resolve each field pattern
-=======
-                let type_name_matches = match (type_name, struct_head) {
-                    (Some(written), Some(head)) => {
-                        let matches = self.tysys.pattern_qualifier_matches(*type_name_id, head);
-                        if !matches {
-                            let (expected, found) =
-                                self.pattern_mismatch_names(*type_name_id, written, type_id);
-                            let _ = self.emit(TypeError::PatternTypeMismatch {
-                                expected,
-                                found,
-                                span: *pat_span,
-                            });
-                        }
-                        matches
-                    }
-                    _ => true,
-                };
-
-                if struct_head.is_none() {
-                    let _ = self.emit(TypeError::PatternTypeMismatch {
-                        expected: "struct type".to_string(),
-                        found: self.tysys.type_table.borrow().type_name(type_id),
-                        span: *pat_span,
-                    });
-                    return;
-                }
-
-                // Resolve each field pattern
->>>>>>> origin/main
                 for field in fields {
                     let field_type = match head {
                         Some(_) => {
@@ -1455,44 +1290,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                 }
 
-<<<<<<< HEAD
                 if let Some((head, _)) = head
                     && !has_rest
                 {
-                    self.report_unlisted_struct_fields(head, fields, *pat_span);
-||||||| dc6a50794
-                // Exhaustiveness check: without `..`, all fields must be listed
-                if !has_rest
-                    && let Some(head) = struct_head
-                    && let Some(struct_info) = self.lookup_struct_fields_of(head)
-                {
-                    let total_fields = struct_info.fields.len();
-                    if fields.len() != total_fields {
-                        let missing: Vec<_> = struct_info
-                            .fields
-                            .iter()
-                            .filter(|(name, _, _)| !fields.iter().any(|f| f.field_name == *name))
-                            .map(|(name, _, _)| name.clone())
-                            .collect();
-                        if !missing.is_empty() {
-                            let _ = self.emit(TypeError::PatternTypeMismatch {
-                                        expected: format!(
-                                            "all fields (missing: {}), or use `..` to ignore remaining fields",
-                                            missing.join(", ")
-                                        ),
-                                        found: format!(
-                                            "pattern with {} of {} fields",
-                                            fields.len(),
-                                            total_fields
-                                        ),
-                                        span: *pat_span,
-                                    });
-                        }
-                    }
-=======
-                if !has_rest && let Some(head) = struct_head {
                     self.check_struct_pattern_complete(head, fields, *pat_span);
->>>>>>> origin/main
                 }
             }
             ast::Pattern::Typed {
@@ -1828,7 +1629,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // use→def edge so it is not flagged dead (mirrors the expr path).
                 if !is_mut && let Some(constant) = self.immutable_global_type(name) {
                     self.record_item_reference_by_name(*id, name);
-                    let (peeled, _) = self.peel_scrutinee_refs(scrutinee_type, ref_binding);
+                    let (peeled, _) = self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                     self.typecheck(constant, peeled, *name_span);
                     self.resolve_constant_pattern(*id, scrutinee_type, constant, ctx, span);
                     return Vec::new();
@@ -2138,57 +1939,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: pat_span,
             } => {
                 let (scrutinee_type, ref_binding) =
-<<<<<<< HEAD
-                    self.peel_scrutinee_refs(scrutinee_type, ref_binding);
+                    self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 let head = self.struct_pattern_head(
                     type_name.as_deref(),
                     *type_name_id,
                     scrutinee_type,
                     *pat_span,
                 );
-||||||| dc6a50794
-                    self.peel_scrutinee_refs(scrutinee_type, ref_binding);
-                let mut type_name_matches = true;
-                if let Some(expected_name) = type_name {
-                    let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-                    if let ResolvedType::Struct { def, .. } = resolved
-                        && !self.pattern_qualifier_matches(*type_name_id, def)
-                    {
-                        let (expected, found) = self.pattern_mismatch_names(
-                            *type_name_id,
-                            expected_name,
-                            scrutinee_type,
-                        );
-                        let _ = self.emit(TypeError::PatternTypeMismatch {
-                            expected,
-                            found,
-                            span: *pat_span,
-                        });
-                        type_name_matches = false;
-                    }
-                }
-=======
-                    self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
-                let mut type_name_matches = true;
-                if let Some(expected_name) = type_name {
-                    let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-                    if let ResolvedType::Struct { def, .. } = resolved
-                        && !self.tysys.pattern_qualifier_matches(*type_name_id, def)
-                    {
-                        let (expected, found) = self.pattern_mismatch_names(
-                            *type_name_id,
-                            expected_name,
-                            scrutinee_type,
-                        );
-                        let _ = self.emit(TypeError::PatternTypeMismatch {
-                            expected,
-                            found,
-                            span: *pat_span,
-                        });
-                        type_name_matches = false;
-                    }
-                }
->>>>>>> origin/main
 
                 let mut field_bindings: PatBindings = Vec::new();
                 for field in fields {
@@ -2216,55 +1973,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ));
                 }
 
-<<<<<<< HEAD
                 if let Some((head, _)) = head
                     && !has_rest
                 {
-                    self.report_unlisted_struct_fields(head, fields, *pat_span);
-||||||| dc6a50794
-                // Exhaustiveness check
-                if !has_rest {
-                    let struct_head = match self.tysys.type_table.borrow().get(scrutinee_type) {
-                        ResolvedType::Struct { def, .. } => Some(*def),
-                        _ => None,
-                    };
-                    if let Some(head) = struct_head
-                        && let Some(struct_info) = self.lookup_struct_fields_of(head)
-                    {
-                        let total_fields = struct_info.fields.len();
-                        if fields.len() != total_fields {
-                            let missing: Vec<_> = struct_info
-                                .fields
-                                .iter()
-                                .filter(|(name, _, _)| {
-                                    !fields.iter().any(|f| f.field_name == *name)
-                                })
-                                .map(|(name, _, _)| name.clone())
-                                .collect();
-                            if !missing.is_empty() {
-                                let _ = self.emit(TypeError::PatternTypeMismatch {
-                                        expected: format!(
-                                            "all fields (missing: {}), or use `..` to ignore remaining fields",
-                                            missing.join(", ")
-                                        ),
-                                        found: format!(
-                                            "pattern with {} of {} fields",
-                                            fields.len(),
-                                            total_fields
-                                        ),
-                                        span: *pat_span,
-                                    });
-                            }
-                        }
-                    }
-=======
-                let struct_head = match self.tysys.type_table.borrow().get(scrutinee_type) {
-                    ResolvedType::Struct { def, .. } => Some(*def),
-                    _ => None,
-                };
-                if !has_rest && let Some(head) = struct_head {
                     self.check_struct_pattern_complete(head, fields, *pat_span);
->>>>>>> origin/main
                 }
                 field_bindings
             }
