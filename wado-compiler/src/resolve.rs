@@ -181,26 +181,21 @@ impl Scopes {
             let reexport_reaches = symbols
                 .get_reexport(&prelude, &name)
                 .is_some_and(|r| r.visibility.reachable_from(in_another_package));
-            if reexport_reaches
-                && let Some(sym) = symbols.lookup_in_module(&prelude, &name)
-                && let Some(def) = defs.of_ast_id(sym.defined_at)
-            {
-                surface.insert(name, def);
+            if reexport_reaches && let Some(sym) = symbols.lookup_in_module(&prelude, &name) {
+                surface.insert(name, defs.def_at(sym.defined_at));
             }
         }
         for sym in symbols.get_module_symbols(&prelude) {
-            if sym.visibility.reachable_from(in_another_package)
-                && let Some(def) = defs.of_ast_id(sym.defined_at)
-            {
-                surface.entry(sym.name.clone()).or_insert(def);
+            if sym.visibility.reachable_from(in_another_package) {
+                surface
+                    .entry(sym.name.clone())
+                    .or_insert(defs.def_at(sym.defined_at));
             }
         }
         // A builtin type is universal by nature rather than by export: `i32`
         // names the same thing in a module that imports nothing.
         for (name, id) in symbols.prelude_builtin_types() {
-            if let Some(def) = defs.of_ast_id(id) {
-                surface.entry(name.to_string()).or_insert(def);
-            }
+            surface.entry(name.to_string()).or_insert(defs.def_at(id));
         }
         out.prelude = surface;
         out.prelude_cases = Self::collect_cases(defs, &out.prelude);
@@ -209,18 +204,16 @@ impl Scopes {
         for module in modules.keys() {
             let imports: IndexMap<String, DefId> = symbols
                 .imports_in(module)
-                .filter_map(|(name, sym)| Some((name.to_string(), defs.of_ast_id(sym.defined_at)?)))
+                .map(|(name, sym)| (name.to_string(), defs.def_at(sym.defined_at)))
                 .collect();
             let mut own: IndexMap<String, DefId> = symbols
                 .get_module_symbols(module)
                 .into_iter()
-                .filter_map(|sym| Some((sym.name.clone(), defs.of_ast_id(sym.defined_at)?)))
+                .map(|sym| (sym.name.clone(), defs.def_at(sym.defined_at)))
                 .collect();
             for name in symbols.reexport_names(module) {
-                if let Some(sym) = symbols.lookup_in_module(module, &name)
-                    && let Some(def) = defs.of_ast_id(sym.defined_at)
-                {
-                    own.entry(name).or_insert(def);
+                if let Some(sym) = symbols.lookup_in_module(module, &name) {
+                    own.entry(name).or_insert(defs.def_at(sym.defined_at));
                 }
             }
             // Both tiers bring their cases, imports ranking first for the same
@@ -783,9 +776,7 @@ impl AstVisitor for Resolver<'_> {
                 // minted spelling would be a reference the walk never saw — so
                 // the declaration node answers for itself and the bound names
                 // it instead of respelling its name.
-                if let Some(def) = self.defs.of_ast_id(t.id) {
-                    self.record(t.id, Resolution::Def(def));
-                }
+                self.record(t.id, Resolution::Def(self.defs.def_at(t.id)));
                 (&t.type_params, Some(t.id))
             }
             Item::Function(_)
@@ -1076,8 +1067,9 @@ impl AstVisitor for Resolver<'_> {
                             self.module,
                             &namespace_member_alias(&ns.namespace, &ns.name),
                         )
-                        .and_then(|sym| self.defs.of_ast_id(sym.defined_at))
-                        .map_or(Resolution::Unresolved, Resolution::Def),
+                        .map_or(Resolution::Unresolved, |sym| {
+                            Resolution::Def(self.defs.def_at(sym.defined_at))
+                        }),
                 };
                 self.record(ns.id, answer);
                 for arg in &ns.args {

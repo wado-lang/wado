@@ -251,17 +251,16 @@ fn collect_resource_refs(
         return;
     }
     let ty = tt.get(type_id);
-    match ty {
-        ResolvedType::Resource { def } | ResolvedType::GenericResource { def, .. } => {
-            // A `resource Child extends Parent` value is usable wherever the
-            // parent is, so holding it holds every ancestor too.
-            out.extend(resource_chain_effects(tt, *def));
-            if let ResolvedType::GenericResource { type_args, .. } = ty {
-                for ta in type_args {
-                    collect_resource_refs(*ta, tt, members, out, visited);
-                }
-            }
+    if let Some((def, type_args)) = resource_handle(ty) {
+        // A `resource Child extends Parent` value is usable wherever the
+        // parent is, so holding it holds every ancestor too.
+        out.extend(resource_chain_effects(tt, def));
+        for ta in type_args {
+            collect_resource_refs(*ta, tt, members, out, visited);
         }
+        return;
+    }
+    match ty {
         ResolvedType::GenericInstance { type_args, .. } => {
             for ta in type_args {
                 collect_resource_refs(*ta, tt, members, out, visited);
@@ -297,6 +296,15 @@ fn collect_resource_refs(
         // Primitives, Unit, Never, Enum, Flags, TypeParam, TypePack,
         // AssocTypeProjection, Unknown, Error — no resource refs.
         _ => {}
+    }
+}
+
+/// The resource a value of `ty` is a handle to, with its type arguments.
+fn resource_handle(ty: &ResolvedType) -> Option<(DefId, &[TypeId])> {
+    match ty {
+        ResolvedType::Resource { def } => Some((*def, &[])),
+        ResolvedType::GenericResource { def, type_args } => Some((*def, type_args)),
+        _ => None,
     }
 }
 
@@ -1072,10 +1080,7 @@ fn add_narrowed_resources(
         .0
         .into_iter()
         .flat_map(|id| annotations.all(|facts| &facts.pattern_ascriptions, id))
-        .filter_map(|&target| match type_table.get(target) {
-            ResolvedType::Resource { def } => Some(*def),
-            _ => None,
-        })
+        .filter_map(|&target| resource_handle(type_table.get(target)).map(|(def, _)| def))
         .collect();
     // A grant expands through the closure, which may hold another target's ancestor.
     loop {

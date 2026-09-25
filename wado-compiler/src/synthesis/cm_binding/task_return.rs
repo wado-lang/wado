@@ -19,11 +19,14 @@ use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::package::Package;
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm,
     TirModule, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
-use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt};
+use crate::tir_visitor::{
+    TirOptVisitor, TirRefVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt,
+};
 use crate::token::Span;
 
 use crate::synthesis::common::{
@@ -255,6 +258,28 @@ impl TirOptVisitor for TaskReturnReducer<'_> {
 
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
         walk_outside_closures(self, expr)
+    }
+}
+
+/// Synthesis hands no `task return` on: every TIR walk after it, from
+/// monomorphize through lowering, relies on there being none.
+pub(super) fn assert_task_returns_eliminated(project: &Package) {
+    struct Survivor;
+    impl TirRefVisitor for Survivor {
+        fn visit_stmt(&mut self, stmt: &TirStmt) {
+            assert!(
+                !matches!(stmt.kind, TirStmtKind::TaskReturn { .. }),
+                "TaskReturn should be eliminated by synthesis before this phase"
+            );
+            self.walk_stmt(stmt);
+        }
+    }
+    for module in project.tir_modules.values() {
+        for func in &module.functions {
+            if let Some(body) = &func.borrow().body {
+                Survivor.visit_block(body);
+            }
+        }
     }
 }
 

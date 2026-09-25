@@ -640,7 +640,7 @@ impl TirOptVisitor for WriteBack<'_> {
                     self.detached_locals.insert(local_index);
                 }
             }
-            TirStmtKind::Return { value: Some(value) } | TirStmtKind::TaskReturn { value } => {
+            TirStmtKind::Return { value: Some(value) } => {
                 self.refuse_stored(value, "the returned value");
             }
             // A labeled block yields through its breaks as well as its tail,

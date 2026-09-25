@@ -1678,17 +1678,17 @@ impl UserCmTypeBinder<'_> {
     }
 
     fn bind_item(&self, item: &mut Item, sources: &mut SourceInterfaceBatch) -> Result<(), String> {
-        let declares_cm = self
-            .resolutions
-            .defs()
-            .of_ast_id(item.id())
-            .is_some_and(|def| self.bound.contains_key(&def));
+        let item_id = item.id();
+        let declares_cm = || {
+            let def = self.resolutions.defs().def_at(item_id);
+            self.bound.contains_key(&def)
+        };
         try_for_each_signed_type(item, &mut |site, ty| {
             let crosses = match site.signer {
-                Signer::Declaration => declares_cm,
+                Signer::Declaration => declares_cm(),
                 Signer::Function => world_import_of(site.attrs).is_some(),
                 Signer::InterfaceOperation => cm_import_of(site.attrs).is_some(),
-                Signer::ResourceMethod => declares_cm && cm_import_of(site.attrs).is_some(),
+                Signer::ResourceMethod => cm_import_of(site.attrs).is_some() && declares_cm(),
             };
             self.bind_type(ty, site.label, crosses, sources)
         })

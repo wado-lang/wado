@@ -1182,9 +1182,12 @@ fn lower_dispatch_in_block(block: &mut TirBlock, env: &DispatchEnv, ctx: &mut Lo
 
 fn lower_dispatch_in_stmt(stmt: &mut TirStmt, env: &DispatchEnv, ctx: &mut LowerCtx) {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. }
-        | TirStmtKind::Expr(value)
-        | TirStmtKind::TaskReturn { value } => lower_dispatch_in_expr(value, env, ctx),
+        TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+            lower_dispatch_in_expr(value, env, ctx);
+        }
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
+        }
         TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 lower_dispatch_in_expr(v, env, ctx);
@@ -1928,8 +1931,10 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
         match &mut stmt.kind {
             TirStmtKind::Let { value, .. }
             | TirStmtKind::Expr(value)
-            | TirStmtKind::TaskReturn { value }
             | TirStmtKind::LetDestructure { value, .. } => self.visit_expr(value),
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
+            }
             TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
                 if let Some(v) = value {
                     self.visit_expr(v);

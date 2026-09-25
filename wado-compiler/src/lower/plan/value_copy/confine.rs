@@ -225,7 +225,6 @@ impl TirRefVisitor for SinkWalker<'_> {
             | TirStmtKind::Break {
                 value: Some(op), ..
             } => self.raise_ret(op),
-            TirStmtKind::TaskReturn { value } => self.raise_ret(value),
             _ => {}
         }
         self.walk_stmt(stmt);

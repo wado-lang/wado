@@ -449,17 +449,17 @@ impl TirMutVisitor for CallRewriteWalker<'_> {
     }
 }
 
-/// Retype a shared adapter's return from a call site, leaving a streaming
-/// adapter's i32 alone. Call sites that disagree are an ICE.
+/// Retype a shared adapter's return from a call site, unless it keeps its i32.
+/// Call sites that disagree are an ICE.
 fn fixup_adapter_return_from_call_site(
     adapter: &mut TirFunction,
     adapter_key: usize,
     call_site_type: TypeId,
-    is_streaming: bool,
+    keeps_i32_return: bool,
     type_table: &RefCell<TypeTable>,
     applied_returns: &mut IndexMap<usize, TypeId>,
 ) {
-    if is_streaming {
+    if keeps_i32_return {
         return;
     }
     // A newtype over a CM resource (`type Trailers = Fields`) shares the base's
@@ -507,19 +507,15 @@ fn record_applied_return(
 }
 
 /// Retype one adapter param and its local from a call-site arg, except a flat
-/// one, whose arg is cast instead, and a streaming adapter's i32.
+/// one, whose arg is cast instead.
 fn fixup_adapter_param_from_call_site(
     adapter: &mut TirFunction,
     param_idx: usize,
     arg_type: TypeId,
     is_gc_passthrough: bool,
-    is_streaming: bool,
 ) {
     let param = &mut adapter.params[param_idx];
     if param.type_id == arg_type {
-        return;
-    }
-    if is_streaming && param.type_id == TypeTable::I32 {
         return;
     }
     if !is_gc_passthrough && is_wasm_flat_type(param.type_id) {
@@ -626,27 +622,18 @@ impl<'a> CallRewriteWalker<'a> {
         let mut args = take_call_args(expr);
         let args = match kind {
             CmCallKind::Free => {
-                let is_streaming = keeps_flat_i32_shape(func_info);
                 self.fixup_adapter_from_call_site(
                     adapter,
                     func_info,
                     expr.type_id,
                     &args,
                     0,
-                    is_streaming,
+                    keeps_flat_i32_return(func_info),
                 );
                 self.cast_args_to_adapter_params(adapter, func_info, &mut args, 0);
-                if is_streaming {
-                    for arg in &mut args {
-                        if arg.expr.type_id != TypeTable::I32 {
-                            cast_in_place(&mut arg.expr, TypeTable::I32);
-                        }
-                    }
-                }
                 args
             }
             CmCallKind::Method => {
-                let is_streaming = keeps_flat_i32_shape(func_info);
                 let receiver = args.remove(0).expr;
                 self.fixup_adapter_from_call_site(
                     adapter,
@@ -654,17 +641,11 @@ impl<'a> CallRewriteWalker<'a> {
                     expr.type_id,
                     &args,
                     1,
-                    is_streaming,
+                    keeps_flat_i32_return(func_info),
                 );
                 {
                     let mut adapter = adapter.borrow_mut();
-                    fixup_adapter_param_from_call_site(
-                        &mut adapter,
-                        0,
-                        receiver.type_id,
-                        true,
-                        false,
-                    );
+                    fixup_adapter_param_from_call_site(&mut adapter, 0, receiver.type_id, true);
                     fixup_wasi_derived_types_in_adapter(
                         &mut adapter,
                         func_info,
@@ -728,7 +709,7 @@ impl<'a> CallRewriteWalker<'a> {
         call_site_type: TypeId,
         args: &[CallArg],
         param_offset: usize,
-        is_streaming: bool,
+        keeps_i32_return: bool,
     ) {
         // The adapter's name is a non-injective `interface_method` join.
         let adapter_key = Rc::as_ptr(adapter) as usize;
@@ -737,7 +718,7 @@ impl<'a> CallRewriteWalker<'a> {
             &mut adapter,
             adapter_key,
             call_site_type,
-            is_streaming,
+            keeps_i32_return,
             self.type_table,
             self.applied_returns,
         );
@@ -750,7 +731,6 @@ impl<'a> CallRewriteWalker<'a> {
                 param_idx,
                 arg.expr.type_id,
                 is_gc_passthrough_param(param_type, registry, self.names),
-                is_streaming,
             );
         }
     }
@@ -809,9 +789,9 @@ fn take_call_args(expr: &mut TirExpr) -> Vec<CallArg> {
     std::mem::take(args)
 }
 
-/// Whether the adapter keeps its i32 params and return at every call site: a
+/// Whether a free or method call leaves the adapter's i32 return as it is: a
 /// sync import taking a stream or future.
-fn keeps_flat_i32_shape(func_info: &CmFunctionInfo) -> bool {
+fn keeps_flat_i32_return(func_info: &CmFunctionInfo) -> bool {
     !func_info.is_async && func_info.has_streaming_param()
 }
 

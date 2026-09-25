@@ -1467,8 +1467,8 @@ impl Analyzer<'_> {
             TirStmtKind::LabeledBlock { label, block } => {
                 self.walk_labeled_block(label, block, live, record);
             }
-            TirStmtKind::TaskReturn { value } => {
-                self.walk_persisting(value, live, record);
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
             TirStmtKind::VariadicForOf { .. } => unreachable!("filtered by has_unsupported_form"),
         }

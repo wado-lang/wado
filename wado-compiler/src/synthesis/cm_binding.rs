@@ -46,7 +46,10 @@ use import_adapter::synthesize_adapter;
 pub use lift::synthesize_lift;
 pub use lower::synthesize_lower;
 pub use resource_rewrite::rewrite_async_primitives_monomorphized;
-use task_return::{expand_task_returns_in_func, reduce_task_returns_in_func, split_task_entry};
+use task_return::{
+    assert_task_returns_eliminated, expand_task_returns_in_func, reduce_task_returns_in_func,
+    split_task_entry,
+};
 use type_fixup::{
     collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
 };
@@ -457,6 +460,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     let validated = reject_unresolvable_record_payloads(&project)?;
     reduce_unexpanded_task_returns(&project);
     resource_rewrite::rewrite_async_primitives(&mut project, validated);
+    assert_task_returns_eliminated(&project);
     Ok(project)
 }
 

@@ -800,7 +800,10 @@ pub fn stmt_has_break_to(label: &str, stmt: &TirStmt) -> bool {
             block_has_break_to(label, body)
         }
         TirStmtKind::Continue => false,
-        TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => false,
+        TirStmtKind::TaskReturn { value } => expr_has_break_to(label, value),
+        TirStmtKind::VariadicForOf { iterable, body, .. } => {
+            expr_has_break_to(label, iterable) || block_has_break_to(label, body)
+        }
     }
 }
 

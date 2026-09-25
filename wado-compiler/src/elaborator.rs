@@ -102,9 +102,7 @@ pub(crate) fn collect_unavailable(
             let Some(reason) = func.unavailable() else {
                 return;
             };
-            let Some(def) = defs.of_ast_id(func.id) else {
-                return;
-            };
+            let def = defs.def_at(func.id);
             let name = match site.owner() {
                 Some(owner) => format!("{owner}::{}", func.name),
                 None => func.name.clone(),
@@ -521,7 +519,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn decl_in_module(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
         self.symbols
             .lookup_in_module(module, name)
-            .and_then(|sym| self.tysys.resolutions.defs().of_ast_id(sym.defined_at))
+            .map(|sym| self.tysys.resolutions.defs().def_at(sym.defined_at))
     }
 
     /// [`Self::decl_in_module`] as a callee identity.
@@ -1160,7 +1158,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn impl_receiver_name(&self, impl_block: &ImplBlock) -> FqTypeName {
         self.qualified_receiver_name_owned(
             &self.get_type_name(&impl_block.ty),
-            self.tysys.resolutions.defs().of_ast_id(impl_block.id),
+            Some(self.tysys.resolutions.defs().def_at(impl_block.id)),
         )
     }
 
@@ -1856,12 +1854,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             })
             .collect();
         for (decl_id, type_params, methods, is_resource) in decl_ops {
-            let resource_self = is_resource
-                .then(|| self.tysys.resolutions.defs().of_ast_id(decl_id))
-                .flatten();
-            let ops = self.resolve_effect_ops(&type_params, &methods, resource_self);
             let defs = std::sync::Arc::clone(self.tysys.resolutions.defs());
             let owner = defs.def_at(decl_id);
+            let ops = self.resolve_effect_ops(&type_params, &methods, is_resource.then_some(owner));
             for method in &methods {
                 let op = defs.def_at(method.id);
                 self.sem
@@ -1970,11 +1965,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &resource_decl.methods,
                         OperationOwner::Resource,
                     );
-                    let resource_def = self.tysys.resolutions.defs().of_ast_id(resource_decl.id);
+                    let resource_def = self.tysys.resolutions.defs().def_at(resource_decl.id);
                     self.resolve_operation_param_defaults(
                         &resource_decl.type_params,
                         &resource_decl.methods,
-                        resource_def,
+                        Some(resource_def),
                     );
                 }
                 // Other items will be added as needed
@@ -2085,7 +2080,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// including the synthesize-request early return.
     fn resolve_impl_item(&mut self, impl_block: &ast::ImplBlock) {
         let struct_name = self.get_type_name(&impl_block.ty);
-        let impl_owner = self.tysys.resolutions.defs().of_ast_id(impl_block.id);
+        let impl_owner = Some(self.tysys.resolutions.defs().def_at(impl_block.id));
         let mut scope = self.enter_impl_scope(impl_block);
         let trait_name = scope.impl_block_trait_name(impl_block);
         // The node the scope bound the receiver to, so a method parameter

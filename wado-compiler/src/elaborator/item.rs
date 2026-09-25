@@ -372,11 +372,11 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
             bound_names: a.bounds.iter().map(|b| b.name.clone()).collect(),
         })
         .collect();
-    let fq = type_table
-        .borrow()
-        .defs()
-        .of_ast_id(decl)
-        .map(|def| FqTraitName::declared(type_table.borrow().defs(), def));
+    let fq = {
+        let type_table = type_table.borrow();
+        let defs = type_table.defs();
+        Some(FqTraitName::declared(defs, defs.def_at(decl)))
+    };
     let resolved = Resolved::Trait {
         module_source: module_source.clone(),
         name: name.to_string(),
@@ -1553,7 +1553,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // mean, and inside the declaration that is this trait.
         let declaring = SelfBinding {
             type_id: self_slot,
-            declaring_trait: scope.tysys.resolutions.defs().of_ast_id(trait_decl.id),
+            declaring_trait: Some(scope.tysys.resolutions.defs().def_at(trait_decl.id)),
         };
         scope.set_self_binding(declaring);
         scope.bind_param(
