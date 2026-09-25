@@ -983,7 +983,7 @@ impl SolverBridge {
                 newtype_base(lowering.declared_type(def), base);
             }
         }
-        for (&def, info) in tysys.data.generic_newtypes.iter() {
+        for (&def, info) in &tysys.data.generic_newtypes {
             let param = |name: &str| -> Option<ParamKind> {
                 info.type_params
                     .iter()
@@ -1060,7 +1060,7 @@ impl SolverBridge {
                     program.facts.insert((head, trait_), Fact { visible_from });
                 }
             };
-        for (&def, info) in tysys.data.struct_fields.iter() {
+        for (&def, info) in &tysys.data.struct_fields {
             if !eligible(def) {
                 continue;
             }
@@ -1147,7 +1147,7 @@ impl SolverBridge {
         // with no member's own `Default` asked for. A generic one does not:
         // a default is elaborated against the declaration, not an instance.
         let default = trait_of(CompilerItem::Default);
-        for (&def, info) in tysys.data.struct_fields.iter() {
+        for (&def, info) in &tysys.data.struct_fields {
             if info.auto_derives_default() {
                 fact(declared(def), default);
             }
@@ -1210,7 +1210,7 @@ impl SolverBridge {
         };
         let data = &tysys.data;
         let mut out = Vec::new();
-        for (&def, info) in data.struct_fields.iter() {
+        for (&def, info) in &data.struct_fields {
             out.extend(lowered(
                 def,
                 info.type_param_type_ids.len(),
@@ -1231,7 +1231,7 @@ impl SolverBridge {
             out.extend(lowered(def, 0, &mut std::iter::empty(), module));
         }
         let mut variants = Vec::new();
-        for (&def, info) in data.variant_cases.iter() {
+        for (&def, info) in &data.variant_cases {
             variants.extend(lowered(
                 def,
                 info.type_param_type_ids.len(),

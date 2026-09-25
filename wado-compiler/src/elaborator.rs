@@ -46,6 +46,7 @@ mod written;
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use tysys::TypeSystem;
 
 use crate::hashmap::IndexMap;
 
@@ -135,7 +136,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Pipeline-wide type knowledge: type arena, decl-interned type
     /// tables, registries, included-files map, and the read-only caches
     /// built once during `annotate_modules`. See [`tysys::TypeSystem`].
-    pub(crate) tysys: tysys::TypeSystem,
+    pub(crate) tysys: TypeSystem,
     /// Per-module semantic facts (imports, decls, bindings, type
     /// annotations). The elaborator takes ownership of one
     /// [`sem::ModuleSemantics`] at the start of each per-module pass
@@ -242,18 +243,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// answers only for a span no parse produced.
     pub(super) fn emit(&self, err: impl Into<Diagnostic>) -> Result<(), Bail> {
         self.logger.error_in(&self.current_module_source, err)
-    }
-
-    /// The declaration an item node declares.
-    ///
-    /// Every item the collect pass walks was declared into the table, so a miss
-    /// is a hole in that pass rather than a name that reached nothing.
-    pub(super) fn def_of_item(&self, id: AstId) -> DefId {
-        self.tysys
-            .resolutions
-            .defs()
-            .of_ast_id(id)
-            .expect("an item declaration has an identity")
     }
 
     /// The symbol `name` reaches from `module`, for a caller whose reference site
@@ -507,26 +496,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.insert_reference(use_id, def_id);
     }
 
-    /// The free function the reference site `site` names, answered by the
-    /// module that wrote it (WEP 2026-08-12). `None` where it names something
-    /// else — a binder, a variant case, a node no walk saw.
-    pub(super) fn free_function_at(&self, site: AstId) -> Option<DefId> {
-        let def = self.tysys.resolutions.declared_if_walked(site)?;
-        (self.tysys.resolutions.defs().kind(def) == DefKind::Function).then_some(def)
-    }
-
-    /// The canonical signature of the free function the site names.
-    pub(super) fn free_function_sig_at(&self, site: AstId) -> Option<&sem::decls::FunctionSig> {
-        self.tysys
-            .signatures
-            .function_sig(self.free_function_at(site)?)
-    }
-
-    /// The declaration `id` declares. See [`crate::defs::DefTable::def_at`].
-    pub(super) fn def_at(&self, id: AstId) -> DefId {
-        self.tysys.resolutions.defs().def_at(id)
-    }
-
     /// The declaration `module` declares under `name`, for the positions no
     /// reference site answers. The module is named by the caller, not searched
     /// for.
@@ -538,12 +507,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// [`Self::decl_in_module`] as a callee identity.
     fn callee_in_module(&self, module: &ModuleSource, name: &str) -> Option<callee::CalleeRef> {
-        Some(self.callee_of(self.decl_in_module(module, name)?))
-    }
-
-    /// The callee identity of the declaration `def`.
-    fn callee_of(&self, def: DefId) -> callee::CalleeRef {
-        callee::CalleeRef::declared(self.tysys.resolutions.defs(), def)
+        Some(self.tysys.callee_of(self.decl_in_module(module, name)?))
     }
 
     /// Report where `def` is `#[unavailable]`. `true` says the site has its
@@ -668,7 +632,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `pub type ByteList = List<u8>;` — since the alias declares no method of
     /// its own. `None` when `name` names no such declaration.
     pub(super) fn newtype_base(&self, name: &str) -> Option<(tir::TypeId, String)> {
-        Some(self.peeled_base(self.lookup_newtype(name)?))
+        Some(self.tysys.peeled_base(self.lookup_newtype(name)?))
     }
 
     /// [`Self::newtype_base`] keyed on the alias's own declaration. A caller
@@ -681,7 +645,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let trait_env::ImplTargetKey::Decl(def) = key else {
             return None;
         };
-        Some(self.peeled_base(self.lookup_newtype_of_decl(*def)?))
+        Some(self.tysys.peeled_base(self.lookup_newtype_of_decl(*def)?))
     }
 
     /// The base a newtype receiver wraps: the key its impls answer at, and the
@@ -697,24 +661,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .or_else(|| self.newtype_base(receiver_name))?;
         let base_key = self.impl_target_of(base, &name::DeclName::new(&base_name));
         Some((base_key, base_name))
-    }
-
-    /// `type Buf = ByteList;` chains, so this peels to the type that declares
-    /// methods rather than stopping at the first link.
-    fn peeled_base(&self, alias: tir::TypeId) -> (tir::TypeId, String) {
-        let mut current = alias;
-        loop {
-            let peeled = match self.tysys.type_table.borrow().get(current).clone() {
-                tir::ResolvedType::Newtype { base_type, .. } => base_type,
-                tir::ResolvedType::Flags { .. } => tir::TypeTable::U32,
-                _ => break,
-            };
-            if peeled == current {
-                break;
-            }
-            current = peeled;
-        }
-        (current, self.tysys.get_ultimate_base_struct_name(current))
     }
 
     /// The declaration a `Type::method` call resolves to, seeing through a
@@ -777,26 +723,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .filter(|e| !e.has_self)
     }
 
-    /// Whether the receiver's own declaration of this name and kind shadows a
-    /// trait impl's. Stated once here because every walk reaching both kinds
-    /// has to apply it, and one that reimplements it applies its own.
-    pub(crate) fn inherent_shadows(
-        &self,
-        receiver: &trait_env::ImplTargetKey,
-        method_name: &str,
-        has_self: bool,
-    ) -> bool {
-        self.tysys
-            .trait_env
-            .impl_method_index
-            .get(receiver)
-            .is_some_and(|bucket| {
-                bucket
-                    .iter()
-                    .any(|e| e.name == method_name && e.has_self == has_self && e.is_inherent())
-            })
-    }
-
     /// Every declaration of `method_name` an impl block on `receiver` makes,
     /// receiver-less first. The one walk behind every qualified lookup.
     ///
@@ -816,8 +742,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .map_or(&[], Vec::as_slice);
         let named = move |entry: &&trait_env::ImplMethodEntry| entry.name == method_name;
         let shadowed = [
-            self.inherent_shadows(receiver, method_name, false),
-            self.inherent_shadows(receiver, method_name, true),
+            self.tysys.inherent_shadows(receiver, method_name, false),
+            self.tysys.inherent_shadows(receiver, method_name, true),
         ];
         let survives = move |entry: &&trait_env::ImplMethodEntry| {
             entry.is_inherent() || !shadowed[usize::from(entry.has_self)]
@@ -1135,7 +1061,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .contains_key(written)
         {
             return match owner {
-                Some(def) => self.impl_receiver_binder(def, written),
+                Some(def) => self.tysys.impl_receiver_binder(def, written),
                 None => self.binder_in_scope(written),
             };
         }
@@ -1159,15 +1085,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if let Some((owner, Some(receiver_decl))) = &ctx.impl_owner
             && ctx.type_params.get(written).and_then(|b| b.decl) == Some(*receiver_decl)
         {
-            return self.impl_receiver_binder(*owner, written);
+            return self.tysys.impl_receiver_binder(*owner, written);
         }
         FqTypeName::binder(written)
-    }
-
-    /// The binder naming the receiver parameter `written` of the `impl` block
-    /// `owner` — every pass that names a blanket's receiver asks here.
-    pub(super) fn impl_receiver_binder(&self, owner: DefId, written: &str) -> FqTypeName {
-        FqTypeName::binder_of_impl(self.tysys.resolutions.defs(), owner, written)
     }
 
     /// The name an `impl` block's receiver registers under. One block, one
@@ -1177,12 +1097,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             &self.get_type_name(&impl_block.ty),
             self.tysys.resolutions.defs().of_ast_id(impl_block.id),
         )
-    }
-
-    /// The spelling `def` renders to in a mangled head — its declared name,
-    /// with a function-local declaration's disambiguator applied.
-    pub(super) fn decl_render_name(&self, def: DefId) -> String {
-        trait_env::render_decl_name(self.tysys.resolutions.defs(), def)
     }
 
     /// The declaration `ns::Name` reaches from this module.
@@ -1257,27 +1171,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .find(|def| defs.module(*def) == frame)
             })
             .or_else(|| self.tysys.resolutions.prelude_decl(name))
-    }
-
-    /// The trait a bound's reference site names; `written` supplies the type
-    /// arguments and the diagnostic spelling.
-    ///
-    /// A site naming no declaration gets no invented identity — `use` and the
-    /// prelude are the only ways to name a trait, so a name reaching nothing here
-    /// reaches nothing at all, and the mangle falls back to the spelling.
-    pub(super) fn fq_trait_name_at(&self, site: AstId, written: &str) -> FqTraitName {
-        let resolutions = &self.tysys.resolutions;
-        let answer = resolutions.get(site);
-        if let Resolution::Binder(_) = answer {
-            return FqTraitName::binder(written);
-        }
-        // `written` is a bound's spelling, and a bound is a bare name: the
-        // parser reads `<...>` after one as associated-type bindings, so no
-        // type argument ever reaches here to be split back out.
-        resolutions.declared(site).map_or_else(
-            || FqTraitName::binder(written),
-            |def| FqTraitName::declared(resolutions.defs(), def),
-        )
     }
 
     /// The trait a reference site names, in the form a mangled method name
@@ -1553,53 +1446,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.local_types.insert(def_id, type_id);
     }
 
-    /// The impl-associated constant `owner` declares as `name`.
-    ///
-    /// `owner` is the declaration the use site's qualifier resolved to — an
-    /// alias and a `ns$Type` prefix answer with it like any other spelling —
-    /// so a same-named type in an unrelated module can never satisfy the
-    /// lookup.
-    pub(super) fn associated_constant_of(
-        &self,
-        owner: DefId,
-        name: &str,
-    ) -> Option<sig::AssocConstSig> {
-        self.tysys
-            .signatures
-            .associated_constant(owner, name)
-            .cloned()
-    }
-
-    /// [`Self::associated_constant_of`] for a qualified path in expression
-    /// position, whose leading segment carries the site that names the owner.
-    pub(super) fn associated_constant_of_path(
-        &self,
-        ident: &ast::IdentExpr,
-    ) -> Option<sig::AssocConstSig> {
-        let owner = trait_query::assoc_const_owner_of_path(ident, &self.tysys.resolutions)?;
-        let name = ident.segments.last()?;
-        self.associated_constant_of(owner, &name.name)
-    }
-
-    /// [`Self::associated_constant_of`] for a pattern's `Type::CONST`
-    /// spelling, whose qualifier is a written `ast::Type` with its own site.
-    pub(super) fn associated_constant_qualified(
-        &self,
-        qualifier: Option<&ast::Type>,
-        name: &str,
-    ) -> Option<sig::AssocConstSig> {
-        let owner = trait_query::assoc_const_owner(qualifier, &self.tysys.resolutions)?;
-        self.associated_constant_of(owner, name)
-    }
-
-    /// The declaration a qualified path's *owner* segment names — `Color` in
-    /// `Color::Red`, `Color` in `ns::Color::Red` — read off the site the
-    /// resolve walk answered for. `None` for a bare name, which qualifies
-    /// nothing, and for an owner that reaches no declaration.
-    pub(crate) fn qualified_owner_decl(&self, ident: &ast::IdentExpr) -> Option<DefId> {
-        self.tysys.resolutions.declared(ident.owner_segment()?.id)
-    }
-
     /// Field info for the declaration a *written* struct name resolved to.
     ///
     /// `None` where the name reached nothing, or reached something that is no
@@ -1620,24 +1466,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// [`TypeLookup::struct_fields_of_head`].
     pub(super) fn lookup_struct_fields_of(&self, head: StructDef) -> Option<&StructFieldInfo> {
         self.type_lookup().struct_fields_of_head(head)
-    }
-
-    /// The variant `type_id` is an instance of, or `None` when it is not one.
-    ///
-    /// Asks the type for its declaration instead of reading a `(name, module)`
-    /// pair off it: an instantiated `Option<i32>` answers with the `Option` it
-    /// was spelled from, so there is no separate generic arm and no spelling
-    /// check deciding whether the pair means a variant at all.
-    pub(super) fn variant_of_type(&self, type_id: TypeId) -> Option<&VariantInfo> {
-        let def = self.tysys.type_def(type_id)?;
-        self.tysys.data.variant_cases.get(&def)
-    }
-
-    /// The enum `type_id` is, or `None` when it is not one. Asks the type for
-    /// its declaration, the way [`Self::variant_of_type`] does.
-    pub(super) fn enum_of_type(&self, type_id: TypeId) -> Option<&EnumInfo> {
-        let def = self.tysys.type_def(type_id)?;
-        self.tysys.data.enum_cases.get(&def)
     }
 
     /// The struct `type_id` is an instance of; see [`Self::variant_of_type`].
@@ -1763,20 +1591,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Name of a type whose identity is the name itself — a primitive, `()`,
-    /// `!` or the raw `Array<T>`.
-    fn builtin_type_name(&self, type_id: tir::TypeId) -> Option<String> {
-        use crate::tir::ResolvedType;
-        let tt = self.tysys.type_table.borrow();
-        match tt.get(tt.peel_refs(type_id)) {
-            ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
-            ResolvedType::Unit => Some(tir::TypeTable::UNIT_TYPE_NAME.to_string()),
-            ResolvedType::Never => Some("!".to_string()),
-            ResolvedType::BuiltinArray(_) => Some(tir::TypeTable::ARRAY_TYPE_NAME.to_string()),
-            _ => None,
-        }
-    }
-
     /// The declaration behind `type_id` (refs peeled), or `None` for a type
     /// parameter, an associated-type projection, an anonymous struct shape and
     /// the other shapes that name none.
@@ -1787,7 +1601,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // A builtin's identity is its name, and the name path already knows
         // which module declares it. A second table answering here would be a
         // second derivation, free to disagree with that one.
-        if let Some(name) = self.builtin_type_name(type_id) {
+        if let Some(name) = self.tysys.builtin_type_name(type_id) {
             return self.decl_key_or_local(&name);
         }
         let tt = self.tysys.type_table.borrow();
@@ -1812,7 +1626,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // never parsed.
             if let Some(key) = self.type_decl_key(current) {
                 let defs = self.tysys.resolutions.defs();
-                if self.decl_render_name(key) == impl_name
+                if self.tysys.decl_render_name(key) == impl_name
                     || FqTypeName::declared(defs, key).to_mangled() == impl_name
                 {
                     return Some(key);
@@ -2106,7 +1920,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut function_sigs: IndexMap<DefId, Rc<sem::decls::FunctionSig>> = IndexMap::default();
         for item in &module.items {
             if let Item::Function(func) = item {
-                let def = self.def_at(func.id);
+                let def = self.tysys.def_at(func.id);
                 let sig = self.record_function_sig(func);
                 function_sigs.insert(def, Rc::new(sig));
             }
@@ -2369,7 +2183,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // Concrete-impl owner (`impl List<u8>`): the receiver's
             // qualified mangle, matching call sites (issue #1348).
             let concrete_owner: Option<FqTypeName> =
-                if scope.impl_is_concrete_instantiation(&impl_block.ty) {
+                if scope.tysys.impl_is_concrete_instantiation(&impl_block.ty) {
                     let tt = scope.tysys.type_table.borrow();
                     let peeled = tt.peel_refs(self_type);
                     let is_instantiation = match tt.get(peeled) {
@@ -2414,11 +2228,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let provided_method_names: Vec<String> =
             impl_block.methods.iter().map(|m| m.name.clone()).collect();
 
-        let impl_is_concrete = scope.impl_is_concrete_instantiation(&impl_block.ty);
+        let impl_is_concrete = scope.tysys.impl_is_concrete_instantiation(&impl_block.ty);
         for method in &impl_block.methods {
             // Records-only: reify emits the method `TirFunction`
             // from the recorded signature facts + the AST.
-            let method_def = scope.def_at(method.id);
+            let method_def = scope.tysys.def_at(method.id);
             let recorded_sig = scope
                 .tysys
                 .signatures
@@ -2448,7 +2262,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         {
             let default_methods: Vec<std::rc::Rc<ast::Function>> = trait_n
                 .canonical()
-                .and_then(|decl| scope.trait_sig_of(&decl))
+                .and_then(|decl| scope.tysys.trait_sig_of(&decl))
                 .map(|trait_sig| {
                     trait_sig
                         .default_methods()
@@ -2524,6 +2338,186 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .default_method_semantics
                     .insert((impl_block.id, default_method.id), populated);
             }
+        }
+    }
+}
+
+impl TypeSystem {
+    /// The impl-associated constant `owner` declares as `name`.
+    ///
+    /// `owner` is the declaration the use site's qualifier resolved to — an
+    /// alias and a `ns$Type` prefix answer with it like any other spelling —
+    /// so a same-named type in an unrelated module can never satisfy the
+    /// lookup.
+    pub(super) fn associated_constant_of(
+        &self,
+        owner: DefId,
+        name: &str,
+    ) -> Option<sig::AssocConstSig> {
+        self.signatures.associated_constant(owner, name).cloned()
+    }
+    /// [`Self::associated_constant_of`] for a qualified path in expression
+    /// position, whose leading segment carries the site that names the owner.
+    pub(super) fn associated_constant_of_path(
+        &self,
+        ident: &ast::IdentExpr,
+    ) -> Option<sig::AssocConstSig> {
+        let owner = trait_query::assoc_const_owner_of_path(ident, &self.resolutions)?;
+        let name = ident.segments.last()?;
+        self.associated_constant_of(owner, &name.name)
+    }
+    /// [`Self::associated_constant_of`] for a pattern's `Type::CONST`
+    /// spelling, whose qualifier is a written `ast::Type` with its own site.
+    pub(super) fn associated_constant_qualified(
+        &self,
+        qualifier: Option<&ast::Type>,
+        name: &str,
+    ) -> Option<sig::AssocConstSig> {
+        let owner = trait_query::assoc_const_owner(qualifier, &self.resolutions)?;
+        self.associated_constant_of(owner, name)
+    }
+    /// The declaration a qualified path's *owner* segment names — `Color` in
+    /// `Color::Red`, `Color` in `ns::Color::Red` — read off the site the
+    /// resolve walk answered for. `None` for a bare name, which qualifies
+    /// nothing, and for an owner that reaches no declaration.
+    pub(crate) fn qualified_owner_decl(&self, ident: &ast::IdentExpr) -> Option<DefId> {
+        self.resolutions.declared(ident.owner_segment()?.id)
+    }
+    /// The canonical signature of the free function the site names.
+    pub(super) fn free_function_sig_at(&self, site: AstId) -> Option<&sem::decls::FunctionSig> {
+        self.signatures.function_sig(self.free_function_at(site)?)
+    }
+}
+
+impl TypeSystem {
+    /// The declaration an item node declares.
+    ///
+    /// Every item the collect pass walks was declared into the table, so a miss
+    /// is a hole in that pass rather than a name that reached nothing.
+    pub(super) fn def_of_item(&self, id: AstId) -> DefId {
+        self.resolutions
+            .defs()
+            .of_ast_id(id)
+            .expect("an item declaration has an identity")
+    }
+
+    /// The free function the reference site `site` names, answered by the
+    /// module that wrote it (WEP 2026-08-12). `None` where it names something
+    /// else — a binder, a variant case, a node no walk saw.
+    pub(super) fn free_function_at(&self, site: AstId) -> Option<DefId> {
+        let def = self.resolutions.declared_if_walked(site)?;
+        (self.resolutions.defs().kind(def) == DefKind::Function).then_some(def)
+    }
+
+    /// The declaration `id` declares. See [`crate::defs::DefTable::def_at`].
+    pub(super) fn def_at(&self, id: AstId) -> DefId {
+        self.resolutions.defs().def_at(id)
+    }
+
+    /// The callee identity of the declaration `def`.
+    fn callee_of(&self, def: DefId) -> callee::CalleeRef {
+        callee::CalleeRef::declared(self.resolutions.defs(), def)
+    }
+
+    /// `type Buf = ByteList;` chains, so this peels to the type that declares
+    /// methods rather than stopping at the first link.
+    fn peeled_base(&self, alias: tir::TypeId) -> (tir::TypeId, String) {
+        let mut current = alias;
+        loop {
+            let peeled = match self.type_table.borrow().get(current).clone() {
+                tir::ResolvedType::Newtype { base_type, .. } => base_type,
+                tir::ResolvedType::Flags { .. } => tir::TypeTable::U32,
+                _ => break,
+            };
+            if peeled == current {
+                break;
+            }
+            current = peeled;
+        }
+        (current, self.get_ultimate_base_struct_name(current))
+    }
+
+    /// Whether the receiver's own declaration of this name and kind shadows a
+    /// trait impl's. Stated once here because every walk reaching both kinds
+    /// has to apply it, and one that reimplements it applies its own.
+    pub(crate) fn inherent_shadows(
+        &self,
+        receiver: &trait_env::ImplTargetKey,
+        method_name: &str,
+        has_self: bool,
+    ) -> bool {
+        self.trait_env
+            .impl_method_index
+            .get(receiver)
+            .is_some_and(|bucket| {
+                bucket
+                    .iter()
+                    .any(|e| e.name == method_name && e.has_self == has_self && e.is_inherent())
+            })
+    }
+
+    /// The binder naming the receiver parameter `written` of the `impl` block
+    /// `owner` — every pass that names a blanket's receiver asks here.
+    pub(super) fn impl_receiver_binder(&self, owner: DefId, written: &str) -> FqTypeName {
+        FqTypeName::binder_of_impl(self.resolutions.defs(), owner, written)
+    }
+
+    /// The spelling `def` renders to in a mangled head — its declared name,
+    /// with a function-local declaration's disambiguator applied.
+    pub(super) fn decl_render_name(&self, def: DefId) -> String {
+        trait_env::render_decl_name(self.resolutions.defs(), def)
+    }
+
+    /// The trait a bound's reference site names; `written` supplies the type
+    /// arguments and the diagnostic spelling.
+    ///
+    /// A site naming no declaration gets no invented identity — `use` and the
+    /// prelude are the only ways to name a trait, so a name reaching nothing here
+    /// reaches nothing at all, and the mangle falls back to the spelling.
+    pub(super) fn fq_trait_name_at(&self, site: AstId, written: &str) -> FqTraitName {
+        let resolutions = &self.resolutions;
+        let answer = resolutions.get(site);
+        if let Resolution::Binder(_) = answer {
+            return FqTraitName::binder(written);
+        }
+        // `written` is a bound's spelling, and a bound is a bare name: the
+        // parser reads `<...>` after one as associated-type bindings, so no
+        // type argument ever reaches here to be split back out.
+        resolutions.declared(site).map_or_else(
+            || FqTraitName::binder(written),
+            |def| FqTraitName::declared(resolutions.defs(), def),
+        )
+    }
+
+    /// The variant `type_id` is an instance of, or `None` when it is not one.
+    ///
+    /// Asks the type for its declaration instead of reading a `(name, module)`
+    /// pair off it: an instantiated `Option<i32>` answers with the `Option` it
+    /// was spelled from, so there is no separate generic arm and no spelling
+    /// check deciding whether the pair means a variant at all.
+    pub(super) fn variant_of_type(&self, type_id: TypeId) -> Option<&VariantInfo> {
+        let def = self.type_def(type_id)?;
+        self.data.variant_cases.get(&def)
+    }
+
+    /// The enum `type_id` is, or `None` when it is not one. Asks the type for
+    /// its declaration, the way [`Self::variant_of_type`] does.
+    pub(super) fn enum_of_type(&self, type_id: TypeId) -> Option<&EnumInfo> {
+        let def = self.type_def(type_id)?;
+        self.data.enum_cases.get(&def)
+    }
+
+    /// Name of a type whose identity is the name itself — a primitive, `()`,
+    /// `!` or the raw `Array<T>`.
+    fn builtin_type_name(&self, type_id: tir::TypeId) -> Option<String> {
+        use crate::tir::ResolvedType;
+        let tt = self.type_table.borrow();
+        match tt.get(tt.peel_refs(type_id)) {
+            ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
+            ResolvedType::Unit => Some(tir::TypeTable::UNIT_TYPE_NAME.to_string()),
+            ResolvedType::Never => Some("!".to_string()),
+            ResolvedType::BuiltinArray(_) => Some(tir::TypeTable::ARRAY_TYPE_NAME.to_string()),
+            _ => None,
         }
     }
 }

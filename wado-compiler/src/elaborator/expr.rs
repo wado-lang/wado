@@ -24,6 +24,7 @@ use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError, VarRef};
+use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{RangeExpr, Visibility};
 use crate::compiler_item::CompilerItem;
@@ -515,7 +516,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         self.settle_branch_holes(&mut branch_types, expected_type);
         let result_type =
-            expected_type.unwrap_or_else(|| self.representative_branch_type(&branch_types));
+            expected_type.unwrap_or_else(|| self.tysys.representative_branch_type(&branch_types));
 
         // Report a `break label: null` whose `Option<...>` inner could not be
         // inferred against a resolved non-`Option` result. A type still UNKNOWN
@@ -540,24 +541,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             TypeTable::NEVER
         }
-    }
-
-    /// The branch that types a block the use site expects nothing from: the
-    /// first carrying a real value. A `never`, `unit` or unresolved branch
-    /// steps aside, and a block holding only those takes its first.
-    fn representative_branch_type(&self, branch_types: &[TypeId]) -> TypeId {
-        let tt = self.tysys.type_table.borrow();
-        branch_types
-            .iter()
-            .copied()
-            .find(|&t| t != TypeTable::NEVER && t != TypeTable::UNIT && !tt.is_indefinite(t))
-            .or_else(|| {
-                branch_types
-                    .iter()
-                    .copied()
-                    .find(|&t| t != TypeTable::NEVER)
-            })
-            .unwrap_or(branch_types[0])
     }
 
     /// Range-check an integer literal against the `i32` it defaults to, the
@@ -822,7 +805,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // cross-module collision, issue #1342). Reify produces the const's
         // TIR under `with_const_module_perspective(const_module)` and does
         // not read these consumer-side entries.
-        if let Some(assoc) = self.associated_constant_of_path(ident) {
+        if let Some(assoc) = self.tysys.associated_constant_of_path(ident) {
             let (Some(owner), Some(member)) = (ident.owner_segment(), ident.segments.last()) else {
                 unreachable!("an associated constant path names an owner and a member")
             };
@@ -941,7 +924,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(ty) = self.global_type_in(&ident.name, home) {
             return Some(ty);
         }
-        let sig = self.free_function_sig_at(ident.id)?.clone();
+        let sig = self.tysys.free_function_sig_at(ident.id)?.clone();
         Some(
             self.compute_func_ref_type_from_sig(&sig, &[])
                 .unwrap_or(TypeTable::UNKNOWN),
@@ -1072,7 +1055,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let inferred = self.tysys.infer_variant_type_args(
                             &self.annotate_ctx,
                             &variant_info,
-                            &case_data,
+                            case_data,
                             None,
                             expected_type,
                             &explicit_args,
@@ -1221,7 +1204,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        let Some((sig, _def_module, _defining_name)) = self.lookup_func_sig_for_ref(ident) else {
+        let Some((sig, _def_module, _defining_name)) = self.tysys.lookup_func_sig_for_ref(ident)
+        else {
             // Fallback: known function but its signature is unreachable
             // (shouldn't normally happen). Emit a stub FuncRef so downstream
             // stays sane.
@@ -1325,21 +1309,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 is_union: false,
             },
         );
-    }
-
-    /// Canonical signature, defining module, and defining name for a
-    /// function-reference identifier (local or imported, possibly aliased).
-    /// The name is the *defining* one — `"foo"` for `use { foo as bar }` —
-    /// keeping the TIR `FuncRef` aligned with the post-monomorphization
-    /// key space.
-    fn lookup_func_sig_for_ref(
-        &self,
-        ident: &ast::IdentExpr,
-    ) -> Option<(FunctionSig, ModuleSource, String)> {
-        let def = self.free_function_at(ident.id)?;
-        let sig = self.tysys.signatures.function_sig(def)?.clone();
-        let defs = self.tysys.resolutions.defs();
-        Some((sig, defs.module(def).clone(), defs.name(def).to_string()))
     }
 
     /// Derive type arguments for a generic function reference from an expected
@@ -2740,7 +2709,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys
                     .type_table
                     .borrow()
-                    .get(self.structure_head(scrutinee_type)),
+                    .get(self.tysys.structure_head(scrutinee_type)),
                 ResolvedType::Resource { .. }
             );
             if is_resource {
@@ -2760,17 +2729,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _ = self.emit(TypeError::InvalidPattern { message, span });
     }
 
-    fn structure_head(&self, type_id: TypeId) -> TypeId {
-        self.tysys
-            .type_table
-            .borrow()
-            .scrutinee_structure_head(type_id)
-    }
-
     /// Project an AST pattern onto the shape coverage reads, asked of the
     /// structure its type wraps, as pattern resolution asks it.
     fn exh_pattern(&mut self, pattern: &ast::Pattern, scrutinee_type: TypeId) -> Pat {
-        let scrutinee_type = self.structure_head(scrutinee_type);
+        let scrutinee_type = self.tysys.structure_head(scrutinee_type);
         match pattern {
             ast::Pattern::Wildcard | ast::Pattern::Error(_) => Pat::Wild,
             ast::Pattern::Ident { name, .. } | ast::Pattern::MutIdent { name, .. } => {
@@ -2924,13 +2886,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn exh_is_unsigned(&self, scrutinee_type: TypeId) -> bool {
-        self.tysys
-            .type_table
-            .borrow()
-            .is_unsigned_int(scrutinee_type)
-    }
-
     /// The values an integer pattern of this type may take.
     fn int_domain(&self, scrutinee_type: TypeId) -> Option<IntDomain> {
         let ResolvedType::Primitive(prim) = *self.tysys.type_table.borrow().get(scrutinee_type)
@@ -2958,7 +2913,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let value = match lit {
             Literal::Number(repr) if util::is_float_only_literal(repr) => return Pat::Wild,
             Literal::Number(repr) => {
-                if self.exh_is_unsigned(scrutinee_type) {
+                if self.tysys.exh_is_unsigned(scrutinee_type) {
                     util::parse_u128_literal(repr).map(|v| v as i128).ok()
                 } else {
                     util::parse_i128_literal(repr).ok()
@@ -2994,7 +2949,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         name: &str,
         payload: Option<&ast::Pattern>,
     ) -> Pat {
-        if let Some(enum_info) = self.enum_of_type(scrutinee_type) {
+        if let Some(enum_info) = self.tysys.enum_of_type(scrutinee_type) {
             let cases: Rc<[Case]> = enum_info
                 .cases
                 .iter()
@@ -3012,7 +2967,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 payload: None,
             };
         }
-        let Some(variant_info) = self.variant_of_type(scrutinee_type).cloned() else {
+        let Some(variant_info) = self.tysys.variant_of_type(scrutinee_type).cloned() else {
             return Pat::Wild;
         };
         let Some(index) = variant_info.cases.iter().position(|c| c.name == name) else {
@@ -3062,7 +3017,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let Some(AssocConstSig {
                 value: const_expr, ..
-            }) = self.associated_constant_qualified(variant_qualifier, variant_name)
+            }) = self
+                .tysys
+                .associated_constant_qualified(variant_qualifier, variant_name)
             else {
                 return Pat::Wild;
             };
@@ -3092,7 +3049,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
     ) -> Pat {
         // Bad or empty bounds were reported where the pattern was resolved.
-        let is_unsigned = self.exh_is_unsigned(scrutinee_type);
+        let is_unsigned = self.tysys.exh_is_unsigned(scrutinee_type);
         let (Some(start_val), Some(end_val)) = (
             util::range_endpoint_to_i128(start, is_unsigned),
             util::range_endpoint_to_i128(end, is_unsigned),
@@ -3537,18 +3494,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type
     }
 
-    /// The struct declaration an unnamed literal's target names, or `None`
-    /// where it declares none and the literal interns by its fields.
-    fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<DefId> {
-        match *self.tysys.type_table.borrow().get(expected_type?) {
-            ResolvedType::Struct {
-                def: StructDef::Decl(def),
-                ..
-            } => Some(def),
-            _ => None,
-        }
-    }
-
     pub(super) fn resolve_struct_literal(
         &mut self,
         struct_lit: &ast::StructLiteralExpr,
@@ -3561,7 +3506,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let implicit_decl = if struct_lit.name.is_some() {
             None
         } else {
-            let Some(def) = self.implicit_struct_target(expected_type) else {
+            let Some(def) = self.tysys.implicit_struct_target(expected_type) else {
                 return self.resolve_anonymous_struct_literal(struct_lit, ctx, expected_type);
             };
             Some(def)
@@ -4651,11 +4596,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ));
     }
 
-    /// Check if a type contains a `TypePack` (variadic pack parameter).
-    pub(super) fn type_contains_pack(&self, type_id: TypeId) -> bool {
-        self.tysys.type_table.borrow().contains_type_pack(type_id)
-    }
-
     /// The local slot bound to the index of `for let [i, v] of t.enumerate()`,
     /// once the binding is in scope. `None` when the form is not an enumerate
     /// or the index position is a wildcard.
@@ -4845,7 +4785,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (elem_idx, elem) in tuple_lit.elements.iter().enumerate() {
             if let Expr::Spread(inner, _span) = elem {
                 let spread_type_id = self.resolve_expr(inner, ctx, None);
-                if self.type_contains_pack(spread_type_id) {
+                if self.tysys.type_contains_pack(spread_type_id) {
                     // A tuple carrying packs (`[..rest]` where `rest: [..T]`)
                     // splices its own elements, so each pack lands directly in
                     // the literal's type and monomorphize expands it there. A
@@ -5206,6 +5146,68 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|key| (Some(*key), defs.module(*key).clone()))
             // The `From` impl may be synthesized later, so a miss is not an error.
             .unwrap_or_else(|| (None, self.current_module_source.clone()))
+    }
+}
+
+impl TypeSystem {
+    /// Canonical signature, defining module, and defining name for a
+    /// function-reference identifier (local or imported, possibly aliased).
+    /// The name is the *defining* one — `"foo"` for `use { foo as bar }` —
+    /// keeping the TIR `FuncRef` aligned with the post-monomorphization
+    /// key space.
+    fn lookup_func_sig_for_ref(
+        &self,
+        ident: &ast::IdentExpr,
+    ) -> Option<(FunctionSig, ModuleSource, String)> {
+        let def = self.free_function_at(ident.id)?;
+        let sig = self.signatures.function_sig(def)?.clone();
+        let defs = self.resolutions.defs();
+        Some((sig, defs.module(def).clone(), defs.name(def).to_string()))
+    }
+}
+
+impl TypeSystem {
+    /// The branch that types a block the use site expects nothing from: the
+    /// first carrying a real value. A `never`, `unit` or unresolved branch
+    /// steps aside, and a block holding only those takes its first.
+    fn representative_branch_type(&self, branch_types: &[TypeId]) -> TypeId {
+        let tt = self.type_table.borrow();
+        branch_types
+            .iter()
+            .copied()
+            .find(|&t| t != TypeTable::NEVER && t != TypeTable::UNIT && !tt.is_indefinite(t))
+            .or_else(|| {
+                branch_types
+                    .iter()
+                    .copied()
+                    .find(|&t| t != TypeTable::NEVER)
+            })
+            .unwrap_or(branch_types[0])
+    }
+
+    fn structure_head(&self, type_id: TypeId) -> TypeId {
+        self.type_table.borrow().scrutinee_structure_head(type_id)
+    }
+
+    fn exh_is_unsigned(&self, scrutinee_type: TypeId) -> bool {
+        self.type_table.borrow().is_unsigned_int(scrutinee_type)
+    }
+
+    /// The struct declaration an unnamed literal's target names, or `None`
+    /// where it declares none and the literal interns by its fields.
+    fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<DefId> {
+        match *self.type_table.borrow().get(expected_type?) {
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                ..
+            } => Some(def),
+            _ => None,
+        }
+    }
+
+    /// Check if a type contains a `TypePack` (variadic pack parameter).
+    pub(super) fn type_contains_pack(&self, type_id: TypeId) -> bool {
+        self.type_table.borrow().contains_type_pack(type_id)
     }
 }
 

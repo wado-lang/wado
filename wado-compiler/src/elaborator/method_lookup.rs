@@ -72,11 +72,12 @@ fn impl_header<'a>(trait_env: &'a TraitEnv, r: &ImplBlockRef) -> &'a ImplHeader 
         .expect("every indexed impl block has an ImplHeader")
 }
 
-impl<H: CompilerHost> Elaborator<'_, H> {
+impl<H: CompilerHost> Elaborator<'_, H> {}
+
+impl TypeSystem {
     /// The declaration facts the decl pass recorded for an indexed impl block.
     fn impl_sig(&self, r: &ImplBlockRef) -> &ImplSig {
-        self.tysys
-            .signatures
+        self.signatures
             .impl_sig(r.0)
             .expect("the decl pass records every impl block's declaration facts")
     }
@@ -421,11 +422,6 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Get the module source for an `ImplBlockRef`.
-    fn impl_block_module_source(&self, r: &ImplBlockRef) -> ModuleSource {
-        self.tysys.resolutions.defs().module(r.0).clone()
-    }
-
     /// Collect trait impl block references for a given type name.
     /// Returns lightweight `ImplBlockRef` values instead of cloning impl block data.
     fn collect_trait_impl_refs(&self, type_key: &ImplTargetKey) -> Vec<ImplBlockRef> {
@@ -579,12 +575,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// The declaration an operator dispatches through, as a compiler item
-    /// names it.
-    pub(super) fn operator_trait_decl(&self, op: &BinaryOp) -> Option<DefId> {
-        self.tysys.compiler_trait_def(operator_compiler_item(op)?)
-    }
-
     /// The trait declaration's own type parameters, under the names it wrote
     /// them, standing at the arguments this impl supplied.
     fn trait_declared_bindings(
@@ -635,7 +625,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if decl != trait_ {
                 return None;
             }
-            let sig = &self.trait_sig_of(&decl)?.method(method_name)?.sig;
+            let sig = &self.tysys.trait_sig_of(&decl)?.method(method_name)?.sig;
             let declared = sig.decl.param_types.get(sig.first_value_param()).copied()?;
             Some((bound, declared))
         })?;
@@ -714,6 +704,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(&rhs),
         )?;
         Some(rhs_type_id)
+    }
+}
+
+impl TypeSystem {
+    /// Get the module source for an `ImplBlockRef`.
+    fn impl_block_module_source(&self, r: &ImplBlockRef) -> ModuleSource {
+        self.resolutions.defs().module(r.0).clone()
+    }
+
+    /// The declaration an operator dispatches through, as a compiler item
+    /// names it.
+    pub(super) fn operator_trait_decl(&self, op: &BinaryOp) -> Option<DefId> {
+        self.compiler_trait_def(operator_compiler_item(op)?)
     }
 }
 
@@ -1111,8 +1114,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             is_ref_impl: false,
             method_type_param_ids: sig.own_type_param_ids(),
             method_own_params: sig.own_params.clone(),
-            impl_module: Some(self.impl_block_module_source(impl_ref)),
-            from_concrete_impl: self.impl_is_concrete_instantiation(&header.ty),
+            impl_module: Some(self.tysys.impl_block_module_source(impl_ref)),
+            from_concrete_impl: self.tysys.impl_is_concrete_instantiation(&header.ty),
             param_defaults: Param::defaults(&sig.params),
             param_names: Param::names(&sig.params),
             consumes_self: sig.self_kind == ast::SelfKind::Value,
@@ -1134,7 +1137,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<MethodInfo> {
         // The nearest declaration answers, keeping its own signature. Only the
         // receiver's takes type arguments — a generic resource is rejected.
-        self.resource_chain_of(def)
+        self.tysys
+            .resource_chain_of(def)
             .into_iter()
             .enumerate()
             .find_map(|(step, current)| {
@@ -1153,12 +1157,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
     }
 
-    /// `def` and every resource it extends. Collected, so the walk's own
-    /// lookups can borrow the type table again.
-    fn resource_chain_of(&self, def: DefId) -> Vec<DefId> {
-        self.tysys.type_table.borrow().resource_chain(def).collect()
-    }
-
     /// The resource that declares `method_name` as an instance method for a
     /// receiver declared by `def` — itself or the nearest ancestor — and what
     /// it declares. A static belongs to its declaring resource alone, so the
@@ -1168,13 +1166,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         def: DefId,
         method_name: &str,
     ) -> Option<(DefId, sig::MethodSig)> {
-        self.resource_chain_of(def).into_iter().find_map(|current| {
-            let sig = self
-                .tysys
-                .signatures
-                .resource_method_sig(current, method_name)?;
-            (sig.self_kind != ast::SelfKind::None).then(|| (current, sig.clone()))
-        })
+        self.tysys
+            .resource_chain_of(def)
+            .into_iter()
+            .find_map(|current| {
+                let sig = self
+                    .tysys
+                    .signatures
+                    .resource_method_sig(current, method_name)?;
+                (sig.self_kind != ast::SelfKind::None).then(|| (current, sig.clone()))
+            })
     }
 
     /// The trait whose impl for `type_key` declares `method_name`, if one does.
@@ -1243,21 +1244,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// The index the declaration gave the first of `slots`, or 0 when there
-    /// are none. A slot carries its own index; nothing else knows it.
-    fn slot_base(&self, slots: &[TypeId]) -> u32 {
-        let table = self.tysys.type_table.borrow();
-        slots
-            .first()
-            .and_then(|&slot| match table.get(slot) {
-                ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                    Some(*index)
-                }
-                _ => None,
-            })
-            .unwrap_or(0)
-    }
-
     /// [`Self::fill_defaulted_method_type_args`] for a static's own slots,
     /// reading the trait and the declaring module off its signature.
     pub(super) fn fill_static_default_type_args(
@@ -1302,13 +1288,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         inferred: &mut [TypeId],
     ) -> bool {
         let receiver_type = self.tysys.get_base_type(receiver_type);
-        if self.is_unbound_type_param(receiver_type) {
+        if self.tysys.is_unbound_type_param(receiver_type) {
             return false;
         }
         let has_fillable = method_type_params
             .iter()
             .zip(inferred.iter())
-            .any(|(p, &tid)| p.default.is_some() && self.is_unbound_type_param(tid));
+            .any(|(p, &tid)| p.default.is_some() && self.tysys.is_unbound_type_param(tid));
         if !has_fillable {
             return false;
         }
@@ -1326,7 +1312,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let mut filled = false;
         for i in 0..inferred.len() {
-            if self.is_unbound_type_param(inferred[i])
+            if self.tysys.is_unbound_type_param(inferred[i])
                 && let Some(default_ty) = defaults[i]
                 && default_ty != TypeTable::ERROR
                 && !self
@@ -1362,7 +1348,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resolve against. Number them from the index the declaration gave the
         // first slot — read off the slot, not counted from the receiver's type
         // arguments, which overshoots on a concrete or pack-bearing impl.
-        let base = self.slot_base(slots);
+        let base = self.tysys.slot_base(slots);
         self.with_self_binding(declaring, |s| {
             s.with_resolving_home(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
@@ -1445,7 +1431,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let fillable: Vec<bool> = method_type_params
             .iter()
             .zip(known.iter())
-            .map(|(p, &tid)| p.default.is_some() && self.is_unbound_type_param(tid))
+            .map(|(p, &tid)| p.default.is_some() && self.tysys.is_unbound_type_param(tid))
             .collect();
         if !fillable.iter().any(|&f| f) {
             return;
@@ -1505,7 +1491,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .zip(type_args)
             .filter(|(p, _)| p.is_pack && reached.contains(&p.name))
-            .filter(|&(_, &arg)| self.is_unbound_type_param(arg) || self.type_contains_pack(arg))
+            .filter(|&(_, &arg)| {
+                self.tysys.is_unbound_type_param(arg) || self.tysys.type_contains_pack(arg)
+            })
             .map(|(p, _)| p.name.clone())
             .collect();
         if open.is_empty() {
@@ -1535,7 +1523,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let self_binding = self
             .tysys
             .base_self_binding(input.receiver_type, input.trait_decl);
-        let reached = self.packs_args_reach(input.param_types, input.args.len());
+        let reached = self
+            .tysys
+            .packs_args_reach(input.param_types, input.args.len());
         let (method_name, receiver_type) = (input.method_name.to_string(), input.receiver_type);
         let mut type_args = self.resolve_method_type_args(explicit, input);
         self.settle_unreached_packs(own_params, &mut type_args, &reached);
@@ -1694,7 +1684,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // borrow must match it.
         if receiver_ast
             .is_some_and(|e| matches!(e, ast::Expr::FieldAccess(_) | ast::Expr::Index(_)))
-            && self.is_replace_on_assign_place_type(receiver)
+            && self.tysys.is_replace_on_assign_place_type(receiver)
         {
             let _ = self.emit(TypeError::CannotMutate {
                 message: format!(
@@ -1703,26 +1693,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
-    }
-
-    /// A type nothing survives a `&mut` copy of — primitive, enum, flags, or
-    /// fn, or a newtype over one. A `variant` is excluded: its payload is a
-    /// shared GC struct, so mutation through the payload lands.
-    pub(super) fn is_replace_on_assign_place_type(&self, type_id: TypeId) -> bool {
-        let table = self.tysys.type_table.borrow();
-        let replaces_on_assign = |ty: &ResolvedType| {
-            matches!(
-                ty,
-                ResolvedType::Primitive(_)
-                    | ResolvedType::Enum { .. }
-                    | ResolvedType::Function { .. }
-            )
-        };
-        if replaces_on_assign(table.get(type_id)) {
-            return true;
-        }
-        let base = table.representation_head(type_id);
-        replaces_on_assign(table.get(base))
     }
 
     /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and
@@ -1980,10 +1950,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         // Qualified in the impl's own frame by the decl pass: the call site's
         // imports may name the same declaration differently, or not at all.
-        let impl_struct_fq = self.impl_sig(impl_ref).target_fq.clone();
+        let impl_struct_fq = self.tysys.impl_sig(impl_ref).target_fq.clone();
         // Track variadic type pack spreads: (pack_name, param_index)
         let mut variadic_pack_entry: Option<(String, u32)> = None;
-        let impl_home = self.impl_block_module_source(impl_ref);
+        let impl_home = self.tysys.impl_block_module_source(impl_ref);
         let target_params = |generic: &ast::GenericType| -> Vec<(String, u32)> {
             generic
                 .args
@@ -2049,7 +2019,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A concrete generic instantiation trait impl (`impl Tag for
         // List<u8>`) yields a per-instantiation concrete method, called
         // directly (no monomorphization), living in the impl's module.
-        let impl_is_concrete = self.impl_is_concrete_instantiation(&header.ty);
+        let impl_is_concrete = self.tysys.impl_is_concrete_instantiation(&header.ty);
 
         // Save trait context for this impl block scope. We use an inherited
         // scope (saves the full ctx via clone) and then selectively clear
@@ -2194,8 +2164,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         // The block names the receiver — not the letter, which another blanket
         // of the same trait may also spell.
-        let blanket_binder = is_blanket_type_param
-            .then(|| scope.impl_receiver_binder(impl_ref.0, &impl_struct_name));
+        let blanket_binder = is_blanket_type_param.then(|| {
+            scope
+                .tysys
+                .impl_receiver_binder(impl_ref.0, &impl_struct_name)
+        });
 
         // Detect blanket ref impls: `impl<T: Bound> Trait for &T` where the inner type
         // is a type parameter. These should NOT override base-type methods.
@@ -2358,7 +2331,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The block's own trait, by declaration: a second trait of that
             // spelling in this frame would otherwise supply the default body,
             // its module, and the slots it is instantiated in.
-            let declaring = scope.trait_sig_of(&trait_decl);
+            let declaring = scope.tysys.trait_sig_of(&trait_decl);
             let trait_module = declaring.map(|sig| sig.module.clone());
             if let Some(default_method) = declaring
                 .and_then(|sig| sig.method(method_name))
@@ -2581,7 +2554,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _ = self.emit(TypeError::AmbiguousTraitArguments {
             method: method_name.to_string(),
             traits,
-            arguments: self.describe_arg_classes(classes),
+            arguments: self.tysys.describe_arg_classes(classes),
             span,
         });
     }
@@ -2603,7 +2576,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _ = self.emit(TypeError::NoMatchingOverload {
             method: method_name.to_string(),
             traits,
-            arguments: self.describe_arg_classes(classes),
+            arguments: self.tysys.describe_arg_classes(classes),
             span,
         });
     }
@@ -2625,16 +2598,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         traits.dedup();
         Some(traits)
-    }
-
-    /// The reason chain both selection failures carry: what each argument
-    /// contributed, in argument order.
-    fn describe_arg_classes(&self, classes: &[ArgClass]) -> Vec<String> {
-        classes
-            .iter()
-            .enumerate()
-            .map(|(i, class)| format!("argument {} {}", i + 1, self.describe_arg_class(class)))
-            .collect()
     }
 
     /// Two *different* traits declaring one method name for one receiver. The
@@ -2801,23 +2764,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let (pairs, plain): (Vec<_>, Vec<_>) = candidates
             .into_iter()
-            .partition(|found| self.is_pair_type(found.element_type));
+            .partition(|found| self.tysys.is_pair_type(found.element_type));
         if want_pair {
             return pairs;
         }
         // A sequence literal prefers the non-pair reading; the pair impls are
         // its only candidates when the type offers nothing else.
         if plain.is_empty() { pairs } else { plain }
-    }
-
-    /// Whether `type_id` is a `[K, V]` — the element a `{ k: v, … }` literal
-    /// writes, and what separates a map's `From` impl from a sequence's.
-    fn is_pair_type(&self, type_id: TypeId) -> bool {
-        self.tysys
-            .type_table
-            .borrow()
-            .as_tuple(type_id)
-            .is_some_and(|elems| elems.len() == 2)
     }
 
     pub(super) fn find_index_assign_trait_impl(
@@ -2879,28 +2832,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<ArithmeticTraitInfo> {
         let mut found =
             self.find_arithmetic_trait_impls(struct_name, base_type_id, trait_, method_name, rhs);
-        self.retain_most_specific_rhs(&mut found);
+        self.tysys.retain_most_specific_rhs(&mut found);
         match found.as_slice() {
             [only] => Some(only.clone()),
             // Unique-or-error, as everywhere else: several admitted impls are
             // the caller's to report, with the span it holds.
             [] | [_, _, ..] => None,
         }
-    }
-
-    /// Keep only the impls writing a type for the right-hand parameter, where
-    /// one does: a bare parameter admits every operand and would shadow them.
-    fn retain_most_specific_rhs(&self, found: &mut Vec<ArithmeticTraitInfo>) {
-        if found.len() >= 2 && found.iter().any(|info| self.writes_rhs_type(info)) {
-            found.retain(|info| self.writes_rhs_type(info));
-        }
-    }
-
-    /// Whether the impl writes a type for its right-hand parameter, rather than
-    /// one mentioning its own type parameter.
-    fn writes_rhs_type(&self, info: &ArithmeticTraitInfo) -> bool {
-        info.rhs_type
-            .is_some_and(|rhs| !self.tysys.type_table.borrow().contains_rigid_param(rhs))
     }
 
     /// Every impl of `trait_name` on the receiver whose right-hand parameter
@@ -3115,7 +3053,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // bindings.
                 let method_header = header.methods.iter().find(|m| m.name == method_name)?;
                 let self_kind = s.tysys.signatures.method_sig(method_header.def)?.self_kind;
-                let impl_source = s.impl_block_module_source(impl_ref);
+                let impl_source = s.tysys.impl_block_module_source(impl_ref);
 
                 let assoc_type = impl_sig
                     .associated_types
@@ -3123,9 +3061,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .copied()
                     .unwrap_or(TypeTable::UNKNOWN);
 
-                let receiver = s
-                    .tysys
-                    .fq_receiver_of_impl(base_type_id, s.impl_is_concrete_instantiation(&impl_ty));
+                let receiver = s.tysys.fq_receiver_of_impl(
+                    base_type_id,
+                    s.tysys.impl_is_concrete_instantiation(&impl_ty),
+                );
 
                 Some(IndexingTraitInfo {
                     method_def: method_header.def,
@@ -3523,6 +3462,85 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The `$index_mut_val` local reify synthesizes comes from the
         // recorded `IndexMutMethodCall` desugar, not from this walk.
         Some(return_type)
+    }
+}
+
+impl TypeSystem {
+    /// The reason chain both selection failures carry: what each argument
+    /// contributed, in argument order.
+    fn describe_arg_classes(&self, classes: &[ArgClass]) -> Vec<String> {
+        classes
+            .iter()
+            .enumerate()
+            .map(|(i, class)| format!("argument {} {}", i + 1, self.describe_arg_class(class)))
+            .collect()
+    }
+
+    /// Keep only the impls writing a type for the right-hand parameter, where
+    /// one does: a bare parameter admits every operand and would shadow them.
+    fn retain_most_specific_rhs(&self, found: &mut Vec<ArithmeticTraitInfo>) {
+        if found.len() >= 2 && found.iter().any(|info| self.writes_rhs_type(info)) {
+            found.retain(|info| self.writes_rhs_type(info));
+        }
+    }
+}
+
+impl TypeSystem {
+    /// `def` and every resource it extends. Collected, so the walk's own
+    /// lookups can borrow the type table again.
+    fn resource_chain_of(&self, def: DefId) -> Vec<DefId> {
+        self.type_table.borrow().resource_chain(def).collect()
+    }
+
+    /// The index the declaration gave the first of `slots`, or 0 when there
+    /// are none. A slot carries its own index; nothing else knows it.
+    fn slot_base(&self, slots: &[TypeId]) -> u32 {
+        let table = self.type_table.borrow();
+        slots
+            .first()
+            .and_then(|&slot| match table.get(slot) {
+                ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                    Some(*index)
+                }
+                _ => None,
+            })
+            .unwrap_or(0)
+    }
+
+    /// A type nothing survives a `&mut` copy of — primitive, enum, flags, or
+    /// fn, or a newtype over one. A `variant` is excluded: its payload is a
+    /// shared GC struct, so mutation through the payload lands.
+    pub(super) fn is_replace_on_assign_place_type(&self, type_id: TypeId) -> bool {
+        let table = self.type_table.borrow();
+        let replaces_on_assign = |ty: &ResolvedType| {
+            matches!(
+                ty,
+                ResolvedType::Primitive(_)
+                    | ResolvedType::Enum { .. }
+                    | ResolvedType::Function { .. }
+            )
+        };
+        if replaces_on_assign(table.get(type_id)) {
+            return true;
+        }
+        let base = table.representation_head(type_id);
+        replaces_on_assign(table.get(base))
+    }
+
+    /// Whether `type_id` is a `[K, V]` — the element a `{ k: v, … }` literal
+    /// writes, and what separates a map's `From` impl from a sequence's.
+    fn is_pair_type(&self, type_id: TypeId) -> bool {
+        self.type_table
+            .borrow()
+            .as_tuple(type_id)
+            .is_some_and(|elems| elems.len() == 2)
+    }
+
+    /// Whether the impl writes a type for its right-hand parameter, rather than
+    /// one mentioning its own type parameter.
+    fn writes_rhs_type(&self, info: &ArithmeticTraitInfo) -> bool {
+        info.rhs_type
+            .is_some_and(|rhs| !self.type_table.borrow().contains_rigid_param(rhs))
     }
 }
 

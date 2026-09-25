@@ -1188,7 +1188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map_or_else(Vec::new, |decl| decl.bounds.clone());
         let bound_names: Vec<FqTraitName> = assoc_bounds
             .iter()
-            .map(|b| self.fq_trait_name_at(b.id, &b.name))
+            .map(|b| self.tysys.fq_trait_name_at(b.id, &b.name))
             .collect();
         let assoc_type_bindings = self.frame_assoc_bindings(base, base_name, &assoc_bounds);
         self.tysys
@@ -1216,7 +1216,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.bound_closure_of(base_name)?
                 .into_iter()
                 .find_map(|(bound, space)| {
-                    let fq = self.fq_trait_name_at(bound.id, &bound.name);
+                    let fq = self.tysys.fq_trait_name_at(bound.id, &bound.name);
                     (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
                         .then(|| bound.assoc_types.iter().find(|b| b.name == assoc).cloned())
                         .flatten()

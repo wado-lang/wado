@@ -23,6 +23,7 @@ use super::scope::{BinderInScope, ScopedBound, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig};
 use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, TypeError};
+use super::tysys::TypeSystem;
 use crate::ast::{AssociatedTypeDecl, AstId, Attribute, GenericParam, Visibility};
 use crate::compiler_item::TraitAssocType;
 use crate::defs::{DefId, DefKind};
@@ -859,7 +860,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .as_ref()
             .and_then(head_site)
             .and_then(|site| scope.tysys.resolutions.declared(site));
-        let impl_def = scope.def_at(impl_block.id);
+        let impl_def = scope.tysys.def_at(impl_block.id);
         scope.sem.decls.impl_sigs.insert(
             impl_def,
             ImplSig {
@@ -1190,13 +1191,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// instantiates a recorded signature instead of re-resolving the method
     /// AST under the *caller's* perspective (WEP 2026-05-26).
     pub(super) fn record_impl_decls(&mut self, impl_block: &ast::ImplBlock) {
-        let impl_def = self.def_at(impl_block.id);
+        let impl_def = self.tysys.def_at(impl_block.id);
         let mut block = self.enter_inherited_type_param_scope();
         block.annotate_ctx.trait_ctx.type_params.clear();
         block.annotate_ctx.trait_ctx.type_param_bounds.clear();
         block.register_impl_block_params(impl_block);
 
-        let impl_is_concrete = block.impl_is_concrete_instantiation(&impl_block.ty);
+        let impl_is_concrete = block.tysys.impl_is_concrete_instantiation(&impl_block.ty);
 
         block.record_impl_sig(impl_block, impl_is_concrete);
         if impl_block.is_synthesize_request {
@@ -1259,7 +1260,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .first()
                 .map(|p| p.self_kind)
                 .unwrap_or(ast::SelfKind::None);
-            let method_def = frame_scope.def_at(method.id);
+            let method_def = frame_scope.tysys.def_at(method.id);
             frame_scope.sem.decls.method_sigs.insert(
                 method_def,
                 MethodSig {
@@ -1362,6 +1363,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             ResolvedType::Variant { .. } => {
                 let payloads: Vec<TypeId> = self
+                    .tysys
                     .variant_of_type(base)
                     .map(|info| info.cases.iter().map(|c| c.payload).collect())
                     .unwrap_or_default();
@@ -1414,6 +1416,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // them up so a variant case payload containing a closure type
                 // fails the CM boundary check too.
                 let payloads: Vec<TypeId> = self
+                    .tysys
                     .variant_of_type(type_id)
                     .map(|info| info.cases.iter().map(|c| c.payload).collect())
                     .unwrap_or_default();
@@ -1507,7 +1510,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Operation signatures the decl pass recorded for the declaration at
     /// `decl_id`.
     fn declared_effect_ops(&self, decl_id: ast::AstId) -> Vec<TirEffectOp> {
-        let decl = self.def_at(decl_id);
+        let decl = self.tysys.def_at(decl_id);
         self.sem
             .decls
             .effect_ops
@@ -1651,7 +1654,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let mut type_params = decl_slots.clone();
             type_params.extend(method_slots);
 
-            let method_def = method_scope.def_at(method.id);
+            let method_def = method_scope.tysys.def_at(method.id);
             methods.insert(
                 method.name.clone(),
                 TraitMethod {
@@ -1697,7 +1700,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         let module = scope.current_module_source.clone();
-        let trait_def = scope.def_at(trait_decl.id);
+        let trait_def = scope.tysys.def_at(trait_decl.id);
         scope
             .sem
             .decls
@@ -1875,7 +1878,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             } else {
                 SelfKind::None
             };
-            let method_def = scope.def_at(method.id);
+            let method_def = scope.tysys.def_at(method.id);
             scope.sem.decls.method_sigs.insert(
                 method_def,
                 MethodSig {
@@ -2237,7 +2240,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// re-resolution. Returns the declared return type for callers that
     /// need it (`resolve_function`'s `task_return_type`).
     fn populate_generic_function_cache(&mut self, func: &Function) -> TypeId {
-        let def = self.def_at(func.id);
+        let def = self.tysys.def_at(func.id);
         let sig = self
             .sem
             .decls
@@ -2451,22 +2454,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             placeholder_function(function_name, test_decl.span),
             tir_test,
         ))
-    }
-
-    /// Whether `impl_block` is a concrete generic instantiation (`impl List<u8>`,
-    /// `impl Tag for [i32, i32]`) — a generic self type, tuples included, whose
-    /// every argument is concrete. Its methods are per-instantiation functions
-    /// named `List<u8>::method` and called directly. The tuple arm carries
-    /// coherence Rule 1: the variadic template is skipped for that arity.
-    ///
-    /// "Concrete" is [`super::TypeSystem::impl_arg_pins_a_position`] and
-    /// nothing else: this names the method, matching decides which receivers
-    /// reach that name, and a second answer mints one name from two functions.
-    pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
-        let Some(args) = impl_target_args(impl_ty) else {
-            return false;
-        };
-        !args.is_empty() && args.iter().all(|a| self.tysys.impl_arg_pins_a_position(a))
     }
 
     /// Resolve a method. Under `impl_is_concrete` the surrounding impl is a fully
@@ -2702,6 +2689,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // AST. No caller reads this return value, so a minimal shell
         // satisfies the signature.
         Some(placeholder_function(func.name.clone(), func.span))
+    }
+}
+
+impl TypeSystem {
+    /// Whether `impl_block` is a concrete generic instantiation (`impl List<u8>`,
+    /// `impl Tag for [i32, i32]`) — a generic self type, tuples included, whose
+    /// every argument is concrete. Its methods are per-instantiation functions
+    /// named `List<u8>::method` and called directly. The tuple arm carries
+    /// coherence Rule 1: the variadic template is skipped for that arity.
+    ///
+    /// "Concrete" is [`super::TypeSystem::impl_arg_pins_a_position`] and
+    /// nothing else: this names the method, matching decides which receivers
+    /// reach that name, and a second answer mints one name from two functions.
+    pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
+        let Some(args) = impl_target_args(impl_ty) else {
+            return false;
+        };
+        !args.is_empty() && args.iter().all(|a| self.impl_arg_pins_a_position(a))
     }
 }
 

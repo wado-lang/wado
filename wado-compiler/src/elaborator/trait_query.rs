@@ -431,22 +431,6 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The declaration header of a trait already identified, so a caller
-    /// answers about the declaration its site resolved to, not a spelling.
-    pub(super) fn trait_decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {
-        self.tysys.trait_env.decl_header_of(key)
-    }
-
-    /// The trait's declaration of the associated type `assoc_name`, or `None`
-    /// when it declares no such type.
-    pub(super) fn trait_assoc_type_decl(
-        &self,
-        key: &DefId,
-        assoc_name: &str,
-    ) -> Option<&ast::AssociatedTypeDecl> {
-        self.tysys.trait_env.assoc_type_decl(key, assoc_name)
-    }
-
     /// The written head of `impl Trait for T`, its name, and the declaration it
     /// names. The head carries its own reference site, so an aliased
     /// `impl B for T` answers `Base` rather than a spelling two modules share.
@@ -470,6 +454,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         for binding in &impl_block.associated_types {
             let bounds: Vec<(String, Option<FqTraitName>)> = self
+                .tysys
                 .trait_assoc_type_decl(&trait_decl, &binding.name)
                 .into_iter()
                 .flat_map(|decl| &decl.bounds)
@@ -656,18 +641,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_args
             .iter()
             .map(|ty| {
-                self.reads_a_projection(ty, &binders)
+                self.tysys.reads_a_projection(ty, &binders)
                     || (self_binding.is_some() && ty.mentions("Self"))
             })
             .collect()
-    }
-
-    fn reads_a_projection(&self, ty: &ast::Type, binders: &[AstId]) -> bool {
-        ty.any(&mut |ty| {
-            matches!(ty, ast::Type::NamespacedGeneric(ns)
-                if matches!(self.tysys.resolutions.get(ns.id),
-                    Resolution::Projection(base) if binders.contains(&base)))
-        })
     }
 
     /// `fq` with each argument `pick` marks resolved in this frame rather than
@@ -693,13 +670,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_named_by_position(fq, &table, |i| resolved.get(i).copied().flatten())
     }
 
-    /// The declared type parameters of an already-identified trait: the
-    /// `<T, U>` of `trait Foo<T, U>`.
-    pub(super) fn trait_decl_type_params_of(&self, key: &DefId) -> Option<Vec<ast::GenericParam>> {
-        self.trait_decl_header_of(key)
-            .map(|header| header.type_params.clone())
-    }
-
     pub(super) fn find_trait_decl_type_params(
         &self,
         trait_name: &str,
@@ -708,7 +678,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // list and the default-method bodies resolve to the same trait.
         if let Some(params) = self
             .decl_key_or_local(trait_name)
-            .and_then(|key| self.trait_decl_type_params_of(&key))
+            .and_then(|key| self.tysys.trait_decl_type_params_of(&key))
         {
             return Some(params);
         }
@@ -723,6 +693,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 *defs.module(**key) == self.current_module_source && header.name == trait_name
             })
             .map(|(_, header)| header.type_params.clone())
+    }
+}
+
+impl TypeSystem {
+    /// The declared type parameters of an already-identified trait: the
+    /// `<T, U>` of `trait Foo<T, U>`.
+    pub(super) fn trait_decl_type_params_of(&self, key: &DefId) -> Option<Vec<ast::GenericParam>> {
+        self.trait_decl_header_of(key)
+            .map(|header| header.type_params.clone())
+    }
+}
+
+impl TypeSystem {
+    /// The declaration header of a trait already identified, so a caller
+    /// answers about the declaration its site resolved to, not a spelling.
+    pub(super) fn trait_decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {
+        self.trait_env.decl_header_of(key)
+    }
+
+    /// The trait's declaration of the associated type `assoc_name`, or `None`
+    /// when it declares no such type.
+    pub(super) fn trait_assoc_type_decl(
+        &self,
+        key: &DefId,
+        assoc_name: &str,
+    ) -> Option<&ast::AssociatedTypeDecl> {
+        self.trait_env.assoc_type_decl(key, assoc_name)
+    }
+
+    fn reads_a_projection(&self, ty: &ast::Type, binders: &[AstId]) -> bool {
+        ty.any(&mut |ty| {
+            matches!(ty, ast::Type::NamespacedGeneric(ns)
+                if matches!(self.resolutions.get(ns.id),
+                    Resolution::Projection(base) if binders.contains(&base)))
+        })
     }
 }
 
@@ -2203,16 +2208,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.decl_key_or_local(written)
     }
 
-    /// The header of `method_name` on the trait `key` names. The cheap form of
-    /// [`Self::trait_method_of`], for counting candidates without cloning each
-    /// one's declaration.
-    fn trait_method_header_of(&self, key: &DefId, method_name: &str) -> Option<&ImplMethodHeader> {
-        self.trait_decl_header_of(key)?
-            .methods
-            .iter()
-            .find(|m| m.name == method_name)
-    }
-
     /// The recorded signature of `method_name` on the trait `trait_name` names
     /// in this frame, with the associated-type declarations its body may name —
     /// the trait's own and every supertrait's, since `Self::Elem` in a
@@ -2226,7 +2221,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         key: &DefId,
         method_name: &str,
     ) -> Option<(sig::MethodSig, Vec<DeclaredAssocType>)> {
-        let header = self.trait_decl_header_of(key)?;
+        let header = self.tysys.trait_decl_header_of(key)?;
         if !header.methods.iter().any(|m| m.name == method_name) {
             return None;
         }
@@ -2239,7 +2234,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .supertrait_decls(key)
-            .filter_map(|decl| Some((decl, self.trait_decl_header_of(&decl)?)))
+            .filter_map(|decl| Some((decl, self.tysys.trait_decl_header_of(&decl)?)))
             .flat_map(|(decl, super_header)| {
                 super_header
                     .assoc_types
@@ -2254,25 +2249,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         let sig = self
+            .tysys
             .trait_sig_of(key)
             .and_then(|sig| sig.method(method_name))
             .expect("the decl pass records every trait method's signature")
             .sig
             .clone();
         Some((sig, assoc_types))
-    }
-
-    /// The recorded signature of an already-identified trait.
-    ///
-    /// Every by-name form funnels through this one. Flattening a key back to
-    /// its declared name and resolving that again is what broke an aliased
-    /// head: the module imported `Alpha as Ay` and never `Alpha`, so the
-    /// second resolution found nothing.
-    pub(super) fn trait_sig_of(&self, key: &DefId) -> Option<&TraitSig> {
-        if !self.tysys.trait_env.declares_trait(key) {
-            return None;
-        }
-        self.tysys.signatures.trait_sig(*key)
     }
 
     /// What `Self::X` means for a receiver reached through a trait bound, for
@@ -2539,7 +2522,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // amounted to.
                     Resolution::Def(def) => def == *key,
                     _ => false,
-                }) && self.trait_method_header_of(key, method_name).is_some()
+                }) && self
+                    .tysys
+                    .trait_method_header_of(key, method_name)
+                    .is_some()
             })
             .collect();
         // The space each bound's written types are read in, settled once here:
@@ -2556,7 +2542,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let mut candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, args);
         // A reserved name answers only where no method of its kind does.
-        let header = |c: &BoundCandidate| self.trait_method_header_of(&c.decl, method_name);
+        let header = |c: &BoundCandidate| self.tysys.trait_method_header_of(&c.decl, method_name);
         let answers = |receiver: bool| {
             candidates
                 .iter()
@@ -2632,7 +2618,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let slots = self.in_space(&space, |e| {
             e.bound_slots(&bound, decl, self_type_id, written_self)
         });
-        let fq_trait_name = self.trait_named_from_slots(fq_trait_name, &bound, &slots);
+        let fq_trait_name = self
+            .tysys
+            .trait_named_from_slots(fq_trait_name, &bound, &slots);
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
             &slots,
@@ -2665,6 +2653,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 defaults_module: sig.defaults_module.clone(),
             },
         ))
+    }
+}
+
+impl TypeSystem {
+    /// The header of `method_name` on the trait `key` names. The cheap form of
+    /// [`Self::trait_method_of`], for counting candidates without cloning each
+    /// one's declaration.
+    fn trait_method_header_of(&self, key: &DefId, method_name: &str) -> Option<&ImplMethodHeader> {
+        self.trait_decl_header_of(key)?
+            .methods
+            .iter()
+            .find(|m| m.name == method_name)
+    }
+}
+
+impl TypeSystem {
+    /// The recorded signature of an already-identified trait.
+    ///
+    /// Every by-name form funnels through this one. Flattening a key back to
+    /// its declared name and resolving that again is what broke an aliased
+    /// head: the module imported `Alpha as Ay` and never `Alpha`, so the
+    /// second resolution found nothing.
+    pub(super) fn trait_sig_of(&self, key: &DefId) -> Option<&TraitSig> {
+        if !self.trait_env.declares_trait(key) {
+            return None;
+        }
+        self.signatures.trait_sig(*key)
     }
 }
 
@@ -2821,7 +2836,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self_binding: Option<SelfBinding>,
         span: Span,
     ) {
-        let at_call = self.call_site_types(params, type_args);
+        let at_call = self.tysys.call_site_types(params, type_args);
         for (i, param) in params.iter().enumerate() {
             let Some(&type_arg) = type_args.get(i) else {
                 continue;
@@ -2926,22 +2941,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// [`written_for`] over a call's type arguments. A parameter the call leaves
-    /// parametric contributes nothing, so a bound mentioning it keeps its binder.
-    fn call_site_types(
-        &self,
-        params: &[ast::GenericParam],
-        type_args: &[TypeId],
-    ) -> Vec<(FqTypeName, FqTypeName)> {
-        let tt = self.tysys.type_table.borrow();
-        params
-            .iter()
-            .zip(type_args)
-            .filter(|(_, arg)| !tt.contains_type_param(**arg))
-            .map(|(param, &arg)| (FqTypeName::binder(&param.name), tt.fq_type_name(arg)))
-            .collect()
-    }
-
     /// Whether one concrete type argument meets one trait bound — the primitive
     /// every enforcement path funnels through. Registers the associated types on
     /// success, raises `TraitBoundNotSatisfied` on failure.
@@ -2997,28 +2996,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// `fq` with each argument that names no type taken from the slot the bound
-    /// fills: `Make<X::Item>` at `T: Constrained<Feed>` names what `Feed` binds
-    /// `Item` to.
-    fn trait_named_from_slots(
-        &self,
-        fq: FqTraitName,
-        bound: &ast::TraitBound,
-        slots: &IndexMap<u32, TypeId>,
-    ) -> FqTraitName {
-        if !bound.type_args.iter().any(names_no_type) {
-            return fq;
-        }
-        let table = self.tysys.type_table.borrow();
-        trait_named_by_position(fq, &table, |i| {
-            bound
-                .type_args
-                .get(i)
-                .filter(|ty| names_no_type(ty))
-                .and_then(|_| slots.get(&(1 + i as u32)).copied())
-        })
-    }
-
     /// What a bound binds `decl`'s slots to: slot 0 is `Self`, and the trait's
     /// own parameters what it writes (`T: Eq<String>`), else their defaults.
     pub(super) fn bound_slots(
@@ -3029,7 +3006,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         written_self: BoundSelf,
     ) -> IndexMap<u32, TypeId> {
         let mut slots = IndexMap::from_iter([(0, self_type_id)]);
-        let Some(trait_params) = self.trait_decl_type_params_of(&decl) else {
+        let Some(trait_params) = self.tysys.trait_decl_type_params_of(&decl) else {
             return slots;
         };
         // Slot 0 is the trait's `Self`. An argument the bound wrote means
@@ -3077,7 +3054,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             // The bound's own site says which trait declares the constraint.
-            let trait_key = self.fq_trait_name_at(bound.id, &bound.name).canonical();
+            let trait_key = self
+                .tysys
+                .fq_trait_name_at(bound.id, &bound.name)
+                .canonical();
             let Some(actual) = trait_key.and_then(|key| {
                 self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
                     type_arg,
@@ -3617,6 +3597,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_struct_fq: self.tysys.fq_receiver_head(derive_id),
             is_blanket_ref_impl: false,
             ref_impl_target: None,
+        })
+    }
+}
+
+impl TypeSystem {
+    /// [`written_for`] over a call's type arguments. A parameter the call leaves
+    /// parametric contributes nothing, so a bound mentioning it keeps its binder.
+    fn call_site_types(
+        &self,
+        params: &[ast::GenericParam],
+        type_args: &[TypeId],
+    ) -> Vec<(FqTypeName, FqTypeName)> {
+        let tt = self.type_table.borrow();
+        params
+            .iter()
+            .zip(type_args)
+            .filter(|(_, arg)| !tt.contains_type_param(**arg))
+            .map(|(param, &arg)| (FqTypeName::binder(&param.name), tt.fq_type_name(arg)))
+            .collect()
+    }
+
+    /// `fq` with each argument that names no type taken from the slot the bound
+    /// fills: `Make<X::Item>` at `T: Constrained<Feed>` names what `Feed` binds
+    /// `Item` to.
+    fn trait_named_from_slots(
+        &self,
+        fq: FqTraitName,
+        bound: &ast::TraitBound,
+        slots: &IndexMap<u32, TypeId>,
+    ) -> FqTraitName {
+        if !bound.type_args.iter().any(names_no_type) {
+            return fq;
+        }
+        let table = self.type_table.borrow();
+        trait_named_by_position(fq, &table, |i| {
+            bound
+                .type_args
+                .get(i)
+                .filter(|ty| names_no_type(ty))
+                .and_then(|_| slots.get(&(1 + i as u32)).copied())
         })
     }
 }

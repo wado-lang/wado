@@ -13,6 +13,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::types::{BindingSite, FunctionContext, TypeError};
+use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{BinaryOp, RangeKind, StructPatternField, wire_numbers_of};
 use crate::compiler_item::CompilerItem;
@@ -869,7 +870,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .scrutinee_structure_head(scrutinee);
-        match (self.variant_of_type(head), self.enum_of_type(head)) {
+        match (
+            self.tysys.variant_of_type(head),
+            self.tysys.enum_of_type(head),
+        ) {
             (Some(variant), _) => variant.cases.len(),
             (None, Some(enumeration)) => enumeration.cases.len(),
             (None, None) => 0,
@@ -909,9 +913,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Enum { .. } => self
+                .tysys
                 .enum_of_type(type_id)
                 .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
             ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => self
+                .tysys
                 .variant_of_type(type_id)
                 .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
             _ => false,
@@ -1092,33 +1098,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// `type_id` with its reference layers peeled, and the reference kind a
-    /// binding beneath takes under match ergonomics: any `&` downgrades `&mut`.
-    fn peel_scrutinee_refs(
-        &self,
-        type_id: TypeId,
-        ref_binding: RefBinding,
-    ) -> (TypeId, RefBinding) {
-        let tt = self.tysys.type_table.borrow();
-        let mut current = type_id;
-        let mut ref_binding = ref_binding;
-        loop {
-            match tt.get(current) {
-                ResolvedType::Ref(inner) => {
-                    current = *inner;
-                    ref_binding = RefBinding::Ref;
-                }
-                ResolvedType::MutRef(inner) => {
-                    current = *inner;
-                    if ref_binding == RefBinding::None {
-                        ref_binding = RefBinding::MutRef;
-                    }
-                }
-                _ => return (current, ref_binding),
-            }
-        }
-    }
-
     /// Resolve an irrefutable destructuring pattern (`let`, the `for` of a tuple).
     pub(super) fn resolve_let_pattern(
         &mut self,
@@ -1131,20 +1110,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         self.check_irrefutable_pattern(pattern, span, site);
         self.resolve_let_pattern_inner(pattern, type_id, is_mut, span, site, ctx, RefBinding::None);
-    }
-
-    /// Whether a struct pattern's qualifier names the scrutinee's own head.
-    ///
-    /// Declaration against declaration, never spelling against spelling. A
-    /// shape names no declaration, so no qualifier matches one; a qualifier the
-    /// walk could not place is left to the diagnostic its unresolved name earns
-    /// elsewhere.
-    fn pattern_qualifier_matches(&self, site: Option<AstId>, head: StructDef) -> bool {
-        let Some(written) = site.and_then(|site| self.tysys.resolutions.declared_if_walked(site))
-        else {
-            return true;
-        };
-        head.decl() == Some(written)
     }
 
     /// The two spellings a pattern mismatch prints.
@@ -1218,7 +1183,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_local_symbol(*id, name, *name_span, pat_mut, binding_type);
             }
             ast::Pattern::Tuple(patterns, has_rest) => {
-                let (type_id, ref_binding) = self.peel_scrutinee_refs(type_id, ref_binding);
+                let (type_id, ref_binding) = self.tysys.peel_scrutinee_refs(type_id, ref_binding);
                 let elem_types = {
                     let type_table = self.tysys.type_table.borrow();
                     if let Some(elem_types) = type_table.as_tuple(type_id) {
@@ -1275,7 +1240,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 has_rest,
                 span: pat_span,
             } => {
-                let (type_id, ref_binding) = self.peel_scrutinee_refs(type_id, ref_binding);
+                let (type_id, ref_binding) = self.tysys.peel_scrutinee_refs(type_id, ref_binding);
                 // Every lookup below asks the scrutinee's head, which an
                 // anonymous shape and a function-local `struct` both have and
                 // neither of them can be reached by spelling. A newtype's head
@@ -1290,7 +1255,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 let type_name_matches = match (type_name, struct_head) {
                     (Some(written), Some(head)) => {
-                        let matches = self.pattern_qualifier_matches(*type_name_id, head);
+                        let matches = self.tysys.pattern_qualifier_matches(*type_name_id, head);
                         if !matches {
                             let (expected, found) =
                                 self.pattern_mismatch_names(*type_name_id, written, type_id);
@@ -1624,7 +1589,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         span: Span,
     ) -> PatBindings {
-        let (peeled_type, ref_binding) = self.peel_scrutinee_refs(scrutinee_type, RefBinding::None);
+        let (peeled_type, ref_binding) = self
+            .tysys
+            .peel_scrutinee_refs(scrutinee_type, RefBinding::None);
         self.resolve_if_pattern_inner(pattern, peeled_type, ctx, span, ref_binding)
     }
 
@@ -1732,7 +1699,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Pattern::Tuple(patterns, has_rest) => {
                 let (scrutinee_type, ref_binding) =
-                    self.peel_scrutinee_refs(scrutinee_type, ref_binding);
+                    self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 let element_types =
                     if let Some(types) = self.tysys.type_table.borrow().as_tuple(scrutinee_type) {
                         types
@@ -1765,7 +1732,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             } => {
                 let (scrutinee_type, ref_binding) =
-                    self.peel_scrutinee_refs(scrutinee_type, ref_binding);
+                    self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 // `<ns>::<Case>` (single `::`, prefix is a namespace import
                 // alias) canonicalizes to the bare `<Case>`; the registries
                 // below are keyed by canonical names. Multi-segment forms
@@ -1790,8 +1757,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Use the base type name (no generic args) to match how
                     // `associated_constants` keys are built via `get_type_name`.
                     // Resolve to literal patterns when possible for switch optimization.
-                    if let Some(assoc) =
-                        self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
+                    if let Some(assoc) = self
+                        .tysys
+                        .associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
                     {
                         self.check_inherent_member_visibility(
                             assoc.inherent_visibility,
@@ -1888,7 +1856,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                     }
                     // Look up the enum case index
-                    if let Some(enum_info) = self.enum_of_type(scrutinee_type).cloned() {
+                    if let Some(enum_info) = self.tysys.enum_of_type(scrutinee_type).cloned() {
                         if let Some(case_data) =
                             enum_info.find_case(normalized_variant_name).cloned()
                         {
@@ -1928,7 +1896,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // (e.g., `Some` in `Some(x)`). Points at the case declaration's
                 // span so LSP jump-to-def from the pattern lands on the case decl.
                 if let Some(id) = name_id
-                    && let Some(variant_info) = self.variant_of_type(scrutinee_type).cloned()
+                    && let Some(variant_info) = self.tysys.variant_of_type(scrutinee_type).cloned()
                     && let Some(case_data) = variant_info
                         .cases
                         .iter()
@@ -2018,12 +1986,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: pat_span,
             } => {
                 let (scrutinee_type, ref_binding) =
-                    self.peel_scrutinee_refs(scrutinee_type, ref_binding);
+                    self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 let mut type_name_matches = true;
                 if let Some(expected_name) = type_name {
                     let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
                     if let ResolvedType::Struct { def, .. } = resolved
-                        && !self.pattern_qualifier_matches(*type_name_id, def)
+                        && !self.tysys.pattern_qualifier_matches(*type_name_id, def)
                     {
                         let (expected, found) = self.pattern_mismatch_names(
                             *type_name_id,
@@ -2324,7 +2292,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// nothing). Reify rebuilds the actual `None` pattern; the body walk
     /// only needs the yes/no answer for its binding/fact walk.
     fn try_null_as_none_pattern(&self, scrutinee_type: TypeId) -> bool {
-        let Some(variant_info) = self.variant_of_type(scrutinee_type) else {
+        let Some(variant_info) = self.tysys.variant_of_type(scrutinee_type) else {
             return false;
         };
         let none_case_name = self
@@ -2545,7 +2513,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_zip_variadic = matches!(
             actual_iterable,
             Expr::MethodCall(mc) if mc.method == "zip" && mc.args.is_empty()
-        ) && self.type_contains_pack(iterable_type_id);
+        ) && self.tysys.type_contains_pack(iterable_type_id);
 
         if let Some((elems, has_type_pack, by_ref)) = tuple_info {
             if has_type_pack || is_zip_variadic {
@@ -3347,6 +3315,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(u) = update {
             self.resolve_expr(u, ctx, None);
         }
+    }
+}
+
+impl TypeSystem {
+    /// `type_id` with its reference layers peeled, and the reference kind a
+    /// binding beneath takes under match ergonomics: any `&` downgrades `&mut`.
+    fn peel_scrutinee_refs(
+        &self,
+        type_id: TypeId,
+        ref_binding: RefBinding,
+    ) -> (TypeId, RefBinding) {
+        let tt = self.type_table.borrow();
+        let mut current = type_id;
+        let mut ref_binding = ref_binding;
+        loop {
+            match tt.get(current) {
+                ResolvedType::Ref(inner) => {
+                    current = *inner;
+                    ref_binding = RefBinding::Ref;
+                }
+                ResolvedType::MutRef(inner) => {
+                    current = *inner;
+                    if ref_binding == RefBinding::None {
+                        ref_binding = RefBinding::MutRef;
+                    }
+                }
+                _ => return (current, ref_binding),
+            }
+        }
+    }
+
+    /// Whether a struct pattern's qualifier names the scrutinee's own head.
+    ///
+    /// Declaration against declaration, never spelling against spelling. A
+    /// shape names no declaration, so no qualifier matches one; a qualifier the
+    /// walk could not place is left to the diagnostic its unresolved name earns
+    /// elsewhere.
+    fn pattern_qualifier_matches(&self, site: Option<AstId>, head: StructDef) -> bool {
+        let Some(written) = site.and_then(|site| self.resolutions.declared_if_walked(site)) else {
+            return true;
+        };
+        head.decl() == Some(written)
     }
 }
 

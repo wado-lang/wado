@@ -322,28 +322,6 @@ impl CalleeIdentKind<'_> {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// If `type_id` is a function type — possibly behind references or
-    /// fn-type newtypes such as `type Handler = fn(...);` — return its
-    /// signature. Otherwise return `None`. Borrows the type table once.
-    pub(super) fn as_fn_signature(&self, type_id: TypeId) -> Option<FnSignature> {
-        let table = self.tysys.type_table.borrow();
-        let peeled_ref = table.peel_refs(type_id);
-        let base = table.representation_head(peeled_ref);
-        match table.get(base) {
-            ResolvedType::Function {
-                is_mut,
-                params,
-                return_type,
-                ..
-            } => Some(FnSignature {
-                is_mut: *is_mut,
-                params: params.clone(),
-                return_type: *return_type,
-            }),
-            _ => None,
-        }
-    }
-
     /// The declared type of a *global* named `name` as written at `site`, if
     /// one exists. Lets a bare call resolve a global callee (a function-typed
     /// global becomes an indirect call; any other type gets a clear
@@ -512,6 +490,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
+    /// If `type_id` is a function type — possibly behind references or
+    /// fn-type newtypes such as `type Handler = fn(...);` — return its
+    /// signature. Otherwise return `None`. Borrows the type table once.
+    pub(super) fn as_fn_signature(&self, type_id: TypeId) -> Option<FnSignature> {
+        let table = self.type_table.borrow();
+        let peeled_ref = table.peel_refs(type_id);
+        let base = table.representation_head(peeled_ref);
+        match table.get(base) {
+            ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                ..
+            } => Some(FnSignature {
+                is_mut: *is_mut,
+                params: params.clone(),
+                return_type: *return_type,
+            }),
+            _ => None,
+        }
+    }
+}
+
+impl TypeSystem {
     /// Classify a call callee's prefix so `resolve_call` can rewrite
     /// `Self::` / `T::` (T bound to concrete) before any name lookup
     /// happens. `T::` (T abstract) is routed through its own static
@@ -573,22 +575,6 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Whether `name` is a declared effect (`interface`) or resource —
-    /// the set of identifiers `resolve_call`'s qualified-call fallback may
-    /// treat as a deferred effect operation (`Stdout::write()`, etc.).
-    fn is_effect_or_resource_decl(&self, def: DefId) -> bool {
-        self.tysys.trait_env.effect_decl_index.contains(&def)
-            || self.tysys.trait_env.resource_decl_index.contains(&def)
-    }
-
-    /// The effect / resource declaration a qualified callee's receiver segment
-    /// names — answered by the site the walk resolved, so an import alias needs
-    /// no translation back into a spelling.
-    fn effect_or_resource_decl_at(&self, site: Option<ast::AstId>) -> Option<DefId> {
-        let def = self.tysys.resolutions.declared(site?)?;
-        self.is_effect_or_resource_decl(def).then_some(def)
-    }
-
     /// The callee of an operation dispatch `[ns::]E::op`, where `E` names an
     /// effect or resource declaring `op`. `None` leaves the caller to report an
     /// unknown function rather than defer an unvalidated call to codegen.
@@ -598,7 +584,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// alias nor a namespace qualifier may reach them.
     fn effect_operation_callee(&self, ident: &ast::IdentExpr, path: &str) -> Option<CalleeRef> {
         let (_, operation) = path.rsplit_once("::")?;
-        let decl = self.effect_or_resource_decl_at(Some(ident.owner_segment()?.id))?;
+        let decl = self
+            .tysys
+            .effect_or_resource_decl_at(Some(ident.owner_segment()?.id))?;
         self.tysys
             .signatures
             .resource_method_sig(decl, operation)
@@ -728,7 +716,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Expr::Ident(ident) = &call.callee
             && let Some((value_ty, binding)) = self.callee_value(ident, ctx)
         {
-            if let Some(sig) = self.as_fn_signature(value_ty) {
+            if let Some(sig) = self.tysys.as_fn_signature(value_ty) {
                 self.record_indirect_callee(
                     call.id,
                     match binding {
@@ -775,7 +763,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !matches!(&call.callee, Expr::Ident(_)) {
             let callee_type = self.resolve_expr(&call.callee, ctx, None);
 
-            if let Some(sig) = self.as_fn_signature(callee_type) {
+            if let Some(sig) = self.tysys.as_fn_signature(callee_type) {
                 self.record_indirect_callee(call.id, IndirectCallee::Expr);
                 // Enforce `fn mut` root-mutability for non-identifier
                 // callees too: `(h.f)()`, `arr[i]()`, `(arr[i].f)()`, …
@@ -1327,7 +1315,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // argument satisfies. Checking against it rejects the call
                     // the declaration was written to accept.
                     if let Some(&expected) = substituted.get(i)
-                        && !self.is_unbound_type_param(expected)
+                        && !self.tysys.is_unbound_type_param(expected)
                     {
                         self.typecheck_arg(*arg, expected, ArgSite::of(&call.args, i, call.span));
                     }
@@ -1449,21 +1437,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // alias — so the declaration comes from the site rather
                     // than from asking the namespace module about a spelling.
                     let ns_variant = self
+                        .tysys
                         .qualified_owner_decl(ident)
                         .and_then(|def| self.tysys.data.variant_cases.get(&def))
                         .cloned();
-                    if let Some(variant_info) = ns_variant {
-                        if let Some((_, case_data)) = variant_info.case_named(method_name) {
-                            self.record_namespaced_case(ident, case_data.ast_id);
-                            return self.construct_variant_case(
-                                &variant_info,
-                                case_data,
-                                &args,
-                                type_name,
-                                expected_type,
-                                call,
-                            );
-                        }
+                    if let Some(variant_info) = ns_variant
+                        && let Some((_, case_data)) = variant_info.case_named(method_name)
+                    {
+                        self.record_namespaced_case(ident, case_data.ast_id);
+                        return self.construct_variant_case(
+                            &variant_info,
+                            case_data,
+                            &args,
+                            type_name,
+                            expected_type,
+                            call,
+                        );
                     }
 
                     // The branch below reads the middle segment as a type, and
@@ -1583,7 +1572,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             let defs = self.tysys.resolutions.defs();
                             let receiver = trait_env::ImplTargetKey::of_decl(
                                 defs,
-                                self.qualified_owner_decl(ident)?,
+                                self.tysys.qualified_owner_decl(ident)?,
                             );
                             self.qualified_method_decl_id(&receiver, method_name)
                         })
@@ -1775,7 +1764,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.record_reference_to_decl(ident.id, callee, ident.span) {
                 return TypeTable::ERROR;
             }
-            (Some(self.callee_of(callee)), effective_name.to_string())
+            (
+                Some(self.tysys.callee_of(callee)),
+                effective_name.to_string(),
+            )
         }
         // `panic` / `unreachable` where no site answered — a synthesised call.
         // A module declaring either name of its own is answered above.
@@ -1844,7 +1836,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // After the projection above, which is what answers for a pack bound
         // through another parameter's associated type.
-        let reached = self.packs_callee_args_reach(&callee, args.len());
+        let reached = self.tysys.packs_callee_args_reach(&callee, args.len());
         self.settle_unreached_packs(&declared, &mut type_args, &reached);
 
         if !type_args.is_empty() {
@@ -2037,17 +2029,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let func_name = callee.name();
         // Handle builtin functions
         if callee_module.is_core_builtin() {
-            return self.get_builtin_return_type(func_name);
+            return self.tysys.get_builtin_return_type(func_name);
         }
         // Legacy: builtin::name pattern
         if let Some(builtin_name) = func_name.strip_prefix("builtin::") {
-            return self.get_builtin_return_type(builtin_name);
+            return self.tysys.get_builtin_return_type(builtin_name);
         }
 
         // Effect operations are routed here as `CalleeRef::local_namespace`, so
         // `ModuleSource::Local { path }` matches `is_effect_like()`.
         if callee_module.is_effect_like()
-            && let Some(decl) = self.effect_or_resource_decl_at(interface_site)
+            && let Some(decl) = self.tysys.effect_or_resource_decl_at(interface_site)
             && let Some((_, Some(return_type))) = self.resolve_effect_op_signature(decl, func_name)
         {
             return return_type;
@@ -2088,18 +2080,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .make_compiler_struct(CompilerItem::String)
-    }
-
-    /// Get the return type of a builtin function
-    ///
-    /// Returns the pre-resolved `TypeId` from the `BuiltinRegistry`.
-    /// For generic builtins like `array_new<T>`, returns a type containing
-    /// `TypeParam` placeholders that get substituted during monomorphization.
-    pub(super) fn get_builtin_return_type(&self, name: &str) -> TypeId {
-        self.tysys
-            .builtin_registry
-            .get_return_type(name)
-            .unwrap_or(TypeTable::UNIT)
     }
 
     /// A callee's declared parameter types and the slots they mention, by the
@@ -2155,7 +2135,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The operation is the path's last segment: a namespace ahead of
             // the interface stays on `suffix`, which `interface_site` skips.
             if let Some((_, operation)) = name.rsplit_once("::")
-                && let Some(decl) = self.effect_or_resource_decl_at(interface_site)
+                && let Some(decl) = self.tysys.effect_or_resource_decl_at(interface_site)
                 && let Some((params, _)) = self.resolve_effect_op_signature(decl, operation)
             {
                 return Some((params, Vec::new()));
@@ -2198,7 +2178,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // One read for this module's functions, its imports under either
         // spelling, and a default expression's callee scope.
-        let sig = callee_site.and_then(|site| self.free_function_sig_at(site))?;
+        let sig = callee_site.and_then(|site| self.tysys.free_function_sig_at(site))?;
         Some((
             sig.decl.param_types.clone(),
             sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
@@ -2508,7 +2488,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // two agree on how many arguments the call owes.
         if let Some(owner) = ident.owner_segment()
             && let Some(operation) = ident.segments.last()
-            && let Some(decl) = self.effect_or_resource_decl_at(Some(owner.id))
+            && let Some(decl) = self.tysys.effect_or_resource_decl_at(Some(owner.id))
             && let Some(sig) = self
                 .tysys
                 .signatures
@@ -2518,7 +2498,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let module = self.tysys.resolutions.defs().module(sig.def).clone();
             return (defaults, Some(module));
         }
-        let Some(def) = self.free_function_at(ident.id) else {
+        let Some(def) = self.tysys.free_function_at(ident.id) else {
             return (Vec::new(), None);
         };
         let Some(sig) = self.tysys.signatures.function_sig(def) else {
@@ -2544,7 +2524,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         }
 
-        self.free_function_sig_at(ident.id)
+        self.tysys
+            .free_function_sig_at(ident.id)
             .map(|sig| Param::is_mut_flags(&sig.params))
             .unwrap_or_default()
     }
@@ -2654,7 +2635,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             v
         } else {
             // Fallback: cross-module lookup via imported functions / loaded modules.
-            let Some(info) = self.lookup_generic_func_for_inference(callee) else {
+            let Some(info) = self.tysys.lookup_generic_func_for_inference(callee) else {
                 return vec![];
             };
             info
@@ -2786,7 +2767,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     !p.is_effect
                         && p.default.is_none()
                         && !p.has_fn_bound()
-                        && self.is_unbound_type_param(tid)
+                        && self.tysys.is_unbound_type_param(tid)
                         && !scope_params.contains(&tid)
                 })
                 .map(|(p, _)| p.name.as_str())
@@ -2835,7 +2816,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let unresolved = |this: &Self, slot: Option<&TypeId>| -> bool {
             match slot {
                 None => true,
-                Some(&t) => this.is_unbound_type_param(t) && !scope_params.contains(&t),
+                Some(&t) => this.tysys.is_unbound_type_param(t) && !scope_params.contains(&t),
             }
         };
 
@@ -2926,7 +2907,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // param (`U = T`) sees `T`'s slot already resolved.
         for i in 0..n {
             let slot = type_args[i];
-            if self.is_unbound_type_param(slot)
+            if self.tysys.is_unbound_type_param(slot)
                 && !scope_params.contains(&slot)
                 && let Some(default_ty) = defaults[i]
             {
@@ -2973,7 +2954,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return true;
             }
             let t = type_args[i];
-            this.is_unbound_type_param(t) && !scope_params.contains(&t)
+            this.tysys.is_unbound_type_param(t) && !scope_params.contains(&t)
         };
 
         let unresolved_names: Vec<String> = space
@@ -3048,7 +3029,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut progressed = false;
             for (owner_idx, param) in params.iter().enumerate() {
                 let owner_ty = args[owner_idx];
-                if self.is_unbound_type_param(owner_ty) {
+                if self.tysys.is_unbound_type_param(owner_ty) {
                     continue;
                 }
                 for bound in &param.bounds {
@@ -3060,7 +3041,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         else {
                             continue;
                         };
-                        if !self.is_unbound_type_param(args[target_idx]) {
+                        if !self.tysys.is_unbound_type_param(args[target_idx]) {
                             continue;
                         }
                         let resolved = {
@@ -3087,18 +3068,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 break;
             }
         }
-    }
-
-    /// Whether `ty` is a type argument nothing has determined yet — either a
-    /// slot the solver left as its own parameter, or an inference variable it
-    /// never solved. Both mean "no answer", so a default may still fill it.
-    pub(super) fn is_unbound_type_param(&self, ty: TypeId) -> bool {
-        matches!(
-            self.tysys.type_table.borrow().get(ty),
-            ResolvedType::TypeParam { .. }
-                | ResolvedType::TypePack { .. }
-                | ResolvedType::InferVar(_)
-        )
     }
 
     /// Group flat turbofish type args into one variadic pack: `ids::<i32, bool>()`
@@ -3201,7 +3170,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let unanswered: Vec<usize> = (0..real.len())
             .filter(|&i| real[i].is_pack && !reached.contains(&real[i].name))
             .filter(|&i| {
-                self.is_unbound_type_param(type_args[i]) || self.type_contains_pack(type_args[i])
+                self.tysys.is_unbound_type_param(type_args[i])
+                    || self.tysys.type_contains_pack(type_args[i])
             })
             .collect();
         if unanswered.is_empty() {
@@ -3210,7 +3180,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A pack the caller declares interns to the same id as the callee's,
         // so a scope holding one is a forwarding this cannot tell apart.
         let scope = self.scope_type_param_ids();
-        if scope.iter().any(|&s| self.type_contains_pack(s)) {
+        if scope.iter().any(|&s| self.tysys.type_contains_pack(s)) {
             return;
         }
         for pack_pos in unanswered {
@@ -3219,45 +3189,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             type_args[pack_pos] = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
         }
-    }
-
-    /// The packs a parameter the call writes an argument for mentions. Those a
-    /// written argument was meant to settle; the rest the site never reached.
-    pub(super) fn packs_args_reach(&self, param_types: &[TypeId], arg_count: usize) -> Vec<String> {
-        let table = self.tysys.type_table.borrow();
-        param_types
-            .iter()
-            .take(arg_count)
-            .flat_map(|&t| table.pack_names(t))
-            .collect()
-    }
-
-    /// [`Self::packs_args_reach`] for a free function, whose parameter types
-    /// the callee reference answers.
-    fn packs_callee_args_reach(&self, callee: &CalleeRef, arg_count: usize) -> Vec<String> {
-        let Some((_, param_types, _)) = self.lookup_generic_func_for_inference(callee) else {
-            return vec![];
-        };
-        self.packs_args_reach(&param_types, arg_count)
-    }
-
-    /// Look up a generic function (current or imported) and produce a temporary
-    /// `(type_param_list, resolved_param_types, decl_return_type)` triple suitable
-    /// for type-arg inference. Sets up the function's type params in scope while
-    /// resolving param and return types.
-    fn lookup_generic_func_for_inference(
-        &self,
-        callee: &CalleeRef,
-    ) -> Option<(Vec<(String, TypeId)>, Vec<TypeId>, Option<TypeId>)> {
-        let sig = self.tysys.signatures.function_sig(callee.def()?)?;
-        if sig.type_param_ids.is_empty() {
-            return Some((vec![], vec![], None));
-        }
-        Some((
-            sig.type_param_ids.clone(),
-            sig.decl.param_types.clone(),
-            sig.decl.return_type,
-        ))
     }
 
     /// The type arguments a `Type::method(..)` call dispatches with, as
@@ -3352,7 +3283,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let key = receiver_key
                     .cloned()
                     .unwrap_or_else(|| self.impl_target(struct_name));
-                self.inherited_default_method_sig(&key, method_name)
+                self.tysys.inherited_default_method_sig(&key, method_name)
             })
         else {
             return (vec![], vec![]);
@@ -3552,30 +3483,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(_, sig)| sig)
     }
 
-    /// The signature of a trait default `key` inherits without overriding it,
-    /// which no impl block lists and so every impl-keyed index misses.
-    fn inherited_default_method_sig(
-        &self,
-        key: &ImplTargetKey,
-        method_name: &str,
-    ) -> Option<MethodSig> {
-        let trait_env = &self.tysys.trait_env;
-        let mut sig = trait_env
-            .impl_index
-            .get(key)?
-            .iter()
-            .filter_map(|impl_def| trait_env.impl_headers.get(impl_def)?.trait_def())
-            .find_map(|trait_decl| {
-                let method = self.trait_sig_of(&trait_decl)?.method(method_name)?;
-                method.is_inherited().then(|| method.sig.clone())
-            })?;
-        let split = sig.declaring_split();
-        sig.decl.type_params.drain(..split);
-        sig.declaring_slot_count = 0;
-        sig.method_slot_base = 0;
-        Some(sig)
-    }
-
     /// Whether `found` arguments fit a case carrying `payload`: one, or none
     /// for a unit payload. Reports the mismatch where they do not.
     pub(super) fn check_case_arity(&self, payload: TypeId, found: usize, span: Span) -> bool {
@@ -3714,6 +3621,112 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
             ctx,
         )
+    }
+}
+
+impl TypeSystem {
+    /// The effect / resource declaration a qualified callee's receiver segment
+    /// names — answered by the site the walk resolved, so an import alias needs
+    /// no translation back into a spelling.
+    fn effect_or_resource_decl_at(&self, site: Option<ast::AstId>) -> Option<DefId> {
+        let def = self.resolutions.declared(site?)?;
+        self.is_effect_or_resource_decl(def).then_some(def)
+    }
+
+    /// [`Self::packs_args_reach`] for a free function, whose parameter types
+    /// the callee reference answers.
+    fn packs_callee_args_reach(&self, callee: &CalleeRef, arg_count: usize) -> Vec<String> {
+        let Some((_, param_types, _)) = self.lookup_generic_func_for_inference(callee) else {
+            return vec![];
+        };
+        self.packs_args_reach(&param_types, arg_count)
+    }
+
+    /// The signature of a trait default `key` inherits without overriding it,
+    /// which no impl block lists and so every impl-keyed index misses.
+    fn inherited_default_method_sig(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<MethodSig> {
+        let trait_env = &self.trait_env;
+        let mut sig = trait_env
+            .impl_index
+            .get(key)?
+            .iter()
+            .filter_map(|impl_def| trait_env.impl_headers.get(impl_def)?.trait_def())
+            .find_map(|trait_decl| {
+                let method = self.trait_sig_of(&trait_decl)?.method(method_name)?;
+                method.is_inherited().then(|| method.sig.clone())
+            })?;
+        let split = sig.declaring_split();
+        sig.decl.type_params.drain(..split);
+        sig.declaring_slot_count = 0;
+        sig.method_slot_base = 0;
+        Some(sig)
+    }
+}
+
+impl TypeSystem {
+    /// Whether `name` is a declared effect (`interface`) or resource —
+    /// the set of identifiers `resolve_call`'s qualified-call fallback may
+    /// treat as a deferred effect operation (`Stdout::write()`, etc.).
+    fn is_effect_or_resource_decl(&self, def: DefId) -> bool {
+        self.trait_env.effect_decl_index.contains(&def)
+            || self.trait_env.resource_decl_index.contains(&def)
+    }
+
+    /// Get the return type of a builtin function
+    ///
+    /// Returns the pre-resolved `TypeId` from the `BuiltinRegistry`.
+    /// For generic builtins like `array_new<T>`, returns a type containing
+    /// `TypeParam` placeholders that get substituted during monomorphization.
+    pub(super) fn get_builtin_return_type(&self, name: &str) -> TypeId {
+        self.builtin_registry
+            .get_return_type(name)
+            .unwrap_or(TypeTable::UNIT)
+    }
+
+    /// Whether `ty` is a type argument nothing has determined yet — either a
+    /// slot the solver left as its own parameter, or an inference variable it
+    /// never solved. Both mean "no answer", so a default may still fill it.
+    pub(super) fn is_unbound_type_param(&self, ty: TypeId) -> bool {
+        matches!(
+            self.type_table.borrow().get(ty),
+            ResolvedType::TypeParam { .. }
+                | ResolvedType::TypePack { .. }
+                | ResolvedType::InferVar(_)
+        )
+    }
+
+    /// The packs a parameter the call writes an argument for mentions. Those a
+    /// written argument was meant to settle; the rest the site never reached.
+    pub(super) fn packs_args_reach(&self, param_types: &[TypeId], arg_count: usize) -> Vec<String> {
+        let table = self.type_table.borrow();
+        param_types
+            .iter()
+            .take(arg_count)
+            .flat_map(|&t| table.pack_names(t))
+            .collect()
+    }
+
+    /// Look up a generic function (current or imported) and produce a temporary
+    /// `(type_param_list, resolved_param_types, decl_return_type)` triple suitable
+    /// for type-arg inference. Sets up the function's type params in scope while
+    /// resolving param and return types.
+    fn lookup_generic_func_for_inference(
+        &self,
+        callee: &CalleeRef,
+    ) -> Option<(Vec<(String, TypeId)>, Vec<TypeId>, Option<TypeId>)> {
+        let sig = self.signatures.function_sig(callee.def()?)?;
+        if sig.type_param_ids.is_empty() {
+            return Some((vec![], vec![], None));
+        }
+        Some((
+            sig.type_param_ids.clone(),
+            sig.decl.param_types.clone(),
+            sig.decl.return_type,
+        ))
     }
 }
 

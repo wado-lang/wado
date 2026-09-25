@@ -17,6 +17,7 @@ use super::callee::CalleeRef;
 use super::infer::unify;
 use super::stmt::collect_ast_pattern_binding_ids;
 use super::types::{FunctionContext, MethodOwner};
+use super::tysys::TypeSystem;
 use super::util::is_float_only_literal;
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::name::{DeclName, RefKind};
@@ -372,42 +373,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// How an argument's class reads in a diagnostic — the reason-chain step
-    /// that says what this argument contributed to selection.
-    pub(super) fn describe_arg_class(&self, class: &ArgClass) -> String {
-        let tt = self.tysys.type_table.borrow();
-        match class {
-            ArgClass::Exact(t) => format!("has type `{}`", tt.type_name(*t)),
-            ArgClass::Head(head) => format!(
-                "is a `{}` whose type arguments are not pinned here",
-                head.to_display()
-            ),
-            ArgClass::IntLit => {
-                "is an integer literal, which admits every numeric parameter".to_string()
-            }
-            ArgClass::FloatLit => {
-                "is a float literal, which admits every float parameter".to_string()
-            }
-            ArgClass::StrLit => {
-                "is a string literal, which admits `String` and its newtypes".to_string()
-            }
-            ArgClass::NullLit => "is `null`, which admits every `Option`".to_string(),
-            ArgClass::Opaque(OpaqueReason::Closure) => {
-                "is a closure, so the parameter is what would type it".to_string()
-            }
-            ArgClass::Opaque(OpaqueReason::CompoundLiteral) => {
-                "is a compound literal, so the parameter is what would type it".to_string()
-            }
-            ArgClass::Opaque(OpaqueReason::Inference) => {
-                "has a type that depends on inference here, so it admits every candidate"
-                    .to_string()
-            }
-            ArgClass::Opaque(OpaqueReason::Unresolved) => {
-                "did not resolve, so it admits every candidate".to_string()
-            }
-        }
-    }
-
     /// The judgement. One arm per `ast::Expr` variant, no wildcard: an
     /// expression form either has a rule or names the reason it has none.
     fn synth(&mut self, expr: &ast::Expr, scope: &mut SynthScope<'_>) -> ArgClass {
@@ -525,7 +490,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 OpaqueReason::Unresolved
             });
         }
-        if let Some(AssocConstSig { ty, .. }) = self.associated_constant_of_path(id) {
+        if let Some(AssocConstSig { ty, .. }) = self.tysys.associated_constant_of_path(id) {
             return self.class_of_type(ty);
         }
         let name = name.to_string();
@@ -699,7 +664,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let ArgClass::Exact(callee) = self.synth(&call.callee, scope) else {
                 return ArgClass::Opaque(OpaqueReason::Inference);
             };
-            return match self.as_fn_signature(callee) {
+            return match self.tysys.as_fn_signature(callee) {
                 Some(sig) => self.class_of_type(sig.return_type),
                 None => ArgClass::Opaque(OpaqueReason::Unresolved),
             };
@@ -710,11 +675,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A `fn`-typed local shadows a same-named function, as in `resolve_call`.
         if !ident.name.contains("::")
             && let Some(local) = scope.ctx.lookup(&ident.name)
-            && let Some(sig) = self.as_fn_signature(local.type_id)
+            && let Some(sig) = self.tysys.as_fn_signature(local.type_id)
         {
             return self.class_of_type(sig.return_type);
         }
-        let Some(callee) = self.synth_callee_ref(ident) else {
+        let Some(callee) = self.tysys.synth_callee_ref(ident) else {
             return ArgClass::Opaque(OpaqueReason::Inference);
         };
         if !self.lookup_function_type_params(&callee).is_empty() {
@@ -722,16 +687,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let return_type = self.lookup_function_return_type(&callee, None);
         self.class_of_type(return_type)
-    }
-
-    /// The callee identity of a plain `name(…)` call, read off its own
-    /// reference site. A variant constructor, a static path or an effect
-    /// operation names no function there and is left to the expected type.
-    fn synth_callee_ref(&self, ident: &ast::IdentExpr) -> Option<CalleeRef> {
-        if ident.name.contains("::") {
-            return None;
-        }
-        Some(self.callee_of(self.free_function_at(ident.id)?))
     }
 
     fn synth_method_call(
@@ -1111,5 +1066,55 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ArgClass::Head(FqTypeName::of_head(self.tysys.resolutions.defs(), def));
         }
         ArgClass::Opaque(OpaqueReason::Unresolved)
+    }
+}
+
+impl TypeSystem {
+    /// The callee identity of a plain `name(…)` call, read off its own
+    /// reference site. A variant constructor, a static path or an effect
+    /// operation names no function there and is left to the expected type.
+    fn synth_callee_ref(&self, ident: &ast::IdentExpr) -> Option<CalleeRef> {
+        if ident.name.contains("::") {
+            return None;
+        }
+        Some(self.callee_of(self.free_function_at(ident.id)?))
+    }
+}
+
+impl TypeSystem {
+    /// How an argument's class reads in a diagnostic — the reason-chain step
+    /// that says what this argument contributed to selection.
+    pub(super) fn describe_arg_class(&self, class: &ArgClass) -> String {
+        let tt = self.type_table.borrow();
+        match class {
+            ArgClass::Exact(t) => format!("has type `{}`", tt.type_name(*t)),
+            ArgClass::Head(head) => format!(
+                "is a `{}` whose type arguments are not pinned here",
+                head.to_display()
+            ),
+            ArgClass::IntLit => {
+                "is an integer literal, which admits every numeric parameter".to_string()
+            }
+            ArgClass::FloatLit => {
+                "is a float literal, which admits every float parameter".to_string()
+            }
+            ArgClass::StrLit => {
+                "is a string literal, which admits `String` and its newtypes".to_string()
+            }
+            ArgClass::NullLit => "is `null`, which admits every `Option`".to_string(),
+            ArgClass::Opaque(OpaqueReason::Closure) => {
+                "is a closure, so the parameter is what would type it".to_string()
+            }
+            ArgClass::Opaque(OpaqueReason::CompoundLiteral) => {
+                "is a compound literal, so the parameter is what would type it".to_string()
+            }
+            ArgClass::Opaque(OpaqueReason::Inference) => {
+                "has a type that depends on inference here, so it admits every candidate"
+                    .to_string()
+            }
+            ArgClass::Opaque(OpaqueReason::Unresolved) => {
+                "did not resolve, so it admits every candidate".to_string()
+            }
+        }
     }
 }

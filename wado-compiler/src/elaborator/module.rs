@@ -47,7 +47,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
 
                     let module_source = scope.current_module_source.clone();
-                    let def = scope.def_of_item(struct_decl.id);
+                    let def = scope.tysys.def_of_item(struct_decl.id);
                     scope.sem.decls.local.struct_fields.insert(
                         def,
                         StructFieldInfo {
@@ -88,7 +88,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         // Generic newtype: store definition for lazy instantiation
                         self.sem.decls.local.generic_newtypes.insert(
-                            self.def_of_item(newtype_decl.id),
+                            self.tysys.def_of_item(newtype_decl.id),
                             GenericNewtypeInfo {
                                 type_params: RealTypeParams::of(&newtype_decl.type_params),
                                 base_type_ast: newtype_decl.ty.clone(),
@@ -128,7 +128,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     let module_source = scope.current_module_source.clone();
-                    let def = scope.def_of_item(variant_decl.id);
+                    let def = scope.tysys.def_of_item(variant_decl.id);
                     scope.sem.decls.local.variant_cases.insert(
                         def,
                         VariantInfo::of_decl(
@@ -148,7 +148,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 Item::Enum(enum_decl) => {
                     self.sem.decls.local.enum_cases.insert(
-                        self.def_of_item(enum_decl.id),
+                        self.tysys.def_of_item(enum_decl.id),
                         EnumInfo::of_decl(self.current_module_source.clone(), enum_decl),
                     );
                     register_enum_compiler_items(
@@ -163,7 +163,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if flags_decl.flags.len() > 32 {
                         continue;
                     }
-                    let def = self.def_of_item(flags_decl.id);
+                    let def = self.tysys.def_of_item(flags_decl.id);
                     self.sem.decls.local.declare_flags(
                         &self.tysys.type_table,
                         def,

@@ -1109,7 +1109,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .chain(
                 PrimitiveType::all_primitive_names()
                     .iter()
-                    .map(|name| name.to_string()),
+                    .map(ToString::to_string),
             )
             .collect();
 

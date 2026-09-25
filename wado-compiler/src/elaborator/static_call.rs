@@ -18,6 +18,7 @@ use super::sig::MethodSig;
 use super::synth::ArgClass;
 use super::trait_env::{ImplHeader, ImplTargetKey};
 use super::types::TypeError;
+use super::tysys::TypeSystem;
 
 /// One `Type::method(...)` spelling as the resolution reads it: what it names,
 /// and what the call site already knows about it. Carried as one value, so a
@@ -383,27 +384,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .chain(resource_static)
             .chain(inherited)
-            .filter_map(|method_id| self.own_candidate(method_id))
+            .filter_map(|method_id| self.tysys.own_candidate(method_id))
             .collect()
-    }
-
-    /// One own declaration as a candidate. `None` where no signature answers
-    /// for it, which is a rung that cannot resolve rather than a spelling that
-    /// names nothing — the others still answer.
-    ///
-    /// Its selector is `Absent`: the arguments choose *among impls*, and the
-    /// receiver's own declaration has none to be chosen against. Reading them
-    /// here would drop it on a mismatch, where the call site has an argument
-    /// type error to report against the one declaration the spelling names.
-    fn own_candidate(&self, method_id: DefId) -> Option<Candidate> {
-        let sig = self.tysys.signatures.method_sig(method_id)?;
-        Some(Candidate {
-            supply: None,
-            method_id,
-            kind: CandidateKind::of(sig.self_kind),
-            origin: CandidateOrigin::Own,
-            selector: Selector::Absent,
-        })
     }
 
     /// The resolution for the declaration the rules picked. Its module is the
@@ -491,7 +473,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         if let Some(receiver_type) = receiver_type {
             let frame: Vec<TypeId> = std::iter::once(receiver_type)
-                .chain(self.trait_args_of_impl(impl_def))
+                .chain(self.tysys.trait_args_of_impl(impl_def))
                 .collect();
             let instantiated = sig.instantiate_call(&self.tysys.type_table, &frame, &[]);
             params.param_types = instantiated.param_types;
@@ -591,7 +573,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Before the ambiguity rule, or the trait a blanket names would be
         // named as one.
         prefer(&mut candidates, |c| c.origin != CandidateOrigin::Blanket);
-        if let Some(alternatives) = self.ambiguous_alternatives(&candidates) {
+        if let Some(alternatives) = self.tysys.ambiguous_alternatives(&candidates) {
             return Selection::Ambiguous(alternatives);
         }
         // The arguments pick among the declarations, read against the parameters
@@ -637,22 +619,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .zip(args)
                 .all(|(&param, &arg)| self.class_admits(param, &ArgClass::Exact(arg))),
         }
-    }
-
-    /// The traits to name when several supply one name, in the order the blocks
-    /// were written. `None` where one trait answers, however many times it is
-    /// implemented: naming it as both alternatives is a remedy nobody can write.
-    fn ambiguous_alternatives(&self, candidates: &[Candidate]) -> Option<Vec<String>> {
-        let distinct: IndexSet<DefId> = candidates
-            .iter()
-            .filter_map(|c| c.supply.as_ref().map(|s| s.trait_decl))
-            .collect();
-        (distinct.len() > 1).then(|| {
-            distinct
-                .into_iter()
-                .map(|decl| self.tysys.resolutions.defs().name(decl).to_string())
-                .collect()
-        })
     }
 
     /// The resolution for a name several declarations answer to, which only an
@@ -783,28 +749,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_id: method.def,
                 kind: CandidateKind::of(sig.self_kind),
                 origin: CandidateOrigin::Written,
-                selector: self.written_selector(header, sig),
+                selector: self.tysys.written_selector(header, sig),
             });
         }
         self.inherited_offer(trait_decl, impl_def, method_name, receiver_type)
-    }
-
-    /// What the argument is checked against for a body the block wrote: the
-    /// declaration's first parameter past any receiver, unless only the
-    /// argument can fill it.
-    pub(super) fn written_selector(&self, header: &ImplHeader, sig: &MethodSig) -> Selector {
-        let first = sig.first_value_param().min(sig.decl.param_types.len());
-        let params = &sig.decl.param_types[first..];
-        if params.is_empty() {
-            return Selector::Absent;
-        }
-        if params
-            .iter()
-            .any(|&param| self.param_filled_by_block(header, sig, param))
-        {
-            return Selector::Blanket;
-        }
-        Selector::Params(params.to_vec())
     }
 
     /// The candidate for the trait's default body, where the block wrote none.
@@ -831,7 +779,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let frame: Vec<TypeId> = std::iter::once(receiver_type.unwrap_or(TypeTable::UNKNOWN))
-            .chain(self.trait_args_of_impl(impl_def))
+            .chain(self.tysys.trait_args_of_impl(impl_def))
             .collect();
         let instantiated = declared
             .sig
@@ -852,16 +800,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// The block's trait-reference arguments, which fill the trait's frame past
-    /// `Self`.
-    fn trait_args_of_impl(&self, impl_def: DefId) -> Vec<TypeId> {
-        self.tysys
-            .signatures
-            .impl_sig(impl_def)
-            .map(|impl_sig| impl_sig.trait_type_args.clone())
-            .unwrap_or_default()
-    }
-
     /// Whether the receiver declares a `variant` case, an `enum` case or a
     /// `flags` member of this name — a constructor the spelling names, not a
     /// call.
@@ -879,27 +817,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             || lookup
                 .flags_members_of(*def)
                 .is_some_and(|info| info.members.iter().any(|member| member.name == name))
-    }
-
-    /// The resolution for a declaration already picked: its signature, read at
-    /// the receiver.
-    /// The receiver's type arguments: the ones a call carries, else the ones
-    /// its type holds. `None` where it brings neither.
-    pub(super) fn receiver_declaring_args(
-        &self,
-        receiver_type: Option<TypeId>,
-        receiver_args: &[TypeId],
-    ) -> Option<Vec<TypeId>> {
-        if !receiver_args.is_empty() {
-            return Some(receiver_args.to_vec());
-        }
-        let args = receiver_type.and_then(|ty| {
-            self.tysys
-                .type_table
-                .borrow()
-                .nominal_type_args(self.tysys.get_base_type(ty))
-        })?;
-        (!args.is_empty()).then_some(args)
     }
 
     fn callee_of_declaration(
@@ -926,7 +843,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Binding slot zero to the receiver here made `Stream::<u8>::new()`
         // return a `StreamWritable<Stream<u8>>`.
         if sig.declaring_slot_count > 0
-            && let Some(args) = self.receiver_declaring_args(receiver_type, receiver_args)
+            && let Some(args) = self
+                .tysys
+                .receiver_declaring_args(receiver_type, receiver_args)
         {
             let declaring = sig
                 .declaring_impl
@@ -942,5 +861,91 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type,
             method_ref,
         })))
+    }
+}
+
+impl TypeSystem {
+    /// What the argument is checked against for a body the block wrote: the
+    /// declaration's first parameter past any receiver, unless only the
+    /// argument can fill it.
+    pub(super) fn written_selector(&self, header: &ImplHeader, sig: &MethodSig) -> Selector {
+        let first = sig.first_value_param().min(sig.decl.param_types.len());
+        let params = &sig.decl.param_types[first..];
+        if params.is_empty() {
+            return Selector::Absent;
+        }
+        if params
+            .iter()
+            .any(|&param| self.param_filled_by_block(header, sig, param))
+        {
+            return Selector::Blanket;
+        }
+        Selector::Params(params.to_vec())
+    }
+}
+
+impl TypeSystem {
+    /// One own declaration as a candidate. `None` where no signature answers
+    /// for it, which is a rung that cannot resolve rather than a spelling that
+    /// names nothing — the others still answer.
+    ///
+    /// Its selector is `Absent`: the arguments choose *among impls*, and the
+    /// receiver's own declaration has none to be chosen against. Reading them
+    /// here would drop it on a mismatch, where the call site has an argument
+    /// type error to report against the one declaration the spelling names.
+    fn own_candidate(&self, method_id: DefId) -> Option<Candidate> {
+        let sig = self.signatures.method_sig(method_id)?;
+        Some(Candidate {
+            supply: None,
+            method_id,
+            kind: CandidateKind::of(sig.self_kind),
+            origin: CandidateOrigin::Own,
+            selector: Selector::Absent,
+        })
+    }
+
+    /// The traits to name when several supply one name, in the order the blocks
+    /// were written. `None` where one trait answers, however many times it is
+    /// implemented: naming it as both alternatives is a remedy nobody can write.
+    fn ambiguous_alternatives(&self, candidates: &[Candidate]) -> Option<Vec<String>> {
+        let distinct: IndexSet<DefId> = candidates
+            .iter()
+            .filter_map(|c| c.supply.as_ref().map(|s| s.trait_decl))
+            .collect();
+        (distinct.len() > 1).then(|| {
+            distinct
+                .into_iter()
+                .map(|decl| self.resolutions.defs().name(decl).to_string())
+                .collect()
+        })
+    }
+
+    /// The block's trait-reference arguments, which fill the trait's frame past
+    /// `Self`.
+    fn trait_args_of_impl(&self, impl_def: DefId) -> Vec<TypeId> {
+        self.signatures
+            .impl_sig(impl_def)
+            .map(|impl_sig| impl_sig.trait_type_args.clone())
+            .unwrap_or_default()
+    }
+
+    /// The resolution for a declaration already picked: its signature, read at
+    /// the receiver.
+    /// The receiver's type arguments: the ones a call carries, else the ones
+    /// its type holds. `None` where it brings neither.
+    pub(super) fn receiver_declaring_args(
+        &self,
+        receiver_type: Option<TypeId>,
+        receiver_args: &[TypeId],
+    ) -> Option<Vec<TypeId>> {
+        if !receiver_args.is_empty() {
+            return Some(receiver_args.to_vec());
+        }
+        let args = receiver_type.and_then(|ty| {
+            self.type_table
+                .borrow()
+                .nominal_type_args(self.get_base_type(ty))
+        })?;
+        (!args.is_empty()).then_some(args)
     }
 }

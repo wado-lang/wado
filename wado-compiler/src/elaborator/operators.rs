@@ -432,7 +432,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Handle Eq trait (== and !=)
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
-                    let eq_method = self.operator_method_name(CompilerItem::Eq);
+                    let eq_method = self.tysys.operator_method_name(CompilerItem::Eq);
                     let Some(resolved) = self.resolve_comparison_method(
                         CompilerItem::Eq,
                         &eq_method,
@@ -474,7 +474,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let resolved = self
                         .resolve_operator_ord_method(&struct_name, lookup_type_id, op)
                         .or_else(|| {
-                            let cmp = self.operator_method_name(CompilerItem::Ord);
+                            let cmp = self.tysys.operator_method_name(CompilerItem::Ord);
                             self.resolve_comparison_method(
                                 CompilerItem::Ord,
                                 &cmp,
@@ -526,12 +526,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(&name)
                     .cloned()
             {
-                let eq_method = self.operator_method_name(CompilerItem::Eq);
-                let ord_method = self.operator_method_name(CompilerItem::Ord);
+                let eq_method = self.tysys.operator_method_name(CompilerItem::Eq);
+                let ord_method = self.tysys.operator_method_name(CompilerItem::Ord);
                 let rhs_arg = self.tysys.type_table.borrow_mut().make_ref(right);
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
                     && let Some((bound_trait_name, info)) = {
-                        let required = self.required_operator_trait(CompilerItem::Eq);
+                        let required = self.tysys.required_operator_trait(CompilerItem::Eq);
                         self.find_method_in_trait_bounds(
                             &bounds,
                             &eq_method,
@@ -569,7 +569,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) && let Some((_trait_name, info)) = {
-                    let required = self.required_operator_trait(CompilerItem::Ord);
+                    let required = self.tysys.required_operator_trait(CompilerItem::Ord);
                     self.find_method_in_trait_bounds(
                         &bounds,
                         &ord_method,
@@ -623,7 +623,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if is_arithmetic_or_bitwise {
             if let Some(struct_name) = self.tysys.operator_receiver_name(left) {
-                let Some(trait_) = self.operator_trait_decl(&op) else {
+                let Some(trait_) = self.tysys.operator_trait_decl(&op) else {
                     return TypeTable::ERROR;
                 };
                 let Some((_, method_name)) = operator_trait_method(&op) else {
@@ -675,8 +675,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     [] | [_, _, ..] => None,
                 };
                 if let Some(trait_info) = trait_info_opt {
-                    let resolved =
-                        self.operator_impl_method(trait_info, method_name, impl_name, impl_type_id);
+                    let resolved = self.tysys.operator_impl_method(
+                        trait_info,
+                        method_name,
+                        impl_name,
+                        impl_type_id,
+                    );
                     return self.dispatch_trait_op_method(
                         left,
                         vec![(right, right_span)],
@@ -721,7 +725,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             if let Some(struct_name) = self.tysys.operator_receiver_name(left) {
-                let Some(trait_) = self.operator_trait_decl(&op) else {
+                let Some(trait_) = self.tysys.operator_trait_decl(&op) else {
                     return TypeTable::ERROR;
                 };
                 let method_name = shift_method;
@@ -751,8 +755,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Shift traits declare `rhs: u32` (not `&Self`), so the
                     // shared builder will type-check against u32 and will not
                     // wrap the operand in `&`.
-                    let resolved =
-                        self.operator_impl_method(trait_info, method_name, impl_name, impl_type_id);
+                    let resolved = self.tysys.operator_impl_method(
+                        trait_info,
+                        method_name,
+                        impl_name,
+                        impl_type_id,
+                    );
                     return self.dispatch_trait_op_method(
                         left,
                         vec![(right, right_span)],
@@ -995,7 +1003,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if unary.op == UnaryOp::MutRef
             && matches!(&unary.expr, ast::Expr::FieldAccess(_) | ast::Expr::Index(_))
-            && self.is_replace_on_assign_place_type(expr_type)
+            && self.tysys.is_replace_on_assign_place_type(expr_type)
         {
             let _ = self.emit(TypeError::CannotAssign {
                 message: format!("cannot take a mutable reference to {REPLACE_ON_ASSIGN_PLACE}"),
@@ -1704,28 +1712,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _local_index = ctx.add_local(name, type_id, false, None);
     }
 
-    /// The operator trait a dispatch means, as a requirement the bound search
-    /// must match.
-    /// The one method an operator trait declares, named by the registry's
-    /// capture of the declaration.
-    fn operator_method_name(&self, item: CompilerItem) -> String {
-        self.tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_method_name(item)
-            .to_string()
-    }
-
-    fn required_operator_trait(&self, item: CompilerItem) -> Option<RequiredTrait> {
-        let def = self.tysys.compiler_trait_def(item)?;
-        Some(RequiredTrait {
-            decl: Resolution::Def(def),
-            args: None,
-            display: self.tysys.resolutions.defs().name(def).to_string(),
-        })
-    }
-
     /// `T::Output` for an operator applied to a type parameter — what the
     /// frame's bound pins it to (`T: Mul<Output = T>`), else the projection
     /// under that same trait, since `T: Add + Mul` declares `Output` twice.
@@ -1777,24 +1763,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// The method of the operator impl `info` matched on `impl_type_id`.
-    fn operator_impl_method(
-        &self,
-        info: ArithmeticTraitInfo,
-        method_name: &str,
-        impl_name: String,
-        impl_type_id: TypeId,
-    ) -> ResolvedTraitMethod {
-        let method_def = self.tysys.declared_method(info.impl_def, method_name);
-        ResolvedTraitMethod::of_operator_impl(
-            info,
-            method_def,
-            method_name,
-            impl_name,
-            impl_type_id,
-        )
-    }
-
     /// An operator on a type parameter, dispatched through the parameter's
     /// bounds. `None` where `receiver` is no parameter; a bound set lacking the
     /// operator's trait is reported, and the call is `ERROR`.
@@ -1816,7 +1784,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(param)
             .cloned()
             .unwrap_or_default();
-        let required = self.required_operator_trait(item);
+        let required = self.tysys.required_operator_trait(item);
         let args = match rhs {
             Some((rhs, _)) => {
                 ArgSource::Types(vec![self.tysys.type_table.borrow_mut().make_ref(rhs)])
@@ -2020,6 +1988,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // recorded `operator_dispatch` (receiver adjustment via `self_kind`,
         // arg `&`-wrapping via `arg_ref_wraps`) + the AST.
         resolved.return_type
+    }
+}
+
+impl TypeSystem {
+    /// The operator trait a dispatch means, as a requirement the bound search
+    /// must match.
+    /// The one method an operator trait declares, named by the registry's
+    /// capture of the declaration.
+    fn operator_method_name(&self, item: CompilerItem) -> String {
+        self.type_table
+            .borrow()
+            .compiler_items()
+            .trait_method_name(item)
+            .to_string()
+    }
+
+    fn required_operator_trait(&self, item: CompilerItem) -> Option<RequiredTrait> {
+        let def = self.compiler_trait_def(item)?;
+        Some(RequiredTrait {
+            decl: Resolution::Def(def),
+            args: None,
+            display: self.resolutions.defs().name(def).to_string(),
+        })
+    }
+
+    /// The method of the operator impl `info` matched on `impl_type_id`.
+    fn operator_impl_method(
+        &self,
+        info: ArithmeticTraitInfo,
+        method_name: &str,
+        impl_name: String,
+        impl_type_id: TypeId,
+    ) -> ResolvedTraitMethod {
+        let method_def = self.declared_method(info.impl_def, method_name);
+        ResolvedTraitMethod::of_operator_impl(
+            info,
+            method_def,
+            method_name,
+            impl_name,
+            impl_type_id,
+        )
     }
 }
 

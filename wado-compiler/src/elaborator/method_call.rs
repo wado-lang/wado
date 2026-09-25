@@ -30,6 +30,7 @@ use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
 use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
+use super::tysys::TypeSystem;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
 use crate::elaborator::call::slot_type_bindings;
@@ -646,7 +647,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // An argument reaches a pack through a parameter and an expected type
         // through the return, so closing either empty answers the call first.
-        let mut reached = self.packs_args_reach(&param_types, args_ast.len());
+        let mut reached = self.tysys.packs_args_reach(&param_types, args_ast.len());
         if expected_type.is_some() {
             reached.extend(self.tysys.type_table.borrow().pack_names(return_type));
         }
@@ -674,7 +675,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // or leaves the expansion to monomorphization when a `..T` pack is
         // present; `return_type` already says what it yields.
         if method_name == "zip" && self.tysys.type_table.borrow().is_tuple(base_type_id) {
-            if let Some(row) = self.zip_row_of_unprovable_arity(base_type_id) {
+            if let Some(row) = self.tysys.zip_row_of_unprovable_arity(base_type_id) {
                 let _ = self.emit(TypeError::ZipOverUnequalPacks { row, span });
                 return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
             }
@@ -774,7 +775,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The solve above has seen every written argument, so a pack still
             // open here is one the call left nothing over for — unless an
             // argument reached it, which makes it the solve's failure.
-            let reached = self.packs_args_reach(&expected_param_types, args.len());
+            let reached = self
+                .tysys
+                .packs_args_reach(&expected_param_types, args.len());
             self.settle_unreached_packs(&method_own_params, &mut known, &reached);
             let own = self.value_default_slot_bindings(
                 &method_own_params,
@@ -1248,6 +1251,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_key.is_some_and(|key| {
             self.tysys.trait_env.declares_trait(&key)
                 && self
+                    .tysys
                     .trait_sig_of(&key)
                     .and_then(|sig| sig.method(method_name))
                     .is_some_and(|m| of_kind(m.sig.self_kind))
@@ -1487,7 +1491,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // misuse), so that shape keeps its unknown-function error.
             let trait_params = self
                 .decl_key_at(head.site, &head.name)
-                .and_then(|key| self.trait_decl_type_params_of(&key))
+                .and_then(|key| self.tysys.trait_decl_type_params_of(&key))
                 .unwrap_or_default();
             if self.is_trait_instance_method_at(head.site, &head.name, &static_call.method)
                 && !trait_params.is_empty()
@@ -1673,7 +1677,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             };
             if let Some(instance_type_args) = generic_data
-                && let Some(variant_info) = self.variant_of_type(target_type_id).cloned()
+                && let Some(variant_info) = self.tysys.variant_of_type(target_type_id).cloned()
                 && let Some((_, case_data)) = variant_info.case_named(&static_call.method)
             {
                 let payload_is_unit = matches!(
@@ -1839,9 +1843,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return TypeTable::ERROR;
             }
             merge_turbofish_type_args(&mut method_type_args, &inferred);
-            let reached = self.packs_args_reach(&param_types, args.len());
+            let reached = self.tysys.packs_args_reach(&param_types, args.len());
             self.settle_unreached_packs(&sig.own_params, &mut method_type_args, &reached);
             let declaring_args = self
+                .tysys
                 .receiver_declaring_args(Some(target_type_id), &[])
                 .unwrap_or_default();
             let declaring = sig
@@ -1871,6 +1876,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut static_type_bindings = declaring_impl_sig
             .map(|impl_sig| {
                 let args = self
+                    .tysys
                     .receiver_declaring_args(Some(target_type_id), &[])
                     .unwrap_or_default();
                 slot_type_bindings(&self.tysys.type_table, &impl_sig.target_type_args, &args)
@@ -1973,20 +1979,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Handle custom variant construction: Shape::Circle(5.0) or MyVariant::Unit
+        // No matching case falls through to method lookup (`AppError::from(e)`).
         if builds_own_case
             && let ResolvedType::Variant { .. } =
                 self.tysys.type_table.borrow().get(target_type_id).clone()
+            && let Some(variant_info) = self.tysys.variant_of_type(target_type_id)
+            && let Some((_, case_data)) = variant_info.case_named(&static_call.method)
         {
-            if let Some(variant_info) = self.variant_of_type(target_type_id) {
-                if let Some((_, case_data)) = variant_info.case_named(&static_call.method) {
-                    if !self.check_case_arity(case_data.payload, args.len(), static_call.span) {
-                        return TypeTable::ERROR;
-                    }
-                    return target_type_id;
-                }
-                // If no matching case, fall through to general method lookup
-                // (e.g., trait methods like `AppError::from(e)`)
+            if !self.check_case_arity(case_data.payload, args.len(), static_call.span) {
+                return TypeTable::ERROR;
             }
+            return target_type_id;
         }
 
         // Handle generic variant construction: Result::<i32, String>::Ok(42)
@@ -1996,7 +1999,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         if builds_own_case && is_generic_instance {
             // Check if the base type is a variant
-            if let Some(variant_info) = self.variant_of_type(target_type_id).cloned() {
+            if let Some(variant_info) = self.tysys.variant_of_type(target_type_id).cloned() {
                 let name = variant_info.name.clone();
                 // This is a generic variant like Result<T, E>
                 // Find the case by name
@@ -2016,7 +2019,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let inferred = self.tysys.infer_variant_type_args(
                             &self.annotate_ctx,
                             &variant_info,
-                            &case_data,
+                            case_data,
                             args.first().copied(),
                             None,
                             &explicit_args,
@@ -2369,7 +2372,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // The template is written against the blanket param, so `-> Self` /
         // `-> T` lands on the receiver at the call site.
-        let blanket_slot = self.blanket_param_slot(&blanket_param);
+        let blanket_slot = self.tysys.blanket_param_slot(&blanket_param);
         let return_type = SubstitutionContext::new()
             .bind(&[blanket_slot], &[receiver_type_id])
             .substitute(template_return, &mut self.tysys.type_table.borrow_mut());
@@ -2464,7 +2467,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let template = self
             .lookup_static_method_param_types_keyed(blanket_param, method, Some(&key))
             .unwrap_or_default();
-        let blanket_slot = self.blanket_param_slot(blanket_param);
+        let blanket_slot = self.tysys.blanket_param_slot(blanket_param);
         let mut tt = self.tysys.type_table.borrow_mut();
         template
             .iter()
@@ -2474,41 +2477,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .substitute(pt, &mut tt)
             })
             .collect()
-    }
-
-    /// The blanket impl's own parameter. `impl<T> Trait for T` declares
-    /// exactly one, and the `DefId` this path is built on *is* its name, so
-    /// the binder is the declaration rather than a reconstruction of it.
-    fn blanket_param_slot(&self, blanket_param: &str) -> TypeId {
-        self.tysys
-            .type_table
-            .borrow_mut()
-            .make_type_param(blanket_param.to_string(), 0)
-    }
-
-    /// The first row of a tuple `zip` whose layout differs from row zero's, so
-    /// nothing says the two are equally long. Two distinct packs never are,
-    /// which is why the variadic WEP §6 puts `zip` over them out of scope.
-    fn zip_row_of_unprovable_arity(&self, tuple: TypeId) -> Option<String> {
-        let table = self.tysys.type_table.borrow();
-        let rows = table.as_tuple(tuple)?;
-        // A row that is no tuple has no layout, and is no transpose either.
-        let layouts: Vec<Vec<TupleSlot>> = rows
-            .iter()
-            .map(|&row| table.tuple_layout(row))
-            .collect::<Option<_>>()?;
-        // Only a pack leaves two rows' lengths unprovable. Without one, the
-        // "no method" message already said everything.
-        if !layouts
-            .iter()
-            .flatten()
-            .any(|slot| matches!(slot, TupleSlot::Pack(_)))
-        {
-            return None;
-        }
-        let first = &layouts[0];
-        let odd = layouts.iter().position(|l| l != first)?;
-        Some(table.type_name(rows[odd]))
     }
 
     /// A qualified method's own type parameters — the slots past the declaring
@@ -2766,20 +2734,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // a static the receiver declares itself shadows an inherited instance
         // method of the same name, and the arm above has already answered it.
         if let ImplTargetKey::Decl(def) = &static_key
-            && !self.declares_resource_static(*def, method_name)
+            && !self.tysys.declares_resource_static(*def, method_name)
             && let Some((_, sig)) = self.resource_instance_method(*def, method_name)
         {
             return Some(sig.value_param_types());
         }
         None
-    }
-
-    /// Whether the resource `def` declares `method_name` as a static of its own.
-    fn declares_resource_static(&self, def: DefId, method_name: &str) -> bool {
-        self.tysys
-            .trait_env
-            .resource_static(&ImplTargetKey::Decl(def), method_name)
-            .is_some()
     }
 
     /// Resolve a static-method receiver `TypeId` to its `(struct_name,
@@ -2872,7 +2832,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         keys.retain(|key| {
             let header = &env.impl_headers[key];
             header.is_trait_impl()
-                && self.impl_head_decl_name(header, defs.module(*key)) == declared_name
+                && self.tysys.impl_head_decl_name(header, defs.module(*key)) == declared_name
         });
         keys
     }
@@ -3051,7 +3011,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_hint: Option<&ImplTargetKey>,
     ) -> bool {
         let target = self.static_receiver_key(struct_name, target_hint);
-        self.inherent_shadows(&target, method_name, false)
+        self.tysys.inherent_shadows(&target, method_name, false)
     }
 
     /// The argument preselect over a receiver's impls: `Selected` and
@@ -3177,35 +3137,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         survey
     }
 
-    /// The original (un-aliased) name `name` resolves to *within `module`* — its
-    /// `use { Original as name }` original, or `name` itself when not aliased.
-    /// Resolving in the impl's own module (not the call site) makes `From`-impl
-    /// matching independent of whatever alias the caller uses for the source
-    /// type.
-    fn import_original_name(&self, name: &str, module: &ModuleSource) -> String {
-        // One question — what did `module` import under this name — asked of
-        // the module whatever it is, rather than of two maps chosen by whether
-        // it happens to be the frame's own.
-        self.tysys
-            .resolutions
-            .imported_as(module, name)
-            .map_or_else(
-                || name.to_string(),
-                |def| self.tysys.resolutions.defs().name(def).to_string(),
-            )
-    }
-
-    /// An impl header's target head as a declaration name, resolved through the
-    /// impl's own imports — unless its type parameters bind the spelling, which
-    /// shadows them.
-    fn impl_head_decl_name(&self, header: &ImplHeader, impl_module: &ModuleSource) -> String {
-        let head = get_type_name_static(&header.ty);
-        if header.type_params.iter().any(|p| p.name == head) {
-            return head;
-        }
-        self.import_original_name(&head, impl_module)
-    }
-
     /// The block a selection came from, where it is written for a single
     /// instantiation: it hosts its own function, under its own head. `None` for
     /// a generic block, whose instance monomorphization materialises in the
@@ -3260,33 +3191,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|&arg| table.fq_type_name(arg))
             .collect();
         Some(sig.target_fq.clone().with_args(args))
-    }
-
-    /// Whether only the argument can fill this parameter — a blanket, whose
-    /// unsubstituted spelling must not be mangled. Three things fill a slot and
-    /// the receiver and the method take the other two.
-    pub(super) fn param_filled_by_block(
-        &self,
-        header: &ImplHeader,
-        sig: &MethodSig,
-        param: TypeId,
-    ) -> bool {
-        if header.type_params.is_empty() {
-            return false;
-        }
-        let table = self.tysys.type_table.borrow();
-        // A reference to a slot is the slot. A slot the receiver mentions is the
-        // receiver's to fill, not the argument's, and one at or past
-        // `method_slot_base` is the method's. By the numbering, not the count:
-        // a concrete head argument leaves a gap, and the block's last slot then
-        // sits past how many names it contributed.
-        match table.get(table.peel_refs(param)) {
-            ResolvedType::TypeParam { index, name }
-            | ResolvedType::TypePack { index, name, .. } => {
-                *index < sig.method_slot_base && !header.ty.mentions(name)
-            }
-            _ => false,
-        }
     }
 
     /// The `Default::default` no declaration backs, which bound-driven
@@ -3611,6 +3515,104 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         return_type
+    }
+}
+
+impl TypeSystem {
+    /// An impl header's target head as a declaration name, resolved through the
+    /// impl's own imports — unless its type parameters bind the spelling, which
+    /// shadows them.
+    fn impl_head_decl_name(&self, header: &ImplHeader, impl_module: &ModuleSource) -> String {
+        let head = get_type_name_static(&header.ty);
+        if header.type_params.iter().any(|p| p.name == head) {
+            return head;
+        }
+        self.import_original_name(&head, impl_module)
+    }
+}
+
+impl TypeSystem {
+    /// The blanket impl's own parameter. `impl<T> Trait for T` declares
+    /// exactly one, and the `DefId` this path is built on *is* its name, so
+    /// the binder is the declaration rather than a reconstruction of it.
+    fn blanket_param_slot(&self, blanket_param: &str) -> TypeId {
+        self.type_table
+            .borrow_mut()
+            .make_type_param(blanket_param.to_string(), 0)
+    }
+
+    /// The first row of a tuple `zip` whose layout differs from row zero's, so
+    /// nothing says the two are equally long. Two distinct packs never are,
+    /// which is why the variadic WEP §6 puts `zip` over them out of scope.
+    fn zip_row_of_unprovable_arity(&self, tuple: TypeId) -> Option<String> {
+        let table = self.type_table.borrow();
+        let rows = table.as_tuple(tuple)?;
+        // A row that is no tuple has no layout, and is no transpose either.
+        let layouts: Vec<Vec<TupleSlot>> = rows
+            .iter()
+            .map(|&row| table.tuple_layout(row))
+            .collect::<Option<_>>()?;
+        // Only a pack leaves two rows' lengths unprovable. Without one, the
+        // "no method" message already said everything.
+        if !layouts
+            .iter()
+            .flatten()
+            .any(|slot| matches!(slot, TupleSlot::Pack(_)))
+        {
+            return None;
+        }
+        let first = &layouts[0];
+        let odd = layouts.iter().position(|l| l != first)?;
+        Some(table.type_name(rows[odd]))
+    }
+
+    /// Whether the resource `def` declares `method_name` as a static of its own.
+    fn declares_resource_static(&self, def: DefId, method_name: &str) -> bool {
+        self.trait_env
+            .resource_static(&ImplTargetKey::Decl(def), method_name)
+            .is_some()
+    }
+
+    /// The original (un-aliased) name `name` resolves to *within `module`* — its
+    /// `use { Original as name }` original, or `name` itself when not aliased.
+    /// Resolving in the impl's own module (not the call site) makes `From`-impl
+    /// matching independent of whatever alias the caller uses for the source
+    /// type.
+    fn import_original_name(&self, name: &str, module: &ModuleSource) -> String {
+        // One question — what did `module` import under this name — asked of
+        // the module whatever it is, rather than of two maps chosen by whether
+        // it happens to be the frame's own.
+        self.resolutions.imported_as(module, name).map_or_else(
+            || name.to_string(),
+            |def| self.resolutions.defs().name(def).to_string(),
+        )
+    }
+
+    /// Whether only the argument can fill this parameter — a blanket, whose
+    /// unsubstituted spelling must not be mangled. Three things fill a slot and
+    /// the receiver and the method take the other two.
+    pub(super) fn param_filled_by_block(
+        &self,
+        header: &ImplHeader,
+        sig: &MethodSig,
+        param: TypeId,
+    ) -> bool {
+        if header.type_params.is_empty() {
+            return false;
+        }
+        let table = self.type_table.borrow();
+        // A reference to a slot is the slot. A slot the receiver mentions is the
+        // receiver's to fill, not the argument's, and one at or past
+        // `method_slot_base` is the method's. By the numbering, not the count:
+        // a concrete head argument leaves a gap, and the block's last slot then
+        // sits past how many names it contributed.
+        match table.get(table.peel_refs(param)) {
+            ResolvedType::TypeParam { index, name }
+            | ResolvedType::TypePack { index, name, .. } => {
+                *index < sig.method_slot_base && !header.ty.mentions(name)
+            }
+            _ => false,
+        }
     }
 }
 
