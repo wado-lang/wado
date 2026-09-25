@@ -744,7 +744,7 @@ impl Lowering<'_> {
     }
 
     /// A callback crosses only into the host, returns nothing, and takes only
-    /// what the host can call a closure back with: scalars and handles.
+    /// what the host always calls a closure back with: scalars and handles.
     fn lower_callback(
         &self,
         (return_type, arguments): (&IdlType, &[Argument]),
@@ -761,6 +761,9 @@ impl Lowering<'_> {
             .map(|arg| {
                 if arg.variadic {
                     return Err(format!("callback argument `{}`: variadic", arg.name));
+                }
+                if arg.optional {
+                    return Err(format!("callback argument `{}`: optional", arg.name));
                 }
                 let ty = self.lower_type(&arg.idl_type, Flow::Out)?;
                 if matches!(ty, WadoType::Named(_)) || ty.primitive_name().is_some() {

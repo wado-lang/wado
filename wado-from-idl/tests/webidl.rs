@@ -414,6 +414,11 @@ fn a_callback_is_a_closure_the_host_calls_back_with_scalars_and_handles() {
             &plain("undefined"),
             &[argument("text", &plain("DOMString"), false, "null")],
         ),
+        callback(
+            "MaybeCallback",
+            &plain("undefined"),
+            &[argument("count", &plain("long"), true, "null")],
+        ),
     ];
     let members = [
         operation(
@@ -448,6 +453,12 @@ fn a_callback_is_a_closure_the_host_calls_back_with_scalars_and_handles() {
             &[argument("callback", &plain("TextCallback"), false, "null")],
             "",
         ),
+        operation(
+            "onMaybe",
+            &plain("undefined"),
+            &[argument("callback", &plain("MaybeCallback"), false, "null")],
+            "",
+        ),
         operation("currentListener", &plain("EventListener"), &[], ""),
     ];
     defs.interfaces.push(partial("Element", &members));
@@ -462,6 +473,7 @@ fn a_callback_is_a_closure_the_host_calls_back_with_scalars_and_handles() {
         [
             "Element.filter: `filter`: a callback returning a value",
             "Element.on_text: `callback`: callback argument `text`: neither a scalar nor a handle",
+            "Element.on_maybe: `callback`: callback argument `count`: optional",
             "Element.current_listener: a callback in a result",
         ]
     );
